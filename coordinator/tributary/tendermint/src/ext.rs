@@ -45,8 +45,6 @@ pub trait Signer: Send + Sync {
   async fn validator_id(&self) -> Option<Self::ValidatorId>;
   /// Sign a signature with the current validator's private key.
   async fn sign(&self, msg: &[u8]) -> Self::Signature;
-  /// Return an empty signature.
-  async fn empty_signature(&self) -> Self::Signature;
 }
 
 #[async_trait]
@@ -60,10 +58,6 @@ impl<S: Signer> Signer for Arc<S> {
 
   async fn sign(&self, msg: &[u8]) -> Self::Signature {
     self.as_ref().sign(msg).await
-  }
-
-  async fn empty_signature(&self) -> Self::Signature {
-    self.as_ref().empty_signature().await
   }
 }
 

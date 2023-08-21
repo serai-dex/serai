@@ -430,24 +430,29 @@ impl<N: Network + 'static> TendermintMachine<N> {
           }
         }
       } {
-        // signatures are used in case we need evidence for bad behavior,
-        // we can just put empty signature for our own messages since we aren't malicious.
-        let sig_for_msg = sig.clone().unwrap_or(self.signer.empty_signature().await);
-        let res = self.message(SignedMessage { msg: msg.clone(), sig: sig_for_msg }).await;
+        if our_message {
+          assert!(sig.is_none());
+          sig = Some(self.signer.sign(&msg.encode()).await);
+        }
+        let sig = sig.unwrap();
+
+        // TODO: message may internally call broadcast. We should check within broadcast it's not
+        // broadcasting our own message at this time.
+        let signed_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
+        let res = self.message(&signed_msg).await;
         if res.is_err() && our_message {
           panic!("honest node (ourselves) had invalid behavior");
         }
+        // Only now should we allow broadcasts since we're sure an invariant wasn't reached causing
+        // us to have invalid messages.
+
+        if res.is_ok() {
+          // Re-broadcast this since it's an original consensus message
+          self.network.broadcast(signed_msg).await;
+        }
 
         match res {
-          Ok(None) => {
-            if let Some(sig) = sig.take() {
-              // If it's our own message, it shouldn't already be signed
-              assert!(!our_message);
-
-              // Re-broadcast this since it's an original consensus message
-              self.network.broadcast(SignedMessage { msg: msg.clone(), sig }).await;
-            }
-          }
+          Ok(None) => {}
           Ok(Some(block)) => {
             let mut validators = vec![];
             let mut sigs = vec![];
@@ -482,57 +487,44 @@ impl<N: Network + 'static> TendermintMachine<N> {
             self.reset(msg.round, proposal).await;
           }
           Err(TendermintError::Malicious(sender, evidence_msg)) => {
-            // if we come here we definitely should have a signature since we aren't malicious.
-            if let Some(sig) = &sig {
-              let current_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
+            let current_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
 
-              let slash = if let Some(old_msg) = evidence_msg {
-                // if the malicious message contains a block, only vote to slash
-                // TODO: Should this decision be made at a higher level?
-                if let Data::Proposal(_, _) = &current_msg.msg.data {
-                  SlashEvent::Id(
-                    SlashReason::InvalidBlock,
-                    self.block.number.0,
-                    self.block.round().number.0,
-                  )
-                } else {
-                  // if old msg and new msg is not the same, use both as evidence.
-                  SlashEvent::WithEvidence(
-                    old_msg.clone(),
-                    if old_msg != current_msg { Some(current_msg.clone()) } else { None },
-                  )
-                }
-              } else {
-                // we don't have evidence. Slash with vote.
+            let slash = if let Some(old_msg) = evidence_msg {
+              // if the malicious message contains a block, only vote to slash
+              // TODO: Should this decision be made at a higher level?
+              if let Data::Proposal(_, _) = &current_msg.msg.data {
                 SlashEvent::Id(
-                  SlashReason::InvalidMessage,
+                  SlashReason::InvalidBlock,
                   self.block.number.0,
                   self.block.round().number.0,
                 )
-              };
-
-              // Each message that we're voting to slash over needs to be re-broadcasted so other
-              // validators also trigger their own votes
-              // TODO: should this be inside slash function?
-              if let SlashEvent::Id(_, _, _) = slash {
-                self.network.broadcast(current_msg).await;
+              } else {
+                // if old msg and new msg is not the same, use both as evidence.
+                SlashEvent::WithEvidence(
+                  old_msg.clone(),
+                  if old_msg != current_msg { Some(current_msg.clone()) } else { None },
+                )
               }
-
-              self.slash(sender, slash).await
             } else {
-              // This should be our own message
-              assert!(our_message);
-              panic!("our own message was malicious")
+              // we don't have evidence. Slash with vote.
+              SlashEvent::Id(
+                SlashReason::InvalidMessage,
+                self.block.number.0,
+                self.block.round().number.0,
+              )
+            };
+
+            // Each message that we're voting to slash over needs to be re-broadcasted so other
+            // validators also trigger their own votes
+            // TODO: should this be inside slash function?
+            if let SlashEvent::Id(_, _, _) = slash {
+              self.network.broadcast(current_msg).await;
             }
+
+            self.slash(sender, slash).await
           }
           Err(TendermintError::Temporal) => (),
           Err(TendermintError::AlreadyHandled) => (),
-        }
-
-        if our_message {
-          assert!(sig.is_none());
-          let sig = self.signer.sign(&msg.encode()).await;
-          self.network.broadcast(SignedMessage { msg, sig }).await;
         }
       }
     }
@@ -565,7 +557,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   async fn message(
     &mut self,
-    signed: SignedMessageFor<N>,
+    signed: &SignedMessageFor<N>,
   ) -> Result<Option<N::Block>, TendermintError<N>> {
     let msg = &signed.msg;
     if msg.block != self.block.number {
@@ -573,7 +565,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
 
     // If this is a precommit, verify its signature
-    self.verify_precommit_signature(&signed)?;
+    self.verify_precommit_signature(signed)?;
 
     // Only let the proposer propose
     if matches!(msg.data, Data::Proposal(..)) &&
@@ -728,7 +720,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Malformed message
         if vr.0 >= self.block.round().number.0 {
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
-          Err(TendermintError::Malicious(msg.sender, Some(signed)))?;
+          Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
         }
 
         if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {

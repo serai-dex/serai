@@ -34,10 +34,6 @@ impl Signer for TestSigner {
     sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(&msg[.. 30.min(msg.len())]);
     sig
   }
-
-  async fn empty_signature(&self) -> Self::Signature {
-    [0; 32]
-  }
 }
 
 #[derive(Clone)]

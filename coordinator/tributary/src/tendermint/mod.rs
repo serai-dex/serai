@@ -118,10 +118,6 @@ impl SignerTrait for Signer {
     res.copy_from_slice(&sig);
     res
   }
-
-  async fn empty_signature(&self) -> Self::Signature {
-    [0; 64]
-  }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
