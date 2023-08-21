@@ -18,10 +18,8 @@ use frost::{
 };
 
 use bitcoin::{
-  consensus::encode::serialize,
-  key::TweakedPublicKey,
-  address::Payload,
-  OutPoint, ScriptBuf, TxOut, Transaction, Block,
+  consensus::encode::serialize, key::TweakedPublicKey, address::Payload, OutPoint, ScriptBuf,
+  TxOut, Transaction, Block,
 };
 #[cfg(feature = "std")]
 use bitcoin::consensus::encode::Decodable;
