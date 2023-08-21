@@ -53,8 +53,8 @@ mod substrate;
 #[cfg(test)]
 pub mod tests;
 
-// This is a static to satisfy lifetime expectations
 lazy_static::lazy_static! {
+  // This is a static to satisfy lifetime expectations
   static ref NEW_TRIBUTARIES: RwLock<VecDeque<TributarySpec>> = RwLock::new(VecDeque::new());
 }
 
@@ -271,6 +271,8 @@ pub async fn handle_p2p<D: Db, P: P2p>(
   loop {
     let mut msg = p2p.receive().await;
     match msg.kind {
+      P2pMessageKind::KeepAlive => {}
+
       P2pMessageKind::Tributary(genesis) => {
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
