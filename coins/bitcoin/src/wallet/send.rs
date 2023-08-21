@@ -16,12 +16,12 @@ use bitcoin::{
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
-  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Network, Address,
+  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Address,
 };
 
 use crate::{
   crypto::Schnorr,
-  wallet::{address, ReceivedOutput},
+  wallet::{ReceivedOutput, address_payload},
 };
 
 #[rustfmt::skip]
@@ -29,8 +29,22 @@ use crate::{
 const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 
 #[rustfmt::skip]
-//https://github.com/bitcoin/bitcoin/blob/a245429d680eb95cf4c0c78e58e63e3f0f5d979a/src/test/transaction_tests.cpp#L815-L816
-const DUST: u64 = 674;
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
+// As the above notes, a lower amount may not be considered dust if contained in a SegWit output
+// This doesn't bother with delineation due to how marginal these values are, and because it isn't
+// worth the complexity to implement differentation
+const DUST: u64 = 546;
+
+#[rustfmt::skip]
+// The constant is from:
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L56-L57
+// It's used here:
+// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5386-L5390
+// Peers won't relay TXs below the filter's fee rate, yet they calculate the fee not against weight yet vsize
+// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5721-L5732
+// And then the fee itself is fee per thousand units, not fee per unit
+// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/feerate.cpp#L23-L37
+const MIN_FEE_PER_KILO_VSIZE: u64 = 1000;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
@@ -42,6 +56,8 @@ pub enum TransactionError {
   DustPayment,
   #[error("too much data was specified")]
   TooMuchData,
+  #[error("fee was too low to pass the default minimum fee rate")]
+  TooLowFee,
   #[error("not enough funds for these payments")]
   NotEnoughFunds,
   #[error("transaction was too large")]
@@ -163,6 +179,26 @@ impl SignableTransaction {
 
     let mut weight = Self::calculate_weight(tx_ins.len(), payments, None);
     let mut needed_fee = fee_per_weight * weight;
+
+    // "Virtual transaction size" is weight ceildiv 4 per
+    // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+
+    // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/
+    //  src/policy/policy.cpp#L295-L298
+    // implements this as expected
+
+    // Technically, it takes whatever's greater, the weight or the amount of signature operatons
+    // multiplied by DEFAULT_BYTES_PER_SIGOP (20)
+    // We only use 1 signature per input, and our inputs have a weight exceeding 20
+    // Accordingly, our inputs' weight will always be greater than the cost of the signature ops
+    let vsize = (weight + 3) / 4;
+    // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
+    // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
+    // specified fee rate is too low to be valid
+    if needed_fee < ((MIN_FEE_PER_KILO_VSIZE * vsize) / 1000) {
+      Err(TransactionError::TooLowFee)?;
+    }
+
     if input_sat < (payment_sat + needed_fee) {
       Err(TransactionError::NotEnoughFunds)?;
     }
@@ -221,12 +257,12 @@ impl SignableTransaction {
     let mut sigs = vec![];
     for i in 0 .. tx.input.len() {
       let mut transcript = transcript.clone();
+      // This unwrap is safe since any transaction with this many inputs violates the maximum
+      // size allowed under standards, which this lib will error on creation of
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
 
       let offset = keys.clone().offset(self.offsets[i]);
-      if address(Network::Bitcoin, offset.group_key())?.script_pubkey() !=
-        self.prevouts[i].script_pubkey
-      {
+      if address_payload(offset.group_key())?.script_pubkey() != self.prevouts[i].script_pubkey {
         None?;
       }
 
@@ -243,7 +279,7 @@ impl SignableTransaction {
 /// A FROST signing machine to produce a Bitcoin transaction.
 ///
 /// This does not support caching its preprocess. When sign is called, the message must be empty.
-/// This will panic if it isn't.
+/// This will panic if either `cache` is called or the message isn't empty.
 pub struct TransactionMachine {
   tx: SignableTransaction,
   sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
@@ -339,7 +375,9 @@ impl SignMachine<Transaction> for TransactionSignMachine {
           commitments[i].clone(),
           cache
             .taproot_key_spend_signature_hash(i, &prevouts, TapSighashType::Default)
-            .unwrap()
+            // This should never happen since the inputs align with the TX the cache was
+            // constructed with, and because i is always < prevouts.len()
+            .expect("taproot_key_spend_signature_hash failed to return a hash")
             .as_ref(),
         )?;
         shares.push(share);

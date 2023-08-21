@@ -22,9 +22,12 @@ use bitcoin_serai::{
     hashes::Hash as HashTrait,
     blockdata::opcodes::all::OP_RETURN,
     script::{PushBytesBuf, Instruction, Instructions, Script},
+    address::NetworkChecked,
     OutPoint, TxOut, Transaction, Network, Address,
   },
-  wallet::{tweak_keys, address, ReceivedOutput, Scanner, TransactionError, SignableTransaction},
+  wallet::{
+    tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
+  },
   rpc::Rpc,
 };
 
@@ -43,7 +46,10 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   rpc
     .rpc_call::<Vec<String>>(
       "generatetoaddress",
-      serde_json::json!([1, address(Network::Regtest, key).unwrap()]),
+      serde_json::json!([
+        1,
+        Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())
+      ]),
     )
     .await
     .unwrap();
@@ -187,7 +193,7 @@ async_sequential! {
     assert_eq!(output.offset(), Scalar::ZERO);
 
     let inputs = vec![output];
-    let addr = || address(Network::Regtest, key).unwrap();
+    let addr = || Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap());
     let payments = vec![(addr(), 1000)];
 
     assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
@@ -223,12 +229,17 @@ async_sequential! {
     );
 
     assert_eq!(
+      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
+      Err(TransactionError::TooLowFee),
+    );
+
+    assert_eq!(
       SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
       Err(TransactionError::NotEnoughFunds),
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, 0),
+      SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
       Err(TransactionError::TooLargeTransaction),
     );
   }
@@ -250,13 +261,14 @@ async_sequential! {
 
     // Declare payments, change, fee
     let payments = [
-      (address(Network::Regtest, key).unwrap(), 1005),
-      (address(Network::Regtest, offset_key).unwrap(), 1007)
+      (Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap()), 1005),
+      (Address::<NetworkChecked>::new(Network::Regtest, address_payload(offset_key).unwrap()), 1007)
     ];
 
     let change_offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
-    let change_addr = address(Network::Regtest, change_key).unwrap();
+    let change_addr =
+      Address::<NetworkChecked>::new(Network::Regtest, address_payload(change_key).unwrap());
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
@@ -327,7 +339,7 @@ async_sequential! {
       SignableTransaction::new(
         vec![output],
         &[],
-        address(Network::Regtest, key),
+        Some(Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())),
         Some(data.clone()),
         FEE
       ).unwrap()

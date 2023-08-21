@@ -17,10 +17,11 @@ use bitcoin_serai::{
     hashes::Hash as HashTrait,
     consensus::{Encodable, Decodable},
     script::Instruction,
+    address::{NetworkChecked, Address as BAddress},
     OutPoint, Transaction, Block, Network as BitcoinNetwork,
   },
   wallet::{
-    tweak_keys, address, ReceivedOutput, Scanner, TransactionError,
+    tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
     SignableTransaction as BSignableTransaction, TransactionMachine,
   },
   rpc::{RpcError, Rpc},
@@ -33,7 +34,7 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Sequence, Script, Witness, TxIn, TxOut, Address as BAddress,
+  Sequence, Script, Witness, TxIn, TxOut,
 };
 
 use serai_client::{
@@ -326,7 +327,7 @@ impl Network for Bitcoin {
   }
 
   fn address(key: ProjectivePoint) -> Address {
-    Address(address(BitcoinNetwork::Bitcoin, key).unwrap())
+    Address(BAddress::<NetworkChecked>::new(BitcoinNetwork::Bitcoin, address_payload(key).unwrap()))
   }
 
   fn branch_address(key: ProjectivePoint) -> Self::Address {
@@ -482,7 +483,12 @@ impl Network for Bitcoin {
         }
         // No outputs left and the change isn't worth enough
         Err(TransactionError::NoOutputs) => None,
+        // amortize_fee removes payments which fall below the dust threshold
+        Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
         Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
+        Err(TransactionError::TooLowFee) => {
+          panic!("created a transaction whose fee is below the minimum")
+        }
         Err(TransactionError::NotEnoughFunds) => {
           if tx_fee.is_none() {
             // Mot even enough funds to pay the fee
@@ -491,8 +497,6 @@ impl Network for Bitcoin {
             panic!("not enough funds for bitcoin TX despite amortizing the fee")
           }
         }
-        // amortize_fee removes payments which fall below the dust threshold
-        Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
         Err(TransactionError::TooLargeTransaction) => {
           panic!("created a too large transaction despite limiting inputs/outputs")
         }
