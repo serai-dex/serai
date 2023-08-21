@@ -1,4 +1,4 @@
-use std::{
+use std_shims::{
   io::{self, Read},
   collections::HashMap,
 };

@@ -462,6 +462,7 @@ dependencies = [
  "bech32 0.9.1",
  "bitcoin-private",
  "bitcoin_hashes",
+ "core2 0.3.3",
  "hex_lit",
  "secp256k1",
  "serde",
@@ -481,7 +482,6 @@ dependencies = [
  "flexible-transcript",
  "hex",
  "k256",
- "lazy_static",
  "modular-frost",
  "rand_core 0.6.4",
  "reqwest",
@@ -489,6 +489,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "std-shims",
  "thiserror",
  "tokio",
  "zeroize",
@@ -501,6 +502,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
 dependencies = [
  "bitcoin-private",
+ "core2 0.3.3",
  "serde",
 ]
 
@@ -884,7 +886,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd94671561e36e4e7de75f753f577edafb0e7c05d6e4547229fdf7938fbcd2c3"
 dependencies = [
- "core2",
+ "core2 0.4.0",
  "multibase",
  "multihash 0.18.1",
  "serde",
@@ -1139,6 +1141,15 @@ name = "core-foundation-sys"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
+
+[[package]]
+name = "core2"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "core2"
@@ -4800,7 +4811,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "blake3",
- "core2",
+ "core2 0.4.0",
  "digest 0.10.7",
  "multihash-derive 0.8.0",
  "sha2 0.10.7",
@@ -4814,7 +4825,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd59dcc2bbe70baabeac52cd22ae52c55eefe6c38ff11a9439f16a350a939f2"
 dependencies = [
- "core2",
+ "core2 0.4.0",
  "unsigned-varint",
 ]
 
@@ -4827,7 +4838,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "blake3",
- "core2",
+ "core2 0.4.0",
  "digest 0.10.7",
  "multihash-derive 0.9.0",
  "ripemd",
@@ -4857,7 +4868,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "890e72cb7396cb99ed98c1246a97b243cc16394470d94e0bc8b0c2c11d84290e"
 dependencies = [
- "core2",
+ "core2 0.4.0",
  "multihash 0.19.0",
  "multihash-derive-impl",
 ]
@@ -8100,6 +8111,7 @@ dependencies = [
 name = "serai-no-std-tests"
 version = "0.1.0"
 dependencies = [
+ "bitcoin-serai",
  "ciphersuite",
  "dalek-ff-group",
  "dkg",

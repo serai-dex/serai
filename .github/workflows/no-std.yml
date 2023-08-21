@@ -30,5 +30,8 @@ jobs:
         with:
           github-token: ${{ inputs.github-token }}
 
+      - name: Install RISC-V Toolchain
+        run: sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
+
       - name: Verify no-std builds
-        run: cd tests/no-std && cargo build --target riscv32imac-unknown-none-elf
+        run: cd tests/no-std && CFLAGS=-I/usr/include cargo build --target riscv32imac-unknown-none-elf

@@ -1,9 +1,13 @@
+use std::sync::OnceLock;
+
 use bitcoin_serai::rpc::Rpc;
 
 use tokio::sync::Mutex;
 
-lazy_static::lazy_static! {
-  pub static ref SEQUENTIAL: Mutex<()> = Mutex::new(());
+static SEQUENTIAL_CELL: OnceLock<Mutex<()>> = OnceLock::new();
+#[allow(non_snake_case)]
+pub fn SEQUENTIAL() -> &'static Mutex<()> {
+  SEQUENTIAL_CELL.get_or_init(|| Mutex::new(()))
 }
 
 #[allow(dead_code)]
@@ -30,7 +34,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
-        let guard = runner::SEQUENTIAL.lock().await;
+        let guard = runner::SEQUENTIAL().lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
           if let Err(err) = tokio::task::spawn_local(async move { $body }).await {

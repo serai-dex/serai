@@ -2,7 +2,7 @@ use rand_core::OsRng;
 
 use sha2::{Digest, Sha256};
 
-use secp256k1::{SECP256K1, Message};
+use secp256k1::{Secp256k1 as BContext, Message};
 
 use k256::Scalar;
 use transcript::{Transcript, RecommendedTranscript};
@@ -37,7 +37,7 @@ fn test_algorithm() {
     &Sha256::digest(MESSAGE),
   );
 
-  SECP256K1
+  BContext::new()
     .verify_schnorr(
       &sig,
       &Message::from(Hash::hash(MESSAGE)),

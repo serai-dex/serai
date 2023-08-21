@@ -8,25 +8,27 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>", "Vrx <vrx00@proton.me>"]
 edition = "2021"
 
 [dependencies]
-lazy_static = "1"
-thiserror = "1"
+std-shims = { version = "0.1.1", path = "../../common/std-shims", default-features = false }
 
-zeroize = "^1.5"
-rand_core = "0.6"
+thiserror = { version = "1", optional = true }
 
-sha2 = "0.10"
+zeroize = { version = "^1.5", default-features = false }
+rand_core = { version = "0.6", default-features = false }
 
-secp256k1 = { version = "0.27", features = ["global-context"] }
-bitcoin = { version = "0.30", features = ["serde"] }
+sha2 = { version = "0.10", default-features = false }
 
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["secp256k1"] }
+secp256k1 = { version = "0.27", default-features = false }
+bitcoin = { version = "0.30", default-features = false, features = ["no-std"] }
 
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-reqwest = { version = "0.11", features = ["json"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
+
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["secp256k1"], optional = true }
+
+hex = { version = "0.4", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+reqwest = { version = "0.11", features = ["json"], optional = true }
 
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
@@ -34,4 +36,29 @@ frost = { package = "modular-frost", path = "../../crypto/frost", features = ["t
 tokio = { version = "1", features = ["full"] }
 
 [features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "zeroize/std",
+  "rand_core/std",
+
+  "sha2/std",
+
+  "secp256k1/std",
+  "bitcoin/std",
+  "bitcoin/serde",
+
+  "k256/std",
+
+  "transcript",
+  "frost",
+
+  "hex",
+  "serde",
+  "serde_json",
+  "reqwest"
+]
 hazmat = []
+default = ["std"]

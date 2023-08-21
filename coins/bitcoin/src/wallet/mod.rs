@@ -1,33 +1,45 @@
-use std::{
-  io::{self, Read, Write},
+use std_shims::{
+  vec::Vec,
   collections::HashMap,
+  io::{self, Write},
 };
+#[cfg(feature = "std")]
+use std_shims::io::Read;
 
 use k256::{
   elliptic_curve::sec1::{Tag, ToEncodedPoint},
   Scalar, ProjectivePoint,
 };
+
+#[cfg(feature = "std")]
 use frost::{
   curve::{Ciphersuite, Secp256k1},
   ThresholdKeys,
 };
 
 use bitcoin::{
-  consensus::encode::{Decodable, serialize},
+  consensus::encode::serialize,
   key::TweakedPublicKey,
   address::Payload,
   OutPoint, ScriptBuf, TxOut, Transaction, Block,
 };
+#[cfg(feature = "std")]
+use bitcoin::consensus::encode::Decodable;
 
-use crate::crypto::{x_only, make_even};
+use crate::crypto::x_only;
+#[cfg(feature = "std")]
+use crate::crypto::make_even;
 
+#[cfg(feature = "std")]
 mod send;
+#[cfg(feature = "std")]
 pub use send::*;
 
 /// Tweak keys to ensure they're usable with Bitcoin.
 ///
 /// Taproot keys, which these keys are used as, must be even. This offsets the keys until they're
 /// even.
+#[cfg(feature = "std")]
 pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   let (_, offset) = make_even(keys.group_key());
   keys.offset(Scalar::from(offset))
@@ -72,6 +84,7 @@ impl ReceivedOutput {
   }
 
   /// Read a ReceivedOutput from a generic satisfying Read.
+  #[cfg(feature = "std")]
   pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
     Ok(ReceivedOutput {
       offset: Secp256k1::read_F(r)?,
@@ -89,9 +102,9 @@ impl ReceivedOutput {
     w.write_all(&serialize(&self.outpoint))
   }
 
-  /// Serialize a ReceivedOutput to a Vec<u8>.
+  /// Serialize a ReceivedOutput to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
-    let mut res = vec![];
+    let mut res = Vec::new();
     self.write(&mut res).unwrap();
     res
   }
@@ -143,7 +156,7 @@ impl Scanner {
 
   /// Scan a transaction.
   pub fn scan_transaction(&self, tx: &Transaction) -> Vec<ReceivedOutput> {
-    let mut res = vec![];
+    let mut res = Vec::new();
     for (vout, output) in tx.output.iter().enumerate() {
       // If the vout index exceeds 2**32, stop scanning outputs
       let Ok(vout) = u32::try_from(vout) else { break };
@@ -165,7 +178,7 @@ impl Scanner {
   /// must be immediately spendable, a post-processing pass is needed to remove those outputs.
   /// Alternatively, scan_transaction can be called on `block.txdata[1 ..]`.
   pub fn scan_block(&self, block: &Block) -> Vec<ReceivedOutput> {
-    let mut res = vec![];
+    let mut res = Vec::new();
     for tx in &block.txdata {
       res.extend(self.scan_transaction(tx));
     }
