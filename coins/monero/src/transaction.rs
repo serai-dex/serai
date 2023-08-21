@@ -315,15 +315,40 @@ impl Transaction {
         })
         .collect::<Result<_, _>>()?;
 
-      rct_signatures.base.fee = prefix
-        .inputs
-        .iter()
-        .map(|input| match input {
-          Input::Gen(..) => 0,
-          Input::ToKey { amount, .. } => amount.unwrap(),
-        })
-        .sum::<u64>()
-        .saturating_sub(prefix.outputs.iter().map(|output| output.amount.unwrap()).sum());
+      if !matches!(prefix.inputs[0], Input::Gen(..)) {
+        let in_amount = prefix
+          .inputs
+          .iter()
+          .map(|input| match input {
+            Input::Gen(..) => {
+              Err(io::Error::new(io::ErrorKind::Other, "Input::Gen present in non-coinbase v1 TX"))?
+            }
+            // v1 TXs can burn v2 outputs
+            // dcff3fe4f914d6b6bd4a5b800cc4cca8f2fdd1bd73352f0700d463d36812f328 is one such TX
+            // It includes a pre-RCT signature for a RCT output, yet if you interpret the RCT
+            // output as being worth 0, it passes a sum check (guaranteed since no outputs are RCT)
+            Input::ToKey { amount, .. } => Ok(amount.unwrap_or(0)),
+          })
+          .collect::<io::Result<Vec<_>>>()?
+          .into_iter()
+          .sum::<u64>();
+
+        let mut out = 0;
+        for output in &prefix.outputs {
+          if output.amount.is_none() {
+            Err(io::Error::new(io::ErrorKind::Other, "v1 transaction had a 0-amount output"))?;
+          }
+          out += output.amount.unwrap();
+        }
+
+        if in_amount < out {
+          Err(io::Error::new(
+            io::ErrorKind::Other,
+            "transaction spent more than it had as inputs",
+          ))?;
+        }
+        rct_signatures.base.fee = in_amount - out;
+      }
     } else if prefix.version == 2 {
       rct_signatures = RctSignatures::read(
         prefix

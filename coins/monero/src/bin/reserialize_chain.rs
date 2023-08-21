@@ -52,7 +52,7 @@ mod binaries {
 
     let blob = hex::decode(res.blob).expect("node returned non-hex block");
     let block = Block::read(&mut blob.as_slice())
-      .unwrap_or_else(|_| panic!("couldn't deserialize block {block_i}"));
+      .unwrap_or_else(|e| panic!("couldn't deserialize block {block_i}: {e}"));
     assert_eq!(block.hash(), hash, "hash differs");
     assert_eq!(block.serialize(), blob, "serialization differs");
 
