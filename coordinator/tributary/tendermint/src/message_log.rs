@@ -38,13 +38,13 @@ impl<N: Network> MessageLog<N> {
     // If they already precommitted to a distinct hash, error
     if let Data::Precommit(Some((hash, _))) = msg.data {
       if let Some(prev) = self.precommitted.get(&msg.sender) {
-        if let Data::Precommit(Some((pre_hash, _))) = prev.msg.data {
-          if hash != pre_hash {
+        if let Data::Precommit(Some((prev_hash, _))) = prev.msg.data {
+          if hash != prev_hash {
             debug!(target: "tendermint", "Validator precommitted to multiple blocks");
             Err(TendermintError::Malicious(msg.sender, Some(prev.clone())))?;
           }
         } else {
-          panic!("this should have never happened!");
+          panic!("message in precommitted wasn't Precommit");
         }
       }
       self.precommitted.insert(msg.sender, signed.clone());

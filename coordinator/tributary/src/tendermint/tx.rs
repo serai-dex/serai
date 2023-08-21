@@ -292,20 +292,21 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
         }
         Data::Precommit(Some((id, sig))) => {
-          // make sure block no isn't overflowing
-          // TODO: is rejecting the evidence right thing to do here?
-          // if this is the first block, there is no prior_commit, hence
-          // no prior end_time. Is the end_tine is just 0 in that case?
-          // on the other hand, are we even able to get precommit slash evidence in the first
-          // block?
+          // TODO: We need to be passed in the genesis time to handle this edge case
           if first.block.0 == 0 {
-            Err(TransactionError::InvalidContent)?
+            todo!("invalid precommit signature on first block")
           }
 
           // get the last commit
+          // TODO: Why do we use u32 when Tendermint uses u64?
           let prior_commit = match u32::try_from(first.block.0 - 1) {
             Ok(n) => match commit(n) {
               Some(c) => c,
+              // If we have yet to sync the block in question, we will return InvalidContent based
+              // on our own temporal ambiguity
+              // This will also cause an InvalidContent for anything using a non-existent block,
+              // yet that's valid behavior
+              // TODO: Double check the ramifications of this
               _ => Err(TransactionError::InvalidContent)?,
             },
             _ => Err(TransactionError::InvalidContent)?,
@@ -330,8 +331,9 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
       // this shouldn't be a problem because if the target isn't valid, no one else
       // gonna vote on it. But we still have to think about spam votes.
 
-      // TODO: we should check signer is a participant?
+      // TODO: we need to check signer is a participant
 
+      // TODO: Move this into the standalone TendermintTx verify
       let sig = &vote.sig;
       // verify the tx signature
       // TODO: Use Schnorr half-aggregation and a batch verification here
