@@ -76,20 +76,6 @@ async fn handle_block<
 
         // TODO: disconnect the node from network/ban from further participation in Tributary
       }
-      TributaryTransaction::Tendermint(TendermintTx::SlashVote(vote)) => {
-        // TODO: make sure same signer doesn't vote twice
-
-        // increment the counter for this vote
-        let vote_key = TributaryDb::<D>::slash_vote_key(genesis, vote.id, vote.target);
-        let mut count = txn.get(&vote_key).map_or(0, |c| u32::from_le_bytes(c.try_into().unwrap()));
-        count += 1; // TODO: Increase by weight, not by 1
-        txn.put(vote_key, count.to_le_bytes());
-
-        // TODO: Check if a supermajority of validators, by weight, voted, and increment slash
-        // points if so
-        // If a node has a certain number more than the median slash points, the node should be
-        // removed
-      }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, _, _, _>(
           tx,

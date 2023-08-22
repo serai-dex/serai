@@ -112,7 +112,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         }
 
         // verify the tx
-        if verify_tendermint_tx::<N>(tendermint_tx, self.genesis, schema, commit).is_err() {
+        if verify_tendermint_tx::<N>(tendermint_tx, schema, commit).is_err() {
           return false;
         }
       }

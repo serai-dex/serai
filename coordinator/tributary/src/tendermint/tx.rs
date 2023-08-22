@@ -1,19 +1,10 @@
-use core::ops::Deref;
-use std::{io, vec, default::Default};
+use std::io;
 
 use scale::Decode;
 
-use zeroize::Zeroizing;
+use blake2::{Digest, Blake2s256};
 
-use blake2::{Digest, Blake2s256, Blake2b512};
-
-use rand::{RngCore, CryptoRng};
-
-use ciphersuite::{
-  group::{GroupEncoding, ff::Field},
-  Ciphersuite, Ristretto,
-};
-use schnorr::SchnorrSignature;
+use ciphersuite::{Ciphersuite, Ristretto};
 
 use crate::{
   transaction::{Transaction, TransactionKind, TransactionError},
@@ -28,72 +19,10 @@ use tendermint::{
   ext::{Network, Commit, RoundNumber, SignatureScheme},
 };
 
-/// Signing data for a slash vote.
-///
-/// The traditional Signed uses a nonce, whereas votes aren't required/expected to be ordered.
-/// Accordingly, a simple uniqueness check works instead.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct VoteSignature {
-  pub signer: <Ristretto as Ciphersuite>::G,
-  pub signature: SchnorrSignature<Ristretto>,
-}
-
-impl ReadWrite for VoteSignature {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let signer = Ristretto::read_G(reader)?;
-    let signature = SchnorrSignature::<Ristretto>::read(reader)?;
-
-    Ok(VoteSignature { signer, signature })
-  }
-
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&self.signer.to_bytes())?;
-    self.signature.write(writer)
-  }
-}
-
-impl Default for VoteSignature {
-  fn default() -> Self {
-    VoteSignature {
-      signer: Ristretto::generator(),
-      signature: SchnorrSignature::<Ristretto>::read(&mut [0; 64].as_slice()).unwrap(),
-    }
-  }
-}
-
-/// A vote to slash a malicious validator.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SlashVote {
-  pub id: [u8; 13],       // vote id(slash event id)
-  pub target: [u8; 32],   // who to slash
-  pub sig: VoteSignature, // signature
-}
-
-impl ReadWrite for SlashVote {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut id = [0; 13];
-    let mut target = [0; 32];
-    reader.read_exact(&mut id)?;
-    reader.read_exact(&mut target)?;
-    let sig = VoteSignature::read(reader)?;
-
-    Ok(SlashVote { id, target, sig })
-  }
-
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&self.id)?;
-    writer.write_all(&self.target)?;
-    self.sig.write(writer)
-  }
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TendermintTx {
   SlashEvidence(Vec<u8>),
-  // TODO: should the SlashVote.sig be directly in the enum
-  // like as in (SlashVote, sig) since the sig is sig of the tx.
-  SlashVote(SlashVote),
 }
 
 impl ReadWrite for TendermintTx {
@@ -126,10 +55,6 @@ impl ReadWrite for TendermintTx {
         }
         Ok(TendermintTx::SlashEvidence(data))
       }
-      1 => {
-        let vote = SlashVote::read(reader)?;
-        Ok(TendermintTx::SlashVote(vote))
-      }
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
     }
   }
@@ -140,10 +65,6 @@ impl ReadWrite for TendermintTx {
         writer.write_all(&[0])?;
         writer.write_all(&u32::try_from(ev.len()).unwrap().to_le_bytes())?;
         writer.write_all(ev)
-      }
-      TendermintTx::SlashVote(vote) => {
-        writer.write_all(&[1])?;
-        vote.write(writer)
       }
     }
   }
@@ -157,65 +78,17 @@ impl Transaction for TendermintTx {
   }
 
   fn hash(&self) -> [u8; 32] {
-    let mut tx = self.serialize();
-    if let TendermintTx::SlashVote(vote) = self {
-      // Make sure the part we're cutting off is the signature
-      assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), vote.sig.signature.serialize());
-    }
-    Blake2s256::digest(tx).into()
+    Blake2s256::digest(self.serialize()).into()
   }
 
-  fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
+  fn sig_hash(&self, _genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
     match self {
       TendermintTx::SlashEvidence(_) => panic!("sig_hash called on slash evidence transaction"),
-      TendermintTx::SlashVote(vote) => {
-        let signature = &vote.sig.signature;
-        <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
-          &Blake2b512::digest(
-            [
-              b"Tributary Slash Vote",
-              genesis.as_ref(),
-              &self.hash(),
-              signature.R.to_bytes().as_ref(),
-            ]
-            .concat(),
-          )
-          .into(),
-        )
-      }
     }
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
     Ok(())
-  }
-}
-
-impl TendermintTx {
-  // Sign a transaction
-  pub fn sign<R: RngCore + CryptoRng>(
-    &mut self,
-    rng: &mut R,
-    genesis: [u8; 32],
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  ) {
-    fn signature(tx: &mut TendermintTx) -> Option<&mut VoteSignature> {
-      match tx {
-        TendermintTx::SlashVote(vote) => Some(&mut vote.sig),
-        _ => None,
-      }
-    }
-
-    signature(self).unwrap().signer = Ristretto::generator() * key.deref();
-
-    let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
-    signature(self).unwrap().signature.R =
-      <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
-
-    let sig_hash = self.sig_hash(genesis);
-
-    signature(self).unwrap().signature =
-      SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 }
 
@@ -234,13 +107,13 @@ pub fn decode_evidence<N: Network>(
 // re-implements an entire foreign library's checks for malicious behavior).
 pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
-  genesis: [u8; 32],
   schema: N::SignatureScheme,
   commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
   tx.verify()?;
 
   match tx {
+    // TODO: Only allow one evidence per validator, since evidence is fatal
     TendermintTx::SlashEvidence(ev) => {
       let (first, second) = decode_evidence::<N>(ev)?;
 
@@ -330,21 +203,6 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
         }
         _ => Err(TransactionError::InvalidContent)?,
-      }
-    }
-    TendermintTx::SlashVote(vote) => {
-      // TODO: verify the target is actually one of our validators?
-      // this shouldn't be a problem because if the target isn't valid, no one else
-      // gonna vote on it. But we still have to think about spam votes.
-
-      // TODO: we need to check signer is a participant
-
-      // TODO: Move this into the standalone TendermintTx verify
-      let sig = &vote.sig;
-      // verify the tx signature
-      // TODO: Use Schnorr half-aggregation and a batch verification here
-      if !sig.signature.verify(sig.signer, tx.sig_hash(genesis)) {
-        Err(TransactionError::InvalidSignature)?;
       }
     }
   }

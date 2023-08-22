@@ -19,10 +19,10 @@ use crate::{
   transaction::Transaction as TransactionTrait,
   TransactionError, Transaction, ProvidedError, ProvidedTransactions, merkle, BlockError, Block,
   Blockchain,
-  tendermint::{TendermintNetwork, Validators, tx::TendermintTx, Signer, TendermintBlock},
+  tendermint::{TendermintNetwork, Validators, Signer, TendermintBlock},
   tests::{
     ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::DummyP2p,
-    new_genesis, random_vote_tx, random_evidence_tx,
+    new_genesis, random_evidence_tx,
   },
 };
 
@@ -149,34 +149,6 @@ fn invalid_block() {
     // signature (which it explicitly isn't allowed to anyways)
     assert_eq!(block.header.transactions, merkle(&[block.transactions[0].hash()]));
   }
-
-  {
-    // Invalid vote signature
-    let mut blockchain = blockchain.clone();
-    let vote_tx = random_vote_tx(&mut OsRng, genesis);
-    assert!(blockchain.add_transaction::<N>(
-      true,
-      Transaction::Tendermint(vote_tx),
-      validators.clone()
-    ));
-    let mut block = blockchain.build_block::<N>(validators.clone());
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
-    match &mut block.transactions[0] {
-      Transaction::Tendermint(tx) => match tx {
-        TendermintTx::SlashVote(vote) => {
-          vote.sig.signature.s += <Ristretto as Ciphersuite>::F::ONE;
-        }
-        _ => panic!("non-vote tx found"),
-      },
-      _ => panic!("non-tendermint tx found"),
-    }
-
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
-
-    // Make sure this isn't because the merkle changed due to the transaction hash including the
-    // signature (which it explicitly isn't allowed to anyways)
-    assert_eq!(block.header.transactions, merkle(&[block.transactions[0].hash()]));
-  }
 }
 
 #[test]
@@ -281,61 +253,6 @@ fn provided_transaction() {
   assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_err());
 }
 
-#[test]
-fn tendermint_vote_tx() {
-  let genesis = new_genesis();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
-
-  let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
-
-  let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
-              mempool: Vec<Transaction<SignedTransaction>>| {
-    let tip = blockchain.tip();
-    for tx in mempool.clone() {
-      let Transaction::Tendermint(tx) = tx else {
-        panic!("non-tendermint tx found");
-      };
-      assert!(blockchain.add_transaction::<N>(
-        true,
-        Transaction::Tendermint(tx),
-        validators.clone()
-      ));
-    }
-    let block = blockchain.build_block::<N>(validators.clone());
-
-    assert_eq!(blockchain.tip(), tip);
-    assert_eq!(block.header.parent, tip);
-
-    // Make sure all transactions were included
-    for bt in &block.transactions {
-      assert!(mempool.contains(bt));
-    }
-
-    // Make sure the merkle was correct
-    // Uses block.transactions instead of mempool as order may differ between the two
-    assert_eq!(
-      block.header.transactions,
-      merkle(&block.transactions.iter().map(Transaction::hash).collect::<Vec<_>>()),
-    );
-
-    // Verify and add the block
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
-    assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
-    assert_eq!(blockchain.tip(), block.hash());
-  };
-
-  // test with single tx
-  let tx = random_vote_tx(&mut OsRng, genesis);
-  test(&mut blockchain, vec![Transaction::Tendermint(tx)]);
-
-  // test with multiple txs
-  let mut mempool: Vec<Transaction<SignedTransaction>> = vec![];
-  for _ in 0 .. 5 {
-    mempool.push(Transaction::Tendermint(random_vote_tx(&mut OsRng, genesis)));
-  }
-  test(&mut blockchain, mempool);
-}
-
 #[tokio::test]
 async fn tendermint_evidence_tx() {
   let genesis = new_genesis();
@@ -397,8 +314,8 @@ async fn tendermint_evidence_tx() {
   test(&mut blockchain, mempool, validators);
 }
 
-#[test]
-fn block_tx_ordering() {
+#[tokio::test]
+async fn block_tx_ordering() {
   #[derive(Debug, PartialEq, Eq, Clone)]
   enum SignedTx {
     Signed(Box<SignedTransaction>),
@@ -451,10 +368,10 @@ fn block_tx_ordering() {
 
   let genesis = new_genesis();
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
 
   // signer
   let signer = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;
+  let validators = Arc::new(Validators::new(genesis, vec![(signer, 1)]).unwrap());
 
   let (_, mut blockchain) = new_blockchain::<SignedTx>(genesis, &[signer]);
   let tip = blockchain.tip();
@@ -469,7 +386,13 @@ fn block_tx_ordering() {
     assert!(blockchain.add_transaction::<N>(true, signed_tx.clone(), validators.clone()));
     mempool.push(signed_tx);
 
-    let unsigned_tx = Transaction::Tendermint(random_vote_tx(&mut OsRng, genesis));
+    let unsigned_tx = Transaction::Tendermint(
+      random_evidence_tx::<N>(
+        Signer::new(genesis, key.clone()).into(),
+        TendermintBlock(vec![u8::try_from(i).unwrap()]),
+      )
+      .await,
+    );
     assert!(blockchain.add_transaction::<N>(true, unsigned_tx.clone(), validators.clone()));
     mempool.push(unsigned_tx);
 

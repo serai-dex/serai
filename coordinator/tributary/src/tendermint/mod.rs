@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
 
-use rand::{SeedableRng, seq::SliceRandom, rngs::OsRng};
+use rand::{SeedableRng, seq::SliceRandom};
 use rand_chacha::ChaCha12Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
@@ -43,11 +43,11 @@ use tokio::{
 use crate::{
   TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
   transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
-  Blockchain, P2p, tendermint::tx::SlashVote,
+  Blockchain, P2p,
 };
 
 pub mod tx;
-use tx::{TendermintTx, VoteSignature};
+use tx::TendermintTx;
 
 const DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
 
@@ -312,21 +312,17 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     );
 
     let signer = self.signer();
-    let tx = match slash_event {
+    let Some(tx) = (match slash_event {
       SlashEvent::WithEvidence(m1, m2) => {
         // create an unsigned evidence tx
-        TendermintTx::SlashEvidence((m1, m2).encode())
+        Some(TendermintTx::SlashEvidence((m1, m2).encode()))
       }
-      SlashEvent::Id(reason, block, round) => {
-        // create a signed vote tx
-        let mut tx = TendermintTx::SlashVote(SlashVote {
-          id: (reason, block, round).encode().try_into().unwrap(),
-          target: validator.encode().try_into().unwrap(),
-          sig: VoteSignature::default(),
-        });
-        tx.sign(&mut OsRng, signer.genesis, &signer.key);
-        tx
+      SlashEvent::Id(_reason, _block, _round) => {
+        // TODO: Increase locally observed slash points
+        None
       }
+    }) else {
+      return;
     };
 
     // add tx to blockchain and broadcast to peers

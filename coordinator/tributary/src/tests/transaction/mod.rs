@@ -22,10 +22,7 @@ use ::tendermint::{
 use crate::{
   transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
   ReadWrite,
-  tendermint::{
-    tx::{SlashVote, VoteSignature, TendermintTx},
-    Validators, Signer,
-  },
+  tendermint::{tx::TendermintTx, Validators, Signer},
 };
 
 #[cfg(test)]
@@ -204,20 +201,4 @@ pub async fn random_evidence_tx<N: Network>(
   let signer_id = signer.validator_id().await.unwrap();
   let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
   TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode())
-}
-
-pub fn random_vote_tx<R: RngCore + CryptoRng>(rng: &mut R, genesis: [u8; 32]) -> TendermintTx {
-  // private key
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
-
-  // vote data
-  let mut id = [0u8; 13];
-  let mut target = [0u8; 32];
-  rng.fill_bytes(&mut id);
-  rng.fill_bytes(&mut target);
-
-  let mut tx = TendermintTx::SlashVote(SlashVote { id, target, sig: VoteSignature::default() });
-  tx.sign(rng, genesis, &key);
-
-  tx
 }

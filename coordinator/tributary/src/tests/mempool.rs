@@ -13,9 +13,7 @@ use crate::{
   transaction::Transaction as TransactionTrait,
   tendermint::{TendermintBlock, Validators, Signer, TendermintNetwork},
   ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
-  tests::{
-    SignedTransaction, signed_transaction, p2p::DummyP2p, random_vote_tx, random_evidence_tx,
-  },
+  tests::{SignedTransaction, signed_transaction, p2p::DummyP2p, random_evidence_tx},
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
@@ -55,17 +53,6 @@ async fn mempool_addition() {
   ));
   assert_eq!(mempool.next_nonce(&signer), Some(1));
 
-  // add a tendermint vote tx
-  let vote_tx = random_vote_tx(&mut OsRng, genesis);
-  assert!(mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Tendermint(vote_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
-
   // add a tendermint evidence tx
   let evidence_tx =
     random_evidence_tx::<N>(Signer::new(genesis, key.clone()).into(), TendermintBlock(vec![]))
@@ -87,14 +74,6 @@ async fn mempool_addition() {
     &blockchain_next_nonces,
     true,
     Transaction::Application(first_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
-  assert!(!mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Tendermint(vote_tx.clone()),
     validators.clone(),
     unsigned_in_chain,
     commit,
@@ -146,18 +125,17 @@ async fn mempool_addition() {
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
-  assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain).len(), 5);
+  assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain).len(), 4);
 
   // If the blockchain says an account had its nonce updated, it should cause a prune
   blockchain_next_nonces.insert(signer, 1);
   let mut block = mempool.block(&blockchain_next_nonces, unsigned_in_chain);
-  assert_eq!(block.len(), 4);
+  assert_eq!(block.len(), 3);
   assert!(!block.iter().any(|tx| tx.hash() == first_tx.hash()));
   assert_eq!(mempool.txs(), &block.drain(..).map(|tx| (tx.hash(), tx)).collect::<HashMap<_, _>>());
 
   // Removing should also successfully prune
   mempool.remove(&tx.hash());
-  mempool.remove(&vote_tx.hash());
 
   assert_eq!(
     mempool.txs(),

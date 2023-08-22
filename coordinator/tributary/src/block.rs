@@ -251,7 +251,7 @@ impl<T: TransactionTrait> Block<T> {
       // use this pattern of verifying tendermint Txs and app txs differently?
       match tx {
         Transaction::Tendermint(tx) => {
-          match verify_tendermint_tx::<N>(tx, genesis, schema.clone(), &commit) {
+          match verify_tendermint_tx::<N>(tx, schema.clone(), &commit) {
             Ok(()) => {}
             Err(e) => Err(BlockError::TransactionError(e))?,
           }
