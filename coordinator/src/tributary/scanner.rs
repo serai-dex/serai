@@ -16,7 +16,7 @@ use tributary::{
   },
 };
 
-use serai_db::{Get, DbTxn};
+use serai_db::DbTxn;
 
 use crate::{
   Db,
