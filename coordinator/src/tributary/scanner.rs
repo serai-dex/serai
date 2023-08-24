@@ -4,7 +4,9 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
+use serai_client::{
+  primitives::NetworkId, validator_sets::primitives::ValidatorSet, subxt::utils::Encoded,
+};
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -43,7 +45,7 @@ async fn handle_block<
 >(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id: &UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
   processors: &Pro,
   publish_serai_tx: PST,
   spec: &TributarySpec,
@@ -109,7 +111,7 @@ pub async fn handle_new_blocks<
 >(
   db: &mut TributaryDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id: &UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
   processors: &Pro,
   publish_serai_tx: PST,
   spec: &TributarySpec,

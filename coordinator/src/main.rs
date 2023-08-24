@@ -17,7 +17,7 @@ use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 use serai_db::{DbTxn, Db};
 use serai_env as env;
 
-use serai_client::{Public, Serai};
+use serai_client::{primitives::NetworkId, Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
@@ -146,7 +146,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
 pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id_send: UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id_send: UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
   p2p: P,
   processors: Pro,
   serai: Arc<Serai>,
@@ -544,6 +544,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             // before this message finishes it handling (or with this message's finished handling)
             let mut txn = db.txn();
             MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
+            MainDb::<D>::add_batch_to_block(&mut txn, msg.network, block, id.id);
             txn.commit();
 
             // TODO: This will publish one ExternalBlock per Batch. We should only publish one per
@@ -701,21 +702,27 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let tributaries = tributaries.clone();
     async move {
       loop {
-        if let Some((genesis, id_type, id)) = recognized_id_recv.recv().await {
-          let mut tx = match id_type {
-            RecognizedIdType::Block => Transaction::BatchPreprocess(SignData {
-              plan: id,
-              attempt: 0,
-              data: MainDb::<D>::first_preprocess(&raw_db, id),
-              signed: Transaction::empty_signed(),
-            }),
+        if let Some((network, genesis, id_type, id)) = recognized_id_recv.recv().await {
+          let txs = match id_type {
+            RecognizedIdType::Block => {
+              let mut txs = vec![];
+              for id in MainDb::<D>::batches_in_block(&raw_db, network, id) {
+                txs.push(Transaction::BatchPreprocess(SignData {
+                  plan: id,
+                  attempt: 0,
+                  data: MainDb::<D>::first_preprocess(&raw_db, id),
+                  signed: Transaction::empty_signed(),
+                }));
+              }
+              txs
+            }
 
-            RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+            RecognizedIdType::Plan => vec![Transaction::SignPreprocess(SignData {
               plan: id,
               attempt: 0,
               data: MainDb::<D>::first_preprocess(&raw_db, id),
               signed: Transaction::empty_signed(),
-            }),
+            })],
           };
 
           let tributaries = tributaries.read().await;
@@ -724,15 +731,17 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           };
           let tributary = tributary.tributary.read().await;
 
-          // TODO: Same note as prior nonce acquisition
-          log::trace!("getting next nonce for Tributary TX containing Batch signing data");
-          let nonce = tributary
-            .next_nonce(Ristretto::generator() * key.deref())
-            .await
-            .expect("publishing a TX to a tributary we aren't in");
-          tx.sign(&mut OsRng, genesis, &key, nonce);
+          for mut tx in txs {
+            // TODO: Same note as prior nonce acquisition
+            log::trace!("getting next nonce for Tributary TX containing Batch signing data");
+            let nonce = tributary
+              .next_nonce(Ristretto::generator() * key.deref())
+              .await
+              .expect("publishing a TX to a tributary we aren't in");
+            tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          publish_transaction(&tributary, tx).await;
+            publish_transaction(&tributary, tx).await;
+          }
         } else {
           log::warn!("recognized_id_send was dropped. are we shutting down?");
           break;

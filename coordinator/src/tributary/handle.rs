@@ -19,6 +19,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use serai_client::{
   Signature,
+  primitives::NetworkId,
   validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
   subxt::utils::Encoded,
   Serai,
@@ -232,7 +233,7 @@ pub async fn handle_application_tx<
   publish_serai_tx: PST,
   genesis: [u8; 32],
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: &UnboundedSender<([u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id: &UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
   txn: &mut <D as Db>::Transaction<'_>,
 ) {
   // Used to determine if an ID is acceptable
@@ -433,7 +434,7 @@ pub async fn handle_application_tx<
       // Because this external block has been finalized, its batch ID should be authorized
       TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, block);
       recognized_id
-        .send((genesis, RecognizedIdType::Block, block))
+        .send((spec.set().network, genesis, RecognizedIdType::Block, block))
         .expect("recognized_id_recv was dropped. are we shutting down?");
     }
 
@@ -446,7 +447,7 @@ pub async fn handle_application_tx<
       for id in plan_ids {
         TributaryDb::<D>::recognize_id(txn, Zone::Sign.label(), genesis, id);
         recognized_id
-          .send((genesis, RecognizedIdType::Plan, id))
+          .send((spec.set().network, genesis, RecognizedIdType::Plan, id))
           .expect("recognized_id_recv was dropped. are we shutting down?");
       }
     }
