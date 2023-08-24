@@ -176,7 +176,7 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    Update { key: Vec<u8>, batch: SignedBatch },
+    Update { key: [u8; 32], batch: SignedBatch },
   }
 }
 

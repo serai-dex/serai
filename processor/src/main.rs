@@ -158,7 +158,7 @@ struct TributaryMutable<N: Network, D: Db> {
   // The safety of this follows as written above.
 
   // TODO: There should only be one SubstrateSigner at a time (see #277)
-  substrate_signers: HashMap<Vec<u8>, SubstrateSigner<D>>,
+  substrate_signers: HashMap<[u8; 32], SubstrateSigner<D>>,
 }
 
 // Items which are mutably borrowed by Substrate.
@@ -373,10 +373,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { substrate_keys, network_keys } =
             tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
-          tributary_mutable.substrate_signers.insert(
-            substrate_keys.group_key().to_bytes().to_vec(),
-            SubstrateSigner::new(substrate_keys),
-          );
+          tributary_mutable
+            .substrate_signers
+            .insert(substrate_keys.group_key().to_bytes(), SubstrateSigner::new(substrate_keys));
 
           let key = network_keys.group_key();
 
@@ -520,7 +519,7 @@ async fn boot<N: Network, D: Db>(
     let substrate_signer = SubstrateSigner::new(substrate_keys);
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary
-    substrate_signers.insert(substrate_key.to_bytes().to_vec(), substrate_signer);
+    substrate_signers.insert(substrate_key.to_bytes(), substrate_signer);
 
     let mut signer = Signer::new(network.clone(), network_keys);
 
@@ -612,7 +611,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           SubstrateSignerEvent::SignedBatch(batch) => {
             coordinator
               .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-                key: key.clone(),
+                key: *key,
                 batch,
               }))
               .await;

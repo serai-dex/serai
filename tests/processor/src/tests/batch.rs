@@ -125,7 +125,7 @@ pub(crate) async fn sign_batch(
           key,
           batch: this_batch,
         }) => {
-          assert_eq!(&key, &id.key);
+          assert_eq!(key.as_slice(), &id.key);
 
           if batch.is_none() {
             assert!(PublicKey::from_raw(id.key.clone().try_into().unwrap())
