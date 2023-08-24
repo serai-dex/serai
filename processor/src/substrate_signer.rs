@@ -19,10 +19,26 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
 
-use serai_client::in_instructions::primitives::{Batch, SignedBatch, batch_message};
+use serai_client::{
+  primitives::NetworkId,
+  in_instructions::primitives::{Batch, SignedBatch, batch_message},
+};
 
 use messages::{sign::SignId, coordinator::*};
 use crate::{Get, DbTxn, Db};
+
+// Generate an ID unique to a Batch
+// TODO: Fork SignId to BatchSignId in order to just use the 5-byte encoding, not the hash of the
+// 5-byte encoding
+fn sign_id(network: NetworkId, id: u32) -> [u8; 32] {
+  let mut transcript = RecommendedTranscript::new(b"Serai Processor Batch Sign ID");
+  transcript.append_message(b"network", network.encode());
+  transcript.append_message(b"id", id.to_le_bytes());
+
+  let mut res = [0; 32];
+  res.copy_from_slice(&transcript.challenge(b"id")[.. 32]);
+  res
+}
 
 #[derive(Debug)]
 pub enum SubstrateSignerEvent {
@@ -35,16 +51,6 @@ struct SubstrateSignerDb<D: Db>(D);
 impl<D: Db> SubstrateSignerDb<D> {
   fn sign_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"SUBSTRATE_SIGNER", dst, key)
-  }
-
-  fn sign_id_key(id: u32) -> Vec<u8> {
-    Self::sign_key(b"sign_id", id.to_le_bytes())
-  }
-  fn save_sign_id(txn: &mut D::Transaction<'_>, id: u32, sign_id: [u8; 32]) {
-    txn.put(Self::sign_id_key(id), sign_id);
-  }
-  fn sign_id(txn: &mut D::Transaction<'_>, id: u32) -> [u8; 32] {
-    txn.get(Self::sign_id_key(id)).expect("completing a batch we never started").try_into().unwrap()
   }
 
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
@@ -75,6 +81,7 @@ impl<D: Db> SubstrateSignerDb<D> {
 pub struct SubstrateSigner<D: Db> {
   db: PhantomData<D>,
 
+  network: NetworkId,
   keys: ThresholdKeys<Ristretto>,
 
   signable: HashMap<[u8; 32], Batch>,
@@ -96,10 +103,11 @@ impl<D: Db> fmt::Debug for SubstrateSigner<D> {
 }
 
 impl<D: Db> SubstrateSigner<D> {
-  pub fn new(keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
+  pub fn new(network: NetworkId, keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
     SubstrateSigner {
       db: PhantomData,
 
+      network,
       keys,
 
       signable: HashMap::new(),
@@ -214,28 +222,8 @@ impl<D: Db> SubstrateSigner<D> {
   }
 
   pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
-    // Generate a unique ID to sign with
-    let id = {
-      // TODO: Add this to in-instructions primitives
-      let mut transcript = RecommendedTranscript::new(b"Serai Processor Batch ID");
-      transcript.domain_separate(b"header");
-      transcript.append_message(b"network", batch.network.encode());
-      transcript.append_message(b"id", batch.id.to_le_bytes());
-      transcript.append_message(b"block", batch.block.0);
-
-      transcript.domain_separate(b"instructions");
-      for instruction in &batch.instructions {
-        // TODO: Either properly transcript this or simply encode the entire batch (since SCALE is
-        // canonical)
-        transcript.append_message(b"instruction", instruction.encode());
-      }
-
-      let mut res = [0; 32];
-      res.copy_from_slice(&transcript.challenge(b"id")[.. 32]);
-      res
-    };
-    SubstrateSignerDb::<D>::save_sign_id(txn, batch.id, id);
-
+    debug_assert_eq!(self.network, batch.network);
+    let id = sign_id(batch.network, batch.id);
     if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
@@ -370,7 +358,7 @@ impl<D: Db> SubstrateSigner<D> {
     // block behind it, which will trigger starting the Batch
     // TODO: There is a race condition between the Scanner recognizing the block and the Batch
     // having signing started
-    let sign_id = SubstrateSignerDb::<D>::sign_id(txn, id);
+    let sign_id = sign_id(self.network, id);
 
     // Stop trying to sign for this batch
     SubstrateSignerDb::<D>::complete(txn, sign_id);

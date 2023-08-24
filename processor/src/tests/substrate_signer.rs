@@ -53,7 +53,7 @@ async fn test_substrate_signer() {
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
 
-    let mut signer = SubstrateSigner::<MemDb>::new(keys);
+    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, keys);
     let mut db = MemDb::new();
     let mut txn = db.txn();
     signer.sign(&mut txn, batch.clone()).await;

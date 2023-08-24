@@ -373,9 +373,10 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { substrate_keys, network_keys } =
             tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
-          tributary_mutable
-            .substrate_signers
-            .insert(substrate_keys.group_key().to_bytes(), SubstrateSigner::new(substrate_keys));
+          tributary_mutable.substrate_signers.insert(
+            substrate_keys.group_key().to_bytes(),
+            SubstrateSigner::new(N::NETWORK, substrate_keys),
+          );
 
           let key = network_keys.group_key();
 
@@ -516,7 +517,7 @@ async fn boot<N: Network, D: Db>(
     let (substrate_keys, network_keys) = key_gen.keys(key);
 
     let substrate_key = substrate_keys.group_key();
-    let substrate_signer = SubstrateSigner::new(substrate_keys);
+    let substrate_signer = SubstrateSigner::new(N::NETWORK, substrate_keys);
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary
     substrate_signers.insert(substrate_key.to_bytes(), substrate_signer);
