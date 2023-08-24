@@ -4,6 +4,7 @@ use std::collections::{VecDeque, HashMap};
 use rand_core::OsRng;
 
 use scale::Encode;
+use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::group::GroupEncoding;
 use frost::{
@@ -36,11 +37,21 @@ impl<D: Db> SubstrateSignerDb<D> {
     D::key(b"SUBSTRATE_SIGNER", dst, key)
   }
 
+  fn sign_id_key(id: u32) -> Vec<u8> {
+    Self::sign_key(b"sign_id", id.to_le_bytes())
+  }
+  fn save_sign_id(txn: &mut D::Transaction<'_>, id: u32, sign_id: [u8; 32]) {
+    txn.put(Self::sign_id_key(id), sign_id);
+  }
+  fn sign_id(txn: &mut D::Transaction<'_>, id: u32) -> [u8; 32] {
+    txn.get(Self::sign_id_key(id)).expect("completing a batch we never started").try_into().unwrap()
+  }
+
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"completed", id)
   }
   fn complete(txn: &mut D::Transaction<'_>, id: [u8; 32]) {
-    txn.put(Self::completed_key(id), [1]);
+    txn.put(Self::completed_key(id), []);
   }
   fn completed<G: Get>(getter: &G, id: [u8; 32]) -> bool {
     getter.get(Self::completed_key(id)).is_some()
@@ -203,9 +214,27 @@ impl<D: Db> SubstrateSigner<D> {
   }
 
   pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
-    // Use the batch id as the ID
-    let mut id = [0u8; 32];
-    id[.. 4].copy_from_slice(&batch.id.to_le_bytes());
+    // Generate a unique ID to sign with
+    let id = {
+      // TODO: Add this to in-instructions primitives
+      let mut transcript = RecommendedTranscript::new(b"Serai Processor Batch ID");
+      transcript.domain_separate(b"header");
+      transcript.append_message(b"network", batch.network.encode());
+      transcript.append_message(b"id", batch.id.to_le_bytes());
+      transcript.append_message(b"block", batch.block.0);
+
+      transcript.domain_separate(b"instructions");
+      for instruction in &batch.instructions {
+        // TODO: Either properly transcript this or simply encode the entire batch (since SCALE is
+        // canonical)
+        transcript.append_message(b"instruction", instruction.encode());
+      }
+
+      let mut res = [0; 32];
+      res.copy_from_slice(&transcript.challenge(b"id")[.. 32]);
+      res
+    };
+    SubstrateSignerDb::<D>::save_sign_id(txn, batch.id, id);
 
     if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
@@ -336,19 +365,20 @@ impl<D: Db> SubstrateSigner<D> {
     }
   }
 
-  pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, batch_id: u32) {
-    // Convert into 32-byte ID
-    // TODO: Add a BatchSignId so we don't have this inefficiency
-    let mut id = [0u8; 32];
-    id[.. 4].copy_from_slice(&batch_id.to_le_bytes());
+  pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, id: u32) {
+    // Safe since SubstrateSigner won't be told of the completion until the Scanner recognizes the
+    // block behind it, which will trigger starting the Batch
+    // TODO: There is a race condition between the Scanner recognizing the block and the Batch
+    // having signing started
+    let sign_id = SubstrateSignerDb::<D>::sign_id(txn, id);
 
     // Stop trying to sign for this batch
-    SubstrateSignerDb::<D>::complete(txn, id);
+    SubstrateSignerDb::<D>::complete(txn, sign_id);
 
-    self.signable.remove(&id);
-    self.attempt.remove(&id);
-    self.preprocessing.remove(&id);
-    self.signing.remove(&id);
+    self.signable.remove(&sign_id);
+    self.attempt.remove(&sign_id);
+    self.preprocessing.remove(&sign_id);
+    self.signing.remove(&sign_id);
 
     // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
     // This function is expected to only be called once Substrate acknowledges this block,
