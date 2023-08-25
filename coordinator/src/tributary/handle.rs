@@ -157,7 +157,7 @@ fn read_known_to_exist_data<D: Db, G: Get>(
   attempt: u32,
   bytes: Vec<u8>,
   signed: Option<&Signed>,
-) -> HashMap<Participant, Vec<u8>> {
+) -> Option<HashMap<Participant, Vec<u8>>> {
   let mut data = HashMap::new();
   for validator in spec.validators().iter().map(|validator| validator.0) {
     data.insert(
@@ -175,16 +175,19 @@ fn read_known_to_exist_data<D: Db, G: Get>(
   }
   assert_eq!(data.len(), usize::from(needed));
 
-  // Remove our own piece of data
-  assert!(data
+  // Remove our own piece of data, if we were involved
+  if data
     .remove(
       &spec
         .i(Ristretto::generator() * key.deref())
-        .expect("handling a message for a Tributary we aren't part of")
+        .expect("handling a message for a Tributary we aren't part of"),
     )
-    .is_some());
-
-  data
+    .is_some()
+  {
+    Some(data)
+  } else {
+    None
+  }
 }
 
 pub fn dkg_confirmation_nonces(
@@ -204,7 +207,7 @@ pub fn generated_key_pair<D: Db>(
   TributaryDb::<D>::save_currently_completing_key_pair(txn, spec.genesis(), key_pair);
 
   let attempt = 0; // TODO
-  let preprocesses = read_known_to_exist_data::<D, _>(
+  let Some(preprocesses) = read_known_to_exist_data::<D, _>(
     txn,
     spec,
     key,
@@ -214,7 +217,9 @@ pub fn generated_key_pair<D: Db>(
     attempt,
     vec![],
     None,
-  );
+  ) else {
+    panic!("wasn't a participant in confirming a key pair");
+  };
   DkgConfirmer::share(spec, key, preprocesses, key_pair)
 }
 
@@ -317,19 +322,21 @@ pub async fn handle_application_tx<
 
   match tx {
     Transaction::DkgCommitments(attempt, bytes, signed) => {
-      if let Some(commitments) =
-        handle(txn, Zone::Dkg, b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, &signed)
-      {
-        log::info!("got all DkgCommitments for {}", hex::encode(genesis));
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-              id: KeyGenId { set: spec.set(), attempt },
-              commitments,
-            }),
-          )
-          .await;
+      match handle(txn, Zone::Dkg, b"dkg_commitments", spec.n(), [0; 32], attempt, bytes, &signed) {
+        Some(Some(commitments)) => {
+          log::info!("got all DkgCommitments for {}", hex::encode(genesis));
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+                id: KeyGenId { set: spec.set(), attempt },
+                commitments,
+              }),
+            )
+            .await;
+        }
+        Some(None) => panic!("wasn't a participant in DKG commitments"),
+        None => {}
       }
     }
 
@@ -366,27 +373,27 @@ pub async fn handle_application_tx<
         confirmation_nonces.to_vec(),
         &signed,
       );
-      if let Some(shares) =
-        handle(txn, Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, &signed)
-      {
-        log::info!("got all DkgShares for {}", hex::encode(genesis));
-        assert!(confirmation_nonces.is_some());
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
-              id: KeyGenId { set: spec.set(), attempt },
-              shares,
-            }),
-          )
-          .await;
-      } else {
-        assert!(confirmation_nonces.is_none());
+      match handle(txn, Zone::Dkg, b"dkg_shares", spec.n(), [0; 32], attempt, bytes, &signed) {
+        Some(Some(shares)) => {
+          log::info!("got all DkgShares for {}", hex::encode(genesis));
+          assert!(confirmation_nonces.is_some());
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+                id: KeyGenId { set: spec.set(), attempt },
+                shares,
+              }),
+            )
+            .await;
+        }
+        Some(None) => panic!("wasn't a participant in DKG shares"),
+        None => assert!(confirmation_nonces.is_none()),
       }
     }
 
     Transaction::DkgConfirmed(attempt, shares, signed) => {
-      if let Some(shares) = handle(
+      match handle(
         txn,
         Zone::Dkg,
         DKG_CONFIRMATION_SHARES,
@@ -396,37 +403,43 @@ pub async fn handle_application_tx<
         shares.to_vec(),
         &signed,
       ) {
-        log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
+        Some(Some(shares)) => {
+          log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
-        let preprocesses = read_known_to_exist_data::<D, _>(
-          txn,
-          spec,
-          key,
-          DKG_CONFIRMATION_NONCES,
-          [0; 32],
-          spec.n(),
-          attempt,
-          vec![],
-          None,
-        );
+          let Some(preprocesses) = read_known_to_exist_data::<D, _>(
+            txn,
+            spec,
+            key,
+            DKG_CONFIRMATION_NONCES,
+            [0; 32],
+            spec.n(),
+            attempt,
+            vec![],
+            None,
+          ) else {
+            panic!("wasn't a participant in DKG confirmation nonces");
+          };
 
-        let key_pair = TributaryDb::<D>::currently_completing_key_pair(txn, genesis)
-          .unwrap_or_else(|| {
-            panic!(
-              "in DkgConfirmed handling, which happens after everyone {}",
-              "(including us) fires DkgConfirmed, yet no confirming key pair"
-            )
-          });
-        let Ok(sig) = DkgConfirmer::complete(spec, key, preprocesses, &key_pair, shares) else {
-          // TODO: Full slash
-          todo!();
-        };
+          let key_pair = TributaryDb::<D>::currently_completing_key_pair(txn, genesis)
+            .unwrap_or_else(|| {
+              panic!(
+                "in DkgConfirmed handling, which happens after everyone {}",
+                "(including us) fires DkgConfirmed, yet no confirming key pair"
+              )
+            });
+          let Ok(sig) = DkgConfirmer::complete(spec, key, preprocesses, &key_pair, shares) else {
+            // TODO: Full slash
+            todo!();
+          };
 
-        publish_serai_tx(
-          spec.set(),
-          Serai::set_validator_set_keys(spec.set().network, key_pair, Signature(sig)),
-        )
-        .await;
+          publish_serai_tx(
+            spec.set(),
+            Serai::set_validator_set_keys(spec.set().network, key_pair, Signature(sig)),
+          )
+          .await;
+        }
+        Some(None) => panic!("wasn't a participant in DKG confirmination shares"),
+        None => {}
       }
     }
 
@@ -453,7 +466,7 @@ pub async fn handle_application_tx<
     }
 
     Transaction::BatchPreprocess(data) => {
-      if let Some(preprocesses) = handle(
+      match handle(
         txn,
         Zone::Batch,
         b"batch_preprocess",
@@ -463,19 +476,23 @@ pub async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
-              id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
-              preprocesses,
-            }),
-          )
-          .await;
+        Some(Some(preprocesses)) => {
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
+                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+                preprocesses,
+              }),
+            )
+            .await;
+        }
+        Some(None) => {}
+        None => {}
       }
     }
     Transaction::BatchShare(data) => {
-      if let Some(shares) = handle(
+      match handle(
         txn,
         Zone::Batch,
         b"batch_share",
@@ -485,23 +502,27 @@ pub async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-              id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
-              shares: shares
-                .into_iter()
-                .map(|(validator, share)| (validator, share.try_into().unwrap()))
-                .collect(),
-            }),
-          )
-          .await;
+        Some(Some(shares)) => {
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
+                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+                shares: shares
+                  .into_iter()
+                  .map(|(validator, share)| (validator, share.try_into().unwrap()))
+                  .collect(),
+              }),
+            )
+            .await;
+        }
+        Some(None) => {}
+        None => {}
       }
     }
 
     Transaction::SignPreprocess(data) => {
-      if let Some(preprocesses) = handle(
+      match handle(
         txn,
         Zone::Sign,
         b"sign_preprocess",
@@ -511,19 +532,23 @@ pub async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
-              id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-              preprocesses,
-            }),
-          )
-          .await;
+        Some(Some(preprocesses)) => {
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                preprocesses,
+              }),
+            )
+            .await;
+        }
+        Some(None) => {}
+        None => {}
       }
     }
     Transaction::SignShare(data) => {
-      if let Some(shares) = handle(
+      match handle(
         txn,
         Zone::Sign,
         b"sign_share",
@@ -533,15 +558,19 @@ pub async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        processors
-          .send(
-            spec.set().network,
-            CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
-              id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
-              shares,
-            }),
-          )
-          .await;
+        Some(Some(shares)) => {
+          processors
+            .send(
+              spec.set().network,
+              CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                shares,
+              }),
+            )
+            .await;
+        }
+        Some(None) => {}
+        None => {}
       }
     }
     Transaction::SignCompleted(_, _, _) => todo!(),
