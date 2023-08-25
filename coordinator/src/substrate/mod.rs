@@ -23,7 +23,11 @@ use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage
 
 use tokio::time::sleep;
 
-use crate::{Db, processors::Processors, tributary::TributarySpec};
+use crate::{
+  Db,
+  processors::Processors,
+  tributary::{TributarySpec, TributaryDb},
+};
 
 mod db;
 pub use db::*;
@@ -298,6 +302,12 @@ async fn handle_block<
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
+        // Immediately ensure this key pair is accessible to the tributary, before we fire any
+        // events off of it
+        let mut txn = db.0.txn();
+        TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
+        txn.commit();
+
         handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");

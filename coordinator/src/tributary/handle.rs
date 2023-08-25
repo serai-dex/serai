@@ -522,6 +522,7 @@ pub async fn handle_application_tx<
     }
 
     Transaction::SignPreprocess(data) => {
+      let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
         Zone::Sign,
@@ -537,7 +538,14 @@ pub async fn handle_application_tx<
             .send(
               spec.set().network,
               CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                id: SignId {
+                  key: key_pair
+                    .expect("completed SignPreprocess despite not setting the key pair")
+                    .1
+                    .into(),
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 preprocesses,
               }),
             )
@@ -548,6 +556,7 @@ pub async fn handle_application_tx<
       }
     }
     Transaction::SignShare(data) => {
+      let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
         Zone::Sign,
@@ -563,7 +572,14 @@ pub async fn handle_application_tx<
             .send(
               spec.set().network,
               CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
-                id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+                id: SignId {
+                  key: key_pair
+                    .expect("completed SignShares despite not setting the key pair")
+                    .1
+                    .into(),
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 shares,
               }),
             )
@@ -573,6 +589,8 @@ pub async fn handle_application_tx<
         None => {}
       }
     }
-    Transaction::SignCompleted(_, _, _) => todo!(),
+    Transaction::SignCompleted(_, _, _) => {
+      // TODO
+    }
   }
 }

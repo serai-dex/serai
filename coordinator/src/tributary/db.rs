@@ -4,7 +4,7 @@ use scale::{Encode, Decode};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_client::validator_sets::primitives::KeyPair;
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
 pub use serai_db::*;
 
@@ -85,6 +85,16 @@ impl<D: Db> TributaryDb<D> {
     getter
       .get(Self::currently_completing_key_pair_key(genesis))
       .map(|bytes| KeyPair::decode(&mut bytes.as_slice()).unwrap())
+  }
+
+  pub fn key_pair_key(set: ValidatorSet) -> Vec<u8> {
+    Self::tributary_key(b"key_pair", set.encode())
+  }
+  pub fn set_key_pair(txn: &mut D::Transaction<'_>, set: ValidatorSet, key_pair: &KeyPair) {
+    txn.put(Self::key_pair_key(set), key_pair.encode());
+  }
+  pub fn key_pair<G: Get>(getter: &G, set: ValidatorSet) -> Option<KeyPair> {
+    Some(KeyPair::decode(&mut getter.get(Self::key_pair_key(set))?.as_slice()).unwrap())
   }
 
   fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
