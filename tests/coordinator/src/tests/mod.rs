@@ -40,6 +40,6 @@ pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, Dock
 pub(crate) async fn wait_for_tributary() {
   tokio::time::sleep(Duration::from_secs(20)).await;
   if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
-    tokio::time::sleep(Duration::from_secs(20)).await;
+    tokio::time::sleep(Duration::from_secs(40)).await;
   }
 }
