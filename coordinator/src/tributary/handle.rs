@@ -15,8 +15,6 @@ use frost::{
 };
 use frost_schnorrkel::Schnorrkel;
 
-use tokio::sync::mpsc::UnboundedSender;
-
 use serai_client::{
   Signature,
   primitives::NetworkId,
@@ -224,8 +222,10 @@ pub fn generated_key_pair<D: Db>(
 pub async fn handle_application_tx<
   D: Db,
   Pro: Processors,
-  F: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Encoded) -> F,
+  FPst: Future<Output = ()>,
+  PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
+  FRid: Future<Output = Vec<[u8; 32]>>,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
 >(
   tx: Transaction,
   spec: &TributarySpec,
@@ -233,7 +233,7 @@ pub async fn handle_application_tx<
   publish_serai_tx: PST,
   genesis: [u8; 32],
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: &UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id: RID,
   txn: &mut <D as Db>::Transaction<'_>,
 ) {
   // Used to determine if an ID is acceptable
@@ -431,11 +431,10 @@ pub async fn handle_application_tx<
     }
 
     Transaction::ExternalBlock(block) => {
-      // Because this external block has been finalized, its batch ID should be authorized
-      TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, block);
-      recognized_id
-        .send((spec.set().network, genesis, RecognizedIdType::Block, block))
-        .expect("recognized_id_recv was dropped. are we shutting down?");
+      // Because this external block has been finalized, its batch IDs should be authorized
+      for id in recognized_id(spec.set().network, genesis, RecognizedIdType::Block, block).await {
+        TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, id);
+      }
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -446,9 +445,10 @@ pub async fn handle_application_tx<
 
       for id in plan_ids {
         TributaryDb::<D>::recognize_id(txn, Zone::Sign.label(), genesis, id);
-        recognized_id
-          .send((spec.set().network, genesis, RecognizedIdType::Plan, id))
-          .expect("recognized_id_recv was dropped. are we shutting down?");
+        assert_eq!(
+          recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await,
+          vec![id]
+        );
       }
     }
 

@@ -2,7 +2,7 @@
 #![allow(unreachable_code)]
 #![allow(clippy::diverging_sub_expression)]
 
-use core::ops::Deref;
+use core::{ops::Deref, future::Future};
 use std::{
   sync::Arc,
   time::{SystemTime, Duration},
@@ -21,13 +21,7 @@ use serai_client::{primitives::NetworkId, Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
-use tokio::{
-  sync::{
-    mpsc::{self, UnboundedSender},
-    RwLock,
-  },
-  time::sleep,
-};
+use tokio::{sync::RwLock, time::sleep};
 
 use ::tributary::{
   ReadWrite, ProvidedError, TransactionKind, TransactionTrait, Block, Tributary, TributaryReader,
@@ -143,10 +137,16 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
 }
 
 #[allow(clippy::type_complexity)]
-pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
+pub async fn scan_tributaries<
+  D: Db,
+  Pro: Processors,
+  P: P2p,
+  FRid: Future<Output = Vec<[u8; 32]>>,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+>(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id_send: UnboundedSender<(NetworkId, [u8; 32], RecognizedIdType, [u8; 32])>,
+  recognized_id: RID,
   p2p: P,
   processors: Pro,
   serai: Arc<Serai>,
@@ -184,10 +184,10 @@ pub async fn scan_tributaries<D: Db, Pro: Processors, P: P2p>(
     }
 
     for (spec, reader) in &tributary_readers {
-      tributary::scanner::handle_new_blocks::<_, _, _, _, P>(
+      tributary::scanner::handle_new_blocks::<_, _, _, _, _, _, P>(
         &mut tributary_db,
         &key,
-        &recognized_id_send,
+        recognized_id.clone(),
         &processors,
         |set, tx| {
           let serai = serai.clone();
@@ -537,6 +537,12 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           Some(Transaction::SubstrateBlock(block))
         }
         coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocess } => {
+          log::info!(
+            "informed of batch (sign ID {}, attempt {}) for block {}",
+            hex::encode(id.id),
+            id.attempt,
+            hex::encode(block),
+          );
           // If this is the first attempt instance, synchronize around the block first
           if id.attempt == 0 {
             // Save the preprocess to disk so we can publish it later
@@ -678,77 +684,80 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     .await;
   }
 
+  // When we reach synchrony on an event requiring signing, send our preprocess for it
+  let recognized_id = {
+    let raw_db = raw_db.clone();
+    let key = key.clone();
+    let tributaries = tributaries.clone();
+    move |network, genesis, id_type, id| {
+      let raw_db = raw_db.clone();
+      let key = key.clone();
+      let tributaries = tributaries.clone();
+      async move {
+        let (ids, txs) = match id_type {
+          RecognizedIdType::Block => {
+            let block = id;
+
+            let ids = MainDb::<D>::batches_in_block(&raw_db, network, block);
+            let mut txs = vec![];
+            for id in &ids {
+              txs.push(Transaction::BatchPreprocess(SignData {
+                plan: *id,
+                attempt: 0,
+                data: MainDb::<D>::first_preprocess(&raw_db, *id),
+                signed: Transaction::empty_signed(),
+              }));
+            }
+            (ids, txs)
+          }
+
+          RecognizedIdType::Plan => (
+            vec![id],
+            vec![Transaction::SignPreprocess(SignData {
+              plan: id,
+              attempt: 0,
+              data: MainDb::<D>::first_preprocess(&raw_db, id),
+              signed: Transaction::empty_signed(),
+            })],
+          ),
+        };
+
+        let tributaries = tributaries.read().await;
+        let Some(tributary) = tributaries.get(&genesis) else {
+          panic!("tributary we don't have came to consensus on an ExternalBlock");
+        };
+        let tributary = tributary.tributary.read().await;
+
+        for mut tx in txs {
+          // TODO: Same note as prior nonce acquisition
+          log::trace!("getting next nonce for Tributary TX containing Batch signing data");
+          let nonce = tributary
+            .next_nonce(Ristretto::generator() * key.deref())
+            .await
+            .expect("publishing a TX to a tributary we aren't in");
+          tx.sign(&mut OsRng, genesis, &key, nonce);
+
+          publish_transaction(&tributary, tx).await;
+        }
+
+        ids
+      }
+    }
+  };
+
   // Handle new blocks for each Tributary
-  // TODO: This channel is unsafe. The Tributary may send an event, which then is marked handled,
-  // before it actually is. This must be a blocking function.
-  let (recognized_id_send, mut recognized_id_recv) = mpsc::unbounded_channel();
   {
     let raw_db = raw_db.clone();
     tokio::spawn(scan_tributaries(
       raw_db,
       key.clone(),
-      recognized_id_send,
+      recognized_id,
       p2p.clone(),
       processors.clone(),
       serai.clone(),
       tributaries.clone(),
     ));
   }
-
-  // When we reach consensus on a new external block, send our BatchPreprocess for it
-  tokio::spawn({
-    let raw_db = raw_db.clone();
-    let key = key.clone();
-    let tributaries = tributaries.clone();
-    async move {
-      loop {
-        if let Some((network, genesis, id_type, id)) = recognized_id_recv.recv().await {
-          let txs = match id_type {
-            RecognizedIdType::Block => {
-              let mut txs = vec![];
-              for id in MainDb::<D>::batches_in_block(&raw_db, network, id) {
-                txs.push(Transaction::BatchPreprocess(SignData {
-                  plan: id,
-                  attempt: 0,
-                  data: MainDb::<D>::first_preprocess(&raw_db, id),
-                  signed: Transaction::empty_signed(),
-                }));
-              }
-              txs
-            }
-
-            RecognizedIdType::Plan => vec![Transaction::SignPreprocess(SignData {
-              plan: id,
-              attempt: 0,
-              data: MainDb::<D>::first_preprocess(&raw_db, id),
-              signed: Transaction::empty_signed(),
-            })],
-          };
-
-          let tributaries = tributaries.read().await;
-          let Some(tributary) = tributaries.get(&genesis) else {
-            panic!("tributary we don't have came to consensus on an ExternalBlock");
-          };
-          let tributary = tributary.tributary.read().await;
-
-          for mut tx in txs {
-            // TODO: Same note as prior nonce acquisition
-            log::trace!("getting next nonce for Tributary TX containing Batch signing data");
-            let nonce = tributary
-              .next_nonce(Ristretto::generator() * key.deref())
-              .await
-              .expect("publishing a TX to a tributary we aren't in");
-            tx.sign(&mut OsRng, genesis, &key, nonce);
-
-            publish_transaction(&tributary, tx).await;
-          }
-        } else {
-          log::warn!("recognized_id_send was dropped. are we shutting down?");
-          break;
-        }
-      }
-    }
-  });
 
   // Spawn the heartbeat task, which will trigger syncing if there hasn't been a Tributary block
   // in a while (presumably because we're behind)

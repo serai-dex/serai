@@ -11,7 +11,7 @@ use frost::Participant;
 
 use sp_runtime::traits::Verify;
 
-use tokio::{time::sleep, sync::mpsc};
+use tokio::time::sleep;
 
 use serai_db::{DbTxn, Db, MemDb};
 
@@ -83,11 +83,12 @@ async fn dkg_test() {
   ) -> (TributaryDb<MemDb>, MemProcessors) {
     let mut scanner_db = TributaryDb(MemDb::new());
     let processors = MemProcessors::new();
-    // Uses a brand new channel since this channel won't be used within this test
-    handle_new_blocks::<_, _, _, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
       &mut scanner_db,
       key,
-      &mpsc::unbounded_channel().0,
+      |_, _, _, _| async {
+        panic!("provided TX caused recognized_id to be called in new_processors")
+      },
       &processors,
       |_, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
       spec,
@@ -108,10 +109,12 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks::<_, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    &mpsc::unbounded_channel().0,
+    |_, _, _, _| async {
+      panic!("provided TX caused recognized_id to be called after Commitments")
+    },
     &processors,
     |_, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
     &spec,
@@ -186,10 +189,12 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks::<_, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    &mpsc::unbounded_channel().0,
+    |_, _, _, _| async {
+      panic!("provided TX caused recognized_id to be called after some shares")
+    },
     &processors,
     |_, _| async { panic!("test tried to publish a new Serai TX after some shares") },
     &spec,
@@ -227,10 +232,10 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks::<_, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    &mpsc::unbounded_channel().0,
+    |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
     &processors,
     |_, _| async { panic!("test tried to publish a new Serai TX") },
     &spec,
@@ -294,10 +299,12 @@ async fn dkg_test() {
   }
 
   // The scanner should successfully try to publish a transaction with a validly signed signature
-  handle_new_blocks::<_, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    &mpsc::unbounded_channel().0,
+    |_, _, _, _| async {
+      panic!("provided TX caused recognized_id to be called after DKG confirmation")
+    },
     &processors,
     |set, tx| {
       let spec = spec.clone();

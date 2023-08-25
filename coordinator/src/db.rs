@@ -68,7 +68,7 @@ impl<'a, D: Db> MainDb<'a, D> {
   ) {
     let key = Self::batches_in_block_key(network, block.0);
     let Some(mut existing) = txn.get(&key) else {
-      txn.put(&key, block.0);
+      txn.put(&key, id);
       return;
     };
 
@@ -77,7 +77,7 @@ impl<'a, D: Db> MainDb<'a, D> {
       return;
     }
 
-    existing.extend(block.0);
+    existing.extend(id);
     txn.put(&key, existing);
   }
 
