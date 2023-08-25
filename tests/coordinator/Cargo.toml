@@ -17,8 +17,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 hex = "0.4"
 
 zeroize = { version = "1", default-features = false }
+rand_core = { version = "0.6", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
+schnorrkel = { git = "https://github.com/serai-dex/schnorrkel" }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }

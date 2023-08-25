@@ -46,9 +46,9 @@ When the connected network has a new block, which is considered finalized
 of confirmations), it's scanned.
 
 Outputs to the key of Serai's multisig are saved to the database. Outputs which
-newly transfer into Serai are used to build a `Batch` for the block. The
+newly transfer into Serai are used to build `Batch`s for the block. The
 processor then begins a threshold signature protocol with its key pair's
-Ristretto key to sign the batch. The protocol's preprocess is sent to the
+Ristretto key to sign the `Batch`s. The protocol's preprocess is sent to the
 coordinator in a `coordinator::ProcessorMessage::BatchPreprocess`.
 
 As a design comment, we *may* be able to sign now possible, already scheduled,
