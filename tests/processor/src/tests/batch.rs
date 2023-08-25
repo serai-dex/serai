@@ -18,7 +18,6 @@ use crate::{*, tests::*};
 
 pub(crate) async fn recv_batch_preprocesses(
   coordinators: &mut [Coordinator],
-  key: [u8; 32],
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
@@ -37,7 +36,7 @@ pub(crate) async fn recv_batch_preprocesses(
         },
       ) => {
         if id.is_none() {
-          assert_eq!(&this_id.key, &key);
+          assert!(this_id.key.is_empty());
           assert_eq!(this_id.attempt, attempt);
           id = Some(this_id.clone());
           block = Some(this_block);
@@ -66,6 +65,7 @@ pub(crate) async fn recv_batch_preprocesses(
 
 pub(crate) async fn sign_batch(
   coordinators: &mut [Coordinator],
+  key: [u8; 32],
   id: SignId,
   preprocesses: HashMap<Participant, Vec<u8>>,
 ) -> SignedBatch {
@@ -125,7 +125,7 @@ pub(crate) async fn sign_batch(
           batch: this_batch,
         }) => {
           if batch.is_none() {
-            assert!(PublicKey::from_raw(id.key.clone().try_into().unwrap())
+            assert!(PublicKey::from_raw(key)
               .verify(&batch_message(&this_batch.batch), &this_batch.signature));
 
             batch = Some(this_batch.clone());
@@ -232,8 +232,7 @@ fn batch_test() {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
         // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-        let (mut id, mut preprocesses) =
-          recv_batch_preprocesses(&mut coordinators, key_pair.0 .0, 0).await;
+        let (mut id, mut preprocesses) = recv_batch_preprocesses(&mut coordinators, 0).await;
         // Trigger a random amount of re-attempts
         for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
           // TODO: Double check how the processor handles this ID field
@@ -246,12 +245,11 @@ fn batch_test() {
               })
               .await;
           }
-          (id, preprocesses) =
-            recv_batch_preprocesses(&mut coordinators, key_pair.0 .0, attempt).await;
+          (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, attempt).await;
         }
 
         // Continue with signing the batch
-        let batch = sign_batch(&mut coordinators, id, preprocesses).await;
+        let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
 
         // Check it
         assert_eq!(batch.batch.network, network);

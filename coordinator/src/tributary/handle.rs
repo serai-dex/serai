@@ -467,7 +467,7 @@ pub async fn handle_application_tx<
           .send(
             spec.set().network,
             CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
-              id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+              id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
               preprocesses,
             }),
           )
@@ -489,9 +489,9 @@ pub async fn handle_application_tx<
           .send(
             spec.set().network,
             CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-              id: SignId { key: todo!(), id: data.plan, attempt: data.attempt },
+              id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
               shares: shares
-                .drain()
+                .into_iter()
                 .map(|(validator, share)| (validator, share.try_into().unwrap()))
                 .collect(),
             }),

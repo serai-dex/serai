@@ -20,14 +20,13 @@ use crate::substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 #[tokio::test]
 async fn test_substrate_signer() {
-  let mut keys = key_gen::<_, Ristretto>(&mut OsRng);
+  let keys = key_gen::<_, Ristretto>(&mut OsRng);
 
   let participant_one = Participant::new(1).unwrap();
 
   let id: u32 = 5;
   let block = BlockHash([0xaa; 32]);
-  let mut actual_id =
-    SignId { key: keys[&participant_one].group_key().to_bytes().to_vec(), id: [0; 32], attempt: 0 };
+  let mut actual_id = SignId { key: vec![], id: [0; 32], attempt: 0 };
 
   let batch = Batch {
     network: NetworkId::Monero,
@@ -50,7 +49,7 @@ async fn test_substrate_signer() {
   let mut t = 0;
   for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    let keys = keys.remove(&i).unwrap();
+    let keys = keys.get(&i).unwrap().clone();
     t = keys.params().t();
 
     let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, keys);
@@ -62,7 +61,6 @@ async fn test_substrate_signer() {
     signers.insert(i, signer);
     dbs.insert(i, db);
   }
-  drop(keys);
 
   let mut signing_set = vec![];
   while signing_set.len() < usize::from(t) {
@@ -144,7 +142,7 @@ async fn test_substrate_signer() {
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(signed_batch.batch, batch);
-      assert!(Public::from_raw(actual_id.key.clone().try_into().unwrap())
+      assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
         .verify(&batch_message(&batch), &signed_batch.signature));
     } else {
       panic!("didn't get signed batch back");
