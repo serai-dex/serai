@@ -22,11 +22,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<N: Network> {
   // Block scanned
-  Block {
-    key: <N::Curve as Ciphersuite>::G,
-    block: <N::Block as Block<N>>::Id,
-    outputs: Vec<N::Output>,
-  },
+  Block { block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
   // Eventuality completion found on-chain
   Completed([u8; 32], <N::Transaction as Transaction<N>>::Id),
 }
@@ -507,7 +503,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
             txn.commit();
 
             // Send all outputs
-            if !scanner.emit(ScannerEvent::Block { key, block: block_id, outputs }) {
+            // TODO2: Fire this with all outputs for all keys, not for each key
+            if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
               return;
             }
             // Write this number as scanned so we won't re-fire these outputs

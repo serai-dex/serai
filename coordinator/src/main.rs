@@ -569,7 +569,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         }
       },
       ProcessorMessage::Substrate(inner_msg) => match inner_msg {
-        processor_messages::substrate::ProcessorMessage::Update { key: _, batch } => {
+        processor_messages::substrate::ProcessorMessage::Update { batch } => {
           assert_eq!(
             batch.batch.network, msg.network,
             "processor sent us a batch for a different network than it was for",

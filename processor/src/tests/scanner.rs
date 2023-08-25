@@ -55,8 +55,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block { key, block, outputs } => {
-          assert_eq!(key, keys.group_key());
+        ScannerEvent::Block { block, outputs } => {
           assert_eq!(block, block_id);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);

@@ -36,8 +36,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { key: this_key, block, outputs } => {
-        assert_eq!(this_key, key);
+      ScannerEvent::Block { block, outputs } => {
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
@@ -109,8 +108,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   }
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { key: this_key, block: block_id, outputs: these_outputs } => {
-      assert_eq!(this_key, key);
+    ScannerEvent::Block { block: block_id, outputs: these_outputs } => {
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }

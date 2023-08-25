@@ -157,8 +157,8 @@ struct TributaryMutable<N: Network, D: Db> {
   // Substrate may mark tasks as completed, invalidating any existing mutable borrows.
   // The safety of this follows as written above.
 
-  // TODO: There should only be one SubstrateSigner at a time (see #277)
-  substrate_signers: HashMap<[u8; 32], SubstrateSigner<D>>,
+  // There should only be one SubstrateSigner at a time (see #277)
+  substrate_signer: Option<SubstrateSigner<D>>,
 }
 
 // Items which are mutably borrowed by Substrate.
@@ -308,7 +308,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
 
     CoordinatorMessage::Coordinator(msg) => {
-      tributary_mutable.substrate_signers.get_mut(msg.key()).unwrap().handle(txn, msg).await;
+      if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
+        substrate_signer.handle(txn, msg).await;
+      }
     }
 
     CoordinatorMessage::Substrate(msg) => {
@@ -317,7 +319,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // This is the first key pair for this network so no block has been finalized yet
           let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
-            assert!(tributary_mutable.substrate_signers.is_empty());
+            assert!(tributary_mutable.substrate_signer.is_none());
             assert!(substrate_mutable.schedulers.is_empty());
 
             // Wait until a network's block's time exceeds Serai's time
@@ -373,10 +375,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // See TributaryMutable's struct definition for why this block is safe
           let KeyConfirmed { substrate_keys, network_keys } =
             tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
-          tributary_mutable.substrate_signers.insert(
-            substrate_keys.group_key().to_bytes(),
-            SubstrateSigner::new(N::NETWORK, substrate_keys),
-          );
+          // TODO2: Don't immediately set this, set it once it's active
+          tributary_mutable.substrate_signer =
+            Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
 
           let key = network_keys.group_key();
 
@@ -408,9 +409,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // We now have to acknowledge every block for this key up to the acknowledged block
           let outputs = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
           // Since this block was acknowledged, we no longer have to sign the batch for it
-          for batch_id in batches {
-            for (_, signer) in tributary_mutable.substrate_signers.iter_mut() {
-              signer.batch_signed(txn, batch_id);
+          if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
+            for batch_id in batches {
+              substrate_signer.batch_signed(txn, batch_id);
             }
           }
 
@@ -506,7 +507,7 @@ async fn boot<N: Network, D: Db>(
   let (mut scanner, active_keys) = Scanner::new(network.clone(), raw_db.clone());
 
   let mut schedulers = HashMap::<Vec<u8>, Scheduler<N>>::new();
-  let mut substrate_signers = HashMap::new();
+  let mut substrate_signer = None;
   let mut signers = HashMap::new();
 
   let main_db = MainDb::new(raw_db.clone());
@@ -516,11 +517,10 @@ async fn boot<N: Network, D: Db>(
 
     let (substrate_keys, network_keys) = key_gen.keys(key);
 
-    let substrate_key = substrate_keys.group_key();
-    let substrate_signer = SubstrateSigner::new(N::NETWORK, substrate_keys);
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary
-    substrate_signers.insert(substrate_key.to_bytes(), substrate_signer);
+    // TODO2: This uses most recent as signer, use the active one
+    substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
 
     let mut signer = Signer::new(network.clone(), network_keys);
 
@@ -554,7 +554,7 @@ async fn boot<N: Network, D: Db>(
 
   (
     main_db,
-    TributaryMutable { key_gen, substrate_signers, signers },
+    TributaryMutable { key_gen, substrate_signer, signers },
     SubstrateMutable { scanner, schedulers },
   )
 }
@@ -603,7 +603,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       }
     }
 
-    for (key, signer) in tributary_mutable.substrate_signers.iter_mut() {
+    if let Some(signer) = tributary_mutable.substrate_signer.as_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
           SubstrateSignerEvent::ProcessorMessage(msg) => {
@@ -612,7 +612,6 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           SubstrateSignerEvent::SignedBatch(batch) => {
             coordinator
               .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-                key: *key,
                 batch,
               }))
               .await;
@@ -665,7 +664,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         let mut txn = raw_db.txn();
 
         match msg.unwrap() {
-          ScannerEvent::Block { key, block, outputs } => {
+          ScannerEvent::Block { block, outputs } => {
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
             // TODO: Move this out from Scanner now that the Scanner no longer handles batches
@@ -735,13 +734,11 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
-              // TODO: Don't reload both sets of keys in full just to get the Substrate public key
-              tributary_mutable
-                .substrate_signers
-                .get_mut(tributary_mutable.key_gen.keys(&key).0.group_key().to_bytes().as_slice())
-                .unwrap()
-                .sign(&mut txn, batch)
-                .await;
+              if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
+                substrate_signer
+                  .sign(&mut txn, batch)
+                  .await;
+              }
             }
           },
 

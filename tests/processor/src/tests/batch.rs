@@ -122,11 +122,8 @@ pub(crate) async fn sign_batch(
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-          key,
           batch: this_batch,
         }) => {
-          assert_eq!(key.as_slice(), &id.key);
-
           if batch.is_none() {
             assert!(PublicKey::from_raw(id.key.clone().try_into().unwrap())
               .verify(&batch_message(&this_batch.batch), &this_batch.signature));
