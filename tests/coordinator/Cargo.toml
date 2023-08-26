@@ -19,7 +19,7 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto", "secp256k1"] }
 schnorrkel = { git = "https://github.com/serai-dex/schnorrkel" }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 

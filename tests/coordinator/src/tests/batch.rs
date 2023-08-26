@@ -6,7 +6,7 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto, Secp256k1};
 
 use dkg::Participant;
 
@@ -17,19 +17,19 @@ use serai_client::{
     InInstructionsEvent,
   },
 };
-use messages::{sign::SignId, CoordinatorMessage};
+use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
-pub async fn batch(
+pub async fn batch<C: Ciphersuite>(
   processors: &mut [Processor],
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  network_key: &Zeroizing<C::F>,
+  batch: Batch,
 ) {
   let mut id = [0; 32];
   OsRng.fill_bytes(&mut id);
   let id = SignId { key: vec![], id, attempt: 0 };
-
-  let block = BlockHash([0x22; 32]);
 
   // Select a random participant to sign first, guaranteeing their inclusion
   let first_signer =
@@ -37,7 +37,7 @@ pub async fn batch(
   processors[first_signer]
     .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
       id: id.clone(),
-      block,
+      block: batch.block,
       preprocess: [u8::try_from(first_signer).unwrap(); 64].to_vec(),
     })
     .await;
@@ -54,7 +54,7 @@ pub async fn batch(
     processor
       .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
         id: id.clone(),
-        block,
+        block: batch.block,
         preprocess: [u8::try_from(i).unwrap(); 64].to_vec(),
       })
       .await;
@@ -141,8 +141,6 @@ pub async fn batch(
     );
   }
 
-  let batch = Batch { network: NetworkId::Bitcoin, id: 0, block, instructions: vec![] };
-
   // Expand to a key pair as Schnorrkel expects
   // It's the private key + 32-bytes of entropy for nonces + the public key
   let mut schnorrkel_key_pair = [0; 96];
@@ -187,7 +185,11 @@ pub async fn batch(
         assert_eq!(batch_events.len(), 1);
         assert_eq!(
           batch_events[0],
-          InInstructionsEvent::Batch { network: NetworkId::Bitcoin, id: 0, block }
+          InInstructionsEvent::Batch {
+            network: batch.batch.network,
+            id: batch.batch.id,
+            block: batch.batch.block
+          }
         );
         break 'outer;
       }
@@ -195,7 +197,43 @@ pub async fn batch(
     }
   }
 
-  // TODO: Verify the coordinator sends SubstrateBlock to all processors
+  // Verify the coordinator sends SubstrateBlock to all processors
+  for processor in processors.iter_mut() {
+    assert_eq!(
+      processor.recv_message().await,
+      messages::CoordinatorMessage::Substrate(
+        messages::substrate::CoordinatorMessage::SubstrateBlock {
+          context: SubstrateContext {
+            serai_time: serai
+              .get_block_by_number(last_serai_block)
+              .await
+              .unwrap()
+              .unwrap()
+              .time()
+              .unwrap() /
+              1000,
+            network_latest_finalized_block: batch.batch.block,
+          },
+          network: batch.batch.network,
+          block: last_serai_block,
+          key: (C::generator() * **network_key).to_bytes().as_ref().to_vec(),
+          burns: vec![],
+          batches: vec![batch.batch.id],
+        }
+      )
+    );
+
+    // Send the ack as expected, though it shouldn't trigger any observable behavior
+    processor
+      .send_message(messages::ProcessorMessage::Coordinator(
+        messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+          network: batch.batch.network,
+          block: last_serai_block,
+          plans: vec![],
+        },
+      ))
+      .await;
+  }
 }
 
 #[tokio::test]
@@ -220,8 +258,19 @@ async fn batch_test() {
       }
       let mut processors = new_processors;
 
-      let substrate_key = key_gen(&mut processors).await;
-      batch(&mut processors, &substrate_key).await;
+      let (substrate_key, network_key) = key_gen::<Secp256k1>(&mut processors).await;
+      batch::<Secp256k1>(
+        &mut processors,
+        &substrate_key,
+        &network_key,
+        Batch {
+          network: NetworkId::Bitcoin,
+          id: 0,
+          block: BlockHash([0x22; 32]),
+          instructions: vec![],
+        },
+      )
+      .await;
     })
     .await;
 }

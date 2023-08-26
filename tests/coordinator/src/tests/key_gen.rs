@@ -8,7 +8,7 @@ use rand_core::OsRng;
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite, Ristretto, Secp256k1,
 };
 use dkg::{Participant, ThresholdParams};
 
@@ -21,7 +21,9 @@ use messages::{key_gen::KeyGenId, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
-pub async fn key_gen(processors: &mut [Processor]) -> Zeroizing<<Ristretto as Ciphersuite>::F> {
+pub async fn key_gen<C: Ciphersuite>(
+  processors: &mut [Processor],
+) -> (Zeroizing<<Ristretto as Ciphersuite>::F>, Zeroizing<C::F>) {
   let participant_from_i = |i: usize| Participant::new(u16::try_from(i + 1).unwrap()).unwrap();
 
   let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
@@ -76,6 +78,9 @@ pub async fn key_gen(processors: &mut [Processor]) -> Zeroizing<<Ristretto as Ci
   let substrate_priv_key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
   let substrate_key = (<Ristretto as Ciphersuite>::generator() * *substrate_priv_key).to_bytes();
 
+  let network_priv_key = Zeroizing::new(C::F::random(&mut OsRng));
+  let network_key = (C::generator() * *network_priv_key).to_bytes().as_ref().to_vec();
+
   let serai = processors[0].serai().await;
   let mut last_serai_block = serai.get_latest_block().await.unwrap().number();
 
@@ -99,7 +104,7 @@ pub async fn key_gen(processors: &mut [Processor]) -> Zeroizing<<Ristretto as Ci
       .send_message(messages::key_gen::ProcessorMessage::GeneratedKeyPair {
         id,
         substrate_key,
-        network_key: b"network_key".to_vec(),
+        network_key: network_key.clone(),
       })
       .await;
   }
@@ -148,7 +153,7 @@ pub async fn key_gen(processors: &mut [Processor]) -> Zeroizing<<Ristretto as Ci
           assert_eq!(context.network_latest_finalized_block.0, [0; 32]);
           assert_eq!(set, this_set);
           assert_eq!(key_pair.0 .0, substrate_key);
-          assert_eq!(key_pair.1.to_vec(), b"network_key".to_vec());
+          assert_eq!(&key_pair.1, &network_key);
         }
         _ => panic!("coordinator didn't respond with ConfirmKeyPair"),
       }
@@ -159,10 +164,10 @@ pub async fn key_gen(processors: &mut [Processor]) -> Zeroizing<<Ristretto as Ci
   }
   assert_eq!(
     serai.get_keys(set).await.unwrap().unwrap(),
-    (Public(substrate_key), b"network_key".to_vec().try_into().unwrap())
+    (Public(substrate_key), network_key.try_into().unwrap())
   );
 
-  substrate_priv_key
+  (substrate_priv_key, network_priv_key)
 }
 
 #[tokio::test]
@@ -187,7 +192,7 @@ async fn key_gen_test() {
       }
       let mut processors = new_processors;
 
-      key_gen(&mut processors).await;
+      key_gen::<Secp256k1>(&mut processors).await;
     })
     .await;
 }
