@@ -26,28 +26,17 @@ pub async fn batch<C: Ciphersuite>(
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   network_key: &Zeroizing<C::F>,
   batch: Batch,
-) {
+) -> u64 {
   let mut id = [0; 32];
   OsRng.fill_bytes(&mut id);
   let id = SignId { key: vec![], id, attempt: 0 };
 
-  // Select a random participant to sign first, guaranteeing their inclusion
-  let first_signer =
+  // Select a random participant to exclude, so we know for sure who *is* participating
+  assert_eq!(COORDINATORS - THRESHOLD, 1);
+  let excluded_signer =
     usize::try_from(OsRng.next_u64() % u64::try_from(processors.len()).unwrap()).unwrap();
-  processors[first_signer]
-    .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
-      id: id.clone(),
-      block: batch.block,
-      preprocess: [u8::try_from(first_signer).unwrap(); 64].to_vec(),
-    })
-    .await;
-  // Sleep twice as for some reason this specific statement hits some latency?
-  wait_for_tributary().await;
-  wait_for_tributary().await;
-
-  // Send the rest of the preprocesses
   for (i, processor) in processors.iter_mut().enumerate() {
-    if i == first_signer {
+    if i == excluded_signer {
       continue;
     }
 
@@ -59,10 +48,23 @@ pub async fn batch<C: Ciphersuite>(
       })
       .await;
   }
+  // Before this Batch is signed, the Tributary will agree this block occurred, adding an extra
+  // step of latency
+  wait_for_tributary().await;
   wait_for_tributary().await;
 
-  // Read from the first signer to find out who was selected to sign
-  let first_preprocesses = processors[first_signer].recv_message().await;
+  // Send from the excluded signer so they don't stay stuck
+  processors[excluded_signer]
+    .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
+      id: id.clone(),
+      block: batch.block,
+      preprocess: [u8::try_from(excluded_signer).unwrap(); 64].to_vec(),
+    })
+    .await;
+
+  // Read from a known signer to find out who was selected to sign
+  let known_signer = (excluded_signer + 1) % COORDINATORS;
+  let first_preprocesses = processors[known_signer].recv_message().await;
   let participants = match first_preprocesses {
     CoordinatorMessage::Coordinator(
       messages::coordinator::CoordinatorMessage::BatchPreprocesses { id: this_id, preprocesses },
@@ -70,21 +72,21 @@ pub async fn batch<C: Ciphersuite>(
       assert_eq!(&id, &this_id);
       assert_eq!(preprocesses.len(), THRESHOLD - 1);
       assert!(!preprocesses
-        .contains_key(&Participant::new(u16::try_from(first_signer).unwrap() + 1).unwrap()));
+        .contains_key(&Participant::new(u16::try_from(known_signer).unwrap() + 1).unwrap()));
 
       let mut participants =
         preprocesses.keys().map(|p| usize::from(u16::from(*p)) - 1).collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
         assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap() - 1; 64]);
       }
-      participants.insert(first_signer);
+      participants.insert(known_signer);
       participants
     }
     _ => panic!("coordinator didn't send back BatchPreprocesses"),
   };
 
   for i in participants.clone() {
-    if i == first_signer {
+    if i == known_signer {
       continue;
     }
     let processor = &mut processors[i];
@@ -198,20 +200,14 @@ pub async fn batch<C: Ciphersuite>(
   }
 
   // Verify the coordinator sends SubstrateBlock to all processors
+  let last_block = serai.get_block_by_number(last_serai_block).await.unwrap().unwrap();
   for processor in processors.iter_mut() {
     assert_eq!(
       processor.recv_message().await,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {
-            serai_time: serai
-              .get_block_by_number(last_serai_block)
-              .await
-              .unwrap()
-              .unwrap()
-              .time()
-              .unwrap() /
-              1000,
+            serai_time: last_block.time().unwrap() / 1000,
             network_latest_finalized_block: batch.batch.block,
           },
           network: batch.batch.network,
@@ -234,6 +230,7 @@ pub async fn batch<C: Ciphersuite>(
       ))
       .await;
   }
+  last_block.number()
 }
 
 #[tokio::test]
