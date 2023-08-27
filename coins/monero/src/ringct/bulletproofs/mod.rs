@@ -104,6 +104,10 @@ impl Bulletproofs {
       Bulletproofs::Original(bp) => bp.verify(rng, commitments),
       Bulletproofs::Plus(bp) => {
         let mut verifier = BatchVerifier::new(1);
+        // If this commitment is torsioned (which is allowed), this won't be a well-formed
+        // dfg::EdwardsPoint (expected to be of prime-order)
+        // The actual BP+ impl will perform a torsion clear though, making this safe
+        // TODO: Have AggregateRangeStatement take in dalek EdwardsPoint for clarity on this
         let Some(statement) = AggregateRangeStatement::new(
           commitments.iter().map(|c| dalek_ff_group::EdwardsPoint(*c)).collect(),
         ) else {
