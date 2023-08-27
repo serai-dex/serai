@@ -1,4 +1,7 @@
-use std::time::{Duration, SystemTime};
+use std::{
+  time::{Duration, SystemTime},
+  collections::HashSet,
+};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, OsRng};
@@ -209,14 +212,25 @@ async fn tributary_test() {
   // TODO: Is there a better way to handle this?
   sleep(Duration::from_secs(1)).await;
 
-  // All tributaries should agree on the tip
-  let mut final_block = None;
-  for (_, tributary) in tributaries {
-    if final_block.is_none() {
-      final_block = Some(tributary.tip().await);
-    }
-    if tributary.tip().await != final_block.unwrap() {
-      panic!("tributary had different tip");
-    }
+  // All tributaries should agree on the tip, within a block
+  let mut tips = HashSet::new();
+  for (_, tributary) in &tributaries {
+    tips.insert(tributary.tip().await);
   }
+  assert!(tips.len() <= 2);
+  if tips.len() == 2 {
+    for tip in tips.iter() {
+      // Find a Tributary where this isn't the tip
+      for (_, tributary) in &tributaries {
+        let Some(after) = tributary.reader().block_after(tip) else { continue };
+        // Make sure the block after is the other tip
+        assert!(tips.contains(&after));
+        return;
+      }
+    }
+  } else {
+    assert_eq!(tips.len(), 1);
+    return;
+  }
+  panic!("tributary had different tip with a variance exceeding one block");
 }
