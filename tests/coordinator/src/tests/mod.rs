@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use ciphersuite::Ristretto;
 
 use dockertest::DockerTest;
@@ -15,6 +17,8 @@ pub use sign::sign;
 
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
+
+pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
   let mut coordinators = vec![];

@@ -1,4 +1,5 @@
 use std::{
+  sync::Mutex,
   time::Duration,
   collections::{HashSet, HashMap},
 };
@@ -177,6 +178,7 @@ pub async fn sign<C: Ciphersuite>(
 
 #[tokio::test]
 async fn sign_test() {
+  let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
   let (processors, test) = new_test();
 
   test
