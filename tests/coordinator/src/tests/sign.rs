@@ -149,7 +149,30 @@ pub async fn sign<C: Ciphersuite>(
     );
   }
 
-  // TODO: Completed flow
+  // Send Completed
+  for i in participants.clone() {
+    let processor = &mut processors[i];
+    processor
+      .send_message(messages::sign::ProcessorMessage::Completed {
+        key: id.key.clone(),
+        id: id.id,
+        tx: b"signed_tx".to_vec(),
+      })
+      .await;
+  }
+  wait_for_tributary().await;
+
+  // Make sure every processor gets Completed
+  for processor in processors {
+    assert_eq!(
+      processor.recv_message().await,
+      CoordinatorMessage::Sign(messages::sign::CoordinatorMessage::Completed {
+        key: id.key.clone(),
+        id: id.id,
+        tx: b"signed_tx".to_vec()
+      })
+    );
+  }
 }
 
 #[tokio::test]
