@@ -1,7 +1,7 @@
 # Processor
 
 The processor is a service which has an instance spawned per network. It is
-responsible for several tasks, from scanning the connected network to signing
+responsible for several tasks, from scanning an external network to signing
 transactions with payments.
 
 This document primarily discusses its flow with regards to the coordinator.
@@ -12,7 +12,7 @@ On `key_gen::CoordinatorMessage::GenerateKey`, the processor begins a pair of
 instances of the distributed key generation protocol specified in the FROST
 paper.
 
-The first instance is for a key to use on the connected network. The second
+The first instance is for a key to use on the external network. The second
 instance is for a Ristretto public key used to publish data to the Serai
 blockchain. This pair of FROST DKG instances is considered a single instance of
 Serai's overall key generation protocol.
@@ -36,12 +36,12 @@ key generation instance. The generated key pair is sent to the coordinator in a
 ## Confirm Key Pair
 
 On `substrate::CoordinatorMessage::ConfirmKeyPair`, the processor starts using
-the newly confirmed key, scanning blocks on the connected network for
+the newly confirmed key, scanning blocks on the external network for
 transfers to it.
 
 ## Connected Network Block
 
-When the connected network has a new block, which is considered finalized
+When the external network has a new block, which is considered finalized
 (either due to being literally finalized or due to having a sufficient amount
 of confirmations), it's scanned.
 
