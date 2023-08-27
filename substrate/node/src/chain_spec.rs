@@ -34,7 +34,7 @@ fn testnet_genesis(
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
     balances: BalancesConfig {
-      balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
+      balances: endowed_accounts.into_iter().map(|k| (k, 1 << 60)).collect(),
     },
     transaction_payment: Default::default(),
 

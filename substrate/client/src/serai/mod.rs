@@ -24,7 +24,7 @@ use subxt::{
 };
 
 pub use serai_runtime::primitives;
-pub use primitives::{Signature, SeraiAddress};
+pub use primitives::{SeraiAddress, Signature, Amount};
 
 pub use serai_runtime as runtime;
 use serai_runtime::{
@@ -305,6 +305,30 @@ impl Serai {
     // hash is practically useless/unsafe
     // If we are to return something, it should be block included in and position within block
     self.0.rpc().submit_extrinsic(tx).await.map(|_| ()).map_err(SeraiError::RpcError)
+  }
+
+  pub async fn get_sri_balance(
+    &self,
+    block: [u8; 32],
+    address: SeraiAddress,
+  ) -> Result<u64, SeraiError> {
+    let data: Option<
+      serai_runtime::system::AccountInfo<u32, serai_runtime::balances::AccountData<u64>>,
+    > = self.storage("System", "Account", Some(vec![scale_value(address)]), block).await?;
+    Ok(data.map(|data| data.data.free).unwrap_or(0))
+  }
+
+  pub fn transfer_sri(to: SeraiAddress, amount: Amount) -> Payload<Composite<()>> {
+    Payload::new(
+      "Balances",
+      // TODO: Use transfer_allow_death?
+      // TODO: Replace the Balances pallet with something much simpler
+      "transfer",
+      scale_composite(serai_runtime::balances::Call::<Runtime>::transfer {
+        dest: to,
+        value: amount.0,
+      }),
+    )
   }
 }
 

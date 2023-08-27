@@ -232,6 +232,7 @@ impl balances::Config for Runtime {
 
   type DustRemoval = ();
   type ExistentialDeposit = ConstU64<1>;
+  // TODO: What's the benefit to this?
   type AccountStore = System;
   type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
 }
