@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use ciphersuite::{Ciphersuite, Ristretto};
 
 use scale::Decode;
-use futures::{StreamExt, SinkExt};
+use futures::{StreamExt, SinkExt, channel::mpsc::UnboundedReceiver};
 use ::tendermint::{
   ext::{BlockNumber, Commit, Block as BlockTrait, Network},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
@@ -144,7 +144,7 @@ pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
   genesis: [u8; 32],
   network: TendermintNetwork<D, T, P>,
 
-  synced_block: SyncedBlockSender<TendermintNetwork<D, T, P>>,
+  synced_block: Arc<RwLock<SyncedBlockSender<TendermintNetwork<D, T, P>>>>,
   synced_block_result: Arc<RwLock<SyncedBlockResultReceiver>>,
   messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
 }
@@ -188,7 +188,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       db,
       genesis,
       network,
-      synced_block,
+      synced_block: Arc::new(RwLock::new(synced_block)),
       synced_block_result: Arc::new(RwLock::new(synced_block_result)),
       messages: Arc::new(RwLock::new(messages)),
     })
@@ -239,11 +239,12 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     res
   }
 
-  // Sync a block.
-  // TODO: Since we have a static validator set, we should only need the tail commit?
-  pub async fn sync_block(&mut self, block: Block<T>, commit: Vec<u8>) -> bool {
-    let mut result = self.synced_block_result.write().await;
-
+  async fn sync_block_internal(
+    &self,
+    block: Block<T>,
+    commit: Vec<u8>,
+    result: &mut UnboundedReceiver<bool>,
+  ) -> bool {
     let (tip, block_number) = {
       let blockchain = self.network.blockchain.read().await;
       (blockchain.tip(), blockchain.block_number())
@@ -272,12 +273,22 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     }
 
     let number = BlockNumber((block_number + 1).into());
-    self.synced_block.send(SyncedBlock { number, block, commit }).await.unwrap();
+    self.synced_block.write().await.send(SyncedBlock { number, block, commit }).await.unwrap();
     result.next().await.unwrap()
   }
 
+  // Sync a block.
+  // TODO: Since we have a static validator set, we should only need the tail commit?
+  pub async fn sync_block(&self, block: Block<T>, commit: Vec<u8>) -> bool {
+    let mut result = self.synced_block_result.write().await;
+    self.sync_block_internal(block, commit, &mut result).await
+  }
+
   // Return true if the message should be rebroadcasted.
-  pub async fn handle_message(&mut self, msg: &[u8]) -> bool {
+  pub async fn handle_message(&self, msg: &[u8]) -> bool {
+    // Acquire the lock now to prevent sync_block from being run at the same time
+    let mut sync_block = self.synced_block_result.write().await;
+
     match msg.first() {
       Some(&TRANSACTION_MESSAGE) => {
         let Ok(tx) = Transaction::read::<&[u8]>(&mut &msg[1 ..]) else {
@@ -316,7 +327,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
           return false;
         };
         let commit = msg[(msg.len() - msg_ref.len()) ..].to_vec();
-        if self.sync_block(block, commit).await {
+        if self.sync_block_internal(block, commit, &mut sync_block).await {
           log::debug!("synced block over p2p net instead of building the commit ourselves");
         }
         false

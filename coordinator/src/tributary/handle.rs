@@ -589,8 +589,20 @@ pub async fn handle_application_tx<
         None => {}
       }
     }
-    Transaction::SignCompleted(_, _, _) => {
-      // TODO
+    Transaction::SignCompleted(id, tx, signed) => {
+      // TODO: Confirm this is a valid ID
+      // TODO: Confirm this signer hasn't prior published a completion
+      let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else { todo!() };
+      processors
+        .send(
+          spec.set().network,
+          CoordinatorMessage::Sign(sign::CoordinatorMessage::Completed {
+            key: key_pair.1.to_vec(),
+            id,
+            tx,
+          }),
+        )
+        .await;
     }
   }
 }

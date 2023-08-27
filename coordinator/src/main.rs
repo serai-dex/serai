@@ -281,7 +281,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
         };
 
         log::trace!("handling message for tributary {:?}", tributary.spec.set());
-        if tributary.tributary.write().await.handle_message(&msg.msg).await {
+        if tributary.tributary.read().await.handle_message(&msg.msg).await {
           P2p::broadcast(&p2p, msg.kind, msg.msg).await;
         }
       }
@@ -385,11 +385,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
               return;
             };
 
-            // TODO: Add a check which doesn't require write to see if this is the next block in
-            // line
-            // If it's in the future, hold it for up to T time
-
-            let res = tributary.tributary.write().await.sync_block(block, msg.msg).await;
+            let res = tributary.tributary.read().await.sync_block(block, msg.msg).await;
             log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
           }
         });
@@ -518,8 +514,9 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           data: share,
           signed: Transaction::empty_signed(),
         })),
-        // TODO
-        sign::ProcessorMessage::Completed { .. } => todo!(),
+        sign::ProcessorMessage::Completed { key: _, id, tx } => {
+          Some(Transaction::SignCompleted(id, tx, Transaction::empty_signed()))
+        }
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
         coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
@@ -624,7 +621,9 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
     // If this created a transaction, publish it
     if let Some(mut tx) = tx {
+      log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
       let tributaries = tributaries.read().await;
+      log::trace!("read global tributaries");
       let Some(tributary) = tributaries.get(&genesis) else {
         // TODO: This can happen since Substrate tells the Processor to generate commitments
         // at the same time it tells the Tributary to be created
@@ -632,9 +631,11 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         panic!("processor is operating on tributary we don't have");
       };
       let tributary = tributary.tributary.read().await;
+      log::trace!("read specific tributary");
 
       match tx.kind() {
         TransactionKind::Provided(_) => {
+          log::trace!("providing transaction {}", hex::encode(tx.hash()));
           let res = tributary.provide_transaction(tx).await;
           if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
             panic!("provided an invalid transaction: {res:?}");

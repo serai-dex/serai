@@ -243,6 +243,9 @@ pub enum Transaction {
 
   SignPreprocess(SignData),
   SignShare(SignData),
+  // TODO: We can't make this an Unsigned as we need to prevent spam, which requires a max of 1
+  // claim per sender
+  // Can we de-duplicate across senders though, if they claim the same hash completes?
   SignCompleted([u8; 32], Vec<u8>, Signed),
 }
 
