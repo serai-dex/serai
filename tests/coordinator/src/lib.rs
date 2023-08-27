@@ -115,7 +115,11 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
         .with_start_policy(StartPolicy::Strict)
         .with_container_name(name.clone())
         .with_log_options(Some(LogOptions {
-          action: LogAction::ForwardToFile { path: logs_path.clone() },
+          action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+            LogAction::Forward
+          } else {
+            LogAction::ForwardToFile { path: logs_path.clone() }
+          },
           policy: LogPolicy::Always,
           source: LogSource::Both,
         })),
