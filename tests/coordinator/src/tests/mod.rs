@@ -10,6 +10,9 @@ pub use key_gen::key_gen;
 mod batch;
 pub use batch::batch;
 
+mod sign;
+pub use sign::sign;
+
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
