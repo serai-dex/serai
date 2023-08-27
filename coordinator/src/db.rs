@@ -92,7 +92,7 @@ impl<'a, D: Db> MainDb<'a, D> {
     }
     txn.put(key, preprocess);
   }
-  pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Vec<u8> {
-    getter.get(Self::first_preprocess_key(id)).expect("asked for first preprocess we never saved")
+  pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Option<Vec<u8>> {
+    getter.get(Self::first_preprocess_key(id))
   }
 }

@@ -694,6 +694,20 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       let key = key.clone();
       let tributaries = tributaries.clone();
       async move {
+        // SubstrateBlockAck is fired before Preprocess, creating a race between Tributary ack
+        // of the SubstrateBlock and the sending of all Preprocesses
+        // A similar race condition exists when multiple Batches are present in a block
+        // This waits until the necessary preprocess is available
+        let get_preprocess = |raw_db, id| async move {
+          loop {
+            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, id) else {
+              sleep(Duration::from_millis(100)).await;
+              continue;
+            };
+            return preprocess;
+          }
+        };
+
         let (ids, txs) = match id_type {
           RecognizedIdType::Block => {
             let block = id;
@@ -704,7 +718,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
               txs.push(Transaction::BatchPreprocess(SignData {
                 plan: *id,
                 attempt: 0,
-                data: MainDb::<D>::first_preprocess(&raw_db, *id),
+                data: get_preprocess(&raw_db, *id).await,
                 signed: Transaction::empty_signed(),
               }));
             }
@@ -716,7 +730,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
             vec![Transaction::SignPreprocess(SignData {
               plan: id,
               attempt: 0,
-              data: MainDb::<D>::first_preprocess(&raw_db, id),
+              data: get_preprocess(&raw_db, id).await,
               signed: Transaction::empty_signed(),
             })],
           ),
