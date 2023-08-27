@@ -311,7 +311,7 @@ impl WipStatement {
     let r = Scalar::random(&mut *rng);
     let s = Scalar::random(&mut *rng);
     let delta = Scalar::random(&mut *rng);
-    let long_n = Scalar::random(&mut *rng);
+    let eta = Scalar::random(&mut *rng);
 
     let ry = r * y[0];
 
@@ -320,7 +320,7 @@ impl WipStatement {
     let A = multiexp(&A_terms) * Scalar(crate::INV_EIGHT());
     A_terms.zeroize();
 
-    let mut B_terms = vec![(ry * s, g), (long_n, h)];
+    let mut B_terms = vec![(ry * s, g), (eta, h)];
     let B = multiexp(&B_terms) * Scalar(crate::INV_EIGHT());
     B_terms.zeroize();
 
@@ -328,7 +328,7 @@ impl WipStatement {
 
     let r_answer = r + (a[0] * e);
     let s_answer = s + (b[0] * e);
-    let delta_answer = long_n + (delta * e) + (alpha * e.square());
+    let delta_answer = eta + (delta * e) + (alpha * e.square());
 
     Some(WipProof { L: L_vec, R: R_vec, A, B, r_answer, s_answer, delta_answer })
   }
