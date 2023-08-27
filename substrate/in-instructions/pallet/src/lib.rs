@@ -52,10 +52,10 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  // The amount of batches a network has issued, which is also the ID to use for the next batch
+  // The ID of the last executed Batch for a network.
   #[pallet::storage]
   #[pallet::getter(fn batches)]
-  pub(crate) type Batches<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
+  pub(crate) type LastBatch<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
 
   // The last Serai block in which this validator set included a batch
   #[pallet::storage]
@@ -117,7 +117,7 @@ pub mod pallet {
       // this to be safe
       LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
 
-      Batches::<T>::insert(batch.network, batch.id);
+      LastBatch::<T>::insert(batch.network, batch.id);
       LatestNetworkBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
         network: batch.network,
@@ -174,9 +174,9 @@ pub mod pallet {
       }
 
       // Verify the batch is sequential
-      // Batches has the last ID set. The next ID should be it + 1
+      // LastBatch has the last ID set. The next ID should be it + 1
       // If there's no ID, the next ID should be 0
-      let expected = Batches::<T>::get(network).map_or(0, |prev| prev + 1);
+      let expected = LastBatch::<T>::get(network).map_or(0, |prev| prev + 1);
       if batch.batch.id < expected {
         Err(InvalidTransaction::Stale)?;
       }

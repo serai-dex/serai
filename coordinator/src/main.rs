@@ -596,8 +596,21 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
                 break;
               }
               Err(e) => {
-                // TODO: Check if this failed because the batch was already published by someone
-                // else
+                if let Ok(latest_block) = serai.get_latest_block().await {
+                  if let Ok(Some(last)) =
+                    serai.get_last_batch_for_network(latest_block.hash(), batch.batch.network).await
+                  {
+                    if last >= batch.batch.id {
+                      log::info!(
+                        "another coordinator executed batch {:?} {} (block {})",
+                        batch.batch.network,
+                        batch.batch.id,
+                        hex::encode(batch.batch.block),
+                      );
+                      break;
+                    }
+                  }
+                }
                 log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
                 tokio::time::sleep(Duration::from_secs(10)).await;
               }
