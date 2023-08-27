@@ -4,7 +4,6 @@ use std::collections::{HashSet, HashMap};
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::ThresholdParams;
 
 use serai_client::{
   SeraiError, Block, Serai,
@@ -19,7 +18,7 @@ use serai_client::{
 
 use serai_db::DbTxn;
 
-use processor_messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage};
+use processor_messages::{SubstrateContext, CoordinatorMessage};
 
 use tokio::time::sleep;
 
@@ -86,28 +85,6 @@ async fn handle_new_set<
 
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
     create_new_tributary(db, spec.clone()).await;
-
-    // Trigger a DKG
-    // TODO: Check how the processor handles this being fired multiple times
-    // We already have a unique event ID based on block, event index (where event index is
-    // the one generated in this handle_block function)
-    // We could use that on this end and the processor end?
-    processors
-      .send(
-        set.network,
-        CoordinatorMessage::KeyGen(processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-          id: KeyGenId { set, attempt: 0 },
-          params: ThresholdParams::new(
-            spec.t(),
-            spec.n(),
-            spec
-              .i(Ristretto::generator() * key.deref())
-              .expect("In set for a set we aren't in set for"),
-          )
-          .unwrap(),
-        }),
-      )
-      .await;
   } else {
     log::info!("not present in set {:?}", set);
   }

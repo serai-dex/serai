@@ -179,6 +179,27 @@ pub async fn scan_tributaries<
         )
         .await;
 
+        // Trigger a DKG for the newly added Tributary
+        let set = spec.set();
+        processors
+          .send(
+            set.network,
+            processor_messages::CoordinatorMessage::KeyGen(
+              processor_messages::key_gen::CoordinatorMessage::GenerateKey {
+                id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
+                params: frost::ThresholdParams::new(
+                  spec.t(),
+                  spec.n(),
+                  spec
+                    .i(Ristretto::generator() * key.deref())
+                    .expect("adding a tribuary for a set we aren't in set for"),
+                )
+                .unwrap(),
+              },
+            ),
+          )
+          .await;
+
         tributary_readers.push((spec, reader));
       }
     }
@@ -438,7 +459,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           break;
         }
       }
-      spec.unwrap()
+      spec.expect("received message from processor we don't have a tributary for")
     };
 
     let genesis = spec.genesis();
