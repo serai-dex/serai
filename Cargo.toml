@@ -57,6 +57,7 @@ members = [
   "tests/message-queue",
   "tests/processor",
   "tests/coordinator",
+  "tests/full-stack",
   "tests/reproducible-runtime",
 ]
 

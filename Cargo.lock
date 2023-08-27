@@ -8175,6 +8175,24 @@ name = "serai-env"
 version = "0.1.0"
 
 [[package]]
+name = "serai-full-stack-tests"
+version = "0.1.0"
+dependencies = [
+ "bitcoin-serai",
+ "dockertest",
+ "hex",
+ "monero-serai",
+ "rand_core 0.6.4",
+ "serai-client",
+ "serai-coordinator-tests",
+ "serai-docker-tests",
+ "serai-message-queue-tests",
+ "serai-processor-tests",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "serai-in-instructions-pallet"
 version = "0.1.0"
 dependencies = [

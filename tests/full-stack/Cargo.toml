@@ -1,0 +1,33 @@
+[package]
+name = "serai-full-stack-tests"
+version = "0.1.0"
+description = "Tests for Serai's Full Stack"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/tests/full-stack"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+hex = "0.4"
+
+zeroize = { version = "1", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+bitcoin-serai = { path = "../../coins/bitcoin" }
+monero-serai = { path = "../../coins/monero" }
+
+serai-client = { path = "../../substrate/client", features = ["serai"] }
+
+tokio = { version = "1", features = ["time"] }
+
+dockertest = "0.3"
+serai-docker-tests = { path = "../docker" }
+serai-message-queue-tests = { path = "../message-queue" }
+serai-processor-tests = { path = "../processor" }
+serai-coordinator-tests = { path = "../coordinator" }
