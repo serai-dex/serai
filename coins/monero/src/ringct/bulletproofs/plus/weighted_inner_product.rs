@@ -192,6 +192,8 @@ impl WipStatement {
     witness: WipWitness,
   ) -> Option<WipProof> {
     let WipStatement { generators, P, mut y } = self;
+    #[cfg(not(debug_assertions))]
+    let _ = P;
 
     if generators.len() != witness.a.len() {
       return None;
