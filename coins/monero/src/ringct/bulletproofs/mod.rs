@@ -19,12 +19,10 @@ pub(crate) mod core;
 use self::core::LOG_N;
 
 pub(crate) mod original;
-pub use original::GENERATORS as BULLETPROOFS_GENERATORS;
-pub(crate) mod plus;
-pub use plus::GENERATORS as BULLETPROOFS_PLUS_GENERATORS;
+use self::original::OriginalStruct;
 
-pub(crate) use self::original::OriginalStruct;
-pub(crate) use self::plus::PlusStruct;
+pub(crate) mod plus;
+use self::plus::*;
 
 pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
 
@@ -33,7 +31,7 @@ pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproofs {
   Original(OriginalStruct),
-  Plus(PlusStruct),
+  Plus(AggregateRangeProof),
 }
 
 impl Bulletproofs {
@@ -80,13 +78,22 @@ impl Bulletproofs {
     outputs: &[Commitment],
     plus: bool,
   ) -> Result<Bulletproofs, TransactionError> {
+    if outputs.is_empty() {
+      Err(TransactionError::NoOutputs)?;
+    }
     if outputs.len() > MAX_OUTPUTS {
-      return Err(TransactionError::TooManyOutputs)?;
+      Err(TransactionError::TooManyOutputs)?;
     }
     Ok(if !plus {
       Bulletproofs::Original(OriginalStruct::prove(rng, outputs))
     } else {
-      Bulletproofs::Plus(PlusStruct::prove(rng, outputs))
+      use dalek_ff_group::EdwardsPoint as DfgPoint;
+      Bulletproofs::Plus(
+        AggregateRangeStatement::new(outputs.iter().map(|com| DfgPoint(com.calculate())).collect())
+          .unwrap()
+          .prove(rng, AggregateRangeWitness::new(outputs).unwrap())
+          .unwrap(),
+      )
     })
   }
 
@@ -95,7 +102,22 @@ impl Bulletproofs {
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
       Bulletproofs::Original(bp) => bp.verify(rng, commitments),
-      Bulletproofs::Plus(bp) => bp.verify(rng, commitments),
+      Bulletproofs::Plus(bp) => {
+        let mut verifier = BatchVerifier::new(1);
+        // If this commitment is torsioned (which is allowed), this won't be a well-formed
+        // dfg::EdwardsPoint (expected to be of prime-order)
+        // The actual BP+ impl will perform a torsion clear though, making this safe
+        // TODO: Have AggregateRangeStatement take in dalek EdwardsPoint for clarity on this
+        let Some(statement) = AggregateRangeStatement::new(
+          commitments.iter().map(|c| dalek_ff_group::EdwardsPoint(*c)).collect(),
+        ) else {
+          return false;
+        };
+        if !statement.verify(rng, &mut verifier, (), bp.clone()) {
+          return false;
+        }
+        verifier.verify_vartime()
+      }
     }
   }
 
@@ -112,7 +134,14 @@ impl Bulletproofs {
   ) -> bool {
     match self {
       Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
-      Bulletproofs::Plus(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Bulletproofs::Plus(bp) => {
+        let Some(statement) = AggregateRangeStatement::new(
+          commitments.iter().map(|c| dalek_ff_group::EdwardsPoint(*c)).collect(),
+        ) else {
+          return false;
+        };
+        statement.verify(rng, verifier, id, bp.clone())
+      }
     }
   }
 
@@ -137,14 +166,14 @@ impl Bulletproofs {
       }
 
       Bulletproofs::Plus(bp) => {
-        write_point(&bp.A, w)?;
-        write_point(&bp.A1, w)?;
-        write_point(&bp.B, w)?;
-        write_scalar(&bp.r1, w)?;
-        write_scalar(&bp.s1, w)?;
-        write_scalar(&bp.d1, w)?;
-        specific_write_vec(&bp.L, w)?;
-        specific_write_vec(&bp.R, w)
+        write_point(&bp.A.0, w)?;
+        write_point(&bp.wip.A.0, w)?;
+        write_point(&bp.wip.B.0, w)?;
+        write_scalar(&bp.wip.r_answer.0, w)?;
+        write_scalar(&bp.wip.s_answer.0, w)?;
+        write_scalar(&bp.wip.delta_answer.0, w)?;
+        specific_write_vec(&bp.wip.L.iter().cloned().map(|L| L.0).collect::<Vec<_>>(), w)?;
+        specific_write_vec(&bp.wip.R.iter().cloned().map(|R| R.0).collect::<Vec<_>>(), w)
       }
     }
   }
@@ -182,15 +211,19 @@ impl Bulletproofs {
 
   /// Read Bulletproofs+.
   pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Plus(PlusStruct {
-      A: read_point(r)?,
-      A1: read_point(r)?,
-      B: read_point(r)?,
-      r1: read_scalar(r)?,
-      s1: read_scalar(r)?,
-      d1: read_scalar(r)?,
-      L: read_vec(read_point, r)?,
-      R: read_vec(read_point, r)?,
+    use dalek_ff_group::{Scalar as DfgScalar, EdwardsPoint as DfgPoint};
+
+    Ok(Bulletproofs::Plus(AggregateRangeProof {
+      A: DfgPoint(read_point(r)?),
+      wip: WipProof {
+        A: DfgPoint(read_point(r)?),
+        B: DfgPoint(read_point(r)?),
+        r_answer: DfgScalar(read_scalar(r)?),
+        s_answer: DfgScalar(read_scalar(r)?),
+        delta_answer: DfgScalar(read_scalar(r)?),
+        L: read_vec(read_point, r)?.into_iter().map(DfgPoint).collect(),
+        R: read_vec(read_point, r)?.into_iter().map(DfgPoint).collect(),
+      },
     }))
   }
 }

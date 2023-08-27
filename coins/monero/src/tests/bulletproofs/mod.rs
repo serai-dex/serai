@@ -9,6 +9,8 @@ use crate::{
   ringct::bulletproofs::{Bulletproofs, original::OriginalStruct},
 };
 
+mod plus;
+
 #[test]
 fn bulletproofs_vector() {
   let scalar = |scalar| Scalar::from_canonical_bytes(scalar).unwrap();
@@ -62,7 +64,7 @@ macro_rules! bulletproofs_tests {
     fn $name() {
       // Create Bulletproofs for all possible output quantities
       let mut verifier = BatchVerifier::new(16);
-      for i in 1 .. 17 {
+      for i in 1 ..= 16 {
         let commitments = (1 ..= i)
           .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
           .collect::<Vec<_>>();
