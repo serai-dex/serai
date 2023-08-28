@@ -712,20 +712,32 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(())
   }
 
-  pub async fn generate_blocks(&self, address: &str, block_count: usize) -> Result<(), RpcError> {
-    self
-      .rpc_call::<_, EmptyResponse>(
-        "json_rpc",
+  // TODO: Take &Address, not &str?
+  pub async fn generate_blocks(
+    &self,
+    address: &str,
+    block_count: usize,
+  ) -> Result<Vec<[u8; 32]>, RpcError> {
+    #[derive(Debug, Deserialize)]
+    struct BlocksResponse {
+      blocks: Vec<String>,
+    }
+
+    let block_strs = self
+      .json_rpc_call::<BlocksResponse>(
+        "generateblocks",
         Some(json!({
-          "method": "generateblocks",
-          "params": {
-            "wallet_address": address,
-            "amount_of_blocks": block_count
-          },
+          "wallet_address": address,
+          "amount_of_blocks": block_count
         })),
       )
-      .await?;
+      .await?
+      .blocks;
 
-    Ok(())
+    let mut blocks = Vec::with_capacity(block_strs.len());
+    for block in block_strs {
+      blocks.push(rpc_hex(&block)?.try_into().map_err(|_| RpcError::InvalidNode)?);
+    }
+    Ok(blocks)
   }
 }

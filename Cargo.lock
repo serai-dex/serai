@@ -1429,6 +1429,7 @@ dependencies = [
  "digest 0.10.7",
  "fiat-crypto",
  "platforms",
+ "rand_core 0.6.4",
  "rustc_version",
  "subtle",
  "zeroize",
@@ -8179,15 +8180,20 @@ name = "serai-full-stack-tests"
 version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
+ "curve25519-dalek 4.0.0",
  "dockertest",
  "hex",
  "monero-serai",
+ "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-client",
  "serai-coordinator-tests",
  "serai-docker-tests",
  "serai-message-queue-tests",
+ "serai-processor",
  "serai-processor-tests",
+ "serde",
+ "serde_json",
  "tokio",
  "zeroize",
 ]

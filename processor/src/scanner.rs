@@ -394,6 +394,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
             // only written to/read by this thread
             // There's also no error caused by them being unexpectedly written (if the commit is
             // made and then the processor suddenly reboots)
+            // There's also no issue if this code is run multiple times (due to code after
+            // aborting)
             if let Some(id) = ScannerDb::<N, D>::block(&scanner.db, i) {
               if id != block_id {
                 panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
@@ -416,33 +418,17 @@ impl<N: Network, D: Db> Scanner<N, D> {
               txn.commit();
             }
 
-            // Clone network because we can't borrow it while also mutably borrowing the
-            // eventualities
-            // Thankfully, network is written to be a cheap clone
-            let network = scanner.network.clone();
-            for (id, tx) in
-              network.get_eventuality_completions(&mut scanner.eventualities, &block).await
-            {
-              // This should only happen if there's a P2P net desync or there's a malicious
-              // validator
-              warn!(
-                "eventuality {} resolved by {}, as found on chain. this should not happen",
-                hex::encode(id),
-                hex::encode(&tx)
-              );
-
-              if !scanner.emit(ScannerEvent::Completed(id, tx)) {
-                return;
-              }
-            }
-
             let outputs = match scanner.network.get_outputs(&block, key).await {
               Ok(outputs) => outputs,
               Err(_) => {
-                warn!("Couldn't scan block {i}");
+                warn!("couldn't scan block {i}");
                 break;
               }
             };
+
+            // Write this number as scanned so we won't perform any of the following mutations
+            // multiple times
+            scanner.ram_scanned.insert(key_vec.clone(), i);
 
             // Panic if we've already seen these outputs
             for output in &outputs {
@@ -493,6 +479,30 @@ impl<N: Network, D: Db> Scanner<N, D> {
               scanner.ram_outputs.insert(id);
             }
 
+            // Clone network because we can't borrow it while also mutably borrowing the
+            // eventualities
+            // Thankfully, network is written to be a cheap clone
+            let network = scanner.network.clone();
+            // TODO: This get_eventuality_completions call will panic if called multiple times over
+            // the same blocks (such as when checking multiple keys under the current layout),
+            // as get_eventuality_completions assumes it's always only fed a future block
+            for (id, tx) in
+              network.get_eventuality_completions(&mut scanner.eventualities, &block).await
+            {
+              // This should only happen if there's a P2P net desync or there's a malicious
+              // validator
+              warn!(
+                "eventuality {} resolved by {}, as found on chain. this should not happen",
+                hex::encode(id),
+                hex::encode(&tx)
+              );
+
+              if !scanner.emit(ScannerEvent::Completed(id, tx)) {
+                return;
+              }
+            }
+
+            // Don't emit an event if there's not any outputs
             if outputs.is_empty() {
               continue;
             }
@@ -507,8 +517,6 @@ impl<N: Network, D: Db> Scanner<N, D> {
             if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
               return;
             }
-            // Write this number as scanned so we won't re-fire these outputs
-            scanner.ram_scanned.insert(key_vec.clone(), i);
           }
         }
       }

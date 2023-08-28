@@ -33,7 +33,7 @@ impl Processors for Arc<MessageQueue> {
 
     let network = match msg.from {
       Service::Processor(network) => network,
-      Service::Coordinator => panic!("coordinator sent coordinator message"),
+      Service::Coordinator => panic!("coordinator received coordinator message"),
     };
     let id = msg.id;
 

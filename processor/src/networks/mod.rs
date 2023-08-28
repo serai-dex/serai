@@ -336,6 +336,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
   /// Get the registered eventualities completed within this block, and any prior blocks which
   /// registered eventualities may have been completed in.
+  ///
+  /// This will panic if not fed a new block.
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,

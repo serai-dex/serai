@@ -19,8 +19,16 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+
 bitcoin-serai = { path = "../../coins/bitcoin" }
 monero-serai = { path = "../../coins/monero" }
+
+scale = { package = "parity-scale-codec", version = "3" }
+serde = "1"
+serde_json = "1"
+
+processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
 
 serai-client = { path = "../../substrate/client", features = ["serai"] }
 

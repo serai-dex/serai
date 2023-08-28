@@ -1,9 +1,10 @@
 use std::{
   sync::{OnceLock, Mutex},
+  time::Duration,
   fs,
 };
 
-use serai_client::primitives::NetworkId;
+use serai_client::{primitives::NetworkId, Serai};
 
 use dockertest::{
   LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition, DockerOperations,
@@ -14,11 +15,12 @@ mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-use serai_processor_tests::{network_instance, processor_instance};
+use serai_processor_tests::{RPC_USER, RPC_PASS, network_instance, processor_instance};
 use serai_message_queue_tests::instance as message_queue_instance;
 use serai_coordinator_tests::{coordinator_instance, serai_composition};
 
 #[allow(unused)]
+#[derive(Clone, Debug)]
 pub struct Handles {
   bitcoin: (String, u32),
   bitcoin_processor: String,
@@ -128,4 +130,56 @@ pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
   coordinator_composition.inject_container_name(handles.serai.clone(), "SERAI_HOSTNAME");
 
   (handles, compositions)
+}
+
+impl Handles {
+  pub async fn serai(&self, ops: &DockerOperations) -> Serai {
+    let serai_rpc = ops.handle(&self.serai).host_port(9944).unwrap();
+    let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
+
+    // If the RPC server has yet to start, sleep for up to 60s until it does
+    for _ in 0 .. 60 {
+      tokio::time::sleep(Duration::from_secs(1)).await;
+      let Ok(client) = Serai::new(&serai_rpc).await else { continue };
+      if client.get_latest_block_hash().await.is_err() {
+        continue;
+      }
+      return client;
+    }
+    panic!("serai RPC server wasn't available after 60s");
+  }
+
+  pub async fn bitcoin(&self, ops: &DockerOperations) -> bitcoin_serai::rpc::Rpc {
+    let rpc = ops.handle(&self.bitcoin.0).host_port(self.bitcoin.1).unwrap();
+    let rpc = format!("http://{RPC_USER}:{RPC_PASS}@{}:{}", rpc.0, rpc.1);
+
+    // If the RPC server has yet to start, sleep for up to 60s until it does
+    for _ in 0 .. 60 {
+      tokio::time::sleep(Duration::from_secs(1)).await;
+      let Ok(client) = bitcoin_serai::rpc::Rpc::new(rpc.clone()).await else { continue };
+      return client;
+    }
+    panic!("bitcoin RPC server wasn't available after 60s");
+  }
+
+  pub async fn monero(
+    &self,
+    ops: &DockerOperations,
+  ) -> monero_serai::rpc::Rpc<monero_serai::rpc::HttpRpc> {
+    use monero_serai::rpc::HttpRpc;
+
+    let rpc = ops.handle(&self.monero.0).host_port(self.monero.1).unwrap();
+    let rpc = format!("http://{RPC_USER}:{RPC_PASS}@{}:{}", rpc.0, rpc.1);
+
+    // If the RPC server has yet to start, sleep for up to 60s until it does
+    for _ in 0 .. 60 {
+      tokio::time::sleep(Duration::from_secs(1)).await;
+      let Ok(client) = HttpRpc::new(rpc.clone()) else { continue };
+      if client.get_height().await.is_err() {
+        continue;
+      }
+      return client;
+    }
+    panic!("monero RPC server wasn't available after 60s");
+  }
 }

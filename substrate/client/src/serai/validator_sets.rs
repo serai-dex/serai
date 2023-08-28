@@ -59,6 +59,7 @@ impl Serai {
       .await
   }
 
+  // TODO: Store these separately since we almost never need both at once?
   pub async fn get_keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self
       .storage(PALLET, "Keys", Some(vec![scale_value(set)]), self.get_latest_block_hash().await?)
