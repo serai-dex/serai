@@ -228,7 +228,7 @@ macro_rules! test {
             let keys = keys.clone();
             async move {
               if !multisig {
-                tx.sign(&mut OsRng, &spend).await.unwrap()
+                tx.sign(&mut OsRng, &spend).unwrap()
               } else {
                 #[cfg(not(feature = "multisig"))]
                 panic!("Multisig branch called without the multisig feature");

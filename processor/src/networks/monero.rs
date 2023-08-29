@@ -630,7 +630,6 @@ impl Network for Monero {
     )
     .unwrap()
     .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))
-    .await
     .unwrap();
 
     let block = self.get_latest_block_number().await.unwrap() + 1;
