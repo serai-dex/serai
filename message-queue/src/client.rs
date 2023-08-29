@@ -162,11 +162,15 @@ impl MessageQueue {
       // Verify the message
       // Verify the sender is sane
       if matches!(self.service, Service::Processor(_)) {
-        assert_eq!(msg.from, Service::Coordinator, "non-coordinator sent processor message");
+        assert_eq!(
+          msg.from,
+          Service::Coordinator,
+          "non-coordinator sent us (a processor) a message"
+        );
       } else {
         assert!(
           matches!(msg.from, Service::Processor(_)),
-          "non-processor sent coordinator message"
+          "non-processor sent us (coordinator) a message"
         );
       }
       // TODO: Verify the sender's signature

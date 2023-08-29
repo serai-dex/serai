@@ -15,6 +15,8 @@ mod binaries {
 
   pub(crate) use serai_primitives::NetworkId;
 
+  use serai_db::{Get, DbTxn, Db as DbTrait};
+
   pub(crate) use jsonrpsee::{RpcModule, server::ServerBuilder};
 
   pub(crate) use crate::messages::*;
@@ -44,7 +46,12 @@ mod binaries {
     The message will be ordered by this service, with the order having no guarantees other than
     successful ordering by the time this call returns.
   */
-  pub(crate) fn queue_message(meta: Metadata, msg: Vec<u8>, sig: SchnorrSignature<Ristretto>) {
+  pub(crate) fn queue_message(
+    db: &RwLock<Db>,
+    meta: Metadata,
+    msg: Vec<u8>,
+    sig: SchnorrSignature<Ristretto>,
+  ) {
     {
       let from = (*KEYS).read().unwrap()[&meta.from];
       assert!(
@@ -55,18 +62,45 @@ mod binaries {
     // Assert one, and only one of these, is the coordinator
     assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
-    // TODO: Verify (from, intent) hasn't been prior seen
+    // Verify (from, intent) hasn't been prior seen
+    // At the time of writing, intents should be unique even across `from`. There's a DoS where
+    // a service sends another service's intent, causing the other service to have their message
+    // dropped though.
+    // Including from prevents that DoS, and allows simplifying intents to solely unique within
+    // a service (not within all of Serai).
+    fn key(domain: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
+      [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
+    }
+    fn intent_key(from: Service, intent: &[u8]) -> Vec<u8> {
+      key(b"intent_seen", bincode::serialize(&(from, intent)).unwrap())
+    }
+    let mut db = db.write().unwrap();
+    let mut txn = db.txn();
+    let intent_key = intent_key(meta.from, &meta.intent);
+    if Get::get(&txn, &intent_key).is_some() {
+      log::warn!(
+        "Prior queued message attempted to be queued again. From: {:?} Intent: {}",
+        meta.from,
+        hex::encode(&meta.intent)
+      );
+      return;
+    }
+    DbTxn::put(&mut txn, intent_key, []);
 
     // Queue it
-    let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(QueuedMessage {
-      from: meta.from,
-      // Temporary value which queue_message will override
-      id: u64::MAX,
-      msg,
-      sig: sig.serialize(),
-    });
+    let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(
+      &mut txn,
+      QueuedMessage {
+        from: meta.from,
+        // Temporary value which queue_message will override
+        id: u64::MAX,
+        msg,
+        sig: sig.serialize(),
+      },
+    );
 
     log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
+    DbTxn::commit(txn);
   }
 
   // next RPC method
@@ -180,11 +214,12 @@ async fn main() {
   let listen_on: &[std::net::SocketAddr] = &["0.0.0.0:2287".parse().unwrap()];
   let server = builder.build(listen_on).await.unwrap();
 
-  let mut module = RpcModule::new(());
+  let mut module = RpcModule::new(RwLock::new(db));
   module
-    .register_method("queue", |args, _| {
+    .register_method("queue", |args, db| {
       let args = args.parse::<(Metadata, Vec<u8>, Vec<u8>)>().unwrap();
       queue_message(
+        db,
         args.0,
         args.1,
         SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),

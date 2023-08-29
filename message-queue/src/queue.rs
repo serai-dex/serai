@@ -33,16 +33,20 @@ impl<D: Db> Queue<D> {
   fn message_key(&self, id: u64) -> Vec<u8> {
     Self::key(b"message", serde_json::to_vec(&(self.1, id)).unwrap())
   }
-  pub(crate) fn queue_message(&mut self, mut msg: QueuedMessage) -> u64 {
+  // TODO: This is fine as-used, yet gets from the DB while having a txn. It should get from the
+  // txn
+  pub(crate) fn queue_message(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    mut msg: QueuedMessage,
+  ) -> u64 {
     let id = self.message_count();
     msg.id = id;
     let msg_key = self.message_key(id);
     let msg_count_key = self.message_count_key();
 
-    let mut txn = self.0.txn();
     txn.put(msg_key, serde_json::to_vec(&msg).unwrap());
     txn.put(msg_count_key, (id + 1).to_le_bytes());
-    txn.commit();
 
     id
   }

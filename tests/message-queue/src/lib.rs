@@ -88,16 +88,19 @@ fn basic_functionality() {
       )
       .await;
 
-    coordinator
-      .queue(
-        Metadata {
-          from: Service::Coordinator,
-          to: Service::Processor(NetworkId::Bitcoin),
-          intent: b"intent 2".to_vec(),
-        },
-        b"Hello, World, again!".to_vec(),
-      )
-      .await;
+    // Queue this twice, which message-queue should de-duplicate
+    for _ in 0 .. 2 {
+      coordinator
+        .queue(
+          Metadata {
+            from: Service::Coordinator,
+            to: Service::Processor(NetworkId::Bitcoin),
+            intent: b"intent 2".to_vec(),
+          },
+          b"Hello, World, again!".to_vec(),
+        )
+        .await;
+    }
 
     // Successfully get it
     let bitcoin = MessageQueue::new(
@@ -121,5 +124,9 @@ fn basic_functionality() {
     assert_eq!(next_msg.from, Service::Coordinator);
     assert_eq!(next_msg.id, 1);
     assert_eq!(&next_msg.msg, b"Hello, World, again!");
+    bitcoin.ack(1).await;
+
+    // No further messages should be available
+    tokio::time::timeout(core::time::Duration::from_secs(10), bitcoin.next(2)).await.unwrap_err();
   });
 }
