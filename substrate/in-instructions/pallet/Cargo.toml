@@ -20,6 +20,7 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -29,6 +30,7 @@ in-instructions-primitives = { package = "serai-in-instructions-primitives", pat
 
 tokens-pallet = { package = "serai-tokens-pallet", path = "../../tokens/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+pallet-asset-conversion = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
 std = [
@@ -46,5 +48,6 @@ std = [
   "in-instructions-primitives/std",
 
   "tokens-pallet/std",
+  "pallet-asset-conversion/std"
 ]
 default = ["std"]

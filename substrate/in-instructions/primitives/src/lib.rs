@@ -16,12 +16,16 @@ use sp_application_crypto::sr25519::Signature;
 use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, Data};
+use serai_primitives::{
+  BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, Coin, Amount, pallet_address,
+};
 
 mod shorthand;
 pub use shorthand::*;
 
 pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
+
+pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = pallet_address(b"InInstructionExecutor");
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
@@ -29,7 +33,16 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
-  Dex(Data),
+  Dex(DexCall),
+}
+
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+pub enum DexCall {
+  AddLiquidity(SeraiAddress),          // address to sent the lp tokens to
+  Swap(Coin, ExternalAddress, Amount), // to_coin, to_address, min_out_amount
 }
 
 #[derive(

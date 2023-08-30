@@ -19,7 +19,7 @@ pub mod pallet {
   #[pallet::config]
   pub trait Config:
     frame_system::Config<AccountId = PublicKey, Lookup = AccountLookup>
-    + AssetsConfig<AssetIdParameter = Coin, Balance = SubstrateAmount>
+    + AssetsConfig<AssetIdParameter = Coin, AssetId = Coin, Balance = SubstrateAmount>
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -37,7 +37,7 @@ pub mod pallet {
   pub struct Pallet<T>(PhantomData<T>);
 
   impl<T: Config> Pallet<T> {
-    fn burn_internal(
+    pub fn burn_internal(
       address: SeraiAddress,
       balance: Balance,
       instruction: OutInstruction,
@@ -62,6 +62,19 @@ pub mod pallet {
       )
       .unwrap();
       Pallet::<T>::deposit_event(Event::Mint { address, balance });
+    }
+
+    pub fn balance(coin: Coin, address: SeraiAddress) -> SubstrateAmount {
+      AssetsPallet::<T>::balance(coin, PublicKey::from(address))
+    }
+
+    pub fn transfer(
+      origin: OriginFor<T>,
+      coin: Coin,
+      target: SeraiAddress,
+      amount: SubstrateAmount,
+    ) -> DispatchResult {
+      AssetsPallet::<T>::transfer(origin, coin, target, amount)
     }
   }
 

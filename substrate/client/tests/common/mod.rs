@@ -7,6 +7,7 @@ use serai_client::Serai;
 pub mod tx;
 pub mod validator_sets;
 pub mod in_instructions;
+pub mod dex;
 
 pub const URL: &str = "ws://127.0.0.1:9944";
 

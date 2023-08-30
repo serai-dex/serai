@@ -5374,6 +5374,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-asset-conversion"
+version = "4.0.0-dev"
+source = "git+https://github.com/serai-dex/substrate#6882eb08c6aa18861ae15d2a364ab352a8eadbf3"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api",
+ "sp-arithmetic",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-assets"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#581453fafc221baf7a12c58882164e9635955efc"
@@ -8204,6 +8222,7 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-asset-conversion",
  "parity-scale-codec",
  "scale-info",
  "serai-in-instructions-primitives",
@@ -8213,6 +8232,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-runtime",
+ "sp-std",
  "thiserror",
 ]
 
@@ -8437,6 +8457,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
+ "pallet-asset-conversion",
  "pallet-assets",
  "pallet-authority-discovery",
  "pallet-babe",

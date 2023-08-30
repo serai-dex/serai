@@ -34,6 +34,7 @@ use serai_runtime::{
 pub mod tokens;
 pub mod in_instructions;
 pub mod validator_sets;
+pub mod dex;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Encode, Decode)]
 pub struct Tip {

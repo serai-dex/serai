@@ -44,6 +44,7 @@ serai-primitives = { path = "../primitives", default-features = false }
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-asset-conversion = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-assets = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -101,6 +102,8 @@ std = [
   "pallet-assets/std",
   "tokens-pallet/std",
   "in-instructions-pallet/std",
+
+  "pallet-asset-conversion/std",
 
   "validator-sets-pallet/std",
   "pallet-session/std",

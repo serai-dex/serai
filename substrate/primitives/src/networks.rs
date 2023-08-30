@@ -48,6 +48,8 @@ pub enum NetworkId {
   Decode,
   MaxEncodedLen,
   TypeInfo,
+  PartialOrd,
+  Ord,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum Coin {

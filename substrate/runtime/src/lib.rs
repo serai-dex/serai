@@ -21,6 +21,8 @@ pub use pallet_assets as assets;
 pub use tokens_pallet as tokens;
 pub use in_instructions_pallet as in_instructions;
 
+pub use pallet_asset_conversion as dex;
+
 pub use validator_sets_pallet as validator_sets;
 
 pub use pallet_session as session;
@@ -41,18 +43,20 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, Perbill,
+  ApplyExtrinsicResult, Perbill, Permill,
 };
 
-use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin};
+use primitives::{
+  PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin, pallet_address,
+};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains},
+  traits::{ConstU8, ConstU32, ConstU64, Contains, AsEnsureOriginWithArg},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
-  parameter_types, construct_runtime,
+  PalletId, parameter_types, construct_runtime, ord_parameter_types,
 };
 
 use transaction_payment::CurrencyAdapter;
@@ -60,6 +64,8 @@ use transaction_payment::CurrencyAdapter;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
+
+use dex::MultiAssetIdConverter;
 
 /// An index to a block.
 pub type BlockNumber = u64;
@@ -143,6 +149,16 @@ parameter_types! {
     );
 
   pub const MaxAuthorities: u32 = 100;
+
+  pub const AssetConversionPalletId: PalletId = PalletId(*b"DexPalet"); // TODO: this requires exactly 8 byte?
+  pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(1);
+  pub const AllowMultiAssetPools: bool = false;
+}
+
+ord_parameter_types! {
+  // TODO: normally we should do AssetConversionPalletId::get() instead of b"DexPalet"
+  // but that gives a lifetime error for now.
+  pub const AssetConversionOrigin: PublicKey = PublicKey::from(pallet_address(b"DexPalet"));
 }
 
 pub struct CallFilter;
@@ -174,6 +190,17 @@ impl Contains<RuntimeCall> for CallFilter {
 
     if let RuntimeCall::ValidatorSets(call) = call {
       return matches!(call, validator_sets::Call::set_keys { .. });
+    }
+
+    if let RuntimeCall::Dex(call) = call {
+      return matches!(
+        call,
+        dex::Call::create_pool { .. } |
+          dex::Call::add_liquidity { .. } |
+          dex::Call::swap_exact_tokens_for_tokens { .. } |
+          dex::Call::swap_tokens_for_exact_tokens { .. } |
+          dex::Call::remove_liquidity { .. }
+      );
     }
 
     false
@@ -271,7 +298,7 @@ impl assets::Config for Runtime {
   type StringLimit = ConstU32<32>;
 
   // Don't allow anyone to create assets
-  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
+  type CreateOrigin = AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
   type ForceOrigin = system::EnsureRoot<PublicKey>;
 
   // Don't charge fees nor kill accounts
@@ -292,6 +319,36 @@ impl assets::Config for Runtime {
   type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
+pub type PoolAssetsInstance = assets::Instance1;
+impl assets::Config<PoolAssetsInstance> for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Balance = SubstrateAmount;
+  type RemoveItemsLimit = ConstU32<1000>; // 0?
+  type AssetId = u32;
+  type AssetIdParameter = u32;
+  type Currency = Balances;
+
+  type CreateOrigin =
+    AsEnsureOriginWithArg<system::EnsureSignedBy<AssetConversionOrigin, PublicKey>>;
+  type ForceOrigin = system::EnsureRoot<PublicKey>;
+
+  // Deposits are zero because creation/admin is limited to Asset Conversion pallet.
+  type AssetDeposit = ConstU64<0>;
+  type AssetAccountDeposit = ConstU64<0>;
+  type MetadataDepositBase = ConstU64<0>;
+  type MetadataDepositPerByte = ConstU64<0>;
+  type ApprovalDeposit = ConstU64<1>; // TODO: is this supposed to be 0 too?
+  type StringLimit = ConstU32<32>;
+
+  type Freezer = ();
+  type Extra = ();
+  type CallbackHandle = ();
+
+  type WeightInfo = assets::weights::SubstrateWeight<Runtime>; // same as the normal assets?
+  #[cfg(feature = "runtime-benchmarks")]
+  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
+}
+
 impl tokens::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
@@ -302,6 +359,63 @@ impl in_instructions::Config for Runtime {
 
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
+}
+
+pub struct AssetConverter;
+impl MultiAssetIdConverter<Coin, Coin> for AssetConverter {
+  /// Returns the MultiAssetId representing the native currency of the chain.
+  fn get_native() -> Coin {
+    Coin::Serai
+  }
+
+  /// Returns true if the given MultiAssetId is the native currency.
+  fn is_native(asset: &Coin) -> bool {
+    *asset == Coin::Serai
+  }
+
+  /// If it's not native, returns the AssetId for the given MultiAssetId.
+  fn try_convert(asset: &Coin) -> Result<Coin, ()> {
+    if *asset == Coin::Serai {
+      return Err(());
+    }
+    Ok(*asset)
+  }
+
+  /// Wraps an AssetId as a MultiAssetId.
+  fn into_multiasset_id(asset: &Coin) -> Coin {
+    *asset
+  }
+}
+
+impl dex::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Currency = Balances;
+  type Balance = SubstrateAmount;
+  type AssetBalance = SubstrateAmount;
+  type HigherPrecisionBalance = u128;
+
+  type AssetId = Coin;
+  type MultiAssetId = Coin;
+  type MultiAssetIdConverter = AssetConverter;
+  type PoolAssetId = u32;
+
+  type Assets = Assets;
+  type PoolAssets = PoolAssets;
+
+  type LPFee = ConstU32<3>; // 0.3%
+  type PoolSetupFee = ConstU64<0>; // Asset class deposit fees are sufficient to prevent spam
+  type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
+  type MintMinLiquidity = ConstU64<100>;
+
+  type MaxSwapPathLength = ConstU32<3>; // asset1 -> SRI -> asset2
+
+  type PalletId = AssetConversionPalletId;
+  type PoolSetupFeeReceiver = AssetConversionOrigin;
+  type AllowMultiAssetPools = AllowMultiAssetPools;
+
+  type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
+  #[cfg(feature = "runtime-benchmarks")]
+  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
 pub struct IdentityValidatorIdOf;
@@ -388,8 +502,11 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Assets: assets,
+    PoolAssets: assets::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Tokens: tokens,
     InInstructions: in_instructions,
+
+    Dex: dex,
 
     ValidatorSets: validator_sets,
 
@@ -601,6 +718,23 @@ sp_api::impl_runtime_apis! {
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
       AuthorityDiscovery::authorities()
+    }
+  }
+
+  impl dex::AssetConversionApi<
+    Block,
+    SubstrateAmount,
+    SubstrateAmount,
+    Coin,
+  > for Runtime {
+    fn quote_price_exact_tokens_for_tokens(asset1: Coin, asset2: Coin, amount: SubstrateAmount, include_fee: bool) -> Option<SubstrateAmount> {
+      Dex::quote_price_exact_tokens_for_tokens(asset1, asset2, amount, include_fee)
+    }
+    fn quote_price_tokens_for_exact_tokens(asset1: Coin, asset2: Coin, amount: SubstrateAmount, include_fee: bool) -> Option<SubstrateAmount> {
+      Dex::quote_price_tokens_for_exact_tokens(asset1, asset2, amount, include_fee)
+    }
+    fn get_reserves(asset1: Coin, asset2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
+      Dex::get_reserves(&asset1, &asset2).ok()
     }
   }
 }
