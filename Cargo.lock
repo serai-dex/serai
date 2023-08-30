@@ -8089,6 +8089,7 @@ dependencies = [
  "bitcoin",
  "ciphersuite",
  "frost-schnorrkel",
+ "futures",
  "lazy_static",
  "modular-frost",
  "monero-serai",

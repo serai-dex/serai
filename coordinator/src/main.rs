@@ -21,6 +21,7 @@ use serai_client::{primitives::NetworkId, Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
+use futures::stream::StreamExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use ::tributary::{
@@ -70,7 +71,7 @@ async fn add_tributary<D: Db, P: P2p>(
   log::info!("adding tributary {:?}", spec.set());
 
   let tributary = Tributary::<_, Transaction, _>::new(
-    // TODO2: Use a db on a distinct volume
+    // TODO2: Use a db on a distinct volume to protect against DoS attacks
     db,
     spec.genesis(),
     spec.start_time(),
@@ -102,7 +103,36 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   let mut db = substrate::SubstrateDb::new(db);
   let mut next_substrate_block = db.next_block();
 
+  let new_substrate_block_notifier = {
+    let serai = &serai;
+    move || async move {
+      loop {
+        match serai.newly_finalized_block().await {
+          Ok(sub) => return sub,
+          Err(e) => {
+            log::error!("couldn't communicate with serai node: {e}");
+            sleep(Duration::from_secs(5)).await;
+          }
+        }
+      }
+    }
+  };
+  let mut substrate_block_notifier = new_substrate_block_notifier().await;
+
   loop {
+    // await the next block, yet if our notifier had an error, re-create it
+    {
+      if substrate_block_notifier
+        .next()
+        .await
+        .and_then(|result| if result.is_err() { None } else { Some(()) })
+        .is_none()
+      {
+        substrate_block_notifier = new_substrate_block_notifier().await;
+        continue;
+      }
+    }
+
     match substrate::handle_new_blocks(
       &mut db,
       &key,
@@ -125,9 +155,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
     )
     .await
     {
-      // TODO2: Should this use a notification system for new blocks?
-      // Right now it's sleeping for half the block time.
-      Ok(()) => sleep(Duration::from_secs(3)).await,
+      Ok(()) => {}
       Err(e) => {
         log::error!("couldn't communicate with serai node: {e}");
         sleep(Duration::from_secs(5)).await;
