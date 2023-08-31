@@ -602,13 +602,24 @@ impl<N: Network + 'static> TendermintMachine<N> {
       if let Some(proposal_signed) = self.block.log.get(msg.round, proposer, Step::Propose) {
         if let Data::Proposal(_, block) = &proposal_signed.msg.data {
           // Check if it has gotten a sufficient amount of precommits
-          // Use a junk signature since message equality disregards the signature
-          // TODO: These precommit signatures won't have been verified if this round is in the
-          // future
+          // Uses a junk signature since message equality disregards the signature
           if self.block.log.has_consensus(
             msg.round,
             Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
           ) {
+            // If msg.round is in the future, these Precommits won't have their inner signatures
+            // verified
+            // It should be impossible for msg.round to be in the future however, as this requires
+            // 67% of validators to Precommit, and we jump on 34% participating in the new round
+            // The one exception would be if a validator had 34%, and could cause participation to
+            // go from 33% (not enough to jump) to 67%, without executing the below code
+            // This also would require the local machine to be outside of allowed time tolerances,
+            // or the validator with 34% to not be publishing Prevotes (as those would cause a
+            // a jump)
+            // Both are invariants
+            // TODO: Replace this panic with an inner signature check
+            assert!(msg.round.0 <= self.block.round().number.0);
+
             log::debug!(target: "tendermint", "block {} has consensus", msg.block.0);
             return Ok(Some(block.clone()));
           }
