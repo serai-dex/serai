@@ -116,8 +116,8 @@ impl Network for TestNetwork {
   type Weights = TestWeights;
   type Block = TestBlock;
 
-  const BLOCK_PROCESSING_TIME: u32 = 2;
-  const LATENCY_TIME: u32 = 1;
+  const BLOCK_PROCESSING_TIME: u32 = 2000;
+  const LATENCY_TIME: u32 = 1000;
 
   fn signer(&self) -> TestSigner {
     TestSigner(self.0)
