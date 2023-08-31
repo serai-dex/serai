@@ -399,6 +399,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
             hex::encode(hash),
             hex::encode(self.genesis)
           );
+          // TODO: Use a notification system for when we have a new provided, in order to minimize
+          // latency
           sleep(Duration::from_secs(Self::block_time().into())).await;
         }
         _ => return invalid_block(),

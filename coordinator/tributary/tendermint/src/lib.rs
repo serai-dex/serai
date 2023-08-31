@@ -189,8 +189,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // Push it on to the queue. This is done so we only handle one message at a time, and so we
       // can handle our own message before broadcasting it. That way, we fail before before
       // becoming malicious
-      // push_front to prioritize our own messages
-      self.queue.push_front(msg);
+      self.queue.push_back(msg);
     }
   }
 
@@ -220,6 +219,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // Sleep until this round ends
     let round_end = self.block.end_time[&end_round];
     let time_until_round_end = round_end.instant().saturating_duration_since(Instant::now());
+    if time_until_round_end == Duration::ZERO {
+      log::trace!(
+        "resetting when prior round ended {}ms ago",
+        Instant::now().saturating_duration_since(round_end.instant()).as_millis(),
+      );
+    }
     log::trace!("sleeping until round ends in {}ms", time_until_round_end.as_millis());
     sleep(time_until_round_end).await;
 
@@ -573,6 +578,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     let msg = &signed.msg;
     if msg.block != self.block.number {
       Err(TendermintError::Temporal)?;
+    }
+
+    if (msg.block == self.block.number) &&
+      (msg.round == self.block.round().number) &&
+      (msg.data.step() == Step::Propose)
+    {
+      log::trace!("received Propose for block {}, round {}", msg.block.0, msg.round.0);
     }
 
     // If this is a precommit, verify its signature
