@@ -195,14 +195,20 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // Start a new round. Returns true if we were the proposer
   fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
-    if let Some(data) =
-      self.block.new_round(round, self.weights.proposer(self.block.number, round), time)
-    {
+    let proposer = self.weights.proposer(self.block.number, round);
+    let res = if let Some(data) = self.block.new_round(round, proposer, time) {
       self.broadcast(data);
       true
     } else {
       false
-    }
+    };
+    log::debug!(
+      target: "tendermint",
+      "proposer for block {}, round {round:?} was {} (me: {res})",
+      self.block.number.0,
+      hex::encode(proposer.encode()),
+    );
+    res
   }
 
   // 53-54
@@ -597,6 +603,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
         if let Data::Proposal(_, block) = &proposal_signed.msg.data {
           // Check if it has gotten a sufficient amount of precommits
           // Use a junk signature since message equality disregards the signature
+          // TODO: These precommit signatures won't have been verified if this round is in the
+          // future
           if self.block.log.has_consensus(
             msg.round,
             Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
@@ -617,6 +625,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 55-56
       // Jump, enabling processing by the below code
       if self.block.log.round_participation(msg.round) > self.weights.fault_threshold() {
+        // Jump to the new round.
+        let proposer = self.round(msg.round, None);
+
         // If this round already has precommit messages, verify their signatures
         let round_msgs = self.block.log.log[&msg.round].clone();
         for (validator, msgs) in &round_msgs {
@@ -626,7 +637,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
               assert!(res);
             } else {
               // Remove the message so it isn't counted towards forming a commit/included in one
-              // This won't remove the fact the precommitted for this block hash in the MessageLog
+              // This won't remove the fact they precommitted for this block hash in the MessageLog
               // TODO: Don't even log these in the first place until we jump, preventing needing
               // to do this in the first place
               let msg = self
@@ -645,9 +656,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
             }
           }
         }
-        // If we're the proposer, return now so we re-run processing with our proposal
-        // If we continue now, it'd just be wasted ops
-        if self.round(msg.round, None) {
+
+        // If we're the proposer, return now we don't waste time on the current round
+        // (as it doesn't have a proposal, since we didn't propose, and cannot complete)
+        if proposer {
           return Ok(None);
         }
       } else {
