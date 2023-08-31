@@ -189,7 +189,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // Push it on to the queue. This is done so we only handle one message at a time, and so we
       // can handle our own message before broadcasting it. That way, we fail before before
       // becoming malicious
-      self.queue.push_back(msg);
+      // push_front to prioritize our own messages
+      self.queue.push_front(msg);
     }
   }
 

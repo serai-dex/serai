@@ -274,6 +274,11 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) p2p: P,
 }
 
+pub const BLOCK_PROCESSING_TIME: u32 = 999;
+pub const LATENCY_TIME: u32 = 1667;
+// TODO: Add test asserting this
+pub const TARGET_BLOCK_TIME: u32 = BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME);
+
 #[async_trait]
 impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> {
   type ValidatorId = [u8; 32];
@@ -285,8 +290,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   // The block time is the latency on message delivery (where a message is some piece of data
   // embedded in a transaction) times three plus the block processing time, hence why it should be
   // kept low.
-  const BLOCK_PROCESSING_TIME: u32 = 999;
-  const LATENCY_TIME: u32 = 1667;
+  const BLOCK_PROCESSING_TIME: u32 = BLOCK_PROCESSING_TIME;
+  const LATENCY_TIME: u32 = LATENCY_TIME;
 
   fn signer(&self) -> Arc<Signer> {
     self.signer.clone()

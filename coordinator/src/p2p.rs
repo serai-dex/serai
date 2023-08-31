@@ -187,8 +187,15 @@ impl LibP2p {
         // Block size limit + 1 KB of space for signatures/metadata
         const MAX_LIBP2P_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
 
+        let heartbeat_interval = tributary::tendermint::LATENCY_TIME / 2;
+        let heartbeats_per_block =
+          usize::try_from(tributary::tendermint::TARGET_BLOCK_TIME / heartbeat_interval).unwrap();
+
         use blake2::{Digest, Blake2s256};
         let config = ConfigBuilder::default()
+          .heartbeat_interval(Duration::from_millis(heartbeat_interval.into()))
+          .history_length(heartbeats_per_block * 2)
+          .history_gossip(heartbeats_per_block)
           .max_transmit_size(MAX_LIBP2P_MESSAGE_SIZE)
           // We send KeepAlive after 80s
           .idle_timeout(Duration::from_secs(85))
@@ -340,6 +347,8 @@ impl P2p for LibP2p {
     self.0.lock().await.send(msg).expect("broadcast_send closed. are we shutting down?");
   }
 
+  // TODO: We only have a single handle call this. Differentiate Send/Recv to remove this constant
+  // lock acquisition?
   async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
     self.1.lock().await.recv().await.expect("receive_recv closed. are we shutting down?")
   }
