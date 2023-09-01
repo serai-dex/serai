@@ -8,6 +8,47 @@ use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
 pub use serai_db::*;
 
+// Used to determine if an ID is acceptable
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Zone {
+  Dkg,
+  Batch,
+  Sign,
+}
+
+impl Zone {
+  fn label(&self) -> &'static str {
+    match self {
+      Zone::Dkg => "dkg",
+      Zone::Batch => "batch",
+      Zone::Sign => "sign",
+    }
+  }
+}
+
+// A struct to refer to a piece of data all validators will presumably provide a value for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DataSpecification {
+  pub zone: Zone,
+  pub label: &'static str,
+  pub id: [u8; 32],
+  pub attempt: u32,
+}
+
+impl DataSpecification {
+  fn as_key(&self, genesis: [u8; 32]) -> Vec<u8> {
+    // TODO: Use a proper transcript here to avoid conflicts?
+    [
+      genesis.as_ref(),
+      self.zone.label().as_bytes(),
+      self.label.as_bytes(),
+      self.id.as_ref(),
+      self.attempt.to_le_bytes().as_ref(),
+    ]
+    .concat()
+  }
+}
+
 #[derive(Debug)]
 pub struct TributaryDb<D: Db>(pub D);
 impl<D: Db> TributaryDb<D> {
@@ -97,24 +138,17 @@ impl<D: Db> TributaryDb<D> {
     Some(KeyPair::decode(&mut getter.get(Self::key_pair_key(set))?.as_slice()).unwrap())
   }
 
-  fn recognized_id_key(label: &'static str, genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
-    Self::tributary_key(b"recognized", [label.as_bytes(), genesis.as_ref(), id.as_ref()].concat())
+  fn recognized_id_key(genesis: [u8; 32], zone: Zone, id: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(
+      b"recognized",
+      [genesis.as_ref(), zone.label().as_bytes(), id.as_ref()].concat(),
+    )
   }
-  pub fn recognized_id<G: Get>(
-    getter: &G,
-    label: &'static str,
-    genesis: [u8; 32],
-    id: [u8; 32],
-  ) -> bool {
-    getter.get(Self::recognized_id_key(label, genesis, id)).is_some()
+  pub fn recognized_id<G: Get>(getter: &G, genesis: [u8; 32], zone: Zone, id: [u8; 32]) -> bool {
+    getter.get(Self::recognized_id_key(genesis, zone, id)).is_some()
   }
-  pub fn recognize_id(
-    txn: &mut D::Transaction<'_>,
-    label: &'static str,
-    genesis: [u8; 32],
-    id: [u8; 32],
-  ) {
-    txn.put(Self::recognized_id_key(label, genesis, id), [])
+  pub fn recognize_id(txn: &mut D::Transaction<'_>, genesis: [u8; 32], zone: Zone, id: [u8; 32]) {
+    txn.put(Self::recognized_id_key(genesis, zone, id), [])
   }
 
   fn attempt_key(genesis: [u8; 32], id: [u8; 32]) -> Vec<u8> {
@@ -127,62 +161,42 @@ impl<D: Db> TributaryDb<D> {
     )
   }
 
-  fn data_received_key(
-    label: &'static [u8],
-    genesis: [u8; 32],
-    id: [u8; 32],
-    attempt: u32,
-  ) -> Vec<u8> {
-    Self::tributary_key(
-      b"data_received",
-      [label, genesis.as_ref(), id.as_ref(), attempt.to_le_bytes().as_ref()].concat(),
-    )
+  // Key for the amount of instances received thus far
+  fn data_received_key(genesis: [u8; 32], data_spec: &DataSpecification) -> Vec<u8> {
+    Self::tributary_key(b"data_received", data_spec.as_key(genesis))
   }
   fn data_key(
-    label: &'static [u8],
     genesis: [u8; 32],
-    id: [u8; 32],
-    attempt: u32,
+    data_spec: &DataSpecification,
     signer: <Ristretto as Ciphersuite>::G,
   ) -> Vec<u8> {
     Self::tributary_key(
       b"data",
-      [
-        label,
-        genesis.as_ref(),
-        id.as_ref(),
-        attempt.to_le_bytes().as_ref(),
-        signer.to_bytes().as_ref(),
-      ]
-      .concat(),
+      [data_spec.as_key(genesis).as_slice(), signer.to_bytes().as_ref()].concat(),
     )
   }
   pub fn data<G: Get>(
-    label: &'static [u8],
     getter: &G,
     genesis: [u8; 32],
-    id: [u8; 32],
-    attempt: u32,
+    data_spec: &DataSpecification,
     signer: <Ristretto as Ciphersuite>::G,
   ) -> Option<Vec<u8>> {
-    getter.get(Self::data_key(label, genesis, id, attempt, signer))
+    getter.get(Self::data_key(genesis, data_spec, signer))
   }
   pub fn set_data(
-    label: &'static [u8],
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
-    id: [u8; 32],
-    attempt: u32,
+    data_spec: &DataSpecification,
     signer: <Ristretto as Ciphersuite>::G,
     data: &[u8],
   ) -> u16 {
-    let received_key = Self::data_received_key(label, genesis, id, attempt);
+    let received_key = Self::data_received_key(genesis, data_spec);
     let mut received =
       u16::from_le_bytes(txn.get(&received_key).unwrap_or(vec![0; 2]).try_into().unwrap());
     received += 1;
 
     txn.put(received_key, received.to_le_bytes());
-    txn.put(Self::data_key(label, genesis, id, attempt, signer), data);
+    txn.put(Self::data_key(genesis, data_spec, signer), data);
 
     received
   }

@@ -359,6 +359,8 @@ pub async fn handle_p2p<D: Db, P: P2p>(
           }
 
           // TODO2: Rate limit this per timestamp
+          // And/or slash on Heartbeat which justifies a response, since the node obviously was
+          // offline and we must now use our bandwidth to compensate for them?
           P2pMessageKind::Heartbeat(genesis) => {
             if msg.msg.len() != 40 {
               log::error!("validator sent invalid heartbeat");

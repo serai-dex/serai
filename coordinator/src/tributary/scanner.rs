@@ -84,7 +84,6 @@ async fn handle_block<
           spec,
           processors,
           publish_serai_tx.clone(),
-          genesis,
           key,
           recognized_id.clone(),
           &mut txn,
