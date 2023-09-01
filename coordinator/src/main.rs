@@ -17,6 +17,7 @@ use ciphersuite::{
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
+use frost::Participant;
 
 use serai_db::{DbTxn, Db};
 use serai_env as env;
@@ -508,7 +509,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
         }
-        key_gen::ProcessorMessage::Shares { id, shares } => {
+        key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
           // DkgConfirmer has a TODO noting it's only secure for a single usage, yet this ensures
           // the TODO is resolved before unsafe usage
@@ -516,10 +517,20 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             panic!("attempt wasn't 0");
           }
           let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec);
+
+          let mut tx_shares = Vec::with_capacity(shares.len());
+          for i in 1 ..= spec.n() {
+            let i = Participant::new(i).unwrap();
+            if i == my_i {
+              continue;
+            }
+            tx_shares
+              .push(shares.remove(&i).expect("processor didn't send share for another validator"));
+          }
+
           Some(Transaction::DkgShares {
             attempt: id.attempt,
-            sender_i: my_i,
-            shares,
+            shares: tx_shares,
             confirmation_nonces: nonces,
             signed: Transaction::empty_signed(),
           })

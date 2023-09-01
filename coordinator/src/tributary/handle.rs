@@ -340,28 +340,31 @@ pub async fn handle_application_tx<
       }
     }
 
-    Transaction::DkgShares { attempt, sender_i, mut shares, confirmation_nonces, signed } => {
-      if sender_i !=
-        spec
-          .i(signed.signer)
-          .expect("transaction added to tributary by signer who isn't a participant")
-      {
-        // TODO: Full slash
-        todo!();
-      }
-
+    Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
       if shares.len() != (usize::from(spec.n()) - 1) {
         // TODO: Full slash
         todo!();
       }
 
+      let sender_i = spec
+        .i(signed.signer)
+        .expect("transaction added to tributary by signer who isn't a participant");
+
       // Only save our share's bytes
       let our_i = spec
         .i(Ristretto::generator() * key.deref())
         .expect("in a tributary we're not a validator for");
-      // This unwrap is safe since the length of shares is checked, the the only missing key
-      // within the valid range will be the sender's i
-      let bytes = if sender_i == our_i { vec![] } else { shares.remove(&our_i).unwrap() };
+
+      let bytes = if sender_i == our_i {
+        vec![]
+      } else {
+        // 1-indexed to 0-indexed, handling the omission of the sender's own data
+        let relative_i = usize::from(u16::from(our_i) - 1) -
+          (if u16::from(our_i) > u16::from(sender_i) { 1 } else { 0 });
+        // Safe since we length-checked shares
+        shares.swap_remove(relative_i)
+      };
+      drop(shares);
 
       let confirmation_nonces = handle(
         txn,

@@ -1,8 +1,5 @@
 use core::ops::Deref;
-use std::{
-  io::{self, Read, Write},
-  collections::HashMap,
-};
+use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -224,8 +221,7 @@ pub enum Transaction {
   DkgCommitments(u32, Vec<u8>, Signed),
   DkgShares {
     attempt: u32,
-    sender_i: Participant,
-    shares: HashMap<Participant, Vec<u8>>,
+    shares: Vec<Vec<u8>>,
     confirmation_nonces: [u8; 64],
     signed: Signed,
   },
@@ -289,10 +285,6 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
-        let mut sender_i = [0; 2];
-        reader.read_exact(&mut sender_i)?;
-        let sender_i = u16::from_le_bytes(sender_i);
-
         let shares = {
           let mut share_quantity = [0; 2];
           reader.read_exact(&mut share_quantity)?;
@@ -301,15 +293,11 @@ impl ReadWrite for Transaction {
           reader.read_exact(&mut share_len)?;
           let share_len = usize::from(u16::from_le_bytes(share_len));
 
-          let mut shares = HashMap::new();
+          let mut shares = vec![];
           for i in 0 .. u16::from_le_bytes(share_quantity) {
-            let mut participant = Participant::new(i + 1).unwrap();
-            if u16::from(participant) >= sender_i {
-              participant = Participant::new(u16::from(participant) + 1).unwrap();
-            }
             let mut share = vec![0; share_len];
             reader.read_exact(&mut share)?;
-            shares.insert(participant, share);
+            shares.push(share);
           }
           shares
         };
@@ -319,14 +307,7 @@ impl ReadWrite for Transaction {
 
         let signed = Signed::read(reader)?;
 
-        Ok(Transaction::DkgShares {
-          attempt,
-          sender_i: Participant::new(sender_i)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid sender participant"))?,
-          shares,
-          confirmation_nonces,
-          signed,
-        })
+        Ok(Transaction::DkgShares { attempt, shares, confirmation_nonces, signed })
       }
 
       2 => {
@@ -395,46 +376,30 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::DkgShares { attempt, sender_i, shares, confirmation_nonces, signed } => {
+      Transaction::DkgShares { attempt, shares, confirmation_nonces, signed } => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
-        // It's unfortunate to have this so duplicated, yet it avoids needing to pass a Spec to
-        // read in order to create a valid DkgShares
-        // TODO: Transform DkgShares to having a Vec of shares, with post-expansion to the proper
-        // HashMap
-        writer.write_all(&u16::from(*sender_i).to_le_bytes())?;
-
-        // Shares are indexed by non-zero u16s (Participants), so this can't fail
+        // `shares` is a Vec which maps to a HashMap<Pariticpant, Vec<u8>> for any legitimate
+        // `DkgShares`. Since Participant has a range of 1 ..= u16::MAX, the length must be <
+        // u16::MAX. The only way for this to not be true if we were malicious, or if we read a
+        // `DkgShares` with a `shares.len() > u16::MAX`. The former is assumed untrue. The latter
+        // is impossible since we'll only read up to u16::MAX items.
         writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
 
-        let mut share_len = None;
-        let mut found_our_share = false;
-        for participant in 1 ..= (shares.len() + 1) {
-          let Some(share) =
-            &shares.get(&Participant::new(u16::try_from(participant).unwrap()).unwrap())
-          else {
-            assert!(!found_our_share);
-            found_our_share = true;
-            continue;
-          };
+        let share_len = shares.get(0).map(|share| share.len()).unwrap_or(0);
+        // For BLS12-381 G2, this would be:
+        // - A 32-byte share
+        // - A 96-byte ephemeral key
+        // - A 128-byte signature
+        // Hence why this has to be u16
+        writer.write_all(&u16::try_from(share_len).unwrap().to_le_bytes())?;
 
-          if let Some(share_len) = share_len {
-            if share.len() != share_len {
-              panic!("variable length shares");
-            }
-          } else {
-            // For BLS12-381 G2, this would be:
-            // - A 32-byte share
-            // - A 96-byte ephemeral key
-            // - A 128-byte signature
-            // Hence why this has to be u16
-            writer.write_all(&u16::try_from(share.len()).unwrap().to_le_bytes())?;
-            share_len = Some(share.len());
-          }
-
+        for share in shares {
+          assert_eq!(share.len(), share_len, "shares were of variable length");
           writer.write_all(share)?;
         }
+
         writer.write_all(confirmation_nonces)?;
         signed.write(writer)
       }
