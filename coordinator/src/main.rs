@@ -600,7 +600,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
             txn.commit();
 
-            Some(Transaction::Batch(id.id))
+            Some(Transaction::Batch(block.0, id.id))
           } else {
             Some(Transaction::BatchPreprocess(SignData {
               plan: id.id,

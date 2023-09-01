@@ -103,9 +103,11 @@ fn serialize_transaction() {
   ));
 
   {
+    let mut block = [0; 32];
+    OsRng.fill_bytes(&mut block);
     let mut batch = [0; 32];
     OsRng.fill_bytes(&mut batch);
-    test_read_write(Transaction::Batch(batch));
+    test_read_write(Transaction::Batch(block, batch));
   }
   test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 

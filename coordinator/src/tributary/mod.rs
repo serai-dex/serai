@@ -232,7 +232,7 @@ pub enum Transaction {
   DkgConfirmed(u32, [u8; 32], Signed),
 
   // When we have synchrony on a batch, we can allow signing it
-  Batch([u8; 32]),
+  Batch([u8; 32], [u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SubstrateBlock(u64),
@@ -331,9 +331,11 @@ impl ReadWrite for Transaction {
       }
 
       3 => {
+        let mut block = [0; 32];
+        reader.read_exact(&mut block)?;
         let mut batch = [0; 32];
         reader.read_exact(&mut batch)?;
-        Ok(Transaction::Batch(batch))
+        Ok(Transaction::Batch(block, batch))
       }
 
       4 => {
@@ -430,8 +432,9 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::Batch(batch) => {
+      Transaction::Batch(block, batch) => {
         writer.write_all(&[3])?;
+        writer.write_all(block)?;
         writer.write_all(batch)
       }
 
@@ -475,7 +478,7 @@ impl TransactionTrait for Transaction {
       Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
       Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
 
-      Transaction::Batch(_) => TransactionKind::Provided("batch"),
+      Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
@@ -534,7 +537,7 @@ impl Transaction {
         Transaction::DkgShares { ref mut signed, .. } => signed,
         Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
 
-        Transaction::Batch(_) => panic!("signing Batch"),
+        Transaction::Batch(_, _) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
         Transaction::BatchPreprocess(ref mut data) => &mut data.signed,

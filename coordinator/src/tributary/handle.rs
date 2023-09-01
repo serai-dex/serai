@@ -443,7 +443,7 @@ pub async fn handle_application_tx<
       }
     }
 
-    Transaction::Batch(batch) => {
+    Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, batch);
       recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch).await;
