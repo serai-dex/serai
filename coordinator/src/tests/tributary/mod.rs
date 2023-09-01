@@ -116,4 +116,17 @@ fn serialize_transaction() {
 
   test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng)));
   test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng)));
+
+  {
+    let mut plan = [0; 32];
+    OsRng.fill_bytes(&mut plan);
+    let mut tx_hash = vec![0; (OsRng.next_u64() % 64).try_into().unwrap()];
+    OsRng.fill_bytes(&mut tx_hash);
+    test_read_write(Transaction::SignCompleted {
+      plan,
+      tx_hash,
+      first_signer: random_signed(&mut OsRng).signer,
+      signature: random_signed(&mut OsRng).signature,
+    });
+  }
 }

@@ -232,6 +232,10 @@ pub enum Transaction {
   DkgConfirmed(u32, [u8; 32], Signed),
 
   // When we have synchrony on a batch, we can allow signing it
+  // TODO (never?): This is less efficient compared to an ExternalBlock provided transaction,
+  // which would be binding over the block hash and automatically achieve synchrony on all
+  // relevant batches. ExternalBlock was removed for this due to complexity around the pipeline
+  // with the current processor, yet it would still be an improvement.
   Batch([u8; 32], [u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
@@ -242,10 +246,18 @@ pub enum Transaction {
 
   SignPreprocess(SignData),
   SignShare(SignData),
-  // TODO: We can't make this an Unsigned as we need to prevent spam, which requires a max of 1
-  // claim per sender
-  // Can we de-duplicate across senders though, if they claim the same hash completes?
-  SignCompleted([u8; 32], Vec<u8>, Signed),
+  // This is defined as an Unsigned transaction in order to de-duplicate SignCompleted amongst
+  // reporters (who should all report the same thing)
+  // We do still track the signer in order to prevent a single signer from publishing arbitrarily
+  // many TXs without penalty
+  // Here, they're denoted as the first_signer, as only the signer of the first TX to be included
+  // with this pairing will be remembered on-chain
+  SignCompleted {
+    plan: [u8; 32],
+    tx_hash: Vec<u8>,
+    first_signer: <Ristretto as Ciphersuite>::G,
+    signature: SchnorrSignature<Ristretto>,
+  },
 }
 
 impl ReadWrite for Transaction {
@@ -354,13 +366,15 @@ impl ReadWrite for Transaction {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
-        let mut tx_len = [0];
-        reader.read_exact(&mut tx_len)?;
-        let mut tx = vec![0; usize::from(tx_len[0])];
-        reader.read_exact(&mut tx)?;
+        let mut tx_hash_len = [0];
+        reader.read_exact(&mut tx_hash_len)?;
+        let mut tx_hash = vec![0; usize::from(tx_hash_len[0])];
+        reader.read_exact(&mut tx_hash)?;
 
-        let signed = Signed::read(reader)?;
-        Ok(Transaction::SignCompleted(plan, tx, signed))
+        let first_signer = Ristretto::read_G(reader)?;
+        let signature = SchnorrSignature::<Ristretto>::read(reader)?;
+
+        Ok(Transaction::SignCompleted { plan, tx_hash, first_signer, signature })
       }
 
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
@@ -460,12 +474,14 @@ impl ReadWrite for Transaction {
         writer.write_all(&[8])?;
         data.write(writer)
       }
-      Transaction::SignCompleted(plan, tx, signed) => {
+      Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
         writer.write_all(&[9])?;
         writer.write_all(plan)?;
-        writer.write_all(&[u8::try_from(tx.len()).expect("tx hash length exceed 255 bytes")])?;
-        writer.write_all(tx)?;
-        signed.write(writer)
+        writer
+          .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
+        writer.write_all(tx_hash)?;
+        writer.write_all(&first_signer.to_bytes())?;
+        signature.write(writer)
       }
     }
   }
@@ -486,7 +502,7 @@ impl TransactionTrait for Transaction {
 
       Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
-      Transaction::SignCompleted(_, _, signed) => TransactionKind::Signed(signed),
+      Transaction::SignCompleted { .. } => TransactionKind::Unsigned,
     }
   }
 
@@ -502,6 +518,12 @@ impl TransactionTrait for Transaction {
   fn verify(&self) -> Result<(), TransactionError> {
     if let Transaction::BatchShare(data) = self {
       if data.data.len() != 32 {
+        Err(TransactionError::InvalidContent)?;
+      }
+    }
+
+    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+      if !signature.verify(*first_signer, self.sign_completed_challenge()) {
         Err(TransactionError::InvalidContent)?;
       }
     }
@@ -545,7 +567,7 @@ impl Transaction {
 
         Transaction::SignPreprocess(ref mut data) => &mut data.signed,
         Transaction::SignShare(ref mut data) => &mut data.signed,
-        Transaction::SignCompleted(_, _, ref mut signed) => signed,
+        Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
       }
     }
 
@@ -557,5 +579,19 @@ impl Transaction {
     signed(self).signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
     let sig_hash = self.sig_hash(genesis);
     signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+  }
+
+  pub fn sign_completed_challenge(&self) -> <Ristretto as Ciphersuite>::F {
+    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+      let mut transcript =
+        RecommendedTranscript::new(b"Coordinator Tributary Transaction SignCompleted");
+      transcript.append_message(b"plan", plan);
+      transcript.append_message(b"tx_hash", tx_hash);
+      transcript.append_message(b"signer", first_signer.to_bytes());
+      transcript.append_message(b"nonce", signature.R.to_bytes());
+      Ristretto::hash_to_F(b"SignCompleted signature", &transcript.challenge(b"challenge"))
+    } else {
+      panic!("sign_completed_challenge called on transaction which wasn't SignCompleted")
+    }
   }
 }

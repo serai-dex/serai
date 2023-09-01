@@ -12,7 +12,11 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::ff::{Field, PrimeField},
+  Ciphersuite, Ristretto,
+};
+use schnorr::SchnorrSignature;
 
 use serai_db::{DbTxn, Db};
 use serai_env as env;
@@ -476,6 +480,10 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   loop {
     // TODO: Dispatch this message to a task dedicated to handling this processor, preventing one
     // processor from holding up all the others
+    // In order to do so, we need to locally track if a message was handled, even if its ID is
+    // greater than what the message-queue tracks as ack'd
+    // TODO: Shouldn't the processor also perform such checks? That its ack doesn't exceed the
+    // queue's?
     let msg = processors.recv().await;
 
     // TODO2: This is slow, and only works as long as a network only has a single Tributary
@@ -565,7 +573,23 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           signed: Transaction::empty_signed(),
         })),
         sign::ProcessorMessage::Completed { key: _, id, tx } => {
-          Some(Transaction::SignCompleted(id, tx, Transaction::empty_signed()))
+          let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+          #[allow(non_snake_case)]
+          let R = <Ristretto as Ciphersuite>::generator() * r.deref();
+          let mut tx = Transaction::SignCompleted {
+            plan: id,
+            tx_hash: tx,
+            first_signer: pub_key,
+            signature: SchnorrSignature { R, s: <Ristretto as Ciphersuite>::F::ZERO },
+          };
+          let signed = SchnorrSignature::sign(&key, r, tx.sign_completed_challenge());
+          match &mut tx {
+            Transaction::SignCompleted { signature, .. } => {
+              *signature = signed;
+            }
+            _ => unreachable!(),
+          }
+          Some(tx)
         }
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {

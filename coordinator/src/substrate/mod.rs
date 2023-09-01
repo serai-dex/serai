@@ -101,7 +101,6 @@ async fn handle_key_gen<Pro: Processors>(
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
   if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
-    // TODO: Check how the processor handles this being fired multiple times
     processors
       .send(
         set.network,
@@ -196,7 +195,6 @@ async fn handle_batch_and_burns<Pro: Processors>(
         .expect("network had a batch/burn yet never set a latest block")
     };
 
-    // TODO: Check how the processor handles this being fired multiple times
     processors
       .send(
         network,

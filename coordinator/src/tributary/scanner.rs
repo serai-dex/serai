@@ -76,7 +76,7 @@ async fn handle_block<
         // mark the node as fatally slashed
         TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs.0.msg.sender);
 
-        // TODO: disconnect the node from network/ban from further participation in Tributary
+        // TODO2: disconnect the node from network/ban from further participation in Tributary
       }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, _, _, _, _, _>(
@@ -99,7 +99,7 @@ async fn handle_block<
     event_id += 1;
   }
 
-  // TODO: Trigger any necessary re-attempts
+  // TODO2: Trigger any necessary re-attempts
 }
 
 pub async fn handle_new_blocks<
