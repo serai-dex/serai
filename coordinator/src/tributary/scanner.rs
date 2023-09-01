@@ -28,7 +28,7 @@ use crate::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RecognizedIdType {
-  Block,
+  Batch,
   Plan,
 }
 
@@ -39,7 +39,7 @@ async fn handle_block<
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
   P: P2p,
 >(
@@ -107,7 +107,7 @@ pub async fn handle_new_blocks<
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
   P: P2p,
 >(

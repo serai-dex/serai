@@ -229,7 +229,7 @@ pub async fn handle_application_tx<
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
 >(
   tx: Transaction,
@@ -443,11 +443,10 @@ pub async fn handle_application_tx<
       }
     }
 
-    Transaction::ExternalBlock(block) => {
-      // Because this external block has been finalized, its batch IDs should be authorized
-      for id in recognized_id(spec.set().network, genesis, RecognizedIdType::Block, block).await {
-        TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, id);
-      }
+    Transaction::Batch(batch) => {
+      // Because this Batch has achieved synchrony, its batch ID should be authorized
+      TributaryDb::<D>::recognize_id(txn, Zone::Batch.label(), genesis, batch);
+      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -458,10 +457,7 @@ pub async fn handle_application_tx<
 
       for id in plan_ids {
         TributaryDb::<D>::recognize_id(txn, Zone::Sign.label(), genesis, id);
-        assert_eq!(
-          recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await,
-          vec![id]
-        );
+        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await;
       }
     }
 

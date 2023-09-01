@@ -180,7 +180,7 @@ pub async fn scan_tributaries<
   D: Db,
   Pro: Processors,
   P: P2p,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
 >(
   raw_db: D,
@@ -590,19 +590,17 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             id.attempt,
             hex::encode(block),
           );
-          // If this is the first attempt instance, synchronize around the block first
+          // If this is the first attempt instance, wait until we synchronize around the batch
+          // first
           if id.attempt == 0 {
             // Save the preprocess to disk so we can publish it later
             // This is fine to use its own TX since it's static and just needs to be written
             // before this message finishes it handling (or with this message's finished handling)
             let mut txn = db.txn();
             MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
-            MainDb::<D>::add_batch_to_block(&mut txn, msg.network, block, id.id);
             txn.commit();
 
-            // TODO: This will publish one ExternalBlock per Batch. We should only publish one per
-            // all batches within a block
-            Some(Transaction::ExternalBlock(block.0))
+            Some(Transaction::Batch(id.id))
           } else {
             Some(Transaction::BatchPreprocess(SignData {
               plan: id.id,
@@ -787,11 +785,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       async move {
         // SubstrateBlockAck is fired before Preprocess, creating a race between Tributary ack
         // of the SubstrateBlock and the sending of all Preprocesses
-        // A similar race condition exists when multiple Batches are present in a block
         // This waits until the necessary preprocess is available
         let get_preprocess = |raw_db, id| async move {
           loop {
             let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, id) else {
+              assert_eq!(id_type, RecognizedIdType::Plan);
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -799,53 +797,37 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           }
         };
 
-        let (ids, txs) = match id_type {
-          RecognizedIdType::Block => {
-            let block = id;
+        let mut tx = match id_type {
+          RecognizedIdType::Batch => Transaction::BatchPreprocess(SignData {
+            plan: id,
+            attempt: 0,
+            data: get_preprocess(&raw_db, id).await,
+            signed: Transaction::empty_signed(),
+          }),
 
-            let ids = MainDb::<D>::batches_in_block(&raw_db, network, block);
-            let mut txs = vec![];
-            for id in &ids {
-              txs.push(Transaction::BatchPreprocess(SignData {
-                plan: *id,
-                attempt: 0,
-                data: get_preprocess(&raw_db, *id).await,
-                signed: Transaction::empty_signed(),
-              }));
-            }
-            (ids, txs)
-          }
-
-          RecognizedIdType::Plan => (
-            vec![id],
-            vec![Transaction::SignPreprocess(SignData {
-              plan: id,
-              attempt: 0,
-              data: get_preprocess(&raw_db, id).await,
-              signed: Transaction::empty_signed(),
-            })],
-          ),
+          RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+            plan: id,
+            attempt: 0,
+            data: get_preprocess(&raw_db, id).await,
+            signed: Transaction::empty_signed(),
+          }),
         };
 
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
-          panic!("tributary we don't have came to consensus on an ExternalBlock");
+          panic!("tributary we don't have came to consensus on an Batch");
         };
         let tributary = tributary.tributary.read().await;
 
-        for mut tx in txs {
-          // TODO: Same note as prior nonce acquisition
-          log::trace!("getting next nonce for Tributary TX containing Batch signing data");
-          let nonce = tributary
-            .next_nonce(Ristretto::generator() * key.deref())
-            .await
-            .expect("publishing a TX to a tributary we aren't in");
-          tx.sign(&mut OsRng, genesis, &key, nonce);
+        // TODO: Same note as prior nonce acquisition
+        log::trace!("getting next nonce for Tributary TX containing Batch signing data");
+        let nonce = tributary
+          .next_nonce(Ristretto::generator() * key.deref())
+          .await
+          .expect("publishing a TX to a tributary we aren't in");
+        tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          publish_transaction(&tributary, tx).await;
-        }
-
-        ids
+        publish_transaction(&tributary, tx).await;
       }
     }
   };

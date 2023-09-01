@@ -46,14 +46,14 @@ by Substrate.
 Note that the keys are confirmed when Substrate emits a `KeyGen` event,
 regardless of if the Tributary has the expected `DkgConfirmed` transactions.
 
-### External Block
+### Batch
 
-When *TODO*, a `ExternalBlock` transaction is provided. This is used to have
-the group acknowledge and synchronize around the block, without the overhead of
-voting in its acknowledgment.
+When *TODO*, a `Batch` transaction is provided. This is used to have the group
+acknowledge and synchronize around a batch, without the overhead of voting in
+its acknowledgment.
 
-When a `ExternalBlock` transaction is included, participants are allowed to
-publish transactions to produce a threshold signature for the block's `Batch`.
+When a `Batch` transaction is included, participants are allowed to publish
+transactions to produce a threshold signature for the batch synchronized over.
 
 ### Substrate Block
 
@@ -66,8 +66,8 @@ publish transactions for the signing protocols it causes.
 ### Batch Preprocess
 
 `BatchPreprocess` is created when a processor sends the coordinator
-`coordinator::ProcessorMessage::BatchPreprocess` and an `ExternalBlock`
-transaction allowing the batch to be signed has already been included on chain.
+`coordinator::ProcessorMessage::BatchPreprocess` and an `Batch` transaction
+allowing the batch to be signed has already been included on chain.
 
 When `t` validators have published `BatchPreprocess` transactions, if the
 coordinator represents one of the first `t` validators to do so, a
@@ -77,7 +77,7 @@ excluding the processor's own preprocess.
 ### Batch Share
 
 `BatchShare` is created when a processor sends the coordinator
-`coordinator::ProcessorMessage::BatchShare`. The relevant `ExternalBlock`
+`coordinator::ProcessorMessage::BatchShare`. The relevant `Batch`
 transaction having already been included on chain follows from
 `coordinator::ProcessorMessage::BatchShare` being a response to a message which
 also has that precondition.

@@ -1,8 +1,5 @@
 use scale::{Encode, Decode};
-use serai_client::{
-  primitives::{NetworkId, BlockHash},
-  in_instructions::primitives::SignedBatch,
-};
+use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch};
 
 pub use serai_db::*;
 
@@ -46,42 +43,6 @@ impl<'a, D: Db> MainDb<'a, D> {
     let mut txn = self.0.txn();
     txn.put(key, existing_bytes);
     txn.commit();
-  }
-
-  fn batches_in_block_key(network: NetworkId, block: [u8; 32]) -> Vec<u8> {
-    Self::main_key(b"batches_in_block", (network, block).encode())
-  }
-  pub fn batches_in_block<G: Get>(
-    getter: &G,
-    network: NetworkId,
-    block: [u8; 32],
-  ) -> Vec<[u8; 32]> {
-    getter
-      .get(Self::batches_in_block_key(network, block))
-      .expect("asking for batches in block for block without batches")
-      .chunks(32)
-      .map(|id| id.try_into().unwrap())
-      .collect()
-  }
-  pub fn add_batch_to_block(
-    txn: &mut D::Transaction<'_>,
-    network: NetworkId,
-    block: BlockHash,
-    id: [u8; 32],
-  ) {
-    let key = Self::batches_in_block_key(network, block.0);
-    let Some(mut existing) = txn.get(&key) else {
-      txn.put(&key, id);
-      return;
-    };
-
-    if existing.chunks(32).any(|existing_id| existing_id == id) {
-      // TODO: Is this an invariant?
-      return;
-    }
-
-    existing.extend(id);
-    txn.put(&key, existing);
   }
 
   fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {

@@ -231,9 +231,8 @@ pub enum Transaction {
   },
   DkgConfirmed(u32, [u8; 32], Signed),
 
-  // When an external block is finalized, we can allow the associated batch IDs
-  // Commits to the full block so eclipsed nodes don't continue on their eclipsed state
-  ExternalBlock([u8; 32]),
+  // When we have synchrony on a batch, we can allow signing it
+  Batch([u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SubstrateBlock(u64),
@@ -332,9 +331,9 @@ impl ReadWrite for Transaction {
       }
 
       3 => {
-        let mut block = [0; 32];
-        reader.read_exact(&mut block)?;
-        Ok(Transaction::ExternalBlock(block))
+        let mut batch = [0; 32];
+        reader.read_exact(&mut batch)?;
+        Ok(Transaction::Batch(batch))
       }
 
       4 => {
@@ -431,9 +430,9 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::ExternalBlock(block) => {
+      Transaction::Batch(batch) => {
         writer.write_all(&[3])?;
-        writer.write_all(block)
+        writer.write_all(batch)
       }
 
       Transaction::SubstrateBlock(block) => {
@@ -476,7 +475,7 @@ impl TransactionTrait for Transaction {
       Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
       Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
 
-      Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
+      Transaction::Batch(_) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
@@ -535,7 +534,7 @@ impl Transaction {
         Transaction::DkgShares { ref mut signed, .. } => signed,
         Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
 
-        Transaction::ExternalBlock(_) => panic!("signing ExternalBlock"),
+        Transaction::Batch(_) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
         Transaction::BatchPreprocess(ref mut data) => &mut data.signed,
