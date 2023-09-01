@@ -1,5 +1,8 @@
-use scale::Encode;
-use serai_client::primitives::{NetworkId, BlockHash};
+use scale::{Encode, Decode};
+use serai_client::{
+  primitives::{NetworkId, BlockHash},
+  in_instructions::primitives::SignedBatch,
+};
 
 pub use serai_db::*;
 
@@ -94,5 +97,20 @@ impl<'a, D: Db> MainDb<'a, D> {
   }
   pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Option<Vec<u8>> {
     getter.get(Self::first_preprocess_key(id))
+  }
+
+  fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
+    Self::main_key(b"batch", (network, id).encode())
+  }
+  pub fn save_batch(&mut self, batch: SignedBatch) {
+    let mut txn = self.0.txn();
+    txn.put(Self::batch_key(batch.batch.network, batch.batch.id), batch.encode());
+    txn.commit();
+  }
+  pub fn batch(&self, network: NetworkId, id: u32) -> Option<SignedBatch> {
+    self
+      .0
+      .get(Self::batch_key(network, id))
+      .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
   }
 }
