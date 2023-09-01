@@ -25,6 +25,10 @@ pub use shorthand::*;
 
 pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 
+
+// This is just an account that will make ops in behalf of users for the 
+// in instructions that is coming in. Not to be confused with in_instructions pallet.
+// in_instructions are a pallet(a module) and that is just and account.
 pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = pallet_address(b"InInstructionExecutor");
 
 #[derive(
@@ -41,8 +45,10 @@ pub enum InInstruction {
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum DexCall {
-  AddLiquidity(SeraiAddress),          // address to sent the lp tokens to
-  Swap(Coin, ExternalAddress, Amount), // to_coin, to_address, min_out_amount
+  // address to sent the lp tokens to
+  AddLiquidity(SeraiAddress),
+  // to_coin, to_address, min_out_amount. TODO: sync with docs.
+  Swap(Coin, ExternalAddress, Amount),
 }
 
 #[derive(

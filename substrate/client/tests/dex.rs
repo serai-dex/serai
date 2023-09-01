@@ -89,10 +89,10 @@ serai_test!(
   }
 
   async fn create_pool() {
-    let asset = Coin::Bitcoin;
+    let coin = Coin::Bitcoin;
     let pair = insecure_pair_from_name("Ferdie");
 
-    let block = common_create_pool(asset, pair.clone()).await;
+    let block = common_create_pool(coin, pair.clone()).await;
 
     let serai = serai().await;
     let events = serai.dex_events(block).await.unwrap();
@@ -101,7 +101,7 @@ serai_test!(
       events,
       vec![DexEvent::PoolCreated {
         creator: pair.public().into(),
-        pool_id: (Coin::Serai, asset),
+        pool_id: (Coin::Serai, coin),
         lp_token: 0 // first lp token that is created in the chain
       }]
     );
@@ -114,17 +114,17 @@ serai_test!(
     // for that to happen publish_tx() should return error as well.
     // or would that be testing the substrate instead of our code?
 
-    let asset = Coin::Monero;
+    let coin = Coin::Monero;
     let pair = insecure_pair_from_name("Ferdie");
     let serai = serai().await;
 
     // TODO: transfer sriXMR in the account so that we can add liq.
 
     // make the pool first so that we can add liquidity to it.
-    // common_create_pool(asset, pair.clone()).await;
+    // common_create_pool(coin, pair.clone()).await;
 
     let block =
-      common_add_liquidity(asset, Amount(50_000000000000), Amount(50_000000000000), pair.clone())
+      common_add_liquidity(coin, Amount(50_000000000000), Amount(50_000000000000), 1, pair.clone())
         .await;
     let events = serai.dex_events(block).await.unwrap();
     println!("Events From add_liq: {:?}", events);

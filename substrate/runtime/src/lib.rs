@@ -51,7 +51,7 @@ use primitives::{
 };
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains, AsEnsureOriginWithArg},
+  traits::{ConstU8, ConstU32, ConstU64, ConstBool, Contains, AsEnsureOriginWithArg},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -149,10 +149,10 @@ parameter_types! {
     );
 
   pub const MaxAuthorities: u32 = 100;
-
-  pub const AssetConversionPalletId: PalletId = PalletId(*b"DexPalet"); // TODO: this requires exactly 8 byte?
-  pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(1);
-  pub const AllowMultiAssetPools: bool = false;
+  // PalletId has to be exactly 8 byte. Hence It is "DexPalet" instead of
+  // "DexPallet".
+  pub const AssetConversionPalletId: PalletId = PalletId(*b"DexPalet");
+  pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
 }
 
 ord_parameter_types! {
@@ -319,11 +319,10 @@ impl assets::Config for Runtime {
   type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
-pub type PoolAssetsInstance = assets::Instance1;
-impl assets::Config<PoolAssetsInstance> for Runtime {
+impl assets::Config<assets::Instance1> for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Balance = SubstrateAmount;
-  type RemoveItemsLimit = ConstU32<1000>; // 0?
+  type RemoveItemsLimit = ConstU32<0>;
   type AssetId = u32;
   type AssetIdParameter = u32;
   type Currency = Balances;
@@ -361,29 +360,29 @@ impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-pub struct AssetConverter;
-impl MultiAssetIdConverter<Coin, Coin> for AssetConverter {
+pub struct CoinConverter;
+impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
   /// Returns the MultiAssetId representing the native currency of the chain.
   fn get_native() -> Coin {
     Coin::Serai
   }
 
   /// Returns true if the given MultiAssetId is the native currency.
-  fn is_native(asset: &Coin) -> bool {
-    *asset == Coin::Serai
+  fn is_native(coin: &Coin) -> bool {
+    *coin == Coin::Serai
   }
 
   /// If it's not native, returns the AssetId for the given MultiAssetId.
-  fn try_convert(asset: &Coin) -> Result<Coin, ()> {
-    if *asset == Coin::Serai {
+  fn try_convert(coin: &Coin) -> Result<Coin, ()> {
+    if *coin == Coin::Serai {
       return Err(());
     }
-    Ok(*asset)
+    Ok(*coin)
   }
 
   /// Wraps an AssetId as a MultiAssetId.
-  fn into_multiasset_id(asset: &Coin) -> Coin {
-    *asset
+  fn into_multiasset_id(coin: &Coin) -> Coin {
+    *coin
   }
 }
 
@@ -392,26 +391,27 @@ impl dex::Config for Runtime {
   type Currency = Balances;
   type Balance = SubstrateAmount;
   type AssetBalance = SubstrateAmount;
+  // TODO review if this should be u64/u128 or u64/u256 (and rounding in general).
   type HigherPrecisionBalance = u128;
 
   type AssetId = Coin;
   type MultiAssetId = Coin;
-  type MultiAssetIdConverter = AssetConverter;
+  type MultiAssetIdConverter = CoinConverter;
   type PoolAssetId = u32;
 
   type Assets = Assets;
-  type PoolAssets = PoolAssets;
+  type PoolAssets = LiquidityTokens;
 
   type LPFee = ConstU32<3>; // 0.3%
   type PoolSetupFee = ConstU64<0>; // Asset class deposit fees are sufficient to prevent spam
   type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
-  type MintMinLiquidity = ConstU64<100>;
+  type MintMinLiquidity = ConstU64<10000>;
 
   type MaxSwapPathLength = ConstU32<3>; // asset1 -> SRI -> asset2
 
   type PalletId = AssetConversionPalletId;
   type PoolSetupFeeReceiver = AssetConversionOrigin;
-  type AllowMultiAssetPools = AllowMultiAssetPools;
+  type AllowMultiAssetPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
   #[cfg(feature = "runtime-benchmarks")]
@@ -502,7 +502,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Assets: assets,
-    PoolAssets: assets::<Instance1>::{Pallet, Call, Storage, Event<T>},
+    LiquidityTokens: assets::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Tokens: tokens,
     InInstructions: in_instructions,
 
@@ -721,20 +721,4 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl dex::AssetConversionApi<
-    Block,
-    SubstrateAmount,
-    SubstrateAmount,
-    Coin,
-  > for Runtime {
-    fn quote_price_exact_tokens_for_tokens(asset1: Coin, asset2: Coin, amount: SubstrateAmount, include_fee: bool) -> Option<SubstrateAmount> {
-      Dex::quote_price_exact_tokens_for_tokens(asset1, asset2, amount, include_fee)
-    }
-    fn quote_price_tokens_for_exact_tokens(asset1: Coin, asset2: Coin, amount: SubstrateAmount, include_fee: bool) -> Option<SubstrateAmount> {
-      Dex::quote_price_tokens_for_exact_tokens(asset1, asset2, amount, include_fee)
-    }
-    fn get_reserves(asset1: Coin, asset2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
-      Dex::get_reserves(&asset1, &asset2).ok()
-    }
-  }
 }

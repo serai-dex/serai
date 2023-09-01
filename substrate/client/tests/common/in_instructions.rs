@@ -49,15 +49,14 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
 }
 
 #[allow(dead_code)]
-pub async fn mint_coin(balance: Balance, network: NetworkId, address: SeraiAddress) -> [u8; 32] {
-  let id = 0;
+pub async fn mint_coin(balance: Balance, network: NetworkId, batch_id: u32, address: SeraiAddress) -> [u8; 32] {
 
   let mut block_hash = BlockHash([0; 32]);
   OsRng.fill_bytes(&mut block_hash.0);
 
   let batch = Batch {
     network,
-    id,
+    id: batch_id,
     block: block_hash,
     instructions: vec![InInstructionWithBalance {
       instruction: InInstruction::Transfer(address),

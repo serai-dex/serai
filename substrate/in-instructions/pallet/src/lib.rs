@@ -89,27 +89,27 @@ pub mod pallet {
           // might be called directly from serai as a native operation.
           //
           // Hence, AddLiquidity call here actually swaps and adds liquidity.
-          // we will swap half of the given asset for SRI to be able to
+          // we will swap half of the given coin for SRI to be able to
           // provide symmetric liquidity. So the pool has be be created before
           // for this to be successful.
           //
           // And for swaps, they are done on an internal address like a temp account.
-          // we mint the deposited asset into that account, do swap on it and burn the
-          // received asset. This way account will be back on initial balance(since the minted asset
-          // will be moved to pool account.) and burned asset will be seen by processor and sent
+          // we mint the deposited coin into that account, do swap on it and burn the
+          // received coin. This way account will be back on initial balance(since the minted coin
+          // will be moved to pool account.) and burned coin will be seen by processor and sent
           // to given external address.
 
           match call {
             DexCall::AddLiquidity(address) => {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
-              let asset1 = instruction.balance.coin;
+              let coin = instruction.balance.coin;
 
-              // mint the given asset on the account
+              // mint the given coin on the account
               Tokens::<T>::mint(IN_INSTRUCTION_EXECUTOR, instruction.balance);
 
               // swap half of it for SRI
               let half = instruction.balance.amount.0 / 2;
-              let path = BoundedVec::truncate_from(vec![asset1, Coin::Serai]);
+              let path = BoundedVec::truncate_from(vec![coin, Coin::Serai]);
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.clone().into(),
                 path,
@@ -120,15 +120,15 @@ pub mod pallet {
               )?;
 
               // get how much we got for our swap
-              let asset2_amount = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
+              let sri_amount = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
 
               // add liquidity
               Dex::<T>::add_liquidity(
                 origin.clone().into(),
-                asset1,
+                coin,
                 Coin::Serai,
                 half,
-                asset2_amount,
+                sri_amount,
                 1,
                 1,
                 address.into(),
@@ -139,27 +139,27 @@ pub mod pallet {
               // IIExecutor account, they can accumulate and would give us wrong SRI amounts next time
               // another users call here(since we know how much to add liq by checking the balance on it).
               // Which then would make addling liq fail. So Let's send the leftovers back to user.
-              let asset1_balance = Tokens::<T>::balance(asset1, IN_INSTRUCTION_EXECUTOR);
-              let asset2_balance = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
-              if asset1_balance != 0 {
-                Tokens::<T>::transfer(origin.clone().into(), asset1, address, asset1_balance)?;
+              let coin_balance = Tokens::<T>::balance(coin, IN_INSTRUCTION_EXECUTOR);
+              let sri_balance = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
+              if coin_balance != 0 {
+                Tokens::<T>::transfer(origin.clone().into(), coin, address, coin_balance)?;
               }
-              if asset2_balance != 0 {
-                Tokens::<T>::transfer(origin.into(), Coin::Serai, address, asset2_balance)?;
+              if sri_balance != 0 {
+                Tokens::<T>::transfer(origin.into(), Coin::Serai, address, sri_balance)?;
               }
 
-              // TODO: ideally we would get the asset1 and 2 balances again and make sure they are 0.
+              // TODO: ideally we would get the coin and sri balances again and make sure they are 0.
               // But we already made 3 calls and that would make 5. should we do it?
             }
-            DexCall::Swap(asset2, address, amount_out_min) => {
+            DexCall::Swap(coin2, address, amount_out_min) => {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
 
-              // mint the given asset on our account
+              // mint the given coin on our account
               Tokens::<T>::mint(IN_INSTRUCTION_EXECUTOR, instruction.balance);
 
               // do the swap on our account
               let path =
-                BoundedVec::truncate_from(vec![instruction.balance.coin, Coin::Serai, asset2]);
+                BoundedVec::truncate_from(vec![instruction.balance.coin, Coin::Serai, coin2]);
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.clone().into(),
                 path,
@@ -170,10 +170,10 @@ pub mod pallet {
               )?;
 
               // see how much we got
-              let asset2_balance = Tokens::<T>::balance(asset2, IN_INSTRUCTION_EXECUTOR);
+              let coin2_balance = Tokens::<T>::balance(coin2, IN_INSTRUCTION_EXECUTOR);
 
-              // burn the received assets so that they sent back to the user
-              let balance = Balance { coin: asset2, amount: Amount(asset2_balance) };
+              // burn the received coins so that they sent back to the user
+              let balance = Balance { coin: coin2, amount: Amount(coin2_balance) };
 
               // TODO: data shouldn't come here from processor just to go back to it.
               Tokens::<T>::burn_internal(
