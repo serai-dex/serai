@@ -13,7 +13,7 @@ impl<'a, D: Db> MainDb<'a, D> {
   }
 
   fn main_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"MAIN", dst, key)
+    D::key(b"coordinator_main", dst, key)
   }
 
   fn acive_tributaries_key() -> Vec<u8> {

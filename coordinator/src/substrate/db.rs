@@ -8,7 +8,7 @@ impl<D: Db> SubstrateDb<D> {
   }
 
   fn substrate_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"SUBSTRATE", dst, key)
+    D::key(b"coordinator_substrate", dst, key)
   }
 
   fn block_key() -> Vec<u8> {

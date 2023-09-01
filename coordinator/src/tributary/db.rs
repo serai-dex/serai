@@ -57,7 +57,7 @@ impl<D: Db> TributaryDb<D> {
   }
 
   fn tributary_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"TRIBUTARY", dst, key)
+    D::key(b"coordinator_tributary", dst, key)
   }
 
   fn block_key(genesis: [u8; 32]) -> Vec<u8> {
