@@ -480,11 +480,10 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
   loop {
     // TODO: Dispatch this message to a task dedicated to handling this processor, preventing one
-    // processor from holding up all the others
-    // In order to do so, we need to locally track if a message was handled, even if its ID is
-    // greater than what the message-queue tracks as ack'd
-    // TODO: Shouldn't the processor also perform such checks? That its ack doesn't exceed the
-    // queue's?
+    // processor from holding up all the others. This would require a peek method be added to the
+    // message-queue (to view multiple future messages at once)
+    // TODO: Do we handle having handled a message, by DB, yet having rebooted before `ack`ing it?
+    // Does the processor?
     let msg = processors.recv().await;
 
     // TODO2: This is slow, and only works as long as a network only has a single Tributary
@@ -511,12 +510,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
-          // DkgConfirmer has a TODO noting it's only secure for a single usage, yet this ensures
-          // the TODO is resolved before unsafe usage
-          if id.attempt != 0 {
-            panic!("attempt wasn't 0");
-          }
-          let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec);
+          let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec, id.attempt);
 
           let mut tx_shares = Vec::with_capacity(shares.len());
           for i in 1 ..= spec.n() {
@@ -549,6 +543,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             &key,
             &spec,
             &(Public(substrate_key), network_key.try_into().unwrap()),
+            id.attempt,
           );
           txn.commit();
 

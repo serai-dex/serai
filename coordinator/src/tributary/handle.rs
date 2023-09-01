@@ -48,6 +48,7 @@ impl DkgConfirmer {
   fn preprocess_internal(
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    attempt: u32,
   ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
     // TODO: Does Substrate already have a validator-uniqueness check?
     let validators = spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
@@ -57,7 +58,7 @@ impl DkgConfirmer {
       let mut entropy_transcript = RecommendedTranscript::new(b"DkgConfirmer Entropy");
       entropy_transcript.append_message(b"spec", spec.serialize());
       entropy_transcript.append_message(b"key", Zeroizing::new(key.to_bytes()));
-      // TODO: This is incredibly insecure unless message-bound (or bound via the attempt)
+      entropy_transcript.append_message(b"attempt", attempt.to_le_bytes());
       Zeroizing::new(entropy_transcript).rng_seed(b"preprocess")
     });
     let (machine, preprocess) = AlgorithmMachine::new(
@@ -71,17 +72,22 @@ impl DkgConfirmer {
     (machine, preprocess.serialize().try_into().unwrap())
   }
   // Get the preprocess for this confirmation.
-  fn preprocess(spec: &TributarySpec, key: &Zeroizing<<Ristretto as Ciphersuite>::F>) -> [u8; 64] {
-    Self::preprocess_internal(spec, key).1
+  fn preprocess(
+    spec: &TributarySpec,
+    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    attempt: u32,
+  ) -> [u8; 64] {
+    Self::preprocess_internal(spec, key, attempt).1
   }
 
   fn share_internal(
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    attempt: u32,
     preprocesses: HashMap<Participant, Vec<u8>>,
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let machine = Self::preprocess_internal(spec, key).0;
+    let machine = Self::preprocess_internal(spec, key, attempt).0;
     let preprocesses = preprocesses
       .into_iter()
       .map(|(p, preprocess)| {
@@ -109,20 +115,22 @@ impl DkgConfirmer {
   fn share(
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    attempt: u32,
     preprocesses: HashMap<Participant, Vec<u8>>,
     key_pair: &KeyPair,
   ) -> Result<[u8; 32], Participant> {
-    Self::share_internal(spec, key, preprocesses, key_pair).map(|(_, share)| share)
+    Self::share_internal(spec, key, attempt, preprocesses, key_pair).map(|(_, share)| share)
   }
 
   fn complete(
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    attempt: u32,
     preprocesses: HashMap<Participant, Vec<u8>>,
     key_pair: &KeyPair,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
-    let machine = Self::share_internal(spec, key, preprocesses, key_pair)
+    let machine = Self::share_internal(spec, key, attempt, preprocesses, key_pair)
       .expect("trying to complete a machine which failed to preprocess")
       .0;
 
@@ -193,8 +201,9 @@ fn read_known_to_exist_data<D: Db, G: Get>(
 pub fn dkg_confirmation_nonces(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
+  attempt: u32,
 ) -> [u8; 64] {
-  DkgConfirmer::preprocess(spec, key)
+  DkgConfirmer::preprocess(spec, key, attempt)
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)]
@@ -203,10 +212,10 @@ pub fn generated_key_pair<D: Db>(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
   key_pair: &KeyPair,
+  attempt: u32,
 ) -> Result<[u8; 32], Participant> {
   TributaryDb::<D>::save_currently_completing_key_pair(txn, spec.genesis(), key_pair);
 
-  let attempt = 0; // TODO
   let Some(preprocesses) = read_known_to_exist_data::<D, _>(
     txn,
     spec,
@@ -220,7 +229,7 @@ pub fn generated_key_pair<D: Db>(
   ) else {
     panic!("wasn't a participant in confirming a key pair");
   };
-  DkgConfirmer::share(spec, key, preprocesses, key_pair)
+  DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
 #[allow(clippy::too_many_arguments)] // TODO
@@ -430,7 +439,8 @@ pub async fn handle_application_tx<
                 "(including us) fires DkgConfirmed, yet no confirming key pair"
               )
             });
-          let Ok(sig) = DkgConfirmer::complete(spec, key, preprocesses, &key_pair, shares) else {
+          let Ok(sig) = DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares)
+          else {
             // TODO: Full slash
             todo!();
           };

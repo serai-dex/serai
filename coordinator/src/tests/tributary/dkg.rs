@@ -172,7 +172,7 @@ async fn dkg_test() {
     let mut tx = Transaction::DkgShares {
       attempt,
       shares,
-      confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec),
+      confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec, 0),
       signed: Transaction::empty_signed(),
     };
     tx.sign(&mut OsRng, spec.genesis(), key, 1);
@@ -287,7 +287,7 @@ async fn dkg_test() {
     // albeit poor
     let mut txn = scanner_db.0.txn();
     let share =
-      crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair).unwrap();
+      crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
     txn.commit();
 
     let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());
