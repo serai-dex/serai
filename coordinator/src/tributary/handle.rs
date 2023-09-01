@@ -36,7 +36,7 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Zone, DataSpecification, TributaryDb, scanner::RecognizedIdType,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, scanner::RecognizedIdType,
   },
 };
 
@@ -216,7 +216,7 @@ pub fn generated_key_pair<D: Db>(
     txn,
     spec,
     key,
-    &DataSpecification { zone: Zone::Dkg, label: DKG_CONFIRMATION_NONCES, id: [0; 32], attempt },
+    &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
     spec.n(),
   ) else {
     panic!("wasn't a participant in confirming a key pair");
@@ -243,13 +243,10 @@ pub async fn handle_application_tx<
   let genesis = spec.genesis();
 
   let handle = |txn: &mut _, data_spec: &DataSpecification, bytes: Vec<u8>, signed: &Signed| {
-    if data_spec.zone == Zone::Dkg {
-      // Since Dkg doesn't have an ID, solely attempts, this should just be [0; 32]
-      assert_eq!(data_spec.id, [0; 32], "DKG, which shouldn't have IDs, had a non-0 ID");
-    } else if !TributaryDb::<D>::recognized_id(txn, genesis, data_spec.zone, data_spec.id) {
+    let Some(curr_attempt) = TributaryDb::<D>::attempt(txn, genesis, data_spec.topic) else {
       // TODO: Full slash
       todo!();
-    }
+    };
 
     // If they've already published a TX for this attempt, slash
     if let Some(data) = TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer) {
@@ -263,7 +260,6 @@ pub async fn handle_application_tx<
     }
 
     // If the attempt is lesser than the blockchain's, slash
-    let curr_attempt = TributaryDb::<D>::attempt(txn, genesis, data_spec.id);
     if data_spec.attempt < curr_attempt {
       // TODO: Slash for being late
       return None;
@@ -283,7 +279,7 @@ pub async fn handle_application_tx<
 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
     // TODO: This needs to be coded by weight, not by validator count
-    let needed = if data_spec.zone == Zone::Dkg { spec.n() } else { spec.t() };
+    let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
     if received == needed {
       return Some(read_known_to_exist_data::<D, _>(txn, spec, key, data_spec, needed));
     }
@@ -294,7 +290,7 @@ pub async fn handle_application_tx<
     Transaction::DkgCommitments(attempt, bytes, signed) => {
       match handle(
         txn,
-        &DataSpecification { zone: Zone::Dkg, label: "commitments", id: [0; 32], attempt },
+        &DataSpecification { topic: Topic::Dkg, label: "commitments", attempt },
         bytes,
         &signed,
       ) {
@@ -343,18 +339,13 @@ pub async fn handle_application_tx<
 
       let confirmation_nonces = handle(
         txn,
-        &DataSpecification {
-          zone: Zone::Dkg,
-          label: DKG_CONFIRMATION_NONCES,
-          id: [0; 32],
-          attempt,
-        },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
         confirmation_nonces.to_vec(),
         &signed,
       );
       match handle(
         txn,
-        &DataSpecification { zone: Zone::Dkg, label: "shares", id: [0; 32], attempt },
+        &DataSpecification { topic: Topic::Dkg, label: "shares", attempt },
         bytes,
         &signed,
       ) {
@@ -379,12 +370,7 @@ pub async fn handle_application_tx<
     Transaction::DkgConfirmed(attempt, shares, signed) => {
       match handle(
         txn,
-        &DataSpecification {
-          zone: Zone::Dkg,
-          label: DKG_CONFIRMATION_SHARES,
-          id: [0; 32],
-          attempt,
-        },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_SHARES, attempt },
         shares.to_vec(),
         &signed,
       ) {
@@ -395,12 +381,7 @@ pub async fn handle_application_tx<
             txn,
             spec,
             key,
-            &DataSpecification {
-              zone: Zone::Dkg,
-              label: DKG_CONFIRMATION_NONCES,
-              id: [0; 32],
-              attempt,
-            },
+            &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
             spec.n(),
           ) else {
             panic!("wasn't a participant in DKG confirmation nonces");
@@ -432,7 +413,7 @@ pub async fn handle_application_tx<
 
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
-      TributaryDb::<D>::recognize_id(txn, genesis, Zone::Batch, batch);
+      TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
       recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch).await;
     }
 
@@ -443,7 +424,7 @@ pub async fn handle_application_tx<
       );
 
       for id in plan_ids {
-        TributaryDb::<D>::recognize_id(txn, genesis, Zone::Sign, id);
+        TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
         recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await;
       }
     }
@@ -452,9 +433,8 @@ pub async fn handle_application_tx<
       match handle(
         txn,
         &DataSpecification {
-          zone: Zone::Batch,
+          topic: Topic::Batch(data.plan),
           label: "preprocess",
-          id: data.plan,
           attempt: data.attempt,
         },
         data.data,
@@ -479,9 +459,8 @@ pub async fn handle_application_tx<
       match handle(
         txn,
         &DataSpecification {
-          zone: Zone::Batch,
+          topic: Topic::Batch(data.plan),
           label: "share",
-          id: data.plan,
           attempt: data.attempt,
         },
         data.data,
@@ -511,9 +490,8 @@ pub async fn handle_application_tx<
       match handle(
         txn,
         &DataSpecification {
-          zone: Zone::Sign,
+          topic: Topic::Sign(data.plan),
           label: "preprocess",
-          id: data.plan,
           attempt: data.attempt,
         },
         data.data,
@@ -545,12 +523,7 @@ pub async fn handle_application_tx<
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
-        &DataSpecification {
-          zone: Zone::Sign,
-          label: "share",
-          id: data.plan,
-          attempt: data.attempt,
-        },
+        &DataSpecification { topic: Topic::Sign(data.plan), label: "share", attempt: data.attempt },
         data.data,
         &data.signed,
       ) {
