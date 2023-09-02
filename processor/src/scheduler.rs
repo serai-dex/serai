@@ -307,7 +307,7 @@ impl<N: Network> Scheduler<N> {
     // This shows up in networks like Monero, where because we spent outputs, our change has yet to
     // re-appear. Since it has yet to re-appear, we only operate with a balance which is a subset
     // of our total balance
-    // Despite this, we may be order to fulfill a payment which is our total balance
+    // Despite this, we may be ordered to fulfill a payment which is our total balance
     // The solution is to wait for the temporarily unavailable change outputs to re-appear,
     // granting us access to our full balance
     let mut executing = vec![];
@@ -317,7 +317,8 @@ impl<N: Network> Scheduler<N> {
         balance -= amount;
         executing.push(self.payments.pop_front().unwrap());
       } else {
-        // TODO: We could continue checking other payments which aren't [0]
+        // Doesn't check if other payments would fit into the current batch as doing so may never
+        // let enough inputs become simultaneously availabile to enable handling of payments[0]
         break;
       }
     }
