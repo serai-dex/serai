@@ -8383,8 +8383,8 @@ dependencies = [
 name = "serai-processor-messages"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "dkg",
+ "parity-scale-codec",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-tokens-primitives",

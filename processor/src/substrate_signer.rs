@@ -3,9 +3,7 @@ use std::collections::{VecDeque, HashMap};
 
 use rand_core::OsRng;
 
-use scale::Encode;
 use transcript::{Transcript, RecommendedTranscript};
-
 use frost::{
   curve::Ristretto,
   ThresholdKeys,
@@ -18,6 +16,7 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
 
+use scale::Encode;
 use serai_client::{
   primitives::NetworkId,
   in_instructions::primitives::{Batch, SignedBatch, batch_message},
@@ -63,7 +62,7 @@ impl<D: Db> SubstrateSignerDb<D> {
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
-    Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
+    Self::sign_key(b"attempt", id.encode())
   }
   fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
     txn.put(Self::attempt_key(id), []);
