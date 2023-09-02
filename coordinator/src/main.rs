@@ -748,6 +748,13 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             panic!("provided an invalid transaction: {res:?}");
           }
         }
+        TransactionKind::Unsigned => {
+          log::trace!("publishing unsigned transaction {}", hex::encode(tx.hash()));
+          // Ignores the result since we can't differentiate already in-mempool from already
+          // on-chain from invalid
+          // TODO: Don't ignore the result
+          tributary.add_transaction(tx).await;
+        }
         TransactionKind::Signed(_) => {
           // Get the next nonce
           // TODO: This should be deterministic, not just DB-backed, to allow rebuilding validators
@@ -767,7 +774,6 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
           // txn.commit();
         }
-        _ => panic!("created an unexpected transaction"),
       }
     }
 

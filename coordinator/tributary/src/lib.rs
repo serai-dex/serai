@@ -221,7 +221,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.read().await.next_nonce(signer)
   }
 
-  // Returns if the transaction was valid.
+  // Returns if the transaction was new and valid.
   // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
   // successfully acquires its own write lock
   pub async fn add_transaction(&self, tx: T) -> bool {

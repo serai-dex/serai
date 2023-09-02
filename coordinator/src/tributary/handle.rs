@@ -550,6 +550,11 @@ pub async fn handle_application_tx<
       }
     }
     Transaction::SignCompleted { plan, tx_hash, .. } => {
+      log::info!(
+        "on-chain SignCompleted claims {} completes {}",
+        hex::encode(&tx_hash),
+        hex::encode(plan)
+      );
       // TODO: Confirm this is a valid plan ID
       // TODO: Confirm this signer hasn't prior published a completion
       let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else { todo!() };
