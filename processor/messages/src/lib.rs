@@ -21,7 +21,9 @@ pub struct SubstrateContext {
 pub mod key_gen {
   use super::*;
 
-  #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  #[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize,
+  )]
   pub struct KeyGenId {
     pub set: ValidatorSet,
     pub attempt: u32,
@@ -276,9 +278,7 @@ impl CoordinatorMessage {
           // Accordingly, the intent is a combination of plan ID and actual TX
           // While transaction alone may suffice, that doesn't cover cross-chain TX ID conflicts,
           // which are possible
-          sign::CoordinatorMessage::Completed { id, tx, .. } => {
-            (3, (id, tx).encode())
-          }
+          sign::CoordinatorMessage::Completed { id, tx, .. } => (3, (id, tx).encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
@@ -288,15 +288,9 @@ impl CoordinatorMessage {
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           // Unique since this embeds the batch ID (hash of it, including its network) and attempt
-          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => {
-            (0, id.encode())
-          }
-          coordinator::CoordinatorMessage::BatchShares { id, .. } => {
-            (1, id.encode())
-          }
-          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => {
-            (2, id.encode())
-          }
+          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => (0, id.encode()),
+          coordinator::CoordinatorMessage::BatchShares { id, .. } => (1, id.encode()),
+          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (2, id.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -306,9 +300,7 @@ impl CoordinatorMessage {
       CoordinatorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
           // Unique since there's only one key pair for a set
-          substrate::CoordinatorMessage::ConfirmKeyPair { set, .. } => {
-            (0, set.encode())
-          }
+          substrate::CoordinatorMessage::ConfirmKeyPair { set, .. } => (0, set.encode()),
           substrate::CoordinatorMessage::SubstrateBlock { network, block, .. } => {
             (1, (network, block).encode())
           }
@@ -362,12 +354,8 @@ impl ProcessorMessage {
             (0, (network, block).encode())
           }
           // Unique since SignId
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-            (1, id.encode())
-          }
-          coordinator::ProcessorMessage::BatchShare { id, .. } => {
-            (2, id.encode())
-          }
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (1, id.encode()),
+          coordinator::ProcessorMessage::BatchShare { id, .. } => (2, id.encode()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];
