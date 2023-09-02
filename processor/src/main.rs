@@ -685,16 +685,14 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
               let mut data = output.data();
               let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
-              // TODO: Should we drop this, instead of truncating?
-              // A truncating message likely doesn't have value yet has increased data load and is
-              // corrupt vs a NOP. The former seems more likely to cause problems
+              // TODO: Refund if we hit one of the following continues
               if data.len() > max_data_len {
                 error!(
-                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. truncating",
+                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
                   hex::encode(output.id()),
                   data.len(),
                 );
-                data = &data[.. max_data_len];
+                continue;
               }
 
               let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
