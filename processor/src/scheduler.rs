@@ -179,6 +179,7 @@ impl<N: Network> Scheduler<N> {
 
     let mut add_plan = |payments| {
       let amount = payment_amounts(&payments);
+      #[allow(clippy::unwrap_or_default)]
       self.queued_plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
       amount
     };
@@ -394,6 +395,7 @@ impl<N: Network> Scheduler<N> {
       return;
     }
 
+    #[allow(clippy::unwrap_or_default)]
     self.plans.entry(actual).or_insert(VecDeque::new()).push_back(payments);
 
     // TODO: This shows how ridiculous the serialize function is

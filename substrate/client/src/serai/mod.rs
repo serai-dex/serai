@@ -149,6 +149,7 @@ impl Serai {
     block: [u8; 32],
   ) -> Result<Option<R>, SeraiError> {
     let storage = self.0.storage();
+    #[allow(clippy::unwrap_or_default)]
     let address = subxt::dynamic::storage(pallet, name, keys.unwrap_or(vec![]));
     debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
 
