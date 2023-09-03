@@ -7,7 +7,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
-use frost::{curve::Ciphersuite, ThresholdKeys};
+use frost::ThresholdKeys;
 
 use log::{info, warn, error};
 use tokio::time::sleep;
@@ -16,7 +16,6 @@ use scale::{Encode, Decode};
 
 use serai_client::{
   primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
-  tokens::primitives::{OutInstruction, OutInstructionWithBalance},
   in_instructions::primitives::{
     Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch, MAX_BATCH_SIZE,
   },
@@ -57,10 +56,13 @@ mod substrate_signer;
 use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 mod scanner;
-use scanner::{ScannerEvent, Scanner, ScannerHandle};
+pub(crate) use scanner::{ScannerEvent, Scanner, ScannerHandle};
 
 mod scheduler;
-use scheduler::Scheduler;
+pub(crate) use scheduler::Scheduler;
+
+mod multisigs;
+use multisigs::MultisigManager;
 
 #[cfg(test)]
 mod tests;
@@ -165,21 +167,25 @@ struct TributaryMutable<N: Network, D: Db> {
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
 struct SubstrateMutable<N: Network, D: Db> {
-  // The scanner is expected to autonomously operate, scanning blocks as they appear.
-  // When a block is sufficiently confirmed, the scanner mutates the signer to try and get a Batch
-  // signed.
-  // The scanner itself only mutates its list of finalized blocks and in-memory state though.
-  // Disk mutations to the scan-state only happen when Substrate says to.
+  /*
+    This contains the Scanner and Schedulers.
 
-  // This can't be mutated as soon as a Batch is signed since the mutation which occurs then is
-  // paired with the mutations caused by Burn events. Substrate's ordering determines if such a
-  // pairing exists.
-  scanner: ScannerHandle<N, D>,
+    The scanner is expected to autonomously operate, scanning blocks as they appear. When a block
+    is sufficiently confirmed, the scanner causes the Substrate signer to sign a batch. It itself
+    only mutates its list of finalized blocks, to protect against re-orgs, and its in-memory state
+    though.
 
-  // Schedulers take in new outputs, from the scanner, and payments, from Burn events on Substrate.
-  // These are paired when possible, in the name of efficiency. Accordingly, both mutations must
-  // happen by Substrate.
-  schedulers: HashMap<Vec<u8>, Scheduler<N>>,
+    Disk mutations to the scan-state only happens once the relevant `Batch` is included on
+    Substrate. It can't be mutated as soon as the `Batch` is signed as we need to know the order of
+    `Batch`s relevant to `Burn`s.
+
+    Schedulers take in new outputs, confirmed in `Batch`s, and outbound payments, triggered by
+    `Burn`s.
+
+    Substrate also decides when to move to a new multisig, hence why this entire object is
+    Substate-mutable.
+  */
+  multisigs: MultisigManager<D, N>,
 }
 
 async fn sign_plans<N: Network, D: Db>(
@@ -194,8 +200,9 @@ async fn sign_plans<N: Network, D: Db>(
 
   let mut block_hash = <N::Block as Block<N>>::Id::default();
   block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-  // block_number call is safe since it unwraps
+  // block_number call is safe since it access a piece of static data
   let block_number = substrate_mutable
+    .multisigs
     .scanner
     .block_number(&block_hash)
     .await
@@ -214,15 +221,17 @@ async fn sign_plans<N: Network, D: Db>(
         .await;
 
     for branch in branches {
-      substrate_mutable
-        .schedulers
-        .get_mut(key.as_ref())
-        .expect("didn't have a scheduler for a key we have a plan for")
-        .created_output::<D>(txn, branch.expected, branch.actual);
+      // TODO: Properly select existing/new multisig
+      substrate_mutable.multisigs.existing.as_mut().unwrap().scheduler.created_output::<D>(
+        txn,
+        branch.expected,
+        branch.actual,
+      );
     }
 
     if let Some((tx, eventuality)) = tx {
       substrate_mutable
+        .multisigs
         .scanner
         .register_eventuality(key.as_ref(), block_number, id, eventuality.clone())
         .await;
@@ -292,7 +301,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   if let Some(required) = msg.msg.required_block() {
     // wait only reads from, it doesn't mutate, the scanner
-    wait(&substrate_mutable.scanner, &required).await;
+    wait(&substrate_mutable.multisigs.scanner, &required).await;
   }
 
   // TODO: Shouldn't we create a txn here and pass it around as needed?
@@ -323,7 +332,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
-            assert!(substrate_mutable.schedulers.is_empty());
+            assert!(substrate_mutable.multisigs.existing.as_ref().is_none());
 
             // Wait until a network's block's time exceeds Serai's time
             // TODO: This assumes the network has a monotonic clock for its blocks' times, which
@@ -367,6 +376,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
             // This block_number call is safe since it unwraps
             substrate_mutable
+              .multisigs
               .scanner
               .block_number(&activation_block)
               .await
@@ -384,10 +394,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           let key = network_keys.group_key();
 
-          substrate_mutable.scanner.register_key(txn, activation_number, key).await;
-          substrate_mutable
-            .schedulers
-            .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<N>::new::<D>(txn, key));
+          substrate_mutable.multisigs.add_key(txn, activation_number, key).await;
 
           tributary_mutable
             .signers
@@ -397,56 +404,26 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
           network: network_id,
-          block,
-          key: key_vec,
+          block: substrate_block,
           burns,
           batches,
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
-          let mut block_id = <N::Block as Block<N>>::Id::default();
-          block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-
-          let key = <N::Curve as Ciphersuite>::read_G::<&[u8]>(&mut key_vec.as_ref()).unwrap();
-
-          // We now have to acknowledge every block for this key up to the acknowledged block
-          let outputs = substrate_mutable.scanner.ack_up_to_block(txn, key, block_id).await;
-          // Since this block was acknowledged, we no longer have to sign the batch for it
+          // Since this block was acknowledged, we no longer have to sign the batches for it
           if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
             for batch_id in batches {
               substrate_signer.batch_signed(txn, batch_id);
             }
           }
 
-          let mut payments = vec![];
-          for out in burns {
-            let OutInstructionWithBalance {
-              instruction: OutInstruction { address, data },
-              balance,
-            } = out;
-            assert_eq!(balance.coin.network(), N::NETWORK);
-
-            if let Ok(address) = N::Address::try_from(address.consume()) {
-              // TODO: Add coin to payment
-              payments.push(Payment {
-                address,
-                data: data.map(|data| data.consume()),
-                amount: balance.amount.0,
-              });
-            }
-          }
-
-          let plans = substrate_mutable
-            .schedulers
-            .get_mut(&key_vec)
-            .expect("key we don't have a scheduler for acknowledged a block")
-            .schedule::<D>(txn, outputs, payments);
+          let plans = substrate_mutable.multisigs.substrate_block(txn, context, burns).await;
 
           coordinator
             .send(ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
                 network: N::NETWORK,
-                block,
+                block: substrate_block,
                 plans: plans.iter().map(|plan| plan.id()).collect(),
               },
             ))
@@ -560,7 +537,7 @@ async fn boot<N: Network, D: Db>(
   (
     main_db,
     TributaryMutable { key_gen, substrate_signer, signers },
-    SubstrateMutable { scanner, schedulers },
+    SubstrateMutable { multisigs: MultisigManager::new(scanner, schedulers) },
   )
 }
 
@@ -662,7 +639,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         coordinator.ack(msg).await;
       },
 
-      msg = substrate_mutable.scanner.events.recv() => {
+      msg = substrate_mutable.multisigs.scanner.events.recv() => {
         let mut txn = raw_db.txn();
 
         match msg.unwrap() {
@@ -670,7 +647,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             let mut block_hash = [0; 32];
             block_hash.copy_from_slice(block.as_ref());
             // TODO: Move this out from Scanner now that the Scanner no longer handles batches
-            let mut batch_id = substrate_mutable.scanner.next_batch_id(&txn);
+            let mut batch_id = substrate_mutable.multisigs.scanner.next_batch_id(&txn);
 
             // start with empty batch
             let mut batches = vec![Batch {
@@ -728,7 +705,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             }
 
             // Save the next batch ID
-            substrate_mutable.scanner.set_next_batch_id(&mut txn, batch_id + 1);
+            substrate_mutable.multisigs.scanner.set_next_batch_id(&mut txn, batch_id + 1);
 
             // Start signing this batch
             for batch in batches {

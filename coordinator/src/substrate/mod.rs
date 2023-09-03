@@ -9,7 +9,7 @@ use serai_client::{
   SeraiError, Block, Serai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair},
+    primitives::{ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
@@ -206,11 +206,6 @@ async fn handle_batch_and_burns<Pro: Processors>(
             },
             network,
             block: block.number(),
-            key: serai
-              .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
-              .await?
-              .map(|keys| keys.1.into_inner())
-              .expect("batch/burn for network which never set keys"),
             burns: burns.remove(&network).unwrap(),
             batches: batches.remove(&network).unwrap(),
           },

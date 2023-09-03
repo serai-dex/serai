@@ -22,10 +22,9 @@ use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
-pub async fn batch<C: Ciphersuite>(
+pub async fn batch(
   processors: &mut [Processor],
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  network_key: &Zeroizing<C::F>,
   batch: Batch,
 ) -> u64 {
   let mut id = [0; 32];
@@ -213,7 +212,6 @@ pub async fn batch<C: Ciphersuite>(
           },
           network: batch.batch.network,
           block: last_serai_block,
-          key: (C::generator() * **network_key).to_bytes().as_ref().to_vec(),
           burns: vec![],
           batches: vec![batch.batch.id],
         }
@@ -257,11 +255,10 @@ async fn batch_test() {
       }
       let mut processors = new_processors;
 
-      let (substrate_key, network_key) = key_gen::<Secp256k1>(&mut processors).await;
-      batch::<Secp256k1>(
+      let (substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
+      batch(
         &mut processors,
         &substrate_key,
-        &network_key,
         Batch {
           network: NetworkId::Bitcoin,
           id: 0,
