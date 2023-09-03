@@ -55,14 +55,13 @@ use signer::{SignerEvent, Signer};
 mod substrate_signer;
 use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
-mod scanner;
-pub(crate) use scanner::{ScannerEvent, Scanner, ScannerHandle};
-
-mod scheduler;
-pub(crate) use scheduler::Scheduler;
-
 mod multisigs;
 use multisigs::MultisigManager;
+// TODO: Get rid of these
+use multisigs::{
+  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  Scheduler,
+};
 
 #[cfg(test)]
 mod tests;

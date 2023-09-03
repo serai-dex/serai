@@ -12,7 +12,7 @@ use serai_db::{DbTxn, MemDb};
 use crate::{
   Plan, Db,
   networks::{OutputType, Output, Block, Network},
-  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
   tests::sign,
 };
 

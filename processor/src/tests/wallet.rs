@@ -11,8 +11,8 @@ use serai_db::{DbTxn, Db, MemDb};
 use crate::{
   Payment, Plan,
   networks::{Output, Transaction, Block, Network},
-  scanner::{ScannerEvent, Scanner},
-  scheduler::Scheduler,
+  multisigs::scanner::{ScannerEvent, Scanner},
+  Scheduler,
   tests::sign,
 };
 

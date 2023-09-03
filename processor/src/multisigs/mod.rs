@@ -6,7 +6,15 @@ use messages::SubstrateContext;
 
 use serai_client::tokens::primitives::{OutInstruction, OutInstructionWithBalance};
 
-use crate::{Db, Payment, Plan, Block, Network, ScannerHandle, Scheduler};
+// TODO: Remove this export
+pub mod scanner;
+use scanner::ScannerHandle;
+
+mod scheduler;
+// TODO: Remove this export
+pub use scheduler::Scheduler;
+
+use crate::{Db, Payment, Plan, Block, Network};
 
 pub struct MultisigViewer<N: Network> {
   key: <N::Curve as Ciphersuite>::G,

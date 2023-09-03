@@ -13,7 +13,7 @@ use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
   networks::{OutputType, Output, Block, Network},
-  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
 pub async fn test_scanner<N: Network>(network: N) {
