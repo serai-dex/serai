@@ -12,14 +12,7 @@ use frost::ThresholdKeys;
 use log::{info, warn, error};
 use tokio::time::sleep;
 
-use scale::{Encode, Decode};
-
-use serai_client::{
-  primitives::{MAX_DATA_LEN, BlockHash, NetworkId},
-  in_instructions::primitives::{
-    Shorthand, RefundableInInstruction, InInstructionWithBalance, Batch, MAX_BATCH_SIZE,
-  },
-};
+use serai_client::primitives::{BlockHash, NetworkId};
 
 use messages::{SubstrateContext, CoordinatorMessage, ProcessorMessage};
 
@@ -31,7 +24,7 @@ mod plan;
 pub use plan::*;
 
 mod networks;
-use networks::{OutputType, Output, PostFeeBranch, Block, Network};
+use networks::{PostFeeBranch, Block, Network};
 #[cfg(feature = "bitcoin")]
 use networks::Bitcoin;
 #[cfg(feature = "monero")]
@@ -56,10 +49,10 @@ mod substrate_signer;
 use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 mod multisigs;
-use multisigs::MultisigManager;
+use multisigs::{MultisigEvent, MultisigManager};
 // TODO: Get rid of these
 use multisigs::{
-  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  scanner::{Scanner, ScannerHandle},
   Scheduler,
 };
 
@@ -638,74 +631,12 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         coordinator.ack(msg).await;
       },
 
+      // TODO: Replace this with proper channel management
       msg = substrate_mutable.multisigs.scanner.events.recv() => {
         let mut txn = raw_db.txn();
 
-        match msg.unwrap() {
-          ScannerEvent::Block { block, outputs } => {
-            let mut block_hash = [0; 32];
-            block_hash.copy_from_slice(block.as_ref());
-            // TODO: Move this out from Scanner now that the Scanner no longer handles batches
-            let mut batch_id = substrate_mutable.multisigs.scanner.next_batch_id(&txn);
-
-            // start with empty batch
-            let mut batches = vec![Batch {
-              network: N::NETWORK,
-              id: batch_id,
-              block: BlockHash(block_hash),
-              instructions: vec![],
-            }];
-            for output in outputs {
-              // If these aren't externally received funds, don't handle it as an instruction
-              if output.kind() != OutputType::External {
-                continue;
-              }
-
-              let mut data = output.data();
-              let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
-              // TODO: Refund if we hit one of the following continues
-              if data.len() > max_data_len {
-                error!(
-                  "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
-                  hex::encode(output.id()),
-                  data.len(),
-                );
-                continue;
-              }
-
-              let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
-              let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
-
-              // TODO2: Set instruction.origin if not set (and handle refunds in general)
-              let instruction = InInstructionWithBalance {
-                instruction: instruction.instruction,
-                balance: output.balance(),
-              };
-
-              let batch = batches.last_mut().unwrap();
-              batch.instructions.push(instruction);
-
-              // check if batch is over-size
-              if batch.encode().len() > MAX_BATCH_SIZE {
-                // pop the last instruction so it's back in size
-                let instruction = batch.instructions.pop().unwrap();
-
-                // bump the id for the new batch
-                batch_id += 1;
-
-                // make a new batch with this instruction included
-                batches.push(Batch {
-                  network: N::NETWORK,
-                  id: batch_id,
-                  block: BlockHash(block_hash),
-                  instructions: vec![instruction],
-                });
-              }
-            }
-
-            // Save the next batch ID
-            substrate_mutable.multisigs.scanner.set_next_batch_id(&mut txn, batch_id + 1);
-
+        match substrate_mutable.multisigs.scanner_event(&mut txn, msg.unwrap()) {
+          MultisigEvent::Batches(batches) => {
             // Start signing this batch
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
@@ -717,8 +648,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               }
             }
           },
-
-          ScannerEvent::Completed(key, id, tx) => {
+          MultisigEvent::Completed(key, id, tx) => {
             if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
               if signer.eventuality_completion(&mut txn, id, &tx).await {
                 log::warn!(
@@ -728,7 +658,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
                 );
               }
             }
-          },
+          }
         }
 
         txn.commit();

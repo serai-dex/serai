@@ -2,23 +2,43 @@ use std::collections::HashMap;
 
 use frost::curve::Ciphersuite;
 
+use scale::{Encode, Decode};
 use messages::SubstrateContext;
 
-use serai_client::tokens::primitives::{OutInstruction, OutInstructionWithBalance};
+use serai_client::{
+  primitives::{BlockHash, MAX_DATA_LEN},
+  in_instructions::primitives::{
+    InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
+  },
+  tokens::primitives::{OutInstruction, OutInstructionWithBalance},
+};
+
+use log::error;
 
 // TODO: Remove this export
 pub mod scanner;
-use scanner::ScannerHandle;
+use scanner::{ScannerEvent, ScannerHandle};
 
 mod scheduler;
 // TODO: Remove this export
 pub use scheduler::Scheduler;
 
-use crate::{Db, Payment, Plan, Block, Network};
+use crate::{
+  Db, Payment, Plan,
+  networks::{OutputType, Output, Transaction, Block, Network},
+};
 
 pub struct MultisigViewer<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
   pub scheduler: Scheduler<N>,
+}
+
+#[derive(Clone, Debug)]
+pub enum MultisigEvent<N: Network> {
+  // Batches to publish
+  Batches(Vec<Batch>),
+  // Eventuality completion found on-chain
+  Completed(Vec<u8>, [u8; 32], <N::Transaction as Transaction<N>>::Id),
 }
 
 pub struct MultisigManager<D: Db, N: Network> {
@@ -26,6 +46,7 @@ pub struct MultisigManager<D: Db, N: Network> {
   pub existing: Option<MultisigViewer<N>>,
   pub new: Option<MultisigViewer<N>>,
 }
+
 impl<D: Db, N: Network> MultisigManager<D, N> {
   // TODO: Replace this
   pub fn new(scanner: ScannerHandle<N, D>, schedulers: HashMap<Vec<u8>, Scheduler<N>>) -> Self {
@@ -106,6 +127,83 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     plans
   }
 
-  // TODO: Listen for SubstrateBlock events
+  // TODO: Embed this into MultisigManager
+  pub fn scanner_event(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    msg: ScannerEvent<N>,
+  ) -> MultisigEvent<N> {
+    match msg {
+      ScannerEvent::Block { block, outputs } => {
+        let mut block_hash = [0; 32];
+        block_hash.copy_from_slice(block.as_ref());
+        // TODO: Move this out from Scanner now that the Scanner no longer handles batches
+        let mut batch_id = self.scanner.next_batch_id(txn);
+
+        // start with empty batch
+        let mut batches = vec![Batch {
+          network: N::NETWORK,
+          id: batch_id,
+          block: BlockHash(block_hash),
+          instructions: vec![],
+        }];
+        for output in outputs {
+          // If these aren't externally received funds, don't handle it as an instruction
+          if output.kind() != OutputType::External {
+            continue;
+          }
+
+          let mut data = output.data();
+          let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
+          // TODO: Refund if we hit one of the following continues
+          if data.len() > max_data_len {
+            error!(
+              "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
+              hex::encode(output.id()),
+              data.len(),
+            );
+            continue;
+          }
+
+          let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
+          let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
+
+          // TODO2: Set instruction.origin if not set (and handle refunds in general)
+          let instruction = InInstructionWithBalance {
+            instruction: instruction.instruction,
+            balance: output.balance(),
+          };
+
+          let batch = batches.last_mut().unwrap();
+          batch.instructions.push(instruction);
+
+          // check if batch is over-size
+          if batch.encode().len() > MAX_BATCH_SIZE {
+            // pop the last instruction so it's back in size
+            let instruction = batch.instructions.pop().unwrap();
+
+            // bump the id for the new batch
+            batch_id += 1;
+
+            // make a new batch with this instruction included
+            batches.push(Batch {
+              network: N::NETWORK,
+              id: batch_id,
+              block: BlockHash(block_hash),
+              instructions: vec![instruction],
+            });
+          }
+        }
+
+        // Save the next batch ID
+        self.scanner.set_next_batch_id(txn, batch_id + 1);
+
+        MultisigEvent::Batches(batches)
+      }
+
+      ScannerEvent::Completed(key, id, tx) => MultisigEvent::Completed(key, id, tx),
+    }
+  }
+
   // TODO: Handle eventuality completions
 }
