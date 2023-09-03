@@ -187,7 +187,9 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 }
 
 /// The Scanner emits events relating to the blockchain, notably received outputs.
+///
 /// It WILL NOT fail to emit an event, even if it reboots at selected moments.
+///
 /// It MAY fire the same event multiple times.
 #[derive(Debug)]
 pub struct Scanner<N: Network, D: Db> {
@@ -195,7 +197,7 @@ pub struct Scanner<N: Network, D: Db> {
   db: D,
   keys: Vec<<N::Curve as Ciphersuite>::G>,
 
-  eventualities: EventualitiesTracker<N::Eventuality>,
+  eventualities: HashMap<Vec<u8>, EventualitiesTracker<N::Eventuality>>,
 
   ram_scanned: HashMap<Vec<u8>, usize>,
   ram_outputs: HashSet<Vec<u8>>,
@@ -225,15 +227,20 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
   pub async fn register_eventuality(
     &mut self,
+    key: &[u8],
     block_number: usize,
     id: [u8; 32],
     eventuality: N::Eventuality,
   ) {
-    self.scanner.write().await.eventualities.register(block_number, id, eventuality)
+    self.scanner.write().await.eventualities.get_mut(key).unwrap().register(
+      block_number,
+      id,
+      eventuality,
+    )
   }
 
-  pub async fn drop_eventuality(&mut self, id: [u8; 32]) {
-    self.scanner.write().await.eventualities.drop(id);
+  pub async fn drop_eventuality(&mut self, key: &[u8], id: [u8; 32]) {
+    self.scanner.write().await.eventualities.get_mut(key).unwrap().drop(id);
   }
 
   /// Rotate the key being scanned for.
@@ -259,11 +266,14 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
 
     let outputs = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
-    scanner.ram_scanned.insert(key.to_bytes().as_ref().to_vec(), activation_number);
+    let key_vec = key.to_bytes().as_ref().to_vec();
+    scanner.ram_scanned.insert(key_vec.clone(), activation_number);
     assert!(outputs.is_empty());
 
     ScannerDb::<N, D>::add_active_key(txn, key);
     scanner.keys.push(key);
+
+    scanner.eventualities.insert(key_vec, EventualitiesTracker::new());
   }
 
   // This perform a database read which isn't safe with regards to if the value is set or not
@@ -321,11 +331,11 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
     let keys = ScannerDb::<N, D>::active_keys(&db);
     let mut ram_scanned = HashMap::new();
+    let mut eventualities = HashMap::new();
     for key in keys.clone() {
-      ram_scanned.insert(
-        key.to_bytes().as_ref().to_vec(),
-        ScannerDb::<N, D>::latest_scanned_block(&db, key),
-      );
+      let key_vec = key.to_bytes().as_ref().to_vec();
+      ram_scanned.insert(key_vec.clone(), ScannerDb::<N, D>::latest_scanned_block(&db, key));
+      eventualities.insert(key_vec, EventualitiesTracker::new());
     }
 
     let scanner = Arc::new(RwLock::new(Scanner {
@@ -333,7 +343,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
       db,
       keys: keys.clone(),
 
-      eventualities: EventualitiesTracker::new(),
+      eventualities,
 
       ram_scanned,
       ram_outputs: HashSet::new(),
@@ -483,11 +493,9 @@ impl<N: Network, D: Db> Scanner<N, D> {
             // eventualities
             // Thankfully, network is written to be a cheap clone
             let network = scanner.network.clone();
-            // TODO: This get_eventuality_completions call will panic if called multiple times over
-            // the same blocks (such as when checking multiple keys under the current layout),
-            // as get_eventuality_completions assumes it's always only fed a future block
-            for (id, tx) in
-              network.get_eventuality_completions(&mut scanner.eventualities, &block).await
+            for (id, tx) in network
+              .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
+              .await
             {
               // This should only happen if there's a P2P net desync or there's a malicious
               // validator

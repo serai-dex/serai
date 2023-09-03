@@ -222,7 +222,10 @@ async fn sign_plans<N: Network, D: Db>(
     }
 
     if let Some((tx, eventuality)) = tx {
-      substrate_mutable.scanner.register_eventuality(block_number, id, eventuality.clone()).await;
+      substrate_mutable
+        .scanner
+        .register_eventuality(key.as_ref(), block_number, id, eventuality.clone())
+        .await;
       signers.get_mut(key.as_ref()).unwrap().sign_transaction(txn, id, tx, eventuality).await;
     }
 
@@ -510,7 +513,7 @@ async fn boot<N: Network, D: Db>(
   let mut substrate_signer = None;
   let mut signers = HashMap::new();
 
-  let main_db = MainDb::new(raw_db.clone());
+  let main_db = MainDb::<N, _>::new(raw_db.clone());
 
   for key in &active_keys {
     schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::from_db(raw_db, *key).unwrap());
@@ -534,13 +537,15 @@ async fn boot<N: Network, D: Db>(
       let id = plan.id();
       info!("reloading plan {}: {:?}", hex::encode(id), plan);
 
+      let key_bytes = plan.key.to_bytes();
+
       let (Some((tx, eventuality)), _) =
         prepare_send(network, signer.keys(), block_number, fee, plan).await
       else {
         panic!("previously created transaction is no longer being created")
       };
 
-      scanner.register_eventuality(block_number, id, eventuality.clone()).await;
+      scanner.register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone()).await;
       // TODO: Reconsider if the Signer should have the eventuality, or if just the network/scanner
       // should
       let mut txn = raw_db.txn();
@@ -595,7 +600,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             let mut txn = raw_db.txn();
             // This does mutate the Scanner, yet the eventuality protocol is only run to mutate
             // the signer, which is Tributary mutable (and what's currently being mutated)
-            substrate_mutable.scanner.drop_eventuality(id).await;
+            substrate_mutable.scanner.drop_eventuality(key, id).await;
             main_db.finish_signing(&mut txn, key, id);
             txn.commit();
           }
