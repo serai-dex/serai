@@ -57,7 +57,7 @@ async fn spend<N: Network, D: Db>(
       assert_eq!(outputs[0].kind(), OutputType::Change);
       outputs
     }
-    ScannerEvent::Completed(_, _) => {
+    ScannerEvent::Completed(_, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }
@@ -79,7 +79,7 @@ pub async fn test_addresses<N: Network>(network: N) {
   let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
   assert!(active_keys.is_empty());
   let mut txn = db.txn();
-  scanner.rotate_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
+  scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
   txn.commit();
 
   // Receive funds to the branch address and make sure it's properly identified
@@ -94,7 +94,7 @@ pub async fn test_addresses<N: Network>(network: N) {
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         outputs
       }
-      ScannerEvent::Completed(_, _) => {
+      ScannerEvent::Completed(_, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };

@@ -37,7 +37,7 @@ pub async fn test_scanner<N: Network>(network: N) {
     if *first {
       assert!(active_keys.is_empty());
       let mut txn = db.txn();
-      scanner.rotate_key(&mut txn, activation_number, group_key).await;
+      scanner.register_key(&mut txn, activation_number, group_key).await;
       txn.commit();
       *first = false;
     } else {
@@ -61,7 +61,7 @@ pub async fn test_scanner<N: Network>(network: N) {
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
-        ScannerEvent::Completed(_, _) => {
+        ScannerEvent::Completed(_, _, _) => {
           panic!("unexpectedly got eventuality completion");
         }
       };

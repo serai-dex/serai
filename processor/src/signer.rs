@@ -207,7 +207,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
     tx_id: &<N::Transaction as Transaction<N>>::Id,
-  ) {
+  ) -> bool {
     if let Some(eventuality) = SignerDb::<N, D>::eventuality(txn, id) {
       // Transaction hasn't hit our mempool/was dropped for a different signature
       // The latter can happen given certain latency conditions/a single malicious signer
@@ -219,7 +219,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           hex::encode(tx_id),
           hex::encode(id),
         );
-        return;
+        return false;
       };
 
       if self.network.confirm_completion(&eventuality, &tx) {
@@ -233,6 +233,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
         if first_completion {
           self.complete(id, tx.id());
+          return true;
         }
       } else {
         warn!(
@@ -242,12 +243,16 @@ impl<N: Network, D: Db> Signer<N, D> {
         );
       }
     } else {
-      warn!(
-        "signer {} informed of the completion of plan {}. that plan was not recognized",
+      // If we don't have this in RAM, it should be because we already finished signing it
+      assert!(SignerDb::<N, D>::completed(txn, id).is_some());
+      info!(
+        "signer {} informed of the eventuality completion for plan {}, {}",
         hex::encode(self.keys.group_key().to_bytes()),
         hex::encode(id),
+        "which we already marked as completed",
       );
     }
+    false
   }
 
   async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {

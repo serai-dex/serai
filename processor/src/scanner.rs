@@ -24,7 +24,7 @@ pub enum ScannerEvent<N: Network> {
   // Block scanned
   Block { block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
   // Eventuality completion found on-chain
-  Completed([u8; 32], <N::Transaction as Transaction<N>>::Id),
+  Completed(Vec<u8>, [u8; 32], <N::Transaction as Transaction<N>>::Id),
 }
 
 pub type ScannerEventChannel<N> = mpsc::UnboundedReceiver<ScannerEvent<N>>;
@@ -239,18 +239,8 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     )
   }
 
-  pub async fn drop_eventuality(&mut self, key: &[u8], id: [u8; 32]) {
-    self.scanner.write().await.eventualities.get_mut(key).unwrap().drop(id);
-  }
-
-  /// Rotate the key being scanned for.
-  ///
-  /// If no key has been prior set, this will become the key with no further actions.
-  ///
-  /// If a key has been prior set, both keys will be scanned for as detailed in the Multisig
-  /// documentation. The old key will eventually stop being scanned for, leaving just the
-  /// updated-to key.
-  pub async fn rotate_key(
+  /// Register a key to scan for.
+  pub async fn register_key(
     &mut self,
     txn: &mut D::Transaction<'_>,
     activation_number: usize,
@@ -263,7 +253,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
       panic!("only a single key is supported at this time");
     }
 
-    info!("Rotating scanner to key {} at {activation_number}", hex::encode(key.to_bytes()));
+    info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
 
     let outputs = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
     let key_vec = key.to_bytes().as_ref().to_vec();
@@ -497,15 +487,13 @@ impl<N: Network, D: Db> Scanner<N, D> {
               .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
               .await
             {
-              // This should only happen if there's a P2P net desync or there's a malicious
-              // validator
-              warn!(
-                "eventuality {} resolved by {}, as found on chain. this should not happen",
+              info!(
+                "eventuality {} resolved by {}, as found on chain",
                 hex::encode(id),
                 hex::encode(&tx)
               );
 
-              if !scanner.emit(ScannerEvent::Completed(id, tx)) {
+              if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {
                 return;
               }
             }

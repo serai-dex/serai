@@ -29,7 +29,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
     let mut txn = db.txn();
-    scanner.rotate_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
+    scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
     txn.commit();
 
     let block = network.test_send(N::address(key)).await;
@@ -41,7 +41,7 @@ pub async fn test_wallet<N: Network>(network: N) {
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
-      ScannerEvent::Completed(_, _) => {
+      ScannerEvent::Completed(_, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     }
@@ -112,7 +112,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }
-    ScannerEvent::Completed(_, _) => {
+    ScannerEvent::Completed(_, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }

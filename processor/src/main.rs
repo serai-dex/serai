@@ -384,7 +384,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           let key = network_keys.group_key();
 
-          substrate_mutable.scanner.rotate_key(txn, activation_number, key).await;
+          substrate_mutable.scanner.register_key(txn, activation_number, key).await;
           substrate_mutable
             .schedulers
             .insert(key.to_bytes().as_ref().to_vec(), Scheduler::<N>::new::<D>(txn, key));
@@ -598,9 +598,6 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               .await;
 
             let mut txn = raw_db.txn();
-            // This does mutate the Scanner, yet the eventuality protocol is only run to mutate
-            // the signer, which is Tributary mutable (and what's currently being mutated)
-            substrate_mutable.scanner.drop_eventuality(key, id).await;
             main_db.finish_signing(&mut txn, key, id);
             txn.commit();
           }
@@ -745,10 +742,15 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             }
           },
 
-          ScannerEvent::Completed(id, tx) => {
-            // We don't know which signer had this plan, so inform all of them
-            for (_, signer) in tributary_mutable.signers.iter_mut() {
-              signer.eventuality_completion(&mut txn, id, &tx).await;
+          ScannerEvent::Completed(key, id, tx) => {
+            if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
+              if signer.eventuality_completion(&mut txn, id, &tx).await {
+                log::warn!(
+                  "informed of eventuality completion for {} {}",
+                  hex::encode(id),
+                  "by blockchain instead of by signing/P2P",
+                );
+              }
             }
           },
         }
