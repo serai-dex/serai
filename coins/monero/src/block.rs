@@ -79,7 +79,7 @@ impl Block {
     merkle_root(self.miner_tx.hash(), &self.txs)
   }
 
-  fn serialize_hashable(&self) -> Vec<u8> {
+  pub fn serialize_hashable(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
     blob.extend_from_slice(&self.tx_merkle_root());
     write_varint(&(1 + u64::try_from(self.txs.len()).unwrap()), &mut blob).unwrap();
