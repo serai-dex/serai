@@ -4,11 +4,12 @@ use std_shims::{
 };
 
 use curve25519_dalek::scalar::Scalar;
-#[cfg(feature = "experimental")]
 use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::traits::Identity;
+
+use monero_generators::H;
 
 use crate::serialize::*;
-#[cfg(feature = "experimental")]
 use crate::{hash_to_scalar, ringct::hash_to_point};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -32,38 +33,107 @@ impl Mlsag {
     })
   }
 
-  #[cfg(feature = "experimental")]
-  pub fn verify(
+  /// Verifies an aggregate MLSAG signature, an aggregate signature is over multiple inputs.
+  pub fn verify_aggregate(
+    &self,
+    msg: &[u8; 32],
+    rings: &[impl AsRef<[[EdwardsPoint; 2]]>],
+    out_pks: &[EdwardsPoint],
+    fee: u64,
+    key_images: &[&EdwardsPoint],
+  ) -> bool {
+    // The idea behind the aggregate signature is to add all the inputs commitments and check that
+    // when we take the inputs from the outputs we get a commitment to 0. We can't simply sum the
+    // decoys as it's only one decoys commitment that is actually being used, so what we do is sum
+    // the decoys commitments at the same index, so for a 2 input transaction we sum the first decoy
+    // of the first input with the first decoy of the second input continuing for each decoy. We
+    // then take away the fee and the sum of outputs from each of those sums.
+    //
+    // This means that the real spend will be at the same index for each input, hurting privacy.
+
+    let decoys = rings[0].as_ref().len();
+    let inputs = rings.len();
+
+    let sum_out_pk = out_pks.iter().sum::<EdwardsPoint>();
+    #[allow(non_snake_case)]
+    let H_fee = H() * Scalar::from(fee);
+
+    // We start with separate matrix's for keys and commitments.
+    let mut key_matrix = vec![vec![EdwardsPoint::identity(); inputs + 1]; decoys];
+
+    for (i, ring) in rings.iter().enumerate() {
+      for (j, member) in ring.as_ref().iter().enumerate() {
+        key_matrix[j][i] = member[0];
+        key_matrix[j][inputs] += member[1];
+      }
+    }
+
+    for i in 0..decoys {
+      key_matrix[i][inputs] += -sum_out_pk - H_fee;
+    }
+
+    self.verify(msg, &key_matrix, key_images)
+  }
+
+  /// Verifies a simple MLSAG signature, a simple signature is over a single input only.
+  pub fn verify_simple(
     &self,
     msg: &[u8; 32],
     ring: &[[EdwardsPoint; 2]],
     key_image: &EdwardsPoint,
+    pseudo_out: &EdwardsPoint,
+  ) -> bool {
+    let mut ring_matrix = Vec::with_capacity(ring.len());
+    for member in ring.iter() {
+      ring_matrix.push([member[0], member[1] - pseudo_out].to_vec())
+    }
+
+    self.verify(msg, &ring_matrix, &[key_image])
+  }
+
+  fn verify(
+    &self,
+    msg: &[u8; 32],
+    ring: &[Vec<EdwardsPoint>],
+    key_images: &[&EdwardsPoint],
   ) -> bool {
     if ring.is_empty() {
       return false;
     }
 
     let mut buf = Vec::with_capacity(6 * 32);
+    buf.extend_from_slice(msg);
+
     let mut ci = self.cc;
-    for (i, ring_member) in ring.iter().enumerate() {
-      buf.extend_from_slice(msg);
 
-      #[allow(non_snake_case)]
-      let L =
-        |r| EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, &ring_member[r], &self.ss[i][r]);
+    let key_images_iter =
+      key_images.iter().map(|ki| Some(*ki)).chain(Some(None).into_iter().cycle());
 
-      buf.extend_from_slice(ring_member[0].compress().as_bytes());
-      buf.extend_from_slice(L(0).compress().as_bytes());
+    for (col, ss) in ring.iter().zip(&self.ss) {
+      for ((ring_member, s), ki) in col.iter().zip(ss).zip(key_images_iter.clone()) {
 
-      #[allow(non_snake_case)]
-      let R = (self.ss[i][0] * hash_to_point(ring_member[0])) + (ci * key_image);
-      buf.extend_from_slice(R.compress().as_bytes());
+        #[allow(non_snake_case)]
+        let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, &ring_member, &s);
 
-      buf.extend_from_slice(ring_member[1].compress().as_bytes());
-      buf.extend_from_slice(L(1).compress().as_bytes());
+        buf.extend_from_slice(ring_member.compress().as_bytes());
+        buf.extend_from_slice(L.compress().as_bytes());
+
+        // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need to
+        // have key images.
+        if let Some(ki) = ki {
+          #[allow(non_snake_case)]
+          let R = (s * hash_to_point(ring_member)) + (ci * ki);
+          buf.extend_from_slice(R.compress().as_bytes());
+        }
+      }
 
       ci = hash_to_scalar(&buf);
       buf.clear();
+      buf.extend_from_slice(msg);
+
+      if ci == Scalar::zero() {
+        return false;
+      }
     }
 
     ci == self.cc
