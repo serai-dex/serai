@@ -14,7 +14,7 @@ use crate::{hash_to_scalar, ringct::hash_to_point};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Mlsag {
-  pub ss: Vec<[Scalar; 2]>,
+  pub ss: Vec<Vec<Scalar>>,
   pub cc: Scalar,
 }
 
@@ -26,9 +26,11 @@ impl Mlsag {
     write_scalar(&self.cc, w)
   }
 
-  pub fn read<R: Read>(mixins: usize, r: &mut R) -> io::Result<Mlsag> {
+  pub fn read<R: Read>(mixins: usize, ss_2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
     Ok(Mlsag {
-      ss: (0 .. mixins).map(|_| read_array(read_scalar, r)).collect::<Result<_, _>>()?,
+      ss: (0 .. mixins)
+        .map(|_| read_raw_vec(read_scalar, ss_2_elements, r))
+        .collect::<Result<_, _>>()?,
       cc: read_scalar(r)?,
     })
   }
@@ -68,7 +70,7 @@ impl Mlsag {
       }
     }
 
-    for i in 0..decoys {
+    for i in 0 .. decoys {
       key_matrix[i][inputs] += -sum_out_pk - H_fee;
     }
 
@@ -111,15 +113,14 @@ impl Mlsag {
 
     for (col, ss) in ring.iter().zip(&self.ss) {
       for ((ring_member, s), ki) in col.iter().zip(ss).zip(key_images_iter.clone()) {
-
         #[allow(non_snake_case)]
         let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, &ring_member, &s);
 
         buf.extend_from_slice(ring_member.compress().as_bytes());
         buf.extend_from_slice(L.compress().as_bytes());
 
-        // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need to
-        // have key images.
+        // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need
+        // to have key images.
         if let Some(ki) = ki {
           #[allow(non_snake_case)]
           let R = (s * hash_to_point(ring_member)) + (ci * ki);
