@@ -67,7 +67,7 @@ impl Serai {
     amount_out_min: Amount,
     address: SeraiAddress,
   ) -> Payload<Composite<()>> {
-    let path = if to_coin == Coin::Serai { 
+    let path = if to_coin == Coin::Serai {
       BoundedVec::truncate_from(vec![from_coin, Coin::Serai])
     } else if from_coin == Coin::Serai {
       BoundedVec::truncate_from(vec![Coin::Serai, to_coin])
@@ -83,7 +83,7 @@ impl Serai {
         amount_in: amount_in.0,
         amount_out_min: amount_out_min.0,
         send_to: address.into(),
-        keep_alive: false
+        keep_alive: false,
       }),
     )
   }

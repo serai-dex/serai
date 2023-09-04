@@ -12,7 +12,12 @@ pub async fn create_pool(coin: Coin, nonce: u32, pair: Pair) -> [u8; 32] {
   let serai = serai().await;
 
   let tx = serai
-    .sign(&PairSigner::new(pair), &Serai::create_pool(coin), nonce, BaseExtrinsicParamsBuilder::new())
+    .sign(
+      &PairSigner::new(pair),
+      &Serai::create_pool(coin),
+      nonce,
+      BaseExtrinsicParamsBuilder::new(),
+    )
     .unwrap();
 
   publish_tx(&tx).await

@@ -5,9 +5,11 @@ use serai_runtime::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress
+    Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress,
   },
-  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR},
+  in_instructions::primitives::{
+    InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR,
+  },
   dex::DexEvent,
   Serai,
 };
@@ -16,7 +18,9 @@ mod common;
 use common::{
   serai,
   in_instructions::{provide_batch, mint_coin},
-  dex::{create_pool as common_create_pool, add_liquidity as common_add_liquidity, swap as common_swap},
+  dex::{
+    create_pool as common_create_pool, add_liquidity as common_add_liquidity, swap as common_swap,
+  },
 };
 
 serai_test!(
@@ -35,12 +39,14 @@ serai_test!(
       Balance { coin, amount: Amount(100_000000000000) },
       NetworkId::Bitcoin,
       batch_id,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
     batch_id += 1;
 
     // add liquidity
-    common_add_liquidity(coin, Amount(50_000000000000), Amount(50_000000000000), 1, pair.clone()).await;
+    common_add_liquidity(coin, Amount(50_000000000000), Amount(50_000000000000), 1, pair.clone())
+      .await;
 
     // now that we have our liquid Btc/SRI pool, we can try add
     // more liquidity to it
@@ -58,20 +64,23 @@ serai_test!(
 
     let block = provide_batch(batch).await;
     let mut events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::LiquidityAdded { .. }));
+    events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
 
     // we should have only 1 liq added event.
     assert_eq!(events.len(), 1);
 
-    assert_eq!(events, vec![DexEvent::LiquidityAdded {
-      who: IN_INSTRUCTION_EXECUTOR.into(),
-      mint_to: pair.public(),
-      pool_id: (Coin::Serai, Coin::Bitcoin),
-      amount1_provided: 6947918403646,
-      amount2_provided: 10_000000000000, // half of sended amount
-      lp_token: 0,
-      lp_token_minted: 8333333333332
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::LiquidityAdded {
+        who: IN_INSTRUCTION_EXECUTOR.into(),
+        mint_to: pair.public(),
+        pool_id: (Coin::Serai, Coin::Bitcoin),
+        amount1_provided: 6947918403646,
+        amount2_provided: 10_000000000000, // half of sended amount
+        lp_token: 0,
+        lp_token_minted: 8333333333332
+      }]
+    );
 
     // TODO: get the minted lp token and check for balance of lp token on the address?
   }
@@ -92,19 +101,23 @@ serai_test!(
       Balance { coin: coin1, amount: Amount(100_000000000000) },
       NetworkId::Monero,
       batch_id,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
     batch_id += 1;
     mint_coin(
       Balance { coin: coin2, amount: Amount(100_000000000000) },
       NetworkId::Ethereum,
       0,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
 
     // add liquidity to pools
-    common_add_liquidity(coin1, Amount(50_000000000000), Amount(50_000000000000), 2, pair.clone()).await;
-    common_add_liquidity(coin2, Amount(50_000000000000), Amount(50_000000000000), 3, pair.clone()).await;
+    common_add_liquidity(coin1, Amount(50_000000000000), Amount(50_000000000000), 2, pair.clone())
+      .await;
+    common_add_liquidity(coin2, Amount(50_000000000000), Amount(50_000000000000), 3, pair.clone())
+      .await;
 
     // make an address to send the eth to
     let mut rand_bytes = vec![0; 32];
@@ -126,19 +139,22 @@ serai_test!(
 
     let block = provide_batch(batch).await;
     let mut events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::SwapExecuted { .. }));
+    events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     // we should have only 1 swap event.
     assert_eq!(events.len(), 1);
 
     let path = BoundedVec::truncate_from(vec![coin1, Coin::Serai, coin2]);
-    assert_eq!(events, vec![DexEvent::SwapExecuted {
-      who: IN_INSTRUCTION_EXECUTOR.into(),
-      send_to:  IN_INSTRUCTION_EXECUTOR.into(),
-      path,
-      amount_in: 20_000000000000,
-      amount_out: 11066655622377
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::SwapExecuted {
+        who: IN_INSTRUCTION_EXECUTOR.into(),
+        send_to: IN_INSTRUCTION_EXECUTOR.into(),
+        path,
+        amount_in: 20_000000000000,
+        amount_out: 11066655622377
+      }]
+    );
 
     // TODO: check balances?
   }
@@ -176,34 +192,36 @@ serai_test!(
       Balance { coin, amount: Amount(100_000000000000) },
       NetworkId::Monero,
       0,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
 
     // add liquidity
     let coin_amount = Amount(50_000000000000);
     let sri_amount = Amount(50_000000000000);
-    let block =
-      common_add_liquidity(coin, coin_amount, sri_amount, 1, pair.clone())
-        .await;
+    let block = common_add_liquidity(coin, coin_amount, sri_amount, 1, pair.clone()).await;
 
     // get only the add liq events
     let mut events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::LiquidityAdded { .. }));
+    events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
 
     // we should have only 1 liq added event.
     assert_eq!(events.len(), 1);
 
-    assert_eq!(events, vec![DexEvent::LiquidityAdded {
-      who: pair.public(),
-      mint_to: pair.public(),
-      pool_id: (Coin::Serai, Coin::Monero),
-      amount1_provided: coin_amount.0,
-      amount2_provided: sri_amount.0,
-      lp_token: 0,
-      // TODO: how to calculate this? just looks like 50 - 0.00000001.
-      // Why that fraction was subtracted?
-      lp_token_minted: 49_999999990000
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::LiquidityAdded {
+        who: pair.public(),
+        mint_to: pair.public(),
+        pool_id: (Coin::Serai, Coin::Monero),
+        amount1_provided: coin_amount.0,
+        amount2_provided: sri_amount.0,
+        lp_token: 0,
+        // TODO: how to calculate this? just looks like 50 - 0.00000001.
+        // Why that fraction was subtracted?
+        lp_token_minted: 49_999999990000
+      }]
+    );
   }
 
   // Tests coin -> SRI and SRI -> coin
@@ -222,11 +240,13 @@ serai_test!(
       Balance { coin, amount: Amount(100_000000000000) },
       NetworkId::Ethereum,
       0,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
 
     // add liquidity
-    common_add_liquidity(coin, Amount(50_000000000000), Amount(50_000000000000), 1, pair.clone()).await;
+    common_add_liquidity(coin, Amount(50_000000000000), Amount(50_000000000000), 1, pair.clone())
+      .await;
 
     // now that we have our liquid pool, swap some coin to SRI.
     let mut amount_in = Amount(25_000000000000);
@@ -234,22 +254,25 @@ serai_test!(
 
     // get only the swap events
     let mut events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::SwapExecuted { .. }));
+    events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     // we should have only 1 swap event.
     assert_eq!(events.len(), 1);
 
     let mut path = BoundedVec::truncate_from(vec![coin, Coin::Serai]);
-    assert_eq!(events, vec![DexEvent::SwapExecuted {
-      who: pair.clone().public(),
-      send_to: pair.public(),
-      path,
-      amount_in: amount_in.0,
-      // TODO: again how to know this? This number is taken from the event itself.
-      // The pool had 1:1 liquidity but seems like it favored SRI to be more
-      // expensive?
-      amount_out: 16633299966633
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::SwapExecuted {
+        who: pair.clone().public(),
+        send_to: pair.public(),
+        path,
+        amount_in: amount_in.0,
+        // TODO: again how to know this? This number is taken from the event itself.
+        // The pool had 1:1 liquidity but seems like it favored SRI to be more
+        // expensive?
+        amount_out: 16633299966633
+      }]
+    );
 
     // now swap some SRI to coin
     amount_in = Amount(10_000000000000);
@@ -257,20 +280,23 @@ serai_test!(
 
     // get only the swap events
     events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::SwapExecuted { .. }));
+    events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     // we should have only 1 swap event.
     assert_eq!(events.len(), 1);
 
     path = BoundedVec::truncate_from(vec![Coin::Serai, coin]);
-    assert_eq!(events, vec![DexEvent::SwapExecuted {
-      who: pair.clone().public(),
-      send_to: pair.public(),
-      path,
-      amount_in: amount_in.0,
-      // TODO: again this?
-      amount_out: 17254428681101
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::SwapExecuted {
+        who: pair.clone().public(),
+        send_to: pair.public(),
+        path,
+        amount_in: amount_in.0,
+        // TODO: again this?
+        amount_out: 17254428681101
+      }]
+    );
 
     // TODO: check the balance of the account?
   }
@@ -290,18 +316,22 @@ serai_test!(
       Balance { coin: coin1, amount: Amount(100_000000000000) },
       NetworkId::Monero,
       0,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
     mint_coin(
       Balance { coin: coin2, amount: Amount(100_000000000000) },
       NetworkId::Ethereum,
       0,
-      pair.clone().public().into()
-    ).await;
+      pair.clone().public().into(),
+    )
+    .await;
 
     // add liquidity to pools
-    common_add_liquidity(coin1, Amount(50_000000000000), Amount(50_000000000000), 2, pair.clone()).await;
-    common_add_liquidity(coin2, Amount(50_000000000000), Amount(50_000000000000), 3, pair.clone()).await;
+    common_add_liquidity(coin1, Amount(50_000000000000), Amount(50_000000000000), 2, pair.clone())
+      .await;
+    common_add_liquidity(coin2, Amount(50_000000000000), Amount(50_000000000000), 3, pair.clone())
+      .await;
 
     // swap coin1 -> coin2
     let amount_in = Amount(25_000000000000);
@@ -309,19 +339,22 @@ serai_test!(
 
     // get only the swap events
     let mut events = serai.dex_events(block).await.unwrap();
-    events.retain(|e|  matches!(e, DexEvent::SwapExecuted { .. }));
+    events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     // we should have only 1 swap event.
     assert_eq!(events.len(), 1);
 
     let path = BoundedVec::truncate_from(vec![coin1, Coin::Serai, coin2]);
-    assert_eq!(events, vec![DexEvent::SwapExecuted {
-      who: pair.clone().public(),
-      send_to: pair.public(),
-      path,
-      amount_in: amount_in.0,
-      // TODO: again this?
-      amount_out: 12453103964435
-    }]);
+    assert_eq!(
+      events,
+      vec![DexEvent::SwapExecuted {
+        who: pair.clone().public(),
+        send_to: pair.public(),
+        path,
+        amount_in: amount_in.0,
+        // TODO: again this?
+        amount_out: 12453103964435
+      }]
+    );
   }
 );

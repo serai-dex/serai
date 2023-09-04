@@ -123,7 +123,8 @@ pub mod pallet {
 
               // get how much we got for our swap
               // TODO: Do we want to use the `usable_balance`?
-              let sri_amount = BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
+              let sri_amount =
+                BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
 
               // add liquidity
               Dex::<T>::add_liquidity(
@@ -137,24 +138,28 @@ pub mod pallet {
                 address.into(),
               )?;
 
-              // TODO: minimums are set to 1 above to guarantee successful adding liq call. Ideally we either
-              // get this info from user or send the leftovers back to user. If leftovers stay on our
-              // IIExecutor account, they can accumulate and would give us wrong SRI amounts next time
-              // another users call here(since we know how much to add liq by checking the balance on it).
-              // Which then would make addling liq fail. So Let's send the leftovers back to user.
+              // TODO: minimums are set to 1 above to guarantee successful adding liq call.
+              // Ideally we either get this info from user or send the leftovers back to user.
+              // If leftovers stay on our IIExecutor account, they can accumulate and would
+              // give us wrong SRI amounts next time another users call here(since we know
+              // how much to add liq by checking the balance on it). Which then would
+              // make addling liq fail. So Let's send the leftovers back to user.
               let coin_balance = Tokens::<T>::balance(coin, IN_INSTRUCTION_EXECUTOR);
-              let sri_balance = BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
+              let sri_balance =
+                BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
               if coin_balance != 0 {
                 Tokens::<T>::transfer(origin.clone().into(), coin, address, coin_balance)?;
               }
               if sri_balance != 0 {
                 // unwrap here. First, it doesn't panic, second we have no choice but to empty
                 // IIE account.
-                BalancesPallet::<T>::transfer_allow_death(origin.into(), address, sri_balance).unwrap();
+                BalancesPallet::<T>::transfer_allow_death(origin.into(), address, sri_balance)
+                  .unwrap();
               }
 
-              // TODO: ideally we would get the coin and sri balances again and make sure they are 0.
-              // But we already made 3 calls and that would make 5. should we do it?
+              // TODO: ideally we would get the coin and sri balances again and
+              // make sure they are 0. But we already made 3 calls and that
+              // would make 5. should we do it?
             }
             DexCall::Swap(coin2, address, amount_out_min) => {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
