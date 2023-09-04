@@ -35,6 +35,7 @@ pub mod tokens;
 pub mod in_instructions;
 pub mod validator_sets;
 pub mod dex;
+pub mod system;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Encode, Decode)]
 pub struct Tip {

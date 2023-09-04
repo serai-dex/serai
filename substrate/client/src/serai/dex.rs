@@ -3,6 +3,8 @@ use serai_runtime::{
   primitives::{Coin, SeraiAddress, Amount},
 };
 
+use sp_core::bounded_vec::BoundedVec;
+
 use subxt::tx::Payload;
 
 use crate::{Serai, SeraiError, Composite, scale_composite};
@@ -54,6 +56,34 @@ impl Serai {
         amount1_min: min_coin_amount.0,
         amount2_min: min_sri_amount.0,
         mint_to: address.into(),
+      }),
+    )
+  }
+
+  pub fn swap(
+    from_coin: Coin,
+    to_coin: Coin,
+    amount_in: Amount,
+    amount_out_min: Amount,
+    address: SeraiAddress,
+  ) -> Payload<Composite<()>> {
+    let path = if to_coin == Coin::Serai { 
+      BoundedVec::truncate_from(vec![from_coin, Coin::Serai])
+    } else if from_coin == Coin::Serai {
+      BoundedVec::truncate_from(vec![Coin::Serai, to_coin])
+    } else {
+      BoundedVec::truncate_from(vec![from_coin, Coin::Serai, to_coin])
+    };
+
+    Payload::new(
+      PALLET,
+      "swap_exact_tokens_for_tokens",
+      scale_composite(dex::Call::<Runtime>::swap_exact_tokens_for_tokens {
+        path,
+        amount_in: amount_in.0,
+        amount_out_min: amount_out_min.0,
+        send_to: address.into(),
+        keep_alive: false
       }),
     )
   }
