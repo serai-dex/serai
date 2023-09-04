@@ -5,12 +5,9 @@ use serai_runtime::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name,
+    Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress
   },
-  in_instructions::{
-    InInstructionsEvent,
-    primitives::{InInstruction, InInstructionWithBalance, Batch},
-  },
+  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR},
   dex::DexEvent,
   Serai,
 };
@@ -47,11 +44,10 @@ serai_test!(
 
     // now that we have our liquid Btc/SRI pool, we can try add
     // more liquidity to it
-    let network = NetworkId::Bitcoin;
     let mut block_hash = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block_hash.0);
     let batch = Batch {
-      network,
+      network: NetworkId::Bitcoin,
       id: batch_id,
       block: block_hash,
       instructions: vec![InInstructionWithBalance {
@@ -61,16 +57,90 @@ serai_test!(
     };
 
     let block = provide_batch(batch).await;
-    let batches = serai.get_batch_events(block).await.unwrap();
-    assert_eq!(batches, vec![InInstructionsEvent::Batch { network, id: batch_id, block: block_hash }]);
+    let mut events = serai.dex_events(block).await.unwrap();
+    events.retain(|e|  matches!(e, DexEvent::LiquidityAdded { .. }));
 
-    let sys_events = serai.system_events(block).await.unwrap();
-    println!("SYSTEM EVENNTTSSS: {:?}", sys_events);
-    let events = serai.dex_events(block).await.unwrap();
-    println!("Dex EVENNTTSS: {:?}", events);
+    // we should have only 1 liq added event.
+    assert_eq!(events.len(), 1);
 
-    // TODO: get the minted lp token and check for balance of lp token on the address
-    // assert_eq!(serai.get_token_balance(block, coin, address).await.unwrap(), amount);
+    assert_eq!(events, vec![DexEvent::LiquidityAdded {
+      who: IN_INSTRUCTION_EXECUTOR.into(),
+      mint_to: pair.public(),
+      pool_id: (Coin::Serai, Coin::Bitcoin),
+      amount1_provided: 6947918403646,
+      amount2_provided: 10_000000000000, // half of sended amount
+      lp_token: 0,
+      lp_token_minted: 8333333333332
+    }]);
+
+    // TODO: get the minted lp token and check for balance of lp token on the address?
+  }
+
+  async fn swap_in_instructions() {
+    let coin1 = Coin::Monero;
+    let coin2 = Coin::Ether;
+    let pair = insecure_pair_from_name("Ferdie");
+    let serai = serai().await;
+    let mut batch_id = 0;
+
+    // create pools
+    common_create_pool(coin1, 0, pair.clone()).await;
+    common_create_pool(coin2, 1, pair.clone()).await;
+
+    // mint coins
+    mint_coin(
+      Balance { coin: coin1, amount: Amount(100_000000000000) },
+      NetworkId::Monero,
+      batch_id,
+      pair.clone().public().into()
+    ).await;
+    batch_id += 1;
+    mint_coin(
+      Balance { coin: coin2, amount: Amount(100_000000000000) },
+      NetworkId::Ethereum,
+      0,
+      pair.clone().public().into()
+    ).await;
+
+    // add liquidity to pools
+    common_add_liquidity(coin1, Amount(50_000000000000), Amount(50_000000000000), 2, pair.clone()).await;
+    common_add_liquidity(coin2, Amount(50_000000000000), Amount(50_000000000000), 3, pair.clone()).await;
+
+    // make an address to send the eth to
+    let mut rand_bytes = vec![0; 32];
+    OsRng.fill_bytes(&mut rand_bytes);
+    let external_address = ExternalAddress::new(rand_bytes).unwrap();
+
+    // now that we have our pools, we can try to swap
+    let mut block_hash = BlockHash([0; 32]);
+    OsRng.fill_bytes(&mut block_hash.0);
+    let batch = Batch {
+      network: NetworkId::Monero,
+      id: batch_id,
+      block: block_hash,
+      instructions: vec![InInstructionWithBalance {
+        instruction: InInstruction::Dex(DexCall::Swap(coin2, external_address, Amount(1))),
+        balance: Balance { coin: coin1, amount: Amount(20_000000000000) },
+      }],
+    };
+
+    let block = provide_batch(batch).await;
+    let mut events = serai.dex_events(block).await.unwrap();
+    events.retain(|e|  matches!(e, DexEvent::SwapExecuted { .. }));
+
+    // we should have only 1 swap event.
+    assert_eq!(events.len(), 1);
+
+    let path = BoundedVec::truncate_from(vec![coin1, Coin::Serai, coin2]);
+    assert_eq!(events, vec![DexEvent::SwapExecuted {
+      who: IN_INSTRUCTION_EXECUTOR.into(),
+      send_to:  IN_INSTRUCTION_EXECUTOR.into(),
+      path,
+      amount_in: 20_000000000000,
+      amount_out: 11066655622377
+    }]);
+
+    // TODO: check balances?
   }
 
   async fn create_pool() {

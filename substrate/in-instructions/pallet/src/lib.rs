@@ -36,9 +36,10 @@ pub mod pallet {
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
 
-  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance};
+  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance, PublicKey};
 
   use pallet_asset_conversion::{Config as DexConfig, Pallet as Dex};
+  use pallet_balances::{Config as BalancesConfig, Pallet as BalancesPallet};
 
   use super::*;
 
@@ -48,6 +49,7 @@ pub mod pallet {
     + ValidatorSetsConfig
     + TokensConfig
     + DexConfig<MultiAssetId = Coin, AssetBalance = SubstrateAmount>
+    + BalancesConfig<Balance = SubstrateAmount>
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -116,11 +118,12 @@ pub mod pallet {
                 half,
                 1, // minimum out, so that we accept whatever we get.
                 IN_INSTRUCTION_EXECUTOR.into(),
-                false, // keep_alive true or false?
+                false,
               )?;
 
               // get how much we got for our swap
-              let sri_amount = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
+              // TODO: Do we want to use the `usable_balance`?
+              let sri_amount = BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
 
               // add liquidity
               Dex::<T>::add_liquidity(
@@ -140,12 +143,14 @@ pub mod pallet {
               // another users call here(since we know how much to add liq by checking the balance on it).
               // Which then would make addling liq fail. So Let's send the leftovers back to user.
               let coin_balance = Tokens::<T>::balance(coin, IN_INSTRUCTION_EXECUTOR);
-              let sri_balance = Tokens::<T>::balance(Coin::Serai, IN_INSTRUCTION_EXECUTOR);
+              let sri_balance = BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
               if coin_balance != 0 {
                 Tokens::<T>::transfer(origin.clone().into(), coin, address, coin_balance)?;
               }
               if sri_balance != 0 {
-                Tokens::<T>::transfer(origin.into(), Coin::Serai, address, sri_balance)?;
+                // unwrap here. First, it doesn't panic, second we have no choice but to empty
+                // IIE account.
+                BalancesPallet::<T>::transfer_allow_death(origin.into(), address, sri_balance).unwrap();
               }
 
               // TODO: ideally we would get the coin and sri balances again and make sure they are 0.

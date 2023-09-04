@@ -31,6 +31,7 @@ in-instructions-primitives = { package = "serai-in-instructions-primitives", pat
 tokens-pallet = { package = "serai-tokens-pallet", path = "../../tokens/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 pallet-asset-conversion = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-balances = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
 std = [
@@ -48,6 +49,7 @@ std = [
   "in-instructions-primitives/std",
 
   "tokens-pallet/std",
-  "pallet-asset-conversion/std"
+  "pallet-asset-conversion/std",
+  "pallet-balances/std"
 ]
 default = ["std"]
