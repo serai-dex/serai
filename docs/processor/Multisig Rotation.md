@@ -25,9 +25,9 @@ The following timeline is established:
    multisig.
 
 4) At the end of six hours, the existing multisig rejects new external state.
-   Once all outputs it created to itself are spendable, which should have
-   occurred during the six hour period, they and the late received external
-   outputs are forwarded to the new multisig.
+   Once all outputs it created to itself are spendable, which should have, yet
+   won't necessarily have, occurred during the six hour period, they and the
+   late received external outputs are forwarded to the new multisig.
 
 5) The existing multisig publishes `Batch`s until its final transaction is
    included in a `Batch`. Then, it reports it has closed. No further actions by
