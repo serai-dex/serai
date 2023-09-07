@@ -176,7 +176,7 @@ impl LibP2p {
     // Uses noise for authentication, yamux for multiplexing
     // TODO: Do we want to add a custom authentication protocol to only accept connections from
     // fellow validators? Doing so would reduce the potential for spam
-    let transport = libp2p_tokio::Transport::new(Config::default())
+    let transport = libp2p_tokio::Transport::new(Config::default().nodelay(true))
       .upgrade(upgrade::Version::V1)
       .authenticate(noise::Config::new(&throwaway_key_pair).unwrap())
       .multiplex(yamux::Config::default())
