@@ -249,22 +249,18 @@ async fn handle_block<
     // Additionally, if the Serai connection also fails 1/100 times, this means a block with 1000
     // events will successfully be incrementally handled (though the Serai connection should be
     // stable)
+    let ValidatorSetsEvent::NewSet { set } = new_set else {
+      panic!("NewSet event wasn't NewSet: {new_set:?}");
+    };
+
+    if set.network == NetworkId::Serai {
+      continue;
+    }
+
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
-      if let ValidatorSetsEvent::NewSet { set } = new_set {
-        log::info!("found fresh new set event {:?}", new_set);
-        handle_new_set(
-          &mut db.0,
-          key,
-          create_new_tributary.clone(),
-          processors,
-          serai,
-          &block,
-          set,
-        )
+      log::info!("found fresh new set event {:?}", new_set);
+      handle_new_set(&mut db.0, key, create_new_tributary.clone(), processors, serai, &block, set)
         .await?;
-      } else {
-        panic!("NewSet event wasn't NewSet: {new_set:?}");
-      }
       let mut txn = db.0.txn();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();
