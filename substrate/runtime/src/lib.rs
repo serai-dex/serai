@@ -27,6 +27,8 @@ pub use pallet_session as session;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
 
+pub use staking_pallet as staking;
+
 pub use pallet_authority_discovery as authority_discovery;
 
 // Actually used by the runtime
@@ -176,6 +178,10 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, validator_sets::Call::set_keys { .. });
     }
 
+    if let RuntimeCall::Staking(call) = call {
+      return matches!(call, staking::Call::stake { .. } | staking::Call::unstake { .. });
+    }
+
     false
   }
 }
@@ -304,6 +310,10 @@ impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl staking::Config for Runtime {
+  type Currency = Balances;
+}
+
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
   fn convert(key: PublicKey) -> Option<PublicKey> {
@@ -392,6 +402,8 @@ construct_runtime!(
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,
+
+    Staking: staking,
 
     Session: session,
     Babe: babe,
