@@ -18,7 +18,7 @@ use bitcoin_serai::{
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
-    OutPoint, Transaction, Block, Network as BitcoinNetwork,
+    OutPoint, TxOut, Transaction, Block, Network as BitcoinNetwork,
   },
   wallet::{
     tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
@@ -34,7 +34,7 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Sequence, Script, Witness, TxIn, TxOut,
+  Sequence, Script, Witness, TxIn,
 };
 
 use serai_client::{
@@ -45,8 +45,8 @@ use serai_client::{
 use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality, EventualitiesTracker, PostFeeBranch, Network,
-    drop_branches, amortize_fee,
+    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
+    PostFeeBranch, Network, drop_branches, amortize_fee,
   },
   Plan,
 };
@@ -162,18 +162,34 @@ impl TransactionTrait<Bitcoin> for Transaction {
   }
 }
 
-impl Eventuality for OutPoint {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Eventuality {
+  // We need to bind to the plan. While we could bind to the plan ID via an OP_RETURN, plans will
+  // use distinct inputs and this is accordingly valid as a binding to a specific plan.
+  plan_binding_input: OutPoint,
+  outputs: Vec<TxOut>,
+}
+
+impl EventualityTrait for Eventuality {
   fn lookup(&self) -> Vec<u8> {
-    self.serialize()
+    let mut buf = Vec::with_capacity(32 + 4);
+    self.plan_binding_input.consensus_encode(&mut buf).unwrap();
+    buf
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    OutPoint::consensus_decode(reader)
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "couldn't decode outpoint as eventuality"))
+    let plan_binding_input = OutPoint::consensus_decode(reader).map_err(|_| {
+      io::Error::new(io::ErrorKind::Other, "couldn't decode outpoint in eventuality")
+    })?;
+    let outputs = Vec::<TxOut>::consensus_decode(reader).map_err(|_| {
+      io::Error::new(io::ErrorKind::Other, "couldn't decode outputs in eventuality")
+    })?;
+    Ok(Eventuality { plan_binding_input, outputs })
   }
   fn serialize(&self) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(36);
-    self.consensus_encode(&mut buf).unwrap();
+    let mut buf = Vec::with_capacity(32 + 4 + 4 + (self.outputs.len() * (8 + 32)));
+    self.plan_binding_input.consensus_encode(&mut buf).unwrap();
+    self.outputs.consensus_encode(&mut buf).unwrap();
     buf
   }
 }
@@ -290,10 +306,7 @@ impl Network for Bitcoin {
 
   type Output = Output;
   type SignableTransaction = SignableTransaction;
-  // Valid given an honest multisig, as assumed
-  // Only the multisig can spend this output and the multisig, if spending this output, will
-  // always create a specific plan
-  type Eventuality = OutPoint;
+  type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
 
   type Address = Address;
@@ -386,7 +399,7 @@ impl Network for Bitcoin {
 
   async fn get_eventuality_completions(
     &self,
-    eventualities: &mut EventualitiesTracker<OutPoint>,
+    eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Self::Block,
   ) -> HashMap<[u8; 32], [u8; 32]> {
     let mut res = HashMap::new();
@@ -395,14 +408,28 @@ impl Network for Bitcoin {
     }
 
     async fn check_block(
-      eventualities: &mut EventualitiesTracker<OutPoint>,
+      eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
       res: &mut HashMap<[u8; 32], [u8; 32]>,
     ) {
       for tx in &block.txdata[1 ..] {
         let input = &tx.input[0].previous_output;
-        if let Some((plan, eventuality)) = eventualities.map.remove(&input.serialize()) {
-          assert_eq!(input, &eventuality);
+        let mut lookup = Vec::with_capacity(4 + 32);
+        input.consensus_encode(&mut lookup).unwrap();
+        if let Some((plan, eventuality)) = eventualities.map.remove(&lookup) {
+          // Sanity, as this is guaranteed by how the lookup is performed
+          assert_eq!(input, &eventuality.plan_binding_input);
+          // If the multisig is honest, then the Eventuality's outputs should match the outputs of
+          // this transaction
+          // This panic is fine as this multisig being dishonest will require intervention on
+          // Substrate to trigger a slash, and then an update to the processor to handle the exact
+          // adjustments needed
+          // Panicking here is effectively triggering the halt we need to perform anyways
+          assert_eq!(
+            tx.output, eventuality.outputs,
+            "dishonest multisig spent input on distinct set of outputs"
+          );
+
           res.insert(plan, tx.id());
         }
       }
@@ -510,14 +537,15 @@ impl Network for Bitcoin {
 
     let branch_outputs = amortize_fee(&mut plan, tx_fee);
 
+    let signable = signable(&plan, Some(tx_fee)).unwrap();
+
+    let plan_binding_input = *plan.inputs[0].output.outpoint();
+    let outputs = signable.outputs().to_vec();
+
     Ok((
       Some((
-        SignableTransaction {
-          keys,
-          transcript: plan.transcript(),
-          actual: signable(&plan, Some(tx_fee)).unwrap(),
-        },
-        *plan.inputs[0].output.outpoint(),
+        SignableTransaction { keys, transcript: plan.transcript(), actual: signable },
+        Eventuality { plan_binding_input, outputs },
       )),
       branch_outputs,
     ))
@@ -551,8 +579,9 @@ impl Network for Bitcoin {
     self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
   }
 
-  fn confirm_completion(&self, eventuality: &OutPoint, tx: &Transaction) -> bool {
-    eventuality == &tx.input[0].previous_output
+  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Transaction) -> bool {
+    (eventuality.plan_binding_input == tx.input[0].previous_output) &&
+      (eventuality.outputs == tx.output)
   }
 
   #[cfg(test)]

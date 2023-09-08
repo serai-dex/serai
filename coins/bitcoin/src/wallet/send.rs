@@ -232,6 +232,11 @@ impl SignableTransaction {
     })
   }
 
+  /// Returns the outputs this transaction will create.
+  pub fn outputs(&self) -> &[TxOut] {
+    &self.tx.output
+  }
+
   /// Create a multisig machine for this transaction.
   ///
   /// Returns None if the wrong keys are used.
