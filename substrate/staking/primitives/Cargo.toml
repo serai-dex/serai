@@ -1,0 +1,19 @@
+[package]
+name = "serai-staking-primitives"
+version = "0.1.0"
+description = "Staking primitives for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/staking/pallet"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+[features]
+std = []
+default = ["std"]

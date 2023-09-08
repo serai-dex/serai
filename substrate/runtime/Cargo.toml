@@ -55,6 +55,8 @@ pallet-session = { git = "https://github.com/serai-dex/substrate", default-featu
 pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+staking-pallet = { package = "serai-staking-pallet", path = "../staking/pallet", default-features = false }
+
 pallet-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -106,6 +108,8 @@ std = [
   "pallet-session/std",
   "pallet-babe/std",
   "pallet-grandpa/std",
+
+  "staking-pallet/std",
 
   "pallet-authority-discovery/std",
 
