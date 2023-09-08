@@ -163,7 +163,6 @@ pub async fn test_signer<N: Network>(network: N) {
   for (i, keys) in keys.drain() {
     let (signable, eventuality) = network
       .prepare_send(
-        keys.clone(),
         sync_block,
         Plan {
           key,

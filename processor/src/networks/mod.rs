@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{fmt::Debug, time::Duration};
 use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
@@ -11,6 +11,10 @@ use frost::{
 };
 
 use serai_client::primitives::{NetworkId, Balance};
+
+use log::error;
+
+use tokio::time::sleep;
 
 #[cfg(feature = "bitcoin")]
 pub mod bitcoin;
@@ -347,11 +351,11 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   ) -> HashMap<[u8; 32], <Self::Transaction as Transaction<Self>>::Id>;
 
   /// Prepare a SignableTransaction for a transaction.
+  ///
   /// Returns None for the transaction if the SignableTransaction was dropped due to lack of value.
   #[rustfmt::skip]
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Self::Curve>,
     block_number: usize,
     plan: Plan<Self>,
     fee: Self::Fee,
@@ -363,6 +367,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError>;
 
@@ -395,4 +400,36 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address) -> Self::Block;
+}
+
+// TODO: Move into above trait
+pub async fn get_latest_block_number<N: Network>(network: &N) -> usize {
+  loop {
+    match network.get_latest_block_number().await {
+      Ok(number) => {
+        return number;
+      }
+      Err(e) => {
+        error!(
+          "couldn't get the latest block number in main's error-free get_block. {} {}",
+          "this should only happen if the node is offline. error: ", e
+        );
+        sleep(Duration::from_secs(10)).await;
+      }
+    }
+  }
+}
+
+pub async fn get_block<N: Network>(network: &N, block_number: usize) -> N::Block {
+  loop {
+    match network.get_block(block_number).await {
+      Ok(block) => {
+        return block;
+      }
+      Err(e) => {
+        error!("couldn't get block {block_number} in main's error-free get_block. error: {}", e);
+        sleep(Duration::from_secs(10)).await;
+      }
+    }
+  }
 }

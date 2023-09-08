@@ -139,10 +139,6 @@ impl<N: Network, D: Db> Signer<N, D> {
     }
   }
 
-  pub fn keys(&self) -> ThresholdKeys<N::Curve> {
-    self.keys.clone()
-  }
-
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
@@ -316,7 +312,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     SignerDb::<N, D>::attempt(txn, &id);
 
     // Attempt to create the TX
-    let machine = match self.network.attempt_send(tx).await {
+    let machine = match self.network.attempt_send(self.keys.clone(), tx).await {
       Err(e) => {
         error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
         return;

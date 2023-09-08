@@ -130,7 +130,6 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
   actual: MSignableTransaction,
 }
@@ -373,7 +372,6 @@ impl Network for Monero {
 
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Ed25519>,
     block_number: usize,
     mut plan: Plan<Self>,
     fee: Fee,
@@ -509,7 +507,6 @@ impl Network for Monero {
     let branch_outputs = amortize_fee(&mut plan, tx_fee);
 
     let signable = SignableTransaction {
-      keys,
       transcript,
       actual: match signable(plan, Some(tx_fee))? {
         Some(signable) => signable,
@@ -522,9 +519,10 @@ impl Network for Monero {
 
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    match transaction.actual.clone().multisig(transaction.keys.clone(), transaction.transcript) {
+    match transaction.actual.clone().multisig(keys, transaction.transcript) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }

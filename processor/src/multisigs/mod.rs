@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use core::time::Duration;
+use std::collections::{VecDeque, HashMap};
 
-use frost::curve::Ciphersuite;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use scale::{Encode, Decode};
 use messages::SubstrateContext;
@@ -13,7 +14,9 @@ use serai_client::{
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
 };
 
-use log::error;
+use log::{info, error};
+
+use tokio::time::sleep;
 
 // TODO: Remove this export
 pub mod scanner;
@@ -24,9 +27,41 @@ mod scheduler;
 pub use scheduler::Scheduler;
 
 use crate::{
-  Db, Payment, Plan,
-  networks::{OutputType, Output, Transaction, Block, Network},
+  Db, MainDb, Payment, PostFeeBranch, Plan,
+  networks::{OutputType, Output, Transaction, Block, Network, get_block},
+  Signer,
 };
+
+// TODO: Remove this pub
+pub async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
+  // TODO2: Use an fee representative of several blocks
+  get_block(network, block_number).await.median_fee()
+}
+
+// TODO: Remove this pub
+pub async fn prepare_send<N: Network>(
+  network: &N,
+  block_number: usize,
+  fee: N::Fee,
+  plan: Plan<N>,
+) -> (Option<(N::SignableTransaction, N::Eventuality)>, Vec<PostFeeBranch>) {
+  loop {
+    match network.prepare_send(block_number, plan.clone(), fee).await {
+      Ok(prepared) => {
+        return prepared;
+      }
+      Err(e) => {
+        error!("couldn't prepare a send for plan {}: {e}", hex::encode(plan.id()));
+        // The processor is either trying to create an invalid TX (fatal) or the node went
+        // offline
+        // The former requires a patch, the latter is a connection issue
+        // If the latter, this is an appropriate sleep. If the former, we should panic, yet
+        // this won't flood the console ad infinitum
+        sleep(Duration::from_secs(60)).await;
+      }
+    }
+  }
+}
 
 pub struct MultisigViewer<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
@@ -85,6 +120,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     self.new = viewer;
   }
 
+  /// Handle a SubstrateBlock event, building the relevant Plans.
   pub async fn substrate_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
@@ -130,6 +166,59 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     });
 
     plans
+  }
+
+  pub async fn sign_plans(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    network: &N,
+    context: SubstrateContext,
+    signers: &mut HashMap<Vec<u8>, Signer<N, D>>,
+    plans: Vec<Plan<N>>,
+  ) {
+    let mut plans = VecDeque::from(plans);
+
+    let mut block_hash = <N::Block as Block<N>>::Id::default();
+    block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
+    // block_number call is safe since it access a piece of static data
+    let block_number = self
+      .scanner
+      .block_number(&block_hash)
+      .await
+      .expect("told to sign_plans on a context we're not synced to");
+
+    let fee = get_fee(network, block_number).await;
+
+    while let Some(plan) = plans.pop_front() {
+      let id = plan.id();
+      info!("preparing plan {}: {:?}", hex::encode(id), plan);
+
+      let key = plan.key.to_bytes();
+      MainDb::<N, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
+      let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
+
+      for branch in branches {
+        // TODO: Properly select existing/new multisig
+        self.existing.as_mut().unwrap().scheduler.created_output::<D>(
+          txn,
+          branch.expected,
+          branch.actual,
+        );
+      }
+
+      if let Some((tx, eventuality)) = tx {
+        self
+          .scanner
+          .register_eventuality(key.as_ref(), block_number, id, eventuality.clone())
+          .await;
+
+        if let Some(signer) = signers.get_mut(key.as_ref()) {
+          signer.sign_transaction(txn, id, tx, eventuality).await;
+        }
+      }
+
+      // TODO: If the TX is None, should we restore its inputs to the scheduler?
+    }
   }
 
   // TODO: Embed this into MultisigManager

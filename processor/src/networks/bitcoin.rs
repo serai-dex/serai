@@ -196,7 +196,6 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
   actual: BSignableTransaction,
 }
@@ -476,7 +475,6 @@ impl Network for Bitcoin {
 
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Secp256k1>,
     _: usize,
     mut plan: Plan<Self>,
     fee: Fee,
@@ -544,7 +542,7 @@ impl Network for Bitcoin {
 
     Ok((
       Some((
-        SignableTransaction { keys, transcript: plan.transcript(), actual: signable },
+        SignableTransaction { transcript: plan.transcript(), actual: signable },
         Eventuality { plan_binding_input, outputs },
       )),
       branch_outputs,
@@ -553,13 +551,14 @@ impl Network for Bitcoin {
 
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
     Ok(
       transaction
         .actual
         .clone()
-        .multisig(transaction.keys.clone(), transaction.transcript)
+        .multisig(keys.clone(), transaction.transcript)
         .expect("used the wrong keys"),
     )
   }

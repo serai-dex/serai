@@ -1,20 +1,16 @@
-use std::{
-  time::Duration,
-  collections::{VecDeque, HashMap},
-};
+use std::{time::Duration, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
-use frost::ThresholdKeys;
 
-use log::{info, warn, error};
+use log::{info, warn};
 use tokio::time::sleep;
 
 use serai_client::primitives::{BlockHash, NetworkId};
 
-use messages::{SubstrateContext, CoordinatorMessage, ProcessorMessage};
+use messages::{CoordinatorMessage, ProcessorMessage};
 
 use serai_env as env;
 
@@ -24,7 +20,7 @@ mod plan;
 pub use plan::*;
 
 mod networks;
-use networks::{PostFeeBranch, Block, Network};
+use networks::{PostFeeBranch, Block, Network, get_latest_block_number, get_block};
 #[cfg(feature = "bitcoin")]
 use networks::Bitcoin;
 #[cfg(feature = "monero")]
@@ -53,72 +49,11 @@ use multisigs::{MultisigEvent, MultisigManager};
 // TODO: Get rid of these
 use multisigs::{
   scanner::{Scanner, ScannerHandle},
-  Scheduler,
+  Scheduler, get_fee, prepare_send,
 };
 
 #[cfg(test)]
 mod tests;
-
-async fn get_latest_block_number<N: Network>(network: &N) -> usize {
-  loop {
-    match network.get_latest_block_number().await {
-      Ok(number) => {
-        return number;
-      }
-      Err(e) => {
-        error!(
-          "couldn't get the latest block number in main's error-free get_block. {} {}",
-          "this should only happen if the node is offline. error: ", e
-        );
-        sleep(Duration::from_secs(10)).await;
-      }
-    }
-  }
-}
-
-async fn get_block<N: Network>(network: &N, block_number: usize) -> N::Block {
-  loop {
-    match network.get_block(block_number).await {
-      Ok(block) => {
-        return block;
-      }
-      Err(e) => {
-        error!("couldn't get block {block_number} in main's error-free get_block. error: {}", e);
-        sleep(Duration::from_secs(10)).await;
-      }
-    }
-  }
-}
-
-async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
-  // TODO2: Use an fee representative of several blocks
-  get_block(network, block_number).await.median_fee()
-}
-
-async fn prepare_send<N: Network>(
-  network: &N,
-  keys: ThresholdKeys<N::Curve>,
-  block_number: usize,
-  fee: N::Fee,
-  plan: Plan<N>,
-) -> (Option<(N::SignableTransaction, N::Eventuality)>, Vec<PostFeeBranch>) {
-  loop {
-    match network.prepare_send(keys.clone(), block_number, plan.clone(), fee).await {
-      Ok(prepared) => {
-        return prepared;
-      }
-      Err(e) => {
-        error!("couldn't prepare a send for plan {}: {e}", hex::encode(plan.id()));
-        // The processor is either trying to create an invalid TX (fatal) or the node went
-        // offline
-        // The former requires a patch, the latter is a connection issue
-        // If the latter, this is an appropriate sleep. If the former, we should panic, yet
-        // this won't flood the console ad infinitum
-        sleep(Duration::from_secs(60)).await;
-      }
-    }
-  }
-}
 
 // Items which are mutably borrowed by Tributary.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
@@ -178,59 +113,6 @@ struct SubstrateMutable<N: Network, D: Db> {
     Substate-mutable.
   */
   multisigs: MultisigManager<D, N>,
-}
-
-async fn sign_plans<N: Network, D: Db>(
-  txn: &mut D::Transaction<'_>,
-  network: &N,
-  substrate_mutable: &mut SubstrateMutable<N, D>,
-  signers: &mut HashMap<Vec<u8>, Signer<N, D>>,
-  context: SubstrateContext,
-  plans: Vec<Plan<N>>,
-) {
-  let mut plans = VecDeque::from(plans);
-
-  let mut block_hash = <N::Block as Block<N>>::Id::default();
-  block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-  // block_number call is safe since it access a piece of static data
-  let block_number = substrate_mutable
-    .multisigs
-    .block_number(&block_hash)
-    .await
-    .expect("told to sign_plans on a context we're not synced to");
-
-  let fee = get_fee(network, block_number).await;
-
-  while let Some(plan) = plans.pop_front() {
-    let id = plan.id();
-    info!("preparing plan {}: {:?}", hex::encode(id), plan);
-
-    let key = plan.key.to_bytes();
-    MainDb::<N, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
-    let (tx, branches) =
-      prepare_send(network, signers.get_mut(key.as_ref()).unwrap().keys(), block_number, fee, plan)
-        .await;
-
-    for branch in branches {
-      // TODO: Properly select existing/new multisig
-      substrate_mutable.multisigs.existing.as_mut().unwrap().scheduler.created_output::<D>(
-        txn,
-        branch.expected,
-        branch.actual,
-      );
-    }
-
-    if let Some((tx, eventuality)) = tx {
-      substrate_mutable
-        .multisigs
-        .scanner
-        .register_eventuality(key.as_ref(), block_number, id, eventuality.clone())
-        .await;
-      signers.get_mut(key.as_ref()).unwrap().sign_transaction(txn, id, tx, eventuality).await;
-    }
-
-    // TODO: If the TX is None, should we restore its inputs to the scheduler?
-  }
 }
 
 async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
@@ -419,16 +301,17 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             ))
             .await;
 
-          sign_plans(
-            txn,
-            network,
-            substrate_mutable,
-            // See commentary in TributaryMutable for why this is safe
-            &mut tributary_mutable.signers,
-            context,
-            plans,
-          )
-          .await;
+          substrate_mutable
+            .multisigs
+            .sign_plans(
+              txn,
+              network,
+              context,
+              // See commentary in TributaryMutable for why this is safe
+              &mut tributary_mutable.signers,
+              plans,
+            )
+            .await;
         }
       }
     }
@@ -495,6 +378,7 @@ async fn boot<N: Network, D: Db>(
     let mut signer = Signer::new(network.clone(), network_keys);
 
     // Load any TXs being actively signed
+    // TODO: Move this into MultisigManager?
     let key = key.to_bytes();
     for (block_number, plan) in main_db.signing(key.as_ref()) {
       let block_number = block_number.try_into().unwrap();
@@ -506,8 +390,7 @@ async fn boot<N: Network, D: Db>(
 
       let key_bytes = plan.key.to_bytes();
 
-      let (Some((tx, eventuality)), _) =
-        prepare_send(network, signer.keys(), block_number, fee, plan).await
+      let (Some((tx, eventuality)), _) = prepare_send(network, block_number, fee, plan).await
       else {
         panic!("previously created transaction is no longer being created")
       };
