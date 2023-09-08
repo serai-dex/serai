@@ -61,6 +61,11 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
   }
 
+  // TODO: On boot, build an index of all standing blocks -> block number
+  pub async fn block_number(&self, hash: &<N::Block as Block<N>>::Id) -> Option<usize> {
+    self.scanner.block_number(hash).await
+  }
+
   pub async fn add_key(
     &mut self,
     txn: &mut D::Transaction<'_>,

@@ -195,7 +195,6 @@ async fn sign_plans<N: Network, D: Db>(
   // block_number call is safe since it access a piece of static data
   let block_number = substrate_mutable
     .multisigs
-    .scanner
     .block_number(&block_hash)
     .await
     .expect("told to sign_plans on a context we're not synced to");
@@ -369,7 +368,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // This block_number call is safe since it unwraps
             substrate_mutable
               .multisigs
-              .scanner
               .block_number(&activation_block)
               .await
               .expect("KeyConfirmed from context we haven't synced")
