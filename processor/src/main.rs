@@ -93,27 +93,29 @@ struct TributaryMutable<N: Network, D: Db> {
 // Items which are mutably borrowed by Substrate.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
-struct SubstrateMutable<N: Network, D: Db> {
-  /*
-    This contains the Scanner and Schedulers.
 
-    The scanner is expected to autonomously operate, scanning blocks as they appear. When a block
-    is sufficiently confirmed, the scanner causes the Substrate signer to sign a batch. It itself
-    only mutates its list of finalized blocks, to protect against re-orgs, and its in-memory state
-    though.
+/*
+  The MultisigManager contains the Scanner and Schedulers.
 
-    Disk mutations to the scan-state only happens once the relevant `Batch` is included on
-    Substrate. It can't be mutated as soon as the `Batch` is signed as we need to know the order of
-    `Batch`s relevant to `Burn`s.
+  The scanner is expected to autonomously operate, scanning blocks as they appear. When a block is
+  sufficiently confirmed, the scanner causes the Substrate signer to sign a batch. It itself only
+  mutates its list of finalized blocks, to protect against re-orgs, and its in-memory state though.
 
-    Schedulers take in new outputs, confirmed in `Batch`s, and outbound payments, triggered by
-    `Burn`s.
+  Disk mutations to the scan-state only happens once the relevant `Batch` is included on Substrate.
+  It can't be mutated as soon as the `Batch` is signed as we need to know the order of `Batch`s
+  relevant to `Burn`s.
 
-    Substrate also decides when to move to a new multisig, hence why this entire object is
-    Substate-mutable.
-  */
-  multisigs: MultisigManager<D, N>,
-}
+  Schedulers take in new outputs, confirmed in `Batch`s, and outbound payments, triggered by
+  `Burn`s.
+
+  Substrate also decides when to move to a new multisig, hence why this entire object is
+  Substate-mutable.
+
+  Since MultisigManager should always be verifiable, and the Tributary is temporal, MultisigManager
+  being entirely SubstrateMutable shows proper data pipe-lining.
+*/
+
+type SubstrateMutable<N, D> = MultisigManager<D, N>;
 
 async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   txn: &mut D::Transaction<'_>,
@@ -174,7 +176,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   if let Some(required) = msg.msg.required_block() {
     // wait only reads from, it doesn't mutate, the scanner
-    wait(&substrate_mutable.multisigs.scanner, &required).await;
+    wait(&substrate_mutable.scanner, &required).await;
   }
 
   // TODO: Shouldn't we create a txn here and pass it around as needed?
@@ -205,7 +207,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
-            assert!(substrate_mutable.multisigs.existing.as_ref().is_none());
+            assert!(substrate_mutable.existing.as_ref().is_none());
 
             // Wait until a network's block's time exceeds Serai's time
             // TODO: This assumes the network has a monotonic clock for its blocks' times, which
@@ -249,7 +251,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
             // This block_number call is safe since it unwraps
             substrate_mutable
-              .multisigs
               .block_number(&activation_block)
               .await
               .expect("KeyConfirmed from context we haven't synced")
@@ -266,7 +267,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           let key = network_keys.group_key();
 
-          substrate_mutable.multisigs.add_key(txn, activation_number, key).await;
+          substrate_mutable.add_key(txn, activation_number, key).await;
 
           tributary_mutable
             .signers
@@ -289,7 +290,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             }
           }
 
-          let plans = substrate_mutable.multisigs.substrate_block(txn, context, burns).await;
+          let plans = substrate_mutable.substrate_block(txn, context, burns).await;
 
           coordinator
             .send(ProcessorMessage::Coordinator(
@@ -302,7 +303,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             .await;
 
           substrate_mutable
-            .multisigs
             .sign_plans(
               txn,
               network,
@@ -410,7 +410,7 @@ async fn boot<N: Network, D: Db>(
   (
     main_db,
     TributaryMutable { key_gen, substrate_signer, signers },
-    SubstrateMutable { multisigs: MultisigManager::new(scanner, schedulers) },
+    MultisigManager::new(scanner, schedulers),
   )
 }
 
@@ -513,10 +513,10 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       },
 
       // TODO: Replace this with proper channel management
-      msg = substrate_mutable.multisigs.scanner.events.recv() => {
+      msg = substrate_mutable.scanner.events.recv() => {
         let mut txn = raw_db.txn();
 
-        match substrate_mutable.multisigs.scanner_event(&mut txn, msg.unwrap()) {
+        match substrate_mutable.scanner_event(&mut txn, msg.unwrap()) {
           MultisigEvent::Batches(batches) => {
             // Start signing this batch
             for batch in batches {
