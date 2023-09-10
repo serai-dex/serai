@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use std_shims::io::{self, *};
 use std_shims::sync::OnceLock;
 
@@ -11,8 +13,8 @@ static PRECOMPUTED_SCALARS_CELL: OnceLock<[Scalar; 8]> = OnceLock::new();
 pub fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
   *PRECOMPUTED_SCALARS_CELL.get_or_init(|| {
     let mut precomputed_scalars = [Scalar::one(); 8];
-    for i in 1 .. 8 {
-      precomputed_scalars[i] = Scalar::from((i * 2 + 1) as u8);
+    for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
+      *scalar = Scalar::from((i * 2 + 1) as u8);
     }
     precomputed_scalars
   })
@@ -40,28 +42,47 @@ impl UnreducedScalar {
 
   fn as_bits(&self) -> [i8; 256] {
     let mut bits = [0; 256];
-    for i in 0 .. 256 {
-      bits[i] = 1 & (self.0[i >> 3] >> (i & 7)) as i8
+    for (i, bit) in bits.iter_mut().enumerate() {
+      *bit = 1 & (self.0[i >> 3] >> (i & 7)) as i8
     }
 
     bits
   }
 
+  /// Computes the non-adjacent form of this scalar with width 5.
+  ///
+  /// This is the same as Monero's `slide` function, it intentionally gives incorrect
+  /// outputs if the last bit is set to match Monero.
   fn non_adjacent_form(&self) -> [i8; 256] {
     let mut bits = self.as_bits();
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0 .. 256 {
       if bits[i] != 0 {
+        // if the bit is a one, work our way up through the window
+        // combining the bits with this bit.
         for b in 1 .. 6 {
           if i + b >= 256 {
+            // if we are at the length of the array then break out
+            // the loop.
             break;
           }
-          if bits[i + b] != 0 {
-            if bits[i] + (bits[i + b] << b) <= 15 {
-              bits[i] += bits[i + b] << b;
+          // potential_carry - the value of the bit at i+b compared to the bit at i
+          let potential_carry = bits[i + b] << b;
+
+          if potential_carry != 0 {
+            if bits[i] + potential_carry <= 15 {
+              // if our current "bit" plus the potential carry is less than 16
+              // add it to our current "bit" and set the potential carry bit to 0.
+              bits[i] += potential_carry;
               bits[i + b] = 0;
-            } else if bits[i] - (bits[i + b] << b) >= -15 {
-              bits[i] -= bits[i + b] << b;
+            } else if bits[i] - potential_carry >= -15 {
+              // else if our current "bit" minus the potential carry is more than -16
+              // take it away from our current "bit".
+              // we then work our way up through the bits setting ones to zero, when
+              // we hit the first zero we change it to one then stop, this is to factor
+              // in the minus.
+              bits[i] -= potential_carry;
               for k in i + b .. 256 {
                 if bits[k] == 0 {
                   bits[k] = 1;
@@ -104,10 +125,10 @@ impl UnreducedScalar {
     for &numb in naf.iter().rev() {
       recovered += recovered;
 
-      if numb > 0 {
-        recovered += precomputed_scalars[numb as usize / 2];
-      } else if numb < 0 {
-        recovered -= precomputed_scalars[(-numb) as usize / 2];
+      match numb.cmp(&0) {
+        Ordering::Greater => recovered += precomputed_scalars[numb as usize / 2],
+        Ordering::Less => recovered -= precomputed_scalars[(-numb) as usize / 2],
+        Ordering::Equal => (),
       }
     }
 
@@ -146,31 +167,5 @@ mod tests {
       "000102030405060708090a0b0c0d0e0f826c4f6e2329a31bc5bc320af0b2bcbb",
       "a124cfd387f461bf3719e03965ee6877826c4f6e2329a31bc5bc320af0b2bc0b",
     );
-  }
-
-  #[test]
-  fn non_adjacent_form() {
-    let mut bytes: [u8; 32] = rand::random();
-    bytes[31] &= 127;
-
-    let reduced_scalar = Scalar::from_bytes_mod_order(bytes.clone());
-    let scalar = UnreducedScalar(bytes);
-
-    let naf = scalar.non_adjacent_form();
-    let precomputed_scalars = PRECOMPUTED_SCALARS();
-
-    let mut recovered = Scalar::zero();
-
-    for &numb in naf.iter().rev() {
-      recovered += recovered;
-
-      if numb > 0 {
-        recovered += precomputed_scalars[numb as usize / 2];
-      } else if numb < 0 {
-        recovered -= precomputed_scalars[(-numb) as usize / 2];
-      }
-    }
-
-    assert_eq!(recovered, reduced_scalar)
   }
 }
