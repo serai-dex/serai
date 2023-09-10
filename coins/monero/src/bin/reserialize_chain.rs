@@ -20,7 +20,66 @@ mod binaries {
     rpc::{RpcError, Rpc, HttpRpc},
   };
 
+  async fn get_outs(rpc: &Rpc<HttpRpc>, amount: u64, indexes: &[u64]) -> Vec<[EdwardsPoint; 2]> {
+    #[derive(Deserialize, Debug)]
+    struct Out {
+      key: String,
+      mask: String,
+    }
+
+    #[derive(Deserialize, Debug)]
+    struct Outs {
+      outs: Vec<Out>,
+    }
+
+    let outs: Outs = loop {
+      match rpc
+        .rpc_call(
+          "get_outs",
+          Some(json!({
+            "get_txid": true,
+            "outputs": indexes.iter().map(|o| json!({
+              "amount": amount,
+              "index": o
+            })).collect::<Vec<_>>()
+          })),
+        )
+        .await
+      {
+        Ok(outs) => break outs,
+        Err(RpcError::ConnectionError) => {
+          println!("get_outs ConnectionError");
+          continue;
+        }
+        Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
+      }
+    };
+
+    let rpc_point = |point: &str| {
+      CompressedEdwardsY(
+        hex::decode(point)
+          .expect("invalid hex for ring member")
+          .try_into()
+          .expect("invalid point len for ring member"),
+      )
+      .decompress()
+      .expect("invalid point for ring member")
+    };
+
+    outs
+      .outs
+      .iter()
+      .map(|out| {
+        let mask = rpc_point(&out.mask);
+        if amount != 0 {
+          assert_eq!(mask, Commitment::new(Scalar::from(1u8), amount).calculate());
+        }
+        [rpc_point(&out.key), mask]
+      })
+      .collect()
+  }
   pub(crate) use tokio::task::JoinHandle;
+  use monero_serai::ringct::mlsag::RingMatrix;
 
   pub(crate) async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
     let hash = loop {
@@ -129,7 +188,68 @@ mod binaries {
         // Accordingly, making sure our signature_hash algorithm is correct is great, and further
         // making sure the verification functions are valid is appreciated
         match tx.rct_signatures.prunable {
-          RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
+          RctPrunable::Null => {}
+          RctPrunable::AggregateMlsagBorromean { borromean, mlsag } => {
+            borromean
+              .iter()
+              .zip(&tx.rct_signatures.base.commitments)
+              .for_each(|(borro, commitment)| assert!(borro.verify(commitment)));
+
+            let mut ring = RingMatrix::aggregate_builder(
+              &tx.rct_signatures.base.commitments,
+              tx.rct_signatures.base.fee,
+            );
+            let mut key_images = Vec::new();
+
+            for input in &tx.prefix.inputs {
+              let (amount, key_offsets, image) = match input {
+                Input::Gen(_) => panic!("Input::Gen"),
+                Input::ToKey { amount, key_offsets, key_image } => (amount, key_offsets, key_image),
+              };
+
+              let mut running_sum = 0;
+              let mut actual_indexes = vec![];
+              for offset in key_offsets {
+                running_sum += offset;
+                actual_indexes.push(running_sum);
+              }
+
+              ring.push_ring(&get_outs(&rpc, amount.unwrap_or(0), &actual_indexes).await).unwrap();
+              key_images.push(image);
+            }
+
+            mlsag.verify(&sig_hash, &ring.finish(), &key_images).unwrap();
+          }
+          RctPrunable::MlsagBorromean { borromean, mlsags } => {
+            borromean
+              .iter()
+              .zip(tx.rct_signatures.base.commitments)
+              .for_each(|(borro, commitment)| assert!(borro.verify(&commitment)));
+
+            for ((i, mlsag), pseudo_out) in
+              mlsags.into_iter().enumerate().zip(tx.rct_signatures.base.pseudo_outs)
+            {
+              let (amount, key_offsets, image) = match &tx.prefix.inputs[i] {
+                Input::Gen(_) => panic!("Input::Gen"),
+                Input::ToKey { amount, key_offsets, key_image } => (amount, key_offsets, key_image),
+              };
+
+              let mut running_sum = 0;
+              let mut actual_indexes = vec![];
+              for offset in key_offsets {
+                running_sum += offset;
+                actual_indexes.push(running_sum);
+              }
+
+              let ring = RingMatrix::simple(
+                &get_outs(&rpc, amount.unwrap_or(0), &actual_indexes).await,
+                pseudo_out,
+              )
+              .unwrap();
+
+              mlsag.verify(&sig_hash, &ring, &[image]).unwrap();
+            }
+          }
           RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
