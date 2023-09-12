@@ -22,7 +22,7 @@ use subtle::{Choice, CtOption};
 pub use curve25519_dalek as dalek;
 
 use dalek::{
-  constants,
+  constants::{self, BASEPOINT_ORDER},
   scalar::Scalar as DScalar,
   edwards::{EdwardsPoint as DEdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
   ristretto::{RistrettoPoint as DRistrettoPoint, RistrettoBasepointTable, CompressedRistretto},
@@ -300,10 +300,7 @@ impl PrimeFieldBits for Scalar {
   }
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
-    let mut bytes = (Scalar::ZERO - Scalar::ONE).to_repr();
-    bytes[0] += 1;
-    debug_assert_eq!(DScalar::from_bytes_mod_order(bytes), DScalar::ZERO);
-    bytes.into()
+    BASEPOINT_ORDER.to_bytes().into()
   }
 }
 
