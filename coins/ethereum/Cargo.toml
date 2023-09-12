@@ -31,7 +31,7 @@ eyre = "0.6"
 ethers = { version = "2", default-features = false, features = ["abigen", "ethers-solc"] }
 
 [build-dependencies]
-ethers-solc = "2"
+ethers-solc = { version = "2", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
