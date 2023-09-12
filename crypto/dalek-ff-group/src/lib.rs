@@ -19,12 +19,10 @@ use digest::{consts::U64, Digest, HashMarker};
 
 use subtle::{Choice, CtOption};
 
-use crypto_bigint::{Encoding, U256};
 pub use curve25519_dalek as dalek;
 
 use dalek::{
   constants,
-  traits::Identity,
   scalar::Scalar as DScalar,
   edwards::{EdwardsPoint as DEdwardsPoint, EdwardsBasepointTable, CompressedEdwardsY},
   ristretto::{RistrettoPoint as DRistrettoPoint, RistrettoBasepointTable, CompressedRistretto},
@@ -32,7 +30,7 @@ use dalek::{
 pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
 use group::{
-  ff::{Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic},
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
@@ -187,10 +185,6 @@ from_wrapper!(u32);
 from_wrapper!(u64);
 from_wrapper!(u128);
 
-// Ed25519 order/scalar modulus
-const MODULUS: U256 =
-  U256::from_be_hex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed");
-
 impl Scalar {
   pub fn pow(&self, other: Scalar) -> Scalar {
     let mut table = [Scalar::ONE; 16];
@@ -239,109 +233,62 @@ impl Field for Scalar {
   const ZERO: Scalar = Scalar(DScalar::ZERO);
   const ONE: Scalar = Scalar(DScalar::ONE);
 
-  fn random(mut rng: impl RngCore) -> Self {
-    let mut r = [0; 64];
-    rng.fill_bytes(&mut r);
-    Self(DScalar::from_bytes_mod_order_wide(&r))
+  fn random(rng: impl RngCore) -> Self {
+    Self(<DScalar as Field>::random(rng))
   }
 
   fn square(&self) -> Self {
-    *self * self
+    Self(self.0.square())
   }
   fn double(&self) -> Self {
-    *self + self
+    Self(self.0.double())
   }
   fn invert(&self) -> CtOption<Self> {
-    CtOption::new(Self(self.0.invert()), !self.is_zero())
+    <DScalar as Field>::invert(&self.0).map(Self)
   }
 
   fn sqrt(&self) -> CtOption<Self> {
-    let mod_3_8 = MODULUS.saturating_add(&U256::from_u8(3)).wrapping_div(&U256::from_u8(8));
-    let mod_3_8 = Scalar::from_repr(mod_3_8.to_le_bytes()).unwrap();
-
-    let sqrt_m1 = MODULUS.saturating_sub(&U256::from_u8(1)).wrapping_div(&U256::from_u8(4));
-    let sqrt_m1 = Scalar::from(2u8).pow(Scalar::from_repr(sqrt_m1.to_le_bytes()).unwrap());
-
-    let tv1 = self.pow(mod_3_8);
-    let tv2 = tv1 * sqrt_m1;
-    let candidate = Self::conditional_select(&tv2, &tv1, tv1.square().ct_eq(self));
-    CtOption::new(candidate, candidate.square().ct_eq(self))
+    self.0.sqrt().map(Self)
   }
 
   fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
-    sqrt_ratio_generic(num, div)
+    let (choice, res) = DScalar::sqrt_ratio(num, div);
+    (choice, Self(res))
   }
 }
 
 impl PrimeField for Scalar {
   type Repr = [u8; 32];
 
-  const MODULUS: &'static str = "1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed";
+  const MODULUS: &'static str = <DScalar as PrimeField>::MODULUS;
 
-  const NUM_BITS: u32 = 253;
-  const CAPACITY: u32 = 252;
+  const NUM_BITS: u32 = <DScalar as PrimeField>::NUM_BITS;
+  const CAPACITY: u32 = <DScalar as PrimeField>::CAPACITY;
 
-  // 2.invert()
-  const TWO_INV: Scalar = Scalar(DScalar::from_bits([
-    247, 233, 122, 46, 141, 49, 9, 44, 107, 206, 123, 81, 239, 124, 111, 10, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 8,
-  ]));
+  const TWO_INV: Scalar = Scalar(<DScalar as PrimeField>::TWO_INV);
 
-  // This was calculated with the method from the ff crate docs
-  // SageMath GF(modulus).primitive_element()
-  const MULTIPLICATIVE_GENERATOR: Scalar = Scalar(DScalar::from_bits({
-    let mut bytes = [0; 32];
-    bytes[0] = 2;
-    bytes
-  }));
-  // This was set per the specification in the ff crate docs
-  // The number of leading zero bits in the little-endian bit representation of (modulus - 1)
-  const S: u32 = 2;
+  const MULTIPLICATIVE_GENERATOR: Scalar =
+    Scalar(<DScalar as PrimeField>::MULTIPLICATIVE_GENERATOR);
+  const S: u32 = <DScalar as PrimeField>::S;
 
-  // This was calculated via the formula from the ff crate docs
-  // Self::MULTIPLICATIVE_GENERATOR ** ((modulus - 1) >> Self::S)
-  const ROOT_OF_UNITY: Scalar = Scalar(DScalar::from_bits([
-    212, 7, 190, 235, 223, 117, 135, 190, 254, 131, 206, 66, 83, 86, 240, 14, 122, 194, 193, 171,
-    96, 109, 61, 125, 231, 129, 121, 224, 16, 115, 74, 9,
-  ]));
-  // Self::ROOT_OF_UNITY.invert()
-  const ROOT_OF_UNITY_INV: Scalar = Scalar(DScalar::from_bits([
-    25, 204, 55, 113, 58, 237, 138, 153, 215, 24, 41, 96, 139, 163, 238, 5, 134, 61, 62, 84, 159,
-    146, 194, 130, 24, 126, 134, 31, 239, 140, 181, 6,
-  ]));
+  const ROOT_OF_UNITY: Scalar = Scalar(<DScalar as PrimeField>::ROOT_OF_UNITY);
+  const ROOT_OF_UNITY_INV: Scalar = Scalar(<DScalar as PrimeField>::ROOT_OF_UNITY_INV);
 
-  // This was calculated via the formula from the ff crate docs
-  // Self::MULTIPLICATIVE_GENERATOR ** (2 ** Self::S)
-  const DELTA: Scalar = Scalar(DScalar::from_bits([
-    16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  ]));
+  const DELTA: Scalar = Scalar(<DScalar as PrimeField>::DELTA);
 
   fn from_repr(bytes: [u8; 32]) -> CtOption<Self> {
-    let scalar = DScalar::from_canonical_bytes(bytes);
-    // TODO: This unwrap_or_else isn't constant time, yet we don't exactly have an alternative...
-    CtOption::new(Scalar(scalar.unwrap_or(DScalar::ZERO)), black_box(scalar).is_some())
+    <DScalar as PrimeField>::from_repr(bytes).map(Scalar)
   }
   fn to_repr(&self) -> [u8; 32] {
-    self.0.to_bytes()
+    self.0.to_repr()
   }
 
   fn is_odd(&self) -> Choice {
-    // This is probably overkill? Yet it's better safe than sorry since this is a complete
-    // decomposition of the scalar
-    let mut bits = self.to_le_bits();
-    let res = choice(bits[0]);
-    // This shouldn't need mut since it should be a mutable reference
-    // Per the bitvec docs, writing through a derefence requires mut, writing through one of its
-    // methods does not
-    // We do not use one of its methods to ensure we write via zeroize
-    for mut bit in bits.iter_mut() {
-      bit.zeroize();
-    }
-    res
+    self.0.is_odd()
   }
 
   fn from_u128(num: u128) -> Self {
-    Self::from(num)
+    Scalar(DScalar::from_u128(num))
   }
 }
 
@@ -424,10 +371,9 @@ macro_rules! dalek_group {
         loop {
           let mut bytes = [0; 32];
           rng.fill_bytes(&mut bytes);
-          let Some(point) = $DCompressed(bytes).decompress() else {
+          let Some(point) = Option::<$Point>::from($Point::from_bytes(&bytes)) else {
             continue;
           };
-          let point = $Point(point);
           // Ban identity, per the trait specification
           if !bool::from(point.is_identity()) {
             return point;
@@ -444,7 +390,7 @@ macro_rules! dalek_group {
         self.0.ct_eq(&$DPoint::identity())
       }
       fn double(&self) -> Self {
-        *self + self
+        Self(self.0.double())
       }
     }
 
@@ -466,7 +412,7 @@ macro_rules! dalek_group {
       }
 
       fn to_bytes(&self) -> Self::Repr {
-        self.0.compress().to_bytes()
+        self.0.to_bytes()
       }
     }
 
@@ -517,11 +463,6 @@ dalek_group!(
   RISTRETTO_BASEPOINT_POINT,
   RISTRETTO_BASEPOINT_TABLE
 );
-
-#[test]
-fn test_scalar_modulus() {
-  assert_eq!(MODULUS.to_le_bytes(), curve25519_dalek::constants::BASEPOINT_ORDER.to_bytes());
-}
 
 #[test]
 fn test_ed25519_group() {
