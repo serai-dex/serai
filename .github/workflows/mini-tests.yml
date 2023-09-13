@@ -1,15 +1,15 @@
-name: common/ Tests
+name: mini/ Tests
 
 on:
   push:
     branches:
       - develop
     paths:
-      - "common/**"
+      - "mini/**"
 
   pull_request:
     paths:
-      - "common/**"
+      - "mini/**"
 
   workflow_dispatch:
 
@@ -25,9 +25,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
-        run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
-            -p std-shims \
-            -p zalloc \
-            -p serai-db \
-            -p serai-env
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p mini-serai
