@@ -32,6 +32,7 @@ const MAX_KEY_LEN: u32 = 96;
   Decode,
   TypeInfo,
   MaxEncodedLen,
+  Default,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Session(pub u32);

@@ -3,6 +3,7 @@
 #[frame_support::pallet]
 pub mod pallet {
   use sp_runtime::{traits::TrailingZeroInput, DispatchError};
+  use sp_std::vec::Vec;
 
   use frame_system::pallet_prelude::*;
   use frame_support::{
@@ -10,7 +11,12 @@ pub mod pallet {
     traits::{Currency, tokens::ExistenceRequirement},
   };
 
+  use serai_primitives::{NetworkId, Amount, PublicKey};
+  use serai_validator_sets_primitives::{ValidatorSet, Session};
   use staking_primitives::AllocatedStaking;
+
+  use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
+  use pallet_session::{Config as SessionConfig, SessionManager, Pallet as SessionPallet};
 
   #[pallet::error]
   pub enum Error<T> {
@@ -21,7 +27,9 @@ pub mod pallet {
   // TODO: Event
 
   #[pallet::config]
-  pub trait Config: frame_system::Config {
+  pub trait Config:
+    frame_system::Config + VsConfig + SessionConfig<ValidatorId = PublicKey>
+  {
     type Currency: Currency<Self::AccountId, Balance = u64>;
   }
 
@@ -52,10 +60,7 @@ pub mod pallet {
       Staked::<T>::mutate(account, |staked| *staked += amount);
     }
 
-    fn remove_stake(
-      account: &T::AccountId,
-      amount: u64,
-    ) -> DispatchResult {
+    fn remove_stake(account: &T::AccountId, amount: u64) -> DispatchResult {
       Staked::<T>::mutate(account, |staked| {
         let available = *staked - Self::allocated(account);
         // Check this invariant in the name of safety
@@ -94,10 +99,7 @@ pub mod pallet {
     /// Stake funds from this account.
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
-    pub fn stake(
-      origin: OriginFor<T>,
-      #[pallet::compact] amount: u64,
-    ) -> DispatchResult {
+    pub fn stake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       // Serai accounts are solely public keys. Accordingly, there's no harm to letting accounts
       // die. They'll simply be re-instantiated later
@@ -111,16 +113,79 @@ pub mod pallet {
     /// unstaked.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
-    pub fn unstake(
-      origin: OriginFor<T>,
-      #[pallet::compact] amount: u64,
-    ) -> DispatchResult {
+    pub fn unstake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       Self::remove_stake(&signer, amount)?;
       // This should never be out of funds as there should always be stakers. Accordingly...
       // TODO: What if this fails for some reason but we removed the stake above?
       T::Currency::transfer(&Self::account(), &signer, amount, ExistenceRequirement::KeepAlive)?;
       Ok(())
+    }
+
+    /// Allocate `amount` to a given validator set.
+    #[pallet::call_index(2)]
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn allocate(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      #[pallet::compact] amount: u64,
+    ) -> DispatchResult {
+      let account = ensure_signed(origin)?;
+
+      // add to amount bonded
+      Self::allocate_internal(&account, amount)?;
+
+      // add to participants list for the network
+      let result = VsPallet::<T>::add_participant(account, Amount(amount), network);
+      if result.is_err() {
+        Self::deallocate_internal(&account, amount).unwrap();
+        return result;
+      }
+
+      Ok(())
+    }
+  }
+
+  /// Call order is new_session(i) -> end_session(i - 1) -> start_session(i)
+  impl<T: Config> SessionManager<T::ValidatorId> for Pallet<T> {
+    fn new_session(new_index: u32) -> Option<Vec<T::ValidatorId>> {
+      let next_validators = VsPallet::<T>::next_validator_set(new_index, NetworkId::Serai);
+
+      // Returning None will keep the previous set going.
+      if next_validators.is_empty() {
+        return None;
+      }
+
+      Some(next_validators)
+    }
+
+    fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
+      // this function will be called for index 0 & 1, not just 0.
+      // we return the same set to effectively say that we want
+      // the same validators for sessions 0 & 1.
+      Some(VsPallet::<T>::genesis_validator_set(NetworkId::Serai))
+    }
+
+    fn end_session(end_index: u32) {
+      // get the validators that are gonna be leaving
+      // or deallocating the next session
+      let key = ValidatorSet { session: Session(end_index + 1), network: NetworkId::Serai };
+      let mut deallocating_validators = VsPallet::<T>::deallocating_validators(key);
+      let leaving_validators = VsPallet::<T>::leaving_validators(key);
+      deallocating_validators.extend(leaving_validators);
+
+      // do the deallocation of those validator funds
+      for (account, amount) in deallocating_validators {
+        // we can unwrap because we are not deallocating more than allocated.
+        <Self as AllocatedStaking<T>>::deallocate(&account, amount.0).unwrap();
+      }
+
+      VsPallet::<T>::end_session(NetworkId::Serai);
+    }
+
+    fn start_session(start_index: u32) {
+      let validators = SessionPallet::<T>::validators();
+      VsPallet::<T>::start_session(start_index, NetworkId::Serai, validators)
     }
   }
 

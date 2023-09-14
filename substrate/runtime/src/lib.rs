@@ -182,6 +182,10 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, staking::Call::stake { .. } | staking::Call::unstake { .. });
     }
 
+    if let RuntimeCall::Session(call) = call {
+      return matches!(call, session::Call::set_keys { .. } | session::Call::purge_keys {});
+    }
+
     false
   }
 }
@@ -327,7 +331,7 @@ impl session::Config for Runtime {
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Babe;
   type NextSessionRotation = Babe;
-  type SessionManager = (); // TODO?
+  type SessionManager = Staking;
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
