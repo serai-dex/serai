@@ -405,9 +405,11 @@ checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
 
 [[package]]
 name = "base58-monero"
-version = "1.1.0"
-source = "git+https://github.com/monero-rs/base58-monero?rev=5045e8d2b817b3b6c1190661f504e879bc769c29#5045e8d2b817b3b6c1190661f504e879bc769c29"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978e81a45367d2409ecd33369a45dda2e9a3ca516153ec194de1fbda4b9fb79d"
 dependencies = [
+ "thiserror",
  "tiny-keccak",
 ]
 
