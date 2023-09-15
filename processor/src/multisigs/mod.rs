@@ -65,7 +65,7 @@ pub async fn prepare_send<N: Network>(
 
 pub struct MultisigViewer<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
-  pub scheduler: Scheduler<N>,
+  scheduler: Scheduler<N>,
 }
 
 #[derive(Clone, Debug)]
@@ -77,28 +77,46 @@ pub enum MultisigEvent<N: Network> {
 }
 
 pub struct MultisigManager<D: Db, N: Network> {
-  pub scanner: ScannerHandle<N, D>,
-  pub existing: Option<MultisigViewer<N>>,
-  pub new: Option<MultisigViewer<N>>,
+  scanner: ScannerHandle<N, D>,
+  existing: Option<MultisigViewer<N>>,
+  new: Option<MultisigViewer<N>>,
 }
 
 impl<D: Db, N: Network> MultisigManager<D, N> {
   // TODO: Replace this
   pub fn new(scanner: ScannerHandle<N, D>, schedulers: HashMap<Vec<u8>, Scheduler<N>>) -> Self {
-    MultisigManager {
-      scanner,
-      existing: Some({
-        assert_eq!(schedulers.len(), 1);
+    assert!(schedulers.len() <= 2);
+    let (existing, new) = match schedulers.len() {
+      0 => (None, None),
+      1 => (Some({
         let (key, scheduler) = schedulers.into_iter().next().unwrap();
         MultisigViewer { key: N::Curve::read_G(&mut key.as_slice()).unwrap(), scheduler }
-      }),
-      new: None,
+      }), None),
+      2 => todo!(),
+      _ => unreachable!(),
+    }
+    MultisigManager {
+      scanner,
+      existing,
+      new,
     }
   }
 
-  // TODO: On boot, build an index of all standing blocks -> block number
+  /// Returns the block number for a block hash, if it's known and all keys have scanned the block.
+  // This is guaranteed to atomically increment so long as no new keys are added to the scanner
+  // which activate at a block before the currently highest scanned block. This is prevented by
+  // the processor waiting for `Batch` inclusion before scanning too far ahead, and activation only
+  // happening after the "too far ahead" window.
   pub async fn block_number(&self, hash: &<N::Block as Block<N>>::Id) -> Option<usize> {
-    self.scanner.block_number(hash).await
+    let latest = self.scanner.block_number(hash).await?;
+
+    // While the scanner has cemented this block, that doesn't mean it's been scanned for all
+    // keys
+    // ram_scanned will return the lowest scanned block number out of all keys
+    if latest > self.scanner.ram_scanned().await {
+      return None;
+    }
+    Some(latest)
   }
 
   pub async fn add_key(
@@ -168,6 +186,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     plans
   }
 
+  // TODO: Merge this with the above function
   pub async fn sign_plans(
     &mut self,
     txn: &mut D::Transaction<'_>,

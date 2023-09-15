@@ -3,7 +3,7 @@ use std::{time::Duration, collections::HashMap};
 use zeroize::{Zeroize, Zeroizing};
 
 use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::group::GroupEncoding;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use log::{info, warn};
 use tokio::time::sleep;
@@ -47,10 +47,7 @@ use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 mod multisigs;
 use multisigs::{MultisigEvent, MultisigManager};
 // TODO: Get rid of these
-use multisigs::{
-  scanner::{Scanner, ScannerHandle},
-  Scheduler, get_fee, prepare_send,
-};
+use multisigs::{scanner::Scanner, Scheduler, get_fee, prepare_send};
 
 #[cfg(test)]
 mod tests;
@@ -126,15 +123,17 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   msg: &Message,
 ) {
   // If this message expects a higher block number than we have, halt until synced
-  async fn wait<N: Network, D: Db>(scanner: &ScannerHandle<N, D>, block_hash: &BlockHash) {
+  async fn wait<N: Network, D: Db>(
+    substrate_mutable: &SubstrateMutable<N, D>,
+    block_hash: &BlockHash,
+  ) {
     let mut needed_hash = <N::Block as Block<N>>::Id::default();
     needed_hash.as_mut().copy_from_slice(&block_hash.0);
 
-    let block_number = loop {
+    loop {
       // Ensure our scanner has scanned this block, which means our daemon has this block at
       // a sufficient depth
-      // The block_number may be set even if scanning isn't complete
-      let Some(block_number) = scanner.block_number(&needed_hash).await else {
+      if substrate_mutable.block_number(&needed_hash).await.is_none() {
         warn!(
           "node is desynced. we haven't scanned {} which should happen after {} confirms",
           hex::encode(&needed_hash),
@@ -143,15 +142,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
         sleep(Duration::from_secs(10)).await;
         continue;
       };
-      break block_number;
-    };
-
-    // While the scanner has cemented this block, that doesn't mean it's been scanned for all
-    // keys
-    // ram_scanned will return the lowest scanned block number out of all keys
-    // This is a safe call which fulfills the unfulfilled safety requirements from the prior call
-    while scanner.ram_scanned().await < block_number {
-      sleep(Duration::from_secs(1)).await;
+      break;
     }
 
     // TODO: Sanity check we got an AckBlock (or this is the AckBlock) for the block in
@@ -175,8 +166,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   }
 
   if let Some(required) = msg.msg.required_block() {
-    // wait only reads from, it doesn't mutate, the scanner
-    wait(&substrate_mutable.scanner, &required).await;
+    // wait only reads from, it doesn't mutate, substrate_mutable
+    wait(&substrate_mutable, &required).await;
   }
 
   // TODO: Shouldn't we create a txn here and pass it around as needed?
@@ -204,14 +195,14 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       match msg {
         messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
           // This is the first key pair for this network so no block has been finalized yet
+          // TODO: Write documentation for this in docs/
+          // TODO: Use an Option instead of a magic?
           let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
             assert!(substrate_mutable.existing.as_ref().is_none());
 
             // Wait until a network's block's time exceeds Serai's time
-            // TODO: This assumes the network has a monotonic clock for its blocks' times, which
-            // isn't a viable assumption
 
             // If the latest block number is 10, then the block indexed by 1 has 10 confirms
             // 10 + 1 - 10 = 1
@@ -247,9 +238,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // Use this as the activation block
             earliest
           } else {
+            // TODO: This doesn't match the Multisig Rotation document
             let mut activation_block = <N::Block as Block<N>>::Id::default();
             activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-            // This block_number call is safe since it unwraps
             substrate_mutable
               .block_number(&activation_block)
               .await
@@ -258,20 +249,23 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           info!("activating {set:?}'s keys at {activation_number}");
 
-          // See TributaryMutable's struct definition for why this block is safe
-          let KeyConfirmed { substrate_keys, network_keys } =
-            tributary_mutable.key_gen.confirm(txn, set, key_pair).await;
-          // TODO2: Don't immediately set this, set it once it's active
-          tributary_mutable.substrate_signer =
-            Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+          let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
+            .expect("Substrate finalized invalid point as a network's key");
 
-          let key = network_keys.group_key();
+          // TODO: Only run the following block when participating
+          {
+            // See TributaryMutable's struct definition for why this block is safe
+            let KeyConfirmed { substrate_keys, network_keys } =
+              tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
+            // TODO2: Don't immediately set this, set it once it's active
+            tributary_mutable.substrate_signer =
+              Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+            tributary_mutable
+              .signers
+              .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
+          }
 
-          substrate_mutable.add_key(txn, activation_number, key).await;
-
-          tributary_mutable
-            .signers
-            .insert(key.to_bytes().as_ref().to_vec(), Signer::new(network.clone(), network_keys));
+          substrate_mutable.add_key(txn, activation_number, network_key).await;
         }
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
