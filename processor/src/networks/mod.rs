@@ -176,10 +176,11 @@ impl<E: Eventuality> Default for EventualitiesTracker<E> {
 }
 
 pub trait Block<N: Network>: Send + Sync + Sized + Clone + Debug {
-  // This is currently bounded to being 32-bytes.
+  // This is currently bounded to being 32 bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn parent(&self) -> Self::Id;
+  // The monotonic network time at this block.
   fn time(&self) -> u64;
   fn median_fee(&self) -> N::Fee;
 }

@@ -220,6 +220,8 @@ impl BlockTrait<Bitcoin> for Block {
     hash
   }
 
+  // TODO: Don't use this block's time, use the network time at this block
+  // TODO: Confirm network time is monotonic, enabling its usage here
   fn time(&self) -> u64 {
     self.header.time.into()
   }
