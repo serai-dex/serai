@@ -21,6 +21,9 @@ pub enum Event {
   __Ignore,
 }
 
+// The amount of blocks to scan after we publish a batch, before confirming the batch was
+// included.
+// Prevents race conditions on rotation regarding when the new keys activate.
 const BATCH_FTL: u64 = 3;
 
 #[derive(Debug)]
@@ -66,6 +69,9 @@ impl Serai {
             if queued_key {
               let mut active_keys = active_keys.write().unwrap();
               let len = active_keys.len().try_into().unwrap();
+              // TODO: active_keys is under Serai, yet the processor is the one actually with the
+              // context on when it activates
+              // This should be re-modeled as an event
               active_keys.push((batch.block + BATCH_FTL, len));
             }
             queued_key = false;
@@ -107,16 +113,19 @@ pub struct Processor {
 impl Processor {
   pub fn new(serai: Serai, blocks: u64) -> Processor {
     let handle = thread::spawn(move || {
-      let mut last_known_serai_time = 0;
+      let mut last_finalized_block = 0;
       for b in 0 .. blocks {
         // If this block is too far ahead of Serai's last block, wait for Serai to process
-        while b >= (last_known_serai_time + BATCH_FTL) {
+        // Note this wait only has to occur if we have a Batch which has yet to be included
+        // mini just publishes a Batch for every Block at this point in time, meaning it always has
+        // to wait
+        while b >= (last_finalized_block + BATCH_FTL) {
           if serai.exhausted() {
             return serai;
           }
           let Ok(event) = serai.events.recv() else { return serai };
           if let Event::IncludedBatch(Batch { block, .. }) = event {
-            last_known_serai_time = block;
+            last_finalized_block = block;
           }
         }
         serai.mempool_batches.write().unwrap().push(Batch {
