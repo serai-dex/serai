@@ -100,28 +100,26 @@ async fn handle_key_gen<Pro: Processors>(
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
-    processors
-      .send(
-        set.network,
-        CoordinatorMessage::Substrate(
-          processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
-            context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
-              network_latest_finalized_block: serai
-                .get_latest_block_for_network(block.hash(), set.network)
-                .await?
-                // The processor treats this as a magic value which will cause it to find a network
-                // block which has a time greater than or equal to the Serai time
-                .unwrap_or(BlockHash([0; 32])),
-            },
-            set,
-            key_pair,
+  processors
+    .send(
+      set.network,
+      CoordinatorMessage::Substrate(
+        processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
+          context: SubstrateContext {
+            serai_time: block.time().unwrap() / 1000,
+            network_latest_finalized_block: serai
+              .get_latest_block_for_network(block.hash(), set.network)
+              .await?
+              // The processor treats this as a magic value which will cause it to find a network
+              // block which has a time greater than or equal to the Serai time
+              .unwrap_or(BlockHash([0; 32])),
           },
-        ),
-      )
-      .await;
-  }
+          set,
+          key_pair,
+        },
+      ),
+    )
+    .await;
 
   Ok(())
 }
