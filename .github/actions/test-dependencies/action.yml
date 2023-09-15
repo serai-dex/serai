@@ -26,7 +26,7 @@ runs:
         github-token: ${{ inputs.github-token }}
 
     - name: Install Foundry
-      uses: foundry-rs/foundry-toolchain@v1
+      uses: foundry-rs/foundry-toolchain@cb603ca0abb544f301eaed59ac0baf579aa6aecf
       with:
         version: nightly
 

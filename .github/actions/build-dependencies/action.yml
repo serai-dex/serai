@@ -21,7 +21,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Protobuf
-      uses: arduino/setup-protoc@v2.0.0
+      uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
       with:
         repo-token: ${{ inputs.github-token }}
 
@@ -33,11 +33,11 @@ runs:
         solc-select use 0.8.16
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@5cb429dd810e16ff67df78472fa81cf760f4d1c0
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
         targets: wasm32-unknown-unknown, riscv32imac-unknown-none-elf
 
     # - name: Cache Rust
-    #   uses: Swatinem/rust-cache@v2
+    #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43
