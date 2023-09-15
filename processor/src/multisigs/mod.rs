@@ -18,9 +18,14 @@ use log::{info, error};
 
 use tokio::time::sleep;
 
-// TODO: Remove this export
+#[cfg(not(test))]
+mod scanner;
+#[cfg(test)]
 pub mod scanner;
+
 use scanner::{ScannerEvent, ScannerHandle};
+// TODO: Remove this export
+pub use scanner::Scanner;
 
 mod scheduler;
 // TODO: Remove this export
@@ -32,14 +37,12 @@ use crate::{
   Signer,
 };
 
-// TODO: Remove this pub
-pub async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
+async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
   // TODO2: Use an fee representative of several blocks
   get_block(network, block_number).await.median_fee()
 }
 
-// TODO: Remove this pub
-pub async fn prepare_send<N: Network>(
+async fn prepare_send<N: Network>(
   network: &N,
   block_number: usize,
   fee: N::Fee,
@@ -83,23 +86,67 @@ pub struct MultisigManager<D: Db, N: Network> {
 }
 
 impl<D: Db, N: Network> MultisigManager<D, N> {
-  // TODO: Replace this
-  pub fn new(scanner: ScannerHandle<N, D>, schedulers: HashMap<Vec<u8>, Scheduler<N>>) -> Self {
-    assert!(schedulers.len() <= 2);
-    let (existing, new) = match schedulers.len() {
-      0 => (None, None),
-      1 => (Some({
-        let (key, scheduler) = schedulers.into_iter().next().unwrap();
-        MultisigViewer { key: N::Curve::read_G(&mut key.as_slice()).unwrap(), scheduler }
-      }), None),
-      2 => todo!(),
-      _ => unreachable!(),
+  pub async fn new(
+    raw_db: &D,
+    network: &N,
+  ) -> (
+    Self,
+    Vec<<N::Curve as Ciphersuite>::G>,
+    Vec<([u8; 32], N::SignableTransaction, N::Eventuality)>,
+  ) {
+    // The scanner has no long-standing orders to re-issue
+    let (mut scanner, active_keys) = Scanner::new(network.clone(), raw_db.clone());
+
+    let mut schedulers = vec![];
+
+    // TODO: MultisigDB
+    let main_db = MainDb::<N, _>::new(raw_db.clone());
+
+    assert!(active_keys.len() <= 2);
+    let mut actively_signing = vec![];
+    for key in &active_keys {
+      schedulers.push(Scheduler::from_db(raw_db, *key).unwrap());
+
+      // Load any TXs being actively signed
+      let key = key.to_bytes();
+      for (block_number, plan) in main_db.signing(key.as_ref()) {
+        let block_number = block_number.try_into().unwrap();
+
+        let fee = get_fee(network, block_number).await;
+
+        let id = plan.id();
+        info!("reloading plan {}: {:?}", hex::encode(id), plan);
+
+        let key_bytes = plan.key.to_bytes();
+
+        let (Some((tx, eventuality)), _) = prepare_send(network, block_number, fee, plan).await
+        else {
+          panic!("previously created transaction is no longer being created")
+        };
+
+        scanner
+          .register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone())
+          .await;
+        actively_signing.push((id, tx, eventuality));
+      }
     }
-    MultisigManager {
-      scanner,
-      existing,
-      new,
-    }
+
+    // TODO: Check active_keys is sort3ed from oldest to newest
+    (
+      MultisigManager {
+        scanner,
+        existing: active_keys
+          .get(0)
+          .cloned()
+          .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
+        new: active_keys
+          .get(1)
+          .cloned()
+          .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
+      },
+      active_keys,
+      actively_signing,
+    )
   }
 
   /// Returns the block number for a block hash, if it's known and all keys have scanned the block.
@@ -240,9 +287,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
   }
 
-  // TODO: Embed this into MultisigManager
-  pub fn scanner_event(
-    &mut self,
+  fn scanner_event_to_multisig_event(
+    &self,
     txn: &mut D::Transaction<'_>,
     msg: ScannerEvent<N>,
   ) -> MultisigEvent<N> {
@@ -316,6 +362,18 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       ScannerEvent::Completed(key, id, tx) => MultisigEvent::Completed(key, id, tx),
     }
+  }
+
+  // async fn where dropping the Future causes no state changes
+  // This property is derived from recv having this property, and recv being the only async call
+  pub async fn next_event<'a>(&mut self, db: &'a mut D) -> (D::Transaction<'a>, MultisigEvent<N>) {
+    let event = self.scanner.events.recv().await.unwrap();
+
+    // No further code is async
+
+    let mut txn = db.txn();
+    let event = self.scanner_event_to_multisig_event(&mut txn, event);
+    (txn, event)
   }
 
   // TODO: Handle eventuality completions

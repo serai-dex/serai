@@ -46,8 +46,6 @@ use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 mod multisigs;
 use multisigs::{MultisigEvent, MultisigManager};
-// TODO: Get rid of these
-use multisigs::{scanner::Scanner, Scheduler, get_fee, prepare_send};
 
 #[cfg(test)]
 mod tests;
@@ -167,7 +165,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   if let Some(required) = msg.msg.required_block() {
     // wait only reads from, it doesn't mutate, substrate_mutable
-    wait(&substrate_mutable, &required).await;
+    wait(substrate_mutable, &required).await;
   }
 
   // TODO: Shouldn't we create a txn here and pass it around as needed?
@@ -200,7 +198,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
-            assert!(substrate_mutable.existing.as_ref().is_none());
+            // We can't check this as existing is no longer pub
+            // assert!(substrate_mutable.existing.as_ref().is_none());
 
             // Wait until a network's block's time exceeds Serai's time
 
@@ -349,19 +348,18 @@ async fn boot<N: Network, D: Db>(
 
   // We don't need to re-issue GenerateKey orders because the coordinator is expected to
   // schedule/notify us of new attempts
+  // TODO: Is this above comment still true? Not at all due to the planned lack of DKG timeouts?
   let key_gen = KeyGen::<N, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
-  // The scanner has no long-standing orders to re-issue
-  let (mut scanner, active_keys) = Scanner::new(network.clone(), raw_db.clone());
 
-  let mut schedulers = HashMap::<Vec<u8>, Scheduler<N>>::new();
+  let (multisig_manager, active_keys, actively_signing) =
+    MultisigManager::new(raw_db, network).await;
+
   let mut substrate_signer = None;
   let mut signers = HashMap::new();
 
   let main_db = MainDb::<N, _>::new(raw_db.clone());
 
   for key in &active_keys {
-    schedulers.insert(key.to_bytes().as_ref().to_vec(), Scheduler::from_db(raw_db, *key).unwrap());
-
     let (substrate_keys, network_keys) = key_gen.keys(key);
 
     // We don't have to load any state for this since the Scanner will re-fire any events
@@ -371,25 +369,10 @@ async fn boot<N: Network, D: Db>(
 
     let mut signer = Signer::new(network.clone(), network_keys);
 
-    // Load any TXs being actively signed
-    // TODO: Move this into MultisigManager?
+    // Sign any TXs being actively signed
     let key = key.to_bytes();
-    for (block_number, plan) in main_db.signing(key.as_ref()) {
-      let block_number = block_number.try_into().unwrap();
-
-      let fee = get_fee(network, block_number).await;
-
-      let id = plan.id();
-      info!("reloading plan {}: {:?}", hex::encode(id), plan);
-
-      let key_bytes = plan.key.to_bytes();
-
-      let (Some((tx, eventuality)), _) = prepare_send(network, block_number, fee, plan).await
-      else {
-        panic!("previously created transaction is no longer being created")
-      };
-
-      scanner.register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone()).await;
+    // TODO: This needs to only be called for the relevant signer
+    for (id, tx, eventuality) in actively_signing.clone() {
       // TODO: Reconsider if the Signer should have the eventuality, or if just the network/scanner
       // should
       let mut txn = raw_db.txn();
@@ -401,11 +384,7 @@ async fn boot<N: Network, D: Db>(
     signers.insert(key.as_ref().to_vec(), signer);
   }
 
-  (
-    main_db,
-    TributaryMutable { key_gen, substrate_signer, signers },
-    MultisigManager::new(scanner, schedulers),
-  )
+  (main_db, TributaryMutable { key_gen, substrate_signer, signers }, multisig_manager)
 }
 
 async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut coordinator: Co) {
@@ -417,6 +396,11 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
   let (mut main_db, mut tributary_mutable, mut substrate_mutable) =
     boot(&mut raw_db, &network).await;
+
+  // A second DB handle, as Rust can't detect the following branches only ever modifying the single
+  // handle once at a time
+  // This clone prevents needing a RwLock wrapper
+  let mut raw_db_two = raw_db.clone();
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
@@ -506,11 +490,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         coordinator.ack(msg).await;
       },
 
-      // TODO: Replace this with proper channel management
-      msg = substrate_mutable.scanner.events.recv() => {
-        let mut txn = raw_db.txn();
-
-        match substrate_mutable.scanner_event(&mut txn, msg.unwrap()) {
+      (mut txn, msg) = substrate_mutable.next_event(&mut raw_db_two) => {
+        match msg {
           MultisigEvent::Batches(batches) => {
             // Start signing this batch
             for batch in batches {
