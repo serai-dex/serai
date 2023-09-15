@@ -42,6 +42,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
   fn block_number_key(id: &<N::Block as Block<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
+  // TODO: On boot, do this for all outstanding blocks
   fn save_block(txn: &mut D::Transaction<'_>, number: usize, id: &<N::Block as Block<N>>::Id) {
     txn.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
     txn.put(Self::block_key(number), id);
@@ -499,6 +500,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
             }
 
             // Don't emit an event if there's not any outputs
+            // TODO: Still emit an event if activation block or retirement block
             if outputs.is_empty() {
               continue;
             }
@@ -509,7 +511,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
             txn.commit();
 
             // Send all outputs
-            // TODO2: Fire this with all outputs for all keys, not for each key
+            // TODO: Block scanning `b + CONFIRMATIONS` until until Substrate acks this Block
+            // TODO: Fire this with all outputs for all keys, not for each key
             if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
               return;
             }
