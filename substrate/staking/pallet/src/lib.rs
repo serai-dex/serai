@@ -144,9 +144,28 @@ pub mod pallet {
 
       Ok(())
     }
+
+    /// Allocate `amount` to a given validator set.
+    #[pallet::call_index(3)]
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn deallocate(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      #[pallet::compact] amount: u64,
+    ) -> DispatchResult {
+      let account = ensure_signed(origin)?;
+
+      // remove participant if we necessary
+      // we can't directly deallocate here, since the leaving validator
+      // will be removed after the next session. We only deallocate then
+      // on `end_session` for the right index.
+      VsPallet::<T>::maybe_remove_participant(account, Amount(amount), network)
+    }
   }
 
-  /// Call order is new_session(i) -> end_session(i - 1) -> start_session(i)
+  /// Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
+  /// new_session(i + 1) is called immediately after start_session(i) returns then
+  /// we wait until the session ends then get a call to end_session(i) and so on.
   impl<T: Config> SessionManager<T::ValidatorId> for Pallet<T> {
     fn new_session(new_index: u32) -> Option<Vec<T::ValidatorId>> {
       let next_validators = VsPallet::<T>::next_validator_set(new_index, NetworkId::Serai);
@@ -167,20 +186,15 @@ pub mod pallet {
     }
 
     fn end_session(end_index: u32) {
-      // get the validators that are gonna be leaving
-      // or deallocating the next session
-      let key = ValidatorSet { session: Session(end_index + 1), network: NetworkId::Serai };
-      let mut deallocating_validators = VsPallet::<T>::deallocating_validators(key);
-      let leaving_validators = VsPallet::<T>::leaving_validators(key);
-      deallocating_validators.extend(leaving_validators);
-
       // do the deallocation of those validator funds
-      for (account, amount) in deallocating_validators {
+      let key = ValidatorSet { session: Session(end_index + 1), network: NetworkId::Serai };
+      let deallocating_validators = VsPallet::<T>::deallocating_validators(key);
+      for (account, amount, _) in deallocating_validators {
         // we can unwrap because we are not deallocating more than allocated.
         <Self as AllocatedStaking<T>>::deallocate(&account, amount.0).unwrap();
       }
 
-      VsPallet::<T>::end_session(NetworkId::Serai);
+      VsPallet::<T>::end_session(end_index, NetworkId::Serai);
     }
 
     fn start_session(start_index: u32) {

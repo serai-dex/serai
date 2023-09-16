@@ -179,7 +179,13 @@ impl Contains<RuntimeCall> for CallFilter {
     }
 
     if let RuntimeCall::Staking(call) = call {
-      return matches!(call, staking::Call::stake { .. } | staking::Call::unstake { .. });
+      return matches!(
+        call,
+        staking::Call::stake { .. } |
+          staking::Call::unstake { .. } |
+          staking::Call::allocate { .. } |
+          staking::Call::deallocate { .. }
+      );
     }
 
     if let RuntimeCall::Session(call) = call {

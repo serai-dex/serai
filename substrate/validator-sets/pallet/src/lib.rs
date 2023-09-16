@@ -6,8 +6,11 @@ pub mod pallet {
   use scale_info::TypeInfo;
 
   use sp_core::sr25519::{Public, Signature};
-  use sp_std::vec;
-  use sp_std::vec::Vec;
+  use sp_std::{
+    vec,
+    vec::Vec,
+    collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+  };
   use sp_application_crypto::RuntimePublic;
   use sp_runtime::traits::SaturatedConversion;
 
@@ -77,22 +80,13 @@ pub mod pallet {
     StorageMap<_, Twox64Concat, ValidatorSet, Vec<(T::AccountId, Amount)>, ValueQuery>;
 
   /// The Validators that has enough bond deallocated
-  /// and set to be leaving to the validator set
-  /// in the next session.
-  #[pallet::storage]
-  #[pallet::getter(fn leaving_validators)]
-  #[pallet::unbounded]
-  pub type LeavingValidators<T: Config> =
-    StorageMap<_, Twox64Concat, ValidatorSet, Vec<(T::AccountId, Amount)>, ValueQuery>;
-
-  /// The Validators that has enough bond deallocated
   /// to still remain in the validator set but freed
   /// some funds.
   #[pallet::storage]
   #[pallet::getter(fn deallocating_validators)]
   #[pallet::unbounded]
   pub type DeallocatingValidators<T: Config> =
-    StorageMap<_, Twox64Concat, ValidatorSet, Vec<(T::AccountId, Amount)>, ValueQuery>;
+    StorageMap<_, Twox64Concat, ValidatorSet, Vec<(T::AccountId, Amount, bool)>, ValueQuery>;
 
   #[pallet::storage]
   #[pallet::getter(fn current_session)]
@@ -164,10 +158,8 @@ pub mod pallet {
       // next epoch time from babe since sessions rotate on epoch change.
       // This is only approximation since slots != blocks.
       let next_start: u64 = Babe::<T>::next_epoch().start_slot.into();
-      if next_start - 100 <= n.saturated_into::<u64>() {
+      if next_start - 100 == n.saturated_into::<u64>() {
         // TODO: only for serai or for all networks?
-        // TODO: this fires for all the blocks until the epoch changes
-        // check whether you already fired for this session
         let set = ValidatorSet {
           session: Session(Self::current_session().0 + 1),
           network: NetworkId::Serai,
@@ -224,7 +216,8 @@ pub mod pallet {
     }
 
     /// This function will set the participant for leaving if remaining bond
-    /// fells short for the bond requirement of the set after the deallocation.
+    /// falls short for the bond requirement of the set after the deallocation.
+    /// Otherwise it will just deallocate the given `amount`.
     pub fn maybe_remove_participant(
       account: T::AccountId,
       amount: Amount,
@@ -232,85 +225,42 @@ pub mod pallet {
     ) -> DispatchResult {
       let current_set =
         Self::validator_set(ValidatorSet { session: Self::current_session(), network }).unwrap();
-      let effective_session = Session(Self::current_session().0 + 2);
+      let key = ValidatorSet { session: Session(Self::current_session().0 + 2), network };
 
-      match current_set.participants.iter().find(|p| p.0 == account) {
-        Some(p) => {
-          // check validator has enough to deallocate
-          if amount > p.1 {
-            Err(Error::<T>::InSufficientAllocation)?;
-          }
-
-          // if the remaining bond is not enough
-          // remove from the validator set.
-          // deallocate all bond instead of just "amount"
-          // since they will be leaving.
-          let key = ValidatorSet { session: effective_session, network };
-          let left = p.1 - amount;
-          if left < current_set.bond {
-            // add to the leaving set
-            LeavingValidators::<T>::try_mutate_exists(key, |existing| {
-              if existing.is_some() {
-                existing.as_mut().unwrap().push((account, p.1));
-              } else {
-                *existing = Some(vec![(account, p.1)]);
-              }
-              Ok::<_, Error<T>>(())
-            })?;
-          } else {
-            // add to deallocation set
-            DeallocatingValidators::<T>::try_mutate_exists(key, |existing| {
-              if existing.is_some() {
-                existing.as_mut().unwrap().push((account, amount));
-              } else {
-                *existing = Some(vec![(account, amount)]);
-              }
-              Ok::<_, Error<T>>(())
-            })?;
-          }
-
-          Ok(())
-        }
+      let pair = match current_set.participants.iter().find(|p| p.0 == account) {
+        Some(p) => *p,
         None => {
           // check whether it is still in the joining set before getting active
-          let key = ValidatorSet { session: effective_session, network };
-          let mut joining_set = JoiningValidators::<T>::get(key);
-          let index = joining_set
-            .iter()
-            .position(|entries| entries.0 == account)
-            .ok_or(Error::<T>::NonExistentValidator)?;
-          let mut p = joining_set[index];
-
-          // check validator has enough to deallocate
-          if amount > p.1 {
-            Err(Error::<T>::InSufficientAllocation)?;
-          }
-
-          // check whether still says or leaves
-          p.1 = p.1 - amount;
-          let deallocation_amount = if p.1 < current_set.bond {
-            // remove from the set
-            joining_set.remove(index);
-            p.1
-          } else {
-            joining_set[index] = p;
-            amount
-          };
-
-          // add to deallocation set
-          DeallocatingValidators::<T>::try_mutate_exists(key, |existing| {
-            if existing.is_some() {
-              existing.as_mut().unwrap().push((p.0, deallocation_amount));
-            } else {
-              *existing = Some(vec![(p.0, deallocation_amount)]);
-            }
-            Ok::<_, Error<T>>(())
-          })?;
-
-          JoiningValidators::<T>::set(key, joining_set);
-          Ok(())
+          let joining_set = JoiningValidators::<T>::get(key);
+          *joining_set.iter().find(|p| p.0 == account).ok_or(Error::<T>::NonExistentValidator)?
         }
+      };
+
+      // check validator has enough to deallocate
+      if amount > pair.1 {
+        Err(Error::<T>::InSufficientAllocation)?;
       }
+
+      // if the remaining bond is not enough remove from the validator set and
+      // deallocate all bond instead of just "amount" since they will be leaving.
+      let deallocation = if pair.1 - amount < current_set.bond {
+        (account, pair.1, true)
+      } else {
+        (account, amount, false)
+      };
+
+      // add to deallocation set
+      DeallocatingValidators::<T>::try_mutate_exists(key, |existing| {
+        if existing.is_some() {
+          existing.as_mut().unwrap().push(deallocation);
+        } else {
+          *existing = Some(vec![deallocation]);
+        }
+        Ok::<_, Error<T>>(())
+      })
+      .unwrap();
+
+      Ok(())
     }
 
     pub fn genesis_validator_set(network: NetworkId) -> Vec<T::AccountId> {
@@ -324,74 +274,91 @@ pub mod pallet {
 
     pub fn next_validator_set(new_index: u32, network: NetworkId) -> Vec<T::AccountId> {
       let mut key = ValidatorSet { session: Session(new_index), network };
-      let mut joining = Self::joining_validators(key).iter().map(|(id, _)| *id).collect::<Vec<_>>();
-      let leaving = Self::leaving_validators(key).iter().map(|(id, _)| *id).collect::<Vec<_>>();
+      let mut joining =
+        Self::joining_validators(key).iter().map(|(id, _)| *id).collect::<BTreeSet<T::AccountId>>();
 
-      // TODO: remove this assert after tests
-      assert_eq!(new_index - 2, Self::current_session().0);
+      // get only the ones who is leaving because of insufficient bond.
+      let leaving = Self::deallocating_validators(key)
+        .iter()
+        .filter(|(_, _, leaving)| *leaving)
+        .map(|(id, _, _)| *id)
+        .collect::<Vec<_>>();
+
+      // get the current set
       key = ValidatorSet { session: Self::current_session(), network };
       let mut current = Self::validator_set(key)
         .unwrap()
         .participants
         .iter()
         .map(|(id, _)| *id)
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<T::AccountId>>();
+
+      // add new ones
+      // - We have to add new ones before filtering out the leaving ones.
+      // Since some of the leaving ones are still only in the joining set.
+      // These are the ones who allocated to a set and then
+      // immediately deallocated before getting into an active set when
+      // they are still only in the joining set. If they are to be removed from
+      // joining set as a result of their deallocation, we remove them here.
+      // We can't remove at the time of their public call, because we still
+      // need to deallocate the funds.
+      //
+      // - Alternatively we can just block the deallocation if you are not
+      // in an active set currently.
+      current.append(&mut joining);
 
       // remove the validators who wanted to leave
       current.retain(|id| !leaving.contains(id));
 
-      // Ignore the ones who is already in the current set.
-      // These are the ones who wants to increase their bond,
-      // which will happen at the start of the session.
-      joining.retain(|id| !current.contains(id));
-
-      // add new ones,
-      current.extend(joining);
-
-      current
+      Vec::from_iter(current)
     }
 
     /// Makes a new validator set for the given session index with the given `validators`
     /// as participants. All validators in `validators`, must be present either
     /// in `JoiningValidators` or the current active validator set.
-    /// Does not fire the `Event::NewSet`, since this expected to fired
+    /// Does not fire the `Event::NewSet` for Serai network, since this expected to fired
     /// prior to this call for a given session index.
     pub fn start_session(new_index: u32, network: NetworkId, validators: Vec<T::AccountId>) {
       // validator sets for index 0 is already set in the genesis build.
       if new_index == 0 {
         return;
       }
+      let key = ValidatorSet { session: Session(new_index), network };
 
       // get the bond of the validators, prepare participants.
       let mut participants = Vec::new();
-      let joining =
-        JoiningValidators::<T>::get(ValidatorSet { session: Session(new_index), network });
-      let leaving =
-        DeallocatingValidators::<T>::get(ValidatorSet { session: Session(new_index), network });
+      let mut joining = JoiningValidators::<T>::get(key);
+      let deallocating = DeallocatingValidators::<T>::get(key)
+        .iter()
+        .filter(|(_, _, leaving)| !leaving)
+        .map(|(id, amount, _)| (*id, *amount))
+        .collect::<Vec<_>>();
       let prev =
         Self::validator_set(ValidatorSet { session: Session(new_index - 1), network }).unwrap();
+
+      // append them all together
+      joining.extend(prev.participants);
+      let last_add_index = joining.len() - 1;
+      joining.extend(deallocating);
+
+      // calculate the amounts
+      let mut amounts = BTreeMap::<T::AccountId, Amount>::new();
+      for (i, (id, amount)) in joining.into_iter().enumerate() {
+        amounts
+          .entry(id)
+          .and_modify(|bond| {
+            if i <= last_add_index {
+              *bond = *bond + amount;
+            } else {
+              *bond = *bond - amount;
+            }
+          })
+          .or_insert(amount);
+      }
+
+      // make participants
       for v in validators.into_iter() {
-        let mut bond = Amount(0);
-        for (id, amount) in prev.participants.iter() {
-          if *id == v {
-            bond = bond + *amount;
-            break;
-          }
-        }
-
-        for (id, amount) in joining.iter() {
-          if *id == v {
-            bond = bond + *amount;
-            break;
-          }
-        }
-
-        for (id, amount) in leaving.iter() {
-          if *id == v {
-            bond = bond - *amount;
-            break;
-          }
-        }
+        let bond = *amounts.get(&v).unwrap_or(&Amount(0));
 
         if bond == Amount(0) {
           panic!("Something went horribly wrong. Session validator {v:?} wasn't in any set.");
@@ -413,9 +380,30 @@ pub mod pallet {
       CurrentSessionIndex::<T>::mutate(|v| {
         *v = Session(new_index);
       });
+
+      // TODO: This new_set fire is to be removed if we fire
+      // 100 block ago for other networks too like for serai net.
+      if network != NetworkId::Serai {
+        if Keys::<T>::get(key).is_none() {
+          todo!()
+        }
+        Pallet::<T>::deposit_event(Event::NewSet { set: new_set })
+      }
     }
 
-    pub fn end_session(_: NetworkId) {}
+    pub fn end_session(end_index: u32, network: NetworkId) {
+      if end_index == 0 {
+        return;
+      }
+
+      // delete old keys
+      let key = ValidatorSet { session: Session(end_index - 1), network };
+      JoiningValidators::<T>::remove(key);
+      DeallocatingValidators::<T>::remove(key);
+      Keys::<T>::remove(key);
+      MuSigKeys::<T>::remove(key);
+      ValidatorSets::<T>::remove(key);
+    }
   }
 
   #[pallet::call]
