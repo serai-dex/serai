@@ -367,7 +367,6 @@ impl Wallet {
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)
-        .await
         .unwrap();
 
         // Push the change output

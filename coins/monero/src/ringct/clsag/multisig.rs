@@ -7,11 +7,7 @@ use rand_chacha::ChaCha20Rng;
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use curve25519_dalek::{
-  traits::{Identity, IsIdentity},
-  scalar::Scalar,
-  edwards::EdwardsPoint,
-};
+use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use group::{ff::Field, Group, GroupEncoding};
 
@@ -147,7 +143,7 @@ pub(crate) fn add_key_image_share(
   participant: Participant,
   share: EdwardsPoint,
 ) {
-  if image.is_identity() {
+  if image.is_identity().into() {
     *image = generator * offset;
   }
   *image += share * lagrange::<dfg::Scalar>(participant, included).0;
@@ -203,7 +199,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     l: Participant,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
-    if self.image.is_identity() {
+    if self.image.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
       self.transcript.append_message(b"mask", self.mask().to_bytes());

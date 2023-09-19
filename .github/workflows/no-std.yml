@@ -23,7 +23,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -31,7 +31,7 @@ jobs:
           github-token: ${{ inputs.github-token }}
 
       - name: Install RISC-V Toolchain
-        run: sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
+        run: sudo apt update && sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
 
       - name: Verify no-std builds
         run: cd tests/no-std && CFLAGS=-I/usr/include cargo build --target riscv32imac-unknown-none-elf

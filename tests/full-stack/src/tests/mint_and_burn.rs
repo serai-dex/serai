@@ -387,7 +387,6 @@ async fn mint_and_burn_test() {
         )
         .unwrap()
         .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))
-        .await
         .unwrap();
 
         rpc.publish_transaction(&tx).await.unwrap()

@@ -35,6 +35,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
     let current_mempool_key = self.current_mempool_key();
+    #[allow(clippy::unwrap_or_default)]
     let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
 
     let mut txn = self.db.txn();
@@ -225,6 +226,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
     let transaction_key = self.transaction_key(tx);
     let current_mempool_key = self.current_mempool_key();
+    #[allow(clippy::unwrap_or_default)]
     let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
 
     let mut i = 0;

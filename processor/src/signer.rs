@@ -11,6 +11,7 @@ use frost::{
 
 use log::{info, debug, warn, error};
 
+use scale::Encode;
 use messages::sign::*;
 use crate::{
   Get, DbTxn, Db,
@@ -74,7 +75,7 @@ impl<N: Network, D: Db> SignerDb<N, D> {
   }
 
   fn attempt_key(id: &SignId) -> Vec<u8> {
-    Self::sign_key(b"attempt", bincode::serialize(id).unwrap())
+    Self::sign_key(b"attempt", id.encode())
   }
   fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
     txn.put(Self::attempt_key(id), []);

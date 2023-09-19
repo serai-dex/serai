@@ -160,20 +160,19 @@ async fn dkg_test() {
   for (k, key) in keys.iter().enumerate() {
     let attempt = 0;
 
-    let mut shares = HashMap::new();
+    let mut shares = vec![];
     for i in 0 .. keys.len() {
       if i != k {
         let mut share = vec![0; 256];
         OsRng.fill_bytes(&mut share);
-        shares.insert(Participant::new((i + 1).try_into().unwrap()).unwrap(), share);
+        shares.push(share);
       }
     }
 
     let mut tx = Transaction::DkgShares {
       attempt,
-      sender_i: Participant::new((k + 1).try_into().unwrap()).unwrap(),
       shares,
-      confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec),
+      confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec, 0),
       signed: Transaction::empty_signed(),
     };
     tx.sign(&mut OsRng, spec.genesis(), key, 1);
@@ -219,10 +218,15 @@ async fn dkg_test() {
         .enumerate()
         .filter_map(|(l, tx)| {
           if let Transaction::DkgShares { shares, .. } = tx {
-            shares
-              .get(&Participant::new((i + 1).try_into().unwrap()).unwrap())
-              .cloned()
-              .map(|share| (Participant::new((l + 1).try_into().unwrap()).unwrap(), share))
+            if i == l {
+              None
+            } else {
+              let relative_i = i - (if i > l { 1 } else { 0 });
+              Some((
+                Participant::new((l + 1).try_into().unwrap()).unwrap(),
+                shares[relative_i].clone(),
+              ))
+            }
           } else {
             panic!("txs had non-shares");
           }
@@ -283,7 +287,7 @@ async fn dkg_test() {
     // albeit poor
     let mut txn = scanner_db.0.txn();
     let share =
-      crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair).unwrap();
+      crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
     txn.commit();
 
     let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());

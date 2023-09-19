@@ -1,5 +1,5 @@
-use scale::Encode;
-use serai_client::primitives::{NetworkId, BlockHash};
+use scale::{Encode, Decode};
+use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch};
 
 pub use serai_db::*;
 
@@ -13,7 +13,7 @@ impl<'a, D: Db> MainDb<'a, D> {
   }
 
   fn main_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"MAIN", dst, key)
+    D::key(b"coordinator_main", dst, key)
   }
 
   fn acive_tributaries_key() -> Vec<u8> {
@@ -45,42 +45,6 @@ impl<'a, D: Db> MainDb<'a, D> {
     txn.commit();
   }
 
-  fn batches_in_block_key(network: NetworkId, block: [u8; 32]) -> Vec<u8> {
-    Self::main_key(b"batches_in_block", (network, block).encode())
-  }
-  pub fn batches_in_block<G: Get>(
-    getter: &G,
-    network: NetworkId,
-    block: [u8; 32],
-  ) -> Vec<[u8; 32]> {
-    getter
-      .get(Self::batches_in_block_key(network, block))
-      .expect("asking for batches in block for block without batches")
-      .chunks(32)
-      .map(|id| id.try_into().unwrap())
-      .collect()
-  }
-  pub fn add_batch_to_block(
-    txn: &mut D::Transaction<'_>,
-    network: NetworkId,
-    block: BlockHash,
-    id: [u8; 32],
-  ) {
-    let key = Self::batches_in_block_key(network, block.0);
-    let Some(mut existing) = txn.get(&key) else {
-      txn.put(&key, id);
-      return;
-    };
-
-    if existing.chunks(32).any(|existing_id| existing_id == id) {
-      // TODO: Is this an invariant?
-      return;
-    }
-
-    existing.extend(id);
-    txn.put(&key, existing);
-  }
-
   fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {
     Self::main_key(b"first_preprocess", id)
   }
@@ -94,5 +58,20 @@ impl<'a, D: Db> MainDb<'a, D> {
   }
   pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Option<Vec<u8>> {
     getter.get(Self::first_preprocess_key(id))
+  }
+
+  fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
+    Self::main_key(b"batch", (network, id).encode())
+  }
+  pub fn save_batch(&mut self, batch: SignedBatch) {
+    let mut txn = self.0.txn();
+    txn.put(Self::batch_key(batch.batch.network, batch.batch.id), batch.encode());
+    txn.commit();
+  }
+  pub fn batch(&self, network: NetworkId, id: u32) -> Option<SignedBatch> {
+    self
+      .0
+      .get(Self::batch_key(network, id))
+      .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
   }
 }

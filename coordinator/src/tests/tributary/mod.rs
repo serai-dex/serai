@@ -1,9 +1,6 @@
 use core::fmt::Debug;
-use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
-
-use frost::Participant;
 
 use tributary::{ReadWrite, tests::random_signed};
 
@@ -19,10 +16,6 @@ mod dkg;
 
 mod handle_p2p;
 mod sync;
-
-fn random_u16<R: RngCore>(rng: &mut R) -> u16 {
-  u16::try_from(rng.next_u64() >> 48).unwrap()
-}
 
 fn random_u32<R: RngCore>(rng: &mut R) -> u32 {
   u32::try_from(rng.next_u64() >> 32).unwrap()
@@ -70,18 +63,17 @@ fn serialize_transaction() {
     // This supports a variable share length, yet share length is expected to be constant among
     // shares
     let share_len = usize::try_from(OsRng.next_u64() % 512).unwrap();
-    // Create a valid map of shares
-    let mut shares = HashMap::new();
+    // Create a valid vec of shares
+    let mut shares = vec![];
     // Create up to 512 participants
     for i in 0 .. (OsRng.next_u64() % 512) {
       let mut share = vec![0; share_len];
       OsRng.fill_bytes(&mut share);
-      shares.insert(Participant::new(u16::try_from(i + 1).unwrap()).unwrap(), share);
+      shares.push(share);
     }
 
     test_read_write(Transaction::DkgShares {
       attempt: random_u32(&mut OsRng),
-      sender_i: Participant::new(random_u16(&mut OsRng).saturating_add(1)).unwrap(),
       shares,
       confirmation_nonces: {
         let mut nonces = [0; 64];
@@ -103,9 +95,11 @@ fn serialize_transaction() {
   ));
 
   {
-    let mut ext_block = [0; 32];
-    OsRng.fill_bytes(&mut ext_block);
-    test_read_write(Transaction::ExternalBlock(ext_block));
+    let mut block = [0; 32];
+    OsRng.fill_bytes(&mut block);
+    let mut batch = [0; 32];
+    OsRng.fill_bytes(&mut batch);
+    test_read_write(Transaction::Batch(block, batch));
   }
   test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 
@@ -114,4 +108,17 @@ fn serialize_transaction() {
 
   test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng)));
   test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng)));
+
+  {
+    let mut plan = [0; 32];
+    OsRng.fill_bytes(&mut plan);
+    let mut tx_hash = vec![0; (OsRng.next_u64() % 64).try_into().unwrap()];
+    OsRng.fill_bytes(&mut tx_hash);
+    test_read_write(Transaction::SignCompleted {
+      plan,
+      tx_hash,
+      first_signer: random_signed(&mut OsRng).signer,
+      signature: random_signed(&mut OsRng).signature,
+    });
+  }
 }

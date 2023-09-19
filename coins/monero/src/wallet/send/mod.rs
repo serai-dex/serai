@@ -805,8 +805,7 @@ impl SignableTransaction {
   }
 
   /// Sign this transaction.
-  // TODO: Remove async
-  pub async fn sign<R: RngCore + CryptoRng>(
+  pub fn sign<R: RngCore + CryptoRng>(
     mut self,
     rng: &mut R,
     spend: &Zeroizing<Scalar>,

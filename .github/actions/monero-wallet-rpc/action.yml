@@ -12,7 +12,7 @@ runs:
   steps:
     - name: Monero Wallet RPC Cache
       id: cache-monero-wallet-rpc
-      uses: actions/cache@v3
+      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84
       with:
         path: monero-wallet-rpc
         key: monero-wallet-rpc-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}

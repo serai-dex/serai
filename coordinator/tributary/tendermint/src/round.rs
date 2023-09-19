@@ -35,7 +35,7 @@ impl<N: Network> RoundData<N> {
   fn timeout(&self, step: Step) -> CanonicalInstant {
     let adjusted_block = N::BLOCK_PROCESSING_TIME * (self.number.0 + 1);
     let adjusted_latency = N::LATENCY_TIME * (self.number.0 + 1);
-    let offset = Duration::from_secs(
+    let offset = Duration::from_millis(
       (match step {
         Step::Propose => adjusted_block + adjusted_latency,
         Step::Prevote => adjusted_block + (2 * adjusted_latency),
@@ -57,6 +57,14 @@ impl<N: Network> RoundData<N> {
 
   // Poll all set timeouts, returning the Step whose timeout has just expired
   pub(crate) async fn timeout_future(&self) -> Step {
+    let now = Instant::now();
+    log::trace!(
+      target: "tendermint",
+      "getting timeout_future, from step {:?}, off timeouts: {:?}",
+      self.step,
+      self.timeouts.iter().map(|(k, v)| (k, v.duration_since(now))).collect::<HashMap<_, _>>()
+    );
+
     let timeout_future = |step| {
       let timeout = self.timeouts.get(&step).copied();
       (async move {

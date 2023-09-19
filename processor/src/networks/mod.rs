@@ -279,6 +279,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction: Send + Sync + Clone + Debug;
   /// The type containing all information to check if a plan was completed.
+  ///
+  /// This must be binding to both the outputs expected and the plan ID.
   type Eventuality: Eventuality;
   /// The FROST machine to sign a transaction.
   type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;

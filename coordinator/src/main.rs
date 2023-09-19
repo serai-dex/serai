@@ -12,7 +12,12 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::ff::{Field, PrimeField},
+  Ciphersuite, Ristretto,
+};
+use schnorr::SchnorrSignature;
+use frost::Participant;
 
 use serai_db::{DbTxn, Db};
 use serai_env as env;
@@ -21,6 +26,7 @@ use serai_client::{primitives::NetworkId, Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
+use futures::stream::StreamExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use ::tributary::{
@@ -70,7 +76,7 @@ async fn add_tributary<D: Db, P: P2p>(
   log::info!("adding tributary {:?}", spec.set());
 
   let tributary = Tributary::<_, Transaction, _>::new(
-    // TODO2: Use a db on a distinct volume
+    // TODO2: Use a db on a distinct volume to protect against DoS attacks
     db,
     spec.genesis(),
     spec.start_time(),
@@ -102,7 +108,47 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   let mut db = substrate::SubstrateDb::new(db);
   let mut next_substrate_block = db.next_block();
 
+  let new_substrate_block_notifier = {
+    let serai = &serai;
+    move || async move {
+      loop {
+        match serai.newly_finalized_block().await {
+          Ok(sub) => return sub,
+          Err(e) => {
+            log::error!("couldn't communicate with serai node: {e}");
+            sleep(Duration::from_secs(5)).await;
+          }
+        }
+      }
+    }
+  };
+  let mut substrate_block_notifier = new_substrate_block_notifier().await;
+
   loop {
+    // await the next block, yet if our notifier had an error, re-create it
+    {
+      let Ok(next_block) =
+        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.next()).await
+      else {
+        // Timed out, which may be because Serai isn't finalizing or may be some issue with the
+        // notifier
+        if serai.get_latest_block().await.map(|block| block.number()).ok() ==
+          Some(next_substrate_block.saturating_sub(1))
+        {
+          log::info!("serai hasn't finalized a block in the last 60s...");
+        } else {
+          substrate_block_notifier = new_substrate_block_notifier().await;
+        }
+        continue;
+      };
+
+      // next_block is a Option<Result>
+      if next_block.and_then(Result::ok).is_none() {
+        substrate_block_notifier = new_substrate_block_notifier().await;
+        continue;
+      }
+    }
+
     match substrate::handle_new_blocks(
       &mut db,
       &key,
@@ -125,9 +171,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
     )
     .await
     {
-      // TODO2: Should this use a notification system for new blocks?
-      // Right now it's sleeping for half the block time.
-      Ok(()) => sleep(Duration::from_secs(3)).await,
+      Ok(()) => {}
       Err(e) => {
         log::error!("couldn't communicate with serai node: {e}");
         sleep(Duration::from_secs(5)).await;
@@ -141,7 +185,7 @@ pub async fn scan_tributaries<
   D: Db,
   Pro: Processors,
   P: P2p,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
 >(
   raw_db: D,
@@ -221,11 +265,11 @@ pub async fn scan_tributaries<
                 }
                 // This is assumed to be some ephemeral error due to the assumed fault-free
                 // creation
-                // TODO: Differentiate connection errors from invariants
+                // TODO2: Differentiate connection errors from invariants
                 Err(e) => {
                   // Check if this failed because the keys were already set by someone else
                   if matches!(serai.get_keys(spec.set()).await, Ok(Some(_))) {
-                    log::info!("other party set key pair for {:?}", set);
+                    log::info!("another coordinator set key pair for {:?}", set);
                     break;
                   }
 
@@ -243,7 +287,7 @@ pub async fn scan_tributaries<
     }
 
     // Sleep for half the block time
-    // TODO2: Should we define a notification system for when a new block occurs?
+    // TODO2: Define a notification system for when a new block occurs
     sleep(Duration::from_secs((Tributary::<D, Transaction, P>::block_time() / 2).into())).await;
   }
 }
@@ -291,115 +335,105 @@ pub async fn handle_p2p<D: Db, P: P2p>(
 ) {
   loop {
     let mut msg = p2p.receive().await;
-    match msg.kind {
-      P2pMessageKind::KeepAlive => {}
+    // Spawn a dedicated task to handle this message, ensuring any singularly latent message
+    // doesn't hold everything up
+    // TODO2: Move to one task per tributary (or two. One for Tendermint, one for Tributary)
+    tokio::spawn({
+      let p2p = p2p.clone();
+      let tributaries = tributaries.clone();
+      async move {
+        match msg.kind {
+          P2pMessageKind::KeepAlive => {}
 
-      P2pMessageKind::Tributary(genesis) => {
-        let tributaries = tributaries.read().await;
-        let Some(tributary) = tributaries.get(&genesis) else {
-          log::debug!("received p2p message for unknown network");
-          continue;
-        };
+          P2pMessageKind::Tributary(genesis) => {
+            let tributaries = tributaries.read().await;
+            let Some(tributary) = tributaries.get(&genesis) else {
+              log::debug!("received p2p message for unknown network");
+              return;
+            };
 
-        log::trace!("handling message for tributary {:?}", tributary.spec.set());
-        if tributary.tributary.read().await.handle_message(&msg.msg).await {
-          P2p::broadcast(&p2p, msg.kind, msg.msg).await;
-        }
-      }
-
-      // TODO2: Rate limit this per timestamp
-      P2pMessageKind::Heartbeat(genesis) => {
-        if msg.msg.len() != 40 {
-          log::error!("validator sent invalid heartbeat");
-          continue;
-        }
-
-        let tributaries = tributaries.read().await;
-        let Some(tributary) = tributaries.get(&genesis) else {
-          log::debug!("received heartbeat message for unknown network");
-          continue;
-        };
-        let tributary_read = tributary.tributary.read().await;
-
-        /*
-        // Have sqrt(n) nodes reply with the blocks
-        let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
-        // Try to have at least 3 responders
-        if responders < 3 {
-          responders = tributary.spec.n().min(3).into();
-        }
-        */
-
-        // Have up to three nodes respond
-        let responders = u64::from(tributary.spec.n().min(3));
-
-        // Decide which nodes will respond by using the latest block's hash as a mutually agreed
-        // upon entropy source
-        // This isn't a secure source of entropy, yet it's fine for this
-        let entropy = u64::from_le_bytes(tributary_read.tip().await[.. 8].try_into().unwrap());
-        // If n = 10, responders = 3, we want start to be 0 ..= 7 (so the highest is 7, 8, 9)
-        // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
-        let start =
-          usize::try_from(entropy % (u64::from(tributary.spec.n() + 1) - responders)).unwrap();
-        let mut selected = false;
-        for validator in
-          &tributary.spec.validators()[start .. (start + usize::try_from(responders).unwrap())]
-        {
-          if our_key == validator.0 {
-            selected = true;
-            break;
+            log::trace!("handling message for tributary {:?}", tributary.spec.set());
+            if tributary.tributary.read().await.handle_message(&msg.msg).await {
+              P2p::broadcast(&p2p, msg.kind, msg.msg).await;
+            }
           }
-        }
-        if !selected {
-          log::debug!("received heartbeat and not selected to respond");
-          continue;
-        }
 
-        log::debug!("received heartbeat and selected to respond");
+          // TODO2: Rate limit this per timestamp
+          // And/or slash on Heartbeat which justifies a response, since the node obviously was
+          // offline and we must now use our bandwidth to compensate for them?
+          P2pMessageKind::Heartbeat(genesis) => {
+            if msg.msg.len() != 40 {
+              log::error!("validator sent invalid heartbeat");
+              return;
+            }
 
-        let reader = tributary_read.reader();
-        drop(tributary_read);
+            let tributaries = tributaries.read().await;
+            let Some(tributary) = tributaries.get(&genesis) else {
+              log::debug!("received heartbeat message for unknown network");
+              return;
+            };
+            let tributary_read = tributary.tributary.read().await;
 
-        let mut latest = msg.msg[.. 32].try_into().unwrap();
-        while let Some(next) = reader.block_after(&latest) {
-          let mut res = reader.block(&next).unwrap().serialize();
-          res.extend(reader.commit(&next).unwrap());
-          // Also include the timestamp used within the Heartbeat
-          res.extend(&msg.msg[32 .. 40]);
-          p2p.send(msg.sender, P2pMessageKind::Block(tributary.spec.genesis()), res).await;
-          latest = next;
-        }
-      }
+            /*
+            // Have sqrt(n) nodes reply with the blocks
+            let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
+            // Try to have at least 3 responders
+            if responders < 3 {
+              responders = tributary.spec.n().min(3).into();
+            }
+            */
 
-      P2pMessageKind::Block(genesis) => {
-        let mut msg_ref: &[u8] = msg.msg.as_ref();
-        let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
-          log::error!("received block message with an invalidly serialized block");
-          continue;
-        };
-        // Get just the commit
-        msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
-        msg.msg.drain((msg.msg.len() - 8) ..);
+            // Have up to three nodes respond
+            let responders = u64::from(tributary.spec.n().min(3));
 
-        // Spawn a dedicated task to add this block, as it may take a notable amount of time
-        // While we could use a long-lived task to add each block, that task would only add one
-        // block at a time *across all tributaries*
-        // We either need:
-        // 1) One task per tributary
-        // 2) Background tasks
-        // 3) For sync_block to return instead of waiting for provided transactions which are
-        //    missing
-        // sync_block waiting is preferable since we know the block is valid by its commit, meaning
-        // we are the node behind
-        // As for 1/2, 1 may be preferable since this message may frequently occur
-        // This is suitably performant, as tokio HTTP servers will even spawn a new task per
-        // connection
-        // In order to reduce congestion though, we should at least check if we take value from
-        // this message before running spawn
-        // TODO2
-        tokio::spawn({
-          let tributaries = tributaries.clone();
-          async move {
+            // Decide which nodes will respond by using the latest block's hash as a mutually agreed
+            // upon entropy source
+            // This isn't a secure source of entropy, yet it's fine for this
+            let entropy = u64::from_le_bytes(tributary_read.tip().await[.. 8].try_into().unwrap());
+            // If n = 10, responders = 3, we want start to be 0 ..= 7 (so the highest is 7, 8, 9)
+            // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
+            let start =
+              usize::try_from(entropy % (u64::from(tributary.spec.n() + 1) - responders)).unwrap();
+            let mut selected = false;
+            for validator in
+              &tributary.spec.validators()[start .. (start + usize::try_from(responders).unwrap())]
+            {
+              if our_key == validator.0 {
+                selected = true;
+                break;
+              }
+            }
+            if !selected {
+              log::debug!("received heartbeat and not selected to respond");
+              return;
+            }
+
+            log::debug!("received heartbeat and selected to respond");
+
+            let reader = tributary_read.reader();
+            drop(tributary_read);
+
+            let mut latest = msg.msg[.. 32].try_into().unwrap();
+            while let Some(next) = reader.block_after(&latest) {
+              let mut res = reader.block(&next).unwrap().serialize();
+              res.extend(reader.commit(&next).unwrap());
+              // Also include the timestamp used within the Heartbeat
+              res.extend(&msg.msg[32 .. 40]);
+              p2p.send(msg.sender, P2pMessageKind::Block(tributary.spec.genesis()), res).await;
+              latest = next;
+            }
+          }
+
+          P2pMessageKind::Block(genesis) => {
+            let mut msg_ref: &[u8] = msg.msg.as_ref();
+            let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
+              log::error!("received block message with an invalidly serialized block");
+              return;
+            };
+            // Get just the commit
+            msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
+            msg.msg.drain((msg.msg.len() - 8) ..);
+
             let tributaries = tributaries.read().await;
             let Some(tributary) = tributaries.get(&genesis) else {
               log::debug!("received block message for unknown network");
@@ -409,9 +443,9 @@ pub async fn handle_p2p<D: Db, P: P2p>(
             let res = tributary.tributary.read().await.sync_block(block, msg.msg).await;
             log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
           }
-        });
+        }
       }
-    }
+    });
   }
 }
 
@@ -447,6 +481,11 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   let pub_key = Ristretto::generator() * key.deref();
 
   loop {
+    // TODO: Dispatch this message to a task dedicated to handling this processor, preventing one
+    // processor from holding up all the others. This would require a peek method be added to the
+    // message-queue (to view multiple future messages at once)
+    // TODO: Do we handle having handled a message, by DB, yet having rebooted before `ack`ing it?
+    // Does the processor?
     let msg = processors.recv().await;
 
     // TODO2: This is slow, and only works as long as a network only has a single Tributary
@@ -471,18 +510,23 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           Some(Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()))
         }
-        key_gen::ProcessorMessage::Shares { id, shares } => {
+        key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
-          // DkgConfirmer has a TODO noting it's only secure for a single usage, yet this ensures
-          // the TODO is resolved before unsafe usage
-          if id.attempt != 0 {
-            panic!("attempt wasn't 0");
+          let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec, id.attempt);
+
+          let mut tx_shares = Vec::with_capacity(shares.len());
+          for i in 1 ..= spec.n() {
+            let i = Participant::new(i).unwrap();
+            if i == my_i {
+              continue;
+            }
+            tx_shares
+              .push(shares.remove(&i).expect("processor didn't send share for another validator"));
           }
-          let nonces = crate::tributary::dkg_confirmation_nonces(&key, &spec);
+
           Some(Transaction::DkgShares {
             attempt: id.attempt,
-            sender_i: my_i,
-            shares,
+            shares: tx_shares,
             confirmation_nonces: nonces,
             signed: Transaction::empty_signed(),
           })
@@ -501,6 +545,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             &key,
             &spec,
             &(Public(substrate_key), network_key.try_into().unwrap()),
+            id.attempt,
           );
           txn.commit();
 
@@ -536,7 +581,23 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           signed: Transaction::empty_signed(),
         })),
         sign::ProcessorMessage::Completed { key: _, id, tx } => {
-          Some(Transaction::SignCompleted(id, tx, Transaction::empty_signed()))
+          let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+          #[allow(non_snake_case)]
+          let R = <Ristretto as Ciphersuite>::generator() * r.deref();
+          let mut tx = Transaction::SignCompleted {
+            plan: id,
+            tx_hash: tx,
+            first_signer: pub_key,
+            signature: SchnorrSignature { R, s: <Ristretto as Ciphersuite>::F::ZERO },
+          };
+          let signed = SchnorrSignature::sign(&key, r, tx.sign_completed_challenge());
+          match &mut tx {
+            Transaction::SignCompleted { signature, .. } => {
+              *signature = signed;
+            }
+            _ => unreachable!(),
+          }
+          Some(tx)
         }
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
@@ -561,19 +622,17 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             id.attempt,
             hex::encode(block),
           );
-          // If this is the first attempt instance, synchronize around the block first
+          // If this is the first attempt instance, wait until we synchronize around the batch
+          // first
           if id.attempt == 0 {
             // Save the preprocess to disk so we can publish it later
             // This is fine to use its own TX since it's static and just needs to be written
             // before this message finishes it handling (or with this message's finished handling)
             let mut txn = db.txn();
             MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
-            MainDb::<D>::add_batch_to_block(&mut txn, msg.network, block, id.id);
             txn.commit();
 
-            // TODO: This will publish one ExternalBlock per Batch. We should only publish one per
-            // all batches within a block
-            Some(Transaction::ExternalBlock(block.0))
+            Some(Transaction::Batch(block.0, id.id))
           } else {
             Some(Transaction::BatchPreprocess(SignData {
               plan: id.id,
@@ -599,41 +658,68 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             "processor sent us a batch for a different network than it was for",
           );
           // TODO: Check this key's key pair's substrate key is authorized to publish batches
-          // TODO: Check the batch ID is an atomic increment
 
-          let tx = Serai::execute_batch(batch.clone());
-          loop {
-            match serai.publish(&tx).await {
-              Ok(_) => {
-                log::info!(
-                  "executed batch {:?} {} (block {})",
-                  batch.batch.network,
-                  batch.batch.id,
-                  hex::encode(batch.batch.block),
-                );
-                break;
-              }
-              Err(e) => {
-                if let Ok(latest_block) = serai.get_latest_block().await {
-                  if let Ok(Some(last)) =
-                    serai.get_last_batch_for_network(latest_block.hash(), batch.batch.network).await
-                  {
-                    if last >= batch.batch.id {
-                      log::info!(
-                        "another coordinator executed batch {:?} {} (block {})",
-                        batch.batch.network,
-                        batch.batch.id,
-                        hex::encode(batch.batch.block),
+          // Save this batch to the disk
+          MainDb::new(&mut db).save_batch(batch);
+
+          /*
+            Use a dedicated task to publish batches due to the latency potentially incurred.
+
+            This does not guarantee the batch has actually been published when the message is
+            `ack`ed to message-queue. Accordingly, if we reboot, these batches would be dropped
+            (as we wouldn't see the `Update` again, triggering our re-attempt to publish).
+
+            The solution to this is to have the task try not to publish the batch which caused it
+            to be spawned, yet all saved batches which have yet to published. This does risk having
+            multiple tasks trying to publish all pending batches, yet these aren't notably complex.
+          */
+          tokio::spawn({
+            let mut db = db.clone();
+            let serai = serai.clone();
+            let network = msg.network;
+            async move {
+              // Since we have a new batch, publish all batches yet to be published to Serai
+              // This handles the edge-case where batch n+1 is signed before batch n is
+              while let Some(batch) = {
+                // Get the next-to-execute batch ID
+                let next = {
+                  let mut first = true;
+                  loop {
+                    if !first {
+                      log::error!(
+                        "couldn't connect to Serai node to get the next batch ID for {network:?}",
                       );
-                      break;
+                      tokio::time::sleep(Duration::from_secs(5)).await;
                     }
+                    first = false;
+
+                    let Ok(latest_block) = serai.get_latest_block().await else { continue };
+                    let Ok(last) =
+                      serai.get_last_batch_for_network(latest_block.hash(), network).await
+                    else {
+                      continue;
+                    };
+                    break if let Some(last) = last { last + 1 } else { 0 };
                   }
+                };
+
+                // If we have this batch, attempt to publish it
+                MainDb::new(&mut db).batch(network, next)
+              } {
+                let id = batch.batch.id;
+                let block = batch.batch.block;
+
+                let tx = Serai::execute_batch(batch);
+                // This publish may fail if this transactions already exists in the mempool, which
+                // is possible, or if this batch was already executed on-chain
+                // Either case will have eventual resolution and be handled by the above check on
+                // if this block should execute
+                if serai.publish(&tx).await.is_ok() {
+                  log::info!("published batch {network:?} {id} (block {})", hex::encode(block));
                 }
-                log::error!("couldn't connect to Serai node to publish batch TX: {:?}", e);
-                tokio::time::sleep(Duration::from_secs(10)).await;
               }
             }
-          }
+          });
 
           None
         }
@@ -662,6 +748,13 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
             panic!("provided an invalid transaction: {res:?}");
           }
         }
+        TransactionKind::Unsigned => {
+          log::trace!("publishing unsigned transaction {}", hex::encode(tx.hash()));
+          // Ignores the result since we can't differentiate already in-mempool from already
+          // on-chain from invalid
+          // TODO: Don't ignore the result
+          tributary.add_transaction(tx).await;
+        }
         TransactionKind::Signed(_) => {
           // Get the next nonce
           // TODO: This should be deterministic, not just DB-backed, to allow rebuilding validators
@@ -681,7 +774,6 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
           // txn.commit();
         }
-        _ => panic!("created an unexpected transaction"),
       }
     }
 
@@ -731,11 +823,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       async move {
         // SubstrateBlockAck is fired before Preprocess, creating a race between Tributary ack
         // of the SubstrateBlock and the sending of all Preprocesses
-        // A similar race condition exists when multiple Batches are present in a block
         // This waits until the necessary preprocess is available
         let get_preprocess = |raw_db, id| async move {
           loop {
             let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, id) else {
+              assert_eq!(id_type, RecognizedIdType::Plan);
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -743,53 +835,37 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           }
         };
 
-        let (ids, txs) = match id_type {
-          RecognizedIdType::Block => {
-            let block = id;
+        let mut tx = match id_type {
+          RecognizedIdType::Batch => Transaction::BatchPreprocess(SignData {
+            plan: id,
+            attempt: 0,
+            data: get_preprocess(&raw_db, id).await,
+            signed: Transaction::empty_signed(),
+          }),
 
-            let ids = MainDb::<D>::batches_in_block(&raw_db, network, block);
-            let mut txs = vec![];
-            for id in &ids {
-              txs.push(Transaction::BatchPreprocess(SignData {
-                plan: *id,
-                attempt: 0,
-                data: get_preprocess(&raw_db, *id).await,
-                signed: Transaction::empty_signed(),
-              }));
-            }
-            (ids, txs)
-          }
-
-          RecognizedIdType::Plan => (
-            vec![id],
-            vec![Transaction::SignPreprocess(SignData {
-              plan: id,
-              attempt: 0,
-              data: get_preprocess(&raw_db, id).await,
-              signed: Transaction::empty_signed(),
-            })],
-          ),
+          RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+            plan: id,
+            attempt: 0,
+            data: get_preprocess(&raw_db, id).await,
+            signed: Transaction::empty_signed(),
+          }),
         };
 
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
-          panic!("tributary we don't have came to consensus on an ExternalBlock");
+          panic!("tributary we don't have came to consensus on an Batch");
         };
         let tributary = tributary.tributary.read().await;
 
-        for mut tx in txs {
-          // TODO: Same note as prior nonce acquisition
-          log::trace!("getting next nonce for Tributary TX containing Batch signing data");
-          let nonce = tributary
-            .next_nonce(Ristretto::generator() * key.deref())
-            .await
-            .expect("publishing a TX to a tributary we aren't in");
-          tx.sign(&mut OsRng, genesis, &key, nonce);
+        // TODO: Same note as prior nonce acquisition
+        log::trace!("getting next nonce for Tributary TX containing Batch signing data");
+        let nonce = tributary
+          .next_nonce(Ristretto::generator() * key.deref())
+          .await
+          .expect("publishing a TX to a tributary we aren't in");
+        tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          publish_transaction(&tributary, tx).await;
-        }
-
-        ids
+        publish_transaction(&tributary, tx).await;
       }
     }
   };

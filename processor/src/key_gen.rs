@@ -15,6 +15,7 @@ use frost::{
 
 use log::info;
 
+use scale::Encode;
 use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 use messages::key_gen::*;
 
@@ -34,7 +35,7 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   }
 
   fn params_key(set: &ValidatorSet) -> Vec<u8> {
-    Self::key_gen_key(b"params", bincode::serialize(set).unwrap())
+    Self::key_gen_key(b"params", set.encode())
   }
   fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
@@ -48,7 +49,7 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
   // Overwriting its commitments would be accordingly poor
   fn commitments_key(id: &KeyGenId) -> Vec<u8> {
-    Self::key_gen_key(b"commitments", bincode::serialize(id).unwrap())
+    Self::key_gen_key(b"commitments", id.encode())
   }
   fn save_commitments(
     txn: &mut D::Transaction<'_>,
@@ -64,8 +65,8 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
     .unwrap()
   }
 
-  fn generated_keys_key(set: ValidatorSet, key_pair: (&[u8], &[u8])) -> Vec<u8> {
-    Self::key_gen_key(b"generated_keys", bincode::serialize(&(set, key_pair)).unwrap())
+  fn generated_keys_key(set: ValidatorSet, key_pair: (&[u8; 32], &[u8])) -> Vec<u8> {
+    Self::key_gen_key(b"generated_keys", (set, key_pair).encode())
   }
   fn save_keys(
     txn: &mut D::Transaction<'_>,
@@ -78,10 +79,7 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
     txn.put(
       Self::generated_keys_key(
         id.set,
-        (
-          substrate_keys.group_key().to_bytes().as_ref(),
-          network_keys.group_key().to_bytes().as_ref(),
-        ),
+        (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()),
       ),
       keys,
     );
@@ -107,10 +105,8 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
-    let (keys_vec, keys) = Self::read_keys(
-      txn,
-      &Self::generated_keys_key(set, (key_pair.0.as_ref(), key_pair.1.as_ref())),
-    );
+    let (keys_vec, keys) =
+      Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())));
     assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
     assert_eq!(
       {

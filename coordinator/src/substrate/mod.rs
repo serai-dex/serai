@@ -101,7 +101,6 @@ async fn handle_key_gen<Pro: Processors>(
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
   if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
-    // TODO: Check how the processor handles this being fired multiple times
     processors
       .send(
         set.network,
@@ -196,7 +195,6 @@ async fn handle_batch_and_burns<Pro: Processors>(
         .expect("network had a batch/burn yet never set a latest block")
     };
 
-    // TODO: Check how the processor handles this being fired multiple times
     processors
       .send(
         network,
@@ -251,22 +249,18 @@ async fn handle_block<
     // Additionally, if the Serai connection also fails 1/100 times, this means a block with 1000
     // events will successfully be incrementally handled (though the Serai connection should be
     // stable)
+    let ValidatorSetsEvent::NewSet { set } = new_set else {
+      panic!("NewSet event wasn't NewSet: {new_set:?}");
+    };
+
+    if set.network == NetworkId::Serai {
+      continue;
+    }
+
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
-      if let ValidatorSetsEvent::NewSet { set } = new_set {
-        log::info!("found fresh new set event {:?}", new_set);
-        handle_new_set(
-          &mut db.0,
-          key,
-          create_new_tributary.clone(),
-          processors,
-          serai,
-          &block,
-          set,
-        )
+      log::info!("found fresh new set event {:?}", new_set);
+      handle_new_set(&mut db.0, key, create_new_tributary.clone(), processors, serai, &block, set)
         .await?;
-      } else {
-        panic!("NewSet event wasn't NewSet: {new_set:?}");
-      }
       let mut txn = db.0.txn();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();

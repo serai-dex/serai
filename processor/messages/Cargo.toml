@@ -16,8 +16,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 zeroize = { version = "1", features = ["derive"] }
 
+scale = { package = "parity-scale-codec", version = "3", default-features = false }
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
 
 dkg = { path = "../../crypto/dkg", features = ["serde"] }
 

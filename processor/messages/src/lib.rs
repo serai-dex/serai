@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use zeroize::Zeroize;
 
+use scale::{Encode, Decode};
 use serde::{Serialize, Deserialize};
 
 use dkg::{Participant, ThresholdParams};
@@ -11,7 +12,7 @@ use in_instructions_primitives::SignedBatch;
 use tokens_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
 pub struct SubstrateContext {
   pub serai_time: u64,
   pub network_latest_finalized_block: BlockHash,
@@ -20,7 +21,9 @@ pub struct SubstrateContext {
 pub mod key_gen {
   use super::*;
 
-  #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize,
+  )]
   pub struct KeyGenId {
     pub set: ValidatorSet,
     pub attempt: u32,
@@ -57,7 +60,7 @@ pub mod key_gen {
 pub mod sign {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub struct SignId {
     pub key: Vec<u8>,
     pub id: [u8; 32],
@@ -91,7 +94,7 @@ pub mod sign {
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
     Preprocess { id: SignId, preprocess: Vec<u8> },
@@ -136,7 +139,7 @@ pub mod coordinator {
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<[u8; 32]> },
     BatchPreprocess { id: SignId, block: BlockHash, preprocess: Vec<u8> },
@@ -147,7 +150,7 @@ pub mod coordinator {
 pub mod substrate {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     ConfirmKeyPair {
       context: SubstrateContext,
@@ -174,7 +177,7 @@ pub mod substrate {
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     Update { batch: SignedBatch },
   }
@@ -251,7 +254,6 @@ impl CoordinatorMessage {
   /// This doesn't use H(msg.serialize()) as it's meant to be unique to intent, not unique to
   /// values. While the values should be consistent per intent, that assumption isn't required
   /// here.
-  // TODO: Should this use borsh intead of bincode?
   pub fn intent(&self) -> Vec<u8> {
     match self {
       CoordinatorMessage::KeyGen(msg) => {
@@ -263,22 +265,20 @@ impl CoordinatorMessage {
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_KEY_GEN_UID, sub];
-        res.extend(&bincode::serialize(id).unwrap());
+        res.extend(&id.encode());
         res
       }
       CoordinatorMessage::Sign(msg) => {
         let (sub, id) = match msg {
           // Unique since SignId includes a hash of the network, and specific transaction info
-          sign::CoordinatorMessage::Preprocesses { id, .. } => (0, bincode::serialize(id).unwrap()),
-          sign::CoordinatorMessage::Shares { id, .. } => (1, bincode::serialize(id).unwrap()),
-          sign::CoordinatorMessage::Reattempt { id } => (2, bincode::serialize(id).unwrap()),
+          sign::CoordinatorMessage::Preprocesses { id, .. } => (0, id.encode()),
+          sign::CoordinatorMessage::Shares { id, .. } => (1, id.encode()),
+          sign::CoordinatorMessage::Reattempt { id } => (2, id.encode()),
           // The coordinator should report all reported completions to the processor
           // Accordingly, the intent is a combination of plan ID and actual TX
           // While transaction alone may suffice, that doesn't cover cross-chain TX ID conflicts,
           // which are possible
-          sign::CoordinatorMessage::Completed { id, tx, .. } => {
-            (3, bincode::serialize(&(id, tx)).unwrap())
-          }
+          sign::CoordinatorMessage::Completed { id, tx, .. } => (3, (id, tx).encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
@@ -288,15 +288,9 @@ impl CoordinatorMessage {
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           // Unique since this embeds the batch ID (hash of it, including its network) and attempt
-          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => {
-            (0, bincode::serialize(id).unwrap())
-          }
-          coordinator::CoordinatorMessage::BatchShares { id, .. } => {
-            (1, bincode::serialize(id).unwrap())
-          }
-          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => {
-            (2, bincode::serialize(id).unwrap())
-          }
+          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => (0, id.encode()),
+          coordinator::CoordinatorMessage::BatchShares { id, .. } => (1, id.encode()),
+          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (2, id.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -306,11 +300,9 @@ impl CoordinatorMessage {
       CoordinatorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
           // Unique since there's only one key pair for a set
-          substrate::CoordinatorMessage::ConfirmKeyPair { set, .. } => {
-            (0, bincode::serialize(set).unwrap())
-          }
+          substrate::CoordinatorMessage::ConfirmKeyPair { set, .. } => (0, set.encode()),
           substrate::CoordinatorMessage::SubstrateBlock { network, block, .. } => {
-            (1, bincode::serialize(&(network, block)).unwrap())
+            (1, (network, block).encode())
           }
         };
 
@@ -340,14 +332,14 @@ impl ProcessorMessage {
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];
-        res.extend(&bincode::serialize(id).unwrap());
+        res.extend(&id.encode());
         res
       }
       ProcessorMessage::Sign(msg) => {
         let (sub, id) = match msg {
           // Unique since SignId
-          sign::ProcessorMessage::Preprocess { id, .. } => (0, bincode::serialize(id).unwrap()),
-          sign::ProcessorMessage::Share { id, .. } => (1, bincode::serialize(id).unwrap()),
+          sign::ProcessorMessage::Preprocess { id, .. } => (0, id.encode()),
+          sign::ProcessorMessage::Share { id, .. } => (1, id.encode()),
           // Unique since a processor will only sign a TX once
           sign::ProcessorMessage::Completed { id, .. } => (2, id.to_vec()),
         };
@@ -359,15 +351,11 @@ impl ProcessorMessage {
       ProcessorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           coordinator::ProcessorMessage::SubstrateBlockAck { network, block, .. } => {
-            (0, bincode::serialize(&(network, block)).unwrap())
+            (0, (network, block).encode())
           }
           // Unique since SignId
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-            (1, bincode::serialize(id).unwrap())
-          }
-          coordinator::ProcessorMessage::BatchShare { id, .. } => {
-            (2, bincode::serialize(id).unwrap())
-          }
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (1, id.encode()),
+          coordinator::ProcessorMessage::BatchShare { id, .. } => (2, id.encode()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -378,7 +366,7 @@ impl ProcessorMessage {
         let (sub, id) = match msg {
           // Unique since network and ID binding
           substrate::ProcessorMessage::Update { batch, .. } => {
-            (0, bincode::serialize(&(batch.batch.network, batch.batch.id)).unwrap())
+            (0, (batch.batch.network, batch.batch.id).encode())
           }
         };
 

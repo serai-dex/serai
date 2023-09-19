@@ -28,7 +28,7 @@ use crate::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RecognizedIdType {
-  Block,
+  Batch,
   Plan,
 }
 
@@ -39,7 +39,7 @@ async fn handle_block<
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
   P: P2p,
 >(
@@ -76,7 +76,7 @@ async fn handle_block<
         // mark the node as fatally slashed
         TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs.0.msg.sender);
 
-        // TODO: disconnect the node from network/ban from further participation in Tributary
+        // TODO2: disconnect the node from network/ban from further participation in Tributary
       }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, _, _, _, _, _>(
@@ -84,7 +84,6 @@ async fn handle_block<
           spec,
           processors,
           publish_serai_tx.clone(),
-          genesis,
           key,
           recognized_id.clone(),
           &mut txn,
@@ -99,7 +98,7 @@ async fn handle_block<
     event_id += 1;
   }
 
-  // TODO: Trigger any necessary re-attempts
+  // TODO2: Trigger any necessary re-attempts
 }
 
 pub async fn handle_new_blocks<
@@ -107,7 +106,7 @@ pub async fn handle_new_blocks<
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
-  FRid: Future<Output = Vec<[u8; 32]>>,
+  FRid: Future<Output = ()>,
   RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
   P: P2p,
 >(

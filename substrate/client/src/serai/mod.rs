@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use futures::stream::{Stream, StreamExt};
+
 use scale::{Encode, Decode, Compact};
 mod scale_value;
 pub(crate) use scale_value::{Value, Composite, scale_value, scale_composite};
@@ -149,6 +151,7 @@ impl Serai {
     block: [u8; 32],
   ) -> Result<Option<R>, SeraiError> {
     let storage = self.0.storage();
+    #[allow(clippy::unwrap_or_default)]
     let address = subxt::dynamic::storage(pallet, name, keys.unwrap_or(vec![]));
     debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
 
@@ -259,6 +262,18 @@ impl Serai {
       return Ok(None);
     };
     self.get_block(hash.into()).await
+  }
+
+  /// A stream which yields whenever new block(s) have been finalized.
+  pub async fn newly_finalized_block(
+    &self,
+  ) -> Result<impl Stream<Item = Result<(), SeraiError>>, SeraiError> {
+    Ok(self.0.rpc().subscribe_finalized_block_headers().await.map_err(SeraiError::RpcError)?.map(
+      |next| {
+        next.map_err(SeraiError::RpcError)?;
+        Ok(())
+      },
+    ))
   }
 
   pub async fn get_nonce(&self, address: &SeraiAddress) -> Result<u32, SeraiError> {

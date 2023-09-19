@@ -1,8 +1,5 @@
 use core::ops::Deref;
-use std::{
-  io::{self, Read, Write},
-  collections::HashMap,
-};
+use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -224,16 +221,18 @@ pub enum Transaction {
   DkgCommitments(u32, Vec<u8>, Signed),
   DkgShares {
     attempt: u32,
-    sender_i: Participant,
-    shares: HashMap<Participant, Vec<u8>>,
+    shares: Vec<Vec<u8>>,
     confirmation_nonces: [u8; 64],
     signed: Signed,
   },
   DkgConfirmed(u32, [u8; 32], Signed),
 
-  // When an external block is finalized, we can allow the associated batch IDs
-  // Commits to the full block so eclipsed nodes don't continue on their eclipsed state
-  ExternalBlock([u8; 32]),
+  // When we have synchrony on a batch, we can allow signing it
+  // TODO (never?): This is less efficient compared to an ExternalBlock provided transaction,
+  // which would be binding over the block hash and automatically achieve synchrony on all
+  // relevant batches. ExternalBlock was removed for this due to complexity around the pipeline
+  // with the current processor, yet it would still be an improvement.
+  Batch([u8; 32], [u8; 32]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SubstrateBlock(u64),
@@ -243,10 +242,18 @@ pub enum Transaction {
 
   SignPreprocess(SignData),
   SignShare(SignData),
-  // TODO: We can't make this an Unsigned as we need to prevent spam, which requires a max of 1
-  // claim per sender
-  // Can we de-duplicate across senders though, if they claim the same hash completes?
-  SignCompleted([u8; 32], Vec<u8>, Signed),
+  // This is defined as an Unsigned transaction in order to de-duplicate SignCompleted amongst
+  // reporters (who should all report the same thing)
+  // We do still track the signer in order to prevent a single signer from publishing arbitrarily
+  // many TXs without penalty
+  // Here, they're denoted as the first_signer, as only the signer of the first TX to be included
+  // with this pairing will be remembered on-chain
+  SignCompleted {
+    plan: [u8; 32],
+    tx_hash: Vec<u8>,
+    first_signer: <Ristretto as Ciphersuite>::G,
+    signature: SchnorrSignature<Ristretto>,
+  },
 }
 
 impl ReadWrite for Transaction {
@@ -278,10 +285,6 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
-        let mut sender_i = [0; 2];
-        reader.read_exact(&mut sender_i)?;
-        let sender_i = u16::from_le_bytes(sender_i);
-
         let shares = {
           let mut share_quantity = [0; 2];
           reader.read_exact(&mut share_quantity)?;
@@ -290,15 +293,11 @@ impl ReadWrite for Transaction {
           reader.read_exact(&mut share_len)?;
           let share_len = usize::from(u16::from_le_bytes(share_len));
 
-          let mut shares = HashMap::new();
+          let mut shares = vec![];
           for i in 0 .. u16::from_le_bytes(share_quantity) {
-            let mut participant = Participant::new(i + 1).unwrap();
-            if u16::from(participant) >= sender_i {
-              participant = Participant::new(u16::from(participant) + 1).unwrap();
-            }
             let mut share = vec![0; share_len];
             reader.read_exact(&mut share)?;
-            shares.insert(participant, share);
+            shares.push(share);
           }
           shares
         };
@@ -308,14 +307,7 @@ impl ReadWrite for Transaction {
 
         let signed = Signed::read(reader)?;
 
-        Ok(Transaction::DkgShares {
-          attempt,
-          sender_i: Participant::new(sender_i)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid sender participant"))?,
-          shares,
-          confirmation_nonces,
-          signed,
-        })
+        Ok(Transaction::DkgShares { attempt, shares, confirmation_nonces, signed })
       }
 
       2 => {
@@ -334,7 +326,9 @@ impl ReadWrite for Transaction {
       3 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
-        Ok(Transaction::ExternalBlock(block))
+        let mut batch = [0; 32];
+        reader.read_exact(&mut batch)?;
+        Ok(Transaction::Batch(block, batch))
       }
 
       4 => {
@@ -353,13 +347,15 @@ impl ReadWrite for Transaction {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
-        let mut tx_len = [0];
-        reader.read_exact(&mut tx_len)?;
-        let mut tx = vec![0; usize::from(tx_len[0])];
-        reader.read_exact(&mut tx)?;
+        let mut tx_hash_len = [0];
+        reader.read_exact(&mut tx_hash_len)?;
+        let mut tx_hash = vec![0; usize::from(tx_hash_len[0])];
+        reader.read_exact(&mut tx_hash)?;
 
-        let signed = Signed::read(reader)?;
-        Ok(Transaction::SignCompleted(plan, tx, signed))
+        let first_signer = Ristretto::read_G(reader)?;
+        let signature = SchnorrSignature::<Ristretto>::read(reader)?;
+
+        Ok(Transaction::SignCompleted { plan, tx_hash, first_signer, signature })
       }
 
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
@@ -380,46 +376,30 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::DkgShares { attempt, sender_i, shares, confirmation_nonces, signed } => {
+      Transaction::DkgShares { attempt, shares, confirmation_nonces, signed } => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
-        // It's unfortunate to have this so duplicated, yet it avoids needing to pass a Spec to
-        // read in order to create a valid DkgShares
-        // TODO: Transform DkgShares to having a Vec of shares, with post-expansion to the proper
-        // HashMap
-        writer.write_all(&u16::from(*sender_i).to_le_bytes())?;
-
-        // Shares are indexed by non-zero u16s (Participants), so this can't fail
+        // `shares` is a Vec which maps to a HashMap<Pariticpant, Vec<u8>> for any legitimate
+        // `DkgShares`. Since Participant has a range of 1 ..= u16::MAX, the length must be <
+        // u16::MAX. The only way for this to not be true if we were malicious, or if we read a
+        // `DkgShares` with a `shares.len() > u16::MAX`. The former is assumed untrue. The latter
+        // is impossible since we'll only read up to u16::MAX items.
         writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
 
-        let mut share_len = None;
-        let mut found_our_share = false;
-        for participant in 1 ..= (shares.len() + 1) {
-          let Some(share) =
-            &shares.get(&Participant::new(u16::try_from(participant).unwrap()).unwrap())
-          else {
-            assert!(!found_our_share);
-            found_our_share = true;
-            continue;
-          };
+        let share_len = shares.get(0).map(|share| share.len()).unwrap_or(0);
+        // For BLS12-381 G2, this would be:
+        // - A 32-byte share
+        // - A 96-byte ephemeral key
+        // - A 128-byte signature
+        // Hence why this has to be u16
+        writer.write_all(&u16::try_from(share_len).unwrap().to_le_bytes())?;
 
-          if let Some(share_len) = share_len {
-            if share.len() != share_len {
-              panic!("variable length shares");
-            }
-          } else {
-            // For BLS12-381 G2, this would be:
-            // - A 32-byte share
-            // - A 96-byte ephemeral key
-            // - A 128-byte signature
-            // Hence why this has to be u16
-            writer.write_all(&u16::try_from(share.len()).unwrap().to_le_bytes())?;
-            share_len = Some(share.len());
-          }
-
+        for share in shares {
+          assert_eq!(share.len(), share_len, "shares were of variable length");
           writer.write_all(share)?;
         }
+
         writer.write_all(confirmation_nonces)?;
         signed.write(writer)
       }
@@ -431,9 +411,10 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::ExternalBlock(block) => {
+      Transaction::Batch(block, batch) => {
         writer.write_all(&[3])?;
-        writer.write_all(block)
+        writer.write_all(block)?;
+        writer.write_all(batch)
       }
 
       Transaction::SubstrateBlock(block) => {
@@ -458,12 +439,14 @@ impl ReadWrite for Transaction {
         writer.write_all(&[8])?;
         data.write(writer)
       }
-      Transaction::SignCompleted(plan, tx, signed) => {
+      Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
         writer.write_all(&[9])?;
         writer.write_all(plan)?;
-        writer.write_all(&[u8::try_from(tx.len()).expect("tx hash length exceed 255 bytes")])?;
-        writer.write_all(tx)?;
-        signed.write(writer)
+        writer
+          .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
+        writer.write_all(tx_hash)?;
+        writer.write_all(&first_signer.to_bytes())?;
+        signature.write(writer)
       }
     }
   }
@@ -476,7 +459,7 @@ impl TransactionTrait for Transaction {
       Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
       Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
 
-      Transaction::ExternalBlock(_) => TransactionKind::Provided("external"),
+      Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
@@ -484,7 +467,7 @@ impl TransactionTrait for Transaction {
 
       Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
-      Transaction::SignCompleted(_, _, signed) => TransactionKind::Signed(signed),
+      Transaction::SignCompleted { .. } => TransactionKind::Unsigned,
     }
   }
 
@@ -500,6 +483,12 @@ impl TransactionTrait for Transaction {
   fn verify(&self) -> Result<(), TransactionError> {
     if let Transaction::BatchShare(data) = self {
       if data.data.len() != 32 {
+        Err(TransactionError::InvalidContent)?;
+      }
+    }
+
+    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+      if !signature.verify(*first_signer, self.sign_completed_challenge()) {
         Err(TransactionError::InvalidContent)?;
       }
     }
@@ -535,7 +524,7 @@ impl Transaction {
         Transaction::DkgShares { ref mut signed, .. } => signed,
         Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
 
-        Transaction::ExternalBlock(_) => panic!("signing ExternalBlock"),
+        Transaction::Batch(_, _) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
         Transaction::BatchPreprocess(ref mut data) => &mut data.signed,
@@ -543,7 +532,7 @@ impl Transaction {
 
         Transaction::SignPreprocess(ref mut data) => &mut data.signed,
         Transaction::SignShare(ref mut data) => &mut data.signed,
-        Transaction::SignCompleted(_, _, ref mut signed) => signed,
+        Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
       }
     }
 
@@ -555,5 +544,19 @@ impl Transaction {
     signed(self).signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
     let sig_hash = self.sig_hash(genesis);
     signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+  }
+
+  pub fn sign_completed_challenge(&self) -> <Ristretto as Ciphersuite>::F {
+    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+      let mut transcript =
+        RecommendedTranscript::new(b"Coordinator Tributary Transaction SignCompleted");
+      transcript.append_message(b"plan", plan);
+      transcript.append_message(b"tx_hash", tx_hash);
+      transcript.append_message(b"signer", first_signer.to_bytes());
+      transcript.append_message(b"nonce", signature.R.to_bytes());
+      Ristretto::hash_to_F(b"SignCompleted signature", &transcript.challenge(b"challenge"))
+    } else {
+      panic!("sign_completed_challenge called on transaction which wasn't SignCompleted")
+    }
   }
 }
