@@ -30,10 +30,10 @@ pub async fn test_scanner<N: Network>(network: N) {
   let db = MemDb::new();
   let new_scanner = || async {
     let mut db = db.clone();
-    let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
+    let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
-      assert!(active_keys.is_empty());
+      assert!(current_keys.is_empty());
       let mut txn = db.txn();
       scanner.register_key(&mut txn, activation_number, group_key).await;
       txn.commit();
@@ -42,7 +42,7 @@ pub async fn test_scanner<N: Network>(network: N) {
       }
       *first = false;
     } else {
-      assert_eq!(active_keys.len(), 1);
+      assert_eq!(current_keys.len(), 1);
     }
     scanner
   };

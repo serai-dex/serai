@@ -27,8 +27,8 @@ pub async fn test_wallet<N: Network>(network: N) {
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut db = MemDb::new();
-  let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
-  assert!(active_keys.is_empty());
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  assert!(current_keys.is_empty());
   let (block_id, outputs) = {
     let mut txn = db.txn();
     scanner

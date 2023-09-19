@@ -79,8 +79,8 @@ pub async fn test_addresses<N: Network>(network: N) {
   }
 
   let mut db = MemDb::new();
-  let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
-  assert!(active_keys.is_empty());
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  assert!(current_keys.is_empty());
   let mut txn = db.txn();
   scanner
     .register_key(

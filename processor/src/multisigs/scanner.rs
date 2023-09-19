@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 use std::{
   sync::Arc,
+  io::Read,
   time::Duration,
   collections::{VecDeque, HashSet, HashMap},
 };
@@ -42,7 +43,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
   fn block_number_key(id: &<N::Block as Block<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"block_number", id)
   }
-  // TODO: On boot, do this for all outstanding blocks
   fn save_block(txn: &mut D::Transaction<'_>, number: usize, id: &<N::Block as Block<N>>::Id) {
     txn.put(Self::block_number_key(id), u64::try_from(number).unwrap().to_le_bytes());
     txn.put(Self::block_key(number), id);
@@ -60,41 +60,49 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
       .map(|number| u64::from_le_bytes(number.try_into().unwrap()).try_into().unwrap())
   }
 
-  fn active_keys_key() -> Vec<u8> {
-    Self::scanner_key(b"active_keys", b"")
+  fn keys_key() -> Vec<u8> {
+    Self::scanner_key(b"keys", b"")
   }
-  fn add_active_key(txn: &mut D::Transaction<'_>, key: <N::Curve as Ciphersuite>::G) {
-    let mut keys = txn.get(Self::active_keys_key()).unwrap_or(vec![]);
+  fn register_key(
+    txn: &mut D::Transaction<'_>,
+    activation_number: usize,
+    key: <N::Curve as Ciphersuite>::G,
+  ) {
+    let mut keys = txn.get(Self::keys_key()).unwrap_or(vec![]);
 
     let key_bytes = key.to_bytes();
 
     let key_len = key_bytes.as_ref().len();
-    assert_eq!(keys.len() % key_len, 0);
+    assert_eq!(keys.len() % (8 + key_len), 0);
 
-    // Don't add this key if it's already present
+    // Sanity check this key isn't already present
     let mut i = 0;
     while i < keys.len() {
-      if &keys[i .. (i + key_len)] == key_bytes.as_ref() {
-        debug!("adding {} as an active key yet it was already present", hex::encode(key_bytes));
-        return;
+      if &keys[(i + 8) .. ((i + 8) + key_len)] == key_bytes.as_ref() {
+        panic!("adding {} as a key yet it was already present", hex::encode(key_bytes));
       }
-      i += key_len;
+      i += 8 + key_len;
     }
 
+    keys.extend(u64::try_from(activation_number).unwrap().to_le_bytes());
     keys.extend(key_bytes.as_ref());
-    txn.put(Self::active_keys_key(), keys);
+    txn.put(Self::keys_key(), keys);
   }
-  fn active_keys<G: Get>(getter: &G) -> Vec<<N::Curve as Ciphersuite>::G> {
-    let bytes_vec = getter.get(Self::active_keys_key()).unwrap_or(vec![]);
+  fn keys<G: Get>(getter: &G) -> Vec<(usize, <N::Curve as Ciphersuite>::G)> {
+    let bytes_vec = getter.get(Self::keys_key()).unwrap_or(vec![]);
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
     // Assumes keys will be 32 bytes when calculating the capacity
     // If keys are larger, this may allocate more memory than needed
     // If keys are smaller, this may require additional allocations
     // Either are fine
-    let mut res = Vec::with_capacity(bytes.len() / 32);
+    let mut res = Vec::with_capacity(bytes.len() / (8 + 32));
     while !bytes.is_empty() {
-      res.push(N::Curve::read_G(&mut bytes).unwrap());
+      let mut activation_number = [0; 8];
+      bytes.read_exact(&mut activation_number).unwrap();
+      let activation_number = u64::from_le_bytes(activation_number).try_into().unwrap();
+
+      res.push((activation_number, N::Curve::read_G(&mut bytes).unwrap()));
     }
     res
   }
@@ -172,7 +180,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 pub struct Scanner<N: Network, D: Db> {
   _db: PhantomData<D>,
 
-  keys: Vec<<N::Curve as Ciphersuite>::G>,
+  keys: Vec<(usize, <N::Curve as Ciphersuite>::G)>,
 
   eventualities: HashMap<Vec<u8>, EventualitiesTracker<N::Eventuality>>,
 
@@ -219,7 +227,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     let mut scanner = self.scanner.write().await;
     assert!(
       activation_number > scanner.ram_scanned.unwrap_or(0),
-      "activation block of new keys was already scanned"
+      "activation block of new keys was already scanned",
     );
 
     info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
@@ -230,8 +238,8 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
       assert!(ScannerDb::<N, D>::save_scanned_block(txn, activation_number).is_empty());
     }
 
-    ScannerDb::<N, D>::add_active_key(txn, key);
-    scanner.keys.push(key);
+    ScannerDb::<N, D>::register_key(txn, activation_number, key);
+    scanner.keys.push((activation_number, key));
 
     scanner.eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
   }
@@ -295,10 +303,10 @@ impl<N: Network, D: Db> Scanner<N, D> {
   pub fn new(network: N, db: D) -> (ScannerHandle<N, D>, Vec<<N::Curve as Ciphersuite>::G>) {
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
-    let keys = ScannerDb::<N, D>::active_keys(&db);
+    let keys = ScannerDb::<N, D>::keys(&db);
     let mut eventualities = HashMap::new();
     for key in &keys {
-      eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
+      eventualities.insert(key.1.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
     }
 
     let ram_scanned = ScannerDb::<N, D>::latest_scanned_block(&db);
@@ -319,7 +327,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
     }));
     tokio::spawn(Scanner::run(db, network, scanner.clone()));
 
-    (ScannerHandle { scanner, events: events_recv }, keys)
+    (ScannerHandle { scanner, events: events_recv }, keys.into_iter().map(|keys| keys.1).collect())
   }
 
   fn emit(&mut self, event: ScannerEvent<N>) -> bool {
@@ -428,11 +436,20 @@ impl<N: Network, D: Db> Scanner<N, D> {
         // TODO: This lock acquisition may be long-lived...
         let mut scanner = scanner.write().await;
 
+        let mut has_activation = false;
         let mut outputs = vec![];
-        for key in scanner.keys.clone() {
+        for (activation_number, key) in scanner.keys.clone() {
+          if activation_number > block_being_scanned {
+            continue;
+          }
+
+          if activation_number == block_being_scanned {
+            has_activation = true;
+          }
+
           let key_vec = key.to_bytes().as_ref().to_vec();
 
-          // TODO2: Check for key deprecation
+          // TODO: Check for key deprecation
 
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
           outputs.extend(network.get_outputs(&block, key).await);
@@ -502,16 +519,18 @@ impl<N: Network, D: Db> Scanner<N, D> {
           scanner.ram_outputs.insert(id);
         }
 
-        // Don't emit an event if there's not any outputs
-        // TODO: Still emit an event if activation block or retirement block
-        if !outputs.is_empty() {
+        // Don't emit an event if:
+        // - This isn't an activation block
+        // - This isn't a retirement block (TODO)
+        // - There's not any outputs
+        // as only those are blocks are meaningful and warrant obtaining synchrony over
+        if has_activation || (!outputs.is_empty()) {
           // Save the outputs to disk
           let mut txn = db.txn();
           ScannerDb::<N, D>::save_outputs(&mut txn, &block_id, &outputs);
           txn.commit();
 
           // Send all outputs
-          // TODO: Block scanning `b + CONFIRMATIONS` until Substrate acks this Block
           if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
             return;
           }

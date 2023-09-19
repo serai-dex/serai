@@ -359,7 +359,7 @@ async fn boot<N: Network, D: Db>(
   // TODO: Is this above comment still true? Not at all due to the planned lack of DKG timeouts?
   let key_gen = KeyGen::<N, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
 
-  let (multisig_manager, active_keys, actively_signing) =
+  let (multisig_manager, current_keys, actively_signing) =
     MultisigManager::new(raw_db, network).await;
 
   let mut substrate_signer = None;
@@ -367,7 +367,7 @@ async fn boot<N: Network, D: Db>(
 
   let main_db = MainDb::<N, _>::new(raw_db.clone());
 
-  for key in &active_keys {
+  for key in &current_keys {
     let (substrate_keys, network_keys) = key_gen.keys(key);
 
     // We don't have to load any state for this since the Scanner will re-fire any events

@@ -95,16 +95,16 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     Vec<([u8; 32], N::SignableTransaction, N::Eventuality)>,
   ) {
     // The scanner has no long-standing orders to re-issue
-    let (mut scanner, active_keys) = Scanner::new(network.clone(), raw_db.clone());
+    let (mut scanner, current_keys) = Scanner::new(network.clone(), raw_db.clone());
 
     let mut schedulers = vec![];
 
     // TODO: MultisigDB
     let main_db = MainDb::<N, _>::new(raw_db.clone());
 
-    assert!(active_keys.len() <= 2);
+    assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
-    for key in &active_keys {
+    for key in &current_keys {
       schedulers.push(Scheduler::from_db(raw_db, *key).unwrap());
 
       // Load any TXs being actively signed
@@ -131,20 +131,20 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
-    // TODO: Check active_keys is sorted from oldest to newest
+    // TODO: Check current_keys is sorted from oldest to newest
     (
       MultisigManager {
         scanner,
-        existing: active_keys
+        existing: current_keys
           .get(0)
           .cloned()
           .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
-        new: active_keys
+        new: current_keys
           .get(1)
           .cloned()
           .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
       },
-      active_keys,
+      current_keys,
       actively_signing,
     )
   }
