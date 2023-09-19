@@ -122,6 +122,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 ) {
   // If this message expects a higher block number than we have, halt until synced
   async fn wait<N: Network, D: Db>(
+    txn: &D::Transaction<'_>,
     substrate_mutable: &SubstrateMutable<N, D>,
     block_hash: &BlockHash,
   ) {
@@ -131,7 +132,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     loop {
       // Ensure our scanner has scanned this block, which means our daemon has this block at
       // a sufficient depth
-      if substrate_mutable.block_number(&needed_hash).await.is_none() {
+      if substrate_mutable.block_number(txn, &needed_hash).await.is_none() {
         warn!(
           "node is desynced. we haven't scanned {} which should happen after {} confirms",
           hex::encode(&needed_hash),
@@ -165,7 +166,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   if let Some(required) = msg.msg.required_block() {
     // wait only reads from, it doesn't mutate, substrate_mutable
-    wait(substrate_mutable, &required).await;
+    wait(txn, substrate_mutable, &required).await;
   }
 
   match msg.msg.clone() {
@@ -247,7 +248,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             let mut activation_block = <N::Block as Block<N>>::Id::default();
             activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
             substrate_mutable
-              .block_number(&activation_block)
+              .block_number(txn, &activation_block)
               .await
               .expect("KeyConfirmed from context we haven't synced")
           };

@@ -32,7 +32,7 @@ pub mod scheduler;
 use scheduler::Scheduler;
 
 use crate::{
-  Db, MainDb, Payment, PostFeeBranch, Plan,
+  Get, Db, MainDb, Payment, PostFeeBranch, Plan,
   networks::{OutputType, Output, Transaction, Block, Network, get_block},
   Signer,
 };
@@ -154,8 +154,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   // which activate at a block before the currently highest scanned block. This is prevented by
   // the processor waiting for `Batch` inclusion before scanning too far ahead, and activation only
   // happening after the "too far ahead" window.
-  pub async fn block_number(&self, hash: &<N::Block as Block<N>>::Id) -> Option<usize> {
-    let latest = self.scanner.block_number(hash).await?;
+  pub async fn block_number<G: Get>(
+    &self,
+    getter: &G,
+    hash: &<N::Block as Block<N>>::Id,
+  ) -> Option<usize> {
+    let latest = ScannerHandle::<N, D>::block_number(getter, hash).await?;
 
     // While the scanner has cemented this block, that doesn't mean it's been scanned for all
     // keys
@@ -212,20 +216,23 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let existing_payments = payments;
     let new_payments = vec![];
 
-    // We now have to acknowledge every block for up to the acknowledged block
+    // We now have to acknowledge the acknowledged block
     let mut block_id = <N::Block as Block<N>>::Id::default();
     block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
 
-    // TODO: Do we want a singular Plan Vec?
-    let mut plans = {
-      let existing = self.existing.as_mut().unwrap();
-      let outputs = self.scanner.ack_up_to_block(txn, existing.key, block_id.clone()).await;
-      existing.scheduler.schedule::<D>(txn, outputs, existing_payments)
-    };
+    // TODO: Split outputs by existing/new
+    let outputs = self.scanner.ack_block(txn, block_id.clone()).await;
+    let existing_outputs = outputs;
+    let new_outputs = vec![];
 
+    // TODO: Do we want a singular Plan Vec?
+    let mut plans = self.existing.as_mut().unwrap().scheduler.schedule::<D>(
+      txn,
+      existing_outputs,
+      existing_payments,
+    );
     plans.extend(if let Some(new) = self.new.as_mut() {
-      let outputs = self.scanner.ack_up_to_block(txn, new.key, block_id).await;
-      new.scheduler.schedule::<D>(txn, outputs, new_payments)
+      new.scheduler.schedule::<D>(txn, new_outputs, new_payments)
     } else {
       vec![]
     });
@@ -233,7 +240,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     plans
   }
 
-  // TODO: Merge this with the above function
+  // TODO: Merge this with the above function?
   pub async fn sign_plans(
     &mut self,
     txn: &mut D::Transaction<'_>,
@@ -247,9 +254,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut block_hash = <N::Block as Block<N>>::Id::default();
     block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
     // block_number call is safe since it access a piece of static data
-    let block_number = self
-      .scanner
-      .block_number(&block_hash)
+    let block_number = ScannerHandle::<N, D>::block_number(txn, &block_hash)
       .await
       .expect("told to sign_plans on a context we're not synced to");
 

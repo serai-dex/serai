@@ -359,11 +359,7 @@ impl Network for Bitcoin {
     self.rpc.get_block(&block_hash).await.map_err(|_| NetworkError::ConnectionError)
   }
 
-  async fn get_outputs(
-    &self,
-    block: &Self::Block,
-    key: ProjectivePoint,
-  ) -> Result<Vec<Self::Output>, NetworkError> {
+  async fn get_outputs(&self, block: &Self::Block, key: ProjectivePoint) -> Vec<Self::Output> {
     let (scanner, _, kinds) = scanner(key);
 
     let mut outputs = vec![];
@@ -395,7 +391,7 @@ impl Network for Bitcoin {
       }
     }
 
-    Ok(outputs)
+    outputs
   }
 
   async fn get_eventuality_completions(

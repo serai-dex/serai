@@ -90,13 +90,15 @@ pub async fn test_wallet<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
+  let first_block_id = block_id;
+  let first_outputs = outputs;
+
   let txid = sign(network.clone(), keys_txs).await;
   let tx = network.get_transaction(&txid).await.unwrap();
   network.mine_block().await;
   let block_number = network.get_latest_block_number().await.unwrap();
   let block = network.get_block(block_number).await.unwrap();
-  let first_outputs = outputs;
-  let outputs = network.get_outputs(&block, key).await.unwrap();
+  let outputs = network.get_outputs(&block, key).await;
   assert_eq!(outputs.len(), 2);
   let amount = amount - tx.fee(&network).await;
   assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
@@ -121,9 +123,7 @@ pub async fn test_wallet<N: Network>(network: N) {
 
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
-  assert_eq!(
-    scanner.ack_up_to_block(&mut txn, key, block.id()).await,
-    [first_outputs, outputs].concat().to_vec()
-  );
+  assert_eq!(scanner.ack_block(&mut txn, first_block_id).await, first_outputs);
+  assert_eq!(scanner.ack_block(&mut txn, block.id()).await, outputs);
   txn.commit();
 }

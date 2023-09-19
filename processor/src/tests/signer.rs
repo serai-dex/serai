@@ -153,7 +153,7 @@ pub async fn test_signer<N: Network>(network: N) {
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
-  let outputs = network.get_outputs(&network.test_send(N::address(key)).await, key).await.unwrap();
+  let outputs = network.get_outputs(&network.test_send(N::address(key)).await, key).await;
   let sync_block = network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS;
   let fee = network.get_fee().await;
 
@@ -193,8 +193,7 @@ pub async fn test_signer<N: Network>(network: N) {
       &network.get_block(network.get_latest_block_number().await.unwrap()).await.unwrap(),
       key,
     )
-    .await
-    .unwrap();
+    .await;
   assert_eq!(outputs.len(), 2);
   // Adjust the amount for the fees
   let amount = amount - tx.fee(&network).await;

@@ -109,15 +109,11 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
   fn next_batch_key() -> Vec<u8> {
     Self::scanner_key(b"next_batch", [])
   }
-  fn outputs_key(
-    key: &<N::Curve as Ciphersuite>::G,
-    block: &<N::Block as Block<N>>::Id,
-  ) -> Vec<u8> {
-    Self::scanner_key(b"outputs", [key.to_bytes().as_ref(), block.as_ref()].concat())
+  fn outputs_key(block: &<N::Block as Block<N>>::Id) -> Vec<u8> {
+    Self::scanner_key(b"outputs", block.as_ref())
   }
   fn save_outputs(
     txn: &mut D::Transaction<'_>,
-    key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
     outputs: &[N::Output],
   ) {
@@ -125,14 +121,13 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     for output in outputs {
       output.write(&mut bytes).unwrap();
     }
-    txn.put(Self::outputs_key(key, block), bytes);
+    txn.put(Self::outputs_key(block), bytes);
   }
   fn outputs(
     txn: &D::Transaction<'_>,
-    key: &<N::Curve as Ciphersuite>::G,
     block: &<N::Block as Block<N>>::Id,
   ) -> Option<Vec<N::Output>> {
-    let bytes_vec = txn.get(Self::outputs_key(key, block))?;
+    let bytes_vec = txn.get(Self::outputs_key(block))?;
     let mut bytes: &[u8] = bytes_vec.as_ref();
 
     let mut res = vec![];
@@ -142,38 +137,29 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     Some(res)
   }
 
-  fn scanned_block_key(key: &<N::Curve as Ciphersuite>::G) -> Vec<u8> {
-    Self::scanner_key(b"scanned_block", key.to_bytes())
+  fn scanned_block_key() -> Vec<u8> {
+    Self::scanner_key(b"scanned_block", [])
   }
 
-  #[allow(clippy::type_complexity)]
-  fn save_scanned_block(
-    txn: &mut D::Transaction<'_>,
-    key: &<N::Curve as Ciphersuite>::G,
-    block: usize,
-  ) -> Vec<N::Output> {
+  fn save_scanned_block(txn: &mut D::Transaction<'_>, block: usize) -> Vec<N::Output> {
     let id = Self::block(txn, block); // It may be None for the first key rotated to
-    let outputs = if let Some(id) = id.as_ref() {
-      Self::outputs(txn, key, id).unwrap_or(vec![])
-    } else {
-      vec![]
-    };
+    let outputs =
+      if let Some(id) = id.as_ref() { Self::outputs(txn, id).unwrap_or(vec![]) } else { vec![] };
 
     // Mark all the outputs from this block as seen
     for output in &outputs {
       txn.put(Self::seen_key(&output.id()), b"");
     }
 
-    txn.put(Self::scanned_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
+    txn.put(Self::scanned_block_key(), u64::try_from(block).unwrap().to_le_bytes());
 
     // Return this block's outputs so they can be pruned from the RAM cache
     outputs
   }
-  fn latest_scanned_block<G: Get>(getter: &G, key: <N::Curve as Ciphersuite>::G) -> usize {
-    let bytes = getter
-      .get(Self::scanned_block_key(&key))
-      .expect("asking for latest scanned block of key which wasn't rotated to");
-    u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap()
+  fn latest_scanned_block<G: Get>(getter: &G) -> Option<usize> {
+    getter
+      .get(Self::scanned_block_key())
+      .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap())
   }
 }
 
@@ -184,13 +170,13 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 /// It MAY fire the same event multiple times.
 #[derive(Debug)]
 pub struct Scanner<N: Network, D: Db> {
-  network: N,
-  db: D,
+  _db: PhantomData<D>,
+
   keys: Vec<<N::Curve as Ciphersuite>::G>,
 
   eventualities: HashMap<Vec<u8>, EventualitiesTracker<N::Eventuality>>,
 
-  ram_scanned: HashMap<Vec<u8>, usize>,
+  ram_scanned: Option<usize>,
   ram_outputs: HashSet<Vec<u8>>,
 
   events: mpsc::UnboundedSender<ScannerEvent<N>>,
@@ -204,16 +190,7 @@ pub struct ScannerHandle<N: Network, D: Db> {
 
 impl<N: Network, D: Db> ScannerHandle<N, D> {
   pub async fn ram_scanned(&self) -> usize {
-    let mut res = None;
-    for scanned in self.scanner.read().await.ram_scanned.values() {
-      if res.is_none() {
-        res = Some(*scanned);
-      }
-      // Returns the lowest scanned value so no matter the keys interacted with, this is
-      // sufficiently scanned
-      res = Some(res.unwrap().min(*scanned));
-    }
-    res.unwrap_or(0)
+    self.scanner.read().await.ram_scanned.unwrap_or(0)
   }
 
   pub async fn register_eventuality(
@@ -238,30 +215,27 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     key: <N::Curve as Ciphersuite>::G,
   ) {
     let mut scanner = self.scanner.write().await;
-    if !scanner.keys.is_empty() {
-      // Protonet will have a single, static validator set
-      // TODO2
-      panic!("only a single key is supported at this time");
-    }
+    assert!(activation_number > scanned.ram_scanned.unwrap_or(0), "activation block of new keys was already scanned");
 
     info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
 
-    let outputs = ScannerDb::<N, D>::save_scanned_block(txn, &key, activation_number);
-    let key_vec = key.to_bytes().as_ref().to_vec();
-    scanner.ram_scanned.insert(key_vec.clone(), activation_number);
-    assert!(outputs.is_empty());
+    if scanner.keys.is_empty() {
+      assert!(scanner.ram_scanned.is_none());
+      scanner.ram_scanned = Some(activation_number);
+      assert!(ScannerDb::<N, D>::save_scanned_block(txn, activation_number).is_empty());
+    }
 
     ScannerDb::<N, D>::add_active_key(txn, key);
     scanner.keys.push(key);
 
-    scanner.eventualities.insert(key_vec, EventualitiesTracker::new());
+    scanner.eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
   }
 
   // This perform a database read which isn't safe with regards to if the value is set or not
   // It may be set, when it isn't expected to be set, or not set, when it is expected to be set
   // Since the value is static, if it's set, it's correctly set
-  pub async fn block_number(&self, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
-    ScannerDb::<N, D>::block_number(&self.scanner.read().await.db, id)
+  pub async fn block_number<G: Get>(getter: &G, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
+    ScannerDb::<N, D>::block_number(getter, id)
   }
 
   // Set the next batch ID to use
@@ -276,11 +250,12 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
       .map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
   }
 
-  /// Acknowledge having handled a block for a key.
-  pub async fn ack_up_to_block(
+  /// Acknowledge having handled a block.
+  ///
+  /// This must only be called on blocks which have been scanned in-memory.
+  pub async fn ack_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    key: <N::Curve as Ciphersuite>::G,
     id: <N::Block as Block<N>>::Id,
   ) -> Vec<N::Output> {
     let mut scanner = self.scanner.write().await;
@@ -289,14 +264,11 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     // Get the number for this block
     let number = ScannerDb::<N, D>::block_number(txn, &id)
       .expect("main loop trying to operate on data we haven't scanned");
-    // Get the number of the last block we acknowledged
-    let prior = ScannerDb::<N, D>::latest_scanned_block(txn, key);
 
-    let mut outputs = vec![];
-    for number in (prior + 1) ..= number {
-      outputs.extend(ScannerDb::<N, D>::save_scanned_block(txn, &key, number));
-    }
-
+    let outputs = ScannerDb::<N, D>::save_scanned_block(txn, number);
+    // This has a race condition if we try to ack a block we scanned on a prior boot, and we have
+    // yet to scan it on this boot
+    assert!(number >= scanner.ram_scanned.unwrap_or(0));
     for output in &outputs {
       assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
@@ -311,17 +283,16 @@ impl<N: Network, D: Db> Scanner<N, D> {
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
     let keys = ScannerDb::<N, D>::active_keys(&db);
-    let mut ram_scanned = HashMap::new();
     let mut eventualities = HashMap::new();
-    for key in keys.clone() {
-      let key_vec = key.to_bytes().as_ref().to_vec();
-      ram_scanned.insert(key_vec.clone(), ScannerDb::<N, D>::latest_scanned_block(&db, key));
-      eventualities.insert(key_vec, EventualitiesTracker::new());
+    for key in &keys {
+      eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
     }
 
+    let ram_scanned = ScannerDb::<N, D>::latest_scanned_block(&db);
+
     let scanner = Arc::new(RwLock::new(Scanner {
-      network,
-      db,
+      _db: PhantomData,
+
       keys: keys.clone(),
 
       eventualities,
@@ -331,7 +302,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
       events: events_send,
     }));
-    tokio::spawn(Scanner::run(scanner.clone()));
+    tokio::spawn(Scanner::run(db, network, scanner.clone()));
 
     (ScannerHandle { scanner, events: events_recv }, keys)
   }
@@ -345,169 +316,168 @@ impl<N: Network, D: Db> Scanner<N, D> {
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
-  async fn run(scanner: Arc<RwLock<Self>>) {
+  async fn run(mut db: D, network: N, scanner: Arc<RwLock<Self>>) {
     loop {
-      // Only check every five seconds for new blocks
-      sleep(Duration::from_secs(5)).await;
+      let (ram_scanned, latest_block_to_scan) = {
+        // Sleep 5 seconds to prevent hammering the node/scanner lock
+        sleep(Duration::from_secs(5)).await;
 
-      // Scan new blocks
-      {
-        let mut scanner = scanner.write().await;
-        let latest = scanner.network.get_latest_block_number().await;
-        let latest = match latest {
-          // Only scan confirmed blocks, which we consider effectively finalized
-          // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
-          Ok(latest) => latest.saturating_sub(N::CONFIRMATIONS.saturating_sub(1)),
-          Err(_) => {
-            warn!("couldn't get latest block number");
-            sleep(Duration::from_secs(60)).await;
+        let ram_scanned = {
+          let scanner = scanner.read().await;
+          if scanner.keys.is_empty() {
             continue;
           }
+          scanner.ram_scanned.unwrap()
         };
 
+        (
+          ram_scanned,
+          loop {
+            break match network.get_latest_block_number().await {
+              // Only scan confirmed blocks, which we consider effectively finalized
+              // CONFIRMATIONS - 1 as whatever's in the latest block already has 1 confirm
+              Ok(latest) => latest.saturating_sub(N::CONFIRMATIONS.saturating_sub(1)),
+              Err(_) => {
+                warn!("couldn't get latest block number");
+                sleep(Duration::from_secs(60)).await;
+                continue;
+              }
+            };
+          },
+        )
+      };
+
+      for block_being_scanned in (ram_scanned + 1) ..= latest_block_to_scan {
+        let block = match network.get_block(block_being_scanned).await {
+          Ok(block) => block,
+          Err(_) => {
+            warn!("couldn't get block {block_being_scanned}");
+            break;
+          }
+        };
+        let block_id = block.id();
+
+        info!("scanning block: {}", hex::encode(&block_id));
+
+        // These DB calls are safe, despite not having a txn, since they're static values
+        // There's no issue if they're written in advance of expected (such as on reboot)
+        // They're also only expected here
+        if let Some(id) = ScannerDb::<N, D>::block(&db, block_being_scanned) {
+          if id != block_id {
+            panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
+          }
+        } else {
+          // TODO: Move this to an unwrap
+          if let Some(id) = ScannerDb::<N, D>::block(&db, block_being_scanned.saturating_sub(1)) {
+            if id != block.parent() {
+              panic!(
+                "block {} doesn't build off expected parent {}",
+                hex::encode(block_id),
+                hex::encode(id),
+              );
+            }
+          }
+
+          let mut txn = db.txn();
+          ScannerDb::<N, D>::save_block(&mut txn, block_being_scanned, &block_id);
+          txn.commit();
+        }
+
+        // Scan new blocks
+        // TODO: This lock acquisition may be long-lived...
+        let mut scanner = scanner.write().await;
+
+        let mut outputs = vec![];
         for key in scanner.keys.clone() {
           let key_vec = key.to_bytes().as_ref().to_vec();
-          let latest_scanned = scanner.ram_scanned[&key_vec];
 
-          for i in (latest_scanned + 1) ..= latest {
-            // TODO2: Check for key deprecation
+          // TODO2: Check for key deprecation
 
-            let block = match scanner.network.get_block(i).await {
-              Ok(block) => block,
-              Err(_) => {
-                warn!("couldn't get block {i}");
-                break;
-              }
-            };
-            let block_id = block.id();
+          // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
+          outputs.extend(network.get_outputs(&block, key).await);
 
-            // These block calls are safe, despite not having a txn, since they're static values
-            // only written to/read by this thread
-            // There's also no error caused by them being unexpectedly written (if the commit is
-            // made and then the processor suddenly reboots)
-            // There's also no issue if this code is run multiple times (due to code after
-            // aborting)
-            if let Some(id) = ScannerDb::<N, D>::block(&scanner.db, i) {
-              if id != block_id {
-                panic!("reorg'd from finalized {} to {}", hex::encode(id), hex::encode(block_id));
-              }
-            } else {
-              info!("Found new block: {}", hex::encode(&block_id));
+          for (id, tx) in network
+            .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
+            .await
+          {
+            info!(
+              "eventuality {} resolved by {}, as found on chain",
+              hex::encode(id),
+              hex::encode(&tx)
+            );
 
-              if let Some(id) = ScannerDb::<N, D>::block(&scanner.db, i.saturating_sub(1)) {
-                if id != block.parent() {
-                  panic!(
-                    "block {} doesn't build off expected parent {}",
-                    hex::encode(block_id),
-                    hex::encode(id),
-                  );
-                }
-              }
-
-              let mut txn = scanner.db.txn();
-              ScannerDb::<N, D>::save_block(&mut txn, i, &block_id);
-              txn.commit();
-            }
-
-            let outputs = match scanner.network.get_outputs(&block, key).await {
-              Ok(outputs) => outputs,
-              Err(_) => {
-                warn!("couldn't scan block {i}");
-                break;
-              }
-            };
-
-            // Write this number as scanned so we won't perform any of the following mutations
-            // multiple times
-            scanner.ram_scanned.insert(key_vec.clone(), i);
-
-            // Panic if we've already seen these outputs
-            for output in &outputs {
-              let id = output.id();
-              info!(
-                "block {} had output {} worth {}",
-                hex::encode(&block_id),
-                hex::encode(&id),
-                output.amount(),
-              );
-
-              // On Bitcoin, the output ID should be unique for a given chain
-              // On Monero, it's trivial to make an output sharing an ID with another
-              // We should only scan outputs with valid IDs however, which will be unique
-
-              /*
-                The safety of this code must satisfy the following conditions:
-                1) seen is not set for the first occurrence
-                2) seen is set for any future occurrence
-
-                seen is only written to after this code completes. Accordingly, it cannot be set
-                before the first occurrence UNLESSS it's set, yet the last scanned block isn't.
-                They are both written in the same database transaction, preventing this.
-
-                As for future occurrences, the RAM entry ensures they're handled properly even if
-                the database has yet to be set.
-
-                On reboot, which will clear the RAM, if seen wasn't set, neither was latest scanned
-                block. Accordingly, this will scan from some prior block, re-populating the RAM.
-
-                If seen was set, then this will be successfully read.
-
-                There's also no concern ram_outputs was pruned, yet seen wasn't set, as pruning
-                from ram_outputs will acquire a write lock (preventing this code from acquiring
-                its own write lock and running), and during its holding of the write lock, it
-                commits the transaction setting seen and the latest scanned block.
-
-                This last case isn't true. Committing seen/latest_scanned_block happens after
-                relinquishing the write lock.
-
-                TODO: Only update ram_outputs after committing the TXN in question.
-              */
-              let seen = ScannerDb::<N, D>::seen(&scanner.db, &id);
-              let id = id.as_ref().to_vec();
-              if seen || scanner.ram_outputs.contains(&id) {
-                panic!("scanned an output multiple times");
-              }
-              scanner.ram_outputs.insert(id);
-            }
-
-            // Clone network because we can't borrow it while also mutably borrowing the
-            // eventualities
-            // Thankfully, network is written to be a cheap clone
-            let network = scanner.network.clone();
-            for (id, tx) in network
-              .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
-              .await
-            {
-              info!(
-                "eventuality {} resolved by {}, as found on chain",
-                hex::encode(id),
-                hex::encode(&tx)
-              );
-
-              if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {
-                return;
-              }
-            }
-
-            // Don't emit an event if there's not any outputs
-            // TODO: Still emit an event if activation block or retirement block
-            if outputs.is_empty() {
-              continue;
-            }
-
-            // Save the outputs to disk
-            let mut txn = scanner.db.txn();
-            ScannerDb::<N, D>::save_outputs(&mut txn, &key, &block_id, &outputs);
-            txn.commit();
-
-            // Send all outputs
-            // TODO: Block scanning `b + CONFIRMATIONS` until until Substrate acks this Block
-            // TODO: Fire this with all outputs for all keys, not for each key
-            if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
+            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {
               return;
             }
           }
         }
+
+        // Panic if we've already seen these outputs
+        for output in &outputs {
+          let id = output.id();
+          info!(
+            "block {} had output {} worth {}",
+            hex::encode(&block_id),
+            hex::encode(&id),
+            output.amount(),
+          );
+
+          // On Bitcoin, the output ID should be unique for a given chain
+          // On Monero, it's trivial to make an output sharing an ID with another
+          // We should only scan outputs with valid IDs however, which will be unique
+
+          /*
+            The safety of this code must satisfy the following conditions:
+            1) seen is not set for the first occurrence
+            2) seen is set for any future occurrence
+
+            seen is only written to after this code completes. Accordingly, it cannot be set
+            before the first occurrence UNLESSS it's set, yet the last scanned block isn't.
+            They are both written in the same database transaction, preventing this.
+
+            As for future occurrences, the RAM entry ensures they're handled properly even if
+            the database has yet to be set.
+
+            On reboot, which will clear the RAM, if seen wasn't set, neither was latest scanned
+            block. Accordingly, this will scan from some prior block, re-populating the RAM.
+
+            If seen was set, then this will be successfully read.
+
+            There's also no concern ram_outputs was pruned, yet seen wasn't set, as pruning
+            from ram_outputs will acquire a write lock (preventing this code from acquiring
+            its own write lock and running), and during its holding of the write lock, it
+            commits the transaction setting seen and the latest scanned block.
+
+            This last case isn't true. Committing seen/latest_scanned_block happens after
+            relinquishing the write lock.
+
+            TODO: Only update ram_outputs after committing the TXN in question.
+          */
+          let seen = ScannerDb::<N, D>::seen(&db, &id);
+          let id = id.as_ref().to_vec();
+          if seen || scanner.ram_outputs.contains(&id) {
+            panic!("scanned an output multiple times");
+          }
+          scanner.ram_outputs.insert(id);
+        }
+
+        // Don't emit an event if there's not any outputs
+        // TODO: Still emit an event if activation block or retirement block
+        if !outputs.is_empty() {
+          // Save the outputs to disk
+          let mut txn = db.txn();
+          ScannerDb::<N, D>::save_outputs(&mut txn, &block_id, &outputs);
+          txn.commit();
+
+          // Send all outputs
+          // TODO: Block scanning `b + CONFIRMATIONS` until until Substrate acks this Block
+          if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
+            return;
+          }
+        }
+
+        // Update ram_scanned
+        scanner.ram_scanned = Some(block_being_scanned);
       }
     }
   }

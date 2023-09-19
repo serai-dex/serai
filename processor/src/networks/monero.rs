@@ -266,15 +266,19 @@ impl Network for Monero {
     )
   }
 
-  async fn get_outputs(
-    &self,
-    block: &Block,
-    key: EdwardsPoint,
-  ) -> Result<Vec<Self::Output>, NetworkError> {
-    let mut txs = Self::scanner(key)
-      .scan(&self.rpc, block)
-      .await
-      .map_err(|_| NetworkError::ConnectionError)?
+  async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Self::Output> {
+    let outputs = loop {
+      match Self::scanner(key).scan(&self.rpc, block).await {
+        Ok(outputs) => break outputs,
+        Err(e) => {
+          log::error!("couldn't scan block {}: {e:?}", hex::encode(block.id()));
+          sleep(Duration::from_secs(60)).await;
+          continue;
+        }
+      }
+    };
+
+    let mut txs = outputs
       .iter()
       .filter_map(|outputs| Some(outputs.not_locked()).filter(|outputs| !outputs.is_empty()))
       .collect::<Vec<_>>();
@@ -304,7 +308,7 @@ impl Network for Monero {
       }
     }
 
-    Ok(outputs)
+    outputs
   }
 
   async fn get_eventuality_completions(

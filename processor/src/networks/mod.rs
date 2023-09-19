@@ -339,12 +339,14 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
-  ) -> Result<Vec<Self::Output>, NetworkError>;
+  ) -> Vec<Self::Output>;
 
   /// Get the registered eventualities completed within this block, and any prior blocks which
   /// registered eventualities may have been completed in.
   ///
   /// This will panic if not fed a new block.
+  // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
+  // code
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
