@@ -54,6 +54,7 @@ pub fn processor_instance(
       ("NETWORK_RPC_LOGIN".to_string(), format!("{RPC_USER}:{RPC_PASS}")),
       ("NETWORK_RPC_PORT".to_string(), port.to_string()),
       ("DB_PATH".to_string(), "./processor-db".to_string()),
+      ("RUST_LOG".to_string(), "serai_processor=trace,".to_string()),
     ]
     .into(),
   )
