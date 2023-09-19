@@ -1,6 +1,6 @@
 [package]
 name = "dalek-ff-group"
-version = "0.4.0"
+version = "0.4.1"
 description = "ff/group bindings around curve25519-dalek"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dalek-ff-group"
@@ -29,7 +29,7 @@ group = { version = "0.13", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false }
 
 sha2 = { version = "0.10", default-features = false }
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "digest", "precomputed-tables", "legacy_compatibility"] }
+curve25519-dalek = { version = ">= 4.0, < 4.2", default-features = false, features = ["alloc", "zeroize", "digest", "group", "precomputed-tables"] }
 
 [dev-dependencies]
 rand_core = { version = "0.6", features = ["std"] }

@@ -68,6 +68,24 @@ pub trait Curve: Ciphersuite {
   }
 
   /// Hash the commitments and message to calculate the binding factor. H1 from the IETF draft.
+  //
+  // This may return 0, which is invalid according to the FROST preprint, as all binding factors
+  // are expected to be in the multiplicative subgroup. This isn't a practical issue, as there's a
+  // negligible probability of this returning 0.
+  //
+  // When raised in
+  // https://github.com/cfrg/draft-irtf-cfrg-frost/issues/451#issuecomment-1715985505,
+  // the negligible probbility was seen as sufficient reason not to edit the spec to be robust in
+  // this regard.
+  //
+  // While that decision may be disagreeable, this library cannot implement a robust scheme while
+  // following the specification. Following the specification is preferred to being robust against
+  // an impractical probability enabling a complex attack (made infeasible by the impractical
+  // probability required).
+  //
+  // We could still panic on the 0-hash, preferring correctness to liveliness. Finding the 0-hash
+  // is as computationally complex as simply calculating the group key's discrete log however,
+  // making it not worth having a panic (as this library is expected not to panic).
   fn hash_binding_factor(binding: &[u8]) -> Self::F {
     <Self as Curve>::hash_to_F(b"rho", binding)
   }

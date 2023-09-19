@@ -52,7 +52,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"] }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
-base58-monero = { version = "1", git = "https://github.com/monero-rs/base58-monero", rev = "5045e8d2b817b3b6c1190661f504e879bc769c29", default-features = false, features = ["check"] }
+base58-monero = { version = "2", default-features = false, features = ["check"] }
 
 # Used for the provided RPC
 digest_auth = { version = "0.3", optional = true }
@@ -95,6 +95,8 @@ std = [
   "hex/std",
   "serde/std",
   "serde_json/std",
+
+  "base58-monero/std",
 ]
 
 http_rpc = ["digest_auth", "reqwest"]
