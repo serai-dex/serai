@@ -17,6 +17,7 @@ use crate::{
 };
 
 async fn spend<N: Network, D: Db>(
+  db: &mut D,
   network: &N,
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
@@ -50,10 +51,13 @@ async fn spend<N: Network, D: Db>(
     network.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { block: _, outputs } => {
+    ScannerEvent::Block { block, outputs } => {
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
+      let mut txn = db.txn();
+      assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+      txn.commit();
       outputs
     }
     ScannerEvent::Completed(_, _, _) => {
@@ -78,8 +82,17 @@ pub async fn test_addresses<N: Network>(network: N) {
   let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
   assert!(active_keys.is_empty());
   let mut txn = db.txn();
-  scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
+  scanner
+    .register_key(
+      &mut txn,
+      network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS,
+      key,
+    )
+    .await;
   txn.commit();
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
+  }
 
   // Receive funds to the branch address and make sure it's properly identified
   let block_id = network.test_send(N::branch_address(key)).await.id();
@@ -91,6 +104,9 @@ pub async fn test_addresses<N: Network>(network: N) {
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
+        let mut txn = db.txn();
+        assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+        txn.commit();
         outputs
       }
       ScannerEvent::Completed(_, _, _) => {
@@ -99,7 +115,7 @@ pub async fn test_addresses<N: Network>(network: N) {
     };
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&network, &keys, &mut scanner, outputs).await;
+  let outputs = spend(&mut db, &network, &keys, &mut scanner, outputs).await;
   // Also test spending the change output
-  spend(&network, &keys, &mut scanner, outputs).await;
+  spend(&mut db, &network, &keys, &mut scanner, outputs).await;
 }

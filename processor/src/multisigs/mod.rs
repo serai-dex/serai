@@ -159,7 +159,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     getter: &G,
     hash: &<N::Block as Block<N>>::Id,
   ) -> Option<usize> {
-    let latest = ScannerHandle::<N, D>::block_number(getter, hash).await?;
+    let latest = ScannerHandle::<N, D>::block_number(getter, hash)?;
 
     // While the scanner has cemented this block, that doesn't mean it's been scanned for all
     // keys
@@ -216,12 +216,18 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let existing_payments = payments;
     let new_payments = vec![];
 
-    // We now have to acknowledge the acknowledged block
+    // We now have to acknowledge the acknowledged block, if it's new
     let mut block_id = <N::Block as Block<N>>::Id::default();
     block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
+    let outputs = if ScannerHandle::<N, D>::db_scanned(txn) <
+      ScannerHandle::<N, D>::block_number(txn, &block_id)
+    {
+      self.scanner.ack_block(txn, block_id.clone()).await
+    } else {
+      vec![]
+    };
 
     // TODO: Split outputs by existing/new
-    let outputs = self.scanner.ack_block(txn, block_id.clone()).await;
     let existing_outputs = outputs;
     let new_outputs = vec![];
 
@@ -255,7 +261,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
     // block_number call is safe since it access a piece of static data
     let block_number = ScannerHandle::<N, D>::block_number(txn, &block_hash)
-      .await
       .expect("told to sign_plans on a context we're not synced to");
 
     let fee = get_fee(network, block_number).await;

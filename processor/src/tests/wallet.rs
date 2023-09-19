@@ -31,8 +31,17 @@ pub async fn test_wallet<N: Network>(network: N) {
   assert!(active_keys.is_empty());
   let (block_id, outputs) = {
     let mut txn = db.txn();
-    scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
+    scanner
+      .register_key(
+        &mut txn,
+        network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS,
+        key,
+      )
+      .await;
     txn.commit();
+    for _ in 0 .. N::CONFIRMATIONS {
+      network.mine_block().await;
+    }
 
     let block = network.test_send(N::address(key)).await;
     let block_id = block.id();
@@ -48,6 +57,9 @@ pub async fn test_wallet<N: Network>(network: N) {
       }
     }
   };
+  let mut txn = db.txn();
+  assert_eq!(scanner.ack_block(&mut txn, block_id.clone()).await, outputs);
+  txn.commit();
 
   let mut txn = db.txn();
   let mut scheduler = Scheduler::new::<MemDb>(&mut txn, key);
@@ -90,9 +102,6 @@ pub async fn test_wallet<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  let first_block_id = block_id;
-  let first_outputs = outputs;
-
   let txid = sign(network.clone(), keys_txs).await;
   let tx = network.get_transaction(&txid).await.unwrap();
   network.mine_block().await;
@@ -123,7 +132,6 @@ pub async fn test_wallet<N: Network>(network: N) {
 
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, first_block_id).await, first_outputs);
   assert_eq!(scanner.ack_block(&mut txn, block.id()).await, outputs);
   txn.commit();
 }

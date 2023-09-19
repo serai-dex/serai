@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 use std::{
   sync::Arc,
   time::Duration,
-  collections::{HashSet, HashMap},
+  collections::{VecDeque, HashSet, HashMap},
 };
 
 use ciphersuite::group::GroupEncoding;
@@ -179,6 +179,8 @@ pub struct Scanner<N: Network, D: Db> {
   ram_scanned: Option<usize>,
   ram_outputs: HashSet<Vec<u8>>,
 
+  need_ack: VecDeque<usize>,
+
   events: mpsc::UnboundedSender<ScannerEvent<N>>,
 }
 
@@ -215,7 +217,10 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     key: <N::Curve as Ciphersuite>::G,
   ) {
     let mut scanner = self.scanner.write().await;
-    assert!(activation_number > scanned.ram_scanned.unwrap_or(0), "activation block of new keys was already scanned");
+    assert!(
+      activation_number > scanner.ram_scanned.unwrap_or(0),
+      "activation block of new keys was already scanned"
+    );
 
     info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
 
@@ -231,10 +236,14 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     scanner.eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
   }
 
+  pub fn db_scanned<G: Get>(getter: &G) -> Option<usize> {
+    ScannerDb::<N, D>::latest_scanned_block(getter)
+  }
+
   // This perform a database read which isn't safe with regards to if the value is set or not
   // It may be set, when it isn't expected to be set, or not set, when it is expected to be set
   // Since the value is static, if it's set, it's correctly set
-  pub async fn block_number<G: Get>(getter: &G, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
+  pub fn block_number<G: Get>(getter: &G, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
     ScannerDb::<N, D>::block_number(getter, id)
   }
 
@@ -258,20 +267,24 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     txn: &mut D::Transaction<'_>,
     id: <N::Block as Block<N>>::Id,
   ) -> Vec<N::Output> {
+    debug!("block {} acknowledged", hex::encode(&id));
+
     let mut scanner = self.scanner.write().await;
-    debug!("Block {} acknowledged", hex::encode(&id));
 
     // Get the number for this block
     let number = ScannerDb::<N, D>::block_number(txn, &id)
       .expect("main loop trying to operate on data we haven't scanned");
+    log::trace!("block {} was {number}", hex::encode(&id));
 
     let outputs = ScannerDb::<N, D>::save_scanned_block(txn, number);
     // This has a race condition if we try to ack a block we scanned on a prior boot, and we have
     // yet to scan it on this boot
-    assert!(number >= scanner.ram_scanned.unwrap_or(0));
+    assert!(number <= scanner.ram_scanned.unwrap());
     for output in &outputs {
       assert!(scanner.ram_outputs.remove(output.id().as_ref()));
     }
+
+    assert_eq!(scanner.need_ack.pop_front().unwrap(), number);
 
     outputs
   }
@@ -300,6 +313,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
       ram_scanned,
       ram_outputs: HashSet::new(),
 
+      need_ack: VecDeque::new(),
+
       events: events_send,
     }));
     tokio::spawn(Scanner::run(db, network, scanner.clone()));
@@ -324,10 +339,26 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
         let ram_scanned = {
           let scanner = scanner.read().await;
+          // If we're not scanning for keys yet, wait until we are
           if scanner.keys.is_empty() {
             continue;
           }
-          scanner.ram_scanned.unwrap()
+
+          let ram_scanned = scanner.ram_scanned.unwrap();
+          // If a Batch has taken too long to be published, start waiting until it is before
+          // continuing scanning
+          // Solves a race condition around multisig rotation, documented in the relevant doc
+          // and demonstrated with mini
+          if let Some(needing_ack) = scanner.need_ack.front() {
+            let next = ram_scanned + 1;
+            let limit = needing_ack + N::CONFIRMATIONS;
+            assert!(next <= limit);
+            if next == limit {
+              continue;
+            }
+          };
+
+          ram_scanned
         };
 
         (
@@ -348,6 +379,16 @@ impl<N: Network, D: Db> Scanner<N, D> {
       };
 
       for block_being_scanned in (ram_scanned + 1) ..= latest_block_to_scan {
+        {
+          if let Some(needing_ack) = scanner.read().await.need_ack.front() {
+            let limit = needing_ack + N::CONFIRMATIONS;
+            assert!(block_being_scanned <= limit);
+            if block_being_scanned == limit {
+              break;
+            }
+          }
+        }
+
         let block = match network.get_block(block_being_scanned).await {
           Ok(block) => block,
           Err(_) => {
@@ -357,7 +398,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
         };
         let block_id = block.id();
 
-        info!("scanning block: {}", hex::encode(&block_id));
+        info!("scanning block: {} ({block_being_scanned})", hex::encode(&block_id));
 
         // These DB calls are safe, despite not having a txn, since they're static values
         // There's no issue if they're written in advance of expected (such as on reboot)
@@ -470,13 +511,15 @@ impl<N: Network, D: Db> Scanner<N, D> {
           txn.commit();
 
           // Send all outputs
-          // TODO: Block scanning `b + CONFIRMATIONS` until until Substrate acks this Block
+          // TODO: Block scanning `b + CONFIRMATIONS` until Substrate acks this Block
           if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
             return;
           }
+
+          scanner.need_ack.push_back(block_being_scanned);
         }
 
-        // Update ram_scanned
+        // Update ram_scanned/need_ack
         scanner.ram_scanned = Some(block_being_scanned);
       }
     }

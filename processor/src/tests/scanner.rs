@@ -7,8 +7,6 @@ use frost::Participant;
 
 use tokio::time::timeout;
 
-use serai_client::primitives::BlockHash;
-
 use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
@@ -28,7 +26,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   }
 
   let first = Arc::new(Mutex::new(true));
-  let activation_number = network.get_latest_block_number().await.unwrap();
+  let activation_number = network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS;
   let db = MemDb::new();
   let new_scanner = || async {
     let mut db = db.clone();
@@ -39,6 +37,9 @@ pub async fn test_scanner<N: Network>(network: N) {
       let mut txn = db.txn();
       scanner.register_key(&mut txn, activation_number, group_key).await;
       txn.commit();
+      for _ in 0 .. N::CONFIRMATIONS {
+        network.mine_block().await;
+      }
       *first = false;
     } else {
       assert_eq!(active_keys.len(), 1);
@@ -73,19 +74,6 @@ pub async fn test_scanner<N: Network>(network: N) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-
-  // Acknowledging it should yield a list of all blocks since the last acknowledged block
-  let mut blocks = vec![];
-  let mut curr_block = activation_number + 1;
-  loop {
-    let block = network.get_block(curr_block).await.unwrap().id();
-    blocks.push(BlockHash(block.as_ref().try_into().unwrap()));
-    if block == block_id {
-      break;
-    }
-    curr_block += 1;
-  }
-
   let mut cloned_db = db.clone();
   let mut txn = cloned_db.txn();
   assert_eq!(scanner.ack_block(&mut txn, block_id).await, outputs);
