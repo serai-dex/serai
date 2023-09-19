@@ -274,26 +274,39 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       let id = plan.id();
       info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-      let key = plan.key.to_bytes();
-      MainDb::<N, D>::save_signing(txn, key.as_ref(), block_number.try_into().unwrap(), &plan);
+      let key = plan.key;
+      let key_bytes = key.to_bytes();
+      MainDb::<N, D>::save_signing(
+        txn,
+        key_bytes.as_ref(),
+        block_number.try_into().unwrap(),
+        &plan,
+      );
       let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
 
       for branch in branches {
-        // TODO: Properly select existing/new multisig
-        self.existing.as_mut().unwrap().scheduler.created_output::<D>(
-          txn,
-          branch.expected,
-          branch.actual,
-        );
+        let existing = self.existing.as_mut().unwrap();
+        let to_use = if key == existing.key {
+          existing
+        } else {
+          let new = self
+            .new
+            .as_mut()
+            .expect("plan wasn't for existing multisig yet there wasn't a new multisig");
+          assert_eq!(key, new.key);
+          new
+        };
+
+        to_use.scheduler.created_output::<D>(txn, branch.expected, branch.actual);
       }
 
       if let Some((tx, eventuality)) = tx {
         self
           .scanner
-          .register_eventuality(key.as_ref(), block_number, id, eventuality.clone())
+          .register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone())
           .await;
 
-        if let Some(signer) = signers.get_mut(key.as_ref()) {
+        if let Some(signer) = signers.get_mut(key_bytes.as_ref()) {
           signer.sign_transaction(txn, id, tx, eventuality).await;
         }
       }
