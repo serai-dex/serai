@@ -171,7 +171,7 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::PoolCreated {
-        creator: pair.public().into(),
+        creator: pair.public(),
         pool_id: (Coin::Serai, coin),
         lp_token: 0 // first lp token that is created in the chain
       }]

@@ -345,7 +345,7 @@ impl assets::Config<assets::Instance1> for Runtime {
 
   type WeightInfo = assets::weights::SubstrateWeight<Runtime>; // same as the normal assets?
   #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
+  type BenchmarkHelper = ();
 }
 
 impl tokens::Config for Runtime {
@@ -414,8 +414,10 @@ impl dex::Config for Runtime {
   type AllowMultiAssetPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
-  #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
+  // TODO: Enabling following lines fails the clippy. "No BenchmarkHelper
+  // on trait dex::Config" :(.
+  // #[cfg(feature = "runtime-benchmarks")]
+  // type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
 pub struct IdentityValidatorIdOf;
