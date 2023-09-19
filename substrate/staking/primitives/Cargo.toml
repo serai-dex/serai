@@ -2,8 +2,7 @@
 name = "serai-staking-primitives"
 version = "0.1.0"
 description = "Staking primitives for Serai"
-license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/staking/pallet"
+license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
