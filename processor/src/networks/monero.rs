@@ -49,7 +49,7 @@ const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
 const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
 const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
 
-impl OutputTrait for Output {
+impl OutputTrait<Monero> for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
   // While we already are immune, thanks to using featured address, this doesn't hurt and is
   // technically more efficient.
@@ -66,6 +66,10 @@ impl OutputTrait for Output {
 
   fn id(&self) -> Self::Id {
     self.0.output.data.key.compress().to_bytes()
+  }
+
+  fn key(&self) -> EdwardsPoint {
+    EdwardsPoint(self.0.output.data.key - (EdwardsPoint::generator().0 * self.0.key_offset()))
   }
 
   fn balance(&self) -> Balance {
@@ -144,6 +148,7 @@ impl BlockTrait<Monero> for Block {
     self.header.previous
   }
 
+  // TODO: Check Monero enforces this to be monotonic and sane
   fn time(&self) -> u64 {
     self.header.timestamp
   }

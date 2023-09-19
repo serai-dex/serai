@@ -131,7 +131,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
-    // TODO: Check current_keys is sorted from oldest to newest
     (
       MultisigManager {
         scanner,
@@ -227,9 +226,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       vec![]
     };
 
-    // TODO: Split outputs by existing/new
-    let existing_outputs = outputs;
-    let new_outputs = vec![];
+    let new_outputs = if let Some(new) = self.new.as_ref() {
+      outputs.iter().filter(|output| output.key() == new.key).cloned().collect()
+    } else {
+      vec![]
+    };
+    let existing_outputs = outputs
+      .into_iter()
+      .filter(|output| output.key() == self.existing.as_ref().unwrap().key)
+      .collect();
 
     // TODO: Do we want a singular Plan Vec?
     let mut plans = self.existing.as_mut().unwrap().scheduler.schedule::<D>(

@@ -94,14 +94,16 @@ impl OutputType {
   }
 }
 
-pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
+pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   type Id: 'static + Id;
 
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
+  fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
   fn balance(&self) -> Balance;
+  // TODO: Remove this?
   fn amount(&self) -> u64 {
     self.balance().amount.0
   }
@@ -280,7 +282,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
   /// The type containing all information on a scanned output.
   // This is almost certainly distinct from the network's native output type.
-  type Output: Output;
+  type Output: Output<Self>;
   /// The type containing all information on a planned transaction, waiting to be signed.
   type SignableTransaction: Send + Sync + Clone + Debug;
   /// The type containing all information to check if a plan was completed.

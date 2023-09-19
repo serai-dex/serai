@@ -15,6 +15,7 @@ use tokio::time::sleep;
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
+    key::{Parity, XOnlyPublicKey},
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
@@ -76,7 +77,7 @@ pub struct Output {
   data: Vec<u8>,
 }
 
-impl OutputTrait for Output {
+impl OutputTrait<Bitcoin> for Output {
   type Id = OutputId;
 
   fn kind(&self) -> OutputType {
@@ -95,6 +96,18 @@ impl OutputTrait for Output {
       res.as_ref().to_vec()
     );
     res
+  }
+
+  fn key(&self) -> ProjectivePoint {
+    let script = &self.output.output().script_pubkey;
+    assert!(script.is_v1_p2tr());
+    let Instruction::PushBytes(key) = script.instructions_minimal().last().unwrap().unwrap() else {
+      panic!("last item in v1 Taproot script wasn't bytes")
+    };
+    let key = XOnlyPublicKey::from_slice(key.as_ref())
+      .expect("last item in v1 Taproot script wasn't x-only public key");
+    Secp256k1::read_G(&mut key.public_key(Parity::Even).serialize().as_slice()).unwrap() -
+      (ProjectivePoint::GENERATOR * self.output.offset())
   }
 
   fn balance(&self) -> Balance {
@@ -232,7 +245,7 @@ impl BlockTrait<Bitcoin> for Block {
   }
 }
 
-const KEY_DST: &[u8] = b"Bitcoin Key";
+const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
 lazy_static::lazy_static! {
   static ref BRANCH_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"branch");
   static ref CHANGE_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"change");

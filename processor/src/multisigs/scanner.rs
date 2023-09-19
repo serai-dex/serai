@@ -107,10 +107,10 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     res
   }
 
-  fn seen_key(id: &<N::Output as Output>::Id) -> Vec<u8> {
+  fn seen_key(id: &<N::Output as Output<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"seen", id)
   }
-  fn seen<G: Get>(getter: &G, id: &<N::Output as Output>::Id) -> bool {
+  fn seen<G: Get>(getter: &G, id: &<N::Output as Output<N>>::Id) -> bool {
     getter.get(Self::seen_key(id)).is_some()
   }
 
@@ -452,7 +452,10 @@ impl<N: Network, D: Db> Scanner<N, D> {
           // TODO: Check for key deprecation
 
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
-          outputs.extend(network.get_outputs(&block, key).await);
+          for output in network.get_outputs(&block, key).await {
+            assert_eq!(output.key(), key);
+            outputs.push(output);
+          }
 
           for (id, tx) in network
             .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
