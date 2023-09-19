@@ -23,13 +23,13 @@ mod scanner;
 #[cfg(test)]
 pub mod scanner;
 
-use scanner::{ScannerEvent, ScannerHandle};
-// TODO: Remove this export
-pub use scanner::Scanner;
+use scanner::{ScannerEvent, ScannerHandle, Scanner};
 
+#[cfg(not(test))]
 mod scheduler;
-// TODO: Remove this export
-pub use scheduler::Scheduler;
+#[cfg(test)]
+pub mod scheduler;
+use scheduler::Scheduler;
 
 use crate::{
   Db, MainDb, Payment, PostFeeBranch, Plan,
@@ -131,7 +131,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
-    // TODO: Check active_keys is sort3ed from oldest to newest
+    // TODO: Check active_keys is sorted from oldest to newest
     (
       MultisigManager {
         scanner,

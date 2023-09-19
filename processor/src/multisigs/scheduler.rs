@@ -29,8 +29,6 @@ pub struct Scheduler<N: Network> {
   // queued_plans are for outputs which we will create, yet when created, will have their amount
   // reduced by the fee it cost to be created. The Scheduler will then be told how what amount the
   // output actually has, and it'll be moved into plans
-  //
-  // TODO2: Consider edge case where branch/change isn't mined yet keys are deprecated
   queued_plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
   plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
 
@@ -153,8 +151,6 @@ impl<N: Network> Scheduler<N> {
   }
 
   fn execute(&mut self, inputs: Vec<N::Output>, mut payments: Vec<Payment<N>>) -> Plan<N> {
-    // This must be equal to plan.key due to how networks detect they created outputs which are to
-    // the branch address
     let branch_address = N::branch_address(self.key);
     // created_output will be called any time we send to a branch address
     // If it's called, and it wasn't expecting to be called, that's almost certainly an error

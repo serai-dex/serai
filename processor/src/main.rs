@@ -168,10 +168,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     wait(substrate_mutable, &required).await;
   }
 
-  // TODO: Shouldn't we create a txn here and pass it around as needed?
-  // The txn would ack this message ID. If we detect this message ID as handled in the DB,
-  // we'd move on here. Only after committing the TX would we report it as acked.
-
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
       coordinator
@@ -180,13 +176,23 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
 
     CoordinatorMessage::Sign(msg) => {
-      tributary_mutable.signers.get_mut(msg.key()).unwrap().handle(txn, msg).await;
+      tributary_mutable
+        .signers
+        .get_mut(msg.key())
+        .expect("coordinator told us to sign with a signer we don't have")
+        .handle(txn, msg)
+        .await;
     }
 
     CoordinatorMessage::Coordinator(msg) => {
-      if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-        substrate_signer.handle(txn, msg).await;
-      }
+      tributary_mutable
+        .substrate_signer
+        .as_mut()
+        .expect(
+          "coordinator told us to sign a batch when we don't have a Substrate signer at this time",
+        )
+        .handle(txn, msg)
+        .await;
     }
 
     CoordinatorMessage::Substrate(msg) => {
@@ -256,7 +262,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // See TributaryMutable's struct definition for why this block is safe
             let KeyConfirmed { substrate_keys, network_keys } =
               tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-            // TODO2: Don't immediately set this, set it once it's active
+            // TODO: Don't immediately set this, set it once it's active
             tributary_mutable.substrate_signer =
               Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
             tributary_mutable
@@ -285,6 +291,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           let plans = substrate_mutable.substrate_block(txn, context, burns).await;
 
+          // TODO: Only send this if we're active?
           coordinator
             .send(ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
@@ -363,10 +370,18 @@ async fn boot<N: Network, D: Db>(
     let (substrate_keys, network_keys) = key_gen.keys(key);
 
     // We don't have to load any state for this since the Scanner will re-fire any events
-    // necessary
+    // necessary, only no longer scanning old blocks once Substrate acks them
     // TODO2: This uses most recent as signer, use the active one
     substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
 
+    // The Scanner re-fires events as needed for substrate_signer yet not signer
+    // This is due to the transactions which we start signing from due to a block not being
+    // guaranteed to be signed before we stop scanning the block on reboot
+    // We could simplify the Signer flow by delaying when it acks a block, yet that'd:
+    // 1) Increase the startup time
+    // 2) Cause re-emission of Batch events, which we'd need to check the safety of
+    //    (TODO: Do anyways?)
+    // 3) Violate the attempt counter (TODO: Is this already being violated?)
     let mut signer = Signer::new(network.clone(), network_keys);
 
     // Sign any TXs being actively signed
@@ -375,6 +390,7 @@ async fn boot<N: Network, D: Db>(
     for (id, tx, eventuality) in actively_signing.clone() {
       // TODO: Reconsider if the Signer should have the eventuality, or if just the network/scanner
       // should
+      // TODO: Move this into Signer::new?
       let mut txn = raw_db.txn();
       signer.sign_transaction(&mut txn, id, tx, eventuality).await;
       // This should only have re-writes of existing data
@@ -425,6 +441,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               }))
               .await;
 
+            // TODO: Is there a race condition where this isn't called due to a sudden halt?
+            // TODO: Move this into Signer
             let mut txn = raw_db.txn();
             main_db.finish_signing(&mut txn, key, id);
             txn.commit();
@@ -498,9 +516,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-                substrate_signer
-                  .sign(&mut txn, batch)
-                  .await;
+                substrate_signer.sign(&mut txn, batch).await;
               }
             }
           },

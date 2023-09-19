@@ -13,7 +13,7 @@ use crate::{
   networks::{Output, Transaction, Block, Network},
   multisigs::{
     scanner::{ScannerEvent, Scanner},
-    Scheduler,
+    scheduler::Scheduler,
   },
   tests::sign,
 };

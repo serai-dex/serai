@@ -126,16 +126,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
       output.write(&mut bytes).unwrap();
     }
     txn.put(Self::outputs_key(key, block), bytes);
-
-    // This is a new set of outputs, which are expected to be handled in a perfectly ordered
-    // fashion
-
-    // TODO2: This is not currently how this works
-    // There may be new blocks 0 .. 5, which A will scan, yet then B may be activated at block 4
-    // This would cause
-    // 0a, 1a, 2a, 3a, 4a, 5a, 4b, 5b
-    // when it should be
-    // 0a, 1a, 2a, 3a, 4a, 4b, 5a, 5b
   }
   fn outputs(
     txn: &D::Transaction<'_>,
