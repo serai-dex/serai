@@ -156,16 +156,6 @@ impl<N: Network> Scheduler<N> {
     mut payments: Vec<Payment<N>>,
     key_for_any_change: <N::Curve as Ciphersuite>::G,
   ) -> Plan<N> {
-    let branch_address = N::branch_address(self.key);
-    // created_output will be called any time we send to a branch address
-    // If it's called, and it wasn't expecting to be called, that's almost certainly an error
-    // The only way it wouldn't be is if someone on Serai triggered a burn to a branch, which is
-    // pointless anyways
-    // If we allow such behavior, we lose the ability to detect the aforementioned class of errors
-    // Ignore these payments so we can safely assert there
-    let mut payments =
-      payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
-
     let mut change = false;
     let mut max = N::MAX_OUTPUTS;
 
@@ -184,6 +174,8 @@ impl<N: Network> Scheduler<N> {
       self.queued_plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
       amount
     };
+
+    let branch_address = N::branch_address(self.key);
 
     // If we have more payments than we can handle in a single TX, create plans for them
     // TODO2: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
@@ -254,10 +246,28 @@ impl<N: Network> Scheduler<N> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
-    payments: Vec<Payment<N>>,
+    mut payments: Vec<Payment<N>>,
     key_for_any_change: <N::Curve as Ciphersuite>::G,
     force_spend: bool,
   ) -> Vec<Plan<N>> {
+    // Drop payments to our own branch address
+    /*
+      created_output will be called any time we send to a branch address. If it's called, and it
+      wasn't expecting to be called, that's almost certainly an error. The only way to guarantee
+      this however is to only have us send to a branch address when creating a branch, hence the
+      dropping of pointless payments.
+
+      This is not comprehensive as a payment may still be made to another active multisig's branch
+      address, depending on timing. This is safe as the issue only occurs when a multisig sends to
+      its *own* branch address, since created_output is called on the signer's Scheduler.
+    */
+
+    {
+      let branch_address = N::branch_address(self.key);
+      payments =
+        payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
+    }
+
     let mut plans = self.add_outputs(utxos, key_for_any_change);
 
     log::info!("scheduling {} new payments", payments.len());
