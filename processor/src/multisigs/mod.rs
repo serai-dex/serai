@@ -37,6 +37,18 @@ use crate::{
   Signer,
 };
 
+enum RotationStep {
+  // Use the existing multisig for all actions (steps 1-3)
+  UseExisting,
+  // Use the new multisig as change (step 4)
+  NewAsChange,
+  // The existing multisig is expected to solely forward transactions at this point (step 5)
+  ForwardFromExisting,
+  // The existing multisig is expected to finish its own transactions and do nothing more
+  // (step 6)
+  ClosingExisting,
+}
+
 async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
   // TODO2: Use an fee representative of several blocks
   get_block(network, block_number).await.median_fee()
@@ -192,6 +204,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     self.new = viewer;
   }
 
+  fn current_rotation_step(&self, block_number: usize) -> RotationStep {
+    if let Some(new) = self.new.as_ref() {
+      if block_number < (new.activation_block + N::CONFIRMATIONS) {
+        RotationStep::UseExisting
+      } else if block_number < (new.activation_block + (2 * N::CONFIRMATIONS)) {
+        RotationStep::NewAsChange
+      } else {
+        RotationStep::ForwardFromExisting
+
+        // TODO: ClosingExisting ?
+      }
+    } else {
+      RotationStep::UseExisting
+    }
+  }
+
   /// Handle a SubstrateBlock event, building the relevant Plans.
   pub async fn substrate_block(
     &mut self,
@@ -221,31 +249,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       .expect("SubstrateBlock with context we haven't synced");
 
     // Determine what step of rotation we're currently in
-    enum RotationStep {
-      // Use the existing multisig for all actions (steps 1-3)
-      UseExisting,
-      // Use the new multisig as change (step 4)
-      NewAsChange,
-      // The existing multisig is expected to solely forward transactions at this point (step 5)
-      ForwardFromExisting,
-      // The existing multisig is expected to finish its own transactions and do nothing more
-      // (step 6)
-      ClosingExisting,
-    }
-
-    let step = if let Some(new) = self.new.as_ref() {
-      if block_number < (new.activation_block + N::CONFIRMATIONS) {
-        RotationStep::UseExisting
-      } else if block_number < (new.activation_block + (2 * N::CONFIRMATIONS)) {
-        RotationStep::NewAsChange
-      } else {
-        RotationStep::ForwardFromExisting
-
-        // TODO: ClosingExisting ?
-      }
-    } else {
-      RotationStep::UseExisting
-    };
+    let step = self.current_rotation_step(block_number);
 
     let mut existing_payments = vec![];
     let mut new_payments = vec![];
@@ -390,8 +394,21 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             continue;
           }
 
-          // TODO: If External to existing multisig during ForwardFromExisting, forward it
-          // TODO: If External to existing multisig during ClosingExisting, drop it
+          let step = self.current_rotation_step(
+            ScannerHandle::<N, D>::block_number(txn, &block)
+              .expect("didn't have the block number for a block we just scanned"),
+          );
+
+          // If this is an External transaction to the existing multisig, and we're either solely
+          // forwarding or closing the existing multisig, drop it
+          // In the case of the forwarding case, we'll report it once it hits the new multisig
+          if (match step {
+            RotationStep::UseExisting | RotationStep::NewAsChange => false,
+            RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
+          }) && (output.key() == self.existing.as_ref().unwrap().key)
+          {
+            continue;
+          }
 
           let mut data = output.data();
           let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
