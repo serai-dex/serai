@@ -299,8 +299,11 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 }
 
 impl<N: Network, D: Db> Scanner<N, D> {
-  #[allow(clippy::new_ret_no_self)]
-  pub fn new(network: N, db: D) -> (ScannerHandle<N, D>, Vec<<N::Curve as Ciphersuite>::G>) {
+  #[allow(clippy::type_complexity, clippy::new_ret_no_self)]
+  pub fn new(
+    network: N,
+    db: D,
+  ) -> (ScannerHandle<N, D>, Vec<(usize, <N::Curve as Ciphersuite>::G)>) {
     let (events_send, events_recv) = mpsc::unbounded_channel();
 
     let keys = ScannerDb::<N, D>::keys(&db);
@@ -327,7 +330,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
     }));
     tokio::spawn(Scanner::run(db, network, scanner.clone()));
 
-    (ScannerHandle { scanner, events: events_recv }, keys.into_iter().map(|keys| keys.1).collect())
+    (ScannerHandle { scanner, events: events_recv }, keys)
   }
 
   fn emit(&mut self, event: ScannerEvent<N>) -> bool {

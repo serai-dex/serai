@@ -67,6 +67,7 @@ async fn prepare_send<N: Network>(
 }
 
 pub struct MultisigViewer<N: Network> {
+  activation_block: usize,
   key: <N::Curve as Ciphersuite>::G,
   scheduler: Scheduler<N>,
 }
@@ -104,7 +105,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
-    for key in &current_keys {
+    for (_, key) in &current_keys {
       schedulers.push(Scheduler::from_db(raw_db, *key).unwrap());
 
       // Load any TXs being actively signed
@@ -134,16 +135,18 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (
       MultisigManager {
         scanner,
-        existing: current_keys
-          .get(0)
-          .cloned()
-          .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
-        new: current_keys
-          .get(1)
-          .cloned()
-          .map(|key| MultisigViewer { key, scheduler: schedulers.remove(0) }),
+        existing: current_keys.get(0).cloned().map(|(activation_block, key)| MultisigViewer {
+          activation_block,
+          key,
+          scheduler: schedulers.remove(0),
+        }),
+        new: current_keys.get(1).cloned().map(|(activation_block, key)| MultisigViewer {
+          activation_block,
+          key,
+          scheduler: schedulers.remove(0),
+        }),
       },
-      current_keys,
+      current_keys.into_iter().map(|(_, key)| key).collect(),
       actively_signing,
     )
   }
@@ -172,11 +175,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   pub async fn add_key(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    external_block: usize,
+    activation_block: usize,
     external_key: <N::Curve as Ciphersuite>::G,
   ) {
-    self.scanner.register_key(txn, external_block, external_key).await;
+    self.scanner.register_key(txn, activation_block, external_key).await;
     let viewer = Some(MultisigViewer {
+      activation_block,
       key: external_key,
       scheduler: Scheduler::<N>::new::<D>(txn, external_key),
     });
@@ -211,9 +215,24 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
-    // TODO: Properly select existing/new multisig for these payments
-    let existing_payments = payments;
-    let new_payments = vec![];
+    let mut existing_payments = vec![];
+    let mut new_payments = vec![];
+
+    // Assign payments to the existing multisig if:
+    // - There isn't a new multisig
+    // - We're within 2 * CONFIRMATIONS blocks of the new multisig's activation
+    if self.new.is_none() || {
+      let mut block = <N::Block as Block<N>>::Id::default();
+      block.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
+      let block_number = ScannerHandle::<N, D>::block_number(txn, &block)
+        .expect("SubstrateBlock with context we haven't synced");
+
+      block_number >= (self.new.as_ref().unwrap().activation_block + (2 * N::CONFIRMATIONS))
+    } {
+      existing_payments = payments;
+    } else {
+      new_payments = payments;
+    }
 
     // We now have to acknowledge the acknowledged block, if it's new
     let mut block_id = <N::Block as Block<N>>::Id::default();
