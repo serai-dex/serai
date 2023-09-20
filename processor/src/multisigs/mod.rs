@@ -280,6 +280,16 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       .collect();
     assert_eq!(existing_outputs.len() + new_outputs.len(), outputs_len);
 
+    match step {
+      RotationStep::UseExisting | RotationStep::NewAsChange => {}
+      RotationStep::ForwardFromExisting => {
+        // TODO: Manually create a Plan for all external outputs needing forwarding/refunding
+      }
+      RotationStep::ClosingExisting => {
+        // TODO: Only keep outputs which were the definite conclusion to an eventuality
+      }
+    }
+
     // TODO: Do we want a singular Plan Vec?
     let mut plans = {
       let existing = self.existing.as_mut().unwrap();
@@ -294,14 +304,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           RotationStep::ForwardFromExisting |
           RotationStep::ClosingExisting => self.new.as_ref().unwrap().key,
         },
+        match step {
+          RotationStep::UseExisting | RotationStep::NewAsChange => false,
+          RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
+        },
       )
     };
-    plans.extend(if let Some(new) = self.new.as_mut() {
-      new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key)
-    } else {
-      vec![]
-    });
-
+    if let Some(new) = self.new.as_mut() {
+      plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
+    }
     plans
   }
 

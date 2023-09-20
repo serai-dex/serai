@@ -224,6 +224,8 @@ impl<N: Network> Scheduler<N> {
       // If we can fulfill planned TXs with this output, do so
       // We could limit this to UTXOs where `utxo.kind() == OutputType::Branch`, yet there's no
       // practical benefit in doing so
+      // TODO: Review how we handle an Eventuality creating a branch being resolved without a Plan
+      // to continue
       let amount = utxo.amount();
       if let Some(plans) = self.plans.get_mut(&amount) {
         // Execute the first set of payments possible with an output of this amount
@@ -254,6 +256,7 @@ impl<N: Network> Scheduler<N> {
     utxos: Vec<N::Output>,
     payments: Vec<Payment<N>>,
     key_for_any_change: <N::Curve as Ciphersuite>::G,
+    force_spend: bool,
   ) -> Vec<Plan<N>> {
     let mut plans = self.add_outputs(utxos, key_for_any_change);
 
@@ -339,6 +342,18 @@ impl<N: Network> Scheduler<N> {
     } else {
       // If we don't have any payments to execute, save these UTXOs for later
       self.utxos.extend(utxos);
+    }
+
+    // If we're instructed to force a spend, do so
+    // This is used when an old multisig is retiring and we want to always transfer outputs to the
+    // new one, regardless if we currently have payments
+    if force_spend && (!self.utxos.is_empty()) {
+      plans.push(Plan {
+        key: self.key,
+        inputs: self.utxos.drain(..).collect::<Vec<_>>(),
+        payments: vec![],
+        change: Some(key_for_any_change),
+      });
     }
 
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
