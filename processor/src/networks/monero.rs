@@ -320,7 +320,7 @@ impl Network for Monero {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Block,
-  ) -> HashMap<[u8; 32], [u8; 32]> {
+  ) -> HashMap<[u8; 32], Transaction> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -330,7 +330,7 @@ impl Network for Monero {
       network: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], [u8; 32]>,
+      res: &mut HashMap<[u8; 32], Transaction>,
     ) {
       for hash in &block.txs {
         let tx = {
@@ -347,7 +347,7 @@ impl Network for Monero {
 
         if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix.extra) {
           if eventuality.matches(&tx) {
-            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, tx.hash());
+            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, tx);
           }
         }
       }

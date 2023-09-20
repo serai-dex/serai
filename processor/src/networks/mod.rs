@@ -353,7 +353,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], <Self::Transaction as Transaction<Self>>::Id>;
+  ) -> HashMap<[u8; 32], Self::Transaction>;
 
   /// Prepare a SignableTransaction for a transaction.
   ///

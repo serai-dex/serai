@@ -25,7 +25,7 @@ pub enum ScannerEvent<N: Network> {
   // Block scanned
   Block { block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
   // Eventuality completion found on-chain
-  Completed(Vec<u8>, [u8; 32], <N::Transaction as Transaction<N>>::Id),
+  Completed(Vec<u8>, [u8; 32], N::Transaction),
 }
 
 pub type ScannerEventChannel<N> = mpsc::UnboundedReceiver<ScannerEvent<N>>;
@@ -467,7 +467,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
             info!(
               "eventuality {} resolved by {}, as found on chain",
               hex::encode(id),
-              hex::encode(&tx)
+              hex::encode(&tx.id())
             );
 
             if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {

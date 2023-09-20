@@ -411,7 +411,7 @@ impl Network for Bitcoin {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], [u8; 32]> {
+  ) -> HashMap<[u8; 32], Transaction> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -420,7 +420,7 @@ impl Network for Bitcoin {
     async fn check_block(
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], [u8; 32]>,
+      res: &mut HashMap<[u8; 32], Transaction>,
     ) {
       for tx in &block.txdata[1 ..] {
         let input = &tx.input[0].previous_output;
@@ -440,7 +440,7 @@ impl Network for Bitcoin {
             "dishonest multisig spent input on distinct set of outputs"
           );
 
-          res.insert(plan, tx.id());
+          res.insert(plan, tx.clone());
         }
       }
 

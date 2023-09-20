@@ -36,7 +36,7 @@ use scheduler::Scheduler;
 
 use crate::{
   Get, Db, Payment, PostFeeBranch, Plan,
-  networks::{OutputType, Output, Transaction, Block, Network, get_block},
+  networks::{OutputType, Output, Block, Network, get_block},
   Signer,
 };
 
@@ -92,7 +92,7 @@ pub enum MultisigEvent<N: Network> {
   // Batches to publish
   Batches(Vec<Batch>),
   // Eventuality completion found on-chain
-  Completed(Vec<u8>, [u8; 32], <N::Transaction as Transaction<N>>::Id),
+  Completed(Vec<u8>, [u8; 32], N::Transaction),
 }
 
 pub struct MultisigManager<D: Db, N: Network> {

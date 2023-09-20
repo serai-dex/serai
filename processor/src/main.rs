@@ -570,13 +570,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           },
           MultisigEvent::Completed(key, id, tx) => {
             if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
-              if signer.eventuality_completion(&mut txn, id, &tx).await {
-                log::warn!(
-                  "informed of eventuality completion for {} {}",
-                  hex::encode(id),
-                  "by blockchain instead of by signing/P2P",
-                );
-              }
+              signer.completed(&mut txn, id, tx);
             }
           }
         }
