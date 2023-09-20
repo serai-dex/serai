@@ -366,6 +366,14 @@ impl<N: Network> Scheduler<N> {
     plans
   }
 
+  pub fn consume_payments<D: Db>(&mut self, txn: &mut D::Transaction<'_>) -> Vec<Payment<N>> {
+    let res: Vec<_> = self.payments.drain(..).collect();
+    if !res.is_empty() {
+      txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
+    }
+    res
+  }
+
   // Note a branch output as having been created, with the amount it was actually created with,
   // or not having been created due to being too small
   // This can be called whenever, so long as it's properly ordered

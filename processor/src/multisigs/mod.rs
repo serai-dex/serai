@@ -255,7 +255,13 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut new_payments = vec![];
     match step {
       RotationStep::UseExisting | RotationStep::NewAsChange => existing_payments = payments,
-      RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => new_payments = payments,
+      RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => {
+        // Consume any payments the prior scheduler was unable to complete
+        // This should only actually matter once
+        new_payments = self.existing.as_mut().unwrap().scheduler.consume_payments::<D>(txn);
+        // Add the new payments
+        new_payments.extend(payments);
+      }
     }
 
     // We now have to acknowledge the acknowledged block, if it's new
