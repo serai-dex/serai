@@ -153,13 +153,10 @@ async fn handle_batch_and_burns<Pro: Processors>(
     if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
       network_had_event(&mut burns, &mut batches, network);
 
-      // Track what Serai acknowledges as the latest block for this network
-      // If this Substrate block has multiple batches, the last batch's block will overwrite the
-      // prior batches
-      // Since batches within a block are guaranteed to be ordered, thanks to their incremental ID,
-      // the last batch will be the latest batch, so its block will be the latest block
-      // This is just a mild optimization to prevent needing an additional RPC call to grab this
-      batch_block.insert(network, network_block);
+      // Make sure this is the only Batch event for this network in this Block
+      // TODO: Make sure Serai rejects multiple Batchs within the same block. It should, as of an
+      // yet to be merged branch
+      assert!(batch_block.insert(network, network_block).is_none());
 
       // Add the batch included by this block
       batches.get_mut(&network).unwrap().push(id);
