@@ -1,8 +1,15 @@
 use core::marker::PhantomData;
+use std::io::Read;
+
+use scale::{Encode, Decode};
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
 pub use serai_db::*;
 
-use crate::{Plan, networks::Network};
+use crate::{
+  Plan,
+  networks::{Block, Network},
+};
 
 #[derive(Debug)]
 pub struct MainDb<N: Network, D: Db>(D, PhantomData<N>);
@@ -94,5 +101,37 @@ impl<N: Network, D: Db> MainDb<N, D> {
     }
 
     txn.put(Self::signing_key(key), signing);
+  }
+
+  fn pending_activation_key() -> Vec<u8> {
+    Self::main_key(b"pending_activation", [])
+  }
+  pub fn set_pending_activation(
+    txn: &mut D::Transaction<'_>,
+    block_before_queue_block: <N::Block as Block<N>>::Id,
+    set: ValidatorSet,
+    key_pair: KeyPair,
+  ) {
+    let mut buf = (set, key_pair).encode();
+    buf.extend(block_before_queue_block.as_ref());
+    txn.put(Self::pending_activation_key(), buf);
+  }
+  pub fn pending_activation<G: Get>(
+    getter: &G,
+  ) -> Option<(<N::Block as Block<N>>::Id, ValidatorSet, KeyPair)> {
+    if let Some(bytes) = getter.get(Self::pending_activation_key()) {
+      if !bytes.is_empty() {
+        let mut slice = bytes.as_slice();
+        let (set, key_pair) = <(ValidatorSet, KeyPair)>::decode(&mut slice).unwrap();
+        let mut block_before_queue_block = <N::Block as Block<N>>::Id::default();
+        slice.read_exact(block_before_queue_block.as_mut()).unwrap();
+        assert!(slice.is_empty());
+        return Some((block_before_queue_block, set, key_pair));
+      }
+    }
+    None
+  }
+  pub fn clear_pending_activation(txn: &mut D::Transaction<'_>) {
+    txn.put(Self::pending_activation_key(), []);
   }
 }

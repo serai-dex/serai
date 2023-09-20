@@ -8,7 +8,10 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use log::{info, warn};
 use tokio::time::sleep;
 
-use serai_client::primitives::{BlockHash, NetworkId};
+use serai_client::{
+  primitives::{BlockHash, NetworkId},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
+};
 
 use messages::{CoordinatorMessage, ProcessorMessage};
 
@@ -169,6 +172,35 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     wait(txn, substrate_mutable, &required).await;
   }
 
+  async fn activate_key<N: Network, D: Db>(
+    network: &N,
+    substrate_mutable: &mut SubstrateMutable<N, D>,
+    tributary_mutable: &mut TributaryMutable<N, D>,
+    txn: &mut D::Transaction<'_>,
+    set: ValidatorSet,
+    key_pair: KeyPair,
+    activation_number: usize,
+  ) {
+    info!("activating {set:?}'s keys at {activation_number}");
+
+    let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
+      .expect("Substrate finalized invalid point as a network's key");
+
+    // TODO: Only run the following block when participating
+    {
+      // See TributaryMutable's struct definition for why this block is safe
+      let KeyConfirmed { substrate_keys, network_keys } =
+        tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
+      // TODO: Don't immediately set this, set it once it's active
+      tributary_mutable.substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+      tributary_mutable
+        .signers
+        .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
+    }
+
+    substrate_mutable.add_key(txn, activation_number, network_key).await;
+  }
+
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
       coordinator
@@ -202,7 +234,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // This is the first key pair for this network so no block has been finalized yet
           // TODO: Write documentation for this in docs/
           // TODO: Use an Option instead of a magic?
-          let activation_number = if context.network_latest_finalized_block.0 == [0; 32] {
+          if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
             // We can't check this as existing is no longer pub
@@ -242,36 +274,28 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             }
 
             // Use this as the activation block
-            earliest
+            let activation_number = earliest;
+
+            activate_key(
+              network,
+              substrate_mutable,
+              tributary_mutable,
+              txn,
+              set,
+              key_pair,
+              activation_number,
+            )
+            .await;
           } else {
-            // TODO: This doesn't match the Multisig Rotation document
-            let mut activation_block = <N::Block as Block<N>>::Id::default();
-            activation_block.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-            substrate_mutable
-              .block_number(txn, &activation_block)
-              .await
-              .expect("KeyConfirmed from context we haven't synced")
-          };
-
-          info!("activating {set:?}'s keys at {activation_number}");
-
-          let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
-            .expect("Substrate finalized invalid point as a network's key");
-
-          // TODO: Only run the following block when participating
-          {
-            // See TributaryMutable's struct definition for why this block is safe
-            let KeyConfirmed { substrate_keys, network_keys } =
-              tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-            // TODO: Don't immediately set this, set it once it's active
-            tributary_mutable.substrate_signer =
-              Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
-            tributary_mutable
-              .signers
-              .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
+            let mut block_before_queue_block = <N::Block as Block<N>>::Id::default();
+            block_before_queue_block
+              .as_mut()
+              .copy_from_slice(&context.network_latest_finalized_block.0);
+            // We can't set these keys for activation until we know their queue block, which we
+            // won't until the next Batch is confirmed
+            // Set this variable so when we get the next Batch event, we can handle it
+            MainDb::<N, D>::set_pending_activation(txn, block_before_queue_block, set, key_pair);
           }
-
-          substrate_mutable.add_key(txn, activation_number, network_key).await;
         }
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
@@ -282,6 +306,33 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           batches,
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
+
+          if let Some((block, set, key_pair)) = MainDb::<N, D>::pending_activation(txn) {
+            // Only run if this is a Batch belonging to a distinct block
+            if context.network_latest_finalized_block.as_ref() != block.as_ref() {
+              let mut queue_block = <N::Block as Block<N>>::Id::default();
+              queue_block.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
+
+              let activation_number = substrate_mutable
+                .block_number(txn, &queue_block)
+                .await
+                .expect("KeyConfirmed from context we haven't synced") +
+                N::CONFIRMATIONS;
+
+              activate_key(
+                network,
+                substrate_mutable,
+                tributary_mutable,
+                txn,
+                set,
+                key_pair,
+                activation_number,
+              )
+              .await;
+
+              MainDb::<N, D>::clear_pending_activation(txn);
+            }
+          }
 
           // Since this block was acknowledged, we no longer have to sign the batches for it
           if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
