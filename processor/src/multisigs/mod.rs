@@ -25,6 +25,9 @@ pub mod scanner;
 
 use scanner::{ScannerEvent, ScannerHandle, Scanner};
 
+mod db;
+use db::MultisigsDb;
+
 #[cfg(not(test))]
 mod scheduler;
 #[cfg(test)]
@@ -32,7 +35,7 @@ pub mod scheduler;
 use scheduler::Scheduler;
 
 use crate::{
-  Get, Db, MainDb, Payment, PostFeeBranch, Plan,
+  Get, Db, Payment, PostFeeBranch, Plan,
   networks::{OutputType, Output, Transaction, Block, Network, get_block},
   Signer,
 };
@@ -112,8 +115,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     let mut schedulers = vec![];
 
-    // TODO: MultisigDB
-    let main_db = MainDb::<N, _>::new(raw_db.clone());
+    let multisigs_db = MultisigsDb::<N, _>::new(raw_db.clone());
 
     assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
@@ -122,7 +124,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
-      for (block_number, plan) in main_db.signing(key.as_ref()) {
+      for (block_number, plan) in multisigs_db.signing(key.as_ref()) {
         let block_number = block_number.try_into().unwrap();
 
         let fee = get_fee(network, block_number).await;
@@ -347,7 +349,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       let key = plan.key;
       let key_bytes = key.to_bytes();
-      MainDb::<N, D>::save_signing(
+      MultisigsDb::<N, D>::save_signing(
         txn,
         key_bytes.as_ref(),
         block_number.try_into().unwrap(),
@@ -491,5 +493,5 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (txn, event)
   }
 
-  // TODO: Handle eventuality completions
+  // TODO: Handle eventuality completions (finish_signing)
 }

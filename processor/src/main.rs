@@ -462,8 +462,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   // This check ensures no network which doesn't have a bidirectional mapping is defined
   assert_eq!(<N::Block as Block<N>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
 
-  let (mut main_db, mut tributary_mutable, mut substrate_mutable) =
-    boot(&mut raw_db, &network).await;
+  let (main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &network).await;
 
   // A second DB handle, as Rust can't detect the following branches only ever modifying the single
   // handle once at a time
@@ -477,6 +476,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
     // Check if the signers have events
     // The signers will only have events after the following select executes, which will then
     // trigger the loop again, hence why having the code here with no timer is fine
+    // These events may be dropped on a sudden reboot, yet due to signing re-attempts, this is fine
     for (key, signer) in tributary_mutable.signers.iter_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
@@ -492,17 +492,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
                 tx: tx.as_ref().to_vec(),
               }))
               .await;
-
-            // TODO: Is there a race condition where this isn't called due to a sudden halt?
-            // TODO: Move this into Signer
-            let mut txn = raw_db.txn();
-            main_db.finish_signing(&mut txn, key, id);
-            txn.commit();
           }
         }
       }
     }
 
+    // TODO: These events cannot be dropped. Run this after handling the message, before txn
+    // commit?
     if let Some(signer) = tributary_mutable.substrate_signer.as_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
