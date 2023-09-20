@@ -244,14 +244,12 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
             // If the latest block number is 10, then the block indexed by 1 has 10 confirms
             // 10 + 1 - 10 = 1
-            while get_block(
-              network,
-              (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS),
-            )
-            .await
-            .time() <
-              context.serai_time
-            {
+            let mut block_i;
+            while {
+              block_i =
+                (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS);
+              get_block(network, block_i).await.time() < context.serai_time
+            } {
               info!(
                 "serai confirmed the first key pair for a set. {} {}",
                 "we're waiting for a network's finalized block's time to exceed unix time ",
@@ -261,9 +259,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             }
 
             // Find the first block to do so
-            let mut earliest =
-              (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS);
-            assert!(get_block(network, earliest).await.time() >= context.serai_time);
+            let mut earliest = block_i;
             // earliest > 0 prevents a panic if Serai creates keys before the genesis block
             // which... should be impossible
             // Yet a prevented panic is a prevented panic
