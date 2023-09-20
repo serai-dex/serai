@@ -294,10 +294,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // TODO: Manually create a Plan for all external outputs needing forwarding/refunding
       }
       RotationStep::ClosingExisting => {
-        // TODO: Only keep outputs which were the definite resolution to an Eventuality
         /*
+          The document says to only handle outputs we created. We don't know what outputs we
+          created. We do have an ordered view of equivalent outputs however, and can assume the
+          first (and likely only) ones are the ones we created.
+
+          Accordingly, only handling outputs we created should be definable as only handling
+          outputs from the resolution of Eventualities.
+
           This isn't feasible. It requires knowing what Eventualities were completed in this block,
-          which we don't know without fully serialized scanning/Batch publication.
+          when we handle this block, which we don't know without fully serialized scanning + Batch
+          publication.
 
           Take the following scenario:
           1) A network uses 10 confirmations. Block x is scanned, meaning x+9a exists.
@@ -311,15 +318,82 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
           We either have to:
           A) Fully serialize scanning (removing the ability to utilize throughput to allow higher
-             latency)
-         C) Create Eventualities immediately, which we can't do as then both the external
-            network's clock AND Serai's clock can trigger Eventualities, removing ordering.
-            We'd need to shift entirely to the external network's clock, only handling Burns
-            outside the parallelization window (which would be extremely latent)
-          B) Use a different mechanism to determine if we created an output
-          D) Re-define which outputs are still to be handled after the 6hr period expires, such
+             latency, at least while the step is `ClosingExisting`).
+          B) Create Eventualities immediately, which we can't do as then both the external
+             network's clock AND Serai's clock can trigger Eventualities, removing ordering.
+             We'd need to shift entirely to the external network's clock, only handling Burns
+             outside the parallelization window (which would be extremely latent).
+          C) Use a different mechanism to determine if we created an output.
+          D) Re-define which outputs are still to be handled after the 6 hour period expires, such
              that the multisig's lifetime cannot be further extended yet it does fulfill its
-             responsibility
+             responsibility.
+
+          External outputs to the existing multisig will be:
+          - Scanned before the rotation and unused (as used External outputs become Change)
+          - Forwarded immediately upon scanning
+          - Not scanned before the cut off time (and accordingly dropped)
+
+          For the first case, since they're scanned before the rotation and unused, they'll be
+          forwarded with all other available outputs (since they'll be available when scanned).
+
+          Change outputs will be:
+          - Scanned before the rotation and forwarded with all other available outputs
+          - Forwarded immediately upon scanning
+          - Not scanned before the cut off time, requiring an extension exclusive to these outputs
+
+          The important thing to note about honest Change outputs to the existing multisig is that
+          they'll only be created within `CONFIRMATIONS` blocks of the activation block. Also
+          important to note is that there's another explicit window of `CONFIRMATIONS` before the
+          6 hour window.
+
+          Eventualities are not guaranteed to be known before we scan the block containing their
+          resolution. They are guaranteed to be known within `CONFIRMATIONS-1` blocks however, due
+          to the limitation on how far we'll scan ahead.
+
+          TODO: Make sure we don't release the Scanner lock between ack_block and
+          register_eventuality.
+
+          This means we will know of all Eventualities related to Change outputs we need to forward
+          before the 6 hour period begins (as forwarding outputs will not create any Change outputs
+          to the existing multisig).
+
+          This means a definition of complete can be defined as:
+          1) Handled all Branch outputs
+          2) Forwarded all External outputs received before the end of 6 hour window
+          3) Forwarded the results of all Eventualities with Change, which will have been created
+             before the 6 hour window
+
+          How can we track and ensure this without needing to check if an output is from the
+          resolution of an Eventuality?
+
+          1) We only create Branch outputs before the 6 hour window starts. These are guaranteed
+             to appear within `CONFIRMATIONS` blocks. They will exist with arbitrary depth however,
+             meaning that upon completion they will spawn several more Eventualities. The further
+             created Eventualities re-risk being present after the 6 hour period ends.
+
+             We can:
+             1) Build a queue for Branch outputs, delaying their handling until relevant
+                Eventualities are guaranteed to be present.
+
+             2) Create all Eventualities under a Branch at time of Branch creation.
+                This idea fails as Plans are tightly bound to outputs.
+
+             3) Don't track Branch outputs by Eventualities, yet by the amount of Branch outputs
+                remaining. Any Branch output received, of a useful amount, is assumed to be our
+                own and handled. All other Branch outputs, even if they're the completion of some
+                Eventuality, are dropped.
+
+                This avoids needing any additional queue, avoiding additional pipelining/latency.
+
+          2) External outputs are self-evident. We simply stop handling them at the cut-off point,
+             and only start checking after `CONFIRMATIONS` blocks if all Eventualities are
+             complete.
+
+          3) Since all Change Eventualities will be known prior to the 6 hour window's beginning,
+             we can safely check if a received Change output is the resolution of an Eventuality.
+             We only need to forward it if so. Forwarding it simply requires only checking if
+             Eventualities are complete after `CONFIRMATIONS` blocks, same as for straggling
+             External outputs.
         */
       }
     }
