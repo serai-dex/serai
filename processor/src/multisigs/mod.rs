@@ -294,7 +294,33 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // TODO: Manually create a Plan for all external outputs needing forwarding/refunding
       }
       RotationStep::ClosingExisting => {
-        // TODO: Only keep outputs which were the definite conclusion to an eventuality
+        // TODO: Only keep outputs which were the definite resolution to an Eventuality
+        /*
+          This isn't feasible. It requires knowing what Eventualities were completed in this block,
+          which we don't know without fully serialized scanning/Batch publication.
+
+          Take the following scenario:
+          1) A network uses 10 confirmations. Block x is scanned, meaning x+9a exists.
+          2) 67% of nodes process x, create, sign, and publish a TX, creating an Eventuality.
+          3) A reorganization to a shorter chain occurs, including the published TX in x+1b.
+          4) The 33% of nodes which are latent will be allowed to scan x+1b as soon as x+10b
+             exists. They won't wait for Serai to include the Batch for x until they try to scan
+             x+10b.
+          5) These latent nodes will handle x+1b, post-create an Eventuality, post-learn x+1b
+             contained resolutions, changing how x+1b should've been interpreted.
+
+          We either have to:
+          A) Fully serialize scanning (removing the ability to utilize throughput to allow higher
+             latency)
+         C) Create Eventualities immediately, which we can't do as then both the external
+            network's clock AND Serai's clock can trigger Eventualities, removing ordering.
+            We'd need to shift entirely to the external network's clock, only handling Burns
+            outside the parallelization window (which would be extremely latent)
+          B) Use a different mechanism to determine if we created an output
+          D) Re-define which outputs are still to be handled after the 6hr period expires, such
+             that the multisig's lifetime cannot be further extended yet it does fulfill its
+             responsibility
+        */
       }
     }
 
