@@ -150,7 +150,12 @@ impl<N: Network> Scheduler<N> {
     Self::read(key, reader)
   }
 
-  fn execute(&mut self, inputs: Vec<N::Output>, mut payments: Vec<Payment<N>>) -> Plan<N> {
+  fn execute(
+    &mut self,
+    inputs: Vec<N::Output>,
+    mut payments: Vec<Payment<N>>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+  ) -> Plan<N> {
     let branch_address = N::branch_address(self.key);
     // created_output will be called any time we send to a branch address
     // If it's called, and it wasn't expecting to be called, that's almost certainly an error
@@ -203,12 +208,14 @@ impl<N: Network> Scheduler<N> {
       payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
     }
 
-    // TODO2: Use the latest key for change
-    // TODO2: Update rotation documentation
-    Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
+    Plan { key: self.key, inputs, payments, change: Some(key_for_any_change).filter(|_| change) }
   }
 
-  fn add_outputs(&mut self, mut utxos: Vec<N::Output>) -> Vec<Plan<N>> {
+  fn add_outputs(
+    &mut self,
+    mut utxos: Vec<N::Output>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+  ) -> Vec<Plan<N>> {
     log::info!("adding {} outputs", utxos.len());
 
     let mut txs = vec![];
@@ -230,7 +237,7 @@ impl<N: Network> Scheduler<N> {
         }
 
         // Create a TX for these payments
-        txs.push(self.execute(vec![utxo], payments));
+        txs.push(self.execute(vec![utxo], payments, key_for_any_change));
       } else {
         self.utxos.push(utxo);
       }
@@ -246,8 +253,9 @@ impl<N: Network> Scheduler<N> {
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
     payments: Vec<Payment<N>>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
   ) -> Vec<Plan<N>> {
-    let mut plans = self.add_outputs(utxos);
+    let mut plans = self.add_outputs(utxos, key_for_any_change);
 
     log::info!("scheduling {} new payments", payments.len());
 
@@ -292,7 +300,12 @@ impl<N: Network> Scheduler<N> {
       // We need to charge a fee before reporting incoming UTXOs to Substrate to cover aggregation
       // TXs
       log::debug!("aggregating a chunk of {} inputs", N::MAX_INPUTS);
-      plans.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
+      plans.push(Plan {
+        key: self.key,
+        inputs: chunk,
+        payments: vec![],
+        change: Some(key_for_any_change),
+      })
     }
 
     // We want to use all possible UTXOs for all possible payments
@@ -322,7 +335,7 @@ impl<N: Network> Scheduler<N> {
     // Now that we have the list of payments we can successfully handle right now, create the TX
     // for them
     if !executing.is_empty() {
-      plans.push(self.execute(utxos, executing));
+      plans.push(self.execute(utxos, executing, key_for_any_change));
     } else {
       // If we don't have any payments to execute, save these UTXOs for later
       self.utxos.extend(utxos);

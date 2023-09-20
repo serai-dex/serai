@@ -68,6 +68,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     &mut txn,
     outputs.clone(),
     vec![Payment { address: N::address(key), data: None, amount }],
+    key,
   );
   txn.commit();
   assert_eq!(

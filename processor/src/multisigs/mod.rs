@@ -215,54 +215,85 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
+    let mut block_id = <N::Block as Block<N>>::Id::default();
+    block_id.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
+    let block_number = ScannerHandle::<N, D>::block_number(txn, &block_id)
+      .expect("SubstrateBlock with context we haven't synced");
+
+    // Determine what step of rotation we're currently in
+    enum RotationStep {
+      // Use the existing multisig for all actions (steps 1-3)
+      UseExisting,
+      // Use the new multisig as change (step 4)
+      NewAsChange,
+      // The existing multisig is expected to solely forward transactions at this point (step 5)
+      ForwardFromExisting,
+      // The existing multisig is expected to finish its own transactions and do nothing more
+      // (step 6)
+      ClosingExisting,
+    }
+
+    let step = if let Some(new) = self.new.as_ref() {
+      if block_number < (new.activation_block + N::CONFIRMATIONS) {
+        RotationStep::UseExisting
+      } else if block_number < (new.activation_block + (2 * N::CONFIRMATIONS)) {
+        RotationStep::NewAsChange
+      } else {
+        RotationStep::ForwardFromExisting
+
+        // TODO: ClosingExisting ?
+      }
+    } else {
+      RotationStep::UseExisting
+    };
+
     let mut existing_payments = vec![];
     let mut new_payments = vec![];
-
-    // Assign payments to the existing multisig if:
-    // - There isn't a new multisig
-    // - We're within 2 * CONFIRMATIONS blocks of the new multisig's activation
-    if self.new.is_none() || {
-      let mut block = <N::Block as Block<N>>::Id::default();
-      block.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
-      let block_number = ScannerHandle::<N, D>::block_number(txn, &block)
-        .expect("SubstrateBlock with context we haven't synced");
-
-      block_number < (self.new.as_ref().unwrap().activation_block + (2 * N::CONFIRMATIONS))
-    } {
-      existing_payments = payments;
-    } else {
-      new_payments = payments;
+    match step {
+      RotationStep::UseExisting | RotationStep::NewAsChange => existing_payments = payments,
+      RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => new_payments = payments,
     }
 
     // We now have to acknowledge the acknowledged block, if it's new
-    let mut block_id = <N::Block as Block<N>>::Id::default();
-    block_id.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-    let outputs = if ScannerHandle::<N, D>::db_scanned(txn) <
-      ScannerHandle::<N, D>::block_number(txn, &block_id)
+    let outputs = if ScannerHandle::<N, D>::db_scanned(txn)
+      .expect("published a Batch despite never scanning a block") <
+      block_number
     {
       self.scanner.ack_block(txn, block_id.clone()).await
     } else {
       vec![]
     };
+    let outputs_len = outputs.len();
 
     let new_outputs = if let Some(new) = self.new.as_ref() {
       outputs.iter().filter(|output| output.key() == new.key).cloned().collect()
     } else {
       vec![]
     };
-    let existing_outputs = outputs
+    let existing_outputs: Vec<_> = outputs
       .into_iter()
       .filter(|output| output.key() == self.existing.as_ref().unwrap().key)
       .collect();
+    assert_eq!(existing_outputs.len() + new_outputs.len(), outputs_len);
 
     // TODO: Do we want a singular Plan Vec?
-    let mut plans = self.existing.as_mut().unwrap().scheduler.schedule::<D>(
-      txn,
-      existing_outputs,
-      existing_payments,
-    );
+    let mut plans = {
+      let existing = self.existing.as_mut().unwrap();
+      let existing_key = existing.key;
+      self.existing.as_mut().unwrap().scheduler.schedule::<D>(
+        txn,
+        existing_outputs,
+        existing_payments,
+        match step {
+          RotationStep::UseExisting => existing_key,
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => self.new.as_ref().unwrap().key,
+        },
+      )
+    };
     plans.extend(if let Some(new) = self.new.as_mut() {
-      new.scheduler.schedule::<D>(txn, new_outputs, new_payments)
+      new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key)
     } else {
       vec![]
     });
@@ -358,6 +389,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           if output.kind() != OutputType::External {
             continue;
           }
+
+          // TODO: If External to existing multisig during ForwardFromExisting, forward it
+          // TODO: If External to existing multisig during ClosingExisting, drop it
 
           let mut data = output.data();
           let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
