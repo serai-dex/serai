@@ -127,5 +127,6 @@ lazy_static::lazy_static! {
     (NetworkId::Bitcoin, Network::new(vec![Coin::Bitcoin]).unwrap()),
     (NetworkId::Ethereum, Network::new(vec![Coin::Ether, Coin::Dai]).unwrap()),
     (NetworkId::Monero, Network::new(vec![Coin::Monero]).unwrap()),
+    (NetworkId::Serai, Network::new(vec![Coin::Serai]).unwrap()),
   ]);
 }

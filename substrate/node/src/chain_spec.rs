@@ -59,6 +59,7 @@ fn testnet_genesis(
         (NetworkId::Bitcoin, NETWORKS[&NetworkId::Bitcoin].clone()),
         (NetworkId::Ethereum, NETWORKS[&NetworkId::Ethereum].clone()),
         (NetworkId::Monero, NETWORKS[&NetworkId::Monero].clone()),
+        (NetworkId::Serai, NETWORKS[&NetworkId::Serai].clone()),
       ],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
