@@ -227,7 +227,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       let block_number = ScannerHandle::<N, D>::block_number(txn, &block)
         .expect("SubstrateBlock with context we haven't synced");
 
-      block_number >= (self.new.as_ref().unwrap().activation_block + (2 * N::CONFIRMATIONS))
+      block_number < (self.new.as_ref().unwrap().activation_block + (2 * N::CONFIRMATIONS))
     } {
       existing_payments = payments;
     } else {
