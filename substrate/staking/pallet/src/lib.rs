@@ -155,7 +155,7 @@ pub mod pallet {
     ) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      // remove participant if we necessary
+      // remove the participant if necessary.
       // we can't directly deallocate here, since the leaving validator
       // will be removed after the next session. We only deallocate then
       // on `end_session` for the right index.
@@ -187,6 +187,7 @@ pub mod pallet {
 
     fn end_session(end_index: u32) {
       // do the deallocation of those validator funds
+      // who will not be in the set next session.
       let key = ValidatorSet { session: Session(end_index + 1), network: NetworkId::Serai };
       let deallocating_validators = VsPallet::<T>::deallocating_validators(key);
       for (account, amount, _) in deallocating_validators {

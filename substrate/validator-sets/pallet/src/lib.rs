@@ -99,6 +99,22 @@ pub mod pallet {
     KeyGen { set: ValidatorSet, key_pair: KeyPair },
   }
 
+  #[pallet::error]
+  pub enum Error<T> {
+    /// Validator Set doesn't exist.
+    NonExistentValidatorSet,
+    /// Validator Set already generated keys.
+    AlreadyGeneratedKeys,
+    /// An invalid MuSig signature was provided.
+    BadSignature,
+    /// Not enough bond to participate in a set.
+    InSufficientBond,
+    /// Validator wasn't registered or active.
+    NonExistentValidator,
+    /// Trying to deallocate more than allocated.
+    InSufficientAllocation,
+  }
+
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
@@ -131,22 +147,6 @@ pub mod pallet {
         *v = Session(0);
       });
     }
-  }
-
-  #[pallet::error]
-  pub enum Error<T> {
-    /// Validator Set doesn't exist.
-    NonExistentValidatorSet,
-    /// Validator Set already generated keys.
-    AlreadyGeneratedKeys,
-    /// An invalid MuSig signature was provided.
-    BadSignature,
-    /// Not enough bond to participate in a set.
-    InSufficientBond,
-    /// Validator wasn't registered or active.
-    NonExistentValidator,
-    /// Trying to deallocate more than allocated.
-    InSufficientAllocation,
   }
 
   #[pallet::hooks]
@@ -210,7 +210,8 @@ pub mod pallet {
           *existing = Some(vec![(account, amount)]);
         }
         Ok::<_, Error<T>>(())
-      })?;
+      })
+      .unwrap();
 
       Ok(())
     }
@@ -264,12 +265,13 @@ pub mod pallet {
     }
 
     pub fn genesis_validator_set(network: NetworkId) -> Vec<T::AccountId> {
-      let mut current = Vec::new();
       let key = ValidatorSet { session: Session(0), network };
-      for p in Self::validator_set(key).unwrap().participants {
-        current.push(p.0);
-      }
-      current
+      Self::validator_set(key)
+        .unwrap()
+        .participants
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>()
     }
 
     pub fn next_validator_set(new_index: u32, network: NetworkId) -> Vec<T::AccountId> {
@@ -397,6 +399,8 @@ pub mod pallet {
       }
 
       // delete old keys
+      // we don't delete the end_index itself since we still need it
+      // to start the next session.
       let key = ValidatorSet { session: Session(end_index - 1), network };
       JoiningValidators::<T>::remove(key);
       DeallocatingValidators::<T>::remove(key);
