@@ -98,6 +98,12 @@ impl OutputTrait<Bitcoin> for Output {
     res
   }
 
+  fn tx_id(&self) -> [u8; 32] {
+    let mut hash = *self.output.outpoint().txid.as_raw_hash().as_byte_array();
+    hash.reverse();
+    hash
+  }
+
   fn key(&self) -> ProjectivePoint {
     let script = &self.output.output().script_pubkey;
     assert!(script.is_v1_p2tr());
@@ -400,7 +406,9 @@ impl Network for Bitcoin {
         };
         data.truncate(MAX_DATA_LEN.try_into().unwrap());
 
-        outputs.push(Output { kind, output, data })
+        let output = Output { kind, output, data };
+        assert_eq!(output.tx_id(), tx.id());
+        outputs.push(output);
       }
     }
 

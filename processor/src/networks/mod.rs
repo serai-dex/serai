@@ -100,6 +100,7 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
+  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id;
   fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
   fn balance(&self) -> Balance;

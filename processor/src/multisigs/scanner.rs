@@ -470,6 +470,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
               hex::encode(&tx.id())
             );
 
+            // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs.
             if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {
               return;
             }

@@ -68,6 +68,10 @@ impl OutputTrait<Monero> for Output {
     self.0.output.data.key.compress().to_bytes()
   }
 
+  fn tx_id(&self) -> [u8; 32] {
+    self.0.output.absolute.tx
+  }
+
   fn key(&self) -> EdwardsPoint {
     EdwardsPoint(self.0.output.data.key - (EdwardsPoint::generator().0 * self.0.key_offset()))
   }

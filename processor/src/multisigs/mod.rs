@@ -36,7 +36,7 @@ use scheduler::Scheduler;
 
 use crate::{
   Get, Db, Payment, PostFeeBranch, Plan,
-  networks::{OutputType, Output, Block, Network, get_block},
+  networks::{OutputType, Output, Transaction, Block, Network, get_block},
   Signer,
 };
 
@@ -124,7 +124,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
-      for (block_number, plan) in multisigs_db.signing(key.as_ref()) {
+      for (block_number, plan) in multisigs_db.active_plans(key.as_ref()) {
         let block_number = block_number.try_into().unwrap();
 
         let fee = get_fee(network, block_number).await;
@@ -409,6 +409,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           match output.kind() {
             // While the above says to simply drop External, if it's usable as a Branch, why not?
             // Minor efficiency which should never matter in real life
+            // The Scheduler itself uses this same trick, though it may actually come up in real
+            // life then
             OutputType::External | OutputType::Branch => {
               // We could simply call can_use_branch, yet it'd have an edge case where if we
               // receive two outputs for 100, and we could use one such output, we'd handle both.
@@ -430,8 +432,29 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
               }
               false
             }
-            // TODO
-            OutputType::Change => todo!(),
+            OutputType::Change => {
+              // If the TX containing this output resolved an Eventuality...
+              if let Some(plan) = MultisigsDb::<N, D>::resolved_plan(txn, output.tx_id()) {
+                // And the Eventuality had change...
+                // We need this check as Eventualities have a race condition and can't be relied
+                // on, as extensively detailed above. Eventualities explicitly with change do have
+                // a safe timing window however
+                if MultisigsDb::<N, D>::plan_by_key_with_self_change(
+                  txn,
+                  // Pass the key so the DB checks the Plan's key is this multisig's, preventing a
+                  // potential issue where the new multisig creates a Plan with change *and a
+                  // payment to the existing multisig's change address*
+                  self.existing.as_ref().unwrap().key,
+                  plan,
+                ) {
+                  // Then this is an honest change output we need to forward
+                  // (or it's a payment to the change address in the same transaction as an honest
+                  // change output, which is fine to let slip in)
+                  return true;
+                }
+              }
+              false
+            }
           }
         });
       }
@@ -460,6 +483,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     if let Some(new) = self.new.as_mut() {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
+
+    for plan in &plans {
+      if plan.change == Some(plan.key) {
+        // Assert these are only created during the expected step
+        // TODO: Check when we register the Eventuality for this Plan, the step isn't
+        // ForwardFromExisting nor ClosingExisting. They should appear during NewAsChange, at the
+        // latest, due to the scan-ahead limit
+        match step {
+          RotationStep::UseExisting => {}
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+        }
+      }
+    }
+
     plans
   }
 
@@ -488,7 +527,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       let key = plan.key;
       let key_bytes = key.to_bytes();
-      MultisigsDb::<N, D>::save_signing(
+      MultisigsDb::<N, D>::save_active_plan(
         txn,
         key_bytes.as_ref(),
         block_number.try_into().unwrap(),
@@ -616,7 +655,13 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         MultisigEvent::Batches(batches)
       }
 
-      ScannerEvent::Completed(key, id, tx) => MultisigEvent::Completed(key, id, tx),
+      // This must be emitted before ScannerEvent::Block for all completions of known Eventualities
+      // within the block. Unknown Eventualities may have their Completed events emitted after
+      // ScannerEvent::Block however.
+      ScannerEvent::Completed(key, id, tx) => {
+        MultisigsDb::<N, D>::resolve_plan(txn, &key, id, tx.id());
+        MultisigEvent::Completed(key, id, tx)
+      }
     }
   }
 
