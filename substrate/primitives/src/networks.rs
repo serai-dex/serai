@@ -70,6 +70,10 @@ impl Coin {
       Coin::Monero => NetworkId::Monero,
     }
   }
+
+  pub fn is_native(&self) -> bool {
+    matches!(self, Coin::Serai)
+  }
 }
 
 // Max of 8 coins per network

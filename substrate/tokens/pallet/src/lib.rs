@@ -76,6 +76,15 @@ pub mod pallet {
     ) -> DispatchResult {
       AssetsPallet::<T>::transfer(origin, coin, target, amount)
     }
+
+    pub fn transfer_keep_alive(
+      origin: OriginFor<T>,
+      coin: Coin,
+      target: SeraiAddress,
+      amount: SubstrateAmount,
+    ) -> DispatchResult {
+      AssetsPallet::<T>::transfer_keep_alive(origin, coin, target, amount)
+    }
   }
 
   #[pallet::call]

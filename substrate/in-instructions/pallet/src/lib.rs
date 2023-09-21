@@ -61,6 +61,12 @@ pub mod pallet {
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
   }
 
+  #[pallet::error]
+  pub enum Error<T> {
+    /// Coin and OutAddress types don't match.
+    InvalidAddressForCoin,
+  }
+
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
@@ -116,9 +122,9 @@ pub mod pallet {
                 origin.clone().into(),
                 path,
                 half,
-                1, // minimum out, so that we accept whatever we get.
+                1, // minimum out, so we accept whatever we get.
                 IN_INSTRUCTION_EXECUTOR.into(),
-                false,
+                true,
               )?;
 
               // get how much we got for our swap
@@ -140,57 +146,78 @@ pub mod pallet {
 
               // TODO: minimums are set to 1 above to guarantee successful adding liq call.
               // Ideally we either get this info from user or send the leftovers back to user.
-              // If leftovers stay on our IIExecutor account, they can accumulate and would
-              // give us wrong SRI amounts next time another users call here(since we know
-              // how much to add liq by checking the balance on it). Which then would
-              // make addling liq fail. So Let's send the leftovers back to user.
+              // Let's send the leftovers back to user for now.
               let coin_balance = Tokens::<T>::balance(coin, IN_INSTRUCTION_EXECUTOR);
               let sri_balance =
                 BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
+
               if coin_balance != 0 {
-                Tokens::<T>::transfer(origin.clone().into(), coin, address, coin_balance)?;
+                Tokens::<T>::transfer_keep_alive(
+                  origin.clone().into(),
+                  coin,
+                  address,
+                  coin_balance,
+                )?;
               }
               if sri_balance != 0 {
-                // unwrap here. First, it doesn't panic, second we have no choice but to empty
-                // IIE account.
-                BalancesPallet::<T>::transfer_allow_death(origin.into(), address, sri_balance)
+                // unwrap here. First, it doesn't panic for full amount,
+                // second we should empty IIE account anyway.
+                BalancesPallet::<T>::transfer_keep_alive(origin.into(), address, sri_balance)
                   .unwrap();
               }
-
-              // TODO: ideally we would get the coin and sri balances again and
-              // make sure they are 0. But we already made 3 calls and that
-              // would make 5. should we do it?
             }
-            DexCall::Swap(coin2, address, amount_out_min) => {
-              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+            DexCall::Swap(out_balance, out_address) => {
+              let send_to_external = !out_address.is_native();
+              let native_coin = out_balance.coin.is_native();
+
+              // we can't send native coin to external chain
+              if native_coin && send_to_external {
+                Err(Error::<T>::InvalidAddressForCoin)?;
+              }
 
               // mint the given coin on our account
               Tokens::<T>::mint(IN_INSTRUCTION_EXECUTOR, instruction.balance);
 
-              // do the swap on our account
-              let path =
-                BoundedVec::truncate_from(vec![instruction.balance.coin, Coin::Serai, coin2]);
-              Dex::<T>::swap_exact_tokens_for_tokens(
-                origin.clone().into(),
-                path,
-                instruction.balance.amount.0,
-                amount_out_min.0,
-                IN_INSTRUCTION_EXECUTOR.into(),
-                false,
-              )?;
+              // get the path
+              let mut path = vec![instruction.balance.coin, Coin::Serai];
+              if !native_coin {
+                path.push(out_balance.coin);
+              }
 
-              // see how much we got
-              let coin2_balance = Tokens::<T>::balance(coin2, IN_INSTRUCTION_EXECUTOR);
+              // get the swap address
+              // if the address is internal, we can directly swap to it.
+              // if not, we swap to ourselves and burn the coins to send them back
+              // on the external chain.
+              let send_to = if send_to_external {
+                IN_INSTRUCTION_EXECUTOR
+              } else {
+                out_address.clone().as_native().unwrap()
+              };
+
+              // do the swap
+              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              Dex::<T>::swap_exact_tokens_for_tokens(
+                origin.into(),
+                BoundedVec::truncate_from(path),
+                instruction.balance.amount.0,
+                out_balance.amount.0,
+                send_to.into(),
+                true,
+              )?;
 
               // burn the received coins so that they sent back to the user
-              let balance = Balance { coin: coin2, amount: Amount(coin2_balance) };
-
-              // TODO: data shouldn't come here from processor just to go back to it.
-              Tokens::<T>::burn_internal(
-                IN_INSTRUCTION_EXECUTOR,
-                balance,
-                OutInstruction { address, data: None },
-              )?;
+              // if it is requested to an external address.
+              if send_to_external {
+                // see how much we got
+                let coin2_balance = Tokens::<T>::balance(out_balance.coin, IN_INSTRUCTION_EXECUTOR);
+                let balance = Balance { coin: out_balance.coin, amount: Amount(coin2_balance) };
+                // TODO: data shouldn't come here from processor just to go back to it.
+                Tokens::<T>::burn_internal(
+                  IN_INSTRUCTION_EXECUTOR,
+                  balance,
+                  OutInstruction { address: out_address.as_external().unwrap(), data: None },
+                )?;
+              }
             }
           }
         }

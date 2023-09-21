@@ -369,12 +369,12 @@ impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
 
   /// Returns true if the given MultiAssetId is the native currency.
   fn is_native(coin: &Coin) -> bool {
-    *coin == Coin::Serai
+    coin.is_native()
   }
 
   /// If it's not native, returns the AssetId for the given MultiAssetId.
   fn try_convert(coin: &Coin) -> Result<Coin, ()> {
-    if *coin == Coin::Serai {
+    if coin.is_native() {
       return Err(());
     }
     Ok(*coin)
