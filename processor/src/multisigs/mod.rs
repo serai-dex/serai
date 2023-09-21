@@ -208,9 +208,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
   fn current_rotation_step(&self, block_number: usize) -> RotationStep {
     if let Some(new) = self.new.as_ref() {
-      if block_number < (new.activation_block + N::CONFIRMATIONS) {
+      if block_number < (new.activation_block + (N::CONFIRMATIONS + 1)) {
         RotationStep::UseExisting
-      } else if block_number < (new.activation_block + (2 * N::CONFIRMATIONS)) {
+      } else if block_number < (new.activation_block + (N::CONFIRMATIONS + 1) + N::CONFIRMATIONS) {
         RotationStep::NewAsChange
       } else {
         RotationStep::ForwardFromExisting
@@ -368,7 +368,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           - Not scanned before the cut off time, requiring an extension exclusive to these outputs
 
           The important thing to note about honest Change outputs to the existing multisig is that
-          they'll only be created within `CONFIRMATIONS` blocks of the activation block. Also
+          they'll only be created within `CONFIRMATIONS+1` blocks of the activation block. Also
           important to note is that there's another explicit window of `CONFIRMATIONS` before the
           6 hour window.
 

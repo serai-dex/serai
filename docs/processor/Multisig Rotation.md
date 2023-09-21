@@ -57,14 +57,29 @@ The following timeline is established:
    otherwise have a `Batch` created.
 
 3) The prior multisig continues handling `Batch`s and `Burn`s for
-   `CONFIRMATIONS` blocks after the "activation block".
+   `CONFIRMATIONS + 1` blocks after the "activation block".
 
-   This is due to the fact the new multisig shouldn't actually be sent coins
-   during this period, making it irrelevant. If coins are prematurely sent to
-   the new multisig, they're artificially delayed by `CONFIRMATIONS` blocks.
-   This prevents an adversary from minting Serai tokens using coins in the new
-   multisig, yet then burning them to drain the prior multisig, creating a lack
-   of liquidity for several blocks.
+   The first `CONFIRMATIONS` blocks is due to the fact the new multisig
+   shouldn't actually be sent coins during this period, making it irrelevant.
+   If coins are prematurely sent to the new multisig, they're artificially
+   delayed until the end of the `CONFIRMATIONS + 1` blocks. This prevents an
+   adversary from minting Serai tokens using coins in the new multisig, yet then
+   burning them to drain the prior multisig, creating a lack of liquidity for
+   several blocks.
+
+   The reason for the `+ 1` is to provide grace to honest UIs. Since UIs will
+   wait until Serai confirms the "activation block" for keys before sending to
+   them, which will take `CONFIRMATIONS` blocks plus some latency, UIs would
+   make transactions to the prior multisig past the end of this period if it was
+   `CONFIRMATIONS` alone. Since the next period is `CONFIRMATIONS` blocks, which
+   is how long transactions take to confirm, transactions made past the end of
+   this period would only received after the next period. After the next period,
+   the prior multisig adds fees and a delay to all received funds (as it
+   forwards the funds from itself to the new multisig). A `+ 1` provides grace
+   for latency.
+
+   The `+ 1` also opens the aforementioned liquidity draining attack,
+   unfortunately, yet only for a single block.
 
 4) The prior multisig continues handling `Batch`s and `Burn`s for another
    `CONFIRMATIONS` blocks.
@@ -83,25 +98,19 @@ The following timeline is established:
    new external transactions, the new multisig takes the responsibility of
    signing all unhandled and newly emitted `Burn`s.
 
-5) For the next 6 hours, all outputs received are immediately forwarded to the
-   new multisig, including their `InInstruction`s if external. Only external
-   transactions to the new multisig are included in `Batch`s.
+5) For the next 6 hours, all non-`Branch` outputs received are immediately
+   forwarded to the new multisig. Only external transactions to the new multisig
+   are included in `Batch`s.
 
-   The only exception to forwarding is if an external transaction is received,
-   yet it cannot be forwarded without dropping the refund address (which may
-   occur due to size limits on arbitrary data). If the refund address cannot be
-   forwarded, the transaction is immediately refunded.
+   The new multisig infers the `InInstruction`, and refund address, for
+   forwarded `External` outputs via reading what they were for the original
+   `External` output.
 
-   Alternatively, external transactions received during this window could always
-   be forwarded without the refund address. On error, they'd refund to the prior
-   multisig, who could then forward the refund itself. This would extend the
-   amount of time the prior multisig is expected to remain operational and add
-   significant complexity however.
-
-   Alternatively, at solely the cost of complexity, the new multisig could infer
-   the refund address as it scans the prior multisig's outputs. Doing so would
-   mean the prior multisig's forwarding transaction would need no arbitrary data
-   included at all.
+   Alternatively, the `InInstruction`, with refund address explicitly included,
+   could be included in the forwarding transaction. This may fail if the
+   `InInstruction` omitted the refund address and is too large to fit in a
+   transaction with one explicitly included. On such failure, the refund would
+   be immediately issued instead.
 
 6) Once the 6 hour period has expired, the prior multisig stops handling outputs
    it didn't itself create. Any remaining `Eventuality`s are completed, and any
@@ -142,19 +151,20 @@ The following timeline is established:
 
 ### Latency and Fees
 
-After step 3, the new multisig should start receiving new external outputs.
-These won't be confirmed for another `CONFIRMATIONS` blocks, and the new
-multisig won't start handling `Burn`s for `CONFIRMATIONS` blocks. Accordingly,
-the new multisig should only become responsible for `Burn`s once it has taken
-ownership of the stream of newly received coins.
+Slightly before the end of step 3, the new multisig should start receiving new
+external outputs. These won't be confirmed for another `CONFIRMATIONS` blocks,
+and the new multisig won't start handling `Burn`s for another
+`CONFIRMATIONS + 1` blocks. Accordingly, the new multisig should only become
+responsible for `Burn`s shortly after it has taken ownership of the stream of
+newly received coins.
 
-Before it takes responsibility, it should've been transferred all internal
+Before it takes responsibility, it also should've been transferred all internal
 outputs under the standard scheduling flow. Any delayed outputs will be
 immediately forwarded, and external stragglers are only reported to Serai once
-sufficiently confirmed in the new multisig. Accordingly, liquidity should avoid
-fragmentation during rotation. The only latency should be on delayed outputs,
-which should've been immediately usable, having to wait another `CONFIRMATIONS`
-blocks to be confirmed once forwarded.
+sufficiently confirmed in the new multisig. Accordingly, liquidity should mostly
+avoid fragmentation during rotation. The only latency should be on the `+ 1`
+blocks present, and on delayed outputs, which should've been immediately usable,
+having to wait another `CONFIRMATIONS` blocks to be confirmed once forwarded.
 
 An output latent by a single block may occur in practice, and would still
 trigger the full `CONFIRMATIONS` delay. The period the prior multisig handles
