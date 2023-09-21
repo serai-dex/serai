@@ -150,6 +150,10 @@ impl<N: Network> Scheduler<N> {
     Self::read(key, reader)
   }
 
+  pub fn can_use_branch(&self, amount: u64) -> bool {
+    self.plans.contains_key(&amount)
+  }
+
   fn execute(
     &mut self,
     inputs: Vec<N::Output>,
@@ -261,7 +265,6 @@ impl<N: Network> Scheduler<N> {
       address, depending on timing. This is safe as the issue only occurs when a multisig sends to
       its *own* branch address, since created_output is called on the signer's Scheduler.
     */
-
     {
       let branch_address = N::branch_address(self.key);
       payments =

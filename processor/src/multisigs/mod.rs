@@ -282,16 +282,19 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     } else {
       vec![]
     };
-    let existing_outputs: Vec<_> = outputs
+    let mut existing_outputs: Vec<_> = outputs
       .into_iter()
       .filter(|output| output.key() == self.existing.as_ref().unwrap().key)
       .collect();
     assert_eq!(existing_outputs.len() + new_outputs.len(), outputs_len);
 
+    let mut plans = vec![];
+
     match step {
       RotationStep::UseExisting | RotationStep::NewAsChange => {}
       RotationStep::ForwardFromExisting => {
-        // TODO: Manually create a Plan for all external outputs needing forwarding/refunding
+        // TODO: Manually create a Plan for all External outputs needing forwarding/refunding
+        // Branch and Change will be handled by the below Scheduler call
       }
       RotationStep::ClosingExisting => {
         /*
@@ -375,6 +378,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
              1) Build a queue for Branch outputs, delaying their handling until relevant
                 Eventualities are guaranteed to be present.
 
+                This solution would theoretically work for all outputs and allow collapsing this
+                problem to simply:
+
+                > Accordingly, only handling outputs we created should be definable as only
+                  handling outputs from the resolution of Eventualities.
+
              2) Create all Eventualities under a Branch at time of Branch creation.
                 This idea fails as Plans are tightly bound to outputs.
 
@@ -395,11 +404,41 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
              Eventualities are complete after `CONFIRMATIONS` blocks, same as for straggling
              External outputs.
         */
+
+        existing_outputs.retain(|output| {
+          match output.kind() {
+            // While the above says to simply drop External, if it's usable as a Branch, why not?
+            // Minor efficiency which should never matter in real life
+            OutputType::External | OutputType::Branch => {
+              // We could simply call can_use_branch, yet it'd have an edge case where if we
+              // receive two outputs for 100, and we could use one such output, we'd handle both.
+              //
+              // Individually schedule each output once confirming they're usable in order to
+              // avoid this.
+              let scheduler = &mut self.existing.as_mut().unwrap().scheduler;
+              if scheduler.can_use_branch(output.amount()) {
+                let mut plan = scheduler.schedule::<D>(
+                  txn,
+                  vec![output.clone()],
+                  vec![],
+                  self.new.as_ref().unwrap().key,
+                  false,
+                );
+                assert_eq!(plan.len(), 1);
+                let plan = plan.remove(0);
+                plans.push(plan);
+              }
+              false
+            }
+            // TODO
+            OutputType::Change => todo!(),
+          }
+        });
       }
     }
 
     // TODO: Do we want a singular Plan Vec?
-    let mut plans = {
+    plans.extend({
       let existing = self.existing.as_mut().unwrap();
       let existing_key = existing.key;
       self.existing.as_mut().unwrap().scheduler.schedule::<D>(
@@ -417,7 +456,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
         },
       )
-    };
+    });
     if let Some(new) = self.new.as_mut() {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
