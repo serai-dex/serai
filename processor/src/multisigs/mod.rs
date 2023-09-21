@@ -295,6 +295,29 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       RotationStep::ForwardFromExisting => {
         // TODO: Manually create a Plan for all External outputs needing forwarding/refunding
         // Branch and Change will be handled by the below Scheduler call
+
+        /*
+          Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
+          a flow for networks which drop their data to still embed arbitrary data.
+
+          One of the documented alternatives which would be valid is, as we scan this output,
+          we save its data locally. Then, when the output is successfully forwarded, we simply
+          read it from the local database. This would also reduce the costs of forwarding.
+
+          There's multiple caveats present here though:
+          1) We can't access the data when the forwarding transaction is scanned, as its
+             Eventuality may not be present yet (unless we delay actually signing the transaction
+             until the Eventuality is guaranteed to be present).
+          2) We can't forward to the new multisig's External address, as it'd be refunded for not
+             having data literally with it.
+
+          We can forward to the new multisig's Change address, resolving the second problem, and
+          only report the transaction to Serai once its guaranteed all nodes will have created the
+          Eventuality, solving the first problem.
+
+          Unfortunately, while much more complex, a database-based solution likely has less edge
+          cases than this reuse of the outbound arbitrary data pipeline.
+        */
       }
       RotationStep::ClosingExisting => {
         /*
@@ -676,6 +699,4 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let event = self.scanner_event_to_multisig_event(&mut txn, event);
     (txn, event)
   }
-
-  // TODO: Handle eventuality completions (finish_signing)
 }
