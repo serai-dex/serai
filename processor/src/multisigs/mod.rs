@@ -230,9 +230,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
   fn current_rotation_step(&self, block_number: usize) -> RotationStep {
     if let Some(new) = self.new.as_ref() {
-      if block_number < (new.activation_block + (N::CONFIRMATIONS + 1)) {
+      if block_number < (new.activation_block + (N::CONFIRMATIONS + 2)) {
         RotationStep::UseExisting
-      } else if block_number < (new.activation_block + (N::CONFIRMATIONS + 1) + N::CONFIRMATIONS) {
+      } else if block_number < (new.activation_block + (N::CONFIRMATIONS + 2) + N::CONFIRMATIONS) {
         RotationStep::NewAsChange
       } else {
         RotationStep::ForwardFromExisting

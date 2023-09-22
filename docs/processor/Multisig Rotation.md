@@ -57,17 +57,17 @@ The following timeline is established:
    otherwise have a `Batch` created.
 
 3) The prior multisig continues handling `Batch`s and `Burn`s for
-   `CONFIRMATIONS + 1` blocks after the "activation block".
+   `CONFIRMATIONS + 2` blocks after the "activation block".
 
    The first `CONFIRMATIONS` blocks is due to the fact the new multisig
    shouldn't actually be sent coins during this period, making it irrelevant.
    If coins are prematurely sent to the new multisig, they're artificially
-   delayed until the end of the `CONFIRMATIONS + 1` blocks. This prevents an
+   delayed until the end of the `CONFIRMATIONS + 2` blocks. This prevents an
    adversary from minting Serai tokens using coins in the new multisig, yet then
    burning them to drain the prior multisig, creating a lack of liquidity for
    several blocks.
 
-   The reason for the `+ 1` is to provide grace to honest UIs. Since UIs will
+   The reason for the `+ 2` is to provide grace to honest UIs. Since UIs will
    wait until Serai confirms the "activation block" for keys before sending to
    them, which will take `CONFIRMATIONS` blocks plus some latency, UIs would
    make transactions to the prior multisig past the end of this period if it was
@@ -75,11 +75,11 @@ The following timeline is established:
    is how long transactions take to confirm, transactions made past the end of
    this period would only received after the next period. After the next period,
    the prior multisig adds fees and a delay to all received funds (as it
-   forwards the funds from itself to the new multisig). A `+ 1` provides grace
+   forwards the funds from itself to the new multisig). A `+ 2` provides grace
    for latency.
 
-   The `+ 1` also opens the aforementioned liquidity draining attack,
-   unfortunately, yet only for a single block.
+   The `+ 2` also opens the aforementioned liquidity draining attack,
+   unfortunately, yet only for a brief moment only when a rotation occurs.
 
 4) The prior multisig continues handling `Batch`s and `Burn`s for another
    `CONFIRMATIONS` blocks.
@@ -154,7 +154,7 @@ The following timeline is established:
 Slightly before the end of step 3, the new multisig should start receiving new
 external outputs. These won't be confirmed for another `CONFIRMATIONS` blocks,
 and the new multisig won't start handling `Burn`s for another
-`CONFIRMATIONS + 1` blocks. Accordingly, the new multisig should only become
+`CONFIRMATIONS + 2` blocks. Accordingly, the new multisig should only become
 responsible for `Burn`s shortly after it has taken ownership of the stream of
 newly received coins.
 
@@ -162,7 +162,7 @@ Before it takes responsibility, it also should've been transferred all internal
 outputs under the standard scheduling flow. Any delayed outputs will be
 immediately forwarded, and external stragglers are only reported to Serai once
 sufficiently confirmed in the new multisig. Accordingly, liquidity should mostly
-avoid fragmentation during rotation. The only latency should be on the `+ 1`
+avoid fragmentation during rotation. The only latency should be on the `+ 2`
 blocks present, and on delayed outputs, which should've been immediately usable,
 having to wait another `CONFIRMATIONS` blocks to be confirmed once forwarded.
 
