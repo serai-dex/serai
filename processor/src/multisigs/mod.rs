@@ -1,4 +1,5 @@
 use core::time::Duration;
+use std::collections::HashMap;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
@@ -300,13 +301,14 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (existing_outputs, new_outputs)
   }
 
+  // Manually creates Plans for all External outputs needing forwarding/refunding.
+  //
+  // Returns created Plans and a map of forwarded output IDs to their associated InInstructions.
   fn filter_outputs_due_to_forwarding(
     &self,
-    txn: &mut D::Transaction<'_>,
     existing_outputs: &mut Vec<N::Output>,
-  ) -> Vec<Plan<N>> {
+  ) -> (Vec<Plan<N>>, HashMap<Vec<u8>, InInstructionWithBalance>) {
     // Manually create a Plan for all External outputs needing forwarding/refunding
-    // Branch and Change will be handled by the below Scheduler call
 
     /*
       Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
@@ -328,6 +330,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     */
 
     let mut plans = vec![];
+    let mut forwarding = HashMap::new();
     existing_outputs.retain(|output| {
       if output.kind() == OutputType::External {
         if let Some(instruction) = instruction_from_output::<N>(output) {
@@ -339,13 +342,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             change: Some(N::address(self.new.as_ref().unwrap().key)),
           });
 
-          // Save the instruction for this output to disk
-          // TODO: Don't write this to the DB. Return it, to be passed to the next function
-          MultisigsDb::<N, D>::save_to_be_forwarded_output_instruction(
-            txn,
-            output.id(),
-            instruction,
-          );
+          // Set the instruction for this output to be returned
+          forwarding.insert(output.id().as_ref().to_vec(), instruction);
         }
 
         // TODO: Refund here
@@ -354,7 +352,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         true
       }
     });
-    plans
+    (plans, forwarding)
   }
 
   // Filter newly received outputs due to the step being RotationStep::ClosingExisting.
@@ -529,7 +527,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     block_id: <N::Block as Block<N>>::Id,
     step: RotationStep,
     burns: Vec<OutInstructionWithBalance>,
-  ) -> (bool, Vec<Plan<N>>) {
+  ) -> (bool, Vec<Plan<N>>, HashMap<Vec<u8>, InInstructionWithBalance>) {
     let (existing_payments, new_payments) = self.burns_to_payments(txn, step, burns);
 
     // We now have to acknowledge the acknowledged block, if it's new
@@ -546,13 +544,13 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       (acquired_lock, self.split_outputs_by_key(outputs))
     };
 
-    let mut plans = match step {
-      RotationStep::UseExisting | RotationStep::NewAsChange => vec![],
+    let (mut plans, forwarded_external_outputs) = match step {
+      RotationStep::UseExisting | RotationStep::NewAsChange => (vec![], HashMap::new()),
       RotationStep::ForwardFromExisting => {
-        self.filter_outputs_due_to_forwarding(txn, &mut existing_outputs)
+        self.filter_outputs_due_to_forwarding(&mut existing_outputs)
       }
       RotationStep::ClosingExisting => {
-        self.filter_outputs_due_to_closing(txn, &mut existing_outputs)
+        (self.filter_outputs_due_to_closing(txn, &mut existing_outputs), HashMap::new())
       }
     };
 
@@ -597,7 +595,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
 
-    (acquired_lock, plans)
+    (acquired_lock, plans, forwarded_external_outputs)
   }
 
   /// Handle a SubstrateBlock event, building the relevant Plans.
@@ -618,7 +616,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let step = self.current_rotation_step(block_number);
 
     // Get the Plans from this block
-    let (acquired_lock, plans) =
+    let (acquired_lock, plans, mut forwarded_external_outputs) =
       self.plans_from_block(txn, block_number, block_id, step, burns).await;
 
     let res = {
@@ -637,8 +635,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           block_number.try_into().unwrap(),
           &plan,
         );
-        let to_be_forwarded =
-          MultisigsDb::<N, D>::take_to_be_forwarded_output_instruction(txn, plan.inputs[0].id());
+
+        let to_be_forwarded = forwarded_external_outputs.remove(plan.inputs[0].id().as_ref());
         if to_be_forwarded.is_some() {
           assert_eq!(plan.inputs.len(), 1);
         }

@@ -9,7 +9,7 @@ use serai_client::in_instructions::primitives::InInstructionWithBalance;
 
 use crate::{
   Get, Db, Plan,
-  networks::{Output, Transaction, Network},
+  networks::{Transaction, Network},
 };
 
 #[derive(Debug)]
@@ -135,27 +135,6 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     txn.put(Self::signing_key(key), signing);
 
     txn.put(Self::resolved_key(resolution.as_ref()), plan);
-  }
-
-  fn to_be_forwarded_key(id: &[u8]) -> Vec<u8> {
-    Self::multisigs_key(b"to_be_forwarded", id)
-  }
-  pub fn save_to_be_forwarded_output_instruction(
-    txn: &mut D::Transaction<'_>,
-    id: <N::Output as Output<N>>::Id,
-    instruction: InInstructionWithBalance,
-  ) {
-    txn.put(Self::to_be_forwarded_key(id.as_ref()), instruction.encode());
-  }
-  pub fn take_to_be_forwarded_output_instruction(
-    txn: &mut D::Transaction<'_>,
-    id: <N::Output as Output<N>>::Id,
-  ) -> Option<InInstructionWithBalance> {
-    let key = Self::to_be_forwarded_key(id.as_ref());
-    let instruction = txn.get(&key)?;
-    txn.del(&key);
-    debug_assert!(txn.get(&key).is_none());
-    Some(InInstructionWithBalance::decode(&mut instruction.as_ref()).unwrap())
   }
 
   fn forwarded_output_key(amount: u64) -> Vec<u8> {
