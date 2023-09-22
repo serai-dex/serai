@@ -57,29 +57,31 @@ The following timeline is established:
    otherwise have a `Batch` created.
 
 3) The prior multisig continues handling `Batch`s and `Burn`s for
-   `CONFIRMATIONS + 2` blocks after the "activation block".
+   `CONFIRMATIONS` blocks, plus 10 minutes, after the "activation block".
 
    The first `CONFIRMATIONS` blocks is due to the fact the new multisig
    shouldn't actually be sent coins during this period, making it irrelevant.
    If coins are prematurely sent to the new multisig, they're artificially
-   delayed until the end of the `CONFIRMATIONS + 2` blocks. This prevents an
-   adversary from minting Serai tokens using coins in the new multisig, yet then
-   burning them to drain the prior multisig, creating a lack of liquidity for
-   several blocks.
+   delayed until the end of the `CONFIRMATIONS` blocks plus 10 minutes period.
+   This prevents an adversary from minting Serai tokens using coins in the new
+   multisig, yet then burning them to drain the prior multisig, creating a lack
+   of liquidity for several blocks.
 
-   The reason for the `+ 2` is to provide grace to honest UIs. Since UIs will
-   wait until Serai confirms the "activation block" for keys before sending to
-   them, which will take `CONFIRMATIONS` blocks plus some latency, UIs would
+   The reason for the 10 minutes is to provide grace to honest UIs. Since UIs
+   will wait until Serai confirms the "activation block" for keys before sending
+   to them, which will take `CONFIRMATIONS` blocks plus some latency, UIs would
    make transactions to the prior multisig past the end of this period if it was
    `CONFIRMATIONS` alone. Since the next period is `CONFIRMATIONS` blocks, which
    is how long transactions take to confirm, transactions made past the end of
    this period would only received after the next period. After the next period,
    the prior multisig adds fees and a delay to all received funds (as it
-   forwards the funds from itself to the new multisig). A `+ 2` provides grace
-   for latency.
+   forwards the funds from itself to the new multisig). The 10 minutes provides
+   grace for latency.
 
-   The `+ 2` also opens the aforementioned liquidity draining attack,
-   unfortunately, yet only for a brief moment only when a rotation occurs.
+   The 10 minutes is a delay on anyone who immediately transitions to the new
+   multisig, in a no latency environment, yet the delay is preferable to fees
+   from forwarding. It also should be less than 10 minutes thanks to various
+   latencies.
 
 4) The prior multisig continues handling `Batch`s and `Burn`s for another
    `CONFIRMATIONS` blocks.
@@ -153,28 +155,18 @@ The following timeline is established:
 
 Slightly before the end of step 3, the new multisig should start receiving new
 external outputs. These won't be confirmed for another `CONFIRMATIONS` blocks,
-and the new multisig won't start handling `Burn`s for another
-`CONFIRMATIONS + 2` blocks. Accordingly, the new multisig should only become
+and the new multisig won't start handling `Burn`s for another `CONFIRMATIONS`
+blocks plus 10 minutes. Accordingly, the new multisig should only become
 responsible for `Burn`s shortly after it has taken ownership of the stream of
 newly received coins.
 
 Before it takes responsibility, it also should've been transferred all internal
 outputs under the standard scheduling flow. Any delayed outputs will be
 immediately forwarded, and external stragglers are only reported to Serai once
-sufficiently confirmed in the new multisig. Accordingly, liquidity should mostly
-avoid fragmentation during rotation. The only latency should be on the `+ 2`
-blocks present, and on delayed outputs, which should've been immediately usable,
-having to wait another `CONFIRMATIONS` blocks to be confirmed once forwarded.
-
-An output latent by a single block may occur in practice, and would still
-trigger the full `CONFIRMATIONS` delay. The period the prior multisig handles
-`Burn`s could be extended by a single block to better handle this, yet then
-liquidity would be fragmented for that single block. We cannot prevent this
-delay from ever occurring without fundamentally re-architecting this design, yet
-we can prevent also having liquidity fragmentation by accepting this delay here.
-Considering latent outputs should be a fraction of overall outputs, meaning the
-delay should be without impact in practice (though so would be the impact of a
-single block of fragmentation), the theoretic property is appreciated.
+sufficiently confirmed in the new multisig. Accordingly, liquidity should avoid
+fragmentation during rotation. The only latency should be on the 10 minutes
+present, and on delayed outputs, which should've been immediately usable, having
+to wait another `CONFIRMATIONS` blocks to be confirmed once forwarded.
 
 Immediate forwarding does unfortunately prevent batching inputs to reduce fees.
 Given immediate forwarding only applies to latent outputs, considered
