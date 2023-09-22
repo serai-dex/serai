@@ -229,18 +229,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   }
 
   fn current_rotation_step(&self, block_number: usize) -> RotationStep {
-    if let Some(new) = self.new.as_ref() {
-      if block_number < (new.activation_block + (N::CONFIRMATIONS + 2)) {
-        RotationStep::UseExisting
-      } else if block_number < (new.activation_block + (N::CONFIRMATIONS + 2) + N::CONFIRMATIONS) {
-        RotationStep::NewAsChange
-      } else {
-        RotationStep::ForwardFromExisting
+    let Some(new) = self.new.as_ref() else { return RotationStep::UseExisting };
+    // Period numbering here has no meaning other than these the time values useful here, and the
+    // order they're built in. They have no reference/shared marker with anything else
+    let period_1_start = new.activation_block + N::CONFIRMATIONS + 2;
+    let period_2_start = period_1_start + N::CONFIRMATIONS;
+    // 6 hours after period 2
+    let period_3_start = period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
 
-        // TODO: ClosingExisting ?
-      }
-    } else {
+    if block_number < period_1_start {
       RotationStep::UseExisting
+    } else if block_number < period_2_start {
+      RotationStep::NewAsChange
+    } else if block_number < period_3_start {
+      RotationStep::ForwardFromExisting
+    } else {
+      RotationStep::ClosingExisting
     }
   }
 

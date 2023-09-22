@@ -241,6 +241,7 @@ impl Network for Monero {
 
   const NETWORK: NetworkId = NetworkId::Monero;
   const ID: &'static str = "Monero";
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
 
   // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction

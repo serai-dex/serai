@@ -314,6 +314,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   const NETWORK: NetworkId;
   /// String ID for this network.
   const ID: &'static str;
+  /// The estimated amount of time a block will take.
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize;
   /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
   /// The maximum amount of inputs which will fit in a TX.

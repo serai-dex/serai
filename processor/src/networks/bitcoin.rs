@@ -339,6 +339,7 @@ impl Network for Bitcoin {
 
   const NETWORK: NetworkId = NetworkId::Bitcoin;
   const ID: &'static str = "Bitcoin";
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
   const CONFIRMATIONS: usize = 6;
 
   // 0.0001 BTC, 10,000 satoshis
