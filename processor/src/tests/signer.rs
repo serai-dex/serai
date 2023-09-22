@@ -168,7 +168,7 @@ pub async fn test_signer<N: Network>(network: N) {
           key,
           inputs: outputs.clone(),
           payments: vec![Payment { address: N::address(key), data: None, amount }],
-          change: Some(key),
+          change: Some(N::change_address(key)),
         },
         fee,
       )

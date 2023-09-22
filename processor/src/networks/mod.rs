@@ -124,6 +124,10 @@ pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
   async fn fee(&self, network: &N) -> u64;
 }
 
+pub trait SignableTransaction: Send + Sync + Clone + Debug {
+  fn fee(&self) -> u64;
+}
+
 pub trait Eventuality: Send + Sync + Clone + Debug {
   fn lookup(&self) -> Vec<u8>;
 
@@ -285,7 +289,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   // This is almost certainly distinct from the network's native output type.
   type Output: Output<Self>;
   /// The type containing all information on a planned transaction, waiting to be signed.
-  type SignableTransaction: Send + Sync + Clone + Debug;
+  type SignableTransaction: SignableTransaction;
   /// The type containing all information to check if a plan was completed.
   ///
   /// This must be binding to both the outputs expected and the plan ID.
@@ -330,8 +334,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Address for the given group key to receive external coins to.
   fn address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
-  // This is purely used for debugging purposes. Any output may be used to execute a branch.
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  /// Address for the given group key to use for change.
+  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;

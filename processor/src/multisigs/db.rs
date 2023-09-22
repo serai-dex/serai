@@ -4,9 +4,12 @@ use ciphersuite::Ciphersuite;
 
 pub use serai_db::*;
 
+use scale::{Encode, Decode};
+use serai_client::in_instructions::primitives::InInstructionWithBalance;
+
 use crate::{
   Get, Db, Plan,
-  networks::{Transaction, Network},
+  networks::{Output, Transaction, Network},
 };
 
 #[derive(Debug)]
@@ -91,7 +94,7 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     let plan =
       Plan::<N>::read::<&[u8]>(&mut &getter.get(Self::plan_key(&id)).unwrap()[8 ..]).unwrap();
     assert_eq!(plan.id(), id);
-    (key == plan.key) && (Some(plan.key) == plan.change)
+    (key == plan.key) && (Some(N::change_address(plan.key)) == plan.change)
   }
   pub fn resolve_plan(
     txn: &mut D::Transaction<'_>,
@@ -120,5 +123,57 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     txn.put(Self::signing_key(key), signing);
 
     txn.put(Self::resolved_key(resolution.as_ref()), plan);
+  }
+
+  fn to_be_forwarded_key(id: &[u8]) -> Vec<u8> {
+    Self::multisigs_key(b"to_be_forwarded", id)
+  }
+  pub fn save_to_be_forwarded_output_instruction(
+    txn: &mut D::Transaction<'_>,
+    id: <N::Output as Output<N>>::Id,
+    instruction: InInstructionWithBalance,
+  ) {
+    txn.put(Self::to_be_forwarded_key(id.as_ref()), instruction.encode());
+  }
+  pub fn take_to_be_forwarded_output_instruction(
+    txn: &mut D::Transaction<'_>,
+    id: <N::Output as Output<N>>::Id,
+  ) -> Option<InInstructionWithBalance> {
+    let key = Self::to_be_forwarded_key(id.as_ref());
+    let instruction = txn.get(&key)?;
+    txn.del(&key);
+    debug_assert!(txn.get(&key).is_none());
+    Some(InInstructionWithBalance::decode(&mut instruction.as_ref()).unwrap())
+  }
+
+  fn forwarded_output_key(amount: u64) -> Vec<u8> {
+    Self::multisigs_key(b"forwarded_output", amount.to_le_bytes())
+  }
+  pub fn save_forwarded_output(
+    txn: &mut D::Transaction<'_>,
+    instruction: InInstructionWithBalance,
+  ) {
+    let key = Self::forwarded_output_key(instruction.balance.amount.0);
+    let mut existing = txn.get(&key).unwrap_or(vec![]);
+    existing.extend(instruction.encode());
+    txn.put(key, existing);
+  }
+  pub fn take_forwarded_output(
+    txn: &mut D::Transaction<'_>,
+    amount: u64,
+  ) -> Option<InInstructionWithBalance> {
+    let key = Self::forwarded_output_key(amount);
+
+    let outputs = txn.get(&key)?;
+    let mut outputs_ref = outputs.as_slice();
+
+    let res = InInstructionWithBalance::decode(&mut outputs_ref).unwrap();
+    assert!(outputs_ref.len() < outputs.len());
+    if outputs_ref.is_empty() {
+      txn.del(&key);
+    } else {
+      txn.put(&key, outputs_ref);
+    }
+    Some(res)
   }
 }

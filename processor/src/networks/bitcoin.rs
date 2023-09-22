@@ -46,8 +46,9 @@ use serai_client::{
 use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
-    PostFeeBranch, Network, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
+    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
+    amortize_fee,
   },
   Plan,
 };
@@ -224,6 +225,11 @@ impl PartialEq for SignableTransaction {
   }
 }
 impl Eq for SignableTransaction {}
+impl SignableTransactionTrait for SignableTransaction {
+  fn fee(&self) -> u64 {
+    self.actual.fee()
+  }
+}
 
 impl BlockTrait<Bitcoin> for Block {
   type Id = [u8; 32];
@@ -366,6 +372,11 @@ impl Network for Bitcoin {
   fn branch_address(key: ProjectivePoint) -> Self::Address {
     let (_, offsets, _) = scanner(key);
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
+  }
+
+  fn change_address(key: ProjectivePoint) -> Self::Address {
+    let (_, offsets, _) = scanner(key);
+    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -514,10 +525,7 @@ impl Network for Bitcoin {
       match BSignableTransaction::new(
         plan.inputs.iter().map(|input| input.output.clone()).collect(),
         &payments,
-        plan.change.map(|key| {
-          let (_, offsets, _) = scanner(key);
-          Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])).0
-        }),
+        plan.change.as_ref().map(|change| change.0.clone()),
         None,
         fee.0,
       ) {

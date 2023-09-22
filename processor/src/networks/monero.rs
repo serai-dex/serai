@@ -37,8 +37,9 @@ use crate::{
   Payment, Plan, additional_key,
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
-    PostFeeBranch, Network, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
+    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
+    amortize_fee,
   },
 };
 
@@ -140,6 +141,11 @@ impl EventualityTrait for Eventuality {
 pub struct SignableTransaction {
   transcript: RecommendedTranscript,
   actual: MSignableTransaction,
+}
+impl SignableTransactionTrait for SignableTransaction {
+  fn fee(&self) -> u64 {
+    self.actual.fee()
+  }
 }
 
 impl BlockTrait<Monero> for Block {
@@ -256,6 +262,10 @@ impl Network for Monero {
 
   fn branch_address(key: EdwardsPoint) -> Self::Address {
     Self::address_internal(key, BRANCH_SUBADDRESS)
+  }
+
+  fn change_address(key: EdwardsPoint) -> Self::Address {
+    Self::address_internal(key, CHANGE_SUBADDRESS)
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -468,9 +478,7 @@ impl Network for Monero {
         Some(Zeroizing::new(plan.id())),
         inputs.clone(),
         payments,
-        plan.change.map(|key| {
-          Change::fingerprintable(Self::address_internal(key, CHANGE_SUBADDRESS).into())
-        }),
+        plan.change.map(|change| Change::fingerprintable(change.into())),
         vec![],
         fee,
       ) {

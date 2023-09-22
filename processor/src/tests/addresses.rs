@@ -35,7 +35,12 @@ async fn spend<N: Network, D: Db>(
           .prepare_send(
             network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS,
             // Send to a change output
-            Plan { key, inputs: outputs.clone(), payments: vec![], change: Some(key) },
+            Plan {
+              key,
+              inputs: outputs.clone(),
+              payments: vec![],
+              change: Some(N::change_address(key)),
+            },
             network.get_fee().await,
           )
           .await

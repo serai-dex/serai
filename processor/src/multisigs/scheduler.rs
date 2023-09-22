@@ -204,7 +204,12 @@ impl<N: Network> Scheduler<N> {
       payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
     }
 
-    Plan { key: self.key, inputs, payments, change: Some(key_for_any_change).filter(|_| change) }
+    Plan {
+      key: self.key,
+      inputs,
+      payments,
+      change: Some(N::change_address(key_for_any_change)).filter(|_| change),
+    }
   }
 
   fn add_outputs(
@@ -320,7 +325,7 @@ impl<N: Network> Scheduler<N> {
         key: self.key,
         inputs: chunk,
         payments: vec![],
-        change: Some(key_for_any_change),
+        change: Some(N::change_address(key_for_any_change)),
       })
     }
 
@@ -361,11 +366,12 @@ impl<N: Network> Scheduler<N> {
     // This is used when an old multisig is retiring and we want to always transfer outputs to the
     // new one, regardless if we currently have payments
     if force_spend && (!self.utxos.is_empty()) {
+      assert!(self.utxos.len() <= N::MAX_INPUTS);
       plans.push(Plan {
         key: self.key,
         inputs: self.utxos.drain(..).collect::<Vec<_>>(),
         payments: vec![],
-        change: Some(key_for_any_change),
+        change: Some(N::change_address(key_for_any_change)),
       });
     }
 

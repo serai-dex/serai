@@ -36,9 +36,31 @@ use scheduler::Scheduler;
 
 use crate::{
   Get, Db, Payment, PostFeeBranch, Plan,
-  networks::{OutputType, Output, Transaction, Block, Network, get_block},
+  networks::{OutputType, Output, Transaction, SignableTransaction, Block, Network, get_block},
   Signer,
 };
+
+// InInstructionWithBalance from an external output
+fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructionWithBalance> {
+  assert_eq!(output.kind(), OutputType::External);
+
+  let mut data = output.data();
+  let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
+  if data.len() > max_data_len {
+    error!(
+      "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
+      hex::encode(output.id()),
+      data.len(),
+    );
+    None?;
+  }
+
+  let Ok(shorthand) = Shorthand::decode(&mut data) else { None? };
+  let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { None? };
+
+  // TODO2: Set instruction.origin if not set (and handle refunds in general)
+  Some(InInstructionWithBalance { instruction: instruction.instruction, balance: output.balance() })
+}
 
 enum RotationStep {
   // Use the existing multisig for all actions (steps 1-3)
@@ -293,31 +315,53 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     match step {
       RotationStep::UseExisting | RotationStep::NewAsChange => {}
       RotationStep::ForwardFromExisting => {
-        // TODO: Manually create a Plan for all External outputs needing forwarding/refunding
+        // Manually create a Plan for all External outputs needing forwarding/refunding
         // Branch and Change will be handled by the below Scheduler call
 
         /*
           Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
-          a flow for networks which drop their data to still embed arbitrary data.
+          a flow for networks which drop their data to still embed arbitrary data. It'd also have
+          edge cases causing failures.
 
-          One of the documented alternatives which would be valid is, as we scan this output,
-          we save its data locally. Then, when the output is successfully forwarded, we simply
-          read it from the local database. This would also reduce the costs of forwarding.
+          Instead, we save the InInstruction as we scan this output. Then, when the output is
+          successfully forwarded, we simply read it from the local database. This also saves the
+          costs of embedding arbitrary data.
 
-          There's multiple caveats present here though:
-          1) We can't access the data when the forwarding transaction is scanned, as its
-             Eventuality may not be present yet (unless we delay actually signing the transaction
-             until the Eventuality is guaranteed to be present).
-          2) We can't forward to the new multisig's External address, as it'd be refunded for not
-             having data literally with it.
+          Since we can't rely on the Eventuality system to detect if it's a forwarded transaction,
+          due to the asynchonicity of the Eventuality system, we instead interpret an External
+          output with no InInstruction, which has an amount associated with an InInstruction
+          being forwarded, as having been forwarded. This does create a specific edge case where
+          a user who doesn't include an InInstruction may not be refunded however, if they share
+          an exact amount with an expected-to-be-forwarded transaction. This is deemed acceptable.
 
-          We can forward to the new multisig's Change address, resolving the second problem, and
-          only report the transaction to Serai once its guaranteed all nodes will have created the
-          Eventuality, solving the first problem.
-
-          Unfortunately, while much more complex, a database-based solution likely has less edge
-          cases than this reuse of the outbound arbitrary data pipeline.
+          TODO: Add a fourth address, forwarded_address, to prevent this.
         */
+
+        existing_outputs.retain(|output| {
+          if output.kind() == OutputType::External {
+            if let Some(instruction) = instruction_from_output::<N>(output) {
+              // Build a dedicated Plan forwarding this
+              plans.push(Plan {
+                key: self.existing.as_ref().unwrap().key,
+                inputs: vec![output.clone()],
+                payments: vec![],
+                change: Some(N::address(self.new.as_ref().unwrap().key)),
+              });
+
+              // Save the instruction for this output to disk
+              // TODO: Don't write this to the DB. Return it, to be passed to the next function
+              MultisigsDb::<N, D>::save_to_be_forwarded_output_instruction(
+                txn,
+                output.id(),
+                instruction,
+              );
+            }
+
+            false
+          } else {
+            true
+          }
+        });
       }
       RotationStep::ClosingExisting => {
         /*
@@ -428,6 +472,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
              External outputs.
         */
 
+        // TODO: This has a fault
+        // We can use a distinct output to fulfill a Branch, and if we do, we'll drop the Branch
+        // output here
+        // Only let Branch outputs fulfill Branches
         existing_outputs.retain(|output| {
           match output.kind() {
             // While the above says to simply drop External, if it's usable as a Branch, why not?
@@ -508,7 +556,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
 
     for plan in &plans {
-      if plan.change == Some(plan.key) {
+      if plan.change == Some(N::change_address(plan.key)) {
         // Assert these are only created during the expected step
         // TODO: Check when we register the Eventuality for this Plan, the step isn't
         // ForwardFromExisting nor ClosingExisting. They should appear during NewAsChange, at the
@@ -556,7 +604,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         block_number.try_into().unwrap(),
         &plan,
       );
+      let to_be_forwarded =
+        MultisigsDb::<N, D>::take_to_be_forwarded_output_instruction(txn, plan.inputs[0].id());
+      if to_be_forwarded.is_some() {
+        assert_eq!(plan.inputs.len(), 1);
+      }
       let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
+
+      // If this is a Plan for an output we're forwarding, we need to save the InInstruction for
+      // its output under the amount successfully forwarded
+      if let Some(mut instruction) = to_be_forwarded {
+        // If we can't successfully create a forwarding TX, simply drop this
+        if let Some(tx) = &tx {
+          instruction.balance.amount.0 -= tx.0.fee();
+          MultisigsDb::<N, D>::save_forwarded_output(txn, instruction);
+        }
+      }
 
       for branch in branches {
         let existing = self.existing.as_mut().unwrap();
@@ -622,6 +685,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           // If this is an External transaction to the existing multisig, and we're either solely
           // forwarding or closing the existing multisig, drop it
           // In the case of the forwarding case, we'll report it once it hits the new multisig
+          // TODO: Delay External outputs received to new multisig earlier than expected
           if (match step {
             RotationStep::UseExisting | RotationStep::NewAsChange => false,
             RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
@@ -630,25 +694,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             continue;
           }
 
-          let mut data = output.data();
-          let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
-          // TODO: Refund if we hit one of the following continues
-          if data.len() > max_data_len {
-            error!(
-              "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
-              hex::encode(output.id()),
-              data.len(),
-            );
-            continue;
-          }
+          let instruction = if let Some(instruction) = instruction_from_output::<N>(&output) {
+            instruction
+          } else {
+            if !output.data().is_empty() {
+              // TODO: Refund
+              continue;
+            }
 
-          let Ok(shorthand) = Shorthand::decode(&mut data) else { continue };
-          let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { continue };
-
-          // TODO2: Set instruction.origin if not set (and handle refunds in general)
-          let instruction = InInstructionWithBalance {
-            instruction: instruction.instruction,
-            balance: output.balance(),
+            if let Some(instruction) =
+              MultisigsDb::<N, D>::take_forwarded_output(txn, output.amount())
+            {
+              instruction
+            } else {
+              // TODO: Refund
+              continue;
+            }
           };
 
           let batch = batches.last_mut().unwrap();
