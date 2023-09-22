@@ -725,32 +725,25 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   ) -> MultisigEvent<N> {
     match msg {
       ScannerEvent::Block { block, outputs } => {
-        let mut block_hash = [0; 32];
-        block_hash.copy_from_slice(block.as_ref());
-        let mut batch_id = MultisigsDb::<N, D>::next_batch_id(txn);
+        // Since the Scanner is asynchronous, the following is a concern for race conditions
+        // We safely know the step of a block since keys are declared, and the Scanner is safe
+        // with respect to the declaration of keys
+        // Accordingly, the following calls regarding new keys and step should be safe
+        let step = self.current_rotation_step(
+          ScannerHandle::<N, D>::block_number(txn, &block)
+            .expect("didn't have the block number for a block we just scanned"),
+        );
 
-        // start with empty batch
-        let mut batches = vec![Batch {
-          network: N::NETWORK,
-          id: batch_id,
-          block: BlockHash(block_hash),
-          instructions: vec![],
-        }];
+        let mut instructions = vec![];
         for output in outputs {
           // If these aren't externally received funds, don't handle it as an instruction
           if output.kind() != OutputType::External {
             continue;
           }
 
-          let step = self.current_rotation_step(
-            ScannerHandle::<N, D>::block_number(txn, &block)
-              .expect("didn't have the block number for a block we just scanned"),
-          );
-
           // If this is an External transaction to the existing multisig, and we're either solely
           // forwarding or closing the existing multisig, drop it
           // In the case of the forwarding case, we'll report it once it hits the new multisig
-          // TODO: Delay External outputs received to new multisig earlier than expected
           if (match step {
             RotationStep::UseExisting | RotationStep::NewAsChange => false,
             RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
@@ -777,6 +770,47 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             }
           };
 
+          // Delay External outputs received to new multisig earlier than expected
+          if Some(output.key()) == self.new.as_ref().map(|new| new.key) {
+            match step {
+              RotationStep::UseExisting => {
+                MultisigsDb::<N, D>::save_delayed_output(txn, instruction);
+                continue;
+              }
+              RotationStep::NewAsChange |
+              RotationStep::ForwardFromExisting |
+              RotationStep::ClosingExisting => {}
+            }
+          }
+
+          instructions.push(instruction);
+        }
+
+        // If any outputs were delayed, append them into this block
+        // TODO: Should the Scanner always emit an event for the first NewAsChange block, in order
+        // to prevent this from being further delayed?
+        match step {
+          RotationStep::UseExisting => {}
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => {
+            instructions.extend(MultisigsDb::<N, D>::take_delayed_outputs(txn));
+          }
+        }
+
+        let mut block_hash = [0; 32];
+        block_hash.copy_from_slice(block.as_ref());
+        let mut batch_id = MultisigsDb::<N, D>::next_batch_id(txn);
+
+        // start with empty batch
+        let mut batches = vec![Batch {
+          network: N::NETWORK,
+          id: batch_id,
+          block: BlockHash(block_hash),
+          instructions: vec![],
+        }];
+
+        for instruction in instructions {
           let batch = batches.last_mut().unwrap();
           batch.instructions.push(instruction);
 

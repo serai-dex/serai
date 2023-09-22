@@ -167,4 +167,27 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     }
     Some(res)
   }
+
+  fn delayed_output_keys() -> Vec<u8> {
+    Self::multisigs_key(b"delayed_outputs", [])
+  }
+  pub fn save_delayed_output(txn: &mut D::Transaction<'_>, instruction: InInstructionWithBalance) {
+    let key = Self::delayed_output_keys();
+    let mut existing = txn.get(&key).unwrap_or(vec![]);
+    existing.extend(instruction.encode());
+    txn.put(key, existing);
+  }
+  pub fn take_delayed_outputs(txn: &mut D::Transaction<'_>) -> Vec<InInstructionWithBalance> {
+    let key = Self::delayed_output_keys();
+
+    let Some(outputs) = txn.get(&key) else { return vec![] };
+    txn.del(key);
+
+    let mut outputs_ref = outputs.as_slice();
+    let mut res = vec![];
+    while !outputs_ref.is_empty() {
+      res.push(InInstructionWithBalance::decode(&mut outputs_ref).unwrap());
+    }
+    res
+  }
 }
