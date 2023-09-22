@@ -744,13 +744,11 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
   // async fn where dropping the Future causes no state changes
   // This property is derived from recv having this property, and recv being the only async call
-  pub async fn next_event<'a>(&mut self, db: &'a mut D) -> (D::Transaction<'a>, MultisigEvent<N>) {
+  pub async fn next_event(&mut self, txn: &mut D::Transaction<'_>) -> MultisigEvent<N> {
     let event = self.scanner.events.recv().await.unwrap();
 
     // No further code is async
 
-    let mut txn = db.txn();
-    let event = self.scanner_event_to_multisig_event(&mut txn, event);
-    (txn, event)
+    self.scanner_event_to_multisig_event(txn, event)
   }
 }

@@ -468,10 +468,73 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   let mut last_coordinator_msg = None;
 
   loop {
+    let mut txn1 = raw_db.txn();
+    let mut txn2 = raw_db_two.txn();
+
+    let mut outer_msg = None;
+
+    tokio::select! {
+      // This blocks the entire processor until it finishes handling this message
+      // KeyGen specifically may take a notable amount of processing time
+      // While that shouldn't be an issue in practice, as after processing an attempt it'll handle
+      // the other messages in the queue, it may be beneficial to parallelize these
+      // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
+      msg = coordinator.recv() => {
+        assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
+        last_coordinator_msg = Some(msg.id);
+
+        // Only handle this if we haven't already
+        if !main_db.handled_message(msg.id) {
+          MainDb::<N, D>::handle_message(&mut txn1, msg.id);
+
+          // This is isolated to better think about how its ordered, or rather, about how the other
+          // cases aren't ordered
+          //
+          // While the coordinator messages are ordered, they're not deterministically ordered
+          // Tributary-caused messages are deterministically ordered, and Substrate-caused messages
+          // are deterministically-ordered, yet they're both shoved into a singular queue
+          // The order at which they're shoved in together isn't deterministic
+          //
+          // This is safe so long as Tributary and Substrate messages don't both expect mutable
+          // references over the same data
+          handle_coordinator_msg(
+            &mut txn1,
+            &network,
+            &mut coordinator,
+            &mut tributary_mutable,
+            &mut substrate_mutable,
+            &msg,
+          ).await;
+        }
+
+        outer_msg = Some(msg);
+      },
+
+      msg = substrate_mutable.next_event(&mut txn2) => {
+        match msg {
+          MultisigEvent::Batches(batches) => {
+            // Start signing this batch
+            for batch in batches {
+              info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
+
+              if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
+                substrate_signer.sign(&mut txn2, batch).await;
+              }
+            }
+          },
+          MultisigEvent::Completed(key, id, tx) => {
+            if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
+              signer.completed(&mut txn2, id, tx);
+            }
+          }
+        }
+      },
+    }
+
     // Check if the signers have events
-    // The signers will only have events after the following select executes, which will then
-    // trigger the loop again, hence why having the code here with no timer is fine
-    // These events may be dropped on a sudden reboot, yet due to signing re-attempts, this is fine
+    // The signers will only have events after the above select executes, so having no timeout on
+    // the above is fine
+    // TODO: Have the Signers return these events, allowing removing these channels?
     for (key, signer) in tributary_mutable.signers.iter_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
@@ -492,8 +555,6 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       }
     }
 
-    // TODO: These events cannot be dropped. Run this after handling the message, before txn
-    // commit?
     if let Some(signer) = tributary_mutable.substrate_signer.as_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
@@ -511,67 +572,10 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       }
     }
 
-    tokio::select! {
-      // This blocks the entire processor until it finishes handling this message
-      // KeyGen specifically may take a notable amount of processing time
-      // While that shouldn't be an issue in practice, as after processing an attempt it'll handle
-      // the other messages in the queue, it may be beneficial to parallelize these
-      // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
-      msg = coordinator.recv() => {
-        assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
-        last_coordinator_msg = Some(msg.id);
-
-        // Only handle this if we haven't already
-        if !main_db.handled_message(msg.id) {
-          let mut txn = raw_db.txn();
-          MainDb::<N, D>::handle_message(&mut txn, msg.id);
-
-          // This is isolated to better think about how its ordered, or rather, about how the other
-          // cases aren't ordered
-          //
-          // While the coordinator messages are ordered, they're not deterministically ordered
-          // Tributary-caused messages are deterministically ordered, and Substrate-caused messages
-          // are deterministically-ordered, yet they're both shoved into a singular queue
-          // The order at which they're shoved in together isn't deterministic
-          //
-          // This is safe so long as Tributary and Substrate messages don't both expect mutable
-          // references over the same data
-          handle_coordinator_msg(
-            &mut txn,
-            &network,
-            &mut coordinator,
-            &mut tributary_mutable,
-            &mut substrate_mutable,
-            &msg,
-          ).await;
-
-          txn.commit();
-        }
-
-        coordinator.ack(msg).await;
-      },
-
-      (mut txn, msg) = substrate_mutable.next_event(&mut raw_db_two) => {
-        match msg {
-          MultisigEvent::Batches(batches) => {
-            // Start signing this batch
-            for batch in batches {
-              info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
-
-              if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-                substrate_signer.sign(&mut txn, batch).await;
-              }
-            }
-          },
-          MultisigEvent::Completed(key, id, tx) => {
-            if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
-              signer.completed(&mut txn, id, tx);
-            }
-          }
-        }
-
-        txn.commit();
-      },
+    txn1.commit();
+    txn2.commit();
+    if let Some(msg) = outer_msg {
+      coordinator.ack(msg).await;
     }
   }
 }
