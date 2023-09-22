@@ -516,7 +516,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
             This last case isn't true. Committing seen/latest_scanned_block happens after
             relinquishing the write lock.
 
-            TODO: Only update ram_outputs after committing the TXN in question.
+            TODO2: Only update ram_outputs after committing the TXN in question.
           */
           let seen = ScannerDb::<N, D>::seen(&db, &id);
           let id = id.as_ref().to_vec();

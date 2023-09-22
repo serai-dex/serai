@@ -147,8 +147,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       break;
     }
 
-    // TODO: Sanity check we got an AckBlock (or this is the AckBlock) for the block in
-    // question
+    // TODO2: Sanity check we got an AckBlock (or this is the AckBlock) for the block in question
 
     /*
     let synced = |context: &SubstrateContext, key| -> Result<(), ()> {
@@ -419,7 +418,7 @@ async fn boot<N: Network, D: Db>(
 
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
-    // TODO2: This uses most recent as signer, use the active one
+    // TODO: This uses most recent as signer, use the active one
     substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
 
     // The Scanner re-fires events as needed for substrate_signer yet not signer

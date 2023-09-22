@@ -208,7 +208,7 @@ impl<D: Db> SubstrateSigner<D> {
     // b"substrate" is a literal from sp-core
     let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), self.keys.clone());
 
-    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same purpose
+    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
     // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
     // message, send distinct preprocess, and then attempt a signing session premised on the former
     // with the latter

@@ -691,7 +691,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             instruction
           } else {
             if !output.data().is_empty() {
-              // TODO: Refund
+              // TODO2: Refund
               continue;
             }
 
@@ -700,7 +700,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             {
               instruction
             } else {
-              // TODO: Refund
+              // TODO2: Refund
               continue;
             }
           };
