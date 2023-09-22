@@ -62,6 +62,7 @@ fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructi
   Some(InInstructionWithBalance { instruction: instruction.instruction, balance: output.balance() })
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum RotationStep {
   // Use the existing multisig for all actions (steps 1-3)
   UseExisting,
@@ -244,7 +245,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
   }
 
-  fn burns_to_payments(burns: Vec<OutInstructionWithBalance>) -> Vec<Payment<N>> {
+  // Convert new Burns to Payments.
+  //
+  // Also moves payments from the old Scheduler to the new multisig if the step calls for it.
+  fn burns_to_payments(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    step: RotationStep,
+    burns: Vec<OutInstructionWithBalance>,
+  ) -> (Vec<Payment<N>>, Vec<Payment<N>>) {
     let mut payments = vec![];
     for out in burns {
       let OutInstructionWithBalance { instruction: OutInstruction { address, data }, balance } =
@@ -260,7 +269,19 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         });
       }
     }
-    payments
+
+    let payments = payments;
+    match step {
+      RotationStep::UseExisting | RotationStep::NewAsChange => (payments, vec![]),
+      RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => {
+        // Consume any payments the prior scheduler was unable to complete
+        // This should only actually matter once
+        let mut new_payments = self.existing.as_mut().unwrap().scheduler.consume_payments::<D>(txn);
+        // Add the new payments
+        new_payments.extend(payments);
+        (vec![], new_payments)
+      }
+    }
   }
 
   fn split_outputs_by_key(&self, outputs: Vec<N::Output>) -> (Vec<N::Output>, Vec<N::Output>) {
@@ -284,9 +305,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   fn filter_outputs_due_to_forwarding(
     &self,
     txn: &mut D::Transaction<'_>,
-    plans: &mut Vec<Plan<N>>,
     existing_outputs: &mut Vec<N::Output>,
-  ) {
+  ) -> Vec<Plan<N>> {
     // Manually create a Plan for all External outputs needing forwarding/refunding
     // Branch and Change will be handled by the below Scheduler call
 
@@ -309,6 +329,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       TODO: Add a fourth address, forwarded_address, to prevent this.
     */
 
+    let mut plans = vec![];
     existing_outputs.retain(|output| {
       if output.kind() == OutputType::External {
         if let Some(instruction) = instruction_from_output::<N>(output) {
@@ -335,15 +356,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         true
       }
     });
+    plans
   }
 
   // Filter newly received outputs due to the step being RotationStep::ClosingExisting.
   fn filter_outputs_due_to_closing(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    plans: &mut Vec<Plan<N>>,
     existing_outputs: &mut Vec<N::Output>,
-  ) {
+  ) -> Vec<Plan<N>> {
     /*
       The document says to only handle outputs we created. We don't know what outputs we
       created. We do have an ordered view of equivalent outputs however, and can assume the
@@ -452,6 +473,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
          External outputs.
     */
 
+    let mut plans = vec![];
     existing_outputs.retain(|output| {
       match output.kind() {
         OutputType::External => false,
@@ -501,6 +523,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         }
       }
     });
+    plans
   }
 
   /// Handle a SubstrateBlock event, building the relevant Plans.
@@ -518,21 +541,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     // Determine what step of rotation we're currently in
     let step = self.current_rotation_step(block_number);
 
-    let (existing_payments, new_payments) = {
-      let payments = Self::burns_to_payments(burns);
-      match step {
-        RotationStep::UseExisting | RotationStep::NewAsChange => (payments, vec![]),
-        RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => {
-          // Consume any payments the prior scheduler was unable to complete
-          // This should only actually matter once
-          let mut new_payments =
-            self.existing.as_mut().unwrap().scheduler.consume_payments::<D>(txn);
-          // Add the new payments
-          new_payments.extend(payments);
-          (vec![], new_payments)
-        }
-      }
-    };
+    let (existing_payments, new_payments) = self.burns_to_payments(txn, step, burns);
 
     // We now have to acknowledge the acknowledged block, if it's new
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
@@ -548,16 +557,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       self.split_outputs_by_key(outputs)
     };
 
-    let mut plans = vec![];
-    match step {
-      RotationStep::UseExisting | RotationStep::NewAsChange => {}
+    let mut plans = match step {
+      RotationStep::UseExisting | RotationStep::NewAsChange => vec![],
       RotationStep::ForwardFromExisting => {
-        self.filter_outputs_due_to_forwarding(txn, &mut plans, &mut existing_outputs)
+        self.filter_outputs_due_to_forwarding(txn, &mut existing_outputs)
       }
       RotationStep::ClosingExisting => {
-        self.filter_outputs_due_to_closing(txn, &mut plans, &mut existing_outputs)
+        self.filter_outputs_due_to_closing(txn, &mut existing_outputs)
       }
-    }
+    };
 
     // TODO: Do we want a singular Plan Vec?
     plans.extend({
@@ -581,6 +589,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     });
 
     for plan in &plans {
+      assert_eq!(plan.key, self.existing.as_ref().unwrap().key);
       if plan.change == Some(N::change_address(plan.key)) {
         // Assert these are only created during the expected step
         // TODO: Check when we register the Eventuality for this Plan, the step isn't
