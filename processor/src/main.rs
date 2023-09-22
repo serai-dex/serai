@@ -6,7 +6,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use log::{info, warn};
-use tokio::time::sleep;
+use tokio::{sync::RwLock, time::sleep};
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
@@ -459,17 +459,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
   let (main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &network).await;
 
-  // A second DB handle, as Rust can't detect the following branches only ever modifying the single
-  // handle once at a time
-  // This clone prevents needing a RwLock wrapper
-  let mut raw_db_two = raw_db.clone();
-
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   let mut last_coordinator_msg = None;
 
   loop {
-    let mut txn1 = raw_db.txn();
-    let mut txn2 = raw_db_two.txn();
+    // The following select uses this txn in both branches, hence why needing a RwLock to pass it
+    // around is needed
+    let txn = RwLock::new(raw_db.txn());
 
     let mut outer_msg = None;
 
@@ -480,12 +476,15 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       // the other messages in the queue, it may be beneficial to parallelize these
       // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
+        let mut txn = txn.write().await;
+        let txn = &mut txn;
+
         assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
         last_coordinator_msg = Some(msg.id);
 
         // Only handle this if we haven't already
         if !main_db.handled_message(msg.id) {
-          MainDb::<N, D>::handle_message(&mut txn1, msg.id);
+          MainDb::<N, D>::handle_message(txn, msg.id);
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered
@@ -498,7 +497,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           // This is safe so long as Tributary and Substrate messages don't both expect mutable
           // references over the same data
           handle_coordinator_msg(
-            &mut txn1,
+            &mut **txn,
             &network,
             &mut coordinator,
             &mut tributary_mutable,
@@ -510,7 +509,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         outer_msg = Some(msg);
       },
 
-      msg = substrate_mutable.next_event(&mut txn2) => {
+      msg = substrate_mutable.next_event(&txn) => {
+        let mut txn = txn.write().await;
+        let txn = &mut txn;
         match msg {
           MultisigEvent::Batches(batches) => {
             // Start signing this batch
@@ -518,13 +519,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-                substrate_signer.sign(&mut txn2, batch).await;
+                substrate_signer.sign(txn, batch).await;
               }
             }
           },
           MultisigEvent::Completed(key, id, tx) => {
             if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
-              signer.completed(&mut txn2, id, tx);
+              signer.completed(txn, id, tx);
             }
           }
         }
@@ -572,8 +573,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       }
     }
 
-    txn1.commit();
-    txn2.commit();
+    txn.into_inner().commit();
     if let Some(msg) = outer_msg {
       coordinator.ack(msg).await;
     }
