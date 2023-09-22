@@ -472,17 +472,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
              External outputs.
         */
 
-        // TODO: This has a fault
-        // We can use a distinct output to fulfill a Branch, and if we do, we'll drop the Branch
-        // output here
-        // Only let Branch outputs fulfill Branches
         existing_outputs.retain(|output| {
           match output.kind() {
-            // While the above says to simply drop External, if it's usable as a Branch, why not?
-            // Minor efficiency which should never matter in real life
-            // The Scheduler itself uses this same trick, though it may actually come up in real
-            // life then
-            OutputType::External | OutputType::Branch => {
+            OutputType::External => false,
+            OutputType::Branch => {
               // We could simply call can_use_branch, yet it'd have an edge case where if we
               // receive two outputs for 100, and we could use one such output, we'd handle both.
               //

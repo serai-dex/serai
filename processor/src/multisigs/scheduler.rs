@@ -6,7 +6,7 @@ use std::{
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::{
-  networks::{Output, Network},
+  networks::{OutputType, Output, Network},
   DbTxn, Db, Payment, Plan,
 };
 
@@ -222,28 +222,28 @@ impl<N: Network> Scheduler<N> {
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
-      // If we can fulfill planned TXs with this output, do so
-      // We could limit this to UTXOs where `utxo.kind() == OutputType::Branch`, yet there's no
-      // practical benefit in doing so
       // TODO: Review how we handle an Eventuality creating a branch being resolved without a Plan
       // to continue
-      let amount = utxo.amount();
-      if let Some(plans) = self.plans.get_mut(&amount) {
-        // Execute the first set of payments possible with an output of this amount
-        let payments = plans.pop_front().unwrap();
-        // They won't be equal if we dropped payments due to being dust
-        assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+      if utxo.kind() == OutputType::Branch {
+        let amount = utxo.amount();
+        if let Some(plans) = self.plans.get_mut(&amount) {
+          // Execute the first set of payments possible with an output of this amount
+          let payments = plans.pop_front().unwrap();
+          // They won't be equal if we dropped payments due to being dust
+          assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
 
-        // If we've grabbed the last plan for this output amount, remove it from the map
-        if plans.is_empty() {
-          self.plans.remove(&amount);
+          // If we've grabbed the last plan for this output amount, remove it from the map
+          if plans.is_empty() {
+            self.plans.remove(&amount);
+          }
+
+          // Create a TX for these payments
+          txs.push(self.execute(vec![utxo], payments, key_for_any_change));
+          continue;
         }
-
-        // Create a TX for these payments
-        txs.push(self.execute(vec![utxo], payments, key_for_any_change));
-      } else {
-        self.utxos.push(utxo);
       }
+
+      self.utxos.push(utxo);
     }
 
     log::info!("{} planned TXs have had their required inputs confirmed", txs.len());
