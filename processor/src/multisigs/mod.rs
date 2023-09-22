@@ -238,12 +238,23 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
 
     let Some(new) = self.new.as_ref() else { return RotationStep::UseExisting };
+
     // Period numbering here has no meaning other than these the time values useful here, and the
     // order they're built in. They have no reference/shared marker with anything else
+
+    // ESTIMATED_BLOCK_TIME_IN_SECONDS is fine to use here. While inaccurate, it shouldn't be
+    // drastically off, and even if it is, it's a hiccup to latency handling only possible when
+    // rotating. The error rate wouldn't be acceptable if it was allowed to accumulate over time,
+    // yet rotation occurs on Serai's clock, disconnecting any errors here from any prior.
+
+    // N::CONFIRMATIONS + 10 minutes
     let period_1_start = new.activation_block +
       N::CONFIRMATIONS +
       ceil_div(10 * 60, N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
+
+    // N::CONFIRMATIONS
     let period_2_start = period_1_start + N::CONFIRMATIONS;
+
     // 6 hours after period 2
     let period_3_start = period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
 
