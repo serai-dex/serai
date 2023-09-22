@@ -1,5 +1,4 @@
 use core::time::Duration;
-use std::collections::{VecDeque, HashMap};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
@@ -37,7 +36,6 @@ use scheduler::Scheduler;
 use crate::{
   Get, Db, Payment, PostFeeBranch, Plan,
   networks::{OutputType, Output, Transaction, SignableTransaction, Block, Network, get_block},
-  Signer,
 };
 
 // InInstructionWithBalance from an external output
@@ -421,9 +419,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       resolution. They are guaranteed to be known within `CONFIRMATIONS-1` blocks however, due
       to the limitation on how far we'll scan ahead.
 
-      TODO: Make sure we don't release the Scanner lock between ack_block and
-      register_eventuality.
-
       This means we will know of all Eventualities related to Change outputs we need to forward
       before the 6 hour period begins (as forwarding outputs will not create any Change outputs
       to the existing multisig).
@@ -526,35 +521,29 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     plans
   }
 
-  /// Handle a SubstrateBlock event, building the relevant Plans.
-  pub async fn substrate_block(
+  // Returns the Plans caused from a block being acknowledged.
+  async fn plans_from_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    context: SubstrateContext,
+    block_number: usize,
+    block_id: <N::Block as Block<N>>::Id,
+    step: RotationStep,
     burns: Vec<OutInstructionWithBalance>,
-  ) -> Vec<Plan<N>> {
-    let mut block_id = <N::Block as Block<N>>::Id::default();
-    block_id.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
-    let block_number = ScannerHandle::<N, D>::block_number(txn, &block_id)
-      .expect("SubstrateBlock with context we haven't synced");
-
-    // Determine what step of rotation we're currently in
-    let step = self.current_rotation_step(block_number);
-
+  ) -> (bool, Vec<Plan<N>>) {
     let (existing_payments, new_payments) = self.burns_to_payments(txn, step, burns);
 
     // We now have to acknowledge the acknowledged block, if it's new
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
-    let (mut existing_outputs, new_outputs) = {
-      let outputs = if ScannerHandle::<N, D>::db_scanned(txn)
+    let (acquired_lock, (mut existing_outputs, new_outputs)) = {
+      let (acquired_lock, outputs) = if ScannerHandle::<N, D>::db_scanned(txn)
         .expect("published a Batch despite never scanning a block") <
         block_number
       {
-        self.scanner.ack_block(txn, block_id.clone()).await
+        (true, self.scanner.ack_block(txn, block_id.clone()).await)
       } else {
-        vec![]
+        (false, vec![])
       };
-      self.split_outputs_by_key(outputs)
+      (acquired_lock, self.split_outputs_by_key(outputs))
     };
 
     let mut plans = match step {
@@ -608,86 +597,102 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
 
-    plans
+    (acquired_lock, plans)
   }
 
-  // TODO: Merge this with the above function?
-  pub async fn sign_plans(
+  /// Handle a SubstrateBlock event, building the relevant Plans.
+  pub async fn substrate_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
     network: &N,
     context: SubstrateContext,
-    signers: &mut HashMap<Vec<u8>, Signer<N, D>>,
-    plans: Vec<Plan<N>>,
-  ) {
-    let mut plans = VecDeque::from(plans);
+    burns: Vec<OutInstructionWithBalance>,
+  ) -> (bool, Vec<(<N::Curve as Ciphersuite>::G, [u8; 32], N::SignableTransaction, N::Eventuality)>)
+  {
+    let mut block_id = <N::Block as Block<N>>::Id::default();
+    block_id.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
+    let block_number = ScannerHandle::<N, D>::block_number(txn, &block_id)
+      .expect("SubstrateBlock with context we haven't synced");
 
-    let mut block_hash = <N::Block as Block<N>>::Id::default();
-    block_hash.as_mut().copy_from_slice(&context.network_latest_finalized_block.0);
-    // block_number call is safe since it access a piece of static data
-    let block_number = ScannerHandle::<N, D>::block_number(txn, &block_hash)
-      .expect("told to sign_plans on a context we're not synced to");
+    // Determine what step of rotation we're currently in
+    let step = self.current_rotation_step(block_number);
 
-    let fee = get_fee(network, block_number).await;
+    // Get the Plans from this block
+    let (acquired_lock, plans) =
+      self.plans_from_block(txn, block_number, block_id, step, burns).await;
 
-    while let Some(plan) = plans.pop_front() {
-      let id = plan.id();
-      info!("preparing plan {}: {:?}", hex::encode(id), plan);
+    let res = {
+      let mut res = Vec::with_capacity(plans.len());
+      let fee = get_fee(network, block_number).await;
 
-      let key = plan.key;
-      let key_bytes = key.to_bytes();
-      MultisigsDb::<N, D>::save_active_plan(
-        txn,
-        key_bytes.as_ref(),
-        block_number.try_into().unwrap(),
-        &plan,
-      );
-      let to_be_forwarded =
-        MultisigsDb::<N, D>::take_to_be_forwarded_output_instruction(txn, plan.inputs[0].id());
-      if to_be_forwarded.is_some() {
-        assert_eq!(plan.inputs.len(), 1);
-      }
-      let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
+      for plan in plans {
+        let id = plan.id();
+        info!("preparing plan {}: {:?}", hex::encode(id), plan);
 
-      // If this is a Plan for an output we're forwarding, we need to save the InInstruction for
-      // its output under the amount successfully forwarded
-      if let Some(mut instruction) = to_be_forwarded {
-        // If we can't successfully create a forwarding TX, simply drop this
-        if let Some(tx) = &tx {
-          instruction.balance.amount.0 -= tx.0.fee();
-          MultisigsDb::<N, D>::save_forwarded_output(txn, instruction);
+        let key = plan.key;
+        let key_bytes = key.to_bytes();
+        MultisigsDb::<N, D>::save_active_plan(
+          txn,
+          key_bytes.as_ref(),
+          block_number.try_into().unwrap(),
+          &plan,
+        );
+        let to_be_forwarded =
+          MultisigsDb::<N, D>::take_to_be_forwarded_output_instruction(txn, plan.inputs[0].id());
+        if to_be_forwarded.is_some() {
+          assert_eq!(plan.inputs.len(), 1);
         }
-      }
+        let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
 
-      for branch in branches {
-        let existing = self.existing.as_mut().unwrap();
-        let to_use = if key == existing.key {
-          existing
-        } else {
-          let new = self
-            .new
-            .as_mut()
-            .expect("plan wasn't for existing multisig yet there wasn't a new multisig");
-          assert_eq!(key, new.key);
-          new
-        };
-
-        to_use.scheduler.created_output::<D>(txn, branch.expected, branch.actual);
-      }
-
-      if let Some((tx, eventuality)) = tx {
-        self
-          .scanner
-          .register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone())
-          .await;
-
-        if let Some(signer) = signers.get_mut(key_bytes.as_ref()) {
-          signer.sign_transaction(txn, id, tx, eventuality).await;
+        // If this is a Plan for an output we're forwarding, we need to save the InInstruction for
+        // its output under the amount successfully forwarded
+        if let Some(mut instruction) = to_be_forwarded {
+          // If we can't successfully create a forwarding TX, simply drop this
+          if let Some(tx) = &tx {
+            instruction.balance.amount.0 -= tx.0.fee();
+            MultisigsDb::<N, D>::save_forwarded_output(txn, instruction);
+          }
         }
-      }
 
-      // TODO: If the TX is None, should we restore its inputs to the scheduler?
-    }
+        for branch in branches {
+          let existing = self.existing.as_mut().unwrap();
+          let to_use = if key == existing.key {
+            existing
+          } else {
+            let new = self
+              .new
+              .as_mut()
+              .expect("plan wasn't for existing multisig yet there wasn't a new multisig");
+            assert_eq!(key, new.key);
+            new
+          };
+
+          to_use.scheduler.created_output::<D>(txn, branch.expected, branch.actual);
+        }
+
+        if let Some((tx, eventuality)) = tx {
+          // The main function we return to will send an event to the coordinator which must be
+          // fired before these registered Eventualities have their Completions fired
+          // Safety is derived from a mutable lock on the Scanner being preserved, preventing
+          // scanning (and detection of Eventuality resolutions) before it's released
+          // It's only released by the main function after it does what it will
+          self
+            .scanner
+            .register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone())
+            .await;
+
+          res.push((key, id, tx, eventuality));
+        }
+
+        // TODO: If the TX is None, should we restore its inputs to the scheduler?
+      }
+      res
+    };
+    (acquired_lock, res)
+  }
+
+  pub async fn release_scanner_lock(&mut self) {
+    self.scanner.release_lock().await;
   }
 
   fn scanner_event_to_multisig_event(

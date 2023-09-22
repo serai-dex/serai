@@ -336,29 +336,35 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             }
           }
 
-          let plans = substrate_mutable.substrate_block(txn, context, burns).await;
+          let (acquired_lock, to_sign) =
+            substrate_mutable.substrate_block(txn, network, context, burns).await;
 
+          // Send SubstrateBlockAck, with relevant plan IDs, before we trigger the signing of
+          // these plans
           // TODO: Only send this if we're active?
           coordinator
-            .send(ProcessorMessage::Coordinator(
+            .send(messages::ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
                 network: N::NETWORK,
                 block: substrate_block,
-                plans: plans.iter().map(|plan| plan.id()).collect(),
+                plans: to_sign.iter().map(|signable| signable.1).collect(),
               },
             ))
             .await;
 
-          substrate_mutable
-            .sign_plans(
-              txn,
-              network,
-              context,
-              // See commentary in TributaryMutable for why this is safe
-              &mut tributary_mutable.signers,
-              plans,
-            )
-            .await;
+          // See commentary in TributaryMutable for why this is safe
+          let signers = &mut tributary_mutable.signers;
+          for (key, id, tx, eventuality) in to_sign {
+            if let Some(signer) = signers.get_mut(key.to_bytes().as_ref()) {
+              signer.sign_transaction(txn, id, tx, eventuality).await;
+            }
+          }
+
+          // This is not premature, even if this block had multiple `Batch`s created, as the first
+          // `Batch` alone will trigger all Plans/Eventualities/Signs
+          if acquired_lock {
+            substrate_mutable.release_scanner_lock().await;
+          }
         }
       }
     }
