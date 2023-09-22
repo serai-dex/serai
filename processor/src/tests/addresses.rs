@@ -62,6 +62,7 @@ async fn spend<N: Network, D: Db>(
       assert_eq!(outputs[0].kind(), OutputType::Change);
       let mut txn = db.txn();
       assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+      scanner.release_lock().await;
       txn.commit();
       outputs
     }
@@ -111,6 +112,7 @@ pub async fn test_addresses<N: Network>(network: N) {
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         let mut txn = db.txn();
         assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+        scanner.release_lock().await;
         txn.commit();
         outputs
       }

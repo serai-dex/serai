@@ -77,6 +77,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   let mut cloned_db = db.clone();
   let mut txn = cloned_db.txn();
   assert_eq!(scanner.ack_block(&mut txn, block_id).await, outputs);
+  scanner.release_lock().await;
   txn.commit();
 
   // There should be no more events

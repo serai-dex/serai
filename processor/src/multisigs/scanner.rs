@@ -11,7 +11,7 @@ use frost::curve::Ciphersuite;
 
 use log::{info, debug, warn};
 use tokio::{
-  sync::{RwLock, mpsc},
+  sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, mpsc},
   time::sleep,
 };
 
@@ -189,29 +189,53 @@ pub struct Scanner<N: Network, D: Db> {
   events: mpsc::UnboundedSender<ScannerEvent<N>>,
 }
 
+#[derive(Clone, Debug)]
+struct ScannerHold<N: Network, D: Db> {
+  scanner: Arc<RwLock<Option<Scanner<N, D>>>>,
+}
+impl<N: Network, D: Db> ScannerHold<N, D> {
+  async fn read(&self) -> RwLockReadGuard<'_, Option<Scanner<N, D>>> {
+    loop {
+      let lock = self.scanner.read().await;
+      if lock.is_none() {
+        drop(lock);
+        tokio::task::yield_now().await;
+        continue;
+      }
+      return lock;
+    }
+  }
+  async fn write(&self) -> RwLockWriteGuard<'_, Option<Scanner<N, D>>> {
+    loop {
+      let lock = self.scanner.write().await;
+      if lock.is_none() {
+        drop(lock);
+        tokio::task::yield_now().await;
+        continue;
+      }
+      return lock;
+    }
+  }
+  // This is safe to not check if something else already acquired the Scanner as the only caller is
+  // sequential.
+  async fn long_term_acquire(&self) -> Scanner<N, D> {
+    self.scanner.write().await.take().unwrap()
+  }
+  async fn restore(&self, scanner: Scanner<N, D>) {
+    let _ = self.scanner.write().await.insert(scanner);
+  }
+}
+
 #[derive(Debug)]
 pub struct ScannerHandle<N: Network, D: Db> {
-  scanner: Arc<RwLock<Scanner<N, D>>>,
+  scanner: ScannerHold<N, D>,
+  held_scanner: Option<Scanner<N, D>>,
   pub events: ScannerEventChannel<N>,
 }
 
 impl<N: Network, D: Db> ScannerHandle<N, D> {
   pub async fn ram_scanned(&self) -> usize {
-    self.scanner.read().await.ram_scanned.unwrap_or(0)
-  }
-
-  pub async fn register_eventuality(
-    &mut self,
-    key: &[u8],
-    block_number: usize,
-    id: [u8; 32],
-    eventuality: N::Eventuality,
-  ) {
-    self.scanner.write().await.eventualities.get_mut(key).unwrap().register(
-      block_number,
-      id,
-      eventuality,
-    )
+    self.scanner.read().await.as_ref().unwrap().ram_scanned.unwrap_or(0)
   }
 
   /// Register a key to scan for.
@@ -221,7 +245,8 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     activation_number: usize,
     key: <N::Curve as Ciphersuite>::G,
   ) {
-    let mut scanner = self.scanner.write().await;
+    let mut scanner_lock = self.scanner.write().await;
+    let scanner = scanner_lock.as_mut().unwrap();
     assert!(
       activation_number > scanner.ram_scanned.unwrap_or(0),
       "activation block of new keys was already scanned",
@@ -254,6 +279,9 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
   /// Acknowledge having handled a block.
   ///
+  /// Creates a lock over the Scanner, preventing its independent scanning operations until
+  /// released.
+  ///
   /// This must only be called on blocks which have been scanned in-memory.
   pub async fn ack_block(
     &mut self,
@@ -262,7 +290,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
   ) -> Vec<N::Output> {
     debug!("block {} acknowledged", hex::encode(&id));
 
-    let mut scanner = self.scanner.write().await;
+    let mut scanner = self.scanner.long_term_acquire().await;
 
     // Get the number for this block
     let number = ScannerDb::<N, D>::block_number(txn, &id)
@@ -279,7 +307,33 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     assert_eq!(scanner.need_ack.pop_front().unwrap(), number);
 
+    self.held_scanner = Some(scanner);
+
     outputs
+  }
+
+  pub async fn register_eventuality(
+    &mut self,
+    key: &[u8],
+    block_number: usize,
+    id: [u8; 32],
+    eventuality: N::Eventuality,
+  ) {
+    let mut lock;
+    (if let Some(scanner) = self.held_scanner.as_mut() {
+      scanner
+    } else {
+      lock = Some(self.scanner.write().await);
+      lock.as_mut().unwrap().as_mut().unwrap()
+    })
+    .eventualities
+    .get_mut(key)
+    .unwrap()
+    .register(block_number, id, eventuality)
+  }
+
+  pub async fn release_lock(&mut self) {
+    self.scanner.restore(self.held_scanner.take().unwrap()).await
   }
 }
 
@@ -299,23 +353,25 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
     let ram_scanned = ScannerDb::<N, D>::latest_scanned_block(&db);
 
-    let scanner = Arc::new(RwLock::new(Scanner {
-      _db: PhantomData,
+    let scanner = ScannerHold {
+      scanner: Arc::new(RwLock::new(Some(Scanner {
+        _db: PhantomData,
 
-      keys: keys.clone(),
+        keys: keys.clone(),
 
-      eventualities,
+        eventualities,
 
-      ram_scanned,
-      ram_outputs: HashSet::new(),
+        ram_scanned,
+        ram_outputs: HashSet::new(),
 
-      need_ack: VecDeque::new(),
+        need_ack: VecDeque::new(),
 
-      events: events_send,
-    }));
+        events: events_send,
+      }))),
+    };
     tokio::spawn(Scanner::run(db, network, scanner.clone()));
 
-    (ScannerHandle { scanner, events: events_recv }, keys)
+    (ScannerHandle { scanner, held_scanner: None, events: events_recv }, keys)
   }
 
   fn emit(&mut self, event: ScannerEvent<N>) -> bool {
@@ -327,14 +383,16 @@ impl<N: Network, D: Db> Scanner<N, D> {
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
-  async fn run(mut db: D, network: N, scanner: Arc<RwLock<Self>>) {
+  async fn run(mut db: D, network: N, scanner: ScannerHold<N, D>) {
     loop {
       let (ram_scanned, latest_block_to_scan) = {
         // Sleep 5 seconds to prevent hammering the node/scanner lock
         sleep(Duration::from_secs(5)).await;
 
         let ram_scanned = {
-          let scanner = scanner.read().await;
+          let scanner_lock = scanner.read().await;
+          let scanner = scanner_lock.as_ref().unwrap();
+
           // If we're not scanning for keys yet, wait until we are
           if scanner.keys.is_empty() {
             continue;
@@ -376,7 +434,13 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
       for block_being_scanned in (ram_scanned + 1) ..= latest_block_to_scan {
         {
-          if let Some(needing_ack) = scanner.read().await.need_ack.front() {
+          let needing_ack = {
+            let scanner_lock = scanner.read().await;
+            let scanner = scanner_lock.as_ref().unwrap();
+            scanner.need_ack.front().cloned()
+          };
+
+          if let Some(needing_ack) = needing_ack {
             let limit = needing_ack + N::CONFIRMATIONS;
             assert!(block_being_scanned <= limit);
             if block_being_scanned == limit {
@@ -422,7 +486,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
         // Scan new blocks
         // TODO: This lock acquisition may be long-lived...
-        let mut scanner = scanner.write().await;
+        let mut scanner_lock = scanner.write().await;
+        let scanner = scanner_lock.as_mut().unwrap();
 
         let mut has_activation = false;
         let mut outputs = vec![];

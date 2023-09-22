@@ -59,6 +59,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   };
   let mut txn = db.txn();
   assert_eq!(scanner.ack_block(&mut txn, block_id.clone()).await, outputs);
+  scanner.release_lock().await;
   txn.commit();
 
   let mut txn = db.txn();
@@ -135,5 +136,6 @@ pub async fn test_wallet<N: Network>(network: N) {
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
   assert_eq!(scanner.ack_block(&mut txn, block.id()).await, outputs);
+  scanner.release_lock().await;
   txn.commit();
 }
