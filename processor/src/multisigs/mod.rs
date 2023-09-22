@@ -654,8 +654,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       ScannerEvent::Block { block, outputs } => {
         let mut block_hash = [0; 32];
         block_hash.copy_from_slice(block.as_ref());
-        // TODO: Move this out from Scanner now that the Scanner no longer handles batches
-        let mut batch_id = self.scanner.next_batch_id(txn);
+        let mut batch_id = MultisigsDb::<N, D>::next_batch_id(txn);
 
         // start with empty batch
         let mut batches = vec![Batch {
@@ -727,7 +726,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         }
 
         // Save the next batch ID
-        self.scanner.set_next_batch_id(txn, batch_id + 1);
+        MultisigsDb::<N, D>::set_next_batch_id(txn, batch_id + 1);
 
         MultisigEvent::Batches(batches)
       }

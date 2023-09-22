@@ -23,6 +23,18 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     D::key(b"MULTISIGS", dst, key)
   }
 
+  fn next_batch_key() -> Vec<u8> {
+    Self::multisigs_key(b"next_batch", [])
+  }
+  // Set the next batch ID to use
+  pub fn set_next_batch_id(txn: &mut D::Transaction<'_>, batch: u32) {
+    txn.put(Self::next_batch_key(), batch.to_le_bytes());
+  }
+  // Get the next batch ID
+  pub fn next_batch_id<G: Get>(getter: &G) -> u32 {
+    getter.get(Self::next_batch_key()).map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
+  }
+
   fn plan_key(id: &[u8]) -> Vec<u8> {
     Self::multisigs_key(b"plan", id)
   }

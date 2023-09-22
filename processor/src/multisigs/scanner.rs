@@ -114,9 +114,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
     getter.get(Self::seen_key(id)).is_some()
   }
 
-  fn next_batch_key() -> Vec<u8> {
-    Self::scanner_key(b"next_batch", [])
-  }
   fn outputs_key(block: &<N::Block as Block<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"outputs", block.as_ref())
   }
@@ -253,18 +250,6 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
   // Since the value is static, if it's set, it's correctly set
   pub fn block_number<G: Get>(getter: &G, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
     ScannerDb::<N, D>::block_number(getter, id)
-  }
-
-  // Set the next batch ID to use
-  pub fn set_next_batch_id(&self, txn: &mut D::Transaction<'_>, batch: u32) {
-    txn.put(ScannerDb::<N, D>::next_batch_key(), batch.to_le_bytes());
-  }
-
-  // Get the next batch ID
-  pub fn next_batch_id(&self, txn: &D::Transaction<'_>) -> u32 {
-    txn
-      .get(ScannerDb::<N, D>::next_batch_key())
-      .map_or(0, |v| u32::from_le_bytes(v.try_into().unwrap()))
   }
 
   /// Acknowledge having handled a block.
