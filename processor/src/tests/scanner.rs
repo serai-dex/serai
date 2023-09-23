@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use rand_core::OsRng;
 
-use frost::Participant;
+use frost::{Participant, tests::key_gen};
 
 use tokio::time::timeout;
 
@@ -86,4 +86,67 @@ pub async fn test_scanner<N: Network>(network: N) {
 
   // Create a new scanner off the current DB and make sure it also does nothing
   assert!(timeout(Duration::from_secs(30), new_scanner().await.events.recv()).await.is_err());
+}
+
+pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
+  // Mine blocks so there's a confirmed block
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
+  }
+
+  let mut db = MemDb::new();
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  assert!(current_keys.is_empty());
+
+  let mut txn = db.txn();
+  // Register keys to cause Block events at CONFIRMATIONS (dropped since first keys),
+  // CONFIRMATIONS + 1, and CONFIRMATIONS + 2
+  for i in 0 .. 3 {
+    scanner
+      .register_key(
+        &mut txn,
+        network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS + i,
+        {
+          let mut keys = key_gen(&mut OsRng);
+          for (_, keys) in keys.iter_mut() {
+            N::tweak_keys(keys);
+          }
+          keys[&Participant::new(1).unwrap()].group_key()
+        },
+      )
+      .await;
+  }
+  txn.commit();
+
+  for _ in 0 .. (3 * N::CONFIRMATIONS) {
+    network.mine_block().await;
+  }
+
+  let block_id =
+    match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
+      ScannerEvent::Block { block, outputs: _ } => {
+        scanner.multisig_completed.send(false).unwrap();
+        block
+      }
+      ScannerEvent::Completed(_, _, _, _) => {
+        panic!("unexpectedly got eventuality completion");
+      }
+    };
+
+  match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
+    ScannerEvent::Block { .. } => {}
+    ScannerEvent::Completed(_, _, _, _) => {
+      panic!("unexpectedly got eventuality completion");
+    }
+  };
+
+  // The ack_block acquisiton shows the Scanner isn't maintaining the lock on its own thread after
+  // emitting the Block event
+  // TODO: This is incomplete. Also test after emitting Completed
+  let mut txn = db.txn();
+  assert_eq!(scanner.ack_block(&mut txn, block_id).await, vec![]);
+  scanner.release_lock().await;
+  txn.commit();
+
+  scanner.multisig_completed.send(false).unwrap();
 }

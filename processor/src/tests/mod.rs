@@ -2,7 +2,7 @@ mod key_gen;
 pub(crate) use key_gen::test_key_gen;
 
 mod scanner;
-pub(crate) use scanner::test_scanner;
+pub(crate) use scanner::{test_scanner, test_no_deadlock_in_multisig_completed};
 
 mod signer;
 pub(crate) use signer::{sign, test_signer};
@@ -59,8 +59,12 @@ macro_rules! test_network {
     $signer: ident,
     $wallet: ident,
     $addresses: ident,
+    $no_deadlock_in_multisig_completed: ident,
   ) => {
-    use $crate::tests::{test_key_gen, test_scanner, test_signer, test_wallet, test_addresses};
+    use $crate::tests::{
+      test_key_gen, test_scanner, test_no_deadlock_in_multisig_completed, test_signer, test_wallet,
+      test_addresses,
+    };
 
     // This doesn't interact with a node and accordingly doesn't need to be run sequentially
     #[tokio::test]
@@ -91,6 +95,12 @@ macro_rules! test_network {
     async_sequential! {
       async fn $addresses() {
         test_addresses($network().await).await;
+      }
+    }
+
+    async_sequential! {
+      async fn $no_deadlock_in_multisig_completed() {
+        test_no_deadlock_in_multisig_completed($network().await).await;
       }
     }
   };

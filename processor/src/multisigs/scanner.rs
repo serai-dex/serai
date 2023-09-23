@@ -11,7 +11,7 @@ use frost::curve::Ciphersuite;
 
 use log::{info, debug, warn};
 use tokio::{
-  sync::{Mutex, RwLockReadGuard, RwLockWriteGuard, RwLock, mpsc},
+  sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, mpsc},
   time::sleep,
 };
 
@@ -191,7 +191,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 /// It MAY fire the same event multiple times.
 #[derive(Debug)]
 pub struct Scanner<N: Network, D: Db> {
-  db: D,
+  _db: PhantomData<D>,
 
   keys: Vec<(usize, <N::Curve as Ciphersuite>::G)>,
 
@@ -203,7 +203,6 @@ pub struct Scanner<N: Network, D: Db> {
   need_ack: VecDeque<usize>,
 
   events: mpsc::UnboundedSender<ScannerEvent<N>>,
-  multisig_completed: Mutex<mpsc::UnboundedReceiver<bool>>,
 }
 
 #[derive(Clone, Debug)]
@@ -375,7 +374,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
     let scanner = ScannerHold {
       scanner: Arc::new(RwLock::new(Some(Scanner {
-        db: db.clone(),
+        _db: PhantomData,
 
         keys: keys.clone(),
 
@@ -387,10 +386,9 @@ impl<N: Network, D: Db> Scanner<N, D> {
         need_ack: VecDeque::new(),
 
         events: events_send,
-        multisig_completed: Mutex::new(multisig_completed_recv),
       }))),
     };
-    tokio::spawn(Scanner::run(db, network, scanner.clone()));
+    tokio::spawn(Scanner::run(db, network, scanner.clone(), multisig_completed_recv));
 
     (
       ScannerHandle {
@@ -403,46 +401,28 @@ impl<N: Network, D: Db> Scanner<N, D> {
     )
   }
 
-  async fn emit(&mut self, block_number: usize, event: ScannerEvent<N>) -> bool {
+  async fn emit(&mut self, event: ScannerEvent<N>) -> bool {
     if self.events.send(event).is_err() {
       info!("Scanner handler was dropped. Shutting down?");
       return false;
-    }
-    let mut lock = self.multisig_completed.lock().await;
-    // TODO(now): This can deadlock if main tries to call ack_block while the Scanner thread tries
-    // to call emit
-    match lock.recv().await {
-      None => {
-        info!("Scanner handler was dropped. Shutting down?");
-        return false;
-      }
-      // Set the retirement block as block_number + CONFIRMATIONS
-      Some(true) => {
-        let mut txn = self.db.txn();
-        // The retiring key is the earliest one still around
-        let retiring_key = ScannerDb::<N, D>::keys(&txn)[0].1;
-        // This value is static w.r.t. the key
-        ScannerDb::<N, D>::save_retirement_block(
-          &mut txn,
-          &retiring_key,
-          block_number + N::CONFIRMATIONS,
-        );
-        txn.commit();
-      }
-      Some(false) => {}
     }
     true
   }
 
   // An async function, to be spawned on a task, to discover and report outputs
-  async fn run(mut db: D, network: N, scanner: ScannerHold<N, D>) {
+  async fn run(
+    mut db: D,
+    network: N,
+    scanner_hold: ScannerHold<N, D>,
+    mut multisig_completed: mpsc::UnboundedReceiver<bool>,
+  ) {
     loop {
       let (ram_scanned, latest_block_to_scan) = {
         // Sleep 5 seconds to prevent hammering the node/scanner lock
         sleep(Duration::from_secs(5)).await;
 
         let ram_scanned = {
-          let scanner_lock = scanner.read().await;
+          let scanner_lock = scanner_hold.read().await;
           let scanner = scanner_lock.as_ref().unwrap();
 
           // If we're not scanning for keys yet, wait until we are
@@ -485,9 +465,10 @@ impl<N: Network, D: Db> Scanner<N, D> {
       };
 
       for block_being_scanned in (ram_scanned + 1) ..= latest_block_to_scan {
+        // Redo the checks for if we're too far ahead
         {
           let needing_ack = {
-            let scanner_lock = scanner.read().await;
+            let scanner_lock = scanner_hold.read().await;
             let scanner = scanner_lock.as_ref().unwrap();
             scanner.need_ack.front().cloned()
           };
@@ -538,11 +519,12 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
         // Scan new blocks
         // TODO: This lock acquisition may be long-lived...
-        let mut scanner_lock = scanner.write().await;
+        let mut scanner_lock = scanner_hold.write().await;
         let scanner = scanner_lock.as_mut().unwrap();
 
         let mut has_activation = false;
         let mut outputs = vec![];
+        let mut completion_block_numbers = vec![];
         for (activation_number, key) in scanner.keys.clone() {
           if activation_number > block_being_scanned {
             continue;
@@ -572,11 +554,9 @@ impl<N: Network, D: Db> Scanner<N, D> {
               hex::encode(&tx.id())
             );
 
-            // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs.
-            if !scanner
-              .emit(block_number, ScannerEvent::Completed(key_vec.clone(), block_number, id, tx))
-              .await
-            {
+            completion_block_numbers.push(block_number);
+            // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs
+            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), block_number, id, tx)).await {
               return;
             }
           }
@@ -631,12 +611,60 @@ impl<N: Network, D: Db> Scanner<N, D> {
           scanner.ram_outputs.insert(id);
         }
 
+        // We could remove this, if instead of doing the first block which passed
+        // requirements + CONFIRMATIONS, we simply emitted an event for every block where
+        // `number % CONFIRMATIONS == 0` (once at the final stage for the existing multisig)
+        // There's no need at this point, yet the latter may be more suitable for modeling...
+        async fn check_multisig_completed<N: Network, D: Db>(
+          db: &mut D,
+          multisig_completed: &mut mpsc::UnboundedReceiver<bool>,
+          block_number: usize,
+        ) -> bool {
+          match multisig_completed.recv().await {
+            None => {
+              info!("Scanner handler was dropped. Shutting down?");
+              false
+            }
+            Some(completed) => {
+              // Set the retirement block as block_number + CONFIRMATIONS
+              if completed {
+                let mut txn = db.txn();
+                // The retiring key is the earliest one still around
+                let retiring_key = ScannerDb::<N, D>::keys(&txn)[0].1;
+                // This value is static w.r.t. the key
+                ScannerDb::<N, D>::save_retirement_block(
+                  &mut txn,
+                  &retiring_key,
+                  block_number + N::CONFIRMATIONS,
+                );
+                txn.commit();
+              }
+              true
+            }
+          }
+        }
+
+        drop(scanner_lock);
+        // Now that we've dropped the Scanner lock, we need to handle the multisig_completed
+        // channel before we decide if this block should be fired or not
+        // (holding the Scanner risks a deadlock)
+        for block_number in completion_block_numbers {
+          if !check_multisig_completed::<N, _>(&mut db, &mut multisig_completed, block_number).await
+          {
+            return;
+          };
+        }
+
+        // Reacquire the scanner
+        let mut scanner_lock = scanner_hold.write().await;
+        let scanner = scanner_lock.as_mut().unwrap();
+
         // Don't emit an event if:
         // - This isn't an activation block
         // - This isn't a retirement block
         // - There's not any outputs
         // as only those are blocks are meaningful and warrant obtaining synchrony over
-        if has_activation ||
+        let sent_block = if has_activation ||
           (!outputs.is_empty()) ||
           (ScannerDb::<N, D>::retirement_block(&db, &scanner.keys[0].1) ==
             Some(block_being_scanned))
@@ -647,18 +675,31 @@ impl<N: Network, D: Db> Scanner<N, D> {
           txn.commit();
 
           // Send all outputs
-          if !scanner
-            .emit(block_being_scanned, ScannerEvent::Block { block: block_id, outputs })
-            .await
-          {
+          if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }).await {
             return;
           }
 
           scanner.need_ack.push_back(block_being_scanned);
-        }
+          true
+        } else {
+          false
+        };
 
         // Update ram_scanned/need_ack
         scanner.ram_scanned = Some(block_being_scanned);
+
+        drop(scanner_lock);
+        // If we sent a Block event, once again check multisig_completed
+        if sent_block &&
+          (!check_multisig_completed::<N, _>(
+            &mut db,
+            &mut multisig_completed,
+            block_being_scanned,
+          )
+          .await)
+        {
+          return;
+        }
       }
     }
   }
