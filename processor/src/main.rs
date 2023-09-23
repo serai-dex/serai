@@ -189,8 +189,10 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
         tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-      // TODO(now): Don't immediately set this, set it once it's active
-      tributary_mutable.substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+      // TODO(now): Rotate to the new substrate_signer when the time comes
+      if set.session.0 == 0 {
+        tributary_mutable.substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+      }
       tributary_mutable
         .signers
         .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
@@ -338,18 +340,19 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let (acquired_lock, to_sign) =
             substrate_mutable.substrate_block(txn, network, context, burns).await;
 
-          // Send SubstrateBlockAck, with relevant plan IDs, before we trigger the signing of
-          // these plans
-          // TODO(now): Only send this if we're active?
-          coordinator
-            .send(messages::ProcessorMessage::Coordinator(
-              messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-                network: N::NETWORK,
-                block: substrate_block,
-                plans: to_sign.iter().map(|signable| signable.1).collect(),
-              },
-            ))
-            .await;
+          // Send SubstrateBlockAck, with relevant plan IDs, before we trigger the signing of these
+          // plans
+          if !tributary_mutable.signers.is_empty() {
+            coordinator
+              .send(messages::ProcessorMessage::Coordinator(
+                messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+                  network: N::NETWORK,
+                  block: substrate_block,
+                  plans: to_sign.iter().map(|signable| signable.1).collect(),
+                },
+              ))
+              .await;
+          }
 
           // See commentary in TributaryMutable for why this is safe
           let signers = &mut tributary_mutable.signers;
@@ -418,14 +421,18 @@ async fn boot<N: Network, D: Db>(
 
   let main_db = MainDb::<N, _>::new(raw_db.clone());
 
-  for key in &current_keys {
-    let (substrate_keys, network_keys) = key_gen.keys(key);
+  for (i, key) in current_keys.iter().enumerate() {
+    let Some((substrate_keys, network_keys)) = key_gen.keys(key) else { continue };
     let network_key = network_keys.group_key();
 
+    // If this is the oldest key, load the SubstrateSigner for it as the active SubstrateSigner
+    // The new key only takes responsibility once the old key is fully deprecated
+    //
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
-    // TODO(now): This uses most recent as signer, use the active one
-    substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+    if i == 0 {
+      substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
+    }
 
     // The Scanner re-fires events as needed for substrate_signer yet not signer
     // This is due to the transactions which we start signing from due to a block not being
