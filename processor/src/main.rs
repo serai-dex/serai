@@ -421,6 +421,7 @@ async fn boot<N: Network, D: Db>(
 
   for key in &current_keys {
     let (substrate_keys, network_keys) = key_gen.keys(key);
+    let network_key = network_keys.group_key();
 
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
@@ -439,13 +440,13 @@ async fn boot<N: Network, D: Db>(
 
     // Sign any TXs being actively signed
     let key = key.to_bytes();
-    // TODO(now): This needs to only be called for the relevant signer
-    for (id, tx, eventuality) in actively_signing.clone() {
-      // TODO(now): Move this into Signer::new?
-      let mut txn = raw_db.txn();
-      signer.sign_transaction(&mut txn, id, tx, eventuality).await;
-      // This should only have re-writes of existing data
-      drop(txn);
+    for (plan, tx, eventuality) in &actively_signing {
+      if plan.key == network_key {
+        let mut txn = raw_db.txn();
+        signer.sign_transaction(&mut txn, plan.id(), tx.clone(), eventuality.clone()).await;
+        // This should only have re-writes of existing data
+        drop(txn);
+      }
     }
 
     signers.insert(key.as_ref().to_vec(), signer);

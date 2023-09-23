@@ -130,7 +130,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   ) -> (
     Self,
     Vec<<N::Curve as Ciphersuite>::G>,
-    Vec<([u8; 32], N::SignableTransaction, N::Eventuality)>,
+    Vec<(Plan<N>, N::SignableTransaction, N::Eventuality)>,
   ) {
     // The scanner has no long-standing orders to re-issue
     let (mut scanner, current_keys) = Scanner::new(network.clone(), raw_db.clone());
@@ -156,7 +156,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
         let key_bytes = plan.key.to_bytes();
 
-        let (Some((tx, eventuality)), _) = prepare_send(network, block_number, fee, plan).await
+        let (Some((tx, eventuality)), _) =
+          prepare_send(network, block_number, fee, plan.clone()).await
         else {
           panic!("previously created transaction is no longer being created")
         };
@@ -164,7 +165,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         scanner
           .register_eventuality(key_bytes.as_ref(), block_number, id, eventuality.clone())
           .await;
-        actively_signing.push((id, tx, eventuality));
+        actively_signing.push((plan, tx, eventuality));
       }
     }
 
@@ -257,7 +258,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     // 6 hours after period 2
     // Also ensure 6 hours is greater than the amount of CONFIRMATIONS, for sanity purposes
-    let period_3_start = period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS).max(N::CONFIRMATIONS);
+    let period_3_start =
+      period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS).max(N::CONFIRMATIONS);
 
     if block_number < period_1_start {
       RotationStep::UseExisting
