@@ -185,12 +185,12 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
       .expect("Substrate finalized invalid point as a network's key");
 
-    // TODO: Only run the following block when participating
+    // TODO(now): Only run the following block when participating
     {
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
         tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-      // TODO: Don't immediately set this, set it once it's active
+      // TODO(now): Don't immediately set this, set it once it's active
       tributary_mutable.substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
       tributary_mutable
         .signers
@@ -341,7 +341,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
           // Send SubstrateBlockAck, with relevant plan IDs, before we trigger the signing of
           // these plans
-          // TODO: Only send this if we're active?
+          // TODO(now): Only send this if we're active?
           coordinator
             .send(messages::ProcessorMessage::Coordinator(
               messages::coordinator::ProcessorMessage::SubstrateBlockAck {
@@ -424,7 +424,7 @@ async fn boot<N: Network, D: Db>(
 
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
-    // TODO: This uses most recent as signer, use the active one
+    // TODO(now): This uses most recent as signer, use the active one
     substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
 
     // The Scanner re-fires events as needed for substrate_signer yet not signer
@@ -439,11 +439,9 @@ async fn boot<N: Network, D: Db>(
 
     // Sign any TXs being actively signed
     let key = key.to_bytes();
-    // TODO: This needs to only be called for the relevant signer
+    // TODO(now): This needs to only be called for the relevant signer
     for (id, tx, eventuality) in actively_signing.clone() {
-      // TODO: Reconsider if the Signer should have the eventuality, or if just the network/scanner
-      // should
-      // TODO: Move this into Signer::new?
+      // TODO(now): Move this into Signer::new?
       let mut txn = raw_db.txn();
       signer.sign_transaction(&mut txn, id, tx, eventuality).await;
       // This should only have re-writes of existing data

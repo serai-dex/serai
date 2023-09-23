@@ -502,7 +502,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
           let key_vec = key.to_bytes().as_ref().to_vec();
 
-          // TODO: Check for key deprecation
+          // TODO(now): Check for key deprecation
 
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
           for output in network.get_outputs(&block, key).await {
@@ -578,7 +578,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
         // Don't emit an event if:
         // - This isn't an activation block
-        // - This isn't a retirement block (TODO)
+        // - This isn't a retirement block (TODO(now))
         // - There's not any outputs
         // as only those are blocks are meaningful and warrant obtaining synchrony over
         if has_activation || (!outputs.is_empty()) {

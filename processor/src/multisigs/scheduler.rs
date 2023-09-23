@@ -91,7 +91,7 @@ impl<N: Network> Scheduler<N> {
     Ok(Scheduler { key, queued_plans, plans, utxos, payments })
   }
 
-  // TODO: Get rid of this
+  // TODO2: Get rid of this
   // We reserialize the entire scheduler on any mutation to save it to the DB which is horrible
   // We should have an incremental solution
   fn serialize(&self) -> Vec<u8> {
@@ -222,8 +222,8 @@ impl<N: Network> Scheduler<N> {
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
-      // TODO: Review how we handle an Eventuality creating a branch being resolved without a Plan
-      // to continue
+      // TODO(now): Review how we handle an Eventuality creating a branch being resolved without a
+      // Plan to continue
       if utxo.kind() == OutputType::Branch {
         let amount = utxo.amount();
         if let Some(plans) = self.plans.get_mut(&amount) {
@@ -449,7 +449,7 @@ impl<N: Network> Scheduler<N> {
     #[allow(clippy::unwrap_or_default)]
     self.plans.entry(actual).or_insert(VecDeque::new()).push_back(payments);
 
-    // TODO: This shows how ridiculous the serialize function is
+    // TODO2: This shows how ridiculous the serialize function is
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
   }
 }
