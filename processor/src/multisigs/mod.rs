@@ -723,7 +723,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           res.push((key, id, tx, eventuality));
         }
 
-        // TODO: If the TX is None, should we restore its inputs to the scheduler?
+        // TODO: If the TX is None, restore its inputs to the scheduler
+        // Otherwise, if the TX had a change output, dropping its inputs would burn funds
+        // Are there exceptional cases upon rotation?
       }
       res
     };

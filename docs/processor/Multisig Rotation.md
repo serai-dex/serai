@@ -140,13 +140,16 @@ The following timeline is established:
    multisig to face full liability for the invalid state, causing it to be fully
    slashed (as needed to reacquire any lost coins).
 
-   This MAY be short-circuitable if multisig `n - 1` transfers coins exceeding
-   the relevant Serai tokens' supply. Serai never expects to operate in an
-   over-solvent state, yet balance should trend upwards due to a flat fee
+   This would appear short-circuitable if multisig `n - 1` transfers coins
+   exceeding the relevant Serai tokens' supply. Serai never expects to operate
+   in an over-solvent state, yet balance should trend upwards due to a flat fee
    applied to each received output (preventing a griefing attack). Any balance
    greater than the tokens' supply may have had funds skimmed off the top, yet
    they'd still guarantee the solvency of Serai without any additional fees
-   passed to users.
+   passed to users. Unfortunately, due to the requirement to verify the `Batch`s
+   published (as else the Serai tokens' supply may be manipulated), this cannot
+   actually be achieved (at least, not without a ZK proof the published `Batch`s
+   were correct).
 
 8) The new multisig reports a successful close of the prior multisig, and
    becomes the sole multisig with full responsibilities.
