@@ -185,8 +185,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
       .expect("Substrate finalized invalid point as a network's key");
 
-    // TODO(now): Only run the following block when participating
-    {
+    if tributary_mutable.key_gen.in_set(&set) {
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
         tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;

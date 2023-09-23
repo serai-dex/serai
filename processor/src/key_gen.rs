@@ -40,9 +40,8 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
-  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> ThresholdParams {
-    // Directly unwraps the .get() as this will only be called after being set
-    bincode::deserialize(&getter.get(Self::params_key(set)).unwrap()).unwrap()
+  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> Option<ThresholdParams> {
+    getter.get(Self::params_key(set)).map(|bytes| bincode::deserialize(&bytes).unwrap())
   }
 
   // Not scoped to the set since that'd have latter attempts overwrite former
@@ -147,6 +146,11 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeyGen { db, entropy, active_commit: HashMap::new(), active_share: HashMap::new() }
   }
 
+  pub fn in_set(&self, set: &ValidatorSet) -> bool {
+    // We determine if we're in set using if we have the parameters for a set's key generation
+    KeyGenDb::<N, D>::params(&self.db, set).is_some()
+  }
+
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
@@ -220,7 +224,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -288,7 +292,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {

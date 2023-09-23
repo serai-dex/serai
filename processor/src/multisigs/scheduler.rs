@@ -222,8 +222,6 @@ impl<N: Network> Scheduler<N> {
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
-      // TODO(now): Review how we handle an Eventuality creating a branch being resolved without a
-      // Plan to continue
       if utxo.kind() == OutputType::Branch {
         let amount = utxo.amount();
         if let Some(plans) = self.plans.get_mut(&amount) {
