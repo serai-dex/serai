@@ -124,7 +124,7 @@ pub mod pallet {
                 half,
                 1, // minimum out, so we accept whatever we get.
                 IN_INSTRUCTION_EXECUTOR.into(),
-                true,
+                false,
               )?;
 
               // get how much we got for our swap
@@ -152,17 +152,12 @@ pub mod pallet {
                 BalancesPallet::<T>::free_balance(PublicKey::from(IN_INSTRUCTION_EXECUTOR));
 
               if coin_balance != 0 {
-                Tokens::<T>::transfer_keep_alive(
-                  origin.clone().into(),
-                  coin,
-                  address,
-                  coin_balance,
-                )?;
+                Tokens::<T>::transfer(origin.clone().into(), coin, address, coin_balance)?;
               }
               if sri_balance != 0 {
                 // unwrap here. First, it doesn't panic for full amount,
                 // second we should empty IIE account anyway.
-                BalancesPallet::<T>::transfer_keep_alive(origin.into(), address, sri_balance)
+                BalancesPallet::<T>::transfer_allow_death(origin.into(), address, sri_balance)
                   .unwrap();
               }
             }
@@ -202,7 +197,7 @@ pub mod pallet {
                 instruction.balance.amount.0,
                 out_balance.amount.0,
                 send_to.into(),
-                true,
+                false,
               )?;
 
               // burn the received coins so that they sent back to the user
