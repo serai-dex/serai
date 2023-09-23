@@ -256,7 +256,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let period_2_start = period_1_start + N::CONFIRMATIONS;
 
     // 6 hours after period 2
-    let period_3_start = period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
+    // Also ensure 6 hours is greater than the amount of CONFIRMATIONS, for sanity purposes
+    let period_3_start = period_2_start + ((6 * 60 * 60) / N::ESTIMATED_BLOCK_TIME_IN_SECONDS).max(N::CONFIRMATIONS);
 
     if block_number < period_1_start {
       RotationStep::UseExisting
@@ -496,13 +497,31 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       match output.kind() {
         OutputType::External => false,
         OutputType::Branch => {
-          // We could simply call can_use_branch, yet it'd have an edge case where if we
-          // receive two outputs for 100, and we could use one such output, we'd handle both.
-          //
-          // Individually schedule each output once confirming they're usable in order to
-          // avoid this.
           let scheduler = &mut self.existing.as_mut().unwrap().scheduler;
+          // There *would* be a race condition here due to the fact we only mark a `Branch` output
+          // as needed when we process the block (and handle scheduling), yet actual `Branch`
+          // outputs may appear as soon as the next block (and we scan the next block before we
+          // process the prior block)
+          //
+          // Unlike Eventuality checking, which happens on scanning and is therefore asynchronous,
+          // all scheduling (and this check against the scheduler) happens on processing, which is
+          // synchronous
+          //
+          // While we could move Eventuality checking into the block processing, removing its
+          // asynchonicity, we could only check data the Scanner deems important. The Scanner won't
+          // deem important Eventuality resolutions which don't create an output to Serai unless
+          // it knows of the Eventuality. Accordingly, at best we could have a split role (the
+          // Scanner noting completion of Eventualities which don't have relevant outputs, the
+          // processing noting completion of ones which do)
+          //
+          // This is unnecessary, due to the current flow around Eventuality resolutions and the
+          // current bounds naturally found being sufficiently amenable, yet notable for the future
           if scheduler.can_use_branch(output.amount()) {
+            // We could simply call can_use_branch, yet it'd have an edge case where if we receive
+            // two outputs for 100, and we could use one such output, we'd handle both.
+            //
+            // Individually schedule each output once confirming they're usable in order to avoid
+            // this.
             let mut plan = scheduler.schedule::<D>(
               txn,
               vec![output.clone()],
