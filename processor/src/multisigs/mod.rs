@@ -623,9 +623,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       assert_eq!(plan.key, self.existing.as_ref().unwrap().key);
       if plan.change == Some(N::change_address(plan.key)) {
         // Assert these are only created during the expected step
-        // TODO: Check when we register the Eventuality for this Plan, the step isn't
-        // ForwardFromExisting nor ClosingExisting. They should appear during NewAsChange, at the
-        // latest, due to the scan-ahead limit
         match step {
           RotationStep::UseExisting => {}
           RotationStep::NewAsChange |
