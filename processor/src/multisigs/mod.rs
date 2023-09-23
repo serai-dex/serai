@@ -1,5 +1,5 @@
 use core::time::Duration;
-use std::collections::HashMap;
+use std::{sync::RwLock, collections::HashMap};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
@@ -16,7 +16,7 @@ use serai_client::{
 
 use log::{info, error};
 
-use tokio::{sync::RwLock, time::sleep};
+use tokio::time::sleep;
 
 #[cfg(not(test))]
 mod scanner;
@@ -137,8 +137,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     let mut schedulers = vec![];
 
-    let multisigs_db = MultisigsDb::<N, _>::new(raw_db.clone());
-
     assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
     for (_, key) in &current_keys {
@@ -146,7 +144,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
-      for (block_number, plan) in multisigs_db.active_plans(key.as_ref()) {
+      for (block_number, plan) in MultisigsDb::<N, D>::active_plans(raw_db, key.as_ref()) {
         let block_number = block_number.try_into().unwrap();
 
         let fee = get_fee(network, block_number).await;
@@ -742,16 +740,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     txn: &mut D::Transaction<'_>,
     msg: ScannerEvent<N>,
   ) -> MultisigEvent<N> {
-    match msg {
+    let (block_number, event) = match msg {
       ScannerEvent::Block { block, outputs } => {
         // Since the Scanner is asynchronous, the following is a concern for race conditions
         // We safely know the step of a block since keys are declared, and the Scanner is safe
         // with respect to the declaration of keys
         // Accordingly, the following calls regarding new keys and step should be safe
-        let step = self.current_rotation_step(
-          ScannerHandle::<N, D>::block_number(txn, &block)
-            .expect("didn't have the block number for a block we just scanned"),
-        );
+        let block_number = ScannerHandle::<N, D>::block_number(txn, &block)
+          .expect("didn't have the block number for a block we just scanned");
+        let step = self.current_rotation_step(block_number);
 
         let mut instructions = vec![];
         for output in outputs {
@@ -806,8 +803,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         }
 
         // If any outputs were delayed, append them into this block
-        // TODO: Should the Scanner always emit an event for the first NewAsChange block, in order
-        // to prevent this from being further delayed?
+        // TODO(now): The Scanner should always emit an event for the first block of each period in
+        // order to prevent this from being further delayed and ensure each step is tracked
         match step {
           RotationStep::UseExisting => {}
           RotationStep::NewAsChange |
@@ -854,17 +851,47 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // Save the next batch ID
         MultisigsDb::<N, D>::set_next_batch_id(txn, batch_id + 1);
 
-        MultisigEvent::Batches(batches)
+        (block_number, MultisigEvent::Batches(batches))
       }
 
       // This must be emitted before ScannerEvent::Block for all completions of known Eventualities
       // within the block. Unknown Eventualities may have their Completed events emitted after
       // ScannerEvent::Block however.
-      ScannerEvent::Completed(key, id, tx) => {
+      ScannerEvent::Completed(key, block_number, id, tx) => {
         MultisigsDb::<N, D>::resolve_plan(txn, &key, id, tx.id());
-        MultisigEvent::Completed(key, id, tx)
+        (block_number, MultisigEvent::Completed(key, id, tx))
       }
-    }
+    };
+
+    // If we either received a Block event (which will be the trigger when we have no
+    // Plans/Eventualities leading into ClosingExisting), or we received the last Completed for
+    // this multisig, set its retirement block
+    let existing = self.existing.as_ref().unwrap();
+
+    // This multisig is closing
+    let closing = self.current_rotation_step(block_number) == RotationStep::ClosingExisting;
+    // There's nothing left in its Scheduler. This call is safe as:
+    // 1) When ClosingExisting, all outputs should've been already forwarded, preventing
+    //    new UTXOs from accumulating.
+    // 2) No new payments should be issued.
+    // 3) While there may be plans, they'll be dropped to create Eventualities.
+    //    If this Eventuality is resolved, the Plan has already been dropped.
+    // 4) If this Eventuality will trigger a Plan, it'll still be in the plans HashMap.
+    let scheduler_is_empty = closing && existing.scheduler.empty();
+    // Nothing is still being signed
+    let no_active_plans = scheduler_is_empty &&
+      MultisigsDb::<N, D>::active_plans(txn, existing.key.to_bytes().as_ref()).is_empty();
+
+    self
+      .scanner
+      .multisig_completed
+      // The above explicitly included their predecessor to ensure short-circuiting, yet their
+      // names aren't defined as an aggregate check. Still including all three here ensures all are
+      // used in the final value
+      .send(closing && scheduler_is_empty && no_active_plans)
+      .unwrap();
+
+    event
   }
 
   // async fn where dropping the Future causes no state changes
@@ -874,6 +901,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     // No further code is async
 
-    self.scanner_event_to_multisig_event(&mut *txn.write().await, event)
+    self.scanner_event_to_multisig_event(&mut *txn.write().unwrap(), event)
   }
 }

@@ -354,14 +354,14 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Get the registered eventualities completed within this block, and any prior blocks which
   /// registered eventualities may have been completed in.
   ///
-  /// This will panic if not fed a new block.
+  /// This may panic if not fed a block greater than the tracker's block number.
   // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
   // code
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], Self::Transaction>;
+  ) -> HashMap<[u8; 32], (usize, Self::Transaction)>;
 
   /// Prepare a SignableTransaction for a transaction.
   ///

@@ -44,6 +44,13 @@ fn scheduler_key<D: Db, G: GroupEncoding>(key: &G) -> Vec<u8> {
 }
 
 impl<N: Network> Scheduler<N> {
+  pub fn empty(&self) -> bool {
+    self.queued_plans.is_empty() &&
+      self.plans.is_empty() &&
+      self.utxos.is_empty() &&
+      self.payments.is_empty()
+  }
+
   fn read<R: Read>(key: <N::Curve as Ciphersuite>::G, reader: &mut R) -> io::Result<Self> {
     let mut read_plans = || -> io::Result<_> {
       let mut all_plans = HashMap::new();

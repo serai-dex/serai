@@ -121,10 +121,10 @@ The following timeline is established:
 
    Once all the 6 hour period has expired, no `Eventuality`s remain, and all
    outputs are forwarded, the multisig publishes a final `Batch` of the first
-   block which met these conditions, regardless of if it would've otherwise had
-   a `Batch`. Then, it reports to Substrate has closed. No further actions by
-   it, nor its validators, are expected (unless those validators remain present
-   in the new multisig).
+   block, plus `CONFIRMATIONS`, which met these conditions, regardless of if it
+   would've otherwise had a `Batch`. Then, it reports to Substrate has closed.
+   No further actions by it, nor its validators, are expected (unless those
+   validators remain present in the new multisig).
 
 7) The new multisig confirms all transactions from all prior multisigs were made
    as expected, including the reported `Batch`s.

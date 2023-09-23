@@ -1,4 +1,4 @@
-use std::{time::Duration, collections::HashMap};
+use std::{sync::RwLock, time::Duration, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
@@ -6,7 +6,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use log::{info, warn};
-use tokio::{sync::RwLock, time::sleep};
+use tokio::time::sleep;
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
@@ -461,6 +461,7 @@ async fn boot<N: Network, D: Db>(
   (main_db, TributaryMutable { key_gen, substrate_signer, signers }, multisig_manager)
 }
 
+#[allow(clippy::await_holding_lock)] // Needed for txn, unfortunately can't be down-scoped
 async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut coordinator: Co) {
   // We currently expect a contextless bidirectional mapping between these two values
   // (which is that any value of A can be interpreted as B and vice versa)
@@ -487,7 +488,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       // the other messages in the queue, it may be beneficial to parallelize these
       // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
-        let mut txn = txn.write().await;
+        let mut txn = txn.write().unwrap();
         let txn = &mut txn;
 
         assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
@@ -521,7 +522,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       },
 
       msg = substrate_mutable.next_event(&txn) => {
-        let mut txn = txn.write().await;
+        let mut txn = txn.write().unwrap();
         let txn = &mut txn;
         match msg {
           MultisigEvent::Batches(batches) => {
@@ -584,7 +585,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       }
     }
 
-    txn.into_inner().commit();
+    txn.into_inner().unwrap().commit();
     if let Some(msg) = outer_msg {
       coordinator.ack(msg).await;
     }

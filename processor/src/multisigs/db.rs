@@ -13,12 +13,8 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct MultisigsDb<N: Network, D: Db>(D, PhantomData<N>);
+pub struct MultisigsDb<N: Network, D: Db>(PhantomData<N>, PhantomData<D>);
 impl<N: Network, D: Db> MultisigsDb<N, D> {
-  pub fn new(db: D) -> Self {
-    Self(db, PhantomData)
-  }
-
   fn multisigs_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"MULTISIGS", dst, key)
   }
@@ -74,14 +70,14 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     }
   }
 
-  pub fn active_plans(&self, key: &[u8]) -> Vec<(u64, Plan<N>)> {
-    let signing = self.0.get(Self::signing_key(key)).unwrap_or(vec![]);
+  pub fn active_plans<G: Get>(getter: &G, key: &[u8]) -> Vec<(u64, Plan<N>)> {
+    let signing = getter.get(Self::signing_key(key)).unwrap_or(vec![]);
     let mut res = vec![];
 
     assert_eq!(signing.len() % 32, 0);
     for i in 0 .. (signing.len() / 32) {
       let id = &signing[(i * 32) .. ((i + 1) * 32)];
-      let buf = self.0.get(Self::plan_key(id)).unwrap();
+      let buf = getter.get(Self::plan_key(id)).unwrap();
 
       let block_number = u64::from_le_bytes(buf[.. 8].try_into().unwrap());
       let plan = Plan::<N>::read::<&[u8]>(&mut &buf[8 ..]).unwrap();

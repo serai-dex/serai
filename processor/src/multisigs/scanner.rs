@@ -11,7 +11,7 @@ use frost::curve::Ciphersuite;
 
 use log::{info, debug, warn};
 use tokio::{
-  sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, mpsc},
+  sync::{Mutex, RwLockReadGuard, RwLockWriteGuard, RwLock, mpsc},
   time::sleep,
 };
 
@@ -25,7 +25,7 @@ pub enum ScannerEvent<N: Network> {
   // Block scanned
   Block { block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
   // Eventuality completion found on-chain
-  Completed(Vec<u8>, [u8; 32], N::Transaction),
+  Completed(Vec<u8>, usize, [u8; 32], N::Transaction),
 }
 
 pub type ScannerEventChannel<N> = mpsc::UnboundedReceiver<ScannerEvent<N>>;
@@ -166,6 +166,22 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
       .get(Self::scanned_block_key())
       .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap())
   }
+
+  fn retirement_block_key(key: &<N::Curve as Ciphersuite>::G) -> Vec<u8> {
+    Self::scanner_key(b"retirement_block", key.to_bytes())
+  }
+  fn save_retirement_block(
+    txn: &mut D::Transaction<'_>,
+    key: &<N::Curve as Ciphersuite>::G,
+    block: usize,
+  ) {
+    txn.put(Self::retirement_block_key(key), u64::try_from(block).unwrap().to_le_bytes());
+  }
+  fn retirement_block<G: Get>(getter: &G, key: &<N::Curve as Ciphersuite>::G) -> Option<usize> {
+    getter
+      .get(Self::retirement_block_key(key))
+      .map(|bytes| usize::try_from(u64::from_le_bytes(bytes.try_into().unwrap())).unwrap())
+  }
 }
 
 /// The Scanner emits events relating to the blockchain, notably received outputs.
@@ -175,7 +191,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 /// It MAY fire the same event multiple times.
 #[derive(Debug)]
 pub struct Scanner<N: Network, D: Db> {
-  _db: PhantomData<D>,
+  db: D,
 
   keys: Vec<(usize, <N::Curve as Ciphersuite>::G)>,
 
@@ -187,6 +203,7 @@ pub struct Scanner<N: Network, D: Db> {
   need_ack: VecDeque<usize>,
 
   events: mpsc::UnboundedSender<ScannerEvent<N>>,
+  multisig_completed: Mutex<mpsc::UnboundedReceiver<bool>>,
 }
 
 #[derive(Clone, Debug)]
@@ -231,6 +248,7 @@ pub struct ScannerHandle<N: Network, D: Db> {
   scanner: ScannerHold<N, D>,
   held_scanner: Option<Scanner<N, D>>,
   pub events: ScannerEventChannel<N>,
+  pub multisig_completed: mpsc::UnboundedSender<bool>,
 }
 
 impl<N: Network, D: Db> ScannerHandle<N, D> {
@@ -320,6 +338,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     eventuality: N::Eventuality,
   ) {
     let mut lock;
+    // We won't use held_scanner if we're re-registering on boot
     (if let Some(scanner) = self.held_scanner.as_mut() {
       scanner
     } else {
@@ -344,6 +363,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
     db: D,
   ) -> (ScannerHandle<N, D>, Vec<(usize, <N::Curve as Ciphersuite>::G)>) {
     let (events_send, events_recv) = mpsc::unbounded_channel();
+    let (multisig_completed_send, multisig_completed_recv) = mpsc::unbounded_channel();
 
     let keys = ScannerDb::<N, D>::keys(&db);
     let mut eventualities = HashMap::new();
@@ -355,7 +375,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
     let scanner = ScannerHold {
       scanner: Arc::new(RwLock::new(Some(Scanner {
-        _db: PhantomData,
+        db: db.clone(),
 
         keys: keys.clone(),
 
@@ -367,17 +387,49 @@ impl<N: Network, D: Db> Scanner<N, D> {
         need_ack: VecDeque::new(),
 
         events: events_send,
+        multisig_completed: Mutex::new(multisig_completed_recv),
       }))),
     };
     tokio::spawn(Scanner::run(db, network, scanner.clone()));
 
-    (ScannerHandle { scanner, held_scanner: None, events: events_recv }, keys)
+    (
+      ScannerHandle {
+        scanner,
+        held_scanner: None,
+        events: events_recv,
+        multisig_completed: multisig_completed_send,
+      },
+      keys,
+    )
   }
 
-  fn emit(&mut self, event: ScannerEvent<N>) -> bool {
+  async fn emit(&mut self, block_number: usize, event: ScannerEvent<N>) -> bool {
     if self.events.send(event).is_err() {
       info!("Scanner handler was dropped. Shutting down?");
       return false;
+    }
+    let mut lock = self.multisig_completed.lock().await;
+    // TODO(now): This can deadlock if main tries to call ack_block while the Scanner thread tries
+    // to call emit
+    match lock.recv().await {
+      None => {
+        info!("Scanner handler was dropped. Shutting down?");
+        return false;
+      }
+      // Set the retirement block as block_number + CONFIRMATIONS
+      Some(true) => {
+        let mut txn = self.db.txn();
+        // The retiring key is the earliest one still around
+        let retiring_key = ScannerDb::<N, D>::keys(&txn)[0].1;
+        // This value is static w.r.t. the key
+        ScannerDb::<N, D>::save_retirement_block(
+          &mut txn,
+          &retiring_key,
+          block_number + N::CONFIRMATIONS,
+        );
+        txn.commit();
+      }
+      Some(false) => {}
     }
     true
   }
@@ -510,7 +562,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
             outputs.push(output);
           }
 
-          for (id, tx) in network
+          for (id, (block_number, tx)) in network
             .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
             .await
           {
@@ -521,7 +573,10 @@ impl<N: Network, D: Db> Scanner<N, D> {
             );
 
             // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs.
-            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), id, tx)) {
+            if !scanner
+              .emit(block_number, ScannerEvent::Completed(key_vec.clone(), block_number, id, tx))
+              .await
+            {
               return;
             }
           }
@@ -578,17 +633,24 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
         // Don't emit an event if:
         // - This isn't an activation block
-        // - This isn't a retirement block (TODO(now))
+        // - This isn't a retirement block
         // - There's not any outputs
         // as only those are blocks are meaningful and warrant obtaining synchrony over
-        if has_activation || (!outputs.is_empty()) {
+        if has_activation ||
+          (!outputs.is_empty()) ||
+          (ScannerDb::<N, D>::retirement_block(&db, &scanner.keys[0].1) ==
+            Some(block_being_scanned))
+        {
           // Save the outputs to disk
           let mut txn = db.txn();
           ScannerDb::<N, D>::save_outputs(&mut txn, &block_id, &outputs);
           txn.commit();
 
           // Send all outputs
-          if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }) {
+          if !scanner
+            .emit(block_being_scanned, ScannerEvent::Block { block: block_id, outputs })
+            .await
+          {
             return;
           }
 

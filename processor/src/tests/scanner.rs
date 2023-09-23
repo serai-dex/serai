@@ -26,7 +26,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   }
 
   let first = Arc::new(Mutex::new(true));
-  let activation_number = network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS;
+  let activation_number = network.get_latest_block_number().await.unwrap();
   let db = MemDb::new();
   let new_scanner = || async {
     let mut db = db.clone();
@@ -57,12 +57,13 @@ pub async fn test_scanner<N: Network>(network: N) {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
         ScannerEvent::Block { block, outputs } => {
+          scanner.multisig_completed.send(false).unwrap();
           assert_eq!(block, block_id);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
-        ScannerEvent::Completed(_, _, _) => {
+        ScannerEvent::Completed(_, _, _, _) => {
           panic!("unexpectedly got eventuality completion");
         }
       };

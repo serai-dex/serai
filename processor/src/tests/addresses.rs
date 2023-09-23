@@ -57,6 +57,7 @@ async fn spend<N: Network, D: Db>(
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block { block, outputs } => {
+      scanner.multisig_completed.send(false).unwrap();
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
@@ -66,7 +67,7 @@ async fn spend<N: Network, D: Db>(
       txn.commit();
       outputs
     }
-    ScannerEvent::Completed(_, _, _) => {
+    ScannerEvent::Completed(_, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }
@@ -88,13 +89,7 @@ pub async fn test_addresses<N: Network>(network: N) {
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
   let mut txn = db.txn();
-  scanner
-    .register_key(
-      &mut txn,
-      network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS,
-      key,
-    )
-    .await;
+  scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
   txn.commit();
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
@@ -107,6 +102,7 @@ pub async fn test_addresses<N: Network>(network: N) {
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Block { block, outputs } => {
+        scanner.multisig_completed.send(false).unwrap();
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
@@ -116,7 +112,7 @@ pub async fn test_addresses<N: Network>(network: N) {
         txn.commit();
         outputs
       }
-      ScannerEvent::Completed(_, _, _) => {
+      ScannerEvent::Completed(_, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };
