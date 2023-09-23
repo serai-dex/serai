@@ -598,7 +598,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     };
 
-    // TODO(now): Do we want a singular Plan Vec?
     plans.extend({
       let existing = self.existing.as_mut().unwrap();
       let existing_key = existing.key;
