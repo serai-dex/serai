@@ -189,7 +189,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
         tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-      // TODO(now): Rotate to the new substrate_signer when the time comes
       if set.session.0 == 0 {
         tributary_mutable.substrate_signer = Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
       }
@@ -525,13 +524,23 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         let mut txn = txn.write().unwrap();
         let txn = &mut txn;
         match msg {
-          MultisigEvent::Batches(batches) => {
+          MultisigEvent::Batches(retired_key_new_key, batches) => {
             // Start signing this batch
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
                 substrate_signer.sign(txn, batch).await;
+              }
+            }
+
+            if let Some((retired_key, new_key)) = retired_key_new_key {
+              // Safe to mutate since all signing operations are done and no more will be added
+              tributary_mutable.signers.remove(retired_key.to_bytes().as_ref());
+              tributary_mutable.substrate_signer.take();
+              if let Some((substrate_keys, _)) = tributary_mutable.key_gen.keys(&new_key) {
+                tributary_mutable.substrate_signer =
+                  Some(SubstrateSigner::new(N::NETWORK, substrate_keys));
               }
             }
           },

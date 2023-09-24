@@ -56,8 +56,9 @@ pub async fn test_scanner<N: Network>(network: N) {
   let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block { block, outputs } => {
+        ScannerEvent::Block { is_retirement_block, block, outputs } => {
           scanner.multisig_completed.send(false).unwrap();
+          assert!(!is_retirement_block);
           assert_eq!(block, block_id);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);
@@ -77,7 +78,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   // Acknowledge the block
   let mut cloned_db = db.clone();
   let mut txn = cloned_db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, block_id).await, outputs);
+  assert_eq!(scanner.ack_block(&mut txn, block_id).await.1, outputs);
   scanner.release_lock().await;
   txn.commit();
 
@@ -124,8 +125,9 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
 
   let block_id =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { block, outputs: _ } => {
+      ScannerEvent::Block { is_retirement_block, block, outputs: _ } => {
         scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
         block
       }
       ScannerEvent::Completed(_, _, _, _) => {
@@ -144,7 +146,7 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
   // emitting the Block event
   // TODO: This is incomplete. Also test after emitting Completed
   let mut txn = db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, block_id).await, vec![]);
+  assert_eq!(scanner.ack_block(&mut txn, block_id).await.1, vec![]);
   scanner.release_lock().await;
   txn.commit();
 

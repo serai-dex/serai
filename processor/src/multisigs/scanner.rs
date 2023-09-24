@@ -23,7 +23,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<N: Network> {
   // Block scanned
-  Block { block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
+  Block { is_retirement_block: bool, block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
   // Eventuality completion found on-chain
   Completed(Vec<u8>, usize, [u8; 32], N::Transaction),
 }
@@ -105,6 +105,12 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
       res.push((activation_number, N::Curve::read_G(&mut bytes).unwrap()));
     }
     res
+  }
+  fn retire_key(txn: &mut D::Transaction<'_>) {
+    let keys = Self::keys(txn);
+    assert_eq!(keys.len(), 2);
+    txn.del(Self::keys_key());
+    Self::register_key(txn, keys[1].0, keys[1].1);
   }
 
   fn seen_key(id: &<N::Output as Output<N>>::Id) -> Vec<u8> {
@@ -304,7 +310,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: <N::Block as Block<N>>::Id,
-  ) -> Vec<N::Output> {
+  ) -> (bool, Vec<N::Output>) {
     debug!("block {} acknowledged", hex::encode(&id));
 
     let mut scanner = self.scanner.long_term_acquire().await;
@@ -326,7 +332,11 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     self.held_scanner = Some(scanner);
 
-    outputs
+    // Load the key from the DB, as it will have already been removed from RAM
+    let key = ScannerDb::<N, D>::keys(txn)[0].1;
+    let is_retirement_block = ScannerDb::<N, D>::retirement_block(txn, &key) == Some(number);
+    ScannerDb::<N, D>::retire_key(txn);
+    (is_retirement_block, outputs)
   }
 
   pub async fn register_eventuality(
@@ -536,8 +546,6 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
           let key_vec = key.to_bytes().as_ref().to_vec();
 
-          // TODO(now): Check for key deprecation
-
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
           for output in network.get_outputs(&block, key).await {
             assert_eq!(output.key(), key);
@@ -659,23 +667,24 @@ impl<N: Network, D: Db> Scanner<N, D> {
         let mut scanner_lock = scanner_hold.write().await;
         let scanner = scanner_lock.as_mut().unwrap();
 
-        // Don't emit an event if:
-        // - This isn't an activation block
-        // - This isn't a retirement block
-        // - There's not any outputs
+        // Only emit an event if any of the following is true:
+        // - This is an activation block
+        // - This is a retirement block
+        // - There's outputs
         // as only those are blocks are meaningful and warrant obtaining synchrony over
-        let sent_block = if has_activation ||
-          (!outputs.is_empty()) ||
-          (ScannerDb::<N, D>::retirement_block(&db, &scanner.keys[0].1) ==
-            Some(block_being_scanned))
-        {
+        let is_retirement_block =
+          ScannerDb::<N, D>::retirement_block(&db, &scanner.keys[0].1) == Some(block_being_scanned);
+        let sent_block = if has_activation || is_retirement_block || (!outputs.is_empty()) {
           // Save the outputs to disk
           let mut txn = db.txn();
           ScannerDb::<N, D>::save_outputs(&mut txn, &block_id, &outputs);
           txn.commit();
 
           // Send all outputs
-          if !scanner.emit(ScannerEvent::Block { block: block_id, outputs }).await {
+          if !scanner
+            .emit(ScannerEvent::Block { is_retirement_block, block: block_id, outputs })
+            .await
+          {
             return;
           }
 
@@ -684,6 +693,12 @@ impl<N: Network, D: Db> Scanner<N, D> {
         } else {
           false
         };
+
+        // Remove it from memory
+        if is_retirement_block {
+          let retired = scanner.keys.remove(0).1;
+          scanner.eventualities.remove(retired.to_bytes().as_ref());
+        }
 
         // Update ram_scanned/need_ack
         scanner.ram_scanned = Some(block_being_scanned);

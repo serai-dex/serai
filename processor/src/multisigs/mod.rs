@@ -109,10 +109,11 @@ pub struct MultisigViewer<N: Network> {
   scheduler: Scheduler<N>,
 }
 
+#[allow(clippy::type_complexity)]
 #[derive(Clone, Debug)]
 pub enum MultisigEvent<N: Network> {
   // Batches to publish
-  Batches(Vec<Batch>),
+  Batches(Option<(<N::Curve as Ciphersuite>::G, <N::Curve as Ciphersuite>::G)>, Vec<Batch>),
   // Eventuality completion found on-chain
   Completed(Vec<u8>, [u8; 32], N::Transaction),
 }
@@ -564,15 +565,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   }
 
   // Returns the Plans caused from a block being acknowledged.
+  //
+  // Will rotate keys if the block acknowledged is the retirement block.
   async fn plans_from_block(
     &mut self,
     txn: &mut D::Transaction<'_>,
     block_number: usize,
     block_id: <N::Block as Block<N>>::Id,
-    step: RotationStep,
+    step: &mut RotationStep,
     burns: Vec<OutInstructionWithBalance>,
   ) -> (bool, Vec<Plan<N>>, HashMap<Vec<u8>, InInstructionWithBalance>) {
-    let (existing_payments, new_payments) = self.burns_to_payments(txn, step, burns);
+    let (mut existing_payments, mut new_payments) = self.burns_to_payments(txn, *step, burns);
 
     // We now have to acknowledge the acknowledged block, if it's new
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
@@ -581,14 +584,24 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         .expect("published a Batch despite never scanning a block") <
         block_number
       {
-        (true, self.scanner.ack_block(txn, block_id.clone()).await)
+        let (is_retirement_block, outputs) = self.scanner.ack_block(txn, block_id.clone()).await;
+        if is_retirement_block {
+          let existing = self.existing.take().unwrap();
+          assert!(existing.scheduler.empty());
+          self.existing = self.new.take();
+          *step = RotationStep::UseExisting;
+          assert!(existing_payments.is_empty());
+          existing_payments = new_payments;
+          new_payments = vec![];
+        }
+        (true, outputs)
       } else {
         (false, vec![])
       };
       (acquired_lock, self.split_outputs_by_key(outputs))
     };
 
-    let (mut plans, forwarded_external_outputs) = match step {
+    let (mut plans, forwarded_external_outputs) = match *step {
       RotationStep::UseExisting | RotationStep::NewAsChange => (vec![], HashMap::new()),
       RotationStep::ForwardFromExisting => {
         self.filter_outputs_due_to_forwarding(&mut existing_outputs)
@@ -605,13 +618,13 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         txn,
         existing_outputs,
         existing_payments,
-        match step {
+        match *step {
           RotationStep::UseExisting => existing_key,
           RotationStep::NewAsChange |
           RotationStep::ForwardFromExisting |
           RotationStep::ClosingExisting => self.new.as_ref().unwrap().key,
         },
-        match step {
+        match *step {
           RotationStep::UseExisting | RotationStep::NewAsChange => false,
           RotationStep::ForwardFromExisting | RotationStep::ClosingExisting => true,
         },
@@ -622,7 +635,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       assert_eq!(plan.key, self.existing.as_ref().unwrap().key);
       if plan.change == Some(N::change_address(plan.key)) {
         // Assert these are only created during the expected step
-        match step {
+        match *step {
           RotationStep::UseExisting => {}
           RotationStep::NewAsChange |
           RotationStep::ForwardFromExisting |
@@ -653,11 +666,11 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       .expect("SubstrateBlock with context we haven't synced");
 
     // Determine what step of rotation we're currently in
-    let step = self.current_rotation_step(block_number);
+    let mut step = self.current_rotation_step(block_number);
 
     // Get the Plans from this block
     let (acquired_lock, plans, mut forwarded_external_outputs) =
-      self.plans_from_block(txn, block_number, block_id, step, burns).await;
+      self.plans_from_block(txn, block_number, block_id, &mut step, burns).await;
 
     let res = {
       let mut res = Vec::with_capacity(plans.len());
@@ -741,7 +754,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     msg: ScannerEvent<N>,
   ) -> MultisigEvent<N> {
     let (block_number, event) = match msg {
-      ScannerEvent::Block { block, outputs } => {
+      ScannerEvent::Block { is_retirement_block, block, outputs } => {
         // Since the Scanner is asynchronous, the following is a concern for race conditions
         // We safely know the step of a block since keys are declared, and the Scanner is safe
         // with respect to the declaration of keys
@@ -851,7 +864,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // Save the next batch ID
         MultisigsDb::<N, D>::set_next_batch_id(txn, batch_id + 1);
 
-        (block_number, MultisigEvent::Batches(batches))
+        (
+          block_number,
+          MultisigEvent::Batches(
+            if is_retirement_block {
+              Some((self.existing.as_ref().unwrap().key, self.new.as_ref().unwrap().key))
+            } else {
+              None
+            },
+            batches,
+          ),
+        )
       }
 
       // This must be emitted before ScannerEvent::Block for all completions of known Eventualities

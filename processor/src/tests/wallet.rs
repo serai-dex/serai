@@ -46,8 +46,9 @@ pub async fn test_wallet<N: Network>(network: N) {
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { block, outputs } => {
+      ScannerEvent::Block { is_retirement_block, block, outputs } => {
         scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
@@ -58,7 +59,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     }
   };
   let mut txn = db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, block_id.clone()).await, outputs);
+  assert_eq!(scanner.ack_block(&mut txn, block_id.clone()).await.1, outputs);
   scanner.release_lock().await;
   txn.commit();
 
@@ -124,8 +125,9 @@ pub async fn test_wallet<N: Network>(network: N) {
   }
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { block: block_id, outputs: these_outputs } => {
+    ScannerEvent::Block { is_retirement_block, block: block_id, outputs: these_outputs } => {
       scanner.multisig_completed.send(false).unwrap();
+      assert!(!is_retirement_block);
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }
@@ -136,7 +138,7 @@ pub async fn test_wallet<N: Network>(network: N) {
 
   // Check the Scanner DB can reload the outputs
   let mut txn = db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, block.id()).await, outputs);
+  assert_eq!(scanner.ack_block(&mut txn, block.id()).await.1, outputs);
   scanner.release_lock().await;
   txn.commit();
 }

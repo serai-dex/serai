@@ -56,13 +56,14 @@ async fn spend<N: Network, D: Db>(
     network.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { block, outputs } => {
+    ScannerEvent::Block { is_retirement_block, block, outputs } => {
       scanner.multisig_completed.send(false).unwrap();
+      assert!(!is_retirement_block);
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
       let mut txn = db.txn();
-      assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+      assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
       scanner.release_lock().await;
       txn.commit();
       outputs
@@ -101,13 +102,14 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Verify the Scanner picked them up
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { block, outputs } => {
+      ScannerEvent::Block { is_retirement_block, block, outputs } => {
         scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
         let mut txn = db.txn();
-        assert_eq!(scanner.ack_block(&mut txn, block).await, outputs);
+        assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
         scanner.release_lock().await;
         txn.commit();
         outputs
