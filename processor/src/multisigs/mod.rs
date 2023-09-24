@@ -816,8 +816,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         }
 
         // If any outputs were delayed, append them into this block
-        // TODO(now): The Scanner should always emit an event for the first block of each period in
-        // order to prevent this from being further delayed and ensure each step is tracked
         match step {
           RotationStep::UseExisting => {}
           RotationStep::NewAsChange |
