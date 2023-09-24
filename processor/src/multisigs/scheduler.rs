@@ -323,7 +323,7 @@ impl<N: Network> Scheduler<N> {
 
     for chunk in utxo_chunks.drain(..) {
       // TODO: While payments have their TXs' fees deducted from themselves, that doesn't hold here
-      // We need to the documented, but not yet implemented, virtual amount scheme to solve this
+      // We need the documented, but not yet implemented, virtual amount scheme to solve this
       log::debug!("aggregating a chunk of {} inputs", N::MAX_INPUTS);
       plans.push(Plan {
         key: self.key,

@@ -285,6 +285,7 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     ScannerDb::<N, D>::register_key(txn, activation_number, key);
     scanner.keys.push((activation_number, key));
+    assert!(scanner.keys.len() <= 2);
 
     scanner.eventualities.insert(key.to_bytes().as_ref().to_vec(), EventualitiesTracker::new());
   }
