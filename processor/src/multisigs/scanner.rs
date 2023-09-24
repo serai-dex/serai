@@ -333,10 +333,12 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
 
     self.held_scanner = Some(scanner);
 
-    // Load the key from the DB, as it will have already been removed from RAM
+    // Load the key from the DB, as it will have already been removed from RAM if retired
     let key = ScannerDb::<N, D>::keys(txn)[0].1;
     let is_retirement_block = ScannerDb::<N, D>::retirement_block(txn, &key) == Some(number);
-    ScannerDb::<N, D>::retire_key(txn);
+    if is_retirement_block {
+      ScannerDb::<N, D>::retire_key(txn);
+    }
     (is_retirement_block, outputs)
   }
 
