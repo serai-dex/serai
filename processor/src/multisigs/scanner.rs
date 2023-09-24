@@ -672,6 +672,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
         // - This is a retirement block
         // - There's outputs
         // as only those are blocks are meaningful and warrant obtaining synchrony over
+        // TODO: Consider not obtaining synchrony over the retirement block depending on how the
+        // hand-off is implemented on the Substrate side of things
         let is_retirement_block =
           ScannerDb::<N, D>::retirement_block(&db, &scanner.keys[0].1) == Some(block_being_scanned);
         let sent_block = if has_activation || is_retirement_block || (!outputs.is_empty()) {
