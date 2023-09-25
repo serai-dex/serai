@@ -794,6 +794,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
       if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id()))) {
         match self.network.validate(block).await {
           Ok(_) => (),
+          // BlockError::Temporal is due to us not having the locally provided tx yet,
+          // since the majority has voted on this block, it should be us that
+          // have the problem. So we just accept that the block is valid.
           Err(BlockError::Temporal) => (),
           Err(BlockError::Fatal) => {
             log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
