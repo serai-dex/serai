@@ -300,12 +300,16 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   let ten_blocks_of_time =
     Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
 
+  let mut readers = vec![];
+  for tributary in tributaries.read().await.values() {
+    readers.push(tributary.tributary.read().await.reader());
+  }
+
   loop {
-    for ActiveTributary { spec: _, tributary } in tributaries.read().await.values() {
-      let tributary = tributary.read().await;
-      let tip = tributary.tip().await;
-      let block_time = SystemTime::UNIX_EPOCH +
-        Duration::from_secs(tributary.reader().time_of_block(&tip).unwrap_or(0));
+    for tributary in &readers {
+      let tip = tributary.tip();
+      let block_time =
+        SystemTime::UNIX_EPOCH + Duration::from_secs(tributary.time_of_block(&tip).unwrap_or(0));
 
       // Only trigger syncing if the block is more than a minute behind
       if SystemTime::now() > (block_time + Duration::from_secs(60)) {
@@ -777,10 +781,6 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           };
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          let Some(tributary) = tributaries.get(&genesis) else {
-            panic!("tributary we don't have came to consensus on an Batch");
-          };
-          let tributary = tributary.tributary.read().await;
           publish_transaction(&tributary, tx).await;
         }
       }
