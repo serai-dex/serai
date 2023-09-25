@@ -36,7 +36,8 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, scanner::RecognizedIdType,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, nonce_decider::NonceDecider,
+    scanner::RecognizedIdType,
   },
 };
 
@@ -230,7 +231,7 @@ pub async fn handle_application_tx<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
 >(
   tx: Transaction,
   spec: &TributarySpec,
@@ -414,7 +415,8 @@ pub async fn handle_application_tx<
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
-      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch).await;
+      let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
+      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch, nonce).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -423,9 +425,10 @@ pub async fn handle_application_tx<
           despite us not providing that transaction",
       );
 
-      for id in plan_ids {
+      let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
+      for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await;
+        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id, nonce).await;
       }
     }
 
@@ -441,6 +444,7 @@ pub async fn handle_application_tx<
         &data.signed,
       ) {
         Some(Some(preprocesses)) => {
+          NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,
@@ -498,6 +502,7 @@ pub async fn handle_application_tx<
         &data.signed,
       ) {
         Some(Some(preprocesses)) => {
+          NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,

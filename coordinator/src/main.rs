@@ -34,8 +34,9 @@ use ::tributary::{
 };
 
 mod tributary;
-#[rustfmt::skip]
-use crate::tributary::{TributarySpec, SignData, Transaction, TributaryDb, scanner::RecognizedIdType};
+use crate::tributary::{
+  TributarySpec, SignData, Transaction, TributaryDb, NonceDecider, scanner::RecognizedIdType,
+};
 
 mod db;
 use db::MainDb;
@@ -186,7 +187,7 @@ pub async fn scan_tributaries<
   Pro: Processors,
   P: P2p,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
 >(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -455,6 +456,7 @@ pub async fn publish_transaction<D: Db, P: P2p>(
 ) {
   log::debug!("publishing transaction {}", hex::encode(tx.hash()));
   if let TransactionKind::Signed(signed) = tx.kind() {
+    // TODO: What if we try to publish TX with a nonce of 5 when the blockchain only has 3?
     if tributary
       .next_nonce(signed.signer)
       .await
@@ -610,6 +612,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           // Safe to use its own txn since this is static and just needs to be written before we
           // provide SubstrateBlock
           let mut txn = db.txn();
+          // TODO: This needs to be scoped per multisig
           TributaryDb::<D>::set_plan_ids(&mut txn, genesis, block, &plans);
           txn.commit();
 
@@ -756,23 +759,29 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           tributary.add_transaction(tx).await;
         }
         TransactionKind::Signed(_) => {
-          // Get the next nonce
-          // TODO: This should be deterministic, not just DB-backed, to allow rebuilding validators
-          // without the prior instance's DB
-          // let mut txn = db.txn();
-          // let nonce = MainDb::tx_nonce(&mut txn, msg.id, tributary);
-
-          // TODO: This isn't deterministic, or at least DB-backed, and accordingly is unsafe
           log::trace!("getting next nonce for Tributary TX in response to processor message");
-          let nonce = tributary
-            .next_nonce(Ristretto::generator() * key.deref())
-            .await
-            .expect("publishing a TX to a tributary we aren't in");
+
+          let nonce = loop {
+            let Some(nonce) =
+              NonceDecider::<D>::nonce(&db, genesis, &tx).expect("signed TX didn't have nonce")
+            else {
+              // This can be None if:
+              // 1) We scanned the relevant transaction(s) in a Tributary block
+              // 2) The processor was sent a message and responded
+              // 3) The Tributary TXN has yet to be committed
+              log::warn!("nonce has yet to be saved for processor-instigated transaction");
+              sleep(Duration::from_millis(100)).await;
+              continue;
+            };
+            break nonce;
+          };
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
+          let Some(tributary) = tributaries.get(&genesis) else {
+            panic!("tributary we don't have came to consensus on an Batch");
+          };
+          let tributary = tributary.tributary.read().await;
           publish_transaction(&tributary, tx).await;
-
-          // txn.commit();
         }
       }
     }
@@ -816,7 +825,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let raw_db = raw_db.clone();
     let key = key.clone();
     let tributaries = tributaries.clone();
-    move |network, genesis, id_type, id| {
+    move |network, genesis, id_type, id, nonce| {
       let raw_db = raw_db.clone();
       let key = key.clone();
       let tributaries = tributaries.clone();
@@ -851,20 +860,13 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           }),
         };
 
+        tx.sign(&mut OsRng, genesis, &key, nonce);
+
         let tributaries = tributaries.read().await;
         let Some(tributary) = tributaries.get(&genesis) else {
           panic!("tributary we don't have came to consensus on an Batch");
         };
         let tributary = tributary.tributary.read().await;
-
-        // TODO: Same note as prior nonce acquisition
-        log::trace!("getting next nonce for Tributary TX containing Batch signing data");
-        let nonce = tributary
-          .next_nonce(Ristretto::generator() * key.deref())
-          .await
-          .expect("publishing a TX to a tributary we aren't in");
-        tx.sign(&mut OsRng, genesis, &key, nonce);
-
         publish_transaction(&tributary, tx).await;
       }
     }

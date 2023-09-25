@@ -40,7 +40,7 @@ async fn handle_block<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
@@ -107,7 +107,7 @@ pub async fn handle_new_blocks<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,

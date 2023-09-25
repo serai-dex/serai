@@ -86,7 +86,7 @@ async fn dkg_test() {
     handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
       &mut scanner_db,
       key,
-      |_, _, _, _| async {
+      |_, _, _, _, _| async {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
@@ -112,7 +112,7 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _| async {
+    |_, _, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
@@ -191,7 +191,7 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _| async {
+    |_, _, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
@@ -239,7 +239,7 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
+    |_, _, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
     &processors,
     |_, _| async { panic!("test tried to publish a new Serai TX") },
     &spec,
@@ -306,7 +306,7 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _| async {
+    |_, _, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,

@@ -30,6 +30,9 @@ use tributary::{
 mod db;
 pub use db::*;
 
+mod nonce_decider;
+pub use nonce_decider::*;
+
 mod handle;
 pub use handle::*;
 
