@@ -3,17 +3,15 @@ use std::sync::{Arc, Mutex};
 
 use rand_core::OsRng;
 
-use frost::Participant;
+use frost::{Participant, tests::key_gen};
 
 use tokio::time::timeout;
-
-use serai_client::primitives::BlockHash;
 
 use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
   networks::{OutputType, Output, Block, Network},
-  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
 pub async fn test_scanner<N: Network>(network: N) {
@@ -32,16 +30,19 @@ pub async fn test_scanner<N: Network>(network: N) {
   let db = MemDb::new();
   let new_scanner = || async {
     let mut db = db.clone();
-    let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
+    let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
     let mut first = first.lock().unwrap();
     if *first {
-      assert!(active_keys.is_empty());
+      assert!(current_keys.is_empty());
       let mut txn = db.txn();
-      scanner.rotate_key(&mut txn, activation_number, group_key).await;
+      scanner.register_key(&mut txn, activation_number, group_key).await;
       txn.commit();
+      for _ in 0 .. N::CONFIRMATIONS {
+        network.mine_block().await;
+      }
       *first = false;
     } else {
-      assert_eq!(active_keys.len(), 1);
+      assert_eq!(current_keys.len(), 1);
     }
     scanner
   };
@@ -55,13 +56,15 @@ pub async fn test_scanner<N: Network>(network: N) {
   let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-        ScannerEvent::Block { block, outputs } => {
+        ScannerEvent::Block { is_retirement_block, block, outputs } => {
+          scanner.multisig_completed.send(false).unwrap();
+          assert!(!is_retirement_block);
           assert_eq!(block, block_id);
           assert_eq!(outputs.len(), 1);
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
-        ScannerEvent::Completed(_, _) => {
+        ScannerEvent::Completed(_, _, _, _) => {
           panic!("unexpectedly got eventuality completion");
         }
       };
@@ -73,22 +76,10 @@ pub async fn test_scanner<N: Network>(network: N) {
   verify_event(new_scanner().await).await;
 
   // Acknowledge the block
-
-  // Acknowledging it should yield a list of all blocks since the last acknowledged block
-  let mut blocks = vec![];
-  let mut curr_block = activation_number + 1;
-  loop {
-    let block = network.get_block(curr_block).await.unwrap().id();
-    blocks.push(BlockHash(block.as_ref().try_into().unwrap()));
-    if block == block_id {
-      break;
-    }
-    curr_block += 1;
-  }
-
   let mut cloned_db = db.clone();
   let mut txn = cloned_db.txn();
-  assert_eq!(scanner.ack_up_to_block(&mut txn, keys.group_key(), block_id).await, outputs);
+  assert_eq!(scanner.ack_block(&mut txn, block_id).await.1, outputs);
+  scanner.release_lock().await;
   txn.commit();
 
   // There should be no more events
@@ -96,4 +87,68 @@ pub async fn test_scanner<N: Network>(network: N) {
 
   // Create a new scanner off the current DB and make sure it also does nothing
   assert!(timeout(Duration::from_secs(30), new_scanner().await.events.recv()).await.is_err());
+}
+
+pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
+  // Mine blocks so there's a confirmed block
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
+  }
+
+  let mut db = MemDb::new();
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  assert!(current_keys.is_empty());
+
+  let mut txn = db.txn();
+  // Register keys to cause Block events at CONFIRMATIONS (dropped since first keys),
+  // CONFIRMATIONS + 1, and CONFIRMATIONS + 2
+  for i in 0 .. 3 {
+    scanner
+      .register_key(
+        &mut txn,
+        network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS + i,
+        {
+          let mut keys = key_gen(&mut OsRng);
+          for (_, keys) in keys.iter_mut() {
+            N::tweak_keys(keys);
+          }
+          keys[&Participant::new(1).unwrap()].group_key()
+        },
+      )
+      .await;
+  }
+  txn.commit();
+
+  for _ in 0 .. (3 * N::CONFIRMATIONS) {
+    network.mine_block().await;
+  }
+
+  let block_id =
+    match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
+      ScannerEvent::Block { is_retirement_block, block, outputs: _ } => {
+        scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
+        block
+      }
+      ScannerEvent::Completed(_, _, _, _) => {
+        panic!("unexpectedly got eventuality completion");
+      }
+    };
+
+  match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
+    ScannerEvent::Block { .. } => {}
+    ScannerEvent::Completed(_, _, _, _) => {
+      panic!("unexpectedly got eventuality completion");
+    }
+  };
+
+  // The ack_block acquisiton shows the Scanner isn't maintaining the lock on its own thread after
+  // emitting the Block event
+  // TODO: This is incomplete. Also test after emitting Completed
+  let mut txn = db.txn();
+  assert_eq!(scanner.ack_block(&mut txn, block_id).await.1, vec![]);
+  scanner.release_lock().await;
+  txn.commit();
+
+  scanner.multisig_completed.send(false).unwrap();
 }

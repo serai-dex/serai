@@ -213,8 +213,6 @@ fn send_test() {
             },
             network,
             block: substrate_block_num,
-            // TODO: Should we use the network key here? Or should we only use the Ristretto key?
-            key: key_pair.1.to_vec(),
             burns: vec![OutInstructionWithBalance {
               instruction: OutInstruction { address: wallet.address(), data: None },
               balance: balance_sent,

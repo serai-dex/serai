@@ -9,7 +9,7 @@ use serai_client::{
   SeraiError, Block, Serai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair},
+    primitives::{ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
@@ -100,28 +100,26 @@ async fn handle_key_gen<Pro: Processors>(
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
-    processors
-      .send(
-        set.network,
-        CoordinatorMessage::Substrate(
-          processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
-            context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
-              network_latest_finalized_block: serai
-                .get_latest_block_for_network(block.hash(), set.network)
-                .await?
-                // The processor treats this as a magic value which will cause it to find a network
-                // block which has a time greater than or equal to the Serai time
-                .unwrap_or(BlockHash([0; 32])),
-            },
-            set,
-            key_pair,
+  processors
+    .send(
+      set.network,
+      CoordinatorMessage::Substrate(
+        processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
+          context: SubstrateContext {
+            serai_time: block.time().unwrap() / 1000,
+            network_latest_finalized_block: serai
+              .get_latest_block_for_network(block.hash(), set.network)
+              .await?
+              // The processor treats this as a magic value which will cause it to find a network
+              // block which has a time greater than or equal to the Serai time
+              .unwrap_or(BlockHash([0; 32])),
           },
-        ),
-      )
-      .await;
-  }
+          set,
+          key_pair,
+        },
+      ),
+    )
+    .await;
 
   Ok(())
 }
@@ -155,13 +153,10 @@ async fn handle_batch_and_burns<Pro: Processors>(
     if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
       network_had_event(&mut burns, &mut batches, network);
 
-      // Track what Serai acknowledges as the latest block for this network
-      // If this Substrate block has multiple batches, the last batch's block will overwrite the
-      // prior batches
-      // Since batches within a block are guaranteed to be ordered, thanks to their incremental ID,
-      // the last batch will be the latest batch, so its block will be the latest block
-      // This is just a mild optimization to prevent needing an additional RPC call to grab this
-      batch_block.insert(network, network_block);
+      // Make sure this is the only Batch event for this network in this Block
+      // TODO: Make sure Serai rejects multiple Batchs within the same block. It should, as of an
+      // yet to be merged branch
+      assert!(batch_block.insert(network, network_block).is_none());
 
       // Add the batch included by this block
       batches.get_mut(&network).unwrap().push(id);
@@ -206,11 +201,6 @@ async fn handle_batch_and_burns<Pro: Processors>(
             },
             network,
             block: block.number(),
-            key: serai
-              .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
-              .await?
-              .map(|keys| keys.1.into_inner())
-              .expect("batch/burn for network which never set keys"),
             burns: burns.remove(&network).unwrap(),
             batches: batches.remove(&network).unwrap(),
           },

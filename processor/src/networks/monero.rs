@@ -37,8 +37,9 @@ use crate::{
   Payment, Plan, additional_key,
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
-    PostFeeBranch, Network, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
+    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
+    amortize_fee,
   },
 };
 
@@ -49,7 +50,7 @@ const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
 const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
 const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
 
-impl OutputTrait for Output {
+impl OutputTrait<Monero> for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
   // While we already are immune, thanks to using featured address, this doesn't hurt and is
   // technically more efficient.
@@ -66,6 +67,14 @@ impl OutputTrait for Output {
 
   fn id(&self) -> Self::Id {
     self.0.output.data.key.compress().to_bytes()
+  }
+
+  fn tx_id(&self) -> [u8; 32] {
+    self.0.output.absolute.tx
+  }
+
+  fn key(&self) -> EdwardsPoint {
+    EdwardsPoint(self.0.output.data.key - (EdwardsPoint::generator().0 * self.0.key_offset()))
   }
 
   fn balance(&self) -> Balance {
@@ -130,9 +139,13 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  keys: ThresholdKeys<Ed25519>,
   transcript: RecommendedTranscript,
   actual: MSignableTransaction,
+}
+impl SignableTransactionTrait for SignableTransaction {
+  fn fee(&self) -> u64 {
+    self.actual.fee()
+  }
 }
 
 impl BlockTrait<Monero> for Block {
@@ -145,6 +158,7 @@ impl BlockTrait<Monero> for Block {
     self.header.previous
   }
 
+  // TODO: Check Monero enforces this to be monotonic and sane
   fn time(&self) -> u64 {
     self.header.timestamp
   }
@@ -227,6 +241,7 @@ impl Network for Monero {
 
   const NETWORK: NetworkId = NetworkId::Monero;
   const ID: &'static str = "Monero";
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
 
   // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
@@ -250,6 +265,10 @@ impl Network for Monero {
     Self::address_internal(key, BRANCH_SUBADDRESS)
   }
 
+  fn change_address(key: EdwardsPoint) -> Self::Address {
+    Self::address_internal(key, CHANGE_SUBADDRESS)
+  }
+
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     // Monero defines height as chain length, so subtract 1 for block number
     Ok(self.rpc.get_height().await.map_err(|_| NetworkError::ConnectionError)? - 1)
@@ -267,15 +286,19 @@ impl Network for Monero {
     )
   }
 
-  async fn get_outputs(
-    &self,
-    block: &Block,
-    key: EdwardsPoint,
-  ) -> Result<Vec<Self::Output>, NetworkError> {
-    let mut txs = Self::scanner(key)
-      .scan(&self.rpc, block)
-      .await
-      .map_err(|_| NetworkError::ConnectionError)?
+  async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Self::Output> {
+    let outputs = loop {
+      match Self::scanner(key).scan(&self.rpc, block).await {
+        Ok(outputs) => break outputs,
+        Err(e) => {
+          log::error!("couldn't scan block {}: {e:?}", hex::encode(block.id()));
+          sleep(Duration::from_secs(60)).await;
+          continue;
+        }
+      }
+    };
+
+    let mut txs = outputs
       .iter()
       .filter_map(|outputs| Some(outputs.not_locked()).filter(|outputs| !outputs.is_empty()))
       .collect::<Vec<_>>();
@@ -305,14 +328,14 @@ impl Network for Monero {
       }
     }
 
-    Ok(outputs)
+    outputs
   }
 
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Block,
-  ) -> HashMap<[u8; 32], [u8; 32]> {
+  ) -> HashMap<[u8; 32], (usize, Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -322,7 +345,7 @@ impl Network for Monero {
       network: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], [u8; 32]>,
+      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
     ) {
       for hash in &block.txs {
         let tx = {
@@ -339,7 +362,7 @@ impl Network for Monero {
 
         if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix.extra) {
           if eventuality.matches(&tx) {
-            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, tx.hash());
+            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, (block.number(), tx));
           }
         }
       }
@@ -373,7 +396,6 @@ impl Network for Monero {
 
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Ed25519>,
     block_number: usize,
     mut plan: Plan<Self>,
     fee: Fee,
@@ -457,9 +479,7 @@ impl Network for Monero {
         Some(Zeroizing::new(plan.id())),
         inputs.clone(),
         payments,
-        plan.change.map(|key| {
-          Change::fingerprintable(Self::address_internal(key, CHANGE_SUBADDRESS).into())
-        }),
+        plan.change.map(|change| Change::fingerprintable(change.into())),
         vec![],
         fee,
       ) {
@@ -509,7 +529,6 @@ impl Network for Monero {
     let branch_outputs = amortize_fee(&mut plan, tx_fee);
 
     let signable = SignableTransaction {
-      keys,
       transcript,
       actual: match signable(plan, Some(tx_fee))? {
         Some(signable) => signable,
@@ -522,9 +541,10 @@ impl Network for Monero {
 
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    match transaction.actual.clone().multisig(transaction.keys.clone(), transaction.transcript) {
+    match transaction.actual.clone().multisig(keys, transaction.transcript) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }

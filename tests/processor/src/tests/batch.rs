@@ -149,7 +149,6 @@ pub(crate) async fn substrate_block(
       context: _,
       network: sent_network,
       block: sent_block,
-      key: _,
       burns: _,
       batches: _,
     } => {
@@ -280,8 +279,6 @@ fn batch_test() {
               },
               network,
               block: substrate_block_num + u64::from(i),
-              // TODO: Should we use the network key here? Or should we only use the Ristretto key?
-              key: key_pair.1.to_vec(),
               burns: vec![],
               batches: vec![batch.batch.id],
             },

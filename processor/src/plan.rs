@@ -24,6 +24,7 @@ impl<N: Network> Payment<N> {
   }
 
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    // TODO: Don't allow creating Payments with an Address which can't be serialized
     let address: Vec<u8> = self
       .address
       .clone()
@@ -74,7 +75,7 @@ pub struct Plan<N: Network> {
   pub key: <N::Curve as Ciphersuite>::G,
   pub inputs: Vec<N::Output>,
   pub payments: Vec<Payment<N>>,
-  pub change: Option<<N::Curve as Ciphersuite>::G>,
+  pub change: Option<N::Address>,
 }
 impl<N: Network> core::fmt::Debug for Plan<N> {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
@@ -83,7 +84,7 @@ impl<N: Network> core::fmt::Debug for Plan<N> {
       .field("key", &hex::encode(self.key.to_bytes()))
       .field("inputs", &self.inputs)
       .field("payments", &self.payments)
-      .field("change", &self.change.map(|change| hex::encode(change.to_bytes())))
+      .field("change", &self.change.as_ref().map(|change| change.to_string()))
       .finish()
   }
 }
@@ -105,8 +106,8 @@ impl<N: Network> Plan<N> {
       payment.transcript(&mut transcript);
     }
 
-    if let Some(change) = self.change {
-      transcript.append_message(b"change", change.to_bytes());
+    if let Some(change) = &self.change {
+      transcript.append_message(b"change", change.to_string());
     }
 
     transcript
@@ -132,12 +133,23 @@ impl<N: Network> Plan<N> {
       payment.write(writer)?;
     }
 
-    writer.write_all(&[u8::from(self.change.is_some())])?;
-    if let Some(change) = &self.change {
-      writer.write_all(change.to_bytes().as_ref())?;
-    }
-
-    Ok(())
+    // TODO: Have Plan construction fail if change cannot be serialized
+    let change = if let Some(change) = &self.change {
+      change.clone().try_into().map_err(|_| {
+        io::Error::new(
+          io::ErrorKind::Other,
+          format!(
+            "an address we said to use as change couldn't be convered to a Vec<u8>: {}",
+            change.to_string(),
+          ),
+        )
+      })?
+    } else {
+      vec![]
+    };
+    assert!(serai_client::primitives::MAX_ADDRESS_LEN <= u8::MAX.into());
+    writer.write_all(&[u8::try_from(change.len()).unwrap()])?;
+    writer.write_all(&change)
   }
 
   pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
@@ -156,9 +168,20 @@ impl<N: Network> Plan<N> {
       payments.push(Payment::<N>::read(reader)?);
     }
 
-    let mut buf = [0; 1];
-    reader.read_exact(&mut buf)?;
-    let change = if buf[0] == 1 { Some(N::Curve::read_G(reader)?) } else { None };
+    let mut len = [0; 1];
+    reader.read_exact(&mut len)?;
+    let mut change = vec![0; usize::from(len[0])];
+    reader.read_exact(&mut change)?;
+    let change = if change.is_empty() {
+      None
+    } else {
+      Some(N::Address::try_from(change).map_err(|_| {
+        io::Error::new(
+          io::ErrorKind::Other,
+          "couldn't deserialize an Address serialized into a Plan",
+        )
+      })?)
+    };
 
     Ok(Plan { key, inputs, payments, change })
   }

@@ -116,6 +116,12 @@ impl SignableTransaction {
     self.needed_fee
   }
 
+  /// Returns the fee this transaction will use.
+  pub fn fee(&self) -> u64 {
+    self.prevouts.iter().map(|prevout| prevout.value).sum::<u64>() -
+      self.tx.output.iter().map(|prevout| prevout.value).sum::<u64>()
+  }
+
   /// Create a new SignableTransaction.
   ///
   /// If a change address is specified, any leftover funds will be sent to it if the leftover funds

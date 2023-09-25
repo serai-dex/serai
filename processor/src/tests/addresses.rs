@@ -12,11 +12,12 @@ use serai_db::{DbTxn, MemDb};
 use crate::{
   Plan, Db,
   networks::{OutputType, Output, Block, Network},
-  scanner::{ScannerEvent, Scanner, ScannerHandle},
+  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
   tests::sign,
 };
 
 async fn spend<N: Network, D: Db>(
+  db: &mut D,
   network: &N,
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
@@ -32,10 +33,14 @@ async fn spend<N: Network, D: Db>(
         keys.clone(),
         network
           .prepare_send(
-            keys.clone(),
             network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS,
             // Send to a change output
-            Plan { key, inputs: outputs.clone(), payments: vec![], change: Some(key) },
+            Plan {
+              key,
+              inputs: outputs.clone(),
+              payments: vec![],
+              change: Some(N::change_address(key)),
+            },
             network.get_fee().await,
           )
           .await
@@ -51,13 +56,19 @@ async fn spend<N: Network, D: Db>(
     network.mine_block().await;
   }
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { block: _, outputs } => {
+    ScannerEvent::Block { is_retirement_block, block, outputs } => {
+      scanner.multisig_completed.send(false).unwrap();
+      assert!(!is_retirement_block);
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
+      let mut txn = db.txn();
+      assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
+      scanner.release_lock().await;
+      txn.commit();
       outputs
     }
-    ScannerEvent::Completed(_, _) => {
+    ScannerEvent::Completed(_, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }
@@ -76,11 +87,14 @@ pub async fn test_addresses<N: Network>(network: N) {
   }
 
   let mut db = MemDb::new();
-  let (mut scanner, active_keys) = Scanner::new(network.clone(), db.clone());
-  assert!(active_keys.is_empty());
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  assert!(current_keys.is_empty());
   let mut txn = db.txn();
-  scanner.rotate_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
+  scanner.register_key(&mut txn, network.get_latest_block_number().await.unwrap(), key).await;
   txn.commit();
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
+  }
 
   // Receive funds to the branch address and make sure it's properly identified
   let block_id = network.test_send(N::branch_address(key)).await.id();
@@ -88,19 +102,25 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Verify the Scanner picked them up
   let outputs =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-      ScannerEvent::Block { block, outputs } => {
+      ScannerEvent::Block { is_retirement_block, block, outputs } => {
+        scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
         assert_eq!(outputs[0].kind(), OutputType::Branch);
+        let mut txn = db.txn();
+        assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
+        scanner.release_lock().await;
+        txn.commit();
         outputs
       }
-      ScannerEvent::Completed(_, _) => {
+      ScannerEvent::Completed(_, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&network, &keys, &mut scanner, outputs).await;
+  let outputs = spend(&mut db, &network, &keys, &mut scanner, outputs).await;
   // Also test spending the change output
-  spend(&network, &keys, &mut scanner, outputs).await;
+  spend(&mut db, &network, &keys, &mut scanner, outputs).await;
 }

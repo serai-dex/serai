@@ -47,6 +47,7 @@ pub fn instance(
         hex::encode((Ristretto::generator() * priv_keys[&NetworkId::Monero]).to_bytes()),
       ),
       ("DB_PATH".to_string(), "./message-queue-db".to_string()),
+      ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
     ]
     .into(),
   );

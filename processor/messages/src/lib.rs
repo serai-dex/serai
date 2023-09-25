@@ -161,7 +161,6 @@ pub mod substrate {
       context: SubstrateContext,
       network: NetworkId,
       block: u64,
-      key: Vec<u8>,
       burns: Vec<OutInstructionWithBalance>,
       batches: Vec<u32>,
     },

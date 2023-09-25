@@ -71,6 +71,11 @@ impl ReceivedOutput {
     self.offset
   }
 
+  /// The Bitcoin output for this output.
+  pub fn output(&self) -> &TxOut {
+    &self.output
+  }
+
   /// The outpoint for this output.
   pub fn outpoint(&self) -> &OutPoint {
     &self.outpoint

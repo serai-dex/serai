@@ -1,0 +1,17 @@
+[package]
+name = "mini-serai"
+version = "0.1.0"
+description = "A miniature version of Serai used to test for race conditions"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/mini"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+loom = "0.7"

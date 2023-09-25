@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{fmt::Debug, time::Duration};
 use std::{io, collections::HashMap};
 
 use async_trait::async_trait;
@@ -11,6 +11,10 @@ use frost::{
 };
 
 use serai_client::primitives::{NetworkId, Balance};
+
+use log::error;
+
+use tokio::time::sleep;
 
 #[cfg(feature = "bitcoin")]
 pub mod bitcoin;
@@ -90,14 +94,17 @@ impl OutputType {
   }
 }
 
-pub trait Output: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
+pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Debug {
   type Id: 'static + Id;
 
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
+  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id;
+  fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
   fn balance(&self) -> Balance;
+  // TODO: Remove this?
   fn amount(&self) -> u64 {
     self.balance().amount.0
   }
@@ -115,6 +122,10 @@ pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
 
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;
+}
+
+pub trait SignableTransaction: Send + Sync + Clone + Debug {
+  fn fee(&self) -> u64;
 }
 
 pub trait Eventuality: Send + Sync + Clone + Debug {
@@ -172,10 +183,11 @@ impl<E: Eventuality> Default for EventualitiesTracker<E> {
 }
 
 pub trait Block<N: Network>: Send + Sync + Sized + Clone + Debug {
-  // This is currently bounded to being 32-bytes.
+  // This is currently bounded to being 32 bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn parent(&self) -> Self::Id;
+  // The monotonic network time at this block.
   fn time(&self) -> u64;
   fn median_fee(&self) -> N::Fee;
 }
@@ -275,9 +287,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
   /// The type containing all information on a scanned output.
   // This is almost certainly distinct from the network's native output type.
-  type Output: Output;
+  type Output: Output<Self>;
   /// The type containing all information on a planned transaction, waiting to be signed.
-  type SignableTransaction: Send + Sync + Clone + Debug;
+  type SignableTransaction: SignableTransaction;
   /// The type containing all information to check if a plan was completed.
   ///
   /// This must be binding to both the outputs expected and the plan ID.
@@ -302,6 +314,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   const NETWORK: NetworkId;
   /// String ID for this network.
   const ID: &'static str;
+  /// The estimated amount of time a block will take.
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize;
   /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
   /// The maximum amount of inputs which will fit in a TX.
@@ -322,8 +336,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Address for the given group key to receive external coins to.
   fn address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
-  // This is purely used for debugging purposes. Any output may be used to execute a branch.
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  /// Address for the given group key to use for change.
+  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
@@ -334,24 +349,26 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     block: &Self::Block,
     key: <Self::Curve as Ciphersuite>::G,
-  ) -> Result<Vec<Self::Output>, NetworkError>;
+  ) -> Vec<Self::Output>;
 
   /// Get the registered eventualities completed within this block, and any prior blocks which
   /// registered eventualities may have been completed in.
   ///
-  /// This will panic if not fed a new block.
+  /// This may panic if not fed a block greater than the tracker's block number.
+  // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
+  // code
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], <Self::Transaction as Transaction<Self>>::Id>;
+  ) -> HashMap<[u8; 32], (usize, Self::Transaction)>;
 
   /// Prepare a SignableTransaction for a transaction.
+  ///
   /// Returns None for the transaction if the SignableTransaction was dropped due to lack of value.
   #[rustfmt::skip]
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Self::Curve>,
     block_number: usize,
     plan: Plan<Self>,
     fee: Self::Fee,
@@ -363,6 +380,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError>;
 
@@ -395,4 +413,36 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address) -> Self::Block;
+}
+
+// TODO: Move into above trait
+pub async fn get_latest_block_number<N: Network>(network: &N) -> usize {
+  loop {
+    match network.get_latest_block_number().await {
+      Ok(number) => {
+        return number;
+      }
+      Err(e) => {
+        error!(
+          "couldn't get the latest block number in main's error-free get_block. {} {}",
+          "this should only happen if the node is offline. error: ", e
+        );
+        sleep(Duration::from_secs(10)).await;
+      }
+    }
+  }
+}
+
+pub async fn get_block<N: Network>(network: &N, block_number: usize) -> N::Block {
+  loop {
+    match network.get_block(block_number).await {
+      Ok(block) => {
+        return block;
+      }
+      Err(e) => {
+        error!("couldn't get block {block_number} in main's error-free get_block. error: {}", e);
+        sleep(Duration::from_secs(10)).await;
+      }
+    }
+  }
 }

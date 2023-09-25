@@ -15,6 +15,7 @@ use tokio::time::sleep;
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
+    key::{Parity, XOnlyPublicKey},
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
@@ -45,8 +46,9 @@ use serai_client::{
 use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, Eventuality as EventualityTrait, EventualitiesTracker,
-    PostFeeBranch, Network, drop_branches, amortize_fee,
+    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
+    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
+    amortize_fee,
   },
   Plan,
 };
@@ -76,7 +78,7 @@ pub struct Output {
   data: Vec<u8>,
 }
 
-impl OutputTrait for Output {
+impl OutputTrait<Bitcoin> for Output {
   type Id = OutputId;
 
   fn kind(&self) -> OutputType {
@@ -95,6 +97,24 @@ impl OutputTrait for Output {
       res.as_ref().to_vec()
     );
     res
+  }
+
+  fn tx_id(&self) -> [u8; 32] {
+    let mut hash = *self.output.outpoint().txid.as_raw_hash().as_byte_array();
+    hash.reverse();
+    hash
+  }
+
+  fn key(&self) -> ProjectivePoint {
+    let script = &self.output.output().script_pubkey;
+    assert!(script.is_v1_p2tr());
+    let Instruction::PushBytes(key) = script.instructions_minimal().last().unwrap().unwrap() else {
+      panic!("last item in v1 Taproot script wasn't bytes")
+    };
+    let key = XOnlyPublicKey::from_slice(key.as_ref())
+      .expect("last item in v1 Taproot script wasn't x-only public key");
+    Secp256k1::read_G(&mut key.public_key(Parity::Even).serialize().as_slice()).unwrap() -
+      (ProjectivePoint::GENERATOR * self.output.offset())
   }
 
   fn balance(&self) -> Balance {
@@ -196,7 +216,6 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  keys: ThresholdKeys<Secp256k1>,
   transcript: RecommendedTranscript,
   actual: BSignableTransaction,
 }
@@ -206,6 +225,11 @@ impl PartialEq for SignableTransaction {
   }
 }
 impl Eq for SignableTransaction {}
+impl SignableTransactionTrait for SignableTransaction {
+  fn fee(&self) -> u64 {
+    self.actual.fee()
+  }
+}
 
 impl BlockTrait<Bitcoin> for Block {
   type Id = [u8; 32];
@@ -221,6 +245,8 @@ impl BlockTrait<Bitcoin> for Block {
     hash
   }
 
+  // TODO: Don't use this block's time, use the network time at this block
+  // TODO: Confirm network time is monotonic, enabling its usage here
   fn time(&self) -> u64 {
     self.header.time.into()
   }
@@ -231,7 +257,7 @@ impl BlockTrait<Bitcoin> for Block {
   }
 }
 
-const KEY_DST: &[u8] = b"Bitcoin Key";
+const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
 lazy_static::lazy_static! {
   static ref BRANCH_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"branch");
   static ref CHANGE_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"change");
@@ -313,6 +339,7 @@ impl Network for Bitcoin {
 
   const NETWORK: NetworkId = NetworkId::Bitcoin;
   const ID: &'static str = "Bitcoin";
+  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
   const CONFIRMATIONS: usize = 6;
 
   // 0.0001 BTC, 10,000 satoshis
@@ -348,6 +375,11 @@ impl Network for Bitcoin {
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
   }
 
+  fn change_address(key: ProjectivePoint) -> Self::Address {
+    let (_, offsets, _) = scanner(key);
+    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
+  }
+
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     self.rpc.get_latest_block_number().await.map_err(|_| NetworkError::ConnectionError)
   }
@@ -358,11 +390,7 @@ impl Network for Bitcoin {
     self.rpc.get_block(&block_hash).await.map_err(|_| NetworkError::ConnectionError)
   }
 
-  async fn get_outputs(
-    &self,
-    block: &Self::Block,
-    key: ProjectivePoint,
-  ) -> Result<Vec<Self::Output>, NetworkError> {
+  async fn get_outputs(&self, block: &Self::Block, key: ProjectivePoint) -> Vec<Self::Output> {
     let (scanner, _, kinds) = scanner(key);
 
     let mut outputs = vec![];
@@ -390,18 +418,20 @@ impl Network for Bitcoin {
         };
         data.truncate(MAX_DATA_LEN.try_into().unwrap());
 
-        outputs.push(Output { kind, output, data })
+        let output = Output { kind, output, data };
+        assert_eq!(output.tx_id(), tx.id());
+        outputs.push(output);
       }
     }
 
-    Ok(outputs)
+    outputs
   }
 
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], [u8; 32]> {
+  ) -> HashMap<[u8; 32], (usize, Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -410,7 +440,7 @@ impl Network for Bitcoin {
     async fn check_block(
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], [u8; 32]>,
+      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
     ) {
       for tx in &block.txdata[1 ..] {
         let input = &tx.input[0].previous_output;
@@ -430,7 +460,7 @@ impl Network for Bitcoin {
             "dishonest multisig spent input on distinct set of outputs"
           );
 
-          res.insert(plan, tx.id());
+          res.insert(plan, (eventualities.block_number, tx.clone()));
         }
       }
 
@@ -476,7 +506,6 @@ impl Network for Bitcoin {
 
   async fn prepare_send(
     &self,
-    keys: ThresholdKeys<Secp256k1>,
     _: usize,
     mut plan: Plan<Self>,
     fee: Fee,
@@ -497,10 +526,7 @@ impl Network for Bitcoin {
       match BSignableTransaction::new(
         plan.inputs.iter().map(|input| input.output.clone()).collect(),
         &payments,
-        plan.change.map(|key| {
-          let (_, offsets, _) = scanner(key);
-          Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])).0
-        }),
+        plan.change.as_ref().map(|change| change.0.clone()),
         None,
         fee.0,
       ) {
@@ -544,7 +570,7 @@ impl Network for Bitcoin {
 
     Ok((
       Some((
-        SignableTransaction { keys, transcript: plan.transcript(), actual: signable },
+        SignableTransaction { transcript: plan.transcript(), actual: signable },
         Eventuality { plan_binding_input, outputs },
       )),
       branch_outputs,
@@ -553,13 +579,14 @@ impl Network for Bitcoin {
 
   async fn attempt_send(
     &self,
+    keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
     Ok(
       transaction
         .actual
         .clone()
-        .multisig(transaction.keys.clone(), transaction.transcript)
+        .multisig(keys.clone(), transaction.transcript)
         .expect("used the wrong keys"),
     )
   }
