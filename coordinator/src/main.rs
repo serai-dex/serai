@@ -300,12 +300,12 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   let ten_blocks_of_time =
     Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
 
-  let mut readers = vec![];
-  for tributary in tributaries.read().await.values() {
-    readers.push(tributary.tributary.read().await.reader());
-  }
-
   loop {
+    let mut readers = vec![];
+    for tributary in tributaries.read().await.values() {
+      readers.push(tributary.tributary.read().await.reader());
+    }
+
     for tributary in &readers {
       let tip = tributary.tip();
       let block_time =
@@ -454,7 +454,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
   }
 }
 
-pub async fn publish_transaction<D: Db, P: P2p>(
+pub async fn publish_signed_transaction<D: Db, P: P2p>(
   tributary: &Tributary<D, Transaction, P>,
   tx: Transaction,
 ) {
@@ -473,7 +473,7 @@ pub async fn publish_transaction<D: Db, P: P2p>(
       assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
     }
   } else {
-    panic!("non-signed transaction passed to publish_transaction");
+    panic!("non-signed transaction passed to publish_signed_transaction");
   }
 }
 
@@ -781,7 +781,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           };
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          publish_transaction(&tributary, tx).await;
+          publish_signed_transaction(&tributary, tx).await;
         }
       }
     }
@@ -867,7 +867,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           panic!("tributary we don't have came to consensus on an Batch");
         };
         let tributary = tributary.tributary.read().await;
-        publish_transaction(&tributary, tx).await;
+        publish_signed_transaction(&tributary, tx).await;
       }
     }
   };
