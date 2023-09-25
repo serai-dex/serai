@@ -64,10 +64,11 @@ pub struct ActiveTributary<D: Db, P: P2p> {
 
 type Tributaries<D, P> = HashMap<[u8; 32], ActiveTributary<D, P>>;
 
-// Adds a tributary into the specified HahMap
-async fn add_tributary<D: Db, P: P2p>(
+// Adds a tributary into the specified HashMap
+async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  processors: &Pro,
   p2p: P,
   tributaries: &mut Tributaries<D, P>,
   spec: TributarySpec,
@@ -79,12 +80,35 @@ async fn add_tributary<D: Db, P: P2p>(
     db,
     spec.genesis(),
     spec.start_time(),
-    key,
+    key.clone(),
     spec.validators(),
     p2p,
   )
   .await
   .unwrap();
+
+  // Trigger a DKG for the newly added Tributary
+  // If we're rebooting, we'll re-fire this message
+  // This is safe due to the message-queue deduplicating based off the intent system
+  let set = spec.set();
+  processors
+    .send(
+      set.network,
+      processor_messages::CoordinatorMessage::KeyGen(
+        processor_messages::key_gen::CoordinatorMessage::GenerateKey {
+          id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
+          params: frost::ThresholdParams::new(
+            spec.t(),
+            spec.n(),
+            spec
+              .i(Ristretto::generator() * key.deref())
+              .expect("adding a tribuary for a set we aren't in set for"),
+          )
+          .unwrap(),
+        },
+      ),
+    )
+    .await;
 
   let reader = tributary.reader();
 
@@ -214,34 +238,13 @@ pub async fn scan_tributaries<
         let reader = add_tributary(
           raw_db.clone(),
           key.clone(),
+          &processors,
           p2p.clone(),
           // This is a short-lived write acquisition, which is why it should be fine
           &mut *tributaries.write().await,
           spec.clone(),
         )
         .await;
-
-        // Trigger a DKG for the newly added Tributary
-        // TODO: This needs to moved into add_tributary, or else we may never emit GenerateKey
-        let set = spec.set();
-        processors
-          .send(
-            set.network,
-            processor_messages::CoordinatorMessage::KeyGen(
-              processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-                id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
-                params: frost::ThresholdParams::new(
-                  spec.t(),
-                  spec.n(),
-                  spec
-                    .i(Ristretto::generator() * key.deref())
-                    .expect("adding a tribuary for a set we aren't in set for"),
-                )
-                .unwrap(),
-              },
-            ),
-          )
-          .await;
 
         tributary_readers.push((spec, reader));
       }
@@ -819,6 +822,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let _ = add_tributary(
       raw_db.clone(),
       key.clone(),
+      &processors,
       p2p.clone(),
       &mut *tributaries.write().await,
       spec,
