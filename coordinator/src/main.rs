@@ -6,7 +6,7 @@ use core::{ops::Deref, future::Future};
 use std::{
   sync::Arc,
   time::{SystemTime, Duration},
-  collections::{VecDeque, HashMap},
+  collections::HashMap,
 };
 
 use zeroize::{Zeroize, Zeroizing};
@@ -27,7 +27,10 @@ use serai_client::{primitives::NetworkId, Public, Serai};
 use message_queue::{Service, client::MessageQueue};
 
 use futures::stream::StreamExt;
-use tokio::{sync::RwLock, time::sleep};
+use tokio::{
+  sync::{RwLock, mpsc},
+  time::sleep,
+};
 
 use ::tributary::{
   ReadWrite, ProvidedError, TransactionKind, TransactionTrait, Block, Tributary, TributaryReader,
@@ -53,11 +56,6 @@ mod substrate;
 
 #[cfg(test)]
 pub mod tests;
-
-lazy_static::lazy_static! {
-  // This is a static to satisfy lifetime expectations
-  static ref NEW_TRIBUTARIES: RwLock<VecDeque<TributarySpec>> = RwLock::new(VecDeque::new());
-}
 
 pub struct ActiveTributary<D: Db, P: P2p> {
   pub spec: TributarySpec,
@@ -103,6 +101,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: Pro,
   serai: Arc<Serai>,
+  new_tributary_channel: mpsc::UnboundedSender<TributarySpec>,
 ) {
   log::info!("scanning substrate");
 
@@ -162,9 +161,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
         // Add it to the queue
         // If we reboot before this is read from the queue, the fact it was saved to the database
         // means it'll be handled on reboot
-        async {
-          NEW_TRIBUTARIES.write().await.push_back(spec);
-        }
+        new_tributary_channel.send(spec).unwrap();
       },
       &processors,
       &serai,
@@ -181,7 +178,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub async fn scan_tributaries<
   D: Db,
   Pro: Processors,
@@ -196,6 +193,7 @@ pub async fn scan_tributaries<
   processors: Pro,
   serai: Arc<Serai>,
   tributaries: Arc<RwLock<Tributaries<D, P>>>,
+  mut new_tributary_channel: mpsc::UnboundedReceiver<TributarySpec>,
 ) {
   log::info!("scanning tributaries");
 
@@ -209,11 +207,10 @@ pub async fn scan_tributaries<
   loop {
     // The following handle_new_blocks function may take an arbitrary amount of time
     // Accordingly, it may take a long time to acquire a write lock on the tributaries table
-    // By definition of NEW_TRIBUTARIES, we allow tributaries to be added almost immediately,
-    // meaning the Substrate scanner won't become blocked on this
+    // By definition of new_tributary_channel, we allow tributaries to be 'added' almost
+    // immediately, meaning the Substrate scanner won't become blocked on this
     {
-      let mut new_tributaries = NEW_TRIBUTARIES.write().await;
-      while let Some(spec) = new_tributaries.pop_front() {
+      while let Ok(spec) = new_tributary_channel.try_recv() {
         let reader = add_tributary(
           raw_db.clone(),
           key.clone(),
@@ -225,6 +222,7 @@ pub async fn scan_tributaries<
         .await;
 
         // Trigger a DKG for the newly added Tributary
+        // TODO: This needs to moved into add_tributary, or else we may never emit GenerateKey
         let set = spec.set();
         processors
           .send(
@@ -799,8 +797,16 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 ) {
   let serai = Arc::new(serai);
 
+  let (new_tributary_channel_send, new_tributary_channel_recv) = mpsc::unbounded_channel();
+
   // Handle new Substrate blocks
-  tokio::spawn(scan_substrate(raw_db.clone(), key.clone(), processors.clone(), serai.clone()));
+  tokio::spawn(scan_substrate(
+    raw_db.clone(),
+    key.clone(),
+    processors.clone(),
+    serai.clone(),
+    new_tributary_channel_send,
+  ));
 
   // Handle the Tributaries
 
@@ -883,6 +889,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       processors.clone(),
       serai.clone(),
       tributaries.clone(),
+      new_tributary_channel_recv,
     ));
   }
 

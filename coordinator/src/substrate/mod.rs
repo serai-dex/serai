@@ -1,4 +1,4 @@
-use core::{ops::Deref, time::Duration, future::Future};
+use core::{ops::Deref, time::Duration};
 use std::collections::{HashSet, HashMap};
 
 use zeroize::Zeroizing;
@@ -43,12 +43,7 @@ async fn in_set(
   Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
-async fn handle_new_set<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
@@ -84,7 +79,7 @@ async fn handle_new_set<
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
-    create_new_tributary(db, spec.clone()).await;
+    create_new_tributary(db, spec.clone());
   } else {
     log::info!("not present in set {:?}", set);
   }
@@ -215,12 +210,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
 #[allow(clippy::needless_pass_by_ref_mut)] // False positive?
-async fn handle_block<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
@@ -295,12 +285,7 @@ async fn handle_block<
   Ok(())
 }
 
-pub async fn handle_new_blocks<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+pub async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
