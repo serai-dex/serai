@@ -219,7 +219,7 @@ fn provided_transaction() {
 
   let tx = random_provided_transaction(&mut OsRng);
 
-  // This should be provideable
+  // This should be providable
   let mut db = MemDb::new();
   let mut txs = ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis);
   txs.provide(tx.clone()).unwrap();
