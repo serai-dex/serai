@@ -28,13 +28,11 @@ use message_queue::{Service, client::MessageQueue};
 
 use futures::stream::StreamExt;
 use tokio::{
-  sync::{RwLock, mpsc},
+  sync::{RwLock, mpsc, broadcast},
   time::sleep,
 };
 
-use ::tributary::{
-  ReadWrite, ProvidedError, TransactionKind, TransactionTrait, Block, Tributary, TributaryReader,
-};
+use ::tributary::{ReadWrite, ProvidedError, TransactionKind, TransactionTrait, Block, Tributary};
 
 mod tributary;
 use crate::tributary::{
@@ -57,12 +55,11 @@ mod substrate;
 #[cfg(test)]
 pub mod tests;
 
+#[derive(Clone)]
 pub struct ActiveTributary<D: Db, P: P2p> {
   pub spec: TributarySpec,
-  pub tributary: Arc<RwLock<Tributary<D, Transaction, P>>>,
+  pub tributary: Arc<Tributary<D, Transaction, P>>,
 }
-
-type Tributaries<D, P> = HashMap<[u8; 32], ActiveTributary<D, P>>;
 
 // Adds a tributary into the specified HashMap
 async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
@@ -70,9 +67,9 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: &Pro,
   p2p: P,
-  tributaries: &mut Tributaries<D, P>,
+  tributaries: &broadcast::Sender<ActiveTributary<D, P>>,
   spec: TributarySpec,
-) -> TributaryReader<D, Transaction> {
+) {
   log::info!("adding tributary {:?}", spec.set());
 
   let tributary = Tributary::<_, Transaction, _>::new(
@@ -110,14 +107,10 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
     )
     .await;
 
-  let reader = tributary.reader();
-
-  tributaries.insert(
-    tributary.genesis(),
-    ActiveTributary { spec, tributary: Arc::new(RwLock::new(tributary)) },
-  );
-
-  reader
+  tributaries
+    .send(ActiveTributary { spec, tributary: Arc::new(tributary) })
+    .map_err(|_| "all ActiveTributary recipients closed")
+    .unwrap();
 }
 
 pub async fn scan_substrate<D: Db, Pro: Processors>(
@@ -125,7 +118,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: Pro,
   serai: Arc<Serai>,
-  new_tributary_channel: mpsc::UnboundedSender<TributarySpec>,
+  new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
 ) {
   log::info!("scanning substrate");
 
@@ -185,7 +178,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
         // Add it to the queue
         // If we reboot before this is read from the queue, the fact it was saved to the database
         // means it'll be handled on reboot
-        new_tributary_channel.send(spec).unwrap();
+        new_tributary_spec.send(spec).unwrap();
       },
       &processors,
       &serai,
@@ -202,7 +195,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
   }
 }
 
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(clippy::type_complexity)]
 pub async fn scan_tributaries<
   D: Db,
   Pro: Processors,
@@ -216,38 +209,25 @@ pub async fn scan_tributaries<
   p2p: P,
   processors: Pro,
   serai: Arc<Serai>,
-  tributaries: Arc<RwLock<Tributaries<D, P>>>,
-  mut new_tributary_channel: mpsc::UnboundedReceiver<TributarySpec>,
+  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
 ) {
   log::info!("scanning tributaries");
 
-  let mut tributary_readers = vec![];
-  for ActiveTributary { spec, tributary } in tributaries.read().await.values() {
-    tributary_readers.push((spec.clone(), tributary.read().await.reader()));
-  }
-
   // Handle new Tributary blocks
+  let mut tributary_readers = vec![];
   let mut tributary_db = tributary::TributaryDb::new(raw_db.clone());
   loop {
-    // The following handle_new_blocks function may take an arbitrary amount of time
-    // Accordingly, it may take a long time to acquire a write lock on the tributaries table
-    // By definition of new_tributary_channel, we allow tributaries to be 'added' almost
-    // immediately, meaning the Substrate scanner won't become blocked on this
-    {
-      while let Ok(spec) = new_tributary_channel.try_recv() {
-        let reader = add_tributary(
-          raw_db.clone(),
-          key.clone(),
-          &processors,
-          p2p.clone(),
-          // This is a short-lived write acquisition, which is why it should be fine
-          &mut *tributaries.write().await,
-          spec.clone(),
-        )
-        .await;
-
-        tributary_readers.push((spec, reader));
+    while let Ok(ActiveTributary { spec, tributary }) = {
+      match new_tributary.try_recv() {
+        Ok(tributary) => Ok(tributary),
+        Err(broadcast::error::TryRecvError::Empty) => Err(()),
+        Err(broadcast::error::TryRecvError::Lagged(_)) => {
+          panic!("scan_tributaries lagged to handle new_tributary")
+        }
+        Err(broadcast::error::TryRecvError::Closed) => panic!("new_tributary sender closed"),
       }
+    } {
+      tributary_readers.push((spec, tributary.reader()));
     }
 
     for (spec, reader) in &tributary_readers {
@@ -296,15 +276,24 @@ pub async fn scan_tributaries<
 
 pub async fn heartbeat_tributaries<D: Db, P: P2p>(
   p2p: P,
-  tributaries: Arc<RwLock<Tributaries<D, P>>>,
+  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
 ) {
   let ten_blocks_of_time =
     Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
 
+  let mut readers = vec![];
   loop {
-    let mut readers = vec![];
-    for tributary in tributaries.read().await.values() {
-      readers.push(tributary.tributary.read().await.reader());
+    while let Ok(ActiveTributary { spec, tributary }) = {
+      match new_tributary.try_recv() {
+        Ok(tributary) => Ok(tributary),
+        Err(broadcast::error::TryRecvError::Empty) => Err(()),
+        Err(broadcast::error::TryRecvError::Lagged(_)) => {
+          panic!("heartbeat lagged to handle new_tributary")
+        }
+        Err(broadcast::error::TryRecvError::Closed) => panic!("new_tributary sender closed"),
+      }
+    } {
+      readers.push(tributary.reader());
     }
 
     for tributary in &readers {
@@ -337,8 +326,27 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
 pub async fn handle_p2p<D: Db, P: P2p>(
   our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
-  tributaries: Arc<RwLock<Tributaries<D, P>>>,
+  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
 ) {
+  // TODO: Merge this into the below loop. We don't need an extra task here
+  let tributaries = Arc::new(RwLock::new(HashMap::new()));
+  tokio::spawn({
+    let tributaries = tributaries.clone();
+    async move {
+      loop {
+        match new_tributary.recv().await {
+          Ok(tributary) => {
+            tributaries.write().await.insert(tributary.spec.genesis(), tributary);
+          }
+          Err(broadcast::error::RecvError::Lagged(_)) => {
+            panic!("handle_p2p lagged to handle new_tributary")
+          }
+          Err(broadcast::error::RecvError::Closed) => panic!("new_tributary sender closed"),
+        }
+      }
+    }
+  });
+
   loop {
     let mut msg = p2p.receive().await;
     // Spawn a dedicated task to handle this message, ensuring any singularly latent message
@@ -359,7 +367,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
             };
 
             log::trace!("handling message for tributary {:?}", tributary.spec.set());
-            if tributary.tributary.read().await.handle_message(&msg.msg).await {
+            if tributary.tributary.handle_message(&msg.msg).await {
               P2p::broadcast(&p2p, msg.kind, msg.msg).await;
             }
           }
@@ -378,7 +386,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
               log::debug!("received heartbeat message for unknown network");
               return;
             };
-            let tributary_read = tributary.tributary.read().await;
+            let tributary_read = &tributary.tributary;
 
             /*
             // Have sqrt(n) nodes reply with the blocks
@@ -417,7 +425,6 @@ pub async fn handle_p2p<D: Db, P: P2p>(
             log::debug!("received heartbeat and selected to respond");
 
             let reader = tributary_read.reader();
-            drop(tributary_read);
 
             let mut latest = msg.msg[.. 32].try_into().unwrap();
             while let Some(next) = reader.block_after(&latest) {
@@ -446,7 +453,7 @@ pub async fn handle_p2p<D: Db, P: P2p>(
               return;
             };
 
-            let res = tributary.tributary.read().await.sync_block(block, msg.msg).await;
+            let res = tributary.tributary.sync_block(block, msg.msg).await;
             log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
           }
         }
@@ -483,9 +490,28 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: Arc<Serai>,
   mut processors: Pro,
-  tributaries: Arc<RwLock<Tributaries<D, P>>>,
+  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
 ) {
   let pub_key = Ristretto::generator() * key.deref();
+
+  // TODO: Merge this into the below loop. We don't need an extra task here
+  let tributaries = Arc::new(RwLock::new(HashMap::new()));
+  tokio::spawn({
+    let tributaries = tributaries.clone();
+    async move {
+      loop {
+        match new_tributary.recv().await {
+          Ok(tributary) => {
+            tributaries.write().await.insert(tributary.spec.genesis(), tributary);
+          }
+          Err(broadcast::error::RecvError::Lagged(_)) => {
+            panic!("handle_processors lagged to handle new_tributary")
+          }
+          Err(broadcast::error::RecvError::Closed) => panic!("new_tributary sender closed"),
+        }
+      }
+    }
+  });
 
   loop {
     // TODO: Dispatch this message to a task dedicated to handling this processor, preventing one
@@ -738,15 +764,13 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
     if let Some(mut tx) = tx {
       log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
       let tributaries = tributaries.read().await;
-      log::trace!("read global tributaries");
       let Some(tributary) = tributaries.get(&genesis) else {
         // TODO: This can happen since Substrate tells the Processor to generate commitments
         // at the same time it tells the Tributary to be created
         // There's no guarantee the Tributary will have been created though
         panic!("processor is operating on tributary we don't have");
       };
-      let tributary = tributary.tributary.read().await;
-      log::trace!("read specific tributary");
+      let tributary = &tributary.tributary;
 
       match tx.kind() {
         TransactionKind::Provided(_) => {
@@ -782,7 +806,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
           };
           tx.sign(&mut OsRng, genesis, &key, nonce);
 
-          publish_signed_transaction(&tributary, tx).await;
+          publish_signed_transaction(tributary, tx).await;
         }
       }
     }
@@ -800,7 +824,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 ) {
   let serai = Arc::new(serai);
 
-  let (new_tributary_channel_send, new_tributary_channel_recv) = mpsc::unbounded_channel();
+  let (new_tributary_spec_send, mut new_tributary_spec_recv) = mpsc::unbounded_channel();
+  // Reload active tributaries from the database
+  for spec in MainDb::new(&mut raw_db).active_tributaries().1 {
+    new_tributary_spec_send.send(spec).unwrap();
+  }
 
   // Handle new Substrate blocks
   tokio::spawn(scan_substrate(
@@ -808,33 +836,64 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     key.clone(),
     processors.clone(),
     serai.clone(),
-    new_tributary_channel_send,
+    new_tributary_spec_send,
   ));
 
   // Handle the Tributaries
 
-  // Arc so this can be shared between the Tributary scanner task and the P2P task
-  // Write locks on this may take a while to acquire
-  let tributaries = Arc::new(RwLock::new(HashMap::<[u8; 32], ActiveTributary<D, P>>::new()));
+  // This should be large enough for an entire rotation of all tributaries
+  // If it's too small, the coordinator fail to boot, which is a decent sanity check
+  let (new_tributary, mut new_tributary_listener_1) = broadcast::channel(32);
+  let new_tributary_listener_2 = new_tributary.subscribe();
+  let new_tributary_listener_3 = new_tributary.subscribe();
+  let new_tributary_listener_4 = new_tributary.subscribe();
+  let new_tributary_listener_5 = new_tributary.subscribe();
 
-  // Reload active tributaries from the database
-  for spec in MainDb::new(&mut raw_db).active_tributaries().1 {
-    let _ = add_tributary(
-      raw_db.clone(),
-      key.clone(),
-      &processors,
-      p2p.clone(),
-      &mut *tributaries.write().await,
-      spec,
-    )
-    .await;
-  }
+  // Spawn a task to further add Tributaries as needed
+  tokio::spawn({
+    let raw_db = raw_db.clone();
+    let key = key.clone();
+    let processors = processors.clone();
+    let p2p = p2p.clone();
+    async move {
+      loop {
+        let spec = new_tributary_spec_recv.recv().await.unwrap();
+        add_tributary(
+          raw_db.clone(),
+          key.clone(),
+          &processors,
+          p2p.clone(),
+          &new_tributary,
+          spec.clone(),
+        )
+        .await;
+      }
+    }
+  });
 
   // When we reach synchrony on an event requiring signing, send our preprocess for it
   let recognized_id = {
     let raw_db = raw_db.clone();
     let key = key.clone();
-    let tributaries = tributaries.clone();
+
+    let tributaries = Arc::new(RwLock::new(HashMap::new()));
+    tokio::spawn({
+      let tributaries = tributaries.clone();
+      async move {
+        loop {
+          match new_tributary_listener_1.recv().await {
+            Ok(tributary) => {
+              tributaries.write().await.insert(tributary.spec.genesis(), tributary);
+            }
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+              panic!("recognized_id lagged to handle new_tributary")
+            }
+            Err(broadcast::error::RecvError::Closed) => panic!("new_tributary sender closed"),
+          }
+        }
+      }
+    });
+
     move |network, genesis, id_type, id, nonce| {
       let raw_db = raw_db.clone();
       let key = key.clone();
@@ -876,8 +935,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         let Some(tributary) = tributaries.get(&genesis) else {
           panic!("tributary we don't have came to consensus on an Batch");
         };
-        let tributary = tributary.tributary.read().await;
-        publish_signed_transaction(&tributary, tx).await;
+        publish_signed_transaction(&tributary.tributary, tx).await;
       }
     }
   };
@@ -892,20 +950,19 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       p2p.clone(),
       processors.clone(),
       serai.clone(),
-      tributaries.clone(),
-      new_tributary_channel_recv,
+      new_tributary_listener_2,
     ));
   }
 
   // Spawn the heartbeat task, which will trigger syncing if there hasn't been a Tributary block
   // in a while (presumably because we're behind)
-  tokio::spawn(heartbeat_tributaries(p2p.clone(), tributaries.clone()));
+  tokio::spawn(heartbeat_tributaries(p2p.clone(), new_tributary_listener_3));
 
   // Handle P2P messages
-  tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, tributaries.clone()));
+  tokio::spawn(handle_p2p(Ristretto::generator() * key.deref(), p2p, new_tributary_listener_4));
 
   // Handle all messages from processors
-  handle_processors(raw_db, key, serai, processors, tributaries).await;
+  handle_processors(raw_db, key, serai, processors, new_tributary_listener_5).await;
 }
 
 #[tokio::main]
