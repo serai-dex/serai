@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{VecDeque, HashMap};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
@@ -13,7 +13,7 @@ use crate::{
   transaction::{Signed, TransactionKind, Transaction as TransactionTrait},
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Debug)]
 pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   db: Option<D>,
   genesis: [u8; 32],
@@ -24,6 +24,8 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
+
+  pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
@@ -76,6 +78,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
       provided: ProvidedTransactions::new(db.clone(), genesis),
       mempool: Mempool::new(db, genesis),
+
+      next_block_notifications: VecDeque::new(),
     };
 
     if let Some((block_number, tip)) = {
@@ -273,6 +277,10 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     txn.commit();
     self.db = Some(db);
+
+    for tx in self.next_block_notifications.drain(..) {
+      let _ = tx.send(());
+    }
 
     Ok(())
   }

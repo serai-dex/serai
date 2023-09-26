@@ -336,6 +336,15 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       _ => false,
     }
   }
+
+  /// Get a Future which will resolve once the next block has been added.
+  pub async fn next_block_notification(
+    &self,
+  ) -> impl Send + Sync + core::future::Future<Output = Result<(), impl Send + Sync>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    self.network.blockchain.write().await.next_block_notifications.push_back(tx);
+    rx
+  }
 }
 
 #[derive(Clone)]
