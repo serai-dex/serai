@@ -85,8 +85,11 @@ async fn sync_test() {
   // It shouldn't automatically catch up. If it somehow was, our test would be broken
   // Sanity check this
   let tip = tributaries[0].tip().await;
-  sleep(Duration::from_secs(2 * block_time)).await;
+  // Wait until a new block occurs
+  sleep(Duration::from_secs(3 * block_time)).await;
+  // Make sure a new block actually occurred
   assert!(tributaries[0].tip().await != tip);
+  // Make sure the new block alone didn't trigger catching up
   assert_eq!(syncer_tributary.tip().await, spec.genesis());
 
   // Start the heartbeat protocol
