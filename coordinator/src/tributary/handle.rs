@@ -17,7 +17,6 @@ use frost_schnorrkel::Schnorrkel;
 
 use serai_client::{
   Signature,
-  primitives::NetworkId,
   validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
   subxt::utils::Encoded,
   Serai,
@@ -225,13 +224,13 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
-pub async fn handle_application_tx<
+pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
+  RID: crate::RIDTrait<FRid>,
 >(
   tx: Transaction,
   spec: &TributarySpec,

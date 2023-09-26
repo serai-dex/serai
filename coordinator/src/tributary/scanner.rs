@@ -4,9 +4,7 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use serai_client::{
-  primitives::NetworkId, validator_sets::primitives::ValidatorSet, subxt::utils::Encoded,
-};
+use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
 
 use tributary::{
   Transaction as TributaryTransaction, Block, TributaryReader,
@@ -40,7 +38,7 @@ async fn handle_block<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
+  RID: crate::RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
@@ -101,13 +99,13 @@ async fn handle_block<
   // TODO2: Trigger any necessary re-attempts
 }
 
-pub async fn handle_new_blocks<
+pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid,
+  RID: crate::RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
