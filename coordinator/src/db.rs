@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use scale::{Encode, Decode};
 use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch};
 
@@ -6,12 +8,8 @@ pub use serai_db::*;
 use crate::tributary::TributarySpec;
 
 #[derive(Debug)]
-pub struct MainDb<'a, D: Db>(&'a mut D);
-impl<'a, D: Db> MainDb<'a, D> {
-  pub fn new(db: &'a mut D) -> Self {
-    Self(db)
-  }
-
+pub struct MainDb<D: Db>(PhantomData<D>);
+impl<D: Db> MainDb<D> {
   fn main_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     D::key(b"coordinator_main", dst, key)
   }
@@ -29,8 +27,8 @@ impl<'a, D: Db> MainDb<'a, D> {
   fn acive_tributaries_key() -> Vec<u8> {
     Self::main_key(b"active_tributaries", [])
   }
-  pub fn active_tributaries(&self) -> (Vec<u8>, Vec<TributarySpec>) {
-    let bytes = self.0.get(Self::acive_tributaries_key()).unwrap_or(vec![]);
+  pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
+    let bytes = getter.get(Self::acive_tributaries_key()).unwrap_or(vec![]);
     let mut bytes_ref: &[u8] = bytes.as_ref();
 
     let mut tributaries = vec![];
@@ -40,9 +38,9 @@ impl<'a, D: Db> MainDb<'a, D> {
 
     (bytes, tributaries)
   }
-  pub fn add_active_tributary(&mut self, spec: &TributarySpec) {
+  pub fn add_active_tributary(txn: &mut D::Transaction<'_>, spec: &TributarySpec) {
     let key = Self::acive_tributaries_key();
-    let (mut existing_bytes, existing) = self.active_tributaries();
+    let (mut existing_bytes, existing) = Self::active_tributaries(txn);
     for tributary in &existing {
       if tributary == spec {
         return;
@@ -50,9 +48,7 @@ impl<'a, D: Db> MainDb<'a, D> {
     }
 
     spec.write(&mut existing_bytes).unwrap();
-    let mut txn = self.0.txn();
     txn.put(key, existing_bytes);
-    txn.commit();
   }
 
   fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {
@@ -73,14 +69,11 @@ impl<'a, D: Db> MainDb<'a, D> {
   fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
     Self::main_key(b"batch", (network, id).encode())
   }
-  pub fn save_batch(&mut self, batch: SignedBatch) {
-    let mut txn = self.0.txn();
+  pub fn save_batch(txn: &mut D::Transaction<'_>, batch: SignedBatch) {
     txn.put(Self::batch_key(batch.batch.network, batch.batch.id), batch.encode());
-    txn.commit();
   }
-  pub fn batch(&self, network: NetworkId, id: u32) -> Option<SignedBatch> {
-    self
-      .0
+  pub fn batch<G: Get>(getter: &G, network: NetworkId, id: u32) -> Option<SignedBatch> {
+    getter
       .get(Self::batch_key(network, id))
       .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
   }
