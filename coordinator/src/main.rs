@@ -870,6 +870,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
     // Alternatively, a peek method with local delineation of handled messages would work.
 
     let msg = processors.recv().await;
+    // TODO: Check this ID is sane (last handled ID or expected next ID)
     if last_msg == Some(msg.id) {
       sleep(Duration::from_secs(1)).await;
       continue;

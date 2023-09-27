@@ -140,9 +140,9 @@ impl MessageQueue {
     }
   }
 
-  pub async fn next(&self, expected: u64) -> QueuedMessage {
+  pub async fn next(&self) -> QueuedMessage {
     loop {
-      let json = self.json_call("next", serde_json::json!([self.service, expected])).await;
+      let json = self.json_call("next", serde_json::json!([self.service])).await;
 
       // Convert from a Value to a type via reserialization
       let msg: Option<QueuedMessage> = serde_json::from_str(
@@ -174,7 +174,6 @@ impl MessageQueue {
         );
       }
       // TODO: Verify the sender's signature
-      // TODO: Check the ID is sane
 
       return msg;
     }

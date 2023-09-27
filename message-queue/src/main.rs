@@ -107,16 +107,11 @@ mod binaries {
   /*
     Gets the next message in queue for this service.
 
-    This is not authenticated due to the fact every nonce would have to be saved to prevent replays,
-    or a challenge-response protocol implemented. Neither are worth doing when there should be no
-    sensitive data on this server.
-
-    The expected index is used to ensure a service didn't fall out of sync with this service. It
-    should always be either the next message's ID or *TODO*.
+    This is not authenticated due to the fact every nonce would have to be saved to prevent
+    replays, or a challenge-response protocol implemented. Neither are worth doing when there
+    should be no sensitive data on this server.
   */
-  pub(crate) fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
-    // TODO: Verify the expected next message ID matches
-
+  pub(crate) fn get_next_message(service: Service) -> Option<QueuedMessage> {
     let queue_outer = (*QUEUES).read().unwrap();
     let queue = queue_outer[&service].read().unwrap();
     let next = queue.last_acknowledged().map(|i| i + 1).unwrap_or(0);
@@ -229,8 +224,8 @@ async fn main() {
     .unwrap();
   module
     .register_method("next", |args, _| {
-      let args = args.parse::<(Service, u64)>().unwrap();
-      Ok(get_next_message(args.0, args.1))
+      let args = args.parse::<Service>().unwrap();
+      Ok(get_next_message(args))
     })
     .unwrap();
   module

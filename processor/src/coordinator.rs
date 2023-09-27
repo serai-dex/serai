@@ -25,8 +25,7 @@ impl Coordinator for MessageQueue {
   }
 
   async fn recv(&mut self) -> Message {
-    // TODO2: Use a proper expected next ID
-    let msg = self.next(0).await;
+    let msg = self.next().await;
 
     let id = msg.id;
 

@@ -28,8 +28,7 @@ impl Processors for Arc<MessageQueue> {
     self.queue(metadata, msg.into_bytes()).await;
   }
   async fn recv(&mut self) -> Message {
-    // TODO: Use a proper expected next ID
-    let msg = self.next(0).await;
+    let msg = self.next().await;
 
     let network = match msg.from {
       Service::Processor(network) => network,
