@@ -35,7 +35,7 @@ impl Processors for MemProcessors {
     let processor = processors.entry(network).or_insert_with(VecDeque::new);
     processor.push_back(msg);
   }
-  async fn recv(&mut self) -> Message {
+  async fn recv(&mut self, _: NetworkId) -> Message {
     todo!()
   }
   async fn ack(&mut self, _: Message) {

@@ -15,7 +15,7 @@ pub struct Message {
 #[async_trait::async_trait]
 pub trait Processors: 'static + Send + Sync + Clone {
   async fn send(&self, network: NetworkId, msg: CoordinatorMessage);
-  async fn recv(&mut self) -> Message;
+  async fn recv(&mut self, network: NetworkId) -> Message;
   async fn ack(&mut self, msg: Message);
 }
 
@@ -27,13 +27,10 @@ impl Processors for Arc<MessageQueue> {
     let msg = serde_json::to_string(&msg).unwrap();
     self.queue(metadata, msg.into_bytes()).await;
   }
-  async fn recv(&mut self) -> Message {
-    let msg = self.next().await;
+  async fn recv(&mut self, network: NetworkId) -> Message {
+    let msg = self.next(Service::Processor(network)).await;
+    assert_eq!(msg.from, Service::Processor(network));
 
-    let network = match msg.from {
-      Service::Processor(network) => network,
-      Service::Coordinator => panic!("coordinator received coordinator message"),
-    };
     let id = msg.id;
 
     // Deserialize it into a ProcessorMessage
@@ -43,6 +40,6 @@ impl Processors for Arc<MessageQueue> {
     return Message { id, network, msg };
   }
   async fn ack(&mut self, msg: Message) {
-    MessageQueue::ack(self, msg.id).await
+    MessageQueue::ack(self, Service::Processor(msg.network), msg.id).await
   }
 }

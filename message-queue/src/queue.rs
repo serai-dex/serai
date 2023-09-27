@@ -3,14 +3,14 @@ use serai_db::{DbTxn, Db};
 use crate::messages::*;
 
 #[derive(Clone, Debug)]
-pub(crate) struct Queue<D: Db>(pub(crate) D, pub(crate) Service);
+pub(crate) struct Queue<D: Db>(pub(crate) D, pub(crate) Service, pub(crate) Service);
 impl<D: Db> Queue<D> {
   fn key(domain: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
   }
 
   fn message_count_key(&self) -> Vec<u8> {
-    Self::key(b"message_count", serde_json::to_vec(&self.1).unwrap())
+    Self::key(b"message_count", bincode::serialize(&(self.1, self.2)).unwrap())
   }
   pub(crate) fn message_count(&self) -> u64 {
     self
@@ -21,7 +21,7 @@ impl<D: Db> Queue<D> {
   }
 
   fn last_acknowledged_key(&self) -> Vec<u8> {
-    Self::key(b"last_acknowledged", serde_json::to_vec(&self.1).unwrap())
+    Self::key(b"last_acknowledged", bincode::serialize(&(self.1, self.2)).unwrap())
   }
   pub(crate) fn last_acknowledged(&self) -> Option<u64> {
     self
@@ -31,7 +31,7 @@ impl<D: Db> Queue<D> {
   }
 
   fn message_key(&self, id: u64) -> Vec<u8> {
-    Self::key(b"message", serde_json::to_vec(&(self.1, id)).unwrap())
+    Self::key(b"message", bincode::serialize(&(self.1, self.2, id)).unwrap())
   }
   // TODO: This is fine as-used, yet gets from the DB while having a txn. It should get from the
   // txn

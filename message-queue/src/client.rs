@@ -140,9 +140,9 @@ impl MessageQueue {
     }
   }
 
-  pub async fn next(&self) -> QueuedMessage {
+  pub async fn next(&self, from: Service) -> QueuedMessage {
     loop {
-      let json = self.json_call("next", serde_json::json!([self.service])).await;
+      let json = self.json_call("next", serde_json::json!([from, self.service])).await;
 
       // Convert from a Value to a type via reserialization
       let msg: Option<QueuedMessage> = serde_json::from_str(
@@ -179,18 +179,18 @@ impl MessageQueue {
     }
   }
 
-  pub async fn ack(&self, id: u64) {
+  pub async fn ack(&self, from: Service, id: u64) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
     let sig = SchnorrSignature::<Ristretto>::sign(
       &self.priv_key,
       nonce,
-      ack_challenge(self.service, self.pub_key, id, nonce_pub),
+      ack_challenge(self.service, self.pub_key, from, id, nonce_pub),
     )
     .serialize();
 
-    let json = self.json_call("ack", serde_json::json!([self.service, id, sig])).await;
+    let json = self.json_call("ack", serde_json::json!([from, self.service, id, sig])).await;
     if json.get("result") != Some(&serde_json::Value::Bool(true)) {
       panic!("failed to ack message {id}: {json}");
     }

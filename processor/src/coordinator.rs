@@ -25,7 +25,7 @@ impl Coordinator for MessageQueue {
   }
 
   async fn recv(&mut self) -> Message {
-    let msg = self.next().await;
+    let msg = self.next(Service::Coordinator).await;
 
     let id = msg.id;
 
@@ -37,6 +37,6 @@ impl Coordinator for MessageQueue {
   }
 
   async fn ack(&mut self, msg: Message) {
-    MessageQueue::ack(self, msg.id).await
+    MessageQueue::ack(self, Service::Coordinator, msg.id).await
   }
 }
