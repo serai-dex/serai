@@ -17,11 +17,17 @@ pub enum Topic {
 
 impl Topic {
   fn as_key(&self, genesis: [u8; 32]) -> Vec<u8> {
-    match self {
-      Topic::Dkg => [genesis.as_slice(), b"dkg".as_ref()].concat(),
-      Topic::Batch(id) => [genesis.as_slice(), b"batch".as_ref(), id.as_ref()].concat(),
-      Topic::Sign(id) => [genesis.as_slice(), b"sign".as_ref(), id.as_ref()].concat(),
-    }
+    let mut res = genesis.to_vec();
+    let (label, id) = match self {
+      Topic::Dkg => (b"dkg".as_slice(), [].as_slice()),
+      Topic::Batch(id) => (b"batch".as_slice(), id.as_slice()),
+      Topic::Sign(id) => (b"sign".as_slice(), id.as_slice()),
+    };
+    res.push(u8::try_from(label.len()).unwrap());
+    res.extend(label);
+    res.push(u8::try_from(id.len()).unwrap());
+    res.extend(id);
+    res
   }
 }
 
@@ -35,13 +41,12 @@ pub struct DataSpecification {
 
 impl DataSpecification {
   fn as_key(&self, genesis: [u8; 32]) -> Vec<u8> {
-    // TODO: Use a proper transcript here to avoid conflicts?
-    [
-      self.topic.as_key(genesis).as_ref(),
-      self.label.as_bytes(),
-      self.attempt.to_le_bytes().as_ref(),
-    ]
-    .concat()
+    let mut res = self.topic.as_key(genesis);
+    let label_bytes = self.label.bytes();
+    res.push(u8::try_from(label_bytes.len()).unwrap());
+    res.extend(label_bytes);
+    res.extend(self.attempt.to_le_bytes());
+    res
   }
 }
 

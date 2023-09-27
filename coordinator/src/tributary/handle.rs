@@ -40,8 +40,18 @@ use crate::{
   },
 };
 
+const DKG_COMMITMENTS: &str = "commitments";
+const DKG_SHARES: &str = "shares";
 const DKG_CONFIRMATION_NONCES: &str = "confirmation_nonces";
 const DKG_CONFIRMATION_SHARES: &str = "confirmation_shares";
+
+// These s/b prefixes between Batch and Sign should be unnecessary, as Batch/Share entries
+// themselves should already be domain separated
+const BATCH_PREPROCESS: &str = "b_preprocess";
+const BATCH_SHARE: &str = "b_share";
+
+const SIGN_PREPROCESS: &str = "s_preprocess";
+const SIGN_SHARE: &str = "s_share";
 
 // Instead of maintaing state, this simply re-creates the machine(s) in-full on every call (which
 // should only be once per tributary).
@@ -290,7 +300,7 @@ pub(crate) async fn handle_application_tx<
     Transaction::DkgCommitments(attempt, bytes, signed) => {
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "commitments", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
         bytes,
         &signed,
       ) {
@@ -345,7 +355,7 @@ pub(crate) async fn handle_application_tx<
       );
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "shares", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
         bytes,
         &signed,
       ) {
@@ -436,7 +446,7 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "preprocess",
+          label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
@@ -463,7 +473,7 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "share",
+          label: BATCH_SHARE,
           attempt: data.attempt,
         },
         data.data,
@@ -494,7 +504,7 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
-          label: "preprocess",
+          label: SIGN_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
@@ -527,7 +537,11 @@ pub(crate) async fn handle_application_tx<
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Sign(data.plan), label: "share", attempt: data.attempt },
+        &DataSpecification {
+          topic: Topic::Sign(data.plan),
+          label: SIGN_SHARE,
+          attempt: data.attempt,
+        },
         data.data,
         &data.signed,
       ) {

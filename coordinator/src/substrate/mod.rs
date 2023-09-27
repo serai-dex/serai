@@ -147,8 +147,6 @@ async fn handle_batch_and_burns<Pro: Processors>(
       network_had_event(&mut burns, &mut batches, network);
 
       // Make sure this is the only Batch event for this network in this Block
-      // TODO: Make sure Serai rejects multiple Batchs within the same block. It should, as of an
-      // yet to be merged branch
       assert!(batch_block.insert(network, network_block).is_none());
 
       // Add the batch included by this block
