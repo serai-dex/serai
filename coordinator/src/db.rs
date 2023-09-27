@@ -67,19 +67,24 @@ impl<D: Db> MainDb<D> {
     res
   }
 
-  fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {
-    Self::main_key(b"first_preprocess", id)
+  fn first_preprocess_key(network: NetworkId, id: [u8; 32]) -> Vec<u8> {
+    Self::main_key(b"first_preprocess", (network, id).encode())
   }
-  pub fn save_first_preprocess(txn: &mut D::Transaction<'_>, id: [u8; 32], preprocess: Vec<u8>) {
-    let key = Self::first_preprocess_key(id);
+  pub fn save_first_preprocess(
+    txn: &mut D::Transaction<'_>,
+    network: NetworkId,
+    id: [u8; 32],
+    preprocess: Vec<u8>,
+  ) {
+    let key = Self::first_preprocess_key(network, id);
     if let Some(existing) = txn.get(&key) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
       return;
     }
     txn.put(key, preprocess);
   }
-  pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Option<Vec<u8>> {
-    getter.get(Self::first_preprocess_key(id))
+  pub fn first_preprocess<G: Get>(getter: &G, network: NetworkId, id: [u8; 32]) -> Option<Vec<u8>> {
+    getter.get(Self::first_preprocess_key(network, id))
   }
 
   fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {

@@ -43,11 +43,10 @@ async fn in_set(
   Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
-async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
+async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
-  processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
@@ -88,7 +87,6 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proc
 }
 
 async fn handle_key_gen<Pro: Processors>(
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
@@ -239,8 +237,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
 
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
-      handle_new_set(&mut db.0, key, create_new_tributary.clone(), processors, serai, &block, set)
-        .await?;
+      handle_new_set(&mut db.0, key, create_new_tributary.clone(), serai, &block, set).await?;
       let mut txn = db.0.txn();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();
@@ -259,7 +256,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
         TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
         txn.commit();
 
-        handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }

@@ -297,7 +297,7 @@ impl ReadWrite for Transaction {
           let share_len = usize::from(u16::from_le_bytes(share_len));
 
           let mut shares = vec![];
-          for i in 0 .. u16::from_le_bytes(share_quantity) {
+          for _ in 0 .. u16::from_le_bytes(share_quantity) {
             let mut share = vec![0; share_len];
             reader.read_exact(&mut share)?;
             shares.push(share);
@@ -490,7 +490,7 @@ impl TransactionTrait for Transaction {
       }
     }
 
-    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+    if let Transaction::SignCompleted { first_signer, signature, .. } = self {
       if !signature.verify(*first_signer, self.sign_completed_challenge()) {
         Err(TransactionError::InvalidContent)?;
       }

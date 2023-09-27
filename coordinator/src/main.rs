@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use core::{ops::Deref, future::Future};
 use std::{
   sync::Arc,
@@ -203,7 +201,6 @@ impl<FRid, F: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -
 {
 }
 
-#[allow(clippy::type_complexity)]
 pub(crate) async fn scan_tributaries<
   D: Db,
   Pro: Processors,
@@ -214,7 +211,6 @@ pub(crate) async fn scan_tributaries<
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: RID,
-  p2p: P,
   processors: Pro,
   serai: Arc<Serai>,
   mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
@@ -229,7 +225,6 @@ pub(crate) async fn scan_tributaries<
           let raw_db = raw_db.clone();
           let key = key.clone();
           let recognized_id = recognized_id.clone();
-          let p2p = p2p.clone();
           let processors = processors.clone();
           let serai = serai.clone();
           async move {
@@ -305,7 +300,7 @@ pub async fn heartbeat_tributaries<D: Db, P: P2p>(
 
   let mut readers = vec![];
   loop {
-    while let Ok(ActiveTributary { spec, tributary }) = {
+    while let Ok(ActiveTributary { spec: _, tributary }) = {
       match new_tributary.try_recv() {
         Ok(tributary) => Ok(tributary),
         Err(broadcast::error::TryRecvError::Empty) => Err(()),
@@ -608,7 +603,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
         ProcessorMessage::Sign(msg) => match msg {
           sign::ProcessorMessage::Preprocess { id, preprocess } => {
             if id.attempt == 0 {
-              MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
+              MainDb::<D>::save_first_preprocess(&mut txn, network, id.id, preprocess);
 
               None
             } else {
@@ -668,7 +663,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
             // If this is the first attempt instance, wait until we synchronize around
             // the batch first
             if id.attempt == 0 {
-              MainDb::<D>::save_first_preprocess(&mut txn, id.id, preprocess);
+              MainDb::<D>::save_first_preprocess(&mut txn, spec.set().network, id.id, preprocess);
 
               Some(Transaction::Batch(block.0, id.id))
             } else {
@@ -942,7 +937,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         // This waits until the necessary preprocess is available
         let get_preprocess = |raw_db, id| async move {
           loop {
-            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, id) else {
+            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, network, id) else {
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -985,7 +980,6 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       raw_db,
       key.clone(),
       recognized_id,
-      p2p.clone(),
       processors.clone(),
       serai.clone(),
       new_tributary_listener_2,
