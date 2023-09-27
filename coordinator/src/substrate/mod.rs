@@ -86,13 +86,19 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   Ok(())
 }
 
-async fn handle_key_gen<Pro: Processors>(
+async fn handle_key_gen<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
+  // This has to be saved *before* we send ConfirmKeyPair
+  let mut txn = db.txn();
+  SubstrateDb::<D>::save_session_for_keys(&mut txn, &key_pair, set.session);
+  txn.commit();
+
   processors
     .send(
       set.network,
@@ -254,7 +260,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
         TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
         txn.commit();
 
-        handle_key_gen(processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }

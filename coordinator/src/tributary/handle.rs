@@ -454,11 +454,12 @@ pub(crate) async fn handle_application_tx<
       ) {
         Some(Some(preprocesses)) => {
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
               CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
               }),
             )
@@ -480,11 +481,12 @@ pub(crate) async fn handle_application_tx<
         &data.signed,
       ) {
         Some(Some(shares)) => {
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
               CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))

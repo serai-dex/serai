@@ -56,6 +56,7 @@ impl TributarySpec {
     let mut validators = vec![];
     for (participant, amount) in set_data.participants {
       // TODO: Ban invalid keys from being validators on the Serai side
+      // (make coordinator key a session key?)
       let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
         .expect("invalid key registered as participant");
       // Give one weight on Tributary per bond instance

@@ -29,7 +29,11 @@ pub async fn batch(
 ) -> u64 {
   let mut id = [0; 32];
   OsRng.fill_bytes(&mut id);
-  let id = SignId { key: vec![], id, attempt: 0 };
+  let id = SignId {
+    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes().to_vec(),
+    id,
+    attempt: 0,
+  };
 
   // Select a random participant to exclude, so we know for sure who *is* participating
   assert_eq!(COORDINATORS - THRESHOLD, 1);
