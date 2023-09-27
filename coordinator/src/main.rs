@@ -775,8 +775,6 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
       };
 
       // If this created a transaction, publish it
-      // TODO: This block may be fired multiple times, with the Tributary maintaining its
-      // own txns. How safe is that?
       if let Some(mut tx) = tx {
         log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
 
