@@ -16,6 +16,16 @@ impl<'a, D: Db> MainDb<'a, D> {
     D::key(b"coordinator_main", dst, key)
   }
 
+  fn handled_message_key(id: u64) -> Vec<u8> {
+    Self::main_key(b"handled_message", id.to_le_bytes())
+  }
+  pub fn save_handled_message(txn: &mut D::Transaction<'_>, id: u64) {
+    txn.put(Self::handled_message_key(id), []);
+  }
+  pub fn handled_message<G: Get>(getter: &G, id: u64) -> bool {
+    getter.get(Self::handled_message_key(id)).is_some()
+  }
+
   fn acive_tributaries_key() -> Vec<u8> {
     Self::main_key(b"active_tributaries", [])
   }

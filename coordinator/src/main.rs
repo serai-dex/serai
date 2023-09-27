@@ -524,6 +524,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
 
   let channels = Arc::new(RwLock::new(HashMap::new()));
   tokio::spawn({
+    let db = db.clone();
     let processors = processors.clone();
     let channels = channels.clone();
     async move {
@@ -849,6 +850,11 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
                 }
               }
 
+              // TODO: Consider a global txn for this message?
+              let mut txn = db.txn();
+              MainDb::<'static, D>::save_handled_message(&mut txn, msg.id);
+              txn.commit();
+
               processors.ack(msg).await;
             }
           }
@@ -864,9 +870,11 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
     // Modify message-queue to offer per-sender queues, not per-receiver.
     // Alternatively, a peek method with local delineation of handled messages would work.
 
-    // TODO: Do we handle having handled a message, by DB, yet having rebooted before `ack`ing it?
-    // Does the processor?
     let msg = processors.recv().await;
+    if MainDb::<'static, D>::handled_message(&db, msg.id) {
+      processors.ack(msg).await;
+      continue;
+    }
     if last_msg == Some(msg.id) {
       sleep(Duration::from_secs(1)).await;
       continue;
