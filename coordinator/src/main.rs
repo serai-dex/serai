@@ -1,6 +1,4 @@
 #![allow(unused_variables)]
-#![allow(unreachable_code)]
-#![allow(clippy::diverging_sub_expression)]
 
 use core::{ops::Deref, future::Future};
 use std::{
