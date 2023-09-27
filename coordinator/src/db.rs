@@ -5,7 +5,8 @@ use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBat
 
 pub use serai_db::*;
 
-use crate::tributary::TributarySpec;
+use ::tributary::ReadWrite;
+use crate::tributary::{TributarySpec, Transaction};
 
 #[derive(Debug)]
 pub struct MainDb<D: Db>(PhantomData<D>);
@@ -49,6 +50,21 @@ impl<D: Db> MainDb<D> {
 
     spec.write(&mut existing_bytes).unwrap();
     txn.put(key, existing_bytes);
+  }
+
+  fn signed_transaction_key(nonce: u32) -> Vec<u8> {
+    Self::main_key(b"signed_transaction", nonce.to_le_bytes())
+  }
+  pub fn save_signed_transaction(txn: &mut D::Transaction<'_>, nonce: u32, tx: Transaction) {
+    txn.put(Self::signed_transaction_key(nonce), tx.serialize());
+  }
+  pub fn take_signed_transaction(txn: &mut D::Transaction<'_>, nonce: u32) -> Option<Transaction> {
+    let key = Self::signed_transaction_key(nonce);
+    let res = txn.get(&key).map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
+    if res.is_some() {
+      txn.del(&key);
+    }
+    res
   }
 
   fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {

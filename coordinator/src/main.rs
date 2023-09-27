@@ -490,27 +490,42 @@ pub async fn handle_p2p<D: Db, P: P2p>(
   }
 }
 
-pub async fn publish_signed_transaction<D: Db, P: P2p>(
+async fn publish_signed_transaction<D: Db, P: P2p>(
+  db: &mut D,
   tributary: &Tributary<D, Transaction, P>,
   tx: Transaction,
 ) {
   log::debug!("publishing transaction {}", hex::encode(tx.hash()));
-  if let TransactionKind::Signed(signed) = tx.kind() {
-    // TODO: What if we try to publish TX with a nonce of 5 when the blockchain only has 3?
-    if tributary
-      .next_nonce(signed.signer)
-      .await
-      .expect("we don't have a nonce, meaning we aren't a participant on this tributary") >
-      signed.nonce
-    {
-      log::warn!("we've already published this transaction. this should only appear on reboot");
-    } else {
-      // We should've created a valid transaction
-      assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
-    }
+
+  let mut txn = db.txn();
+  let signer = if let TransactionKind::Signed(signed) = tx.kind() {
+    let signer = signed.signer;
+
+    // Safe as we should deterministically create transactions, meaning if this is already on-disk,
+    // it's what we're saving now
+    MainDb::<D>::save_signed_transaction(&mut txn, signed.nonce, tx);
+
+    signer
   } else {
     panic!("non-signed transaction passed to publish_signed_transaction");
+  };
+
+  // If we're trying to publish 5, when the last transaction published was 3, this will delay
+  // publication until the point in time we publish 4
+  while let Some(tx) = MainDb::<D>::take_signed_transaction(
+    &mut txn,
+    tributary
+      .next_nonce(signer)
+      .await
+      .expect("we don't have a nonce, meaning we aren't a participant on this tributary"),
+  ) {
+    // We should've created a valid transaction
+    // This does assume publish_signed_transaction hasn't been called twice with the same
+    // transaction, which risks a race condition on the validity of this assert
+    // Our use case only calls this function sequentially
+    assert!(tributary.add_transaction(tx).await, "created an invalid transaction");
   }
+  txn.commit();
 }
 
 async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
@@ -521,7 +536,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   tributary: ActiveTributary<D, P>,
   mut recv: mpsc::UnboundedReceiver<processors::Message>,
 ) {
-  let db_clone = db.clone(); // Enables cloning the DB while we have a txn
+  let mut db_clone = db.clone(); // Enables cloning the DB while we have a txn
   let pub_key = Ristretto::generator() * key.deref();
 
   let ActiveTributary { spec, tributary } = tributary;
@@ -799,7 +814,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
             };
             tx.sign(&mut OsRng, genesis, &key, nonce);
 
-            publish_signed_transaction(&tributary, tx).await;
+            publish_signed_transaction(&mut db_clone, &tributary, tx).await;
           }
         }
       }
@@ -953,7 +968,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     });
 
     move |network, genesis, id_type, id, nonce| {
-      let raw_db = raw_db.clone();
+      let mut raw_db = raw_db.clone();
       let key = key.clone();
       let tributaries = tributaries.clone();
       async move {
@@ -994,7 +1009,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           // TODO: This may happen if the task above is simply slow
           panic!("tributary we don't have came to consensus on an Batch");
         };
-        publish_signed_transaction(tributary, tx).await;
+        publish_signed_transaction(&mut raw_db, tributary, tx).await;
       }
     }
   };
