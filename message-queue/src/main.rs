@@ -105,7 +105,7 @@ mod binaries {
       },
     );
 
-    log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
+    log::info!("Queued message. From: {:?} To: {:?} ID: {id}", meta.from, meta.to);
     DbTxn::commit(txn);
   }
 
@@ -142,7 +142,7 @@ mod binaries {
     // It's the second if we acknowledge messages before saving them as acknowledged
     // TODO: Check only a proper message is being acked
 
-    log::info!("{:?} is acknowledging {:?} {}", from, to, id);
+    log::info!("Acknowledging From: {:?} To: {:?} ID: {}", from, to, id);
 
     (*QUEUES).read().unwrap()[&(from, to)].write().unwrap().ack_message(id)
   }
