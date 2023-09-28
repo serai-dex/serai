@@ -18,6 +18,7 @@ use crate::{*, tests::*};
 
 pub(crate) async fn recv_batch_preprocesses(
   coordinators: &mut [Coordinator],
+  substrate_key: &[u8; 32],
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
@@ -36,7 +37,7 @@ pub(crate) async fn recv_batch_preprocesses(
         },
       ) => {
         if id.is_none() {
-          assert!(this_id.key.is_empty());
+          assert_eq!(&this_id.key, substrate_key);
           assert_eq!(this_id.attempt, attempt);
           id = Some(this_id.clone());
           block = Some(this_block);
@@ -231,7 +232,8 @@ fn batch_test() {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
         // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-        let (mut id, mut preprocesses) = recv_batch_preprocesses(&mut coordinators, 0).await;
+        let (mut id, mut preprocesses) =
+          recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, 0).await;
         // Trigger a random amount of re-attempts
         for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
           // TODO: Double check how the processor handles this ID field
@@ -244,7 +246,8 @@ fn batch_test() {
               })
               .await;
           }
-          (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, attempt).await;
+          (id, preprocesses) =
+            recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, attempt).await;
         }
 
         // Continue with signing the batch

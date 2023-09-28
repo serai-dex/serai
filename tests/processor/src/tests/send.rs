@@ -187,7 +187,7 @@ fn send_test() {
       tokio::time::sleep(Duration::from_secs(10)).await;
 
       // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-      let (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, 0).await;
+      let (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, 0).await;
 
       // Continue with signing the batch
       let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
