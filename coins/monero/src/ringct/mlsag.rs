@@ -87,7 +87,7 @@ impl Mlsag {
       // keep the msg in the buffer.
       buf.drain(msg.len() ..);
 
-      if ci == Scalar::zero() {
+      if ci == Scalar::ZERO {
         return Err(MlsagError::InvalidCi);
       }
     }

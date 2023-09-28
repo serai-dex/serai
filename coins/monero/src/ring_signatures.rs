@@ -52,11 +52,11 @@ impl RingSignature {
     let mut buf = Vec::with_capacity(32 + 32 * 2 * ring.len());
     buf.extend_from_slice(msg);
 
-    let mut sum = Scalar::zero();
+    let mut sum = Scalar::ZERO;
 
     for (ring_member, sig) in ring.iter().zip(&self.sigs) {
       #[allow(non_snake_case)]
-      let Li = &sig.r * &ED25519_BASEPOINT_TABLE + sig.c * ring_member;
+      let Li = &sig.r * ED25519_BASEPOINT_TABLE + sig.c * ring_member;
       buf.extend_from_slice(Li.compress().as_bytes());
       #[allow(non_snake_case)]
       let Ri = sig.r * hash_to_point(ring_member.compress().to_bytes()) + sig.c * key_image;

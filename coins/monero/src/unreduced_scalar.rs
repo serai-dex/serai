@@ -12,7 +12,7 @@ static PRECOMPUTED_SCALARS_CELL: OnceLock<[Scalar; 8]> = OnceLock::new();
 #[allow(non_snake_case)]
 pub fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
   *PRECOMPUTED_SCALARS_CELL.get_or_init(|| {
-    let mut precomputed_scalars = [Scalar::one(); 8];
+    let mut precomputed_scalars = [Scalar::ONE; 8];
     for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
       *scalar = Scalar::from((i * 2 + 1) as u8);
     }
@@ -120,7 +120,7 @@ impl UnreducedScalar {
 
     let precomputed_scalars = PRECOMPUTED_SCALARS();
 
-    let mut recovered = Scalar::zero();
+    let mut recovered = Scalar::ZERO;
 
     for &numb in naf.iter().rev() {
       recovered += recovered;
