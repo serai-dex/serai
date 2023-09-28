@@ -116,7 +116,7 @@ impl ClsagMultisig {
     ClsagMultisig {
       transcript,
 
-      H: hash_to_point(output_key),
+      H: hash_to_point(&output_key),
       image: EdwardsPoint::identity(),
 
       details,

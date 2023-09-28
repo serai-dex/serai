@@ -3,13 +3,11 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::{Scalar, EdwardsPoint};
 
 use monero_generators::H;
 
-use crate::serialize::*;
-use crate::{hash_to_scalar, ringct::hash_to_point};
+use crate::{hash_to_scalar, ringct::hash_to_point, serialize::*};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
@@ -67,18 +65,18 @@ impl Mlsag {
     let key_images_iter = key_images.iter().map(|ki| Some(*ki)).chain(Some(None));
 
     for (ring_member, ss) in ring.iter().zip(&self.ss) {
-      for ((ring_member_layer, s), ki) in ring_member.iter().zip(ss).zip(key_images_iter.clone()) {
+      for ((ring_member_entry, s), ki) in ring_member.iter().zip(ss).zip(key_images_iter.clone()) {
         #[allow(non_snake_case)]
-        let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, ring_member_layer, s);
+        let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, ring_member_entry, s);
 
-        buf.extend_from_slice(ring_member_layer.compress().as_bytes());
+        buf.extend_from_slice(ring_member_entry.compress().as_bytes());
         buf.extend_from_slice(L.compress().as_bytes());
 
         // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need
         // to have key images.
         if let Some(ki) = ki {
           #[allow(non_snake_case)]
-          let R = (s * hash_to_point(ring_member_layer)) + (ci * ki);
+          let R = (s * hash_to_point(ring_member_entry)) + (ci * ki);
           buf.extend_from_slice(R.compress().as_bytes());
         }
       }

@@ -1,15 +1,11 @@
 use core::fmt::Debug;
 use std_shims::io::{self, Read, Write};
 
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::Identity;
+use curve25519_dalek::{EdwardsPoint, Scalar, traits::Identity};
 
 use monero_generators::H_pow_2;
 
-use crate::hash_to_scalar;
-use crate::unreduced_scalar::UnreducedScalar;
-use crate::serialize::*;
+use crate::{hash_to_scalar, unreduced_scalar::UnreducedScalar, serialize::*};
 
 /// 64 Borromean ring signatures.
 ///

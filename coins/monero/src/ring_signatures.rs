@@ -1,8 +1,6 @@
 use std_shims::io::{self, *};
 
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::scalar::Scalar;
-use dalek_ff_group::ED25519_BASEPOINT_TABLE;
+use curve25519_dalek::{EdwardsPoint, Scalar, constants::ED25519_BASEPOINT_TABLE};
 
 use monero_generators::hash_to_point;
 
