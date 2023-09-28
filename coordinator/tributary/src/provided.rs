@@ -35,6 +35,10 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     D::key(b"tributary_provided", b"current", self.genesis)
   }
 
+  pub(crate) fn waiting_list_key(genesis: [u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_provided", b"waiting_list", genesis)
+  }
+
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
     let mut res = ProvidedTransactions { db, genesis, transactions: HashMap::new() };
 
@@ -71,25 +75,50 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     }
 
     let tx_hash = tx.hash();
-    let provided_key = self.transaction_key(&tx_hash);
-    if self.db.get(&provided_key).is_some() {
-      Err(ProvidedError::AlreadyProvided)?;
-    }
 
-    let current_provided_key = self.current_provided_key();
+    // get waiting list
+    let waiting_list_key = Self::waiting_list_key(self.genesis);
     #[allow(clippy::unwrap_or_default)]
-    let mut currently_provided = self.db.get(&current_provided_key).unwrap_or(vec![]);
+    let mut waiting_list = self.db.get(&waiting_list_key).unwrap_or(vec![]);
 
-    let mut txn = self.db.txn();
-    txn.put(provided_key, tx.serialize());
-    currently_provided.extend(tx_hash);
-    txn.put(current_provided_key, currently_provided);
-    txn.commit();
+    // check whether this tx is a late provide
+    let exist = waiting_list.chunks_exact(32).position(|h| {
+      let hash: [u8; 32] = h.try_into().unwrap();
+      hash == tx_hash
+    });
+    if let Some(i) = exist {
+      // remove from the list since it is now arrived.
+      let i = i * 32;
+      assert_eq!(&waiting_list.drain(i .. (i + 32)).collect::<Vec<_>>(), &tx_hash);
 
-    if self.transactions.get(order).is_none() {
-      self.transactions.insert(order, VecDeque::new());
+      let mut txn = self.db.txn();
+      txn.put(waiting_list_key, waiting_list);
+      txn.commit();
+    } else {
+      // add to mempool if not
+
+      // check whether we already have the tx in pool
+      let provided_key = self.transaction_key(&tx_hash);
+      if self.db.get(&provided_key).is_some() {
+        Err(ProvidedError::AlreadyProvided)?;
+      }
+
+      let current_provided_key = self.current_provided_key();
+      #[allow(clippy::unwrap_or_default)]
+      let mut currently_provided = self.db.get(&current_provided_key).unwrap_or(vec![]);
+
+      let mut txn = self.db.txn();
+      txn.put(provided_key, tx.serialize());
+      currently_provided.extend(tx_hash);
+      txn.put(current_provided_key, currently_provided);
+      txn.commit();
+
+      if self.transactions.get(order).is_none() {
+        self.transactions.insert(order, VecDeque::new());
+      }
+      self.transactions.get_mut(order).unwrap().push_back(tx);
     }
-    self.transactions.get_mut(order).unwrap().push_back(tx);
+
     Ok(())
   }
 
@@ -100,25 +129,38 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     order: &'static str,
     tx: [u8; 32],
   ) {
-    assert_eq!(self.transactions.get_mut(order).unwrap().pop_front().unwrap().hash(), tx);
+    let txs = self.transactions.get_mut(order);
+    if txs.as_ref().is_none() ||
+      (txs.as_ref().is_some() && !txs.as_ref().unwrap().iter().any(|t| t.hash() == tx))
+    {
+      // we don't have this tx in our mempool, add it to waiting list.
+      let waiting_list_key = Self::waiting_list_key(self.genesis);
+      #[allow(clippy::unwrap_or_default)]
+      let mut waiting_list = self.db.get(&waiting_list_key).unwrap_or(vec![]);
 
-    let current_provided_key = self.current_provided_key();
-    let mut currently_provided = txn.get(&current_provided_key).unwrap();
+      waiting_list.extend(tx);
+      txn.put(waiting_list_key, waiting_list);
+    } else {
+      assert_eq!(txs.unwrap().pop_front().unwrap().hash(), tx);
 
-    // Find this TX's hash
-    let mut i = 0;
-    loop {
-      if currently_provided[i .. (i + 32)] == tx {
-        assert_eq!(&currently_provided.drain(i .. (i + 32)).collect::<Vec<_>>(), &tx);
-        break;
+      let current_provided_key = self.current_provided_key();
+      let mut currently_provided = txn.get(&current_provided_key).unwrap();
+
+      // Find this TX's hash
+      let mut i = 0;
+      loop {
+        if currently_provided[i .. (i + 32)] == tx {
+          assert_eq!(&currently_provided.drain(i .. (i + 32)).collect::<Vec<_>>(), &tx);
+          break;
+        }
+
+        i += 32;
+        if i >= currently_provided.len() {
+          panic!("couldn't find completed TX in currently provided");
+        }
       }
 
-      i += 32;
-      if i >= currently_provided.len() {
-        panic!("couldn't find completed TX in currently provided");
-      }
+      txn.put(current_provided_key, currently_provided);
     }
-
-    txn.put(current_provided_key, currently_provided);
   }
 }

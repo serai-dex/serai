@@ -120,6 +120,11 @@ pub(crate) async fn handle_new_blocks<
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
+
+    if !tributary.provided_waiting_list_empty() {
+      return;
+    }
+
     handle_block::<_, _, _, _, _, _, P>(
       db,
       key,

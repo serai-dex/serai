@@ -50,6 +50,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
   }
+  fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
+  }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
       b"tributary_blockchain",
@@ -136,6 +139,12 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
+  pub(crate) fn provided_waiting_list_empty(db: &D, genesis: [u8; 32]) -> bool {
+    let key = ProvidedTransactions::<D, T>::waiting_list_key(genesis);
+    #[allow(clippy::unwrap_or_default)]
+    db.get(key).unwrap_or(vec![]).is_empty()
+  }
+
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
     db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
   }
@@ -182,7 +191,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.mempool.block(&self.next_nonces, unsigned_in_chain),
     );
     // build_block should not return invalid blocks
-    self.verify_block::<N>(&block, schema).unwrap();
+    self.verify_block::<N>(&block, schema, false).unwrap();
     block
   }
 
@@ -190,10 +199,13 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     &self,
     block: &Block<T>,
     schema: N::SignatureScheme,
+    ignore_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain =
       |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+    let provided_in_chain =
+      |hash: [u8; 32]| db.get(Self::provided_included_key(&self.genesis, &hash)).is_some();
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
@@ -207,6 +219,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       schema,
       &commit,
       unsigned_in_chain,
+      provided_in_chain,
+      ignore_non_local_provided,
     )
   }
 
@@ -217,7 +231,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     commit: Vec<u8>,
     schema: N::SignatureScheme,
   ) -> Result<(), BlockError> {
-    self.verify_block::<N>(block, schema)?;
+    self.verify_block::<N>(block, schema, true)?;
 
     log::info!(
       "adding block {} to tributary {} with {} TXs",
@@ -249,7 +263,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided(order) => {
-          self.provided.complete(&mut txn, order, tx.hash());
+          let hash = tx.hash();
+          self.provided.complete(&mut txn, order, hash);
+          txn.put(Self::provided_included_key(&self.genesis, &hash), []);
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();

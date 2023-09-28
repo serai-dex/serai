@@ -91,6 +91,8 @@ fn empty_block() {
       validators,
       commit,
       unsigned_in_chain,
+      unsigned_in_chain,
+      false,
     )
     .unwrap();
 }
@@ -123,6 +125,8 @@ fn duplicate_nonces() {
       validators.clone(),
       commit,
       unsigned_in_chain,
+      unsigned_in_chain,
+      false,
     );
     if i == 1 {
       res.unwrap();

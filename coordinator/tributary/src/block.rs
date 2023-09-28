@@ -33,7 +33,10 @@ pub enum BlockError {
   /// An unsigned transaction which was already added to the chain was present again.
   #[error("an unsigned transaction which was already added to the chain was present again")]
   UnsignedAlreadyIncluded,
-  /// Transactions weren't ordered as expected (Provided, followed by Unsigned, folowed by Signed).
+  /// A provided transaction which was already added to the chain was present again.
+  #[error("an provided transaction which was already added to the chain was present again")]
+  ProvidedAlreadyIncluded,
+  /// Transactions weren't ordered as expected (Provided, followed by Unsigned, followed by Signed).
   #[error("transactions weren't ordered as expected (Provided, Unsigned, Signed)")]
   WrongTransactionOrder,
   /// The block had a provided transaction this validator has yet to be provided.
@@ -175,6 +178,8 @@ impl<T: TransactionTrait> Block<T> {
     schema: N::SignatureScheme,
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
+    provided_in_chain: impl Fn([u8; 32]) -> bool, // TODO: merge this with unsigned_on_chain?
+    ignore_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     enum Order {
@@ -209,9 +214,17 @@ impl<T: TransactionTrait> Block<T> {
 
       let current_tx_order = match tx.kind() {
         TransactionKind::Provided(order) => {
+          if provided_in_chain(tx_hash) {
+            Err(BlockError::ProvidedAlreadyIncluded)?;
+          }
+
           let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
           else {
-            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+            if !ignore_non_local_provided {
+              Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
+            } else {
+              continue;
+            }
           };
           // Since this was a provided TX, it must be an application TX
           let Transaction::Application(tx) = tx else {
