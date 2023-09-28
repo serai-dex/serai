@@ -28,7 +28,7 @@ async fn add_inputs(
     &mut OsRng,
     rpc,
     protocol.ring_len(),
-    rpc.get_height().await.unwrap() - 1,
+    rpc.get_height().await.unwrap(),
     &spendable_outputs,
   )
   .await

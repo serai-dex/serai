@@ -264,7 +264,7 @@ macro_rules! test {
               &mut OsRng,
               &rpc,
               protocol.ring_len(),
-              rpc.get_height().await.unwrap() - 1,
+              rpc.get_height().await.unwrap(),
               &[miner_tx.clone()]
             )
             .await

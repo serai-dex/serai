@@ -364,7 +364,7 @@ async fn mint_and_burn_test() {
         &mut OsRng,
         &rpc,
         Protocol::v16.ring_len(),
-        rpc.get_height().await.unwrap() - 1,
+        rpc.get_height().await.unwrap(),
         &[output.clone()],
       )
       .await

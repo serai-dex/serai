@@ -746,7 +746,7 @@ impl Network for Monero {
       &mut OsRng,
       &self.rpc,
       protocol.ring_len(),
-      self.rpc.get_height().await.unwrap() - 1,
+      self.rpc.get_height().await.unwrap(),
       &outputs,
     )
     .await

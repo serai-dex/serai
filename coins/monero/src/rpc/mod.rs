@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use crate::{
   Protocol,
   serialize::*,
-  transaction::{Input, Timelock, Transaction},
+  transaction::{Input, Transaction},
   block::Block,
   wallet::{FeePriority, Fee},
 };
@@ -52,6 +52,14 @@ struct TransactionsResponse {
   #[serde(default)]
   missed_tx: Vec<String>,
   txs: Vec<TransactionResponse>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct OutputResponse {
+  pub height: usize,
+  pub unlocked: bool,
+  key: String,
+  mask: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -534,29 +542,15 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(distributions.distributions.swap_remove(0).distribution)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
-  /// timelock has been satisfied.
-  ///
-  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
-  /// Monero transactions.
-  pub async fn get_unlocked_outputs(
-    &self,
-    indexes: &[u64],
-    height: usize,
-  ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
+  /// Get the specified outputs from the RingCT (zero-amount) pool
+  pub async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
     #[derive(Deserialize, Debug)]
-    struct Out {
-      key: String,
-      mask: String,
-      txid: String,
+    struct OutsResponse {
+      status: String,
+      outs: Vec<OutputResponse>,
     }
 
-    #[derive(Deserialize, Debug)]
-    struct Outs {
-      outs: Vec<Out>,
-    }
-
-    let outs: Outs = self
+    let res: OutsResponse = self
       .rpc_call(
         "get_outs",
         Some(json!({
@@ -569,18 +563,25 @@ impl<R: RpcConnection> Rpc<R> {
       )
       .await?;
 
-    let txs = self
-      .get_transactions(
-        &outs.outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
-      )
-      .await?;
+    if res.status != "OK" {
+      Err(RpcError::InvalidNode)?;
+    }
 
-    // TODO: https://github.com/serai-dex/serai/issues/104
+    Ok(res.outs)
+  }
+
+  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them
+  /// if they are unlocked.
+  pub async fn get_unlocked_outputs(
+    &self,
+    indexes: &[u64],
+  ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
+    let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
+
     outs
-      .outs
       .iter()
       .enumerate()
-      .map(|(i, out)| {
+      .map(|(_, out)| {
         // Allow keys to be invalid, though if they are, return None to trigger selection of a new
         // decoy
         // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
@@ -593,10 +594,7 @@ impl<R: RpcConnection> Rpc<R> {
         ) else {
           return Ok(None);
         };
-        Ok(
-          Some([key, rpc_point(&out.mask)?])
-            .filter(|_| Timelock::Block(height) >= txs[i].prefix.timelock),
-        )
+        Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| out.unlocked))
       })
       .collect()
   }

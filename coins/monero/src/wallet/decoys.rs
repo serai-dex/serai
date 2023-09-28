@@ -23,8 +23,8 @@ use crate::{
   rpc::{RpcError, RpcConnection, Rpc},
 };
 
-const LOCK_WINDOW: usize = 10;
-const MATURITY: u64 = 60;
+pub const LOCK_WINDOW: usize = 10;
+const COINBASE_LOCK_WINDOW: u64 = 60;
 const RECENT_WINDOW: usize = 15;
 const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
@@ -53,7 +53,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   used: &mut HashSet<u64>,
   count: usize,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
-  if height >= rpc.get_height().await? {
+  if height > rpc.get_height().await? {
     // TODO: Don't use InternalError for the caller's failure
     Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
   }
@@ -64,6 +64,8 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   // Retries on failure. Retries are obvious as decoys, yet should be minimal
   while confirmed.len() != count {
     let remaining = count - confirmed.len();
+    // TODO: over-request candidates in case some are locked to avoid needing
+    // round trips to the daemon (and revealing obvious decoys to the daemon)
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
       #[cfg(test)]
@@ -117,7 +119,9 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
       }
     }
 
-    for (i, output) in rpc.get_unlocked_outputs(&candidates, height).await?.iter_mut().enumerate() {
+    // TODO: make sure that the real output is included in the response, and
+    // that mask and key are equal to expected
+    for (i, output) in rpc.get_unlocked_outputs(&candidates).await?.iter_mut().enumerate() {
       // Don't include the real spend as a decoy, despite requesting it
       if real_indexes.contains(&i) {
         continue;
@@ -159,6 +163,14 @@ impl Decoys {
     self.offsets.len()
   }
 
+  pub fn indexes(&self) -> Vec<u64> {
+    let mut res = vec![self.offsets[0]; self.len()];
+    for m in 1 .. res.len() {
+      res[m] = res[m - 1] + self.offsets[m];
+    }
+    res
+  }
+
   /// Select decoys using the same distribution as Monero.
   pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
     rng: &mut R,
@@ -187,19 +199,27 @@ impl Decoys {
       outputs.push((real[real.len() - 1], [input.key(), input.commitment().calculate()]));
     }
 
-    if distribution.len() <= height {
-      let extension = rpc.get_output_distribution(distribution.len(), height).await?;
+    if distribution.len() < height {
+      // TODO: verify distribution elems are strictly increasing
+      let extension =
+        rpc.get_output_distribution(distribution.len(), height.saturating_sub(1)).await?;
       distribution.extend(extension);
     }
     // If asked to use an older height than previously asked, truncate to ensure accuracy
     // Should never happen, yet risks desyncing if it did
-    distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
+    distribution.truncate(height);
 
-    let high = distribution[distribution.len() - 1];
+    if distribution.len() != height {
+      Err(RpcError::InternalError("unexpected rct out distribution len"))?;
+    } else if distribution.len() < LOCK_WINDOW {
+      Err(RpcError::InternalError("not enough decoy candidates"))?;
+    }
+
     #[allow(clippy::cast_precision_loss)]
     let per_second = {
       let blocks = distribution.len().min(BLOCKS_PER_YEAR);
-      let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];
+      let initial = distribution[distribution.len().saturating_sub(blocks + 1)];
+      let outputs = distribution[distribution.len() - 1].saturating_sub(initial);
       (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
     };
 
@@ -209,8 +229,9 @@ impl Decoys {
     }
 
     // TODO: Create a TX with less than the target amount, as allowed by the protocol
-    if (high - MATURITY) < u64::try_from(inputs.len() * ring_len).unwrap() {
-      Err(RpcError::InternalError("not enough decoy candidates"))?;
+    let high = distribution[distribution.len() - LOCK_WINDOW];
+    if high.saturating_sub(COINBASE_LOCK_WINDOW) < u64::try_from(inputs.len() * ring_len).unwrap() {
+      Err(RpcError::InternalError("not enough coinbase candidates"))?;
     }
 
     // Select all decoys for this transaction, assuming we generate a sane transaction
