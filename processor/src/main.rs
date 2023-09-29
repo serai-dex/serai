@@ -13,7 +13,7 @@ use serai_client::{
   validator_sets::primitives::{ValidatorSet, KeyPair},
 };
 
-use messages::{CoordinatorMessage, ProcessorMessage};
+use messages::CoordinatorMessage;
 
 use serai_env as env;
 
@@ -202,9 +202,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
-      coordinator
-        .send(ProcessorMessage::KeyGen(tributary_mutable.key_gen.handle(txn, msg).await))
-        .await;
+      coordinator.send(tributary_mutable.key_gen.handle(txn, msg).await).await;
     }
 
     CoordinatorMessage::Sign(msg) => {
@@ -343,13 +341,11 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // plans
           if !tributary_mutable.signers.is_empty() {
             coordinator
-              .send(messages::ProcessorMessage::Coordinator(
-                messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-                  network: N::NETWORK,
-                  block: substrate_block,
-                  plans: to_sign.iter().map(|signable| signable.1).collect(),
-                },
-              ))
+              .send(messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+                network: N::NETWORK,
+                block: substrate_block,
+                plans: to_sign.iter().map(|signable| signable.1).collect(),
+              })
               .await;
           }
 
@@ -531,9 +527,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
               coordinator.send(
-                messages::ProcessorMessage::Substrate(
-                  messages::substrate::ProcessorMessage::Batch { batch: batch.clone() }
-                )
+                messages::substrate::ProcessorMessage::Batch { batch: batch.clone() }
               ).await;
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
@@ -568,18 +562,18 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       while let Some(msg) = signer.events.pop_front() {
         match msg {
           SignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::Sign(msg)).await;
+            coordinator.send(msg).await;
           }
 
           SignerEvent::SignedTransaction { id, tx } => {
             // It is important ProcessorMessage::Completed is only emitted if a Signer we had
             // created the TX completed (which having it only emitted after a SignerEvent ensures)
             coordinator
-              .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
+              .send(messages::sign::ProcessorMessage::Completed {
                 key: key.clone(),
                 id,
                 tx: tx.as_ref().to_vec(),
-              }))
+              })
               .await;
           }
         }
@@ -590,14 +584,10 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       while let Some(msg) = signer.events.pop_front() {
         match msg {
           SubstrateSignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(ProcessorMessage::Coordinator(msg)).await;
+            coordinator.send(msg).await;
           }
           SubstrateSignerEvent::SignedBatch(batch) => {
-            coordinator
-              .send(ProcessorMessage::Substrate(
-                messages::substrate::ProcessorMessage::SignedBatch { batch },
-              ))
-              .await;
+            coordinator.send(messages::substrate::ProcessorMessage::SignedBatch { batch }).await;
           }
         }
       }

@@ -14,14 +14,15 @@ pub struct Message {
 
 #[async_trait::async_trait]
 pub trait Processors: 'static + Send + Sync + Clone {
-  async fn send(&self, network: NetworkId, msg: CoordinatorMessage);
+  async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>);
   async fn recv(&mut self, network: NetworkId) -> Message;
   async fn ack(&mut self, msg: Message);
 }
 
 #[async_trait::async_trait]
 impl Processors for Arc<MessageQueue> {
-  async fn send(&self, network: NetworkId, msg: CoordinatorMessage) {
+  async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>) {
+    let msg: CoordinatorMessage = msg.into();
     let metadata =
       Metadata { from: self.service, to: Service::Processor(network), intent: msg.intent() };
     let msg = serde_json::to_string(&msg).unwrap();

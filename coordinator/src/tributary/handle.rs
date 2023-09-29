@@ -25,8 +25,8 @@ use serai_client::{
 use tributary::Signed;
 
 use processor_messages::{
-  CoordinatorMessage, coordinator,
   key_gen::{self, KeyGenId},
+  coordinator,
   sign::{self, SignId},
 };
 
@@ -309,10 +309,10 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+              key_gen::CoordinatorMessage::Commitments {
                 id: KeyGenId { set: spec.set(), attempt },
                 commitments,
-              }),
+              },
             )
             .await;
         }
@@ -365,10 +365,10 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+              key_gen::CoordinatorMessage::Shares {
                 id: KeyGenId { set: spec.set(), attempt },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -458,10 +458,10 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
+              coordinator::CoordinatorMessage::BatchPreprocesses {
                 id: SignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -485,13 +485,13 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
+              coordinator::CoordinatorMessage::BatchShares {
                 id: SignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
                   .collect(),
-              }),
+              },
             )
             .await;
         }
@@ -517,7 +517,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+              sign::CoordinatorMessage::Preprocesses {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignPreprocess despite not setting the key pair")
@@ -527,7 +527,7 @@ pub(crate) async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -551,7 +551,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+              sign::CoordinatorMessage::Shares {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignShares despite not setting the key pair")
@@ -561,7 +561,7 @@ pub(crate) async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -581,11 +581,7 @@ pub(crate) async fn handle_application_tx<
       processors
         .send(
           spec.set().network,
-          CoordinatorMessage::Sign(sign::CoordinatorMessage::Completed {
-            key: key_pair.1.to_vec(),
-            id: plan,
-            tx: tx_hash,
-          }),
+          sign::CoordinatorMessage::Completed { key: key_pair.1.to_vec(), id: plan, tx: tx_hash },
         )
         .await;
     }

@@ -88,19 +88,17 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   processors
     .send(
       set.network,
-      processor_messages::CoordinatorMessage::KeyGen(
-        processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-          id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
-          params: frost::ThresholdParams::new(
-            spec.t(),
-            spec.n(),
-            spec
-              .i(Ristretto::generator() * key.deref())
-              .expect("adding a tributary for a set we aren't in set for"),
-          )
-          .unwrap(),
-        },
-      ),
+      processor_messages::key_gen::CoordinatorMessage::GenerateKey {
+        id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
+        params: frost::ThresholdParams::new(
+          spec.t(),
+          spec.n(),
+          spec
+            .i(Ristretto::generator() * key.deref())
+            .expect("adding a tributary for a set we aren't in set for"),
+        )
+        .unwrap(),
+      },
     )
     .await;
 
@@ -625,10 +623,8 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
 
             // Re-define batch
             // We can't drop it, yet it shouldn't be accidentally used in the following block
-            #[allow(clippy::let_unit_value)]
+            #[allow(clippy::let_unit_value, unused_variables)]
             let batch = ();
-            #[allow(clippy::let_unit_value)]
-            let _ = batch;
 
             // Verify all `Batch`s which we've already indexed from Substrate
             // This won't be complete, as it only runs when a `Batch` message is received, which

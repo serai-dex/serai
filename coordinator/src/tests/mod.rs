@@ -30,10 +30,10 @@ impl MemProcessors {
 
 #[async_trait::async_trait]
 impl Processors for MemProcessors {
-  async fn send(&self, network: NetworkId, msg: CoordinatorMessage) {
+  async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>) {
     let mut processors = self.0.write().await;
     let processor = processors.entry(network).or_insert_with(VecDeque::new);
-    processor.push_back(msg);
+    processor.push_back(msg.into());
   }
   async fn recv(&mut self, _: NetworkId) -> Message {
     todo!()
