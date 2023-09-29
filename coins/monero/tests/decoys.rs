@@ -1,8 +1,8 @@
 use monero_serai::{
   transaction::Transaction,
-  wallet::{SpendableOutput, decoys::LOCK_WINDOW},
+  wallet::SpendableOutput,
   rpc::{Rpc, OutputResponse},
-  Protocol,
+  Protocol, DEFAULT_LOCK_WINDOW,
 };
 
 mod runner;
@@ -55,7 +55,7 @@ test!(
       // Make sure output from tx1 is in the block in which it unlocks
       let out_tx1: OutputResponse =
         rpc.get_outs(&[output_tx1.global_index]).await.unwrap().swap_remove(0);
-      assert_eq!(out_tx1.height, height - LOCK_WINDOW);
+      assert_eq!(out_tx1.height, height - DEFAULT_LOCK_WINDOW);
       assert!(out_tx1.unlocked);
 
       // Select decoys using spendable output from tx0 as the real, and make sure DSA selects

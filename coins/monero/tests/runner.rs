@@ -36,7 +36,6 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
 
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
-// TODO: mine as much as needed instead of default 10 blocks
 pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 32]) {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
@@ -46,15 +45,18 @@ pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 3
     found = match block.txs.iter().find(|&&x| x == tx_hash) {
       Some(_) => true,
       None => {
-        rpc.generate_blocks(addr, 1).await.unwrap();
-        height += 1;
+        height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
         false
       }
     }
   }
 
-  // mine 9 more blocks to unlock the tx
-  rpc.generate_blocks(addr, 9).await.unwrap();
+  // Mine until tx's outputs are unlocked
+  let o_indexes: Vec<u64> = rpc.get_o_indexes(tx_hash).await.unwrap();
+  while rpc.get_unlocked_outputs(&o_indexes, height).await.unwrap().into_iter().all(|o| o.is_none())
+  {
+    height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
+  }
 }
 
 // Mines 60 blocks and returns an unlocked miner TX output.

@@ -22,6 +22,7 @@ use crate::{
   transaction::{Input, Transaction},
   block::Block,
   wallet::{FeePriority, Fee},
+  DEFAULT_LOCK_WINDOW,
 };
 
 #[cfg(feature = "http-rpc")]
@@ -575,13 +576,13 @@ impl<R: RpcConnection> Rpc<R> {
   pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
+    height: usize,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
 
     outs
       .iter()
-      .enumerate()
-      .map(|(_, out)| {
+      .map(|out| {
         // Allow keys to be invalid, though if they are, return None to trigger selection of a new
         // decoy
         // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
@@ -594,7 +595,10 @@ impl<R: RpcConnection> Rpc<R> {
         ) else {
           return Ok(None);
         };
-        Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| out.unlocked))
+        Ok(
+          Some([key, rpc_point(&out.mask)?])
+            .filter(|_| out.unlocked && height >= (out.height + DEFAULT_LOCK_WINDOW)),
+        )
       })
       .collect()
   }
@@ -711,13 +715,14 @@ impl<R: RpcConnection> Rpc<R> {
     &self,
     address: &str,
     block_count: usize,
-  ) -> Result<Vec<[u8; 32]>, RpcError> {
+  ) -> Result<(Vec<[u8; 32]>, usize), RpcError> {
     #[derive(Debug, Deserialize)]
     struct BlocksResponse {
       blocks: Vec<String>,
+      height: usize,
     }
 
-    let block_strs = self
+    let res = self
       .json_rpc_call::<BlocksResponse>(
         "generateblocks",
         Some(json!({
@@ -725,13 +730,12 @@ impl<R: RpcConnection> Rpc<R> {
           "amount_of_blocks": block_count
         })),
       )
-      .await?
-      .blocks;
+      .await?;
 
-    let mut blocks = Vec::with_capacity(block_strs.len());
-    for block in block_strs {
+    let mut blocks = Vec::with_capacity(res.blocks.len());
+    for block in res.blocks {
       blocks.push(hash_hex(&block)?);
     }
-    Ok(blocks)
+    Ok((blocks, res.height))
   }
 }

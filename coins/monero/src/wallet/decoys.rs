@@ -21,15 +21,13 @@ use crate::{
   serialize::varint_len,
   wallet::SpendableOutput,
   rpc::{RpcError, RpcConnection, Rpc},
+  DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME,
 };
 
-pub const LOCK_WINDOW: usize = 10;
-const COINBASE_LOCK_WINDOW: u64 = 60;
 const RECENT_WINDOW: usize = 15;
-const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 #[allow(clippy::cast_precision_loss)]
-const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
+const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
 
 // TODO: Resolve safety of this in case a reorg occurs/the network changes
 // TODO: Update this when scanning a block, as possible
@@ -121,7 +119,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
 
     // TODO: make sure that the real output is included in the response, and
     // that mask and key are equal to expected
-    for (i, output) in rpc.get_unlocked_outputs(&candidates).await?.iter_mut().enumerate() {
+    for (i, output) in rpc.get_unlocked_outputs(&candidates, height).await?.iter_mut().enumerate() {
       // Don't include the real spend as a decoy, despite requesting it
       if real_indexes.contains(&i) {
         continue;
@@ -211,7 +209,7 @@ impl Decoys {
 
     if distribution.len() != height {
       Err(RpcError::InternalError("unexpected rct out distribution len"))?;
-    } else if distribution.len() < LOCK_WINDOW {
+    } else if distribution.len() < DEFAULT_LOCK_WINDOW {
       Err(RpcError::InternalError("not enough decoy candidates"))?;
     }
 
@@ -229,8 +227,10 @@ impl Decoys {
     }
 
     // TODO: Create a TX with less than the target amount, as allowed by the protocol
-    let high = distribution[distribution.len() - LOCK_WINDOW];
-    if high.saturating_sub(COINBASE_LOCK_WINDOW) < u64::try_from(inputs.len() * ring_len).unwrap() {
+    let high = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
+    if high.saturating_sub(COINBASE_LOCK_WINDOW as u64) <
+      u64::try_from(inputs.len() * ring_len).unwrap()
+    {
       Err(RpcError::InternalError("not enough coinbase candidates"))?;
     }
 

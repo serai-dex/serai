@@ -100,7 +100,7 @@ async fn mint_and_burn_test() {
         let rpc = producer_handles.monero(ops).await;
         let mut res = Vec::with_capacity(count);
         for _ in 0 .. count {
-          let block = rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap()[0]).await.unwrap();
+          let block = rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap().0[0]).await.unwrap();
 
           let mut txs = Vec::with_capacity(block.txs.len());
           for tx in &block.txs {
