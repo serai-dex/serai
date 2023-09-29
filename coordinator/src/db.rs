@@ -1,7 +1,15 @@
 use core::marker::PhantomData;
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
+
 use scale::{Encode, Decode};
-use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch};
+use serai_client::{
+  primitives::NetworkId,
+  in_instructions::primitives::{Batch, SignedBatch},
+};
 
 pub use serai_db::*;
 
@@ -87,6 +95,19 @@ impl<D: Db> MainDb<D> {
     getter.get(Self::first_preprocess_key(network, id))
   }
 
+  fn expected_batch_key(network: NetworkId, id: u32) -> Vec<u8> {
+    Self::main_key(b"expected_batch", (network, id).encode())
+  }
+  pub fn save_expected_batch(txn: &mut D::Transaction<'_>, batch: &Batch) {
+    txn.put(
+      Self::expected_batch_key(batch.network, batch.id),
+      Blake2b::<U32>::digest(batch.instructions.encode()),
+    );
+  }
+  pub fn expected_batch<G: Get>(getter: &G, network: NetworkId, id: u32) -> Option<[u8; 32]> {
+    getter.get(Self::expected_batch_key(network, id)).map(|batch| batch.try_into().unwrap())
+  }
+
   fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
     Self::main_key(b"batch", (network, id).encode())
   }
@@ -97,5 +118,17 @@ impl<D: Db> MainDb<D> {
     getter
       .get(Self::batch_key(network, id))
       .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
+  }
+
+  fn last_verified_batch_key(network: NetworkId) -> Vec<u8> {
+    Self::main_key(b"last_verified_batch", network.encode())
+  }
+  pub fn save_last_verified_batch(txn: &mut D::Transaction<'_>, network: NetworkId, id: u32) {
+    txn.put(Self::last_verified_batch_key(network), id.to_le_bytes());
+  }
+  pub fn last_verified_batch<G: Get>(getter: &G, network: NetworkId) -> Option<u32> {
+    getter
+      .get(Self::last_verified_batch_key(network))
+      .map(|id| u32::from_le_bytes(id.try_into().unwrap()))
   }
 }

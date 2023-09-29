@@ -8137,6 +8137,7 @@ name = "serai-client"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
+ "blake2",
  "ciphersuite",
  "frost-schnorrkel",
  "futures",
@@ -8262,6 +8263,7 @@ dependencies = [
  "serai-validator-sets-pallet",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "thiserror",
 ]

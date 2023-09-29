@@ -47,6 +47,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
+use substrate::SubstrateDb;
 
 #[cfg(test)]
 pub mod tests;
@@ -118,7 +119,7 @@ pub async fn scan_substrate<D: Db, Pro: Processors>(
 ) {
   log::info!("scanning substrate");
 
-  let mut db = substrate::SubstrateDb::new(db);
+  let mut db = SubstrateDb::new(db);
   let mut next_substrate_block = db.next_block();
 
   let new_substrate_block_notifier = {
@@ -565,16 +566,16 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
         ProcessorMessage::Sign(inner_msg) => match inner_msg {
           // We'll only receive Preprocess and Share if we're actively signing
           sign::ProcessorMessage::Preprocess { id, .. } => {
-            Some(substrate::SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+            Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
           }
           sign::ProcessorMessage::Share { id, .. } => {
-            Some(substrate::SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+            Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
           }
           // While the Processor's Scanner will always emit Completed, that's routed through the
           // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
           // confirms it
           sign::ProcessorMessage::Completed { key, .. } => {
-            Some(substrate::SubstrateDb::<D>::session_for_key(&txn, key).unwrap())
+            Some(SubstrateDb::<D>::session_for_key(&txn, key).unwrap())
           }
         },
         ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
@@ -606,19 +607,69 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
           }
           // We'll only fire these if we are the Substrate signer, making the Tributary relevant
           coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-            Some(substrate::SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+            Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
           }
           coordinator::ProcessorMessage::BatchShare { id, .. } => {
-            Some(substrate::SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+            Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
           }
         },
+        // These don't return a relevant Tributary as there's no Tributary with action expected
         ProcessorMessage::Substrate(inner_msg) => match inner_msg {
+          processor_messages::substrate::ProcessorMessage::Batch { batch } => {
+            assert_eq!(
+              batch.network, msg.network,
+              "processor sent us a batch for a different network than it was for",
+            );
+            let this_batch_id = batch.id;
+            MainDb::<D>::save_expected_batch(&mut txn, batch);
+
+            // Re-define batch
+            // We can't drop it, yet it shouldn't be accidentally used in the following block
+            #[allow(clippy::let_unit_value)]
+            let batch = ();
+            #[allow(clippy::let_unit_value)]
+            let _ = batch;
+
+            // Verify all `Batch`s which we've already indexed from Substrate
+            // This won't be complete, as it only runs when a `Batch` message is received, which
+            // will be before we get a `SignedBatch`. It is, however, incremental. We can use a
+            // complete version to finish the last section when we need a complete version.
+            let last = MainDb::<D>::last_verified_batch(&txn, msg.network);
+            // This variable exists so Rust can verify Send/Sync properties
+            let mut faulty = None;
+            for id in last.map(|last| last + 1).unwrap_or(0) ..= this_batch_id {
+              if let Some(on_chain) = SubstrateDb::<D>::batch_instructions_hash(&txn, network, id) {
+                let off_chain = MainDb::<D>::expected_batch(&txn, network, id).unwrap();
+                if on_chain != off_chain {
+                  faulty = Some((id, off_chain, on_chain));
+                  break;
+                }
+                MainDb::<D>::save_last_verified_batch(&mut txn, msg.network, id);
+              }
+            }
+
+            if let Some((id, off_chain, on_chain)) = faulty {
+              // Halt operations on this network and spin, as this is a critical fault
+              loop {
+                log::error!(
+                  "{}! network: {:?} id: {} off-chain: {} on-chain: {}",
+                  "on-chain batch doesn't match off-chain",
+                  network,
+                  id,
+                  hex::encode(off_chain),
+                  hex::encode(on_chain),
+                );
+                sleep(Duration::from_secs(60)).await;
+              }
+            }
+
+            None
+          }
           // If this is a new Batch, immediately publish it (if we can)
-          // This doesn't return a relevant Tributary as there's no Tributary with action expected
-          processor_messages::substrate::ProcessorMessage::Update { batch } => {
+          processor_messages::substrate::ProcessorMessage::SignedBatch { batch } => {
             assert_eq!(
               batch.batch.network, msg.network,
-              "processor sent us a batch for a different network than it was for",
+              "processor sent us a signed batch for a different network than it was for",
             );
             // TODO: Check this key's key pair's substrate key is authorized to publish batches
 
@@ -849,7 +900,8 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
             }
           },
           ProcessorMessage::Substrate(inner_msg) => match inner_msg {
-            processor_messages::substrate::ProcessorMessage::Update { .. } => unreachable!(),
+            processor_messages::substrate::ProcessorMessage::Batch { .. } => unreachable!(),
+            processor_messages::substrate::ProcessorMessage::SignedBatch { .. } => unreachable!(),
           },
         };
 

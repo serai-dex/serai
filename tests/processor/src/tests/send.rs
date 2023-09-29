@@ -9,6 +9,7 @@ use messages::{sign::SignId, SubstrateContext};
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
+  in_instructions::primitives::Batch,
   tokens::primitives::{OutInstruction, OutInstructionWithBalance},
 };
 
@@ -186,17 +187,18 @@ fn send_test() {
       // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
       tokio::time::sleep(Duration::from_secs(10)).await;
 
+      let expected_batch =
+        Batch { network, id: 0, block: BlockHash(block_with_tx.unwrap()), instructions: vec![] };
+
       // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-      let (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, 0).await;
+      let (id, preprocesses) =
+        recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, 0).await;
 
       // Continue with signing the batch
       let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
 
       // Check it
-      assert_eq!(batch.batch.network, network);
-      assert_eq!(batch.batch.id, 0);
-      assert_eq!(batch.batch.block, BlockHash(block_with_tx.unwrap()));
-      assert!(batch.batch.instructions.is_empty());
+      assert_eq!(batch.batch, expected_batch);
 
       // Fire a SubstrateBlock with a burn
       let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;

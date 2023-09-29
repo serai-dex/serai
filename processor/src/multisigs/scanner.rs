@@ -694,6 +694,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
             return;
           }
 
+          // Since we're creating a Batch, mark it as needing ack
           scanner.need_ack.push_back(block_being_scanned);
           true
         } else {
@@ -706,7 +707,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
           scanner.eventualities.remove(retired.to_bytes().as_ref());
         }
 
-        // Update ram_scanned/need_ack
+        // Update ram_scanned
         scanner.ram_scanned = Some(block_being_scanned);
 
         drop(scanner_lock);

@@ -530,6 +530,12 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
+              coordinator.send(
+                messages::ProcessorMessage::Substrate(
+                  messages::substrate::ProcessorMessage::Batch { batch: batch.clone() }
+                )
+              ).await;
+
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
                 substrate_signer.sign(txn, batch).await;
               }
@@ -588,9 +594,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           }
           SubstrateSignerEvent::SignedBatch(batch) => {
             coordinator
-              .send(ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-                batch,
-              }))
+              .send(ProcessorMessage::Substrate(
+                messages::substrate::ProcessorMessage::SignedBatch { batch },
+              ))
               .await;
           }
         }

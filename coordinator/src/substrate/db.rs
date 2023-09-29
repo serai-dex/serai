@@ -2,7 +2,10 @@ use scale::{Encode, Decode};
 
 pub use serai_db::*;
 
-use serai_client::validator_sets::primitives::{Session, KeyPair};
+use serai_client::{
+  primitives::NetworkId,
+  validator_sets::primitives::{Session, KeyPair},
+};
 
 #[derive(Debug)]
 pub struct SubstrateDb<D: Db>(pub D);
@@ -54,5 +57,24 @@ impl<D: Db> SubstrateDb<D> {
     assert!(existing.is_none() || (existing.as_ref() == Some(&session)));
     txn.put(key_0, session.clone());
     txn.put(Self::session_key(&key_pair.1), session);
+  }
+
+  fn batch_instructions_key(network: NetworkId, id: u32) -> Vec<u8> {
+    Self::substrate_key(b"batch", (network, id).encode())
+  }
+  pub fn batch_instructions_hash<G: Get>(
+    getter: &G,
+    network: NetworkId,
+    id: u32,
+  ) -> Option<[u8; 32]> {
+    getter.get(Self::batch_instructions_key(network, id)).map(|bytes| bytes.try_into().unwrap())
+  }
+  pub fn save_batch_instructions_hash(
+    txn: &mut D::Transaction<'_>,
+    network: NetworkId,
+    id: u32,
+    hash: [u8; 32],
+  ) {
+    txn.put(Self::batch_instructions_key(network, id), hash);
   }
 }

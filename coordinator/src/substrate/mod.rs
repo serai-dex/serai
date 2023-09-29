@@ -123,7 +123,8 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
   Ok(())
 }
 
-async fn handle_batch_and_burns<Pro: Processors>(
+async fn handle_batch_and_burns<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
@@ -149,8 +150,14 @@ async fn handle_batch_and_burns<Pro: Processors>(
   let mut burns = HashMap::new();
 
   for batch in serai.get_batch_events(hash).await? {
-    if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
+    if let InInstructionsEvent::Batch { network, id, block: network_block, instructions_hash } =
+      batch
+    {
       network_had_event(&mut burns, &mut batches, network);
+
+      let mut txn = db.txn();
+      SubstrateDb::<D>::save_batch_instructions_hash(&mut txn, network, id, instructions_hash);
+      txn.commit();
 
       // Make sure this is the only Batch event for this network in this Block
       assert!(batch_block.insert(network, network_block).is_none());
@@ -277,7 +284,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
   // This does break the uniqueness of (hash, event_id) -> one event, yet
   // (network, (hash, event_id)) remains valid as a unique ID for an event
   if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
-    handle_batch_and_burns(processors, serai, &block).await?;
+    handle_batch_and_burns(&mut db.0, processors, serai, &block).await?;
   }
   let mut txn = db.0.txn();
   SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
