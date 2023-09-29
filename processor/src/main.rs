@@ -566,6 +566,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           }
 
           SignerEvent::SignedTransaction { id, tx } => {
+            // It is important ProcessorMessage::Completed is only emitted if a Signer we had
+            // created the TX completed (which having it only emitted after a SignerEvent ensures)
             coordinator
               .send(ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
                 key: key.clone(),
