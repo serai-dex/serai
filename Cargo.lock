@@ -8191,10 +8191,12 @@ dependencies = [
 name = "serai-coordinator-tests"
 version = "0.1.0"
 dependencies = [
+ "blake2",
  "ciphersuite",
  "dkg",
  "dockertest",
  "hex",
+ "parity-scale-codec",
  "rand_core 0.6.4",
  "schnorrkel",
  "serai-client",

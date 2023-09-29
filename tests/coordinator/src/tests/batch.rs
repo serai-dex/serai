@@ -7,9 +7,14 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto, Secp256k1};
-
 use dkg::Participant;
+
+use scale::Encode;
 
 use serai_client::{
   primitives::{NetworkId, BlockHash, Signature},
@@ -34,6 +39,12 @@ pub async fn batch(
     id,
     attempt: 0,
   };
+
+  for processor in processors.iter_mut() {
+    processor
+      .send_message(messages::substrate::ProcessorMessage::Batch { batch: batch.clone() })
+      .await;
+  }
 
   // Select a random participant to exclude, so we know for sure who *is* participating
   assert_eq!(COORDINATORS - THRESHOLD, 1);
@@ -168,7 +179,7 @@ pub async fn batch(
 
   for processor in processors.iter_mut() {
     processor
-      .send_message(messages::substrate::ProcessorMessage::Update { batch: batch.clone() })
+      .send_message(messages::substrate::ProcessorMessage::SignedBatch { batch: batch.clone() })
       .await;
   }
 
@@ -194,7 +205,8 @@ pub async fn batch(
           InInstructionsEvent::Batch {
             network: batch.batch.network,
             id: batch.batch.id,
-            block: batch.batch.block
+            block: batch.batch.block,
+            instructions_hash: Blake2b::<U32>::digest(batch.batch.instructions.encode()).into(),
           }
         );
         break 'outer;

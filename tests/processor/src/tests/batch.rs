@@ -256,7 +256,7 @@ fn batch_test() {
           },
         };
 
-        // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
+        // Make sure the processors picked it up by checking they're trying to sign a batch for it
         let (mut id, mut preprocesses) =
           recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, 0).await;
         // Trigger a random amount of re-attempts
