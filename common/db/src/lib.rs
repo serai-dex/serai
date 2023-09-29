@@ -1,5 +1,7 @@
 mod mem;
 pub use mem::*;
+mod db_macro;
+pub use db_macro::*;
 
 #[cfg(feature = "rocksdb")]
 mod rocks;

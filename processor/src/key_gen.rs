@@ -1,6 +1,6 @@
-use core::marker::PhantomData;
 use std::collections::HashMap;
 
+use serai_db::createDb;
 use zeroize::Zeroizing;
 
 use rand_core::SeedableRng;
@@ -27,104 +27,71 @@ pub struct KeyConfirmed<C: Ciphersuite> {
   pub network_keys: ThresholdKeys<C>,
 }
 
-#[derive(Clone, Debug)]
-struct KeyGenDb<N: Network, D: Db>(PhantomData<D>, PhantomData<N>);
-impl<N: Network, D: Db> KeyGenDb<N, D> {
-  fn key_gen_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"KEY_GEN", dst, key)
+createDb!(
+  KeyGenDb {
+    ParamsDb,
+    CommitmentsDb,
+    GeneratedKeysDb,
+    KeysDb
   }
+);
 
-  fn params_key(set: &ValidatorSet) -> Vec<u8> {
-    Self::key_gen_key(b"params", set.encode())
-  }
-  fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
-    txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
-  }
-  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> Option<ThresholdParams> {
-    getter.get(Self::params_key(set)).map(|bytes| bincode::deserialize(&bytes).unwrap())
-  }
+#[allow(clippy::type_complexity)]
+fn read_keys<N: Network>(
+  getter: &impl Get,
+  key: &[u8],
+) -> Option<(Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>))> {
+  let keys_vec = getter.get(key)?;
+  let mut keys_ref: &[u8] = keys_vec.as_ref();
+  let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+  let mut network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+  N::tweak_keys(&mut network_keys);
+  Some((keys_vec, (substrate_keys, network_keys)))
+}
 
-  // Not scoped to the set since that'd have latter attempts overwrite former
-  // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
-  // Overwriting its commitments would be accordingly poor
-  fn commitments_key(id: &KeyGenId) -> Vec<u8> {
-    Self::key_gen_key(b"commitments", id.encode())
-  }
-  fn save_commitments(
-    txn: &mut D::Transaction<'_>,
-    id: &KeyGenId,
-    commitments: &HashMap<Participant, Vec<u8>>,
-  ) {
-    txn.put(Self::commitments_key(id), bincode::serialize(commitments).unwrap());
-  }
-  fn commitments<G: Get>(getter: &G, id: &KeyGenId) -> HashMap<Participant, Vec<u8>> {
-    bincode::deserialize::<HashMap<Participant, Vec<u8>>>(
-      &getter.get(Self::commitments_key(id)).unwrap(),
-    )
-    .unwrap()
-  }
+fn confirm_keys<N: Network>(
+  txn: &mut impl DbTxn,
+  set: ValidatorSet,
+  key_pair: KeyPair,
+) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
+  let val: &[u8] = key_pair.1.as_ref();
+  let (keys_vec, keys) =
+    read_keys::<N>(txn, &GeneratedKeysDb::key((set, (&key_pair.0 .0, val)).encode()))
+      .unwrap();
+  assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
+  assert_eq!(
+    {
+      let network_key: &[u8] = key_pair.1.as_ref();
+      network_key
+    },
+    keys.1.group_key().to_bytes().as_ref(),
+  );
+  txn.put(KeysDb::key(&keys.1.group_key().to_bytes()), keys_vec);
+  keys
+}
 
-  fn generated_keys_key(set: ValidatorSet, key_pair: (&[u8; 32], &[u8])) -> Vec<u8> {
-    Self::key_gen_key(b"generated_keys", (set, key_pair).encode())
-  }
-  fn save_keys(
-    txn: &mut D::Transaction<'_>,
+fn keys<N: Network>(
+  getter: &impl Get,
+  key: &<N::Curve as Ciphersuite>::G,
+) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
+  let res = read_keys::<N>(getter, &KeysDb::key(key.to_bytes()))?.1;
+  assert_eq!(&res.1.group_key(), key);
+  Some(res)
+}
+impl GeneratedKeysDb {
+  fn save_keys<N: Network>(
+    txn: &mut impl DbTxn,
     id: &KeyGenId,
     substrate_keys: &ThresholdCore<Ristretto>,
     network_keys: &ThresholdKeys<N::Curve>,
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(network_keys.serialize().iter());
+    let key = (id.set, (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref())).encode();
     txn.put(
-      Self::generated_keys_key(
-        id.set,
-        (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()),
-      ),
+      Self::key(key),
       keys,
     );
-  }
-
-  fn keys_key(key: &<N::Curve as Ciphersuite>::G) -> Vec<u8> {
-    Self::key_gen_key(b"keys", key.to_bytes())
-  }
-  #[allow(clippy::type_complexity)]
-  fn read_keys<G: Get>(
-    getter: &G,
-    key: &[u8],
-  ) -> Option<(Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>))> {
-    let keys_vec = getter.get(key)?;
-    let mut keys_ref: &[u8] = keys_vec.as_ref();
-    let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    let mut network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    N::tweak_keys(&mut network_keys);
-    Some((keys_vec, (substrate_keys, network_keys)))
-  }
-  fn confirm_keys(
-    txn: &mut D::Transaction<'_>,
-    set: ValidatorSet,
-    key_pair: KeyPair,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
-    let (keys_vec, keys) =
-      Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())))
-        .unwrap();
-    assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
-    assert_eq!(
-      {
-        let network_key: &[u8] = key_pair.1.as_ref();
-        network_key
-      },
-      keys.1.group_key().to_bytes().as_ref(),
-    );
-    txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
-    keys
-  }
-  fn keys<G: Get>(
-    getter: &G,
-    key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
-    let res = Self::read_keys(getter, &Self::keys_key(key))?.1;
-    assert_eq!(&res.1.group_key(), key);
-    Some(res)
   }
 }
 
@@ -149,7 +116,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
   pub fn in_set(&self, set: &ValidatorSet) -> bool {
     // We determine if we're in set using if we have the parameters for a set's key generation
-    KeyGenDb::<N, D>::params(&self.db, set).is_some()
+    ParamsDb::get::<ThresholdParams>(&self.db, set.encode()).is_some()
   }
 
   pub fn keys(
@@ -165,7 +132,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     // The only other concern is if it's set when it's not safe to use
     // The keys are only written on confirmation, and the transaction writing them is atomic to
     // every associated operation
-    KeyGenDb::<N, D>::keys(&self.db, key)
+    keys::<N>(&self.db, key)
   }
 
   pub async fn handle(
@@ -207,7 +174,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           self.active_share.remove(&id.set).is_none()
         {
           // If we haven't handled this set before, save the params
-          KeyGenDb::<N, D>::save_params(txn, &id.set, &params);
+          ParamsDb::set(txn, &id.set.encode(), &params);
         }
 
         let (machines, commitments) = key_gen_machines(id, params);
@@ -228,7 +195,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
+        let params = ParamsDb::get::<ThresholdParams>(txn, &id.set.encode()).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -288,7 +255,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           share.extend(network_shares[i].serialize());
         }
 
-        KeyGenDb::<N, D>::save_commitments(txn, &id, &commitments);
+        CommitmentsDb::set(txn, &id.encode(), &commitments);
 
         ProcessorMessage::Shares { id, shares }
       }
@@ -296,13 +263,13 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
+        let params = ParamsDb::get::<ThresholdParams>(txn, &id.set.encode()).unwrap();
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let machines = key_gen_machines(id, params).0;
           let mut rng = secret_shares_rng(id);
-          let commitments = KeyGenDb::<N, D>::commitments(txn, &id);
+          let commitments = CommitmentsDb::get::<HashMap<Participant, Vec<u8>>>(txn, &id.encode()).unwrap();
 
           let mut commitments_ref: HashMap<Participant, &[u8]> =
             commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
@@ -376,7 +343,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let mut network_keys = ThresholdKeys::new(network_keys);
         N::tweak_keys(&mut network_keys);
 
-        KeyGenDb::<N, D>::save_keys(txn, &id, &substrate_keys, &network_keys);
+        GeneratedKeysDb::save_keys::<N>(txn, &id, &substrate_keys, &network_keys);
 
         ProcessorMessage::GeneratedKeyPair {
           id,
@@ -393,7 +360,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> KeyConfirmed<N::Curve> {
-    let (substrate_keys, network_keys) = KeyGenDb::<N, D>::confirm_keys(txn, set, key_pair);
+    let (substrate_keys, network_keys) = confirm_keys::<N>(txn, set, key_pair);
 
     info!(
       "Confirmed key pair {} {} for set {:?}",

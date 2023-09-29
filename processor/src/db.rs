@@ -8,6 +8,13 @@ pub use serai_db::*;
 
 use crate::networks::{Block, Network};
 
+createDb!(
+  MainDb {
+    HandledMessageDb,
+    PendingActivationsDb
+  }
+);
+
 #[derive(Debug)]
 pub struct MainDb<N: Network, D: Db>(D, PhantomData<N>);
 impl<N: Network, D: Db> MainDb<N, D> {

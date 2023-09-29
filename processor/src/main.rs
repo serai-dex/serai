@@ -471,6 +471,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   let (main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &network).await;
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
+  // TODO: Load with a slight tolerance
   let mut last_coordinator_msg = None;
 
   loop {
