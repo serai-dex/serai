@@ -1,4 +1,7 @@
-use std_shims::io::{self, *};
+use std_shims::{
+  io::{self, *},
+  vec::Vec,
+};
 
 use curve25519_dalek::{EdwardsPoint, Scalar, constants::ED25519_BASEPOINT_TABLE};
 
