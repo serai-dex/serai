@@ -397,8 +397,8 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
       .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
   }
 
-  pub fn provided_waiting_list_empty(&self) -> bool {
-    Blockchain::<D, T>::provided_waiting_list_empty(&self.0, self.1)
+  pub fn provided_txs_ok_for_block(&self, hash: &[u8; 32], order: &str) -> bool {
+    Blockchain::<D, T>::provided_txs_ok_for_block(&self.0, &self.1, hash, order)
   }
 
   // This isn't static, yet can be read with only minor discrepancy risks

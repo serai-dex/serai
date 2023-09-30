@@ -12,6 +12,7 @@ use tributary::{
     tx::{TendermintTx, decode_evidence},
     TendermintNetwork,
   },
+  TransactionKind,
 };
 
 use serai_db::DbTxn;
@@ -121,8 +122,18 @@ pub(crate) async fn handle_new_blocks<
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
 
-    if !tributary.provided_waiting_list_empty() {
-      return;
+    for tx in &block.transactions {
+      // since we know provided txs are the first in the block, we can assume that
+      // all of them were ok if we haven't returned yet and got a new kind, so we can
+      // break and continue to scan the block.
+      let TransactionKind::Provided(order) = tx.kind() else {
+        break;
+      };
+
+      // make sure we have all the provided txs in this block locally
+      if !tributary.provided_txs_ok_for_block(&block.hash(), order) {
+        return;
+      }
     }
 
     handle_block::<_, _, _, _, _, _, P>(

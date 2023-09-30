@@ -217,7 +217,7 @@ fn provided_transaction() {
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
   let (db, mut blockchain) = new_blockchain::<ProvidedTransaction>(genesis, &[]);
 
-  let tx = random_provided_transaction(&mut OsRng);
+  let tx = random_provided_transaction(&mut OsRng, "order1");
 
   // This should be providable
   let mut temp_db = MemDb::new();
@@ -226,10 +226,10 @@ fn provided_transaction() {
   assert_eq!(txs.provide(tx.clone()), Err(ProvidedError::AlreadyProvided));
   assert_eq!(
     ProvidedTransactions::<_, ProvidedTransaction>::new(temp_db.clone(), genesis).transactions,
-    HashMap::from([("provided", VecDeque::from([tx.clone()]))]),
+    HashMap::from([("order1", VecDeque::from([tx.clone()]))]),
   );
   let mut txn = temp_db.txn();
-  txs.complete(&mut txn, "provided", tx.hash());
+  txs.complete(&mut txn, "order1", [0u8; 32], tx.hash());
   txn.commit();
   assert!(ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
     .transactions
@@ -260,18 +260,88 @@ fn provided_transaction() {
 
   // case we don't have the block's provided txs in our local
   {
-    let tx = random_provided_transaction(&mut OsRng);
-    let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
+    let tx1 = random_provided_transaction(&mut OsRng, "order1");
+    let tx2 = random_provided_transaction(&mut OsRng, "order1");
+    let tx3 = random_provided_transaction(&mut OsRng, "order2");
+    let tx4 = random_provided_transaction(&mut OsRng, "order2");
+
     // add_block DOES NOT fail for unverified provided transactions if told to add them,
     // since now we can have them later.
-    assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
+    let block1 = Block::new(blockchain.tip(), vec![tx1.clone(), tx3.clone()], vec![]);
+    assert!(blockchain.add_block::<N>(&block1, vec![], validators.clone()).is_ok());
 
-    // make sure waiting list is not empty now
-    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_waiting_list_empty(&db, genesis));
-    // we provide it now..
-    blockchain.provide_transaction(tx.clone()).unwrap();
-    // list has to be empty now
-    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_waiting_list_empty(&db, genesis));
+    // in fact, we can have many blocks that have provided txs that we don't have locally.
+    let block2 = Block::new(blockchain.tip(), vec![tx2.clone(), tx4.clone()], vec![]);
+    assert!(blockchain.add_block::<N>(&block2, vec![], validators.clone()).is_ok());
+
+    // make sure we won't return ok for the block before we actually got the txs
+    let TransactionKind::Provided(order) = tx1.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+    // provide the first tx
+    blockchain.provide_transaction(tx1).unwrap();
+    // it should be ok for this order now, since the second tx has different order.
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+
+    // give the second tx
+    let TransactionKind::Provided(order) = tx3.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx3).unwrap();
+    // it should be ok now for the first block
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+
+    // provide the second block txs
+    let TransactionKind::Provided(order) = tx4.kind() else { panic!("tx wasn't provided") };
+    // not ok yet
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx4).unwrap();
+    // ok now
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+
+    // provide the second block txs
+    let TransactionKind::Provided(order) = tx2.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx2).unwrap();
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
   }
 }
 
@@ -418,7 +488,8 @@ async fn block_tx_ordering() {
     assert!(blockchain.add_transaction::<N>(true, unsigned_tx.clone(), validators.clone()));
     mempool.push(unsigned_tx);
 
-    let provided_tx = SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng)));
+    let provided_tx =
+      SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng, "order1")));
     blockchain.provide_transaction(provided_tx.clone()).unwrap();
     provided_txs.push(provided_tx);
   }

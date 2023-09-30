@@ -34,9 +34,18 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
   fn current_provided_key(&self) -> Vec<u8> {
     D::key(b"tributary_provided", b"current", self.genesis)
   }
-
-  pub(crate) fn waiting_list_key(genesis: [u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_provided", b"waiting_list", genesis)
+  pub(crate) fn local_transaction_no_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
+    D::key(b"tributary_provided", b"local", [genesis, order.as_bytes()].concat())
+  }
+  pub(crate) fn on_chain_transaction_no_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
+    D::key(b"tributary_provided", b"on_chain", [genesis, order.as_bytes()].concat())
+  }
+  pub(crate) fn last_tx_block_order_key(
+    genesis: &[u8; 32],
+    hash: &[u8; 32],
+    order: &str,
+  ) -> Vec<u8> {
+    D::key(b"tributary_provided", b"on_chain", [genesis, hash, order.as_bytes()].concat())
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
@@ -73,30 +82,31 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
       Ok(()) => {}
       Err(e) => Err(ProvidedError::InvalidProvided(e))?,
     }
-
     let tx_hash = tx.hash();
 
-    // get waiting list
-    let waiting_list_key = Self::waiting_list_key(self.genesis);
+    // get local and on-chain tx numbers
+    let local_key = Self::local_transaction_no_key(&self.genesis, order);
+    let on_chain_key = Self::on_chain_transaction_no_key(&self.genesis, order);
     #[allow(clippy::unwrap_or_default)]
-    let mut waiting_list = self.db.get(&waiting_list_key).unwrap_or(vec![]);
+    let on_chain_tx_no = u32::from_le_bytes(
+      self
+        .db
+        .get(on_chain_key)
+        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
+        .try_into()
+        .unwrap(),
+    );
+    let mut local_tx_no = u32::from_le_bytes(
+      self
+        .db
+        .get(&local_key)
+        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
+        .try_into()
+        .unwrap(),
+    );
 
-    // check whether this tx is a late provide
-    let exist = waiting_list.chunks_exact(32).position(|h| {
-      let hash: [u8; 32] = h.try_into().unwrap();
-      hash == tx_hash
-    });
-    if let Some(i) = exist {
-      // remove from the list since it is now arrived.
-      let i = i * 32;
-      assert_eq!(&waiting_list.drain(i .. (i + 32)).collect::<Vec<_>>(), &tx_hash);
-
-      let mut txn = self.db.txn();
-      txn.put(waiting_list_key, waiting_list);
-      txn.commit();
-    } else {
-      // add to mempool if not
-
+    // try add to mempool if this is a new provided(we haven't seen it on-chain before).
+    if local_tx_no >= on_chain_tx_no {
       // check whether we already have the tx in pool
       let provided_key = self.transaction_key(&tx_hash);
       if self.db.get(&provided_key).is_some() {
@@ -119,6 +129,12 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
       self.transactions.get_mut(order).unwrap().push_back(tx);
     }
 
+    // bump the tx number for the local order
+    local_tx_no += 1;
+    let mut txn = self.db.txn();
+    txn.put(local_key, local_tx_no.to_le_bytes());
+    txn.commit();
+
     Ok(())
   }
 
@@ -127,20 +143,11 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     order: &'static str,
+    block: [u8; 32],
     tx: [u8; 32],
   ) {
     let txs = self.transactions.get_mut(order);
-    if txs.as_ref().is_none() ||
-      (txs.as_ref().is_some() && !txs.as_ref().unwrap().iter().any(|t| t.hash() == tx))
-    {
-      // we don't have this tx in our mempool, add it to waiting list.
-      let waiting_list_key = Self::waiting_list_key(self.genesis);
-      #[allow(clippy::unwrap_or_default)]
-      let mut waiting_list = self.db.get(&waiting_list_key).unwrap_or(vec![]);
-
-      waiting_list.extend(tx);
-      txn.put(waiting_list_key, waiting_list);
-    } else {
+    if txs.is_some() && txs.as_ref().unwrap().iter().any(|t| t.hash() == tx) {
       assert_eq!(txs.unwrap().pop_front().unwrap().hash(), tx);
 
       let current_provided_key = self.current_provided_key();
@@ -162,5 +169,33 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
       txn.put(current_provided_key, currently_provided);
     }
+
+    // bump the on-chain tx number.
+    let on_chain_key = Self::on_chain_transaction_no_key(&self.genesis, order);
+    let block_order_key = Self::last_tx_block_order_key(&self.genesis, &block, order);
+    let mut on_chain_tx_no = u32::from_le_bytes(
+      self
+        .db
+        .get(&on_chain_key)
+        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
+        .try_into()
+        .unwrap(),
+    );
+
+    // TODO: use block hash or block number block-order key?
+    // - Block hash is easy to use for keys and doesn't require additional api
+    // but it takes up too much space.
+    // - Block numbers are not that suitable as keys and requires additional tributary scanner
+    // api(block_hash -> block_no) but doesn't take much space.
+
+    // TODO: do we need both a global save and block-order save?
+    // Technically it should be enough to save the tx for block-order only, but that requires
+    // api change in `provide` function to take block hash as well(last block of the chain),
+    // we should be able pass the last block from where we call it, but we do we want that?
+
+    // save it
+    on_chain_tx_no += 1;
+    txn.put(on_chain_key, on_chain_tx_no.to_le_bytes());
+    txn.put(block_order_key, on_chain_tx_no.to_le_bytes());
   }
 }

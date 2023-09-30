@@ -139,10 +139,32 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
-  pub(crate) fn provided_waiting_list_empty(db: &D, genesis: [u8; 32]) -> bool {
-    let key = ProvidedTransactions::<D, T>::waiting_list_key(genesis);
+  // TODO: no idea what to call this function
+  pub(crate) fn provided_txs_ok_for_block(
+    db: &D,
+    genesis: &[u8; 32],
+    block: &[u8; 32],
+    order: &str,
+  ) -> bool {
+    let local_key = ProvidedTransactions::<D, T>::local_transaction_no_key(genesis, order);
+    let on_chain_key = ProvidedTransactions::<D, T>::last_tx_block_order_key(genesis, block, order);
     #[allow(clippy::unwrap_or_default)]
-    db.get(key).unwrap_or(vec![]).is_empty()
+    let local = u32::from_le_bytes(
+      db.get(local_key)
+        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
+        .try_into()
+        .unwrap(),
+    );
+    let on_chain = u32::from_le_bytes(
+      db.get(on_chain_key)
+        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
+        .try_into()
+        .unwrap(),
+    );
+
+    // TODO: clean up the old used keys? since we don't need block-order -> tx_no
+    // info once we get pass the block.
+    local >= on_chain
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
@@ -264,7 +286,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       match tx.kind() {
         TransactionKind::Provided(order) => {
           let hash = tx.hash();
-          self.provided.complete(&mut txn, order, hash);
+          self.provided.complete(&mut txn, order, self.tip, hash);
           txn.put(Self::provided_included_key(&self.genesis, &hash), []);
         }
         TransactionKind::Unsigned => {
