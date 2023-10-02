@@ -27,14 +27,7 @@ pub struct KeyConfirmed<C: Ciphersuite> {
   pub network_keys: ThresholdKeys<C>,
 }
 
-createDb!(
-  KeyGenDb {
-    ParamsDb,
-    CommitmentsDb,
-    GeneratedKeysDb,
-    KeysDb
-  }
-);
+createDb!(KeyGenDb { ParamsDb, CommitmentsDb, GeneratedKeysDb, KeysDb });
 
 #[allow(clippy::type_complexity)]
 fn read_keys<N: Network>(
@@ -56,8 +49,7 @@ fn confirm_keys<N: Network>(
 ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
   let val: &[u8] = key_pair.1.as_ref();
   let (keys_vec, keys) =
-    read_keys::<N>(txn, &GeneratedKeysDb::key((set, (&key_pair.0 .0, val)).encode()))
-      .unwrap();
+    read_keys::<N>(txn, &GeneratedKeysDb::key((set, (&key_pair.0 .0, val)).encode())).unwrap();
   assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
   assert_eq!(
     {
@@ -87,11 +79,12 @@ impl GeneratedKeysDb {
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(network_keys.serialize().iter());
-    let key = (id.set, (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref())).encode();
-    txn.put(
-      Self::key(key),
-      keys,
-    );
+    let key = (
+      id.set,
+      (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()),
+    )
+      .encode();
+    txn.put(Self::key(key), keys);
   }
 }
 
@@ -170,8 +163,8 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         info!("Generating new key. ID: {:?} Params: {:?}", id, params);
 
         // Remove old attempts
-        if self.active_commit.remove(&id.set).is_none() &&
-          self.active_share.remove(&id.set).is_none()
+        if self.active_commit.remove(&id.set).is_none()
+          && self.active_share.remove(&id.set).is_none()
         {
           // If we haven't handled this set before, save the params
           ParamsDb::set(txn, &id.set.encode(), &params);
@@ -269,7 +262,8 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let machines = key_gen_machines(id, params).0;
           let mut rng = secret_shares_rng(id);
-          let commitments = CommitmentsDb::get::<HashMap<Participant, Vec<u8>>>(txn, &id.encode()).unwrap();
+          let commitments =
+            CommitmentsDb::get::<HashMap<Participant, Vec<u8>>>(txn, &id.encode()).unwrap();
 
           let mut commitments_ref: HashMap<Participant, &[u8]> =
             commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
