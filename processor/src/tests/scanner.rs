@@ -1,11 +1,11 @@
 use core::time::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use rand_core::OsRng;
 
 use frost::{Participant, tests::key_gen};
 
-use tokio::time::timeout;
+use tokio::{sync::Mutex, time::timeout};
 
 use serai_db::{DbTxn, Db, MemDb};
 
@@ -31,7 +31,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   let new_scanner = || async {
     let mut db = db.clone();
     let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
-    let mut first = first.lock().unwrap();
+    let mut first = first.lock().await;
     if *first {
       assert!(current_keys.is_empty());
       let mut txn = db.txn();
