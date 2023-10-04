@@ -13,7 +13,6 @@ pub mod pallet {
 
   use serai_primitives::{NetworkId, Amount, PublicKey};
   use serai_validator_sets_primitives::{ValidatorSet, Session};
-  use staking_primitives::AllocatedStaking;
 
   use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
   use pallet_session::{Config as SessionConfig, SessionManager, Pallet as SessionPallet};
@@ -21,7 +20,7 @@ pub mod pallet {
   #[pallet::error]
   pub enum Error<T> {
     BondUnavailable,
-    InSufficientAllocation,
+    InsufficientAllocation,
   }
 
   // TODO: Event
@@ -86,7 +85,7 @@ pub mod pallet {
     fn deallocate_internal(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
       Allocated::<T>::try_mutate(account, |allocated| {
         if *allocated < amount {
-          Err(Error::<T>::InSufficientAllocation)?;
+          Err(Error::<T>::InsufficientAllocation)?;
         }
         *allocated -= amount;
         Ok(())
@@ -109,8 +108,7 @@ pub mod pallet {
       Ok(())
     }
 
-    /// Unstake funds from this account. Only unallocated funds may be
-    /// unstaked.
+    /// Unstake funds from this account. Only unallocated funds may be unstaked.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn unstake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
@@ -135,17 +133,11 @@ pub mod pallet {
       // add to amount bonded
       Self::allocate_internal(&account, amount)?;
 
-      // add to participants list for the network
-      let result = VsPallet::<T>::add_participant(account, Amount(amount), network);
-      if result.is_err() {
-        Self::deallocate_internal(&account, amount).unwrap();
-        return result;
-      }
-
-      Ok(())
+      // increase allocation for participant or add to participants list if new.
+      VsPallet::<T>::increase_allocation(account, Amount(amount), network)
     }
 
-    /// Allocate `amount` to a given validator set.
+    /// Deallocate `amount` from a given validator set.
     #[pallet::call_index(3)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn deallocate(
@@ -155,27 +147,20 @@ pub mod pallet {
     ) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      // remove the participant if necessary.
+      // decrease allocation and remove the participant if necessary.
       // we can't directly deallocate here, since the leaving validator
       // will be removed after the next session. We only deallocate then
       // on `end_session` for the right index.
-      VsPallet::<T>::maybe_remove_participant(account, Amount(amount), network)
+      VsPallet::<T>::decrease_allocation(account, Amount(amount), network)
     }
   }
 
-  /// Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
-  /// new_session(i + 1) is called immediately after start_session(i) returns then
-  /// we wait until the session ends then get a call to end_session(i) and so on.
+  // Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
+  // new_session(i + 1) is called immediately after start_session(i) returns,
+  // then we wait until the session ends then get a call to end_session(i) and so on.
   impl<T: Config> SessionManager<T::ValidatorId> for Pallet<T> {
     fn new_session(new_index: u32) -> Option<Vec<T::ValidatorId>> {
-      let next_validators = VsPallet::<T>::next_validator_set(new_index, NetworkId::Serai);
-
-      // Returning None will keep the previous set going.
-      if next_validators.is_empty() {
-        return None;
-      }
-
-      Some(next_validators)
+      Some(VsPallet::<T>::next_validator_set(new_index, NetworkId::Serai))
     }
 
     fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
@@ -192,7 +177,7 @@ pub mod pallet {
       let deallocating_validators = VsPallet::<T>::deallocating_validators(key);
       for (account, amount, _) in deallocating_validators {
         // we can unwrap because we are not deallocating more than allocated.
-        <Self as AllocatedStaking<T>>::deallocate(&account, amount.0).unwrap();
+        Self::deallocate_internal(&account, amount.0).unwrap();
       }
 
       VsPallet::<T>::end_session(end_index, NetworkId::Serai);
@@ -201,17 +186,6 @@ pub mod pallet {
     fn start_session(start_index: u32) {
       let validators = SessionPallet::<T>::validators();
       VsPallet::<T>::start_session(start_index, NetworkId::Serai, validators)
-    }
-  }
-
-  impl<T: Config> AllocatedStaking<T> for Pallet<T> {
-    type Error = Error<T>;
-
-    fn allocate(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
-      Self::allocate_internal(account, amount)
-    }
-    fn deallocate(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
-      Self::deallocate_internal(account, amount)
     }
   }
 }

@@ -38,7 +38,7 @@ serai_test!(
         .get_new_set_events(serai.get_block_by_number(0).await.unwrap().unwrap().hash())
         .await
         .unwrap(),
-      [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero, NetworkId::Serai]
+      [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero]
         .iter()
         .copied()
         .map(|network| ValidatorSetsEvent::NewSet {

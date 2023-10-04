@@ -189,7 +189,7 @@ impl Contains<RuntimeCall> for CallFilter {
     }
 
     if let RuntimeCall::Session(call) = call {
-      return matches!(call, session::Call::set_keys { .. } | session::Call::purge_keys {});
+      return matches!(call, session::Call::set_keys { .. });
     }
 
     false

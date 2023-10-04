@@ -56,10 +56,10 @@ fn testnet_genesis(
     validator_sets: ValidatorSetsConfig {
       bond: Amount(1_000_000 * 10_u64.pow(8)),
       networks: vec![
+        (NetworkId::Serai, NETWORKS[&NetworkId::Serai].clone()),
         (NetworkId::Bitcoin, NETWORKS[&NetworkId::Bitcoin].clone()),
         (NetworkId::Ethereum, NETWORKS[&NetworkId::Ethereum].clone()),
         (NetworkId::Monero, NETWORKS[&NetworkId::Monero].clone()),
-        (NetworkId::Serai, NETWORKS[&NetworkId::Serai].clone()),
       ],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },

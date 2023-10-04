@@ -124,9 +124,9 @@ impl Network {
 #[cfg(feature = "std")]
 lazy_static::lazy_static! {
   pub static ref NETWORKS: HashMap<NetworkId, Network> = HashMap::from([
+    (NetworkId::Serai, Network::new(vec![Coin::Serai]).unwrap()),
     (NetworkId::Bitcoin, Network::new(vec![Coin::Bitcoin]).unwrap()),
     (NetworkId::Ethereum, Network::new(vec![Coin::Ether, Coin::Dai]).unwrap()),
     (NetworkId::Monero, Network::new(vec![Coin::Monero]).unwrap()),
-    (NetworkId::Serai, Network::new(vec![Coin::Serai]).unwrap()),
   ]);
 }
