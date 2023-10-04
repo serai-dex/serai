@@ -139,10 +139,6 @@ impl<N: Network, D: Db> Signer<N, D> {
     }
   }
 
-  pub fn keys(&self) -> ThresholdKeys<N::Curve> {
-    self.keys.clone()
-  }
-
   fn verify_id(&self, id: &SignId) -> Result<(), ()> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
@@ -202,28 +198,42 @@ impl<N: Network, D: Db> Signer<N, D> {
     self.events.push_back(SignerEvent::SignedTransaction { id, tx: tx_id });
   }
 
-  pub async fn eventuality_completion(
+  pub fn completed(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], tx: N::Transaction) {
+    let first_completion = !self.already_completed(txn, id);
+
+    // Save this completion to the DB
+    SignerDb::<N, D>::save_transaction(txn, &tx);
+    SignerDb::<N, D>::complete(txn, id, &tx.id());
+
+    if first_completion {
+      self.complete(id, tx.id());
+    }
+  }
+
+  // Doesn't use any loops/retries since we'll eventually get this from the Scanner anyways
+  async fn claimed_eventuality_completion(
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
     tx_id: &<N::Transaction as Transaction<N>>::Id,
-  ) {
+  ) -> bool {
     if let Some(eventuality) = SignerDb::<N, D>::eventuality(txn, id) {
       // Transaction hasn't hit our mempool/was dropped for a different signature
       // The latter can happen given certain latency conditions/a single malicious signer
-      // In the case of a single malicious signer, they can drag multiple honest
-      // validators down with them, so we unfortunately can't slash on this case
+      // In the case of a single malicious signer, they can drag multiple honest validators down
+      // with them, so we unfortunately can't slash on this case
       let Ok(tx) = self.network.get_transaction(tx_id).await else {
         warn!(
-          "a validator claimed {} completed {} yet we didn't have that TX in our mempool",
+          "a validator claimed {} completed {} yet we didn't have that TX in our mempool {}",
           hex::encode(tx_id),
           hex::encode(id),
+          "(or had another connectivity issue)",
         );
-        return;
+        return false;
       };
 
       if self.network.confirm_completion(&eventuality, &tx) {
-        info!("eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
+        info!("signer eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
 
         let first_completion = !self.already_completed(txn, id);
 
@@ -233,6 +243,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
         if first_completion {
           self.complete(id, tx.id());
+          return true;
         }
       } else {
         warn!(
@@ -242,12 +253,17 @@ impl<N: Network, D: Db> Signer<N, D> {
         );
       }
     } else {
-      warn!(
-        "signer {} informed of the completion of plan {}. that plan was not recognized",
+      // If we don't have this in RAM, it should be because we already finished signing it
+      // TODO: Will the coordinator ever send us Completed for an unknown ID?
+      assert!(SignerDb::<N, D>::completed(txn, id).is_some());
+      info!(
+        "signer {} informed of the eventuality completion for plan {}, {}",
         hex::encode(self.keys.group_key().to_bytes()),
         hex::encode(id),
+        "which we already marked as completed",
       );
     }
+    false
   }
 
   async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
@@ -311,7 +327,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     SignerDb::<N, D>::attempt(txn, &id);
 
     // Attempt to create the TX
-    let machine = match self.network.attempt_send(tx).await {
+    let machine = match self.network.attempt_send(self.keys.clone(), tx).await {
       Err(e) => {
         error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
         return;
@@ -481,7 +497,7 @@ impl<N: Network, D: Db> Signer<N, D> {
         }
         tx.as_mut().copy_from_slice(&tx_vec);
 
-        self.eventuality_completion(txn, id, &tx).await;
+        self.claimed_eventuality_completion(txn, id, &tx).await;
       }
     }
   }

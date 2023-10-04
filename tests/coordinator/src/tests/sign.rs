@@ -232,10 +232,9 @@ async fn sign_test() {
       let balance = Balance { coin: Coin::Bitcoin, amount };
 
       let coin_block = BlockHash([0x33; 32]);
-      let block_included_in = batch::<Secp256k1>(
+      let block_included_in = batch(
         &mut processors,
         &substrate_key,
-        &network_key,
         Batch {
           network: NetworkId::Bitcoin,
           id: 0,
@@ -346,7 +345,6 @@ async fn sign_test() {
               },
               network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
-              key: (Secp256k1::generator() * *network_key).to_bytes().to_vec(),
               burns: vec![OutInstructionWithBalance {
                 instruction: out_instruction.clone(),
                 balance: Balance { coin: Coin::Bitcoin, amount }

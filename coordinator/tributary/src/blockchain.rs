@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{VecDeque, HashMap};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
@@ -13,7 +13,7 @@ use crate::{
   transaction::{Signed, TransactionKind, Transaction as TransactionTrait},
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Debug)]
 pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   db: Option<D>,
   genesis: [u8; 32],
@@ -24,11 +24,13 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
+
+  pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
-  fn tip_key(&self) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"tip", self.genesis)
+  fn tip_key(genesis: [u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"tip", genesis)
   }
   fn block_number_key(&self) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_number", self.genesis)
@@ -76,11 +78,13 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
       provided: ProvidedTransactions::new(db.clone(), genesis),
       mempool: Mempool::new(db, genesis),
+
+      next_block_notifications: VecDeque::new(),
     };
 
     if let Some((block_number, tip)) = {
       let db = res.db.as_ref().unwrap();
-      db.get(res.block_number_key()).map(|number| (number, db.get(res.tip_key()).unwrap()))
+      db.get(res.block_number_key()).map(|number| (number, db.get(Self::tip_key(genesis)).unwrap()))
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
@@ -130,6 +134,10 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
   pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
+  }
+
+  pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
+    db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
   }
 
   pub(crate) fn add_transaction<N: Network>(
@@ -226,7 +234,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let mut txn = db.txn();
 
     self.tip = block.hash();
-    txn.put(self.tip_key(), self.tip);
+    txn.put(Self::tip_key(self.genesis), self.tip);
 
     self.block_number += 1;
     txn.put(self.block_number_key(), self.block_number.to_le_bytes());
@@ -269,6 +277,10 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     txn.commit();
     self.db = Some(db);
+
+    for tx in self.next_block_notifications.drain(..) {
+      let _ = tx.send(());
+    }
 
     Ok(())
   }

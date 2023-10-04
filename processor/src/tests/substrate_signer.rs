@@ -26,7 +26,11 @@ async fn test_substrate_signer() {
 
   let id: u32 = 5;
   let block = BlockHash([0xaa; 32]);
-  let mut actual_id = SignId { key: vec![], id: [0; 32], attempt: 0 };
+  let mut actual_id = SignId {
+    key: keys.values().next().unwrap().group_key().to_bytes().to_vec(),
+    id: [0; 32],
+    attempt: 0,
+  };
 
   let batch = Batch {
     network: NetworkId::Monero,

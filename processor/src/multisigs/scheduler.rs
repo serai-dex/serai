@@ -6,7 +6,7 @@ use std::{
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::{
-  networks::{Output, Network},
+  networks::{OutputType, Output, Network},
   DbTxn, Db, Payment, Plan,
 };
 
@@ -29,8 +29,6 @@ pub struct Scheduler<N: Network> {
   // queued_plans are for outputs which we will create, yet when created, will have their amount
   // reduced by the fee it cost to be created. The Scheduler will then be told how what amount the
   // output actually has, and it'll be moved into plans
-  //
-  // TODO2: Consider edge case where branch/change isn't mined yet keys are deprecated
   queued_plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
   plans: HashMap<u64, VecDeque<Vec<Payment<N>>>>,
 
@@ -46,6 +44,13 @@ fn scheduler_key<D: Db, G: GroupEncoding>(key: &G) -> Vec<u8> {
 }
 
 impl<N: Network> Scheduler<N> {
+  pub fn empty(&self) -> bool {
+    self.queued_plans.is_empty() &&
+      self.plans.is_empty() &&
+      self.utxos.is_empty() &&
+      self.payments.is_empty()
+  }
+
   fn read<R: Read>(key: <N::Curve as Ciphersuite>::G, reader: &mut R) -> io::Result<Self> {
     let mut read_plans = || -> io::Result<_> {
       let mut all_plans = HashMap::new();
@@ -93,7 +98,7 @@ impl<N: Network> Scheduler<N> {
     Ok(Scheduler { key, queued_plans, plans, utxos, payments })
   }
 
-  // TODO: Get rid of this
+  // TODO2: Get rid of this
   // We reserialize the entire scheduler on any mutation to save it to the DB which is horrible
   // We should have an incremental solution
   fn serialize(&self) -> Vec<u8> {
@@ -152,19 +157,16 @@ impl<N: Network> Scheduler<N> {
     Self::read(key, reader)
   }
 
-  fn execute(&mut self, inputs: Vec<N::Output>, mut payments: Vec<Payment<N>>) -> Plan<N> {
-    // This must be equal to plan.key due to how networks detect they created outputs which are to
-    // the branch address
-    let branch_address = N::branch_address(self.key);
-    // created_output will be called any time we send to a branch address
-    // If it's called, and it wasn't expecting to be called, that's almost certainly an error
-    // The only way it wouldn't be is if someone on Serai triggered a burn to a branch, which is
-    // pointless anyways
-    // If we allow such behavior, we lose the ability to detect the aforementioned class of errors
-    // Ignore these payments so we can safely assert there
-    let mut payments =
-      payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
+  pub fn can_use_branch(&self, amount: u64) -> bool {
+    self.plans.contains_key(&amount)
+  }
 
+  fn execute(
+    &mut self,
+    inputs: Vec<N::Output>,
+    mut payments: Vec<Payment<N>>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+  ) -> Plan<N> {
     let mut change = false;
     let mut max = N::MAX_OUTPUTS;
 
@@ -183,6 +185,8 @@ impl<N: Network> Scheduler<N> {
       self.queued_plans.entry(amount).or_insert(VecDeque::new()).push_back(payments);
       amount
     };
+
+    let branch_address = N::branch_address(self.key);
 
     // If we have more payments than we can handle in a single TX, create plans for them
     // TODO2: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
@@ -207,37 +211,44 @@ impl<N: Network> Scheduler<N> {
       payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
     }
 
-    // TODO2: Use the latest key for change
-    // TODO2: Update rotation documentation
-    Plan { key: self.key, inputs, payments, change: Some(self.key).filter(|_| change) }
+    Plan {
+      key: self.key,
+      inputs,
+      payments,
+      change: Some(N::change_address(key_for_any_change)).filter(|_| change),
+    }
   }
 
-  fn add_outputs(&mut self, mut utxos: Vec<N::Output>) -> Vec<Plan<N>> {
+  fn add_outputs(
+    &mut self,
+    mut utxos: Vec<N::Output>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+  ) -> Vec<Plan<N>> {
     log::info!("adding {} outputs", utxos.len());
 
     let mut txs = vec![];
 
     for utxo in utxos.drain(..) {
-      // If we can fulfill planned TXs with this output, do so
-      // We could limit this to UTXOs where `utxo.kind() == OutputType::Branch`, yet there's no
-      // practical benefit in doing so
-      let amount = utxo.amount();
-      if let Some(plans) = self.plans.get_mut(&amount) {
-        // Execute the first set of payments possible with an output of this amount
-        let payments = plans.pop_front().unwrap();
-        // They won't be equal if we dropped payments due to being dust
-        assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+      if utxo.kind() == OutputType::Branch {
+        let amount = utxo.amount();
+        if let Some(plans) = self.plans.get_mut(&amount) {
+          // Execute the first set of payments possible with an output of this amount
+          let payments = plans.pop_front().unwrap();
+          // They won't be equal if we dropped payments due to being dust
+          assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
 
-        // If we've grabbed the last plan for this output amount, remove it from the map
-        if plans.is_empty() {
-          self.plans.remove(&amount);
+          // If we've grabbed the last plan for this output amount, remove it from the map
+          if plans.is_empty() {
+            self.plans.remove(&amount);
+          }
+
+          // Create a TX for these payments
+          txs.push(self.execute(vec![utxo], payments, key_for_any_change));
+          continue;
         }
-
-        // Create a TX for these payments
-        txs.push(self.execute(vec![utxo], payments));
-      } else {
-        self.utxos.push(utxo);
       }
+
+      self.utxos.push(utxo);
     }
 
     log::info!("{} planned TXs have had their required inputs confirmed", txs.len());
@@ -249,9 +260,28 @@ impl<N: Network> Scheduler<N> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
-    payments: Vec<Payment<N>>,
+    mut payments: Vec<Payment<N>>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+    force_spend: bool,
   ) -> Vec<Plan<N>> {
-    let mut plans = self.add_outputs(utxos);
+    // Drop payments to our own branch address
+    /*
+      created_output will be called any time we send to a branch address. If it's called, and it
+      wasn't expecting to be called, that's almost certainly an error. The only way to guarantee
+      this however is to only have us send to a branch address when creating a branch, hence the
+      dropping of pointless payments.
+
+      This is not comprehensive as a payment may still be made to another active multisig's branch
+      address, depending on timing. This is safe as the issue only occurs when a multisig sends to
+      its *own* branch address, since created_output is called on the signer's Scheduler.
+    */
+    {
+      let branch_address = N::branch_address(self.key);
+      payments =
+        payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
+    }
+
+    let mut plans = self.add_outputs(utxos, key_for_any_change);
 
     log::info!("scheduling {} new payments", payments.len());
 
@@ -293,10 +323,14 @@ impl<N: Network> Scheduler<N> {
 
     for chunk in utxo_chunks.drain(..) {
       // TODO: While payments have their TXs' fees deducted from themselves, that doesn't hold here
-      // We need to charge a fee before reporting incoming UTXOs to Substrate to cover aggregation
-      // TXs
+      // We need the documented, but not yet implemented, virtual amount scheme to solve this
       log::debug!("aggregating a chunk of {} inputs", N::MAX_INPUTS);
-      plans.push(Plan { key: self.key, inputs: chunk, payments: vec![], change: Some(self.key) })
+      plans.push(Plan {
+        key: self.key,
+        inputs: chunk,
+        payments: vec![],
+        change: Some(N::change_address(key_for_any_change)),
+      })
     }
 
     // We want to use all possible UTXOs for all possible payments
@@ -326,10 +360,23 @@ impl<N: Network> Scheduler<N> {
     // Now that we have the list of payments we can successfully handle right now, create the TX
     // for them
     if !executing.is_empty() {
-      plans.push(self.execute(utxos, executing));
+      plans.push(self.execute(utxos, executing, key_for_any_change));
     } else {
       // If we don't have any payments to execute, save these UTXOs for later
       self.utxos.extend(utxos);
+    }
+
+    // If we're instructed to force a spend, do so
+    // This is used when an old multisig is retiring and we want to always transfer outputs to the
+    // new one, regardless if we currently have payments
+    if force_spend && (!self.utxos.is_empty()) {
+      assert!(self.utxos.len() <= N::MAX_INPUTS);
+      plans.push(Plan {
+        key: self.key,
+        inputs: self.utxos.drain(..).collect::<Vec<_>>(),
+        payments: vec![],
+        change: Some(N::change_address(key_for_any_change)),
+      });
     }
 
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
@@ -340,6 +387,14 @@ impl<N: Network> Scheduler<N> {
       payments_at_start - self.payments.len(),
     );
     plans
+  }
+
+  pub fn consume_payments<D: Db>(&mut self, txn: &mut D::Transaction<'_>) -> Vec<Payment<N>> {
+    let res: Vec<_> = self.payments.drain(..).collect();
+    if !res.is_empty() {
+      txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
+    }
+    res
   }
 
   // Note a branch output as having been created, with the amount it was actually created with,
@@ -399,7 +454,7 @@ impl<N: Network> Scheduler<N> {
     #[allow(clippy::unwrap_or_default)]
     self.plans.entry(actual).or_insert(VecDeque::new()).push_back(payments);
 
-    // TODO: This shows how ridiculous the serialize function is
+    // TODO2: This shows how ridiculous the serialize function is
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
   }
 }

@@ -36,6 +36,8 @@ lazy_static = "1"
 
 rand_core = "0.6"
 
+blake2 = "0.10"
+
 ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }

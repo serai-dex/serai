@@ -30,6 +30,9 @@ use tributary::{
 mod db;
 pub use db::*;
 
+mod nonce_decider;
+pub use nonce_decider::*;
+
 mod handle;
 pub use handle::*;
 
@@ -53,6 +56,7 @@ impl TributarySpec {
     let mut validators = vec![];
     for (participant, amount) in set_data.participants {
       // TODO: Ban invalid keys from being validators on the Serai side
+      // (make coordinator key a session key?)
       let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
         .expect("invalid key registered as participant");
       // Give one weight on Tributary per bond instance
@@ -294,7 +298,7 @@ impl ReadWrite for Transaction {
           let share_len = usize::from(u16::from_le_bytes(share_len));
 
           let mut shares = vec![];
-          for i in 0 .. u16::from_le_bytes(share_quantity) {
+          for _ in 0 .. u16::from_le_bytes(share_quantity) {
             let mut share = vec![0; share_len];
             reader.read_exact(&mut share)?;
             shares.push(share);
@@ -487,7 +491,7 @@ impl TransactionTrait for Transaction {
       }
     }
 
-    if let Transaction::SignCompleted { plan, tx_hash, first_signer, signature } = self {
+    if let Transaction::SignCompleted { first_signer, signature, .. } = self {
       if !signature.verify(*first_signer, self.sign_completed_challenge()) {
         Err(TransactionError::InvalidContent)?;
       }

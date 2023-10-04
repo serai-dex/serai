@@ -10,14 +10,15 @@ pub struct Message {
 
 #[async_trait::async_trait]
 pub trait Coordinator {
-  async fn send(&mut self, msg: ProcessorMessage);
+  async fn send(&mut self, msg: impl Send + Into<ProcessorMessage>);
   async fn recv(&mut self) -> Message;
   async fn ack(&mut self, msg: Message);
 }
 
 #[async_trait::async_trait]
 impl Coordinator for MessageQueue {
-  async fn send(&mut self, msg: ProcessorMessage) {
+  async fn send(&mut self, msg: impl Send + Into<ProcessorMessage>) {
+    let msg: ProcessorMessage = msg.into();
     let metadata = Metadata { from: self.service, to: Service::Coordinator, intent: msg.intent() };
     let msg = serde_json::to_string(&msg).unwrap();
 
@@ -25,8 +26,7 @@ impl Coordinator for MessageQueue {
   }
 
   async fn recv(&mut self) -> Message {
-    // TODO: Use a proper expected next ID
-    let msg = self.next(0).await;
+    let msg = self.next(Service::Coordinator).await;
 
     let id = msg.id;
 
@@ -38,6 +38,6 @@ impl Coordinator for MessageQueue {
   }
 
   async fn ack(&mut self, msg: Message) {
-    MessageQueue::ack(self, msg.id).await
+    MessageQueue::ack(self, Service::Coordinator, msg.id).await
   }
 }

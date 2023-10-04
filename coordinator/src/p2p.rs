@@ -149,10 +149,6 @@ struct Behavior {
   mdns: libp2p::mdns::tokio::Behaviour,
 }
 
-lazy_static::lazy_static! {
-  static ref TIME_OF_LAST_P2P_MESSAGE: Mutex<Instant> = Mutex::new(Instant::now());
-}
-
 #[allow(clippy::type_complexity)]
 #[derive(Clone)]
 pub struct LibP2p(
@@ -246,10 +242,16 @@ impl LibP2p {
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
 
     tokio::spawn({
+      let mut time_of_last_p2p_message = Instant::now();
+
       #[allow(clippy::needless_pass_by_ref_mut)] // False positive
-      async fn broadcast_raw(p2p: &mut Swarm<Behavior>, msg: Vec<u8>) {
+      async fn broadcast_raw(
+        p2p: &mut Swarm<Behavior>,
+        time_of_last_p2p_message: &mut Instant,
+        msg: Vec<u8>,
+      ) {
         // Update the time of last message
-        *TIME_OF_LAST_P2P_MESSAGE.lock().await = Instant::now();
+        *time_of_last_p2p_message = Instant::now();
 
         match p2p.behaviour_mut().gossipsub.publish(IdentTopic::new(LIBP2P_TOPIC), msg.clone()) {
           Err(PublishError::SigningError(e)) => panic!("signing error when broadcasting: {e}"),
@@ -267,8 +269,7 @@ impl LibP2p {
       async move {
         // Run this task ad-infinitum
         loop {
-          let time_since_last =
-            Instant::now().duration_since(*TIME_OF_LAST_P2P_MESSAGE.lock().await);
+          let time_since_last = Instant::now().duration_since(time_of_last_p2p_message);
           tokio::select! {
             biased;
 
@@ -276,6 +277,7 @@ impl LibP2p {
             msg = broadcast_recv.recv() => {
               broadcast_raw(
                 &mut swarm,
+                &mut time_of_last_p2p_message,
                 msg.expect("broadcast_recv closed. are we shutting down?")
               ).await;
             }
@@ -324,7 +326,11 @@ impl LibP2p {
             // (where a finalized block only occurs due to network activity), meaning this won't be
             // run
             _ = tokio::time::sleep(Duration::from_secs(80).saturating_sub(time_since_last)) => {
-              broadcast_raw(&mut swarm, P2pMessageKind::KeepAlive.serialize()).await;
+              broadcast_raw(
+                &mut swarm,
+                &mut time_of_last_p2p_message,
+                P2pMessageKind::KeepAlive.serialize()
+              ).await;
             }
           }
         }

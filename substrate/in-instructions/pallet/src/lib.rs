@@ -4,6 +4,7 @@
 
 use scale::Encode;
 
+use sp_io::hashing::blake2_256;
 use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockHash, NetworkId};
@@ -57,7 +58,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch { network: NetworkId, id: u32, block: BlockHash },
+    Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
   }
 
@@ -265,6 +266,7 @@ pub mod pallet {
         network: batch.network,
         id: batch.id,
         block: batch.block,
+        instructions_hash: blake2_256(&batch.instructions.encode()),
       });
       for (i, instruction) in batch.instructions.into_iter().enumerate() {
         // TODO: Check this balance's coin belongs to this network

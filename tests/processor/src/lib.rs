@@ -54,6 +54,7 @@ pub fn processor_instance(
       ("NETWORK_RPC_LOGIN".to_string(), format!("{RPC_USER}:{RPC_PASS}")),
       ("NETWORK_RPC_PORT".to_string(), port.to_string()),
       ("DB_PATH".to_string(), "./processor-db".to_string()),
+      ("RUST_LOG".to_string(), "serai_processor=trace,".to_string()),
     ]
     .into(),
   )
@@ -221,13 +222,15 @@ impl Coordinator {
 
   /// Receive a message from a processor as its coordinator.
   pub async fn recv_message(&mut self) -> ProcessorMessage {
-    let msg =
-      tokio::time::timeout(core::time::Duration::from_secs(10), self.queue.next(self.next_recv_id))
-        .await
-        .unwrap();
+    let msg = tokio::time::timeout(
+      core::time::Duration::from_secs(10),
+      self.queue.next(Service::Processor(self.network)),
+    )
+    .await
+    .unwrap();
     assert_eq!(msg.from, Service::Processor(self.network));
     assert_eq!(msg.id, self.next_recv_id);
-    self.queue.ack(self.next_recv_id).await;
+    self.queue.ack(Service::Processor(self.network), msg.id).await;
     self.next_recv_id += 1;
     serde_json::from_slice(&msg.msg).unwrap()
   }

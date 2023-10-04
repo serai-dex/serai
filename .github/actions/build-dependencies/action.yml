@@ -10,7 +10,7 @@ inputs:
   rust-toolchain:
     description: "Rust toolchain to install"
     required: false
-    default: stable
+    default: 1.72.1
 
   rust-components:
     description: "Rust components to install"

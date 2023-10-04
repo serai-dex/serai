@@ -16,6 +16,7 @@ mod bitcoin {
     bitcoin_signer,
     bitcoin_wallet,
     bitcoin_addresses,
+    bitcoin_no_deadlock_in_multisig_completed,
   );
 }
 
@@ -39,5 +40,6 @@ mod monero {
     monero_signer,
     monero_wallet,
     monero_addresses,
+    monero_no_deadlock_in_multisig_completed,
   );
 }
