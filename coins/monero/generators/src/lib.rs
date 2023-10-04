@@ -5,7 +5,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use std_shims::sync::OnceLock;
+use std_shims::{sync::OnceLock, vec::Vec};
 
 use sha3::{Digest, Keccak256};
 
@@ -56,14 +56,13 @@ const MAX_MN: usize = MAX_M * N;
 /// Container struct for Bulletproofs(+) generators.
 #[allow(non_snake_case)]
 pub struct Generators {
-  pub G: [EdwardsPoint; MAX_MN],
-  pub H: [EdwardsPoint; MAX_MN],
+  pub G: Vec<EdwardsPoint>,
+  pub H: Vec<EdwardsPoint>,
 }
 
 /// Generate generators as needed for Bulletproofs(+), as Monero does.
 pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
-  let mut res =
-    Generators { G: [EdwardsPoint::identity(); MAX_MN], H: [EdwardsPoint::identity(); MAX_MN] };
+  let mut res = Generators { G: Vec::with_capacity(MAX_MN), H: Vec::with_capacity(MAX_MN) };
   for i in 0 .. MAX_MN {
     let i = 2 * i;
 
@@ -73,8 +72,8 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
 
     write_varint(&i.try_into().unwrap(), &mut even).unwrap();
     write_varint(&(i + 1).try_into().unwrap(), &mut odd).unwrap();
-    res.H[i / 2] = EdwardsPoint(hash_to_point(hash(&even)));
-    res.G[i / 2] = EdwardsPoint(hash_to_point(hash(&odd)));
+    res.H.push(EdwardsPoint(hash_to_point(hash(&even))));
+    res.G.push(EdwardsPoint(hash_to_point(hash(&odd))));
   }
   res
 }

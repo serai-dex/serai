@@ -1,5 +1,12 @@
 use rand_core::{RngCore, OsRng};
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
+
+use scale::Encode;
+
 use serai_client::{
   primitives::{Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress},
   in_instructions::{
@@ -38,12 +45,20 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(batch).await;
+    let block = provide_batch(batch.clone()).await;
 
     let serai = serai().await;
     assert_eq!(serai.get_latest_block_for_network(block, network).await.unwrap(), Some(block_hash));
     let batches = serai.get_batch_events(block).await.unwrap();
-    assert_eq!(batches, vec![InInstructionsEvent::Batch { network, id, block: block_hash }]);
+    assert_eq!(
+      batches,
+      vec![InInstructionsEvent::Batch {
+        network,
+        id,
+        block: block_hash,
+        instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+      }]
+    );
 
     assert_eq!(
       serai.get_mint_events(block).await.unwrap(),

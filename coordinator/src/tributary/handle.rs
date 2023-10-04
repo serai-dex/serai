@@ -17,7 +17,6 @@ use frost_schnorrkel::Schnorrkel;
 
 use serai_client::{
   Signature,
-  primitives::NetworkId,
   validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
   subxt::utils::Encoded,
   Serai,
@@ -26,8 +25,8 @@ use serai_client::{
 use tributary::Signed;
 
 use processor_messages::{
-  CoordinatorMessage, coordinator,
   key_gen::{self, KeyGenId},
+  coordinator,
   sign::{self, SignId},
 };
 
@@ -36,12 +35,23 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, scanner::RecognizedIdType,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, nonce_decider::NonceDecider,
+    scanner::RecognizedIdType,
   },
 };
 
+const DKG_COMMITMENTS: &str = "commitments";
+const DKG_SHARES: &str = "shares";
 const DKG_CONFIRMATION_NONCES: &str = "confirmation_nonces";
 const DKG_CONFIRMATION_SHARES: &str = "confirmation_shares";
+
+// These s/b prefixes between Batch and Sign should be unnecessary, as Batch/Share entries
+// themselves should already be domain separated
+const BATCH_PREPROCESS: &str = "b_preprocess";
+const BATCH_SHARE: &str = "b_share";
+
+const SIGN_PREPROCESS: &str = "s_preprocess";
+const SIGN_SHARE: &str = "s_share";
 
 // Instead of maintaing state, this simply re-creates the machine(s) in-full on every call (which
 // should only be once per tributary).
@@ -224,13 +234,13 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
-pub async fn handle_application_tx<
+pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32]) -> FRid,
+  RID: crate::RIDTrait<FRid>,
 >(
   tx: Transaction,
   spec: &TributarySpec,
@@ -290,7 +300,7 @@ pub async fn handle_application_tx<
     Transaction::DkgCommitments(attempt, bytes, signed) => {
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "commitments", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
         bytes,
         &signed,
       ) {
@@ -299,10 +309,10 @@ pub async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+              key_gen::CoordinatorMessage::Commitments {
                 id: KeyGenId { set: spec.set(), attempt },
                 commitments,
-              }),
+              },
             )
             .await;
         }
@@ -345,7 +355,7 @@ pub async fn handle_application_tx<
       );
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "shares", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
         bytes,
         &signed,
       ) {
@@ -355,10 +365,10 @@ pub async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+              key_gen::CoordinatorMessage::Shares {
                 id: KeyGenId { set: spec.set(), attempt },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -414,7 +424,8 @@ pub async fn handle_application_tx<
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
-      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch).await;
+      let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
+      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch, nonce).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -423,9 +434,10 @@ pub async fn handle_application_tx<
           despite us not providing that transaction",
       );
 
-      for id in plan_ids {
+      let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
+      for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id).await;
+        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id, nonce).await;
       }
     }
 
@@ -434,20 +446,22 @@ pub async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "preprocess",
+          label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
         &data.signed,
       ) {
         Some(Some(preprocesses)) => {
+          NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::BatchPreprocesses {
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -460,23 +474,24 @@ pub async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "share",
+          label: BATCH_SHARE,
           attempt: data.attempt,
         },
         data.data,
         &data.signed,
       ) {
         Some(Some(shares)) => {
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::BatchShares {
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
                   .collect(),
-              }),
+              },
             )
             .await;
         }
@@ -491,17 +506,18 @@ pub async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
-          label: "preprocess",
+          label: SIGN_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
         &data.signed,
       ) {
         Some(Some(preprocesses)) => {
+          NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+              sign::CoordinatorMessage::Preprocesses {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignPreprocess despite not setting the key pair")
@@ -511,7 +527,7 @@ pub async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -523,7 +539,11 @@ pub async fn handle_application_tx<
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Sign(data.plan), label: "share", attempt: data.attempt },
+        &DataSpecification {
+          topic: Topic::Sign(data.plan),
+          label: SIGN_SHARE,
+          attempt: data.attempt,
+        },
         data.data,
         &data.signed,
       ) {
@@ -531,7 +551,7 @@ pub async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+              sign::CoordinatorMessage::Shares {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignShares despite not setting the key pair")
@@ -541,7 +561,7 @@ pub async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -561,11 +581,7 @@ pub async fn handle_application_tx<
       processors
         .send(
           spec.set().network,
-          CoordinatorMessage::Sign(sign::CoordinatorMessage::Completed {
-            key: key_pair.1.to_vec(),
-            id: plan,
-            tx: tx_hash,
-          }),
+          sign::CoordinatorMessage::Completed { key: key_pair.1.to_vec(), id: plan, tx: tx_hash },
         )
         .await;
     }

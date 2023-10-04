@@ -1,4 +1,4 @@
-use core::{ops::Deref, time::Duration, future::Future};
+use core::{ops::Deref, time::Duration};
 use std::collections::{HashSet, HashMap};
 
 use zeroize::Zeroizing;
@@ -9,7 +9,7 @@ use serai_client::{
   SeraiError, Block, Serai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair},
+    primitives::{ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
@@ -18,7 +18,7 @@ use serai_client::{
 
 use serai_db::DbTxn;
 
-use processor_messages::{SubstrateContext, CoordinatorMessage};
+use processor_messages::SubstrateContext;
 
 use tokio::time::sleep;
 
@@ -43,16 +43,10 @@ async fn in_set(
   Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
-async fn handle_new_set<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
-  processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
@@ -84,7 +78,7 @@ async fn handle_new_set<
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
     let spec = TributarySpec::new(block.hash(), time, set, set_data);
-    create_new_tributary(db, spec.clone()).await;
+    create_new_tributary(db, spec.clone());
   } else {
     log::info!("not present in set {:?}", set);
   }
@@ -92,41 +86,43 @@ async fn handle_new_set<
   Ok(())
 }
 
-async fn handle_key_gen<Pro: Processors>(
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+async fn handle_key_gen<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set).await?.expect("KeyGen occurred for a set which doesn't exist") {
-    processors
-      .send(
-        set.network,
-        CoordinatorMessage::Substrate(
-          processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
-            context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
-              network_latest_finalized_block: serai
-                .get_latest_block_for_network(block.hash(), set.network)
-                .await?
-                // The processor treats this as a magic value which will cause it to find a network
-                // block which has a time greater than or equal to the Serai time
-                .unwrap_or(BlockHash([0; 32])),
-            },
-            set,
-            key_pair,
-          },
-        ),
-      )
-      .await;
-  }
+  // This has to be saved *before* we send ConfirmKeyPair
+  let mut txn = db.txn();
+  SubstrateDb::<D>::save_session_for_keys(&mut txn, &key_pair, set.session);
+  txn.commit();
+
+  processors
+    .send(
+      set.network,
+      processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
+        context: SubstrateContext {
+          serai_time: block.time().unwrap() / 1000,
+          network_latest_finalized_block: serai
+            .get_latest_block_for_network(block.hash(), set.network)
+            .await?
+            // The processor treats this as a magic value which will cause it to find a network
+            // block which has a time greater than or equal to the Serai time
+            .unwrap_or(BlockHash([0; 32])),
+        },
+        set,
+        key_pair,
+      },
+    )
+    .await;
 
   Ok(())
 }
 
-async fn handle_batch_and_burns<Pro: Processors>(
+async fn handle_batch_and_burns<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
@@ -152,16 +148,17 @@ async fn handle_batch_and_burns<Pro: Processors>(
   let mut burns = HashMap::new();
 
   for batch in serai.get_batch_events(hash).await? {
-    if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
+    if let InInstructionsEvent::Batch { network, id, block: network_block, instructions_hash } =
+      batch
+    {
       network_had_event(&mut burns, &mut batches, network);
 
-      // Track what Serai acknowledges as the latest block for this network
-      // If this Substrate block has multiple batches, the last batch's block will overwrite the
-      // prior batches
-      // Since batches within a block are guaranteed to be ordered, thanks to their incremental ID,
-      // the last batch will be the latest batch, so its block will be the latest block
-      // This is just a mild optimization to prevent needing an additional RPC call to grab this
-      batch_block.insert(network, network_block);
+      let mut txn = db.txn();
+      SubstrateDb::<D>::save_batch_instructions_hash(&mut txn, network, id, instructions_hash);
+      txn.commit();
+
+      // Make sure this is the only Batch event for this network in this Block
+      assert!(batch_block.insert(network, network_block).is_none());
 
       // Add the batch included by this block
       batches.get_mut(&network).unwrap().push(id);
@@ -198,23 +195,16 @@ async fn handle_batch_and_burns<Pro: Processors>(
     processors
       .send(
         network,
-        CoordinatorMessage::Substrate(
-          processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
-            context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
-              network_latest_finalized_block,
-            },
-            network,
-            block: block.number(),
-            key: serai
-              .get_keys(ValidatorSet { network, session: Session(0) }) // TODO2
-              .await?
-              .map(|keys| keys.1.into_inner())
-              .expect("batch/burn for network which never set keys"),
-            burns: burns.remove(&network).unwrap(),
-            batches: batches.remove(&network).unwrap(),
+        processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
+          context: SubstrateContext {
+            serai_time: block.time().unwrap() / 1000,
+            network_latest_finalized_block,
           },
-        ),
+          network,
+          block: block.number(),
+          burns: burns.remove(&network).unwrap(),
+          batches: batches.remove(&network).unwrap(),
+        },
       )
       .await;
   }
@@ -225,12 +215,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
 #[allow(clippy::needless_pass_by_ref_mut)] // False positive?
-async fn handle_block<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
@@ -259,8 +244,7 @@ async fn handle_block<
 
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
-      handle_new_set(&mut db.0, key, create_new_tributary.clone(), processors, serai, &block, set)
-        .await?;
+      handle_new_set(&mut db.0, key, create_new_tributary.clone(), serai, &block, set).await?;
       let mut txn = db.0.txn();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();
@@ -279,7 +263,7 @@ async fn handle_block<
         TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
         txn.commit();
 
-        handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
@@ -296,7 +280,7 @@ async fn handle_block<
   // This does break the uniqueness of (hash, event_id) -> one event, yet
   // (network, (hash, event_id)) remains valid as a unique ID for an event
   if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
-    handle_batch_and_burns(processors, serai, &block).await?;
+    handle_batch_and_burns(&mut db.0, processors, serai, &block).await?;
   }
   let mut txn = db.0.txn();
   SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
@@ -305,12 +289,7 @@ async fn handle_block<
   Ok(())
 }
 
-pub async fn handle_new_blocks<
-  D: Db,
-  Fut: Future<Output = ()>,
-  CNT: Clone + Fn(&mut D, TributarySpec) -> Fut,
-  Pro: Processors,
->(
+pub async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,

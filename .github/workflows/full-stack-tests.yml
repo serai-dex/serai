@@ -15,10 +15,25 @@ jobs:
     steps:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
 
-      - name: Install Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      # - name: Install Build Dependencies
+      #   uses: ./.github/actions/build-dependencies
+      #   with:
+      #     github-token: ${{ inputs.github-token }}
+
+      # Inlined build-dependencies action to minimize disk usage
+      - name: Install Protobuf
+        uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
         with:
-          github-token: ${{ inputs.github-token }}
+          repo-token: ${{ inputs.github-token }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@5cb429dd810e16ff67df78472fa81cf760f4d1c0
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Remove unused packages
+        run: sudo apt remove -y *powershell* *bazel* *nodejs* *npm* *yarn* *terraform* *firefox* *chromium* *texinfo* *sqlite3* *imagemagick* && sudo apt autoremove -y
 
       - name: Run Full Stack Docker tests
         run: cd tests/full-stack && GITHUB_CI=true RUST_BACKTRACE=1 cargo test

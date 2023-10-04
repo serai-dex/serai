@@ -1,3 +1,10 @@
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
+
+use scale::Encode;
+
 use sp_core::Pair;
 
 use serai_client::{
@@ -38,7 +45,12 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
   // TODO: impl From<Batch> for BatchEvent?
   assert_eq!(
     batches,
-    vec![InInstructionsEvent::Batch { network: batch.network, id: batch.id, block: batch.block }],
+    vec![InInstructionsEvent::Batch {
+      network: batch.network,
+      id: batch.id,
+      block: batch.block,
+      instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+    }],
   );
 
   // TODO: Check the tokens events

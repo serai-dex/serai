@@ -104,7 +104,7 @@ fn invalid_block() {
 
   {
     // Add a valid transaction
-    let mut blockchain = blockchain.clone();
+    let (_, mut blockchain) = new_blockchain(genesis, &[tx.1.signer]);
     assert!(blockchain.add_transaction::<N>(
       true,
       Transaction::Application(tx.clone()),
@@ -129,7 +129,7 @@ fn invalid_block() {
 
   {
     // Invalid signature
-    let mut blockchain = blockchain.clone();
+    let (_, mut blockchain) = new_blockchain(genesis, &[tx.1.signer]);
     assert!(blockchain.add_transaction::<N>(
       true,
       Transaction::Application(tx),

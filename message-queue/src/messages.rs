@@ -48,15 +48,17 @@ pub fn message_challenge(
 }
 
 pub fn ack_challenge(
+  to: Service,
+  to_key: <Ristretto as Ciphersuite>::G,
   from: Service,
-  from_key: <Ristretto as Ciphersuite>::G,
   id: u64,
   nonce: <Ristretto as Ciphersuite>::G,
 ) -> <Ristretto as Ciphersuite>::F {
   let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Ackowledgement");
   transcript.domain_separate(b"metadata");
+  transcript.append_message(b"to", bincode::serialize(&to).unwrap());
+  transcript.append_message(b"to_key", to_key.to_bytes());
   transcript.append_message(b"from", bincode::serialize(&from).unwrap());
-  transcript.append_message(b"from_key", from_key.to_bytes());
   transcript.domain_separate(b"message");
   transcript.append_message(b"id", id.to_le_bytes());
   transcript.domain_separate(b"signature");

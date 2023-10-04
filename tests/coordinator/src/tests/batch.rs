@@ -7,9 +7,14 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto, Secp256k1};
-
 use dkg::Participant;
+
+use scale::Encode;
 
 use serai_client::{
   primitives::{NetworkId, BlockHash, Signature},
@@ -22,15 +27,24 @@ use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
-pub async fn batch<C: Ciphersuite>(
+pub async fn batch(
   processors: &mut [Processor],
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  network_key: &Zeroizing<C::F>,
   batch: Batch,
 ) -> u64 {
   let mut id = [0; 32];
   OsRng.fill_bytes(&mut id);
-  let id = SignId { key: vec![], id, attempt: 0 };
+  let id = SignId {
+    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes().to_vec(),
+    id,
+    attempt: 0,
+  };
+
+  for processor in processors.iter_mut() {
+    processor
+      .send_message(messages::substrate::ProcessorMessage::Batch { batch: batch.clone() })
+      .await;
+  }
 
   // Select a random participant to exclude, so we know for sure who *is* participating
   assert_eq!(COORDINATORS - THRESHOLD, 1);
@@ -165,7 +179,7 @@ pub async fn batch<C: Ciphersuite>(
 
   for processor in processors.iter_mut() {
     processor
-      .send_message(messages::substrate::ProcessorMessage::Update { batch: batch.clone() })
+      .send_message(messages::substrate::ProcessorMessage::SignedBatch { batch: batch.clone() })
       .await;
   }
 
@@ -191,7 +205,8 @@ pub async fn batch<C: Ciphersuite>(
           InInstructionsEvent::Batch {
             network: batch.batch.network,
             id: batch.batch.id,
-            block: batch.batch.block
+            block: batch.batch.block,
+            instructions_hash: Blake2b::<U32>::digest(batch.batch.instructions.encode()).into(),
           }
         );
         break 'outer;
@@ -213,7 +228,6 @@ pub async fn batch<C: Ciphersuite>(
           },
           network: batch.batch.network,
           block: last_serai_block,
-          key: (C::generator() * **network_key).to_bytes().as_ref().to_vec(),
           burns: vec![],
           batches: vec![batch.batch.id],
         }
@@ -257,11 +271,10 @@ async fn batch_test() {
       }
       let mut processors = new_processors;
 
-      let (substrate_key, network_key) = key_gen::<Secp256k1>(&mut processors).await;
-      batch::<Secp256k1>(
+      let (substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
+      batch(
         &mut processors,
         &substrate_key,
-        &network_key,
         Batch {
           network: NetworkId::Bitcoin,
           id: 0,

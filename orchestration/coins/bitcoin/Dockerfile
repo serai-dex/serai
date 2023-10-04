@@ -7,8 +7,7 @@ ENV BITCOIN_DATA=/home/bitcoin/.bitcoin
 
 WORKDIR /home/bitcoin
 
-RUN apk update && \
-  apk --no-cache add ca-certificates bash su-exec git gnupg
+RUN apk --no-cache add git gnupg
 
 # Download Bitcoin
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
@@ -27,7 +26,23 @@ RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256s
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 
+# Also build mimalloc
+FROM debian:bookworm-slim as mimalloc
+
+RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
+RUN git clone https://github.com/microsoft/mimalloc && \
+  cd mimalloc && \
+  mkdir -p out/secure && \
+  cd out/secure && \
+  cmake -DMI_SECURE=ON ../.. && \
+  make && \
+  cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
+# Build the actual image
 FROM debian:bookworm-slim as image
+
+COPY --from=mimalloc libmimalloc.so /usr/lib
+RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 # Upgrade packages
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean

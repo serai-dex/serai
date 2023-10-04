@@ -200,7 +200,7 @@ impl Processor {
     Serai::new(&self.serai_rpc).await.unwrap()
   }
 
-  /// Send a message to a processor as its coordinator.
+  /// Send a message to the coordinator as a processor.
   pub async fn send_message(&mut self, msg: impl Into<ProcessorMessage>) {
     let msg: ProcessorMessage = msg.into();
     self
@@ -217,14 +217,14 @@ impl Processor {
     self.next_send_id += 1;
   }
 
-  /// Receive a message from a processor as its coordinator.
+  /// Receive a message from the coordinator as a processor.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    let msg = tokio::time::timeout(Duration::from_secs(10), self.queue.next(self.next_recv_id))
+    let msg = tokio::time::timeout(Duration::from_secs(10), self.queue.next(Service::Coordinator))
       .await
       .unwrap();
     assert_eq!(msg.from, Service::Coordinator);
     assert_eq!(msg.id, self.next_recv_id);
-    self.queue.ack(self.next_recv_id).await;
+    self.queue.ack(Service::Coordinator, msg.id).await;
     self.next_recv_id += 1;
     serde_json::from_slice(&msg.msg).unwrap()
   }

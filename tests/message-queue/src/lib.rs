@@ -47,6 +47,7 @@ pub fn instance(
         hex::encode((Ristretto::generator() * priv_keys[&NetworkId::Monero]).to_bytes()),
       ),
       ("DB_PATH".to_string(), "./message-queue-db".to_string()),
+      ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
     ]
     .into(),
   );
@@ -105,28 +106,54 @@ fn basic_functionality() {
     // Successfully get it
     let bitcoin = MessageQueue::new(
       Service::Processor(NetworkId::Bitcoin),
-      rpc,
+      rpc.clone(),
       Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
     );
-    let msg = bitcoin.next(0).await;
+    let msg = bitcoin.next(Service::Coordinator).await;
     assert_eq!(msg.from, Service::Coordinator);
     assert_eq!(msg.id, 0);
     assert_eq!(&msg.msg, b"Hello, World!");
 
     // If we don't ack it, it should continue to be returned
-    assert_eq!(msg, bitcoin.next(0).await);
+    assert_eq!(msg, bitcoin.next(Service::Coordinator).await);
 
     // Acknowledging it should yield the next message
-    bitcoin.ack(0).await;
+    bitcoin.ack(Service::Coordinator, 0).await;
 
-    let next_msg = bitcoin.next(1).await;
+    let next_msg = bitcoin.next(Service::Coordinator).await;
     assert!(msg != next_msg);
     assert_eq!(next_msg.from, Service::Coordinator);
     assert_eq!(next_msg.id, 1);
     assert_eq!(&next_msg.msg, b"Hello, World, again!");
-    bitcoin.ack(1).await;
+    bitcoin.ack(Service::Coordinator, 1).await;
 
     // No further messages should be available
-    tokio::time::timeout(core::time::Duration::from_secs(10), bitcoin.next(2)).await.unwrap_err();
+    tokio::time::timeout(core::time::Duration::from_secs(10), bitcoin.next(Service::Coordinator))
+      .await
+      .unwrap_err();
+
+    // Queueing to a distinct processor should work, with a unique ID
+    coordinator
+      .queue(
+        Metadata {
+          from: Service::Coordinator,
+          to: Service::Processor(NetworkId::Monero),
+          // Intents should be per-from-to, making this valid
+          intent: b"intent".to_vec(),
+        },
+        b"Hello, World!".to_vec(),
+      )
+      .await;
+
+    let monero = MessageQueue::new(
+      Service::Processor(NetworkId::Monero),
+      rpc,
+      Zeroizing::new(priv_keys[&NetworkId::Monero]),
+    );
+    assert_eq!(monero.next(Service::Coordinator).await.id, 0);
+    monero.ack(Service::Coordinator, 0).await;
+    tokio::time::timeout(core::time::Duration::from_secs(10), monero.next(Service::Coordinator))
+      .await
+      .unwrap_err();
   });
 }

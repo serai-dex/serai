@@ -11,8 +11,16 @@ ENV GLIBC_VERSION=2.28-r0
 
 WORKDIR /home/monero
 
-RUN apk update \
-  && apk --no-cache add ca-certificates gnupg bash su-exec
+RUN apk update && apk --no-cache add gcc g++ libc-dev make cmake git
+RUN git clone https://github.com/microsoft/mimalloc && \
+  cd mimalloc && \
+  mkdir -p out/secure && \
+  cd out/secure && \
+  cmake -DMI_SECURE=ON ../.. && \
+  make && \
+  cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
+RUN apk --no-cache add gnupg
 
 # Download Monero
 RUN wget https://downloads.getmonero.org/cli/monero-linux-x64-v${MONERO_VERSION}.tar.bz2
@@ -29,8 +37,11 @@ RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 # Build the actual image
 FROM alpine:latest as image
 
+COPY --from=builder /home/monero/libmimalloc.so /usr/lib
+ENV LD_PRELOAD=libmimalloc.so
+
 # Upgrade packages
-RUN apk update && apk upgrade && apk add gcompat
+RUN apk update && apk upgrade && apk --no-cache add gcompat
 
 # Switch to a non-root user
 # System user (not a human), shell of nologin, no password assigned

@@ -336,6 +336,15 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       _ => false,
     }
   }
+
+  /// Get a Future which will resolve once the next block has been added.
+  pub async fn next_block_notification(
+    &self,
+  ) -> impl Send + Sync + core::future::Future<Output = Result<(), impl Send + Sync>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    self.network.blockchain.write().await.next_block_notifications.push_back(tx);
+    rx
+  }
 }
 
 #[derive(Clone)]
@@ -344,7 +353,8 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
   pub fn genesis(&self) -> [u8; 32] {
     self.1
   }
-  // Since these values are static, they can be safely read from the database without lock
+
+  // Since these values are static once set, they can be safely read from the database without lock
   // acquisition
   pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
     Blockchain::<D, T>::block_from_db(&self.0, self.1, hash)
@@ -362,5 +372,10 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
     self
       .commit(hash)
       .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
+  }
+
+  // This isn't static, yet can be read with only minor discrepancy risks
+  pub fn tip(&self) -> [u8; 32] {
+    Blockchain::<D, T>::tip_from_db(&self.0, self.1)
   }
 }

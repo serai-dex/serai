@@ -12,6 +12,7 @@ ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
+ADD mini /serai/mini
 ADD tests /serai/tests
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
@@ -32,9 +33,23 @@ RUN --mount=type=cache,target=/root/.cargo \
   mkdir /serai/bin && \
   mv /serai/target/release/serai-node /serai/bin
 
-# Prepare Image
+# Also build mimalloc
+FROM debian:bookworm-slim as mimalloc
+
+RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
+RUN git clone https://github.com/microsoft/mimalloc && \
+  cd mimalloc && \
+  mkdir -p out/secure && \
+  cd out/secure && \
+  cmake -DMI_SECURE=ON ../.. && \
+  make && \
+  cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
+# Build the actual image
 FROM debian:bookworm-slim as image
-LABEL description="STAGE 2: Copy and Run"
+
+COPY --from=mimalloc libmimalloc.so /usr/lib
+RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 # Upgrade packages
 RUN apt update && apt upgrade -y

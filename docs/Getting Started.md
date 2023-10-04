@@ -66,6 +66,7 @@ cargo build --release --all-features
 
 Running tests requires:
 
+- [A rootless Docker setup](https://docs.docker.com/engine/security/rootless/)
 - A properly configured Bitcoin regtest node (available via Docker)
 - A properly configured Monero regtest node (available via Docker)
 - A properly configured monero-wallet-rpc instance

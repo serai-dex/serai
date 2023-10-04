@@ -40,9 +40,8 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
     txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
   }
-  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> ThresholdParams {
-    // Directly unwraps the .get() as this will only be called after being set
-    bincode::deserialize(&getter.get(Self::params_key(set)).unwrap()).unwrap()
+  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> Option<ThresholdParams> {
+    getter.get(Self::params_key(set)).map(|bytes| bincode::deserialize(&bytes).unwrap())
   }
 
   // Not scoped to the set since that'd have latter attempts overwrite former
@@ -92,13 +91,13 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn read_keys<G: Get>(
     getter: &G,
     key: &[u8],
-  ) -> (Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)) {
-    let keys_vec = getter.get(key).unwrap();
+  ) -> Option<(Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>))> {
+    let keys_vec = getter.get(key)?;
     let mut keys_ref: &[u8] = keys_vec.as_ref();
     let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
     let mut network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
     N::tweak_keys(&mut network_keys);
-    (keys_vec, (substrate_keys, network_keys))
+    Some((keys_vec, (substrate_keys, network_keys)))
   }
   fn confirm_keys(
     txn: &mut D::Transaction<'_>,
@@ -106,7 +105,8 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
     key_pair: KeyPair,
   ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
     let (keys_vec, keys) =
-      Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())));
+      Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())))
+        .unwrap();
     assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
     assert_eq!(
       {
@@ -121,10 +121,10 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn keys<G: Get>(
     getter: &G,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
-    let res = Self::read_keys(getter, &Self::keys_key(key)).1;
+  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
+    let res = Self::read_keys(getter, &Self::keys_key(key))?.1;
     assert_eq!(&res.1.group_key(), key);
-    res
+    Some(res)
   }
 }
 
@@ -147,13 +147,21 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeyGen { db, entropy, active_commit: HashMap::new(), active_share: HashMap::new() }
   }
 
+  pub fn in_set(&self, set: &ValidatorSet) -> bool {
+    // We determine if we're in set using if we have the parameters for a set's key generation
+    KeyGenDb::<N, D>::params(&self.db, set).is_some()
+  }
+
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
+  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
     // This is safe, despite not having a txn, since it's a static value
     // The only concern is it may not be set when expected, or it may be set unexpectedly
-    // Since this unwraps, it being unset when expected to be set will cause a panic
+    //
+    // They're only expected to be set on boot, if confirmed. If they were confirmed yet the
+    // transaction wasn't committed, their confirmation will be re-handled
+    //
     // The only other concern is if it's set when it's not safe to use
     // The keys are only written on confirmation, and the transaction writing them is atomic to
     // every associated operation
@@ -220,7 +228,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -288,7 +296,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set);
+        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
