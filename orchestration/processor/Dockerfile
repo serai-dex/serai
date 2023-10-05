@@ -1,4 +1,4 @@
-FROM rust:1.71-slim-bookworm as builder
+FROM rust:1.73-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Upgrade and add dev dependencies
