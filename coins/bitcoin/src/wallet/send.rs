@@ -197,7 +197,7 @@ impl SignableTransaction {
     // multiplied by DEFAULT_BYTES_PER_SIGOP (20)
     // We only use 1 signature per input, and our inputs have a weight exceeding 20
     // Accordingly, our inputs' weight will always be greater than the cost of the signature ops
-    let vsize = (weight + 3) / 4;
+    let vsize = weight.div_ceil(4);
     // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
     // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
     // specified fee rate is too low to be valid

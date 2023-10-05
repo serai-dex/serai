@@ -229,14 +229,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   }
 
   fn current_rotation_step(&self, block_number: usize) -> RotationStep {
-    fn ceil_div(num: usize, denom: usize) -> usize {
-      let res = num / denom;
-      if (res * denom) == num {
-        return res;
-      }
-      res + 1
-    }
-
     let Some(new) = self.new.as_ref() else { return RotationStep::UseExisting };
 
     // Period numbering here has no meaning other than these the time values useful here, and the
@@ -250,7 +242,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     // N::CONFIRMATIONS + 10 minutes
     let period_1_start = new.activation_block +
       N::CONFIRMATIONS +
-      ceil_div(10 * 60, N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
+      (10usize * 60).div_ceil(N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
 
     // N::CONFIRMATIONS
     let period_2_start = period_1_start + N::CONFIRMATIONS;
