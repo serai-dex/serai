@@ -29,11 +29,11 @@ pub struct KeyConfirmed<C: Ciphersuite> {
 
 createDb!(
   KeyGenDb {
-    ParamsDb,
-    CommitmentsDb,
-    GeneratedKeysDb,
-    KeysDb
-  }
+    ParamsDb: ThresholdParams,
+    CommitmentsDb: HashMap<Participant, Vec<u8>>,
+    GeneratedKeysDb: Vec<u8>,
+    KeysDb: Vec<u8>
+}
 );
 
 #[allow(clippy::type_complexity)]
@@ -66,7 +66,7 @@ fn confirm_keys<N: Network>(
     },
     keys.1.group_key().to_bytes().as_ref(),
   );
-  txn.put(KeysDb::key(&keys.1.group_key().to_bytes()), keys_vec);
+  txn.put(KeysDb::key(keys.1.group_key().to_bytes()), keys_vec);
   keys
 }
 
@@ -116,7 +116,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
   pub fn in_set(&self, set: &ValidatorSet) -> bool {
     // We determine if we're in set using if we have the parameters for a set's key generation
-    ParamsDb::get::<ThresholdParams>(&self.db, set.encode()).is_some()
+    ParamsDb::get(&self.db, set.encode()).is_some()
   }
 
   pub fn keys(
@@ -195,7 +195,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = ParamsDb::get::<ThresholdParams>(txn, &id.set.encode()).unwrap();
+        let params = ParamsDb::get(txn, &id.set.encode()).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -263,13 +263,13 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = ParamsDb::get::<ThresholdParams>(txn, &id.set.encode()).unwrap();
+        let params = ParamsDb::get(txn, &id.set.encode()).unwrap();
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let machines = key_gen_machines(id, params).0;
           let mut rng = secret_shares_rng(id);
-          let commitments = CommitmentsDb::get::<HashMap<Participant, Vec<u8>>>(txn, &id.encode()).unwrap();
+          let commitments = CommitmentsDb::get(txn, id.encode()).unwrap();
 
           let mut commitments_ref: HashMap<Participant, &[u8]> =
             commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();

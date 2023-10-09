@@ -19,6 +19,8 @@ use serai_env as env;
 
 use message_queue::{Service, client::MessageQueue};
 
+use scale::Encode;
+
 mod plan;
 pub use plan::*;
 
@@ -289,7 +291,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // We can't set these keys for activation until we know their queue block, which we
             // won't until the next Batch is confirmed
             // Set this variable so when we get the next Batch event, we can handle it
-            MainDb::<N, D>::set_pending_activation(txn, block_before_queue_block, set, key_pair);
+            let mut buf = (set, key_pair).encode();
+            buf.extend(block_before_queue_block.as_ref());
+            PendingActivationsDb::set(txn, [], &buf);
           }
         }
 
@@ -302,7 +306,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
-          if let Some((block, set, key_pair)) = MainDb::<N, D>::pending_activation(txn) {
+          if let Some((block, set, key_pair)) = PendingActivationsDb::pending_activation::<N, D::Transaction<'_>>(txn) {
             // Only run if this is a Batch belonging to a distinct block
             if context.network_latest_finalized_block.as_ref() != block.as_ref() {
               let mut queue_block = <N::Block as Block<N>>::Id::default();
@@ -325,7 +329,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
               )
               .await;
 
-              MainDb::<N, D>::clear_pending_activation(txn);
+              PendingActivationsDb::clear_pending_activation(txn);
             }
           }
 
@@ -375,7 +379,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 async fn boot<N: Network, D: Db>(
   raw_db: &mut D,
   network: &N,
-) -> (MainDb<N, D>, TributaryMutable<N, D>, SubstrateMutable<N, D>) {
+) -> (D,TributaryMutable<N, D>, SubstrateMutable<N, D>) {
   let mut entropy_transcript = {
     let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
     if entropy.len() != 64 {
@@ -418,7 +422,7 @@ async fn boot<N: Network, D: Db>(
   let mut substrate_signer = None;
   let mut signers = HashMap::new();
 
-  let main_db = MainDb::<N, _>::new(raw_db.clone());
+  let main_db = raw_db.clone();
 
   for (i, key) in current_keys.iter().enumerate() {
     let Some((substrate_keys, network_keys)) = key_gen.keys(key) else { continue };
@@ -495,8 +499,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         last_coordinator_msg = Some(msg.id);
 
         // Only handle this if we haven't already
-        if !main_db.handled_message(msg.id) {
-          MainDb::<N, D>::handle_message(txn, msg.id);
+        if HandledMessageDb::get(&main_db, msg.id.encode()).is_none() {
+          let data: Vec<u8> = vec![];
+          HandledMessageDb::set(txn as &mut D::Transaction<'_>, msg.id.to_le_bytes(), &data);
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered
