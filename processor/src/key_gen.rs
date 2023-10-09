@@ -56,8 +56,7 @@ fn confirm_keys<N: Network>(
 ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
   let val: &[u8] = key_pair.1.as_ref();
   let (keys_vec, keys) =
-    read_keys::<N>(txn, &GeneratedKeysDb::key((set, (&key_pair.0 .0, val)).encode()))
-      .unwrap();
+    read_keys::<N>(txn, &GeneratedKeysDb::key((set, (&key_pair.0 .0, val)).encode())).unwrap();
   assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
   assert_eq!(
     {
@@ -87,11 +86,12 @@ impl GeneratedKeysDb {
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(network_keys.serialize().iter());
-    let key = (id.set, (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref())).encode();
-    txn.put(
-      Self::key(key),
-      keys,
-    );
+    let key = (
+      id.set,
+      (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()),
+    )
+      .encode();
+    txn.put(Self::key(key), keys);
   }
 }
 

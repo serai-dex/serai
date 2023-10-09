@@ -306,7 +306,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
         } => {
           assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
 
-          if let Some((block, set, key_pair)) = PendingActivationsDb::pending_activation::<N, D::Transaction<'_>>(txn) {
+          if let Some((block, set, key_pair)) =
+            PendingActivationsDb::pending_activation::<N, D::Transaction<'_>>(txn)
+          {
             // Only run if this is a Batch belonging to a distinct block
             if context.network_latest_finalized_block.as_ref() != block.as_ref() {
               let mut queue_block = <N::Block as Block<N>>::Id::default();
@@ -379,7 +381,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 async fn boot<N: Network, D: Db>(
   raw_db: &mut D,
   network: &N,
-) -> (D,TributaryMutable<N, D>, SubstrateMutable<N, D>) {
+) -> (D, TributaryMutable<N, D>, SubstrateMutable<N, D>) {
   let mut entropy_transcript = {
     let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
     if entropy.len() != 64 {
