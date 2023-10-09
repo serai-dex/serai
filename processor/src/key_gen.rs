@@ -33,7 +33,7 @@ createDb!(
     CommitmentsDb: HashMap<Participant, Vec<u8>>,
     GeneratedKeysDb: Vec<u8>,
     KeysDb: Vec<u8>
-}
+  }
 );
 
 #[allow(clippy::type_complexity)]
