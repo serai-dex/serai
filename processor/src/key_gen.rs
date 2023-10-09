@@ -195,7 +195,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let params = ParamsDb::get(txn, &id.set.encode()).unwrap();
+        let params = ParamsDb::get(txn, id.set.encode()).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -263,7 +263,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = ParamsDb::get(txn, &id.set.encode()).unwrap();
+        let params = ParamsDb::get(txn, id.set.encode()).unwrap();
 
         // Same commentary on inconsistency as above exists
         let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
