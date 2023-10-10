@@ -53,7 +53,7 @@ pub mod pallet {
     }
 
     pub fn mint(address: SeraiAddress, balance: Balance) {
-      // TODO: Prevent minting when it'd cause an amount exceeding the bond
+      // TODO: Prevent minting when it'd cause an amount exceeding the allocated stake
       AssetsPallet::<T>::mint(
         RawOrigin::Signed(ADDRESS.into()).into(),
         balance.coin,

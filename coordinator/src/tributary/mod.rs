@@ -17,8 +17,8 @@ use frost::Participant;
 use scale::{Encode, Decode};
 
 use serai_client::{
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet, ValidatorSetData},
+  primitives::{NetworkId, PublicKey},
+  validator_sets::primitives::{Session, ValidatorSet},
 };
 
 #[rustfmt::skip]
@@ -51,16 +51,16 @@ impl TributarySpec {
     serai_block: [u8; 32],
     start_time: u64,
     set: ValidatorSet,
-    set_data: ValidatorSetData,
+    set_participants: Vec<PublicKey>,
   ) -> TributarySpec {
     let mut validators = vec![];
-    for (participant, amount) in set_data.participants {
+    for participant in set_participants {
       // TODO: Ban invalid keys from being validators on the Serai side
       // (make coordinator key a session key?)
       let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
         .expect("invalid key registered as participant");
-      // Give one weight on Tributary per bond instance
-      validators.push((participant, amount.0 / set_data.bond.0));
+      // TODO: Give one weight on Tributary per bond instance
+      validators.push((participant, 1));
     }
 
     Self { serai_block, start_time, set, validators }

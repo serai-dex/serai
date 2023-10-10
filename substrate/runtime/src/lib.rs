@@ -21,13 +21,12 @@ pub use pallet_assets as assets;
 pub use tokens_pallet as tokens;
 pub use in_instructions_pallet as in_instructions;
 
+pub use staking_pallet as staking;
 pub use validator_sets_pallet as validator_sets;
 
 pub use pallet_session as session;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
-
-pub use staking_pallet as staking;
 
 pub use pallet_authority_discovery as authority_discovery;
 
@@ -144,7 +143,7 @@ parameter_types! {
       NORMAL_DISPATCH_RATIO,
     );
 
-  pub const MaxAuthorities: u32 = 100;
+  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_VALIDATORS_PER_SET;
 }
 
 pub struct CallFilter;
@@ -174,10 +173,6 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, in_instructions::Call::execute_batch { .. });
     }
 
-    if let RuntimeCall::ValidatorSets(call) = call {
-      return matches!(call, validator_sets::Call::set_keys { .. });
-    }
-
     if let RuntimeCall::Staking(call) = call {
       return matches!(
         call,
@@ -186,6 +181,10 @@ impl Contains<RuntimeCall> for CallFilter {
           staking::Call::allocate { .. } |
           staking::Call::deallocate { .. }
       );
+    }
+
+    if let RuntimeCall::ValidatorSets(call) = call {
+      return matches!(call, validator_sets::Call::set_keys { .. });
     }
 
     if let RuntimeCall::Session(call) = call {
@@ -316,12 +315,12 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl validator_sets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
 impl staking::Config for Runtime {
   type Currency = Balances;
+}
+
+impl validator_sets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
 }
 
 pub struct IdentityValidatorIdOf;

@@ -26,7 +26,6 @@ pallet-session = { git = "https://github.com/serai-dex/substrate", default-featu
 
 serai-primitives = { path = "../../primitives", default-features = false }
 serai-validator-sets-primitives = { path = "../../validator-sets/primitives", default-features = false }
-staking-primitives = { package = "serai-staking-primitives", path = "../primitives", default-features = false }
 
 [features]
 std = [
@@ -34,7 +33,7 @@ std = [
   "frame-support/std",
 
   "sp-std/std",
-  
+
   "validator-sets-pallet/std",
   "pallet-session/std",
 ]

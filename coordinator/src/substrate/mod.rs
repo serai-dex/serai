@@ -35,12 +35,14 @@ async fn in_set(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
   set: ValidatorSet,
+  block_hash: [u8; 32],
 ) -> Result<Option<bool>, SeraiError> {
-  let Some(data) = serai.get_validator_set(set).await? else {
+  let Some(participants) = serai.get_validator_set_participants(set.network, block_hash).await?
+  else {
     return Ok(None);
   };
   let key = (Ristretto::generator() * key.deref()).to_bytes();
-  Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
+  Ok(Some(participants.iter().any(|participant| participant.0 == key)))
 }
 
 async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
@@ -51,10 +53,13 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   block: &Block,
   set: ValidatorSet,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set).await?.expect("NewSet for set which doesn't exist") {
+  if in_set(key, serai, set, block.hash()).await?.expect("NewSet for set which doesn't exist") {
     log::info!("present in set {:?}", set);
 
-    let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
+    let set_participants = serai
+      .get_validator_set_participants(set.network, block.hash())
+      .await?
+      .expect("NewSet for set which doesn't exist");
 
     let time = if let Ok(time) = block.time() {
       time
@@ -77,7 +82,7 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
     const SUBSTRATE_TO_TRIBUTARY_TIME_DELAY: u64 = 120;
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
-    let spec = TributarySpec::new(block.hash(), time, set, set_data);
+    let spec = TributarySpec::new(block.hash(), time, set, set_participants);
     create_new_tributary(db, spec.clone());
   } else {
     log::info!("not present in set {:?}", set);

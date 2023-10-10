@@ -8386,7 +8386,6 @@ dependencies = [
 name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
- "lazy_static",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -8533,18 +8532,10 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
- "serai-staking-primitives",
  "serai-validator-sets-pallet",
  "serai-validator-sets-primitives",
  "sp-runtime",
  "sp-std",
-]
-
-[[package]]
-name = "serai-staking-primitives"
-version = "0.1.0"
-dependencies = [
- "frame-system",
 ]
 
 [[package]]
@@ -8579,13 +8570,14 @@ dependencies = [
  "frame-support",
  "frame-system",
  "hashbrown 0.14.0",
- "pallet-babe",
+ "pallet-session",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
  "serai-validator-sets-primitives",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

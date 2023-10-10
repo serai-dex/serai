@@ -3,7 +3,7 @@ use rand_core::{RngCore, OsRng};
 use sp_core::{sr25519::Public, Pair};
 
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
+  primitives::{NetworkId, insecure_pair_from_name},
   validator_sets::{
     primitives::{Session, ValidatorSet, musig_key},
     ValidatorSetsEvent,
@@ -47,12 +47,19 @@ serai_test!(
         .collect::<Vec<_>>(),
     );
 
-    let set_data = serai.get_validator_set(set).await.unwrap().unwrap();
-    assert_eq!(set_data.network, NETWORKS[&NetworkId::Bitcoin]);
-    let participants_ref: &[_] = set_data.participants.as_ref();
-    assert_eq!(participants_ref, [(public, set_data.bond)].as_ref());
+    let participants = serai
+      .get_validator_set_participants(set.network, serai.get_latest_block_hash().await.unwrap())
+      .await
+      .unwrap()
+      .unwrap();
+    let participants_ref: &[_] = participants.as_ref();
+    assert_eq!(participants_ref, [public].as_ref());
     assert_eq!(
-      serai.get_validator_set_musig_key(set).await.unwrap().unwrap(),
+      serai
+        .get_validator_set_musig_key(set, serai.get_latest_block_hash().await.unwrap())
+        .await
+        .unwrap()
+        .unwrap(),
       musig_key(set, &[public]).0
     );
 
@@ -64,6 +71,6 @@ serai_test!(
       serai.get_key_gen_events(block).await.unwrap(),
       vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]
     );
-    assert_eq!(serai.get_keys(set).await.unwrap(), Some(key_pair));
+    assert_eq!(serai.get_keys(set, block).await.unwrap(), Some(key_pair));
   }
 );

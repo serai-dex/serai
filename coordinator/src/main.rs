@@ -254,7 +254,10 @@ pub(crate) async fn scan_tributaries<
                         // TODO2: Differentiate connection errors from invariants
                         Err(e) => {
                           // Check if this failed because the keys were already set by someone else
-                          if matches!(serai.get_keys(spec.set()).await, Ok(Some(_))) {
+                          // TODO: hash_with_keys is latest, yet we'll remove old keys from storage
+                          let hash_with_keys = serai.get_latest_block_hash().await.unwrap();
+                          if matches!(serai.get_keys(spec.set(), hash_with_keys).await, Ok(Some(_)))
+                          {
                             log::info!("another coordinator set key pair for {:?}", set);
                             break;
                           }

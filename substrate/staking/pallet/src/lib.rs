@@ -12,15 +12,13 @@ pub mod pallet {
   };
 
   use serai_primitives::{NetworkId, Amount, PublicKey};
-  use serai_validator_sets_primitives::{ValidatorSet, Session};
 
   use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
-  use pallet_session::{Config as SessionConfig, SessionManager, Pallet as SessionPallet};
+  use pallet_session::{Config as SessionConfig, SessionManager};
 
   #[pallet::error]
   pub enum Error<T> {
-    BondUnavailable,
-    InsufficientAllocation,
+    StakeUnavilable,
   }
 
   // TODO: Event
@@ -35,15 +33,12 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  // There's an argument some of the following should be in AccountData
-  // AccountData is also premised on enabling reaping, when reaping is more of a pain than a gain
-
   /// The amount of funds this account has staked.
   #[pallet::storage]
   #[pallet::getter(fn staked)]
   pub type Staked<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
 
-  /// The amount of bond this account has allocated to validator sets.
+  /// The amount of stake this account has allocated to validator sets.
   #[pallet::storage]
   #[pallet::getter(fn allocated)]
   pub type Allocated<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
@@ -62,9 +57,8 @@ pub mod pallet {
     fn remove_stake(account: &T::AccountId, amount: u64) -> DispatchResult {
       Staked::<T>::mutate(account, |staked| {
         let available = *staked - Self::allocated(account);
-        // Check this invariant in the name of safety
         if available < amount {
-          Err(Error::<T>::BondUnavailable)?;
+          Err(Error::<T>::StakeUnavilable)?;
         }
         *staked -= amount;
         Ok::<_, DispatchError>(())
@@ -75,17 +69,18 @@ pub mod pallet {
       Allocated::<T>::try_mutate(account, |allocated| {
         let available = Self::staked(account) - *allocated;
         if available < amount {
-          Err(Error::<T>::BondUnavailable)?;
+          Err(Error::<T>::StakeUnavilable)?;
         }
         *allocated += amount;
         Ok(())
       })
     }
 
+    #[allow(unused)] // TODO
     fn deallocate_internal(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
       Allocated::<T>::try_mutate(account, |allocated| {
         if *allocated < amount {
-          Err(Error::<T>::InsufficientAllocation)?;
+          Err(Error::<T>::StakeUnavilable)?;
         }
         *allocated -= amount;
         Ok(())
@@ -115,7 +110,6 @@ pub mod pallet {
       let signer = ensure_signed(origin)?;
       Self::remove_stake(&signer, amount)?;
       // This should never be out of funds as there should always be stakers. Accordingly...
-      // TODO: What if this fails for some reason but we removed the stake above?
       T::Currency::transfer(&Self::account(), &signer, amount, ExistenceRequirement::KeepAlive)?;
       Ok(())
     }
@@ -130,11 +124,11 @@ pub mod pallet {
     ) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      // add to amount bonded
+      // add to amount allocated
       Self::allocate_internal(&account, amount)?;
 
-      // increase allocation for participant or add to participants list if new.
-      VsPallet::<T>::increase_allocation(account, Amount(amount), network)
+      // increase allocation for participant in validator set
+      VsPallet::<T>::increase_allocation(network, account, Amount(amount))
     }
 
     /// Deallocate `amount` from a given validator set.
@@ -147,46 +141,39 @@ pub mod pallet {
     ) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      // decrease allocation and remove the participant if necessary.
-      // we can't directly deallocate here, since the leaving validator
-      // will be removed after the next session. We only deallocate then
-      // on `end_session` for the right index.
-      VsPallet::<T>::decrease_allocation(account, Amount(amount), network)
+      // decrease allocation in validator set
+      VsPallet::<T>::decrease_allocation(network, account, Amount(amount))?;
+
+      // We don't immediately call deallocate since the deallocation only takes effect in the next
+      // session
+      // TODO: If this validator isn't active, allow immediate deallocation
+      Ok(())
     }
+
+    // TODO: Add a function to reclaim deallocated funds
   }
 
   // Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
-  // new_session(i + 1) is called immediately after start_session(i) returns,
+  // new_session(i + 1) is called immediately after start_session(i)
   // then we wait until the session ends then get a call to end_session(i) and so on.
   impl<T: Config> SessionManager<T::ValidatorId> for Pallet<T> {
-    fn new_session(new_index: u32) -> Option<Vec<T::ValidatorId>> {
-      Some(VsPallet::<T>::next_validator_set(new_index, NetworkId::Serai))
+    fn new_session(_new_index: u32) -> Option<Vec<T::ValidatorId>> {
+      // Don't call new_session multiple times on genesis
+      // TODO: Will this cause pallet_session::Pallet::current_index to desync from validator-sets?
+      if frame_system::Pallet::<T>::block_number() > 1u32.into() {
+        VsPallet::<T>::new_session();
+      }
+      // TODO: Where do we return their stake?
+      Some(VsPallet::<T>::validators(NetworkId::Serai))
     }
 
     fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
-      // this function will be called for index 0 & 1, not just 0.
-      // we return the same set to effectively say that we want
-      // the same validators for sessions 0 & 1.
-      Some(VsPallet::<T>::genesis_validator_set(NetworkId::Serai))
+      Some(VsPallet::<T>::validators(NetworkId::Serai))
     }
 
-    fn end_session(end_index: u32) {
-      // do the deallocation of those validator funds
-      // who will not be in the set next session.
-      let key = ValidatorSet { session: Session(end_index + 1), network: NetworkId::Serai };
-      let deallocating_validators = VsPallet::<T>::deallocating_validators(key);
-      for (account, amount, _) in deallocating_validators {
-        // we can unwrap because we are not deallocating more than allocated.
-        Self::deallocate_internal(&account, amount.0).unwrap();
-      }
+    fn end_session(_end_index: u32) {}
 
-      VsPallet::<T>::end_session(end_index, NetworkId::Serai);
-    }
-
-    fn start_session(start_index: u32) {
-      let validators = SessionPallet::<T>::validators();
-      VsPallet::<T>::start_session(start_index, NetworkId::Serai, validators)
-    }
+    fn start_session(_start_index: u32) {}
   }
 }
 

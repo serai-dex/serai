@@ -164,7 +164,11 @@ pub async fn key_gen<C: Ciphersuite>(
     }
   }
   assert_eq!(
-    serai.get_keys(set).await.unwrap().unwrap(),
+    serai
+      .get_keys(set, serai.get_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+      .await
+      .unwrap()
+      .unwrap(),
     (Public(substrate_key), network_key.try_into().unwrap())
   );
 
