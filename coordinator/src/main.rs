@@ -536,7 +536,9 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   loop {
     match new_tributary.try_recv() {
       Ok(tributary) => {
-        tributaries.insert(tributary.spec.set().session, tributary);
+        let set = tributary.spec.set();
+        assert_eq!(set.network, network);
+        tributaries.insert(set.session, tributary);
       }
       Err(mpsc::error::TryRecvError::Empty) => {}
       Err(mpsc::error::TryRecvError::Disconnected) => {
@@ -577,7 +579,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
           }
         },
         ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
-          // This is a special case as it's relevant to *all* Tributaries
+          // This is a special case as it's relevant to *all* Tributaries for this network
           // It doesn't return a Tributary to become `relevant_tributary` though
           coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
             assert_eq!(
