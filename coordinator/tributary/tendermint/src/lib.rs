@@ -481,10 +481,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
               }
             }
 
-            let commit_msg = commit_msg(
-              self.block.end_time[&msg.round].canonical(),
-              block.id().as_ref(),
-            );
+            let commit_msg =
+              commit_msg(self.block.end_time[&msg.round].canonical(), block.id().as_ref());
             let commit = Commit {
               end_time: self.block.end_time[&msg.round].canonical(),
               validators: validators.clone(),
