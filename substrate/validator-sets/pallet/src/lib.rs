@@ -92,12 +92,25 @@ pub mod pallet {
   pub type Allocations<T: Config> =
     StorageMap<_, Blake2_128Concat, (NetworkId, Public), Amount, OptionQuery>;
   /// A sorted view of the current allocations premised on the underlying DB itself being sorted.
-  // Uses Identity so we can iterate over the key space from highest-to-lowest allocated.
-  // While this does enable attacks the hash is meant to prevent, the minimum stake should resolve
-  // these.
+  /*
+    This uses Identity so we can take advantage of the DB's lexicographic ordering to iterate over
+    the key space from highest-to-lowest allocated.
+
+    This does remove the protection using a hash algorithm here offers against spam attacks (by
+    flooding the DB with layers, increasing lookup time and merkle proof sizes, not that we use
+    merkle proofs as Polkadot does).
+
+    Since amounts are represented with just 8 bytes, only 16 nibbles are presents. This caps the
+    potential depth caused by spam at 16 layers (as the underlying DB operates on nibbles).
+
+    While there is an entire 32-byte public key after this, a Blake hash of the key is inserted
+    after the amount to prevent the key from also being used to cause layer spam.
+
+    There's also a minimum stake requirement, which further reduces the potential for spam.
+  */
   #[pallet::storage]
   type SortedAllocations<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 8], Public), (), OptionQuery>;
+    StorageMap<_, Identity, (NetworkId, [u8; 8], [u8; 16], Public), (), OptionQuery>;
   impl<T: Config> Pallet<T> {
     /// A function which takes an amount and generates a byte array with a lexicographic order from
     /// high amount to low amount.
@@ -109,14 +122,24 @@ pub mod pallet {
       }
       bytes
     }
+    #[inline]
+    fn sorted_allocation_key(
+      network: NetworkId,
+      key: Public,
+      amount: Amount,
+    ) -> (NetworkId, [u8; 8], [u8; 16], Public) {
+      let amount = Self::lexicographic_amount(amount);
+      let hash = sp_io::hashing::blake2_128(&(network, amount, key).encode());
+      (network, amount, hash, key)
+    }
     fn set_allocation(network: NetworkId, key: Public, amount: Amount) {
       let prior = Allocations::<T>::take((network, key));
-      if prior.is_some() {
-        SortedAllocations::<T>::remove((network, Self::lexicographic_amount(amount), key));
+      if let Some(amount) = prior {
+        SortedAllocations::<T>::remove(Self::sorted_allocation_key(network, key, amount));
       }
       if amount.0 != 0 {
         Allocations::<T>::set((network, key), Some(amount));
-        SortedAllocations::<T>::set((network, Self::lexicographic_amount(amount), key), Some(()));
+        SortedAllocations::<T>::set(Self::sorted_allocation_key(network, key, amount), Some(()));
       }
     }
   }
@@ -172,7 +195,6 @@ pub mod pallet {
         if !next.starts_with(&prefix) {
           break;
         }
-        assert_eq!(next.len(), (32 + 1 + 8 + 32));
         let key = Public(next[(next.len() - 32) .. next.len()].try_into().unwrap());
 
         InSet::<T>::set((network, key), Some(()));
@@ -180,7 +202,6 @@ pub mod pallet {
 
         last = next;
       }
-      assert!(!participants.is_empty());
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
