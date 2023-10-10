@@ -1,0 +1,46 @@
+[package]
+name = "serai-staking-pallet"
+version = "0.1.0"
+description = "Staking pallet for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/staking/pallet"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+serai-primitives = { path = "../../primitives", default-features = false }
+serai-validator-sets-primitives = { path = "../../validator-sets/primitives", default-features = false }
+
+[features]
+std = [
+  "frame-system/std",
+  "frame-support/std",
+
+  "sp-std/std",
+
+  "validator-sets-pallet/std",
+  "pallet-session/std",
+]
+
+runtime-benchmarks = [
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+]
+
+default = ["std"]

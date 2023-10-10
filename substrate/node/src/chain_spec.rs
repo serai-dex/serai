@@ -26,6 +26,7 @@ fn testnet_genesis(
     (
       key,
       key,
+      // TODO: Properly diversify these?
       SessionKeys { babe: key.into(), grandpa: key.into(), authority_discovery: key.into() },
     )
   };
@@ -54,12 +55,9 @@ fn testnet_genesis(
     },
 
     validator_sets: ValidatorSetsConfig {
-      bond: Amount(1_000_000 * 10_u64.pow(8)),
-      networks: vec![
-        (NetworkId::Bitcoin, NETWORKS[&NetworkId::Bitcoin].clone()),
-        (NetworkId::Ethereum, NETWORKS[&NetworkId::Ethereum].clone()),
-        (NetworkId::Monero, NETWORKS[&NetworkId::Monero].clone()),
-      ],
+      stake: Amount(1_000_000 * 10_u64.pow(8)),
+      // TODO: Array of these in primitives
+      networks: vec![NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero],
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
     session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },

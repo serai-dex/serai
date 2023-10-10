@@ -13,8 +13,10 @@ use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
 #[cfg(not(feature = "std"))]
 use sp_std::vec::Vec;
 
-use serai_primitives::{NetworkId, Network, Amount};
+use serai_primitives::NetworkId;
 
+/// The maximum amount of validators per set.
+pub const MAX_VALIDATORS_PER_SET: u32 = 150;
 // Support keys up to 96 bytes (BLS12-381 G2).
 const MAX_KEY_LEN: u32 = 96;
 
@@ -32,6 +34,7 @@ const MAX_KEY_LEN: u32 = 96;
   Decode,
   TypeInfo,
   MaxEncodedLen,
+  Default,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub struct Session(pub u32);
@@ -55,17 +58,6 @@ pub struct Session(pub u32);
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,
-}
-
-/// The data for a validator set.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-pub struct ValidatorSetData {
-  pub bond: Amount,
-  pub network: Network,
-
-  // Participant and their amount bonded to this set
-  // Limit each set to 100 participants for now
-  pub participants: BoundedVec<(Public, Amount), ConstU32<100>>,
 }
 
 type MaxKeyLen = ConstU32<MAX_KEY_LEN>;

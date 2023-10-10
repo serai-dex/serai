@@ -21,6 +21,7 @@ pub use pallet_assets as assets;
 pub use tokens_pallet as tokens;
 pub use in_instructions_pallet as in_instructions;
 
+pub use staking_pallet as staking;
 pub use validator_sets_pallet as validator_sets;
 
 pub use pallet_session as session;
@@ -142,7 +143,7 @@ parameter_types! {
       NORMAL_DISPATCH_RATIO,
     );
 
-  pub const MaxAuthorities: u32 = 100;
+  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_VALIDATORS_PER_SET;
 }
 
 pub struct CallFilter;
@@ -172,8 +173,22 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, in_instructions::Call::execute_batch { .. });
     }
 
+    if let RuntimeCall::Staking(call) = call {
+      return matches!(
+        call,
+        staking::Call::stake { .. } |
+          staking::Call::unstake { .. } |
+          staking::Call::allocate { .. } |
+          staking::Call::deallocate { .. }
+      );
+    }
+
     if let RuntimeCall::ValidatorSets(call) = call {
       return matches!(call, validator_sets::Call::set_keys { .. });
+    }
+
+    if let RuntimeCall::Session(call) = call {
+      return matches!(call, session::Call::set_keys { .. });
     }
 
     false
@@ -300,6 +315,10 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl staking::Config for Runtime {
+  type Currency = Balances;
+}
+
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
@@ -317,7 +336,7 @@ impl session::Config for Runtime {
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Babe;
   type NextSessionRotation = Babe;
-  type SessionManager = (); // TODO?
+  type SessionManager = Staking;
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
@@ -392,6 +411,8 @@ construct_runtime!(
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,
+
+    Staking: staking,
 
     Session: session,
     Babe: babe,

@@ -195,8 +195,13 @@ async fn mint_and_burn_test() {
             let halt_at = if additional { 5 * 10 } else { 10 * 10 };
             let print_at = halt_at / 2;
             for i in 0 .. halt_at {
-              if let Some(key_pair) =
-                serai.get_keys(ValidatorSet { network, session: Session(0) }).await.unwrap()
+              if let Some(key_pair) = serai
+                .get_keys(
+                  ValidatorSet { network, session: Session(0) },
+                  serai.get_latest_block_hash().await.unwrap(),
+                )
+                .await
+                .unwrap()
               {
                 return key_pair;
               }

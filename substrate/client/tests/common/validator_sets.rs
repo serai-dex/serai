@@ -28,7 +28,11 @@ pub async fn set_validator_set_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8
   let serai = serai().await;
   let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
   assert_eq!(
-    serai.get_validator_set_musig_key(set).await.unwrap().unwrap(),
+    serai
+      .get_validator_set_musig_key(set, serai.get_latest_block_hash().await.unwrap())
+      .await
+      .unwrap()
+      .unwrap(),
     musig_key(set, &[public]).0
   );
 
@@ -40,7 +44,11 @@ pub async fn set_validator_set_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8
   let threshold_keys =
     musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &[public_key]).unwrap();
   assert_eq!(
-    serai.get_validator_set_musig_key(set).await.unwrap().unwrap(),
+    serai
+      .get_validator_set_musig_key(set, serai.get_latest_block_hash().await.unwrap())
+      .await
+      .unwrap()
+      .unwrap(),
     threshold_keys.group_key().to_bytes()
   );
 
@@ -66,7 +74,7 @@ pub async fn set_validator_set_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8
     serai.get_key_gen_events(block).await.unwrap(),
     vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]
   );
-  assert_eq!(serai.get_keys(set).await.unwrap(), Some(key_pair));
+  assert_eq!(serai.get_keys(set, block).await.unwrap(), Some(key_pair));
 
   block
 }

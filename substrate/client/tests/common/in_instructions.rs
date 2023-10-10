@@ -26,7 +26,9 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
   // TODO: Get the latest session
   let set = ValidatorSet { session: Session(0), network: batch.network };
   let pair = insecure_pair_from_name(&format!("ValidatorSet {:?}", set));
-  let keys = if let Some(keys) = serai.get_keys(set).await.unwrap() {
+  let keys = if let Some(keys) =
+    serai.get_keys(set, serai.get_latest_block_hash().await.unwrap()).await.unwrap()
+  {
     keys
   } else {
     let keys = (pair.public(), vec![].try_into().unwrap());

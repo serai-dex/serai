@@ -1,7 +1,4 @@
 #[cfg(feature = "std")]
-use std::collections::HashMap;
-
-#[cfg(feature = "std")]
 use zeroize::Zeroize;
 
 use serde::{Serialize, Deserialize};
@@ -119,13 +116,4 @@ impl Network {
   pub fn coins(&self) -> &[Coin] {
     &self.coins
   }
-}
-
-#[cfg(feature = "std")]
-lazy_static::lazy_static! {
-  pub static ref NETWORKS: HashMap<NetworkId, Network> = HashMap::from([
-    (NetworkId::Bitcoin, Network::new(vec![Coin::Bitcoin]).unwrap()),
-    (NetworkId::Ethereum, Network::new(vec![Coin::Ether, Coin::Dai]).unwrap()),
-    (NetworkId::Monero, Network::new(vec![Coin::Monero]).unwrap()),
-  ]);
 }

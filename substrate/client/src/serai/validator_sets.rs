@@ -1,8 +1,8 @@
-use sp_core::sr25519::Signature;
+use sp_core::sr25519::{Public, Signature};
 
 use serai_runtime::{validator_sets, ValidatorSets, Runtime};
 pub use validator_sets::primitives;
-use primitives::{ValidatorSet, ValidatorSetData, KeyPair};
+use primitives::{ValidatorSet, KeyPair};
 
 use subxt::utils::Encoded;
 
@@ -31,39 +31,29 @@ impl Serai {
       .await
   }
 
-  pub async fn get_validator_set(
+  pub async fn get_validator_set_participants(
     &self,
-    set: ValidatorSet,
-  ) -> Result<Option<ValidatorSetData>, SeraiError> {
-    self
-      .storage(
-        PALLET,
-        "ValidatorSets",
-        Some(vec![scale_value(set)]),
-        self.get_latest_block_hash().await?,
-      )
-      .await
+    network: NetworkId,
+    at_hash: [u8; 32],
+  ) -> Result<Option<Vec<Public>>, SeraiError> {
+    self.storage(PALLET, "Participants", Some(vec![scale_value(network)]), at_hash).await
   }
 
   pub async fn get_validator_set_musig_key(
     &self,
     set: ValidatorSet,
+    at_hash: [u8; 32],
   ) -> Result<Option<[u8; 32]>, SeraiError> {
-    self
-      .storage(
-        PALLET,
-        "MuSigKeys",
-        Some(vec![scale_value(set)]),
-        self.get_latest_block_hash().await?,
-      )
-      .await
+    self.storage(PALLET, "MuSigKeys", Some(vec![scale_value(set)]), at_hash).await
   }
 
   // TODO: Store these separately since we almost never need both at once?
-  pub async fn get_keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
-    self
-      .storage(PALLET, "Keys", Some(vec![scale_value(set)]), self.get_latest_block_hash().await?)
-      .await
+  pub async fn get_keys(
+    &self,
+    set: ValidatorSet,
+    at_hash: [u8; 32],
+  ) -> Result<Option<KeyPair>, SeraiError> {
+    self.storage(PALLET, "Keys", Some(vec![scale_value(set)]), at_hash).await
   }
 
   pub fn set_validator_set_keys(
