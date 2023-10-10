@@ -11,7 +11,7 @@ use ciphersuite::{
   group::{ff::Field, GroupEncoding},
   Ciphersuite, Ristretto, Secp256k1,
 };
-use dkg::{Participant, ThresholdParams};
+use dkg::ThresholdParams;
 
 use serai_client::{
   primitives::NetworkId,
@@ -24,21 +24,32 @@ use crate::{*, tests::*};
 
 pub async fn key_gen<C: Ciphersuite>(
   processors: &mut [Processor],
-) -> (Zeroizing<<Ristretto as Ciphersuite>::F>, Zeroizing<C::F>) {
-  let participant_from_i = |i: usize| Participant::new(u16::try_from(i + 1).unwrap()).unwrap();
+) -> (Vec<u8>, Zeroizing<<Ristretto as Ciphersuite>::F>, Zeroizing<C::F>) {
+  let mut participant_is = vec![];
 
   let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
   let id = KeyGenId { set, attempt: 0 };
 
   for (i, processor) in processors.iter_mut().enumerate() {
+    let msg = processor.recv_message().await;
+    match &msg {
+      CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
+        params,
+        ..
+      }) => {
+        participant_is.push(params.i());
+      }
+      _ => panic!("unexpected message: {msg:?}"),
+    }
+
     assert_eq!(
-      processor.recv_message().await,
+      msg,
       CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
         id,
         params: ThresholdParams::new(
           u16::try_from(((COORDINATORS * 2) / 3) + 1).unwrap(),
           u16::try_from(COORDINATORS).unwrap(),
-          participant_from_i(i),
+          participant_is[i],
         )
         .unwrap()
       })
@@ -47,7 +58,7 @@ pub async fn key_gen<C: Ciphersuite>(
     processor
       .send_message(messages::key_gen::ProcessorMessage::Commitments {
         id,
-        commitments: vec![u8::try_from(i).unwrap()],
+        commitments: vec![u8::try_from(u16::from(participant_is[i])).unwrap()],
       })
       .await;
   }
@@ -55,9 +66,14 @@ pub async fn key_gen<C: Ciphersuite>(
   wait_for_tributary().await;
   for (i, processor) in processors.iter_mut().enumerate() {
     let mut commitments = (0 .. u8::try_from(COORDINATORS).unwrap())
-      .map(|l| (participant_from_i(l.into()), vec![l]))
+      .map(|l| {
+        (
+          participant_is[usize::from(l)],
+          vec![u8::try_from(u16::from(participant_is[usize::from(l)])).unwrap()],
+        )
+      })
       .collect::<HashMap<_, _>>();
-    commitments.remove(&participant_from_i(i));
+    commitments.remove(&participant_is[i]);
     assert_eq!(
       processor.recv_message().await,
       CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::Commitments {
@@ -66,13 +82,20 @@ pub async fn key_gen<C: Ciphersuite>(
       })
     );
 
-    // from (0 .. n), to (1 ..= n)
+    // Recipient it's for -> (Sender i, Recipient i)
     let mut shares = (0 .. u8::try_from(COORDINATORS).unwrap())
-      .map(|l| (participant_from_i(l.into()), vec![u8::try_from(i).unwrap(), l + 1]))
+      .map(|l| {
+        (
+          participant_is[usize::from(l)],
+          vec![
+            u8::try_from(u16::try_from(participant_is[i]).unwrap()).unwrap(),
+            u8::try_from(u16::from(participant_is[usize::from(l)])).unwrap(),
+          ],
+        )
+      })
       .collect::<HashMap<_, _>>();
 
-    let i = participant_from_i(i);
-    shares.remove(&i);
+    shares.remove(&participant_is[i]);
     processor.send_message(messages::key_gen::ProcessorMessage::Shares { id, shares }).await;
   }
 
@@ -87,14 +110,22 @@ pub async fn key_gen<C: Ciphersuite>(
 
   wait_for_tributary().await;
   for (i, processor) in processors.iter_mut().enumerate() {
-    let i = participant_from_i(i);
+    let i = participant_is[i];
     assert_eq!(
       processor.recv_message().await,
       CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::Shares {
         id,
         shares: {
           let mut shares = (0 .. u8::try_from(COORDINATORS).unwrap())
-            .map(|l| (participant_from_i(l.into()), vec![l, u8::try_from(u16::from(i)).unwrap()]))
+            .map(|l| {
+              (
+                participant_is[usize::from(l)],
+                vec![
+                  u8::try_from(u16::from(participant_is[usize::from(l)])).unwrap(),
+                  u8::try_from(u16::from(i)).unwrap(),
+                ],
+              )
+            })
             .collect::<HashMap<_, _>>();
           shares.remove(&i);
           shares
@@ -172,7 +203,11 @@ pub async fn key_gen<C: Ciphersuite>(
     (Public(substrate_key), network_key.try_into().unwrap())
   );
 
-  (substrate_priv_key, network_priv_key)
+  (
+    participant_is.into_iter().map(|i| u8::try_from(u16::from(i)).unwrap()).collect(),
+    substrate_priv_key,
+    network_priv_key,
+  )
 }
 
 #[tokio::test]
