@@ -23,10 +23,10 @@ runs:
     - name: Remove unused packages
       shell: bash
       run: |
-        sudo apt remove -y *msbuild* *powershell* *nuget* *bazel* *ansible* *terraform* *heroku* *aws* *azure*
-        sudo apt remove -y *nvm* *nodejs* *npm* *yarn* *java* *kotlin* *go* *swift* *julia* *fortran* *android*
-        sudo apt remove -y *apache2* *nginx* *firefox* *chromium* *chrome* *edge*
-        sudo apt remove -y *qemu* *sql* *texinfo* *imagemagick*
+        sudo apt remove -y "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" "*azure*"
+        sudo apt remove -y "*nvm*" "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*go*" "*swift*" "*julia*" "*fortran*" "*android*"
+        sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+        sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
         sudo apt autoremove -y
         sudo apt update
         sudo apt install python3 python3-pip -y
