@@ -20,6 +20,9 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Remove unused packages
+      run: sudo apt remove -y *powershell* *bazel* *nodejs* *npm* *yarn* *terraform* *firefox* *chromium* *qemu* *texinfo* *sqlite3* *imagemagick* && sudo apt autoremove -y
+
     - name: Install Protobuf
       uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
       with:
