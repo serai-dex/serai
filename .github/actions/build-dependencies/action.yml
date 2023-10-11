@@ -21,6 +21,7 @@ runs:
   using: "composite"
   steps:
     - name: Remove unused packages
+      shell: bash
       run: sudo apt remove -y *powershell* *bazel* *nodejs* *npm* *yarn* *terraform* *firefox* *chromium* *qemu* *texinfo* *sqlite3* *imagemagick* && sudo apt autoremove -y
 
     - name: Install Protobuf
