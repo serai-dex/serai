@@ -122,9 +122,9 @@ The following timeline is established:
    Once all the 6 hour period has expired, no `Eventuality`s remain, and all
    outputs are forwarded, the multisig publishes a final `Batch` of the first
    block, plus `CONFIRMATIONS`, which met these conditions, regardless of if it
-   would've otherwise had a `Batch`. Then, it reports to Substrate has closed.
-   No further actions by it, nor its validators, are expected (unless those
-   validators remain present in the new multisig).
+   would've otherwise had a `Batch`. No further actions by it, nor its
+   validators, are expected (unless, of course, those validators remain present
+   in the new multisig).
 
 7) The new multisig confirms all transactions from all prior multisigs were made
    as expected, including the reported `Batch`s.
@@ -151,8 +151,8 @@ The following timeline is established:
    actually be achieved (at least, not without a ZK proof the published `Batch`s
    were correct).
 
-8) The new multisig reports a successful close of the prior multisig, and
-   becomes the sole multisig with full responsibilities.
+8) The new multisig publishes the next `Batch`, signifying the accepting of full
+   responsibilities and a successful close of the prior multisig.
 
 ### Latency and Fees
 

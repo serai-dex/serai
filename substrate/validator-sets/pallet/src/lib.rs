@@ -58,7 +58,7 @@ pub mod pallet {
   #[pallet::storage]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
   impl<T: Config> Pallet<T> {
-    fn session(network: NetworkId) -> Session {
+    pub fn session(network: NetworkId) -> Session {
       if network == NetworkId::Serai {
         Session(pallet_session::Pallet::<T>::current_index())
       } else {
@@ -206,12 +206,6 @@ pub mod pallet {
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
       if network != NetworkId::Serai {
-        // Remove the keys for the set prior to the one now rotating out
-        if session.0 >= 2 {
-          let prior_to_now_rotating = ValidatorSet { network, session: Session(session.0 - 2) };
-          MuSigKeys::<T>::remove(prior_to_now_rotating);
-          Keys::<T>::remove(prior_to_now_rotating);
-        }
         MuSigKeys::<T>::set(set, Some(musig_key(set, &participants)));
       }
       Participants::<T>::set(network, participants.try_into().unwrap());
@@ -398,8 +392,16 @@ pub mod pallet {
         // Handover is automatically complete for Serai as it doesn't have a handover protocol
         // TODO: Update how handover completed is determined. It's not on set keys. It's on new
         // set accepting responsibility
-        let handover_completed = (network == NetworkId::Serai) ||
-          Keys::<T>::contains_key(ValidatorSet { network, session: Self::session(network) });
+        let handover_completed = (network == NetworkId::Serai) || {
+          let current_session = Self::session(network);
+          // This function shouldn't be used on genesis
+          debug_assert!(current_session != Session(0));
+          // Check the prior session had its keys cleared, which happens once its retired
+          !Keys::<T>::contains_key(ValidatorSet {
+            network,
+            session: Session(current_session.0 - 1),
+          })
+        };
         // Only spawn a NewSet if the current set was actually established with a completed
         // handover protocol
         if handover_completed {
@@ -410,6 +412,12 @@ pub mod pallet {
 
     pub fn validators(network: NetworkId) -> Vec<Public> {
       Self::participants(network).into()
+    }
+
+    pub fn retire_session(network: NetworkId, session: Session) {
+      let set = ValidatorSet { network, session };
+      MuSigKeys::<T>::remove(set);
+      Keys::<T>::remove(set);
     }
   }
 }

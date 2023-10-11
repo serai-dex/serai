@@ -50,5 +50,6 @@ std = [
   "in-instructions-primitives/std",
 
   "tokens-pallet/std",
+  "validator-sets-pallet/std",
 ]
 default = ["std"]

@@ -898,6 +898,8 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
               if id.attempt == 0 {
                 MainDb::<D>::save_first_preprocess(&mut txn, spec.set().network, id.id, preprocess);
 
+                // TODO: If this is the new key's first Batch, only create this TX once we verify
+                // all prior published `Batch`s
                 Some(Transaction::Batch(block.0, id.id))
               } else {
                 Some(Transaction::BatchPreprocess(SignData {
