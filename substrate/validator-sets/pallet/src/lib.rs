@@ -169,10 +169,11 @@ pub mod pallet {
     fn new_set(network: NetworkId) {
       // Update CurrentSession
       let session = if network != NetworkId::Serai {
-        CurrentSession::<T>::mutate(network, |session| {
-          Some(session.map(|session| Session(session.0 + 1)).unwrap_or(Session(0)))
-        })
-        .unwrap()
+        let new_session = CurrentSession::<T>::get(network)
+          .map(|session| Session(session.0 + 1))
+          .unwrap_or(Session(0));
+        CurrentSession::<T>::set(network, Some(new_session));
+        new_session
       } else {
         Self::session(network)
       };

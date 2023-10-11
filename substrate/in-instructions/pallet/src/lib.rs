@@ -80,7 +80,9 @@ pub mod pallet {
     }
   }
 
-  fn key_for_network<T: Config>(network: NetworkId) -> Result<(Session, Option<Public>, Option<Public>), InvalidTransaction> {
+  fn keys_for_network<T: Config>(
+    network: NetworkId,
+  ) -> Result<(Session, Option<Public>, Option<Public>), InvalidTransaction> {
     let session = ValidatorSets::<T>::session(network);
     let mut set = ValidatorSet { session, network };
     let latest = ValidatorSets::<T>::keys(set).map(|keys| keys.0);
@@ -146,9 +148,6 @@ pub mod pallet {
         Call::__Ignore(_, _) => unreachable!(),
       };
 
-      let network = batch.batch.network;
-      let (current_session, prior, current) = key_for_network::<T>(network)?;
-
       // verify the batch size
       // TODO: Merge this encode with the one done by batch_message
       if batch.batch.encode().len() > MAX_BATCH_SIZE {
@@ -156,15 +155,19 @@ pub mod pallet {
       }
 
       // verify the signature
+      let network = batch.batch.network;
+      let (current_session, prior, current) = keys_for_network::<T>(network)?;
       let batch_message = batch_message(&batch.batch);
       // Check the prior key first since only a single `Batch` (the last one) will be when prior is
       // Some yet prior wasn't the signing key
-      let valid_by_prior = if let Some(key) = prior {
-        key.verify(&batch_message, &batch.signature)
-      } else { false };
-      let valid = valid_by_prior || (if let Some(key) = current {
-        key.verify(&batch_message, &batch.signature)
-      } else { false });
+      let valid_by_prior =
+        if let Some(key) = prior { key.verify(&batch_message, &batch.signature) } else { false };
+      let valid = valid_by_prior ||
+        (if let Some(key) = current {
+          key.verify(&batch_message, &batch.signature)
+        } else {
+          false
+        });
       if !valid {
         Err(InvalidTransaction::BadProof)?;
       }
