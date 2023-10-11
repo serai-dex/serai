@@ -418,7 +418,7 @@ pub mod pallet {
       }
     }
 
-    pub fn validators(network: NetworkId) -> Vec<Public> {
+    pub fn select_validators(network: NetworkId) -> Vec<Public> {
       Self::participants(network).into()
     }
 

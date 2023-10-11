@@ -158,17 +158,14 @@ pub mod pallet {
   // then we wait until the session ends then get a call to end_session(i) and so on.
   impl<T: Config> SessionManager<T::ValidatorId> for Pallet<T> {
     fn new_session(_new_index: u32) -> Option<Vec<T::ValidatorId>> {
-      // Don't call new_session multiple times on genesis
-      // TODO: Will this cause pallet_session::Pallet::current_index to desync from validator-sets?
-      if frame_system::Pallet::<T>::block_number() > 1u32.into() {
-        VsPallet::<T>::new_session();
-      }
+      VsPallet::<T>::new_session();
       // TODO: Where do we return their stake?
-      Some(VsPallet::<T>::validators(NetworkId::Serai))
+      Some(VsPallet::<T>::select_validators(NetworkId::Serai))
     }
 
     fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
-      Some(VsPallet::<T>::validators(NetworkId::Serai))
+      // TODO: Because we don't call new_session here, we don't emit NewSet { Serai, session: 1 }
+      Some(VsPallet::<T>::select_validators(NetworkId::Serai))
     }
 
     fn end_session(_end_index: u32) {}
