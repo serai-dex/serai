@@ -23,7 +23,7 @@ runs:
     - name: Remove unused packages
       shell: bash
       run: |
-        sudo apt remove -y *powershell* *bazel* *nodejs* *npm* *yarn* *terraform* *firefox* *chromium* *qemu* *texinfo* *imagemagick*
+        sudo apt remove -y *powershell* *bazel* *nodejs* *npm* *yarn* *terraform* *firefox* *chromium* *qemu* *sqlite3* *texinfo* *imagemagick*
         sudo apt autoremove -y
         sudo apt install python3 -y
 
