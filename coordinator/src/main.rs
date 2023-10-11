@@ -253,13 +253,30 @@ pub(crate) async fn scan_tributaries<
                         // creation
                         // TODO2: Differentiate connection errors from invariants
                         Err(e) => {
-                          // Check if this failed because the keys were already set by someone else
-                          // TODO: hash_with_keys is latest, yet we'll remove old keys from storage
-                          let hash_with_keys = serai.get_latest_block_hash().await.unwrap();
-                          if matches!(serai.get_keys(spec.set(), hash_with_keys).await, Ok(Some(_)))
-                          {
-                            log::info!("another coordinator set key pair for {:?}", set);
-                            break;
+                          if let Ok(latest) = serai.get_latest_block_hash().await {
+                            // Check if this failed because the keys were already set by someone
+                            // else
+                            if matches!(serai.get_keys(spec.set(), latest).await, Ok(Some(_))) {
+                              log::info!("another coordinator set key pair for {:?}", set);
+                              break;
+                            }
+
+                            // The above block may return false if the keys have been pruned from
+                            // the state
+                            // Check if this session is no longer the latest session, meaning it at
+                            // some point did set keys, and we're just operating off very
+                            // historical data
+                            if let Ok(Some(current_session)) =
+                              serai.get_session(spec.set().network, latest).await
+                            {
+                              if current_session.0 > spec.set().session.0 {
+                                log::warn!(
+                                  "trying to set keys for a set which isn't the latest {:?}",
+                                  set
+                                );
+                                break;
+                              }
+                            }
                           }
 
                           log::error!(

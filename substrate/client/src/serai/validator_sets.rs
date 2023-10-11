@@ -2,7 +2,7 @@ use sp_core::sr25519::{Public, Signature};
 
 use serai_runtime::{validator_sets, ValidatorSets, Runtime};
 pub use validator_sets::primitives;
-use primitives::{ValidatorSet, KeyPair};
+use primitives::{Session, ValidatorSet, KeyPair};
 
 use subxt::utils::Encoded;
 
@@ -29,6 +29,14 @@ impl Serai {
     self
       .events::<ValidatorSets, _>(block, |event| matches!(event, ValidatorSetsEvent::KeyGen { .. }))
       .await
+  }
+
+  pub async fn get_session(
+    &self,
+    network: NetworkId,
+    at_hash: [u8; 32],
+  ) -> Result<Option<Session>, SeraiError> {
+    self.storage(PALLET, "CurrentSession", Some(vec![scale_value(network)]), at_hash).await
   }
 
   pub async fn get_validator_set_participants(

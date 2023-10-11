@@ -243,6 +243,8 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
       panic!("NewSet event wasn't NewSet: {new_set:?}");
     };
 
+    // If this is Serai, do nothing
+    // We only coordinate/process external networks
     if set.network == NetworkId::Serai {
       continue;
     }
