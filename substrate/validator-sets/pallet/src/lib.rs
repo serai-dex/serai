@@ -83,8 +83,12 @@ pub mod pallet {
     ValueQuery,
   >;
   /// The validators selected to be in-set, yet with the ability to perform a check for presence.
+  // Uses Identity so we can call clear_prefix over network, manually inserting a Blake2 hash
+  // before the spammable key.
+  // TODO: Review child trees?
   #[pallet::storage]
-  pub type InSet<T: Config> = StorageMap<_, Blake2_128Concat, (NetworkId, Public), (), OptionQuery>;
+  pub type InSet<T: Config> =
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
 
   /// The current amount allocated to a validator set by a validator.
   #[pallet::storage]
@@ -197,7 +201,10 @@ pub mod pallet {
         }
         let key = Public(next[(next.len() - 32) .. next.len()].try_into().unwrap());
 
-        InSet::<T>::set((network, key), Some(()));
+        InSet::<T>::set(
+          (network, sp_io::hashing::blake2_128(&(network, key).encode()), key),
+          Some(()),
+        );
         participants.push(key);
 
         last = next;
