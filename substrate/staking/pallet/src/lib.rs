@@ -13,12 +13,13 @@ pub mod pallet {
 
   use serai_primitives::{NetworkId, Amount, PublicKey};
 
-  use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
+  use validator_sets_pallet::{primitives::Session, Config as VsConfig, Pallet as VsPallet};
   use pallet_session::{Config as SessionConfig, SessionManager};
 
   #[pallet::error]
   pub enum Error<T> {
     StakeUnavilable,
+    NoDeallocation,
   }
 
   // TODO: Event
@@ -76,7 +77,6 @@ pub mod pallet {
       })
     }
 
-    #[allow(unused)] // TODO
     fn deallocate_internal(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
       Allocated::<T>::try_mutate(account, |allocated| {
         if *allocated < amount {
@@ -150,7 +150,20 @@ pub mod pallet {
       Ok(())
     }
 
-    // TODO: Add a function to reclaim deallocated funds
+    #[pallet::call_index(4)]
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn claim_deallocation(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      session: Session,
+    ) -> DispatchResult {
+      let account = ensure_signed(origin)?;
+      let Some(amount) = VsPallet::<T>::take_deallocatable_amount(network, session, account) else {
+        Err(Error::<T>::NoDeallocation)?
+      };
+      Self::deallocate_internal(&account, amount.0)?;
+      Ok(())
+    }
   }
 
   // Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)

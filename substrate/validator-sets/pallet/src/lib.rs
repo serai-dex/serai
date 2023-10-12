@@ -163,6 +163,7 @@ pub mod pallet {
   #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
+  // TODO: Expand
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
