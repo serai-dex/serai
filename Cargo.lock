@@ -8137,6 +8137,7 @@ name = "serai-client"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
+ "blake2",
  "ciphersuite",
  "frost-schnorrkel",
  "futures",
@@ -8190,10 +8191,12 @@ dependencies = [
 name = "serai-coordinator-tests"
 version = "0.1.0"
 dependencies = [
+ "blake2",
  "ciphersuite",
  "dkg",
  "dockertest",
  "hex",
+ "parity-scale-codec",
  "rand_core 0.6.4",
  "schnorrkel",
  "serai-client",
@@ -8262,6 +8265,7 @@ dependencies = [
  "serai-validator-sets-pallet",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "thiserror",
 ]
@@ -8382,7 +8386,6 @@ dependencies = [
 name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
- "lazy_static",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -8500,6 +8503,7 @@ dependencies = [
  "scale-info",
  "serai-in-instructions-pallet",
  "serai-primitives",
+ "serai-staking-pallet",
  "serai-tokens-pallet",
  "serai-validator-sets-pallet",
  "sp-api",
@@ -8516,6 +8520,22 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "serai-staking-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-session",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serai-validator-sets-pallet",
+ "serai-validator-sets-primitives",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -8550,12 +8570,14 @@ dependencies = [
  "frame-support",
  "frame-system",
  "hashbrown 0.14.0",
+ "pallet-session",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
  "serai-validator-sets-primitives",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

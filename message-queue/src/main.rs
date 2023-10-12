@@ -25,12 +25,17 @@ mod binaries {
 
   pub(crate) type Db = serai_db::RocksDB;
 
-  lazy_static::lazy_static! {
-    pub(crate) static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
-      Arc::new(RwLock::new(HashMap::new()));
-    pub(crate) static ref QUEUES: Arc<RwLock<HashMap<Service, RwLock<Queue<Db>>>>> =
-      Arc::new(RwLock::new(HashMap::new()));
+  #[allow(clippy::type_complexity)]
+  mod clippy {
+    use super::*;
+    lazy_static::lazy_static! {
+      pub(crate) static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+      pub(crate) static ref QUEUES: Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    }
   }
+  pub(crate) use self::clippy::*;
 
   // queue RPC method
   /*
@@ -71,16 +76,17 @@ mod binaries {
     fn key(domain: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
       [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
     }
-    fn intent_key(from: Service, intent: &[u8]) -> Vec<u8> {
-      key(b"intent_seen", bincode::serialize(&(from, intent)).unwrap())
+    fn intent_key(from: Service, to: Service, intent: &[u8]) -> Vec<u8> {
+      key(b"intent_seen", bincode::serialize(&(from, to, intent)).unwrap())
     }
     let mut db = db.write().unwrap();
     let mut txn = db.txn();
-    let intent_key = intent_key(meta.from, &meta.intent);
+    let intent_key = intent_key(meta.from, meta.to, &meta.intent);
     if Get::get(&txn, &intent_key).is_some() {
       log::warn!(
-        "Prior queued message attempted to be queued again. From: {:?} Intent: {}",
+        "Prior queued message attempted to be queued again. From: {:?} To: {:?} Intent: {}",
         meta.from,
+        meta.to,
         hex::encode(&meta.intent)
       );
       return;
@@ -88,7 +94,7 @@ mod binaries {
     DbTxn::put(&mut txn, intent_key, []);
 
     // Queue it
-    let id = (*QUEUES).read().unwrap()[&meta.to].write().unwrap().queue_message(
+    let id = (*QUEUES).read().unwrap()[&(meta.from, meta.to)].write().unwrap().queue_message(
       &mut txn,
       QueuedMessage {
         from: meta.from,
@@ -99,26 +105,21 @@ mod binaries {
       },
     );
 
-    log::info!("Queued message from {:?}. It is {:?} {id}", meta.from, meta.to);
+    log::info!("Queued message. From: {:?} To: {:?} ID: {id}", meta.from, meta.to);
     DbTxn::commit(txn);
   }
 
   // next RPC method
   /*
-    Gets the next message in queue for this service.
+    Gets the next message in queue for the named services.
 
-    This is not authenticated due to the fact every nonce would have to be saved to prevent replays,
-    or a challenge-response protocol implemented. Neither are worth doing when there should be no
-    sensitive data on this server.
-
-    The expected index is used to ensure a service didn't fall out of sync with this service. It
-    should always be either the next message's ID or *TODO*.
+    This is not authenticated due to the fact every nonce would have to be saved to prevent
+    replays, or a challenge-response protocol implemented. Neither are worth doing when there
+    should be no sensitive data on this server.
   */
-  pub(crate) fn get_next_message(service: Service, _expected: u64) -> Option<QueuedMessage> {
-    // TODO: Verify the expected next message ID matches
-
+  pub(crate) fn get_next_message(from: Service, to: Service) -> Option<QueuedMessage> {
     let queue_outer = (*QUEUES).read().unwrap();
-    let queue = queue_outer[&service].read().unwrap();
+    let queue = queue_outer[&(from, to)].read().unwrap();
     let next = queue.last_acknowledged().map(|i| i + 1).unwrap_or(0);
     queue.get_message(next)
   }
@@ -128,10 +129,10 @@ mod binaries {
     Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
     message.
   */
-  pub(crate) fn ack_message(service: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
+  pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
     {
-      let from = (*KEYS).read().unwrap()[&service];
-      assert!(sig.verify(from, ack_challenge(service, from, id, sig.R)));
+      let to_key = (*KEYS).read().unwrap()[&to];
+      assert!(sig.verify(to_key, ack_challenge(to, to_key, from, id, sig.R)));
     }
 
     // Is it:
@@ -141,9 +142,9 @@ mod binaries {
     // It's the second if we acknowledge messages before saving them as acknowledged
     // TODO: Check only a proper message is being acked
 
-    log::info!("{:?} is acknowledging {}", service, id);
+    log::info!("Acknowledging From: {:?} To: {:?} ID: {}", from, to, id);
 
-    (*QUEUES).read().unwrap()[&service].write().unwrap().ack_message(id)
+    (*QUEUES).read().unwrap()[&(from, to)].write().unwrap().ack_message(id)
   }
 }
 
@@ -182,13 +183,29 @@ async fn main() {
     Some(<Ristretto as Ciphersuite>::G::from_bytes(&repr).unwrap())
   };
 
+  const ALL_EXT_NETWORKS: [NetworkId; 3] =
+    [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
+
   let register_service = |service, key| {
     (*KEYS).write().unwrap().insert(service, key);
-    (*QUEUES).write().unwrap().insert(service, RwLock::new(Queue(db.clone(), service)));
+    let mut queues = (*QUEUES).write().unwrap();
+    if service == Service::Coordinator {
+      for network in ALL_EXT_NETWORKS {
+        queues.insert(
+          (service, Service::Processor(network)),
+          RwLock::new(Queue(db.clone(), service, Service::Processor(network))),
+        );
+      }
+    } else {
+      queues.insert(
+        (service, Service::Coordinator),
+        RwLock::new(Queue(db.clone(), service, Service::Coordinator)),
+      );
+    }
   };
 
   // Make queues for each NetworkId, other than Serai
-  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
+  for network in ALL_EXT_NETWORKS {
     // Use a match so we error if the list of NetworkIds changes
     let Some(key) = read_key(match network {
       NetworkId::Serai => unreachable!(),
@@ -229,17 +246,18 @@ async fn main() {
     .unwrap();
   module
     .register_method("next", |args, _| {
-      let args = args.parse::<(Service, u64)>().unwrap();
-      Ok(get_next_message(args.0, args.1))
+      let (from, to) = args.parse::<(Service, Service)>().unwrap();
+      Ok(get_next_message(from, to))
     })
     .unwrap();
   module
     .register_method("ack", |args, _| {
-      let args = args.parse::<(Service, u64, Vec<u8>)>().unwrap();
+      let args = args.parse::<(Service, Service, u64, Vec<u8>)>().unwrap();
       ack_message(
         args.0,
         args.1,
-        SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),
+        args.2,
+        SchnorrSignature::<Ristretto>::read(&mut args.3.as_slice()).unwrap(),
       );
       Ok(true)
     })

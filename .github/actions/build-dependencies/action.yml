@@ -10,7 +10,7 @@ inputs:
   rust-toolchain:
     description: "Rust toolchain to install"
     required: false
-    default: 1.72.1
+    default: 1.73.0
 
   rust-components:
     description: "Rust components to install"
@@ -20,6 +20,19 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Remove unused packages
+      shell: bash
+      run: |
+        sudo apt remove -y "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
+        sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+        sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+        sudo apt autoremove -y
+        sudo apt update
+        sudo apt install python3 python3-pip -y
+        sudo apt clean
+        docker system prune -a --volumes
+
     - name: Install Protobuf
       uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
       with:

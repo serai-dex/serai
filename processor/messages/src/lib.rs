@@ -8,7 +8,7 @@ use serde::{Serialize, Deserialize};
 use dkg::{Participant, ThresholdParams};
 
 use serai_primitives::{BlockHash, NetworkId};
-use in_instructions_primitives::SignedBatch;
+use in_instructions_primitives::{Batch, SignedBatch};
 use tokens_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
 
@@ -178,7 +178,8 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    Update { batch: SignedBatch },
+    Batch { batch: Batch },
+    SignedBatch { batch: SignedBatch },
   }
 }
 
@@ -364,8 +365,9 @@ impl ProcessorMessage {
       ProcessorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
           // Unique since network and ID binding
-          substrate::ProcessorMessage::Update { batch, .. } => {
-            (0, (batch.batch.network, batch.batch.id).encode())
+          substrate::ProcessorMessage::Batch { batch } => (0, (batch.network, batch.id).encode()),
+          substrate::ProcessorMessage::SignedBatch { batch, .. } => {
+            (1, (batch.batch.network, batch.batch.id).encode())
           }
         };
 

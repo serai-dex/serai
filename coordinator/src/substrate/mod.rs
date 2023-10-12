@@ -18,7 +18,7 @@ use serai_client::{
 
 use serai_db::DbTxn;
 
-use processor_messages::{SubstrateContext, CoordinatorMessage};
+use processor_messages::SubstrateContext;
 
 use tokio::time::sleep;
 
@@ -35,27 +35,31 @@ async fn in_set(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
   set: ValidatorSet,
+  block_hash: [u8; 32],
 ) -> Result<Option<bool>, SeraiError> {
-  let Some(data) = serai.get_validator_set(set).await? else {
+  let Some(participants) = serai.get_validator_set_participants(set.network, block_hash).await?
+  else {
     return Ok(None);
   };
   let key = (Ristretto::generator() * key.deref()).to_bytes();
-  Ok(Some(data.participants.iter().any(|(participant, _)| participant.0 == key)))
+  Ok(Some(participants.iter().any(|participant| participant.0 == key)))
 }
 
-async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
+async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
-  processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set).await?.expect("NewSet for set which doesn't exist") {
+  if in_set(key, serai, set, block.hash()).await?.expect("NewSet for set which doesn't exist") {
     log::info!("present in set {:?}", set);
 
-    let set_data = serai.get_validator_set(set).await?.expect("NewSet for set which doesn't exist");
+    let set_participants = serai
+      .get_validator_set_participants(set.network, block.hash())
+      .await?
+      .expect("NewSet for set which doesn't exist");
 
     let time = if let Ok(time) = block.time() {
       time
@@ -78,7 +82,7 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proc
     const SUBSTRATE_TO_TRIBUTARY_TIME_DELAY: u64 = 120;
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
-    let spec = TributarySpec::new(block.hash(), time, set, set_data);
+    let spec = TributarySpec::new(block.hash(), time, set, set_participants);
     create_new_tributary(db, spec.clone());
   } else {
     log::info!("not present in set {:?}", set);
@@ -87,39 +91,43 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proc
   Ok(())
 }
 
-async fn handle_key_gen<Pro: Processors>(
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+async fn handle_key_gen<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
+  // This has to be saved *before* we send ConfirmKeyPair
+  let mut txn = db.txn();
+  SubstrateDb::<D>::save_session_for_keys(&mut txn, &key_pair, set.session);
+  txn.commit();
+
   processors
     .send(
       set.network,
-      CoordinatorMessage::Substrate(
-        processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
-          context: SubstrateContext {
-            serai_time: block.time().unwrap() / 1000,
-            network_latest_finalized_block: serai
-              .get_latest_block_for_network(block.hash(), set.network)
-              .await?
-              // The processor treats this as a magic value which will cause it to find a network
-              // block which has a time greater than or equal to the Serai time
-              .unwrap_or(BlockHash([0; 32])),
-          },
-          set,
-          key_pair,
+      processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
+        context: SubstrateContext {
+          serai_time: block.time().unwrap() / 1000,
+          network_latest_finalized_block: serai
+            .get_latest_block_for_network(block.hash(), set.network)
+            .await?
+            // The processor treats this as a magic value which will cause it to find a network
+            // block which has a time greater than or equal to the Serai time
+            .unwrap_or(BlockHash([0; 32])),
         },
-      ),
+        set,
+        key_pair,
+      },
     )
     .await;
 
   Ok(())
 }
 
-async fn handle_batch_and_burns<Pro: Processors>(
+async fn handle_batch_and_burns<D: Db, Pro: Processors>(
+  db: &mut D,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
@@ -145,12 +153,16 @@ async fn handle_batch_and_burns<Pro: Processors>(
   let mut burns = HashMap::new();
 
   for batch in serai.get_batch_events(hash).await? {
-    if let InInstructionsEvent::Batch { network, id, block: network_block } = batch {
+    if let InInstructionsEvent::Batch { network, id, block: network_block, instructions_hash } =
+      batch
+    {
       network_had_event(&mut burns, &mut batches, network);
 
+      let mut txn = db.txn();
+      SubstrateDb::<D>::save_batch_instructions_hash(&mut txn, network, id, instructions_hash);
+      txn.commit();
+
       // Make sure this is the only Batch event for this network in this Block
-      // TODO: Make sure Serai rejects multiple Batchs within the same block. It should, as of an
-      // yet to be merged branch
       assert!(batch_block.insert(network, network_block).is_none());
 
       // Add the batch included by this block
@@ -188,18 +200,16 @@ async fn handle_batch_and_burns<Pro: Processors>(
     processors
       .send(
         network,
-        CoordinatorMessage::Substrate(
-          processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
-            context: SubstrateContext {
-              serai_time: block.time().unwrap() / 1000,
-              network_latest_finalized_block,
-            },
-            network,
-            block: block.number(),
-            burns: burns.remove(&network).unwrap(),
-            batches: batches.remove(&network).unwrap(),
+        processor_messages::substrate::CoordinatorMessage::SubstrateBlock {
+          context: SubstrateContext {
+            serai_time: block.time().unwrap() / 1000,
+            network_latest_finalized_block,
           },
-        ),
+          network,
+          block: block.number(),
+          burns: burns.remove(&network).unwrap(),
+          batches: batches.remove(&network).unwrap(),
+        },
       )
       .await;
   }
@@ -233,14 +243,15 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
       panic!("NewSet event wasn't NewSet: {new_set:?}");
     };
 
+    // If this is Serai, do nothing
+    // We only coordinate/process external networks
     if set.network == NetworkId::Serai {
       continue;
     }
 
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
-      handle_new_set(&mut db.0, key, create_new_tributary.clone(), processors, serai, &block, set)
-        .await?;
+      handle_new_set(&mut db.0, key, create_new_tributary.clone(), serai, &block, set).await?;
       let mut txn = db.0.txn();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();
@@ -259,7 +270,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
         TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
         txn.commit();
 
-        handle_key_gen(key, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
@@ -276,7 +287,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
   // This does break the uniqueness of (hash, event_id) -> one event, yet
   // (network, (hash, event_id)) remains valid as a unique ID for an event
   if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
-    handle_batch_and_burns(processors, serai, &block).await?;
+    handle_batch_and_burns(&mut db.0, processors, serai, &block).await?;
   }
   let mut txn = db.0.txn();
   SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);

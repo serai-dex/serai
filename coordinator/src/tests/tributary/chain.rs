@@ -15,8 +15,8 @@ use ciphersuite::{
 use sp_application_crypto::sr25519;
 
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, Amount},
-  validator_sets::primitives::{Session, ValidatorSet, ValidatorSetData},
+  primitives::NetworkId,
+  validator_sets::primitives::{Session, ValidatorSet},
 };
 
 use tokio::time::sleep;
@@ -52,20 +52,12 @@ pub fn new_spec<R: RngCore + CryptoRng>(
 
   let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
 
-  let set_data = ValidatorSetData {
-    bond: Amount(100),
-    network: NETWORKS[&NetworkId::Bitcoin].clone(),
-    participants: keys
-      .iter()
-      .map(|key| {
-        (sr25519::Public((<Ristretto as Ciphersuite>::generator() * **key).to_bytes()), Amount(100))
-      })
-      .collect::<Vec<_>>()
-      .try_into()
-      .unwrap(),
-  };
+  let set_participants = keys
+    .iter()
+    .map(|key| sr25519::Public((<Ristretto as Ciphersuite>::generator() * **key).to_bytes()))
+    .collect::<Vec<_>>();
 
-  let res = TributarySpec::new(serai_block, start_time, set, set_data);
+  let res = TributarySpec::new(serai_block, start_time, set, set_participants);
   assert_eq!(TributarySpec::read::<&[u8]>(&mut res.serialize().as_ref()).unwrap(), res);
   res
 }

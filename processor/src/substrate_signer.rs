@@ -4,6 +4,7 @@ use std::collections::{VecDeque, HashMap};
 use rand_core::OsRng;
 
 use transcript::{Transcript, RecommendedTranscript};
+use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   ThresholdKeys,
@@ -177,9 +178,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    // Doesn't set key since there's only one key active at a time
-    // TODO: BatchSignId
-    let id = SignId { key: vec![], id, attempt };
+    let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter

@@ -66,7 +66,7 @@ fn serialize_transaction() {
     // Create a valid vec of shares
     let mut shares = vec![];
     // Create up to 512 participants
-    for i in 0 .. (OsRng.next_u64() % 512) {
+    for _ in 0 .. (OsRng.next_u64() % 512) {
       let mut share = vec![0; share_len];
       OsRng.fill_bytes(&mut share);
       shares.push(share);

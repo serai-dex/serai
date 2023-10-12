@@ -4,6 +4,7 @@
 
 use scale::Encode;
 
+use sp_io::hashing::blake2_256;
 use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockHash, NetworkId};
@@ -45,7 +46,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch { network: NetworkId, id: u32, block: BlockHash },
+    Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
   }
 
@@ -79,29 +80,23 @@ pub mod pallet {
     }
   }
 
-  fn key_for_network<T: Config>(network: NetworkId) -> Result<Public, InvalidTransaction> {
-    // TODO: Get the latest session
-    let session = Session(0);
-
+  fn keys_for_network<T: Config>(
+    network: NetworkId,
+  ) -> Result<(Session, Option<Public>, Option<Public>), InvalidTransaction> {
+    let session = ValidatorSets::<T>::session(network);
     let mut set = ValidatorSet { session, network };
-    // TODO: If this session just set their keys, it'll invalidate any batches in the mempool
-    // Should there be a transitory period/future-set cut off?
-    if let Some(keys) = ValidatorSets::<T>::keys(set) {
-      Ok(keys.0)
-    } else {
-      // If this set hasn't set their keys yet, use the previous set's
-      if set.session.0 == 0 {
-        // Since there haven't been any keys set, no signature can legitimately exist
-        Err(InvalidTransaction::BadProof)?;
-      }
+    let latest = ValidatorSets::<T>::keys(set).map(|keys| keys.0);
+    let prior = if set.session.0 != 0 {
       set.session.0 -= 1;
-
-      if let Some(keys) = ValidatorSets::<T>::keys(set) {
-        Ok(keys.0)
-      } else {
-        Err(InvalidTransaction::BadProof)?
-      }
+      ValidatorSets::<T>::keys(set).map(|keys| keys.0)
+    } else {
+      None
+    };
+    // If there's no keys set, then this must be an invalid signature
+    if prior.is_none() && latest.is_none() {
+      Err(InvalidTransaction::BadProof)?;
     }
+    Ok((session, prior, latest))
   }
 
   #[pallet::call]
@@ -123,6 +118,7 @@ pub mod pallet {
         network: batch.network,
         id: batch.id,
         block: batch.block,
+        instructions_hash: blake2_256(&batch.instructions.encode()),
       });
       for (i, instruction) in batch.instructions.into_iter().enumerate() {
         // TODO: Check this balance's coin belongs to this network
@@ -152,9 +148,6 @@ pub mod pallet {
         Call::__Ignore(_, _) => unreachable!(),
       };
 
-      let network = batch.batch.network;
-      let key = key_for_network::<T>(network)?;
-
       // verify the batch size
       // TODO: Merge this encode with the one done by batch_message
       if batch.batch.encode().len() > MAX_BATCH_SIZE {
@@ -162,8 +155,28 @@ pub mod pallet {
       }
 
       // verify the signature
-      if !key.verify(&batch_message(&batch.batch), &batch.signature) {
+      let network = batch.batch.network;
+      let (current_session, prior, current) = keys_for_network::<T>(network)?;
+      let batch_message = batch_message(&batch.batch);
+      // Check the prior key first since only a single `Batch` (the last one) will be when prior is
+      // Some yet prior wasn't the signing key
+      let valid_by_prior =
+        if let Some(key) = prior { key.verify(&batch_message, &batch.signature) } else { false };
+      let valid = valid_by_prior ||
+        (if let Some(key) = current {
+          key.verify(&batch_message, &batch.signature)
+        } else {
+          false
+        });
+      if !valid {
         Err(InvalidTransaction::BadProof)?;
+      }
+
+      // If it wasn't valid by the prior key, meaning it was valid by the current key, the current
+      // key is publishing `Batch`s. This should only happen once the current key has verified all
+      // `Batch`s published by the prior key, meaning they are accepting the hand-over.
+      if prior.is_some() && (!valid_by_prior) {
+        ValidatorSets::<T>::retire_session(network, Session(current_session.0 - 1));
       }
 
       // check that this validator set isn't publishing a batch more than once per block

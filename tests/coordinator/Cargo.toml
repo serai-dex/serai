@@ -19,11 +19,14 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
+blake2 = "0.10"
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto", "secp256k1"] }
 schnorrkel = "0.11"
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
+
+scale = { package = "parity-scale-codec", version = "3" }
 
 serai-client = { path = "../../substrate/client", features = ["serai"] }
 serai-message-queue = { path = "../../message-queue" }

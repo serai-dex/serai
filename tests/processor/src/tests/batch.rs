@@ -10,7 +10,7 @@ use messages::{sign::SignId, SubstrateContext};
 use serai_client::{
   primitives::{BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId},
   in_instructions::primitives::{
-    InInstruction, InInstructionWithBalance, SignedBatch, batch_message,
+    InInstruction, InInstructionWithBalance, Batch, SignedBatch, batch_message,
   },
 };
 
@@ -18,6 +18,8 @@ use crate::{*, tests::*};
 
 pub(crate) async fn recv_batch_preprocesses(
   coordinators: &mut [Coordinator],
+  substrate_key: &[u8; 32],
+  batch: &Batch,
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
@@ -26,8 +28,18 @@ pub(crate) async fn recv_batch_preprocesses(
   for (i, coordinator) in coordinators.iter_mut().enumerate() {
     let i = Participant::new(u16::try_from(i).unwrap() + 1).unwrap();
 
-    let msg = coordinator.recv_message().await;
-    match msg {
+    if attempt == 0 {
+      match coordinator.recv_message().await {
+        messages::ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Batch {
+          batch: sent_batch,
+        }) => {
+          assert_eq!(&sent_batch, batch);
+        }
+        _ => panic!("processor didn't send batch"),
+      }
+    }
+
+    match coordinator.recv_message().await {
       messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::BatchPreprocess {
           id: this_id,
@@ -36,7 +48,7 @@ pub(crate) async fn recv_batch_preprocesses(
         },
       ) => {
         if id.is_none() {
-          assert!(this_id.key.is_empty());
+          assert_eq!(&this_id.key, substrate_key);
           assert_eq!(this_id.attempt, attempt);
           id = Some(this_id.clone());
           block = Some(this_block);
@@ -121,9 +133,9 @@ pub(crate) async fn sign_batch(
 
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
-        messages::ProcessorMessage::Substrate(messages::substrate::ProcessorMessage::Update {
-          batch: this_batch,
-        }) => {
+        messages::ProcessorMessage::Substrate(
+          messages::substrate::ProcessorMessage::SignedBatch { batch: this_batch },
+        ) => {
           if batch.is_none() {
             assert!(PublicKey::from_raw(key)
               .verify(&batch_message(&this_batch.batch), &this_batch.signature));
@@ -230,8 +242,23 @@ fn batch_test() {
         // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
         tokio::time::sleep(Duration::from_secs(10)).await;
 
-        // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-        let (mut id, mut preprocesses) = recv_batch_preprocesses(&mut coordinators, 0).await;
+        let expected_batch = Batch {
+          network,
+          id: i,
+          block: BlockHash(block_with_tx.unwrap()),
+          instructions: if let Some(instruction) = instruction {
+            vec![InInstructionWithBalance { instruction, balance: balance_sent }]
+          } else {
+            // This shouldn't have an instruction as we didn't add any data into the TX we sent
+            // Empty batches remain valuable as they let us achieve consensus on the block and spend
+            // contained outputs
+            vec![]
+          },
+        };
+
+        // Make sure the processors picked it up by checking they're trying to sign a batch for it
+        let (mut id, mut preprocesses) =
+          recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, 0).await;
         // Trigger a random amount of re-attempts
         for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
           // TODO: Double check how the processor handles this ID field
@@ -244,27 +271,16 @@ fn batch_test() {
               })
               .await;
           }
-          (id, preprocesses) = recv_batch_preprocesses(&mut coordinators, attempt).await;
+          (id, preprocesses) =
+            recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, attempt)
+              .await;
         }
 
         // Continue with signing the batch
         let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
 
         // Check it
-        assert_eq!(batch.batch.network, network);
-        assert_eq!(batch.batch.id, i);
-        assert_eq!(batch.batch.block, BlockHash(block_with_tx.unwrap()));
-        if let Some(instruction) = instruction {
-          assert_eq!(
-            batch.batch.instructions,
-            vec![InInstructionWithBalance { instruction, balance: balance_sent }]
-          );
-        } else {
-          // This shouldn't have an instruction as we didn't add any data into the TX we sent
-          // Empty batches remain valuable as they let us achieve consensus on the block and spend
-          // contained outputs
-          assert!(batch.batch.instructions.is_empty());
-        }
+        assert_eq!(batch.batch, expected_batch);
 
         // Fire a SubstrateBlock
         let serai_time =

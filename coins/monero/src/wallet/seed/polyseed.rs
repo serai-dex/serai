@@ -50,8 +50,7 @@ fn birthday_decode(birthday: u16) -> u64 {
 const SECRET_BITS: usize = 150;
 
 const BITS_PER_BYTE: usize = 8;
-// ceildiv of SECRET_BITS by BITS_PER_BYTE
-const SECRET_SIZE: usize = (SECRET_BITS + BITS_PER_BYTE - 1) / BITS_PER_BYTE; // 19
+const SECRET_SIZE: usize = SECRET_BITS.div_ceil(BITS_PER_BYTE); // 19
 const CLEAR_BITS: usize = (SECRET_SIZE * BITS_PER_BYTE) - SECRET_BITS; // 2
 
 // Polyseed calls this CLEAR_MASK and has a very complicated formula for this fundamental

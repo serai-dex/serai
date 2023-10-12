@@ -25,8 +25,8 @@ use serai_client::{
 use tributary::Signed;
 
 use processor_messages::{
-  CoordinatorMessage, coordinator,
   key_gen::{self, KeyGenId},
+  coordinator,
   sign::{self, SignId},
 };
 
@@ -40,8 +40,18 @@ use crate::{
   },
 };
 
+const DKG_COMMITMENTS: &str = "commitments";
+const DKG_SHARES: &str = "shares";
 const DKG_CONFIRMATION_NONCES: &str = "confirmation_nonces";
 const DKG_CONFIRMATION_SHARES: &str = "confirmation_shares";
+
+// These s/b prefixes between Batch and Sign should be unnecessary, as Batch/Share entries
+// themselves should already be domain separated
+const BATCH_PREPROCESS: &str = "b_preprocess";
+const BATCH_SHARE: &str = "b_share";
+
+const SIGN_PREPROCESS: &str = "s_preprocess";
+const SIGN_SHARE: &str = "s_share";
 
 // Instead of maintaing state, this simply re-creates the machine(s) in-full on every call (which
 // should only be once per tributary).
@@ -290,7 +300,7 @@ pub(crate) async fn handle_application_tx<
     Transaction::DkgCommitments(attempt, bytes, signed) => {
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "commitments", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
         bytes,
         &signed,
       ) {
@@ -299,10 +309,10 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
+              key_gen::CoordinatorMessage::Commitments {
                 id: KeyGenId { set: spec.set(), attempt },
                 commitments,
-              }),
+              },
             )
             .await;
         }
@@ -345,7 +355,7 @@ pub(crate) async fn handle_application_tx<
       );
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Dkg, label: "shares", attempt },
+        &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
         bytes,
         &signed,
       ) {
@@ -355,10 +365,10 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
+              key_gen::CoordinatorMessage::Shares {
                 id: KeyGenId { set: spec.set(), attempt },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -436,7 +446,7 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "preprocess",
+          label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
@@ -444,13 +454,14 @@ pub(crate) async fn handle_application_tx<
       ) {
         Some(Some(preprocesses)) => {
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::BatchPreprocesses {
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -463,23 +474,24 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Batch(data.plan),
-          label: "share",
+          label: BATCH_SHARE,
           attempt: data.attempt,
         },
         data.data,
         &data.signed,
       ) {
         Some(Some(shares)) => {
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Coordinator(coordinator::CoordinatorMessage::BatchShares {
-                id: SignId { key: vec![], id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::BatchShares {
+                id: SignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
                   .collect(),
-              }),
+              },
             )
             .await;
         }
@@ -494,7 +506,7 @@ pub(crate) async fn handle_application_tx<
         txn,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
-          label: "preprocess",
+          label: SIGN_PREPROCESS,
           attempt: data.attempt,
         },
         data.data,
@@ -505,7 +517,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Preprocesses {
+              sign::CoordinatorMessage::Preprocesses {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignPreprocess despite not setting the key pair")
@@ -515,7 +527,7 @@ pub(crate) async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 preprocesses,
-              }),
+              },
             )
             .await;
         }
@@ -527,7 +539,11 @@ pub(crate) async fn handle_application_tx<
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
-        &DataSpecification { topic: Topic::Sign(data.plan), label: "share", attempt: data.attempt },
+        &DataSpecification {
+          topic: Topic::Sign(data.plan),
+          label: SIGN_SHARE,
+          attempt: data.attempt,
+        },
         data.data,
         &data.signed,
       ) {
@@ -535,7 +551,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              CoordinatorMessage::Sign(sign::CoordinatorMessage::Shares {
+              sign::CoordinatorMessage::Shares {
                 id: SignId {
                   key: key_pair
                     .expect("completed SignShares despite not setting the key pair")
@@ -545,7 +561,7 @@ pub(crate) async fn handle_application_tx<
                   attempt: data.attempt,
                 },
                 shares,
-              }),
+              },
             )
             .await;
         }
@@ -565,11 +581,7 @@ pub(crate) async fn handle_application_tx<
       processors
         .send(
           spec.set().network,
-          CoordinatorMessage::Sign(sign::CoordinatorMessage::Completed {
-            key: key_pair.1.to_vec(),
-            id: plan,
-            tx: tx_hash,
-          }),
+          sign::CoordinatorMessage::Completed { key: key_pair.1.to_vec(), id: plan, tx: tx_hash },
         )
         .await;
     }

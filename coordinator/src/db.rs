@@ -1,7 +1,15 @@
 use core::marker::PhantomData;
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
+
 use scale::{Encode, Decode};
-use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch};
+use serai_client::{
+  primitives::NetworkId,
+  in_instructions::primitives::{Batch, SignedBatch},
+};
 
 pub use serai_db::*;
 
@@ -15,14 +23,14 @@ impl<D: Db> MainDb<D> {
     D::key(b"coordinator_main", dst, key)
   }
 
-  fn handled_message_key(id: u64) -> Vec<u8> {
-    Self::main_key(b"handled_message", id.to_le_bytes())
+  fn handled_message_key(network: NetworkId, id: u64) -> Vec<u8> {
+    Self::main_key(b"handled_message", (network, id).encode())
   }
-  pub fn save_handled_message(txn: &mut D::Transaction<'_>, id: u64) {
-    txn.put(Self::handled_message_key(id), []);
+  pub fn save_handled_message(txn: &mut D::Transaction<'_>, network: NetworkId, id: u64) {
+    txn.put(Self::handled_message_key(network, id), []);
   }
-  pub fn handled_message<G: Get>(getter: &G, id: u64) -> bool {
-    getter.get(Self::handled_message_key(id)).is_some()
+  pub fn handled_message<G: Get>(getter: &G, network: NetworkId, id: u64) -> bool {
+    getter.get(Self::handled_message_key(network, id)).is_some()
   }
 
   fn acive_tributaries_key() -> Vec<u8> {
@@ -67,19 +75,37 @@ impl<D: Db> MainDb<D> {
     res
   }
 
-  fn first_preprocess_key(id: [u8; 32]) -> Vec<u8> {
-    Self::main_key(b"first_preprocess", id)
+  fn first_preprocess_key(network: NetworkId, id: [u8; 32]) -> Vec<u8> {
+    Self::main_key(b"first_preprocess", (network, id).encode())
   }
-  pub fn save_first_preprocess(txn: &mut D::Transaction<'_>, id: [u8; 32], preprocess: Vec<u8>) {
-    let key = Self::first_preprocess_key(id);
+  pub fn save_first_preprocess(
+    txn: &mut D::Transaction<'_>,
+    network: NetworkId,
+    id: [u8; 32],
+    preprocess: Vec<u8>,
+  ) {
+    let key = Self::first_preprocess_key(network, id);
     if let Some(existing) = txn.get(&key) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
       return;
     }
     txn.put(key, preprocess);
   }
-  pub fn first_preprocess<G: Get>(getter: &G, id: [u8; 32]) -> Option<Vec<u8>> {
-    getter.get(Self::first_preprocess_key(id))
+  pub fn first_preprocess<G: Get>(getter: &G, network: NetworkId, id: [u8; 32]) -> Option<Vec<u8>> {
+    getter.get(Self::first_preprocess_key(network, id))
+  }
+
+  fn expected_batch_key(network: NetworkId, id: u32) -> Vec<u8> {
+    Self::main_key(b"expected_batch", (network, id).encode())
+  }
+  pub fn save_expected_batch(txn: &mut D::Transaction<'_>, batch: &Batch) {
+    txn.put(
+      Self::expected_batch_key(batch.network, batch.id),
+      Blake2b::<U32>::digest(batch.instructions.encode()),
+    );
+  }
+  pub fn expected_batch<G: Get>(getter: &G, network: NetworkId, id: u32) -> Option<[u8; 32]> {
+    getter.get(Self::expected_batch_key(network, id)).map(|batch| batch.try_into().unwrap())
   }
 
   fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
@@ -92,5 +118,17 @@ impl<D: Db> MainDb<D> {
     getter
       .get(Self::batch_key(network, id))
       .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
+  }
+
+  fn last_verified_batch_key(network: NetworkId) -> Vec<u8> {
+    Self::main_key(b"last_verified_batch", network.encode())
+  }
+  pub fn save_last_verified_batch(txn: &mut D::Transaction<'_>, network: NetworkId, id: u32) {
+    txn.put(Self::last_verified_batch_key(network), id.to_le_bytes());
+  }
+  pub fn last_verified_batch<G: Get>(getter: &G, network: NetworkId) -> Option<u32> {
+    getter
+      .get(Self::last_verified_batch_key(network))
+      .map(|id| u32::from_le_bytes(id.try_into().unwrap()))
   }
 }

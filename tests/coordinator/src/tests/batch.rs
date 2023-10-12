@@ -7,9 +7,14 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
+use blake2::{
+  digest::{consts::U32, Digest},
+  Blake2b,
+};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto, Secp256k1};
-
 use dkg::Participant;
+
+use scale::Encode;
 
 use serai_client::{
   primitives::{NetworkId, BlockHash, Signature},
@@ -24,12 +29,23 @@ use crate::{*, tests::*};
 
 pub async fn batch(
   processors: &mut [Processor],
+  processor_is: &[u8],
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
   let mut id = [0; 32];
   OsRng.fill_bytes(&mut id);
-  let id = SignId { key: vec![], id, attempt: 0 };
+  let id = SignId {
+    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes().to_vec(),
+    id,
+    attempt: 0,
+  };
+
+  for processor in processors.iter_mut() {
+    processor
+      .send_message(messages::substrate::ProcessorMessage::Batch { batch: batch.clone() })
+      .await;
+  }
 
   // Select a random participant to exclude, so we know for sure who *is* participating
   assert_eq!(COORDINATORS - THRESHOLD, 1);
@@ -44,7 +60,7 @@ pub async fn batch(
       .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
         id: id.clone(),
         block: batch.block,
-        preprocess: [u8::try_from(i).unwrap(); 64].to_vec(),
+        preprocess: [processor_is[i]; 64].to_vec(),
       })
       .await;
   }
@@ -58,7 +74,7 @@ pub async fn batch(
     .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
       id: id.clone(),
       block: batch.block,
-      preprocess: [u8::try_from(excluded_signer).unwrap(); 64].to_vec(),
+      preprocess: [processor_is[excluded_signer]; 64].to_vec(),
     })
     .await;
 
@@ -71,36 +87,32 @@ pub async fn batch(
     ) => {
       assert_eq!(&id, &this_id);
       assert_eq!(preprocesses.len(), THRESHOLD - 1);
-      assert!(!preprocesses
-        .contains_key(&Participant::new(u16::try_from(known_signer).unwrap() + 1).unwrap()));
+      let known_signer_i = Participant::new(u16::from(processor_is[known_signer])).unwrap();
+      assert!(!preprocesses.contains_key(&known_signer_i));
 
-      let mut participants =
-        preprocesses.keys().map(|p| usize::from(u16::from(*p)) - 1).collect::<HashSet<_>>();
+      let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
-        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap() - 1; 64]);
+        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 64]);
       }
-      participants.insert(known_signer);
+      participants.insert(known_signer_i);
       participants
     }
     _ => panic!("coordinator didn't send back BatchPreprocesses"),
   };
 
   for i in participants.clone() {
-    if i == known_signer {
+    if u16::from(i) == u16::from(processor_is[known_signer]) {
       continue;
     }
-    let processor = &mut processors[i];
+
+    let processor =
+      &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     let mut preprocesses = participants
       .clone()
       .into_iter()
-      .map(|i| {
-        (
-          Participant::new(u16::try_from(i + 1).unwrap()).unwrap(),
-          [u8::try_from(i).unwrap(); 64].to_vec(),
-        )
-      })
+      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64].to_vec()))
       .collect::<HashMap<_, _>>();
-    preprocesses.remove(&Participant::new(u16::try_from(i + 1).unwrap()).unwrap());
+    preprocesses.remove(&i);
 
     assert_eq!(
       processor.recv_message().await,
@@ -114,25 +126,25 @@ pub async fn batch(
   }
 
   for i in participants.clone() {
-    let processor = &mut processors[i];
+    let processor =
+      &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     processor
       .send_message(messages::coordinator::ProcessorMessage::BatchShare {
         id: id.clone(),
-        share: [u8::try_from(i).unwrap(); 32],
+        share: [u8::try_from(u16::from(i)).unwrap(); 32],
       })
       .await;
   }
   wait_for_tributary().await;
   for i in participants.clone() {
-    let processor = &mut processors[i];
+    let processor =
+      &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     let mut shares = participants
       .clone()
       .into_iter()
-      .map(|i| {
-        (Participant::new(u16::try_from(i + 1).unwrap()).unwrap(), [u8::try_from(i).unwrap(); 32])
-      })
+      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 32]))
       .collect::<HashMap<_, _>>();
-    shares.remove(&Participant::new(u16::try_from(i + 1).unwrap()).unwrap());
+    shares.remove(&i);
 
     assert_eq!(
       processor.recv_message().await,
@@ -164,7 +176,7 @@ pub async fn batch(
 
   for processor in processors.iter_mut() {
     processor
-      .send_message(messages::substrate::ProcessorMessage::Update { batch: batch.clone() })
+      .send_message(messages::substrate::ProcessorMessage::SignedBatch { batch: batch.clone() })
       .await;
   }
 
@@ -190,7 +202,8 @@ pub async fn batch(
           InInstructionsEvent::Batch {
             network: batch.batch.network,
             id: batch.batch.id,
-            block: batch.batch.block
+            block: batch.batch.block,
+            instructions_hash: Blake2b::<U32>::digest(batch.batch.instructions.encode()).into(),
           }
         );
         break 'outer;
@@ -255,9 +268,10 @@ async fn batch_test() {
       }
       let mut processors = new_processors;
 
-      let (substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
+      let (processor_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
       batch(
         &mut processors,
+        &processor_is,
         &substrate_key,
         Batch {
           network: NetworkId::Bitcoin,

@@ -281,7 +281,7 @@ async fn dkg_test() {
   let key_pair = (serai_client::Public(substrate_key), network_key.try_into().unwrap());
 
   let mut txs = vec![];
-  for (k, key) in keys.iter().enumerate() {
+  for key in keys.iter() {
     let attempt = 0;
     // This is fine to re-use the one DB as such, due to exactly how this specific call is coded,
     // albeit poor

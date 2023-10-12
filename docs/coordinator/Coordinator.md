@@ -7,23 +7,28 @@ node.
 This document primarily details its flow with regards to the Serai node and
 processor.
 
-## New Set Event
+### New Set Event
 
 On `validator_sets::pallet::Event::NewSet`, the coordinator spawns a tributary
 for the new set. It additionally sends the processor
 `key_gen::CoordinatorMessage::GenerateKey`.
 
-## Key Generation Event
+### Key Generation Event
 
 On `validator_sets::pallet::Event::KeyGen`, the coordinator sends
 `substrate::CoordinatorMessage::ConfirmKeyPair` to the processor.
 
-# Update
+### Batch
 
-On `key_gen::ProcessorMessage::Update`, the coordinator publishes an unsigned
-transaction containing the signed batch to the Serai blockchain.
+On `substrate::ProcessorMessage::Batch`, the coordinator notes what the on-chain
+`Batch` should be, for verification once published.
 
-# Sign Completed
+### SignedBatch
+
+On `substrate::ProcessorMessage::SignedBatch`, the coordinator publishes an
+unsigned transaction containing the signed batch to the Serai blockchain.
+
+### Sign Completed
 
 On `sign::ProcessorMessage::Completed`, the coordinator makes a tributary
 transaction containing the transaction hash the signing process was supposedly
