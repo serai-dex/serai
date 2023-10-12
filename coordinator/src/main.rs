@@ -761,6 +761,8 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                 );
                 // If we failed to publish it, restore it
                 batches.push_front(batch);
+                // Sleep for a few seconds before retrying to prevent hammering the node
+                tokio::time::sleep(Duration::from_secs(5)).await;
               }
             }
 
