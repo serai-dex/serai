@@ -2,7 +2,7 @@
 
 #[frame_support::pallet]
 pub mod pallet {
-  use sp_runtime::{traits::TrailingZeroInput, DispatchError};
+  use sp_runtime::traits::TrailingZeroInput;
   use sp_std::vec::Vec;
 
   use frame_system::pallet_prelude::*;
@@ -55,14 +55,14 @@ pub mod pallet {
       Staked::<T>::mutate(account, |staked| *staked += amount);
     }
 
-    fn remove_stake(account: &T::AccountId, amount: u64) -> DispatchResult {
+    fn remove_stake(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
       Staked::<T>::mutate(account, |staked| {
         let available = *staked - Self::allocated(account);
         if available < amount {
           Err(Error::<T>::StakeUnavilable)?;
         }
         *staked -= amount;
-        Ok::<_, DispatchError>(())
+        Ok::<_, Error<T>>(())
       })
     }
 
@@ -128,7 +128,8 @@ pub mod pallet {
       Self::allocate_internal(&account, amount)?;
 
       // increase allocation for participant in validator set
-      VsPallet::<T>::increase_allocation(network, account, Amount(amount))
+      VsPallet::<T>::increase_allocation(network, account, Amount(amount))?;
+      Ok(())
     }
 
     /// Deallocate `amount` from a given validator set.
@@ -142,11 +143,12 @@ pub mod pallet {
       let account = ensure_signed(origin)?;
 
       // decrease allocation in validator set
-      VsPallet::<T>::decrease_allocation(network, account, Amount(amount))?;
+      let can_immediately_deallocate =
+        VsPallet::<T>::decrease_allocation(network, account, Amount(amount))?;
+      if can_immediately_deallocate {
+        Self::deallocate_internal(&account, amount)?;
+      }
 
-      // We don't immediately call deallocate since the deallocation only takes effect in the next
-      // session
-      // TODO: If this validator isn't active, allow immediate deallocation
       Ok(())
     }
 

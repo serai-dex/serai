@@ -18,7 +18,9 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = Public> + pallet_session::Config + TypeInfo
+    frame_system::Config<AccountId = Public>
+    + pallet_session::Config<ValidatorId = Public>
+    + TypeInfo
   {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
   }
@@ -172,6 +174,13 @@ pub mod pallet {
   }
 
   impl<T: Config> Pallet<T> {
+    fn in_set_key(
+      network: NetworkId,
+      account: T::AccountId,
+    ) -> (NetworkId, [u8; 16], T::AccountId) {
+      (network, sp_io::hashing::blake2_128(&(network, account).encode()), account)
+    }
+
     fn new_set(network: NetworkId) {
       // Update CurrentSession
       let session = if network != NetworkId::Serai {
@@ -208,10 +217,7 @@ pub mod pallet {
         }
         let key = Public(next[(next.len() - 32) .. next.len()].try_into().unwrap());
 
-        InSet::<T>::set(
-          (network, sp_io::hashing::blake2_128(&(network, key).encode()), key),
-          Some(()),
-        );
+        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
         participants.push(key);
 
         last = next;
@@ -351,7 +357,7 @@ pub mod pallet {
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
-    ) -> DispatchResult {
+    ) -> Result<(), Error<T>> {
       let new_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0 + amount.0;
       if new_allocation < Self::minimum_allocation(network).unwrap().0 {
         Err(Error::<T>::InsufficientStake)?;
@@ -364,15 +370,18 @@ pub mod pallet {
     ///
     /// Errors if the capacity provided by this allocation is in use.
     ///
-    /// Errors if a partial decrease of allocation which puts the allocation below the minimum.
+    /// Errors if a partial decrease of allocation which puts the remaining allocation below the
+    /// minimum requirement.
     ///
     /// The capacity prior provided by the allocation is immediately removed, in order to ensure it
     /// doesn't become used (preventing deallocation).
+    ///
+    /// Returns if the amount is immediately eligible for deallocation.
     pub fn decrease_allocation(
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
-    ) -> DispatchResult {
+    ) -> Result<bool, Error<T>> {
       // TODO: Check it's safe to decrease this set's stake by this amount
 
       let new_allocation = Self::allocation((network, account))
@@ -392,8 +401,26 @@ pub mod pallet {
       // Decrease the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
 
+      // If we're not in-set, allow immediate deallocation
+      let mut active = InSet::<T>::contains_key(Self::in_set_key(network, account));
+      // If the network is Serai, also check pallet_session's list of active validators, as our
+      // InSet is actually the queued for next session's validators
+      // Only runs if active isn't already true in order to short-circuit
+      if (!active) && (network == NetworkId::Serai) {
+        // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with
+        // InSet?
+        for validator in pallet_session::Pallet::<T>::validators() {
+          if validator == account {
+            active = true;
+            break;
+          }
+        }
+      }
+      if !active {
+        return Ok(true);
+      }
+
       // Set it to PendingDeallocations, letting the staking pallet release it on a future session
-      // TODO: We can immediately deallocate if not active
       let mut to_unlock_on = Self::session(network);
       if network == NetworkId::Serai {
         // Since the next Serai set will already have been decided, we can only deallocate once the
@@ -412,7 +439,7 @@ pub mod pallet {
         Some(Amount(existing.0 + amount.0)),
       );
 
-      Ok(())
+      Ok(false)
     }
 
     // Checks if this session has completed the handover from the prior session.
