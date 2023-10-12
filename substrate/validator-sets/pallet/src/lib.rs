@@ -148,6 +148,11 @@ pub mod pallet {
     }
   }
 
+  /// Pending deallocations, keyed by the Session they become unlocked on.
+  #[pallet::storage]
+  type PendingDeallocations<T: Config> =
+    StorageMap<_, Blake2_128Concat, (NetworkId, Session, Public), Amount, OptionQuery>;
+
   /// The MuSig key for a validator set.
   #[pallet::storage]
   #[pallet::getter(fn musig_key)]
@@ -386,33 +391,64 @@ pub mod pallet {
       // Decrease the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
 
-      // Set it to PendingDeallocation, letting the staking pallet release it AFTER this session
-      // TODO
-      // TODO: We can immediately free it if it doesn't cross a key share threshold
+      // Set it to PendingDeallocations, letting the staking pallet release it on a future session
+      // TODO: We can immediately deallocate if not active
+      let mut to_unlock_on = Self::session(network);
+      if network == NetworkId::Serai {
+        // Since the next Serai set will already have been decided, we can only deallocate once the
+        // next set ends
+        to_unlock_on.0 += 2;
+      } else {
+        // TODO: We can immediately free it if the deallocation doesn't cross a key share threshold
+        to_unlock_on.0 += 1;
+      }
+      // Increase the session by one, creating a cooldown period
+      to_unlock_on.0 += 1;
+      let existing =
+        PendingDeallocations::<T>::get((network, to_unlock_on, account)).unwrap_or(Amount(0));
+      PendingDeallocations::<T>::set(
+        (network, to_unlock_on, account),
+        Some(Amount(existing.0 + amount.0)),
+      );
 
       Ok(())
+    }
+
+    // Checks if this session has completed the handover from the prior session.
+    fn handover_completed(network: NetworkId, session: Session) -> bool {
+      let current_session = Self::session(network);
+      // No handover occurs on genesis
+      if current_session.0 == 0 {
+        return true;
+      }
+      // If the session we've been queried about has yet to start, it can't have completed its
+      // handover
+      if current_session.0 < session.0 {
+        return false;
+      }
+      if current_session.0 == session.0 {
+        // Handover is automatically complete for Serai as it doesn't have a handover protocol
+        // If not Serai, check the prior session had its keys cleared, which happens once its
+        // retired
+        return (network == NetworkId::Serai) ||
+          (!Keys::<T>::contains_key(ValidatorSet {
+            network,
+            session: Session(current_session.0 - 1),
+          }));
+      }
+      // We're currently in a future session, meaning this session definitely performed itself
+      // handover
+      true
     }
 
     pub fn new_session() {
       // TODO: Define an array of all networks in primitives
       let networks = [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
       for network in networks {
-        // Handover is automatically complete for Serai as it doesn't have a handover protocol
-        // TODO: Update how handover completed is determined. It's not on set keys. It's on new
-        // set accepting responsibility
-        let handover_completed = (network == NetworkId::Serai) || {
-          let current_session = Self::session(network);
-          // This function shouldn't be used on genesis
-          debug_assert!(current_session != Session(0));
-          // Check the prior session had its keys cleared, which happens once its retired
-          !Keys::<T>::contains_key(ValidatorSet {
-            network,
-            session: Session(current_session.0 - 1),
-          })
-        };
+        let current_session = Self::session(network);
         // Only spawn a NewSet if the current set was actually established with a completed
         // handover protocol
-        if handover_completed {
+        if Self::handover_completed(network, current_session) {
           Pallet::<T>::new_set(network);
         }
       }
@@ -426,6 +462,21 @@ pub mod pallet {
       let set = ValidatorSet { network, session };
       MuSigKeys::<T>::remove(set);
       Keys::<T>::remove(set);
+    }
+
+    /// Take the amount deallocatable.
+    ///
+    /// `session` refers to the Session the stake becomes deallocatable on.
+    pub fn take_deallocatable_amount(
+      network: NetworkId,
+      session: Session,
+      key: Public,
+    ) -> Option<Amount> {
+      // Check this Session has properly started, completing the handover from the prior session.
+      if !Self::handover_completed(network, session) {
+        return None;
+      }
+      PendingDeallocations::<T>::take((network, session, key))
     }
   }
 }
