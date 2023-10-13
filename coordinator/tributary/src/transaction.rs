@@ -78,7 +78,7 @@ impl ReadWrite for Signed {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionKind<'a> {
-  /// This tranaction should be provided by every validator, in an exact order.
+  /// This transaction should be provided by every validator, in an exact order.
   ///
   /// The contained static string names the orderer to use. This allows two distinct provided
   /// transaction kinds, without a synchronized order, to be ordered within their own kind without
@@ -87,8 +87,9 @@ pub enum TransactionKind<'a> {
   /// The only malleability is in when this transaction appears on chain. The block producer will
   /// include it when they have it. Block verification will fail for validators without it.
   ///
-  /// If a supermajority of validators still produce a commit for a block with a provided
-  /// transaction which isn't locally held, the chain will sleep until it is locally provided.
+  /// If a supermajority of validators produce a commit for a block with a provided transaction
+  /// which isn't locally held, the block will be added to the local chain. When the transaction is
+  /// locally provided, it will be compared for correctness to the on-chain version
   Provided(&'static str),
 
   /// An unsigned transaction, only able to be included by the block producer.

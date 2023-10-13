@@ -62,7 +62,11 @@ impl ReadWrite for ProvidedTransaction {
 
 impl Transaction for ProvidedTransaction {
   fn kind(&self) -> TransactionKind<'_> {
-    TransactionKind::Provided("provided")
+    match self.0[0] {
+      1 => TransactionKind::Provided("order1"),
+      2 => TransactionKind::Provided("order2"),
+      _ => panic!("unknown order"),
+    }
   }
 
   fn hash(&self) -> [u8; 32] {
@@ -74,9 +78,17 @@ impl Transaction for ProvidedTransaction {
   }
 }
 
-pub fn random_provided_transaction<R: RngCore + CryptoRng>(rng: &mut R) -> ProvidedTransaction {
+pub fn random_provided_transaction<R: RngCore + CryptoRng>(
+  rng: &mut R,
+  order: &str,
+) -> ProvidedTransaction {
   let mut data = vec![0; 512];
   rng.fill_bytes(&mut data);
+  data[0] = match order {
+    "order1" => 1,
+    "order2" => 2,
+    _ => panic!("unknown order"),
+  };
   ProvidedTransaction(data)
 }
 

@@ -35,10 +35,7 @@ use tendermint::{
   SlashEvent,
 };
 
-use tokio::{
-  sync::RwLock,
-  time::{Duration, sleep},
-};
+use tokio::sync::RwLock;
 
 use crate::{
   TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
@@ -360,12 +357,15 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
-    self.blockchain.read().await.verify_block::<Self>(&block, self.signature_scheme()).map_err(
-      |e| match e {
+    self
+      .blockchain
+      .read()
+      .await
+      .verify_block::<Self>(&block, self.signature_scheme(), false)
+      .map_err(|e| match e {
         BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
         _ => TendermintBlockError::Fatal,
-      },
-    )
+      })
   }
 
   async fn add_block(
@@ -412,9 +412,6 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
             hex::encode(hash),
             hex::encode(self.genesis)
           );
-          // TODO: Use a notification system for when we have a new provided, in order to minimize
-          // latency
-          sleep(Duration::from_secs(Self::block_time().into())).await;
         }
         _ => return invalid_block(),
       }

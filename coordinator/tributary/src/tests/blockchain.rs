@@ -48,7 +48,7 @@ fn block_addition() {
 
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
-  blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+  blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
   assert!(blockchain.add_block::<N>(&block, vec![], validators).is_ok());
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
@@ -71,14 +71,14 @@ fn invalid_block() {
     #[allow(clippy::redundant_clone)] // False positive
     let mut block = block.clone();
     block.header.parent = Blake2s256::digest(block.header.parent).into();
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
   }
 
   // Mutate tranactions merkle
   {
     let mut block = block;
     block.header.transactions = Blake2s256::digest(block.header.transactions).into();
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
   }
 
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
@@ -89,7 +89,7 @@ fn invalid_block() {
     // Manually create the block to bypass build_block's checks
     let block = Block::new(blockchain.tip(), vec![], vec![Transaction::Application(tx.clone())]);
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
   }
 
   // Run the rest of the tests with them as a participant
@@ -99,7 +99,7 @@ fn invalid_block() {
   {
     let block = Block::new(blockchain.tip(), vec![], vec![Transaction::Application(tx.clone())]);
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
   }
 
   {
@@ -112,11 +112,11 @@ fn invalid_block() {
     ));
     let mut block = blockchain.build_block::<N>(validators.clone());
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
 
     // And verify mutating the transactions merkle now causes a failure
     block.header.transactions = merkle(&[]);
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
   }
 
   {
@@ -124,7 +124,7 @@ fn invalid_block() {
     let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 5);
     // Manually create the block to bypass build_block's checks
     let block = Block::new(blockchain.tip(), vec![], vec![Transaction::Application(tx)]);
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
   }
 
   {
@@ -136,14 +136,14 @@ fn invalid_block() {
       validators.clone()
     ));
     let mut block = blockchain.build_block::<N>(validators.clone());
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
     match &mut block.transactions[0] {
       Transaction::Application(tx) => {
         tx.1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
       }
       _ => panic!("non-signed tx found"),
     }
-    assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
 
     // Make sure this isn't because the merkle changed due to the transaction hash including the
     // signature (which it explicitly isn't allowed to anyways)
@@ -191,7 +191,7 @@ fn signed_transaction() {
     );
 
     // Verify and add the block
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
     assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
     assert_eq!(blockchain.tip(), block.hash());
   };
@@ -215,42 +215,134 @@ fn signed_transaction() {
 fn provided_transaction() {
   let genesis = new_genesis();
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
-  let (_, mut blockchain) = new_blockchain::<ProvidedTransaction>(genesis, &[]);
+  let (db, mut blockchain) = new_blockchain::<ProvidedTransaction>(genesis, &[]);
 
-  let tx = random_provided_transaction(&mut OsRng);
+  let tx = random_provided_transaction(&mut OsRng, "order1");
 
-  // This should be provideable
-  let mut db = MemDb::new();
-  let mut txs = ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis);
+  // This should be providable
+  let mut temp_db = MemDb::new();
+  let mut txs = ProvidedTransactions::<_, ProvidedTransaction>::new(temp_db.clone(), genesis);
   txs.provide(tx.clone()).unwrap();
   assert_eq!(txs.provide(tx.clone()), Err(ProvidedError::AlreadyProvided));
   assert_eq!(
-    ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis).transactions,
-    HashMap::from([("provided", VecDeque::from([tx.clone()]))]),
+    ProvidedTransactions::<_, ProvidedTransaction>::new(temp_db.clone(), genesis).transactions,
+    HashMap::from([("order1", VecDeque::from([tx.clone()]))]),
   );
-  let mut txn = db.txn();
-  txs.complete(&mut txn, "provided", tx.hash());
+  let mut txn = temp_db.txn();
+  txs.complete(&mut txn, "order1", [0u8; 32], tx.hash());
   txn.commit();
   assert!(ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
     .transactions
     .is_empty());
 
-  // Non-provided transactions should fail verification
-  let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
-  assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
+  // case we have the block's provided txs in our local as well
+  {
+    // Non-provided transactions should fail verification because we don't have them locally.
+    let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
+    assert!(blockchain.verify_block::<N>(&block, validators.clone(), false).is_err());
 
-  // Provided transactions should pass verification
-  blockchain.provide_transaction(tx.clone()).unwrap();
-  blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    // Provided transactions should pass verification
+    blockchain.provide_transaction(tx.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
 
-  // add_block should work for verified blocks
-  assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
+    // add_block should work for verified blocks
+    assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
 
-  let block = Block::new(blockchain.tip(), vec![tx], vec![]);
-  // The provided transaction should no longer considered provided, causing this error
-  assert!(blockchain.verify_block::<N>(&block, validators.clone()).is_err());
-  // add_block should fail for unverified provided transactions if told to add them
-  assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_err());
+    let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
+
+    // The provided transaction should no longer considered provided but added to chain,
+    // causing this error
+    assert_eq!(
+      blockchain.verify_block::<N>(&block, validators.clone(), false),
+      Err(BlockError::ProvidedAlreadyIncluded)
+    );
+  }
+
+  // case we don't have the block's provided txs in our local
+  {
+    let tx1 = random_provided_transaction(&mut OsRng, "order1");
+    let tx2 = random_provided_transaction(&mut OsRng, "order1");
+    let tx3 = random_provided_transaction(&mut OsRng, "order2");
+    let tx4 = random_provided_transaction(&mut OsRng, "order2");
+
+    // add_block DOES NOT fail for unverified provided transactions if told to add them,
+    // since now we can have them later.
+    let block1 = Block::new(blockchain.tip(), vec![tx1.clone(), tx3.clone()], vec![]);
+    assert!(blockchain.add_block::<N>(&block1, vec![], validators.clone()).is_ok());
+
+    // in fact, we can have many blocks that have provided txs that we don't have locally.
+    let block2 = Block::new(blockchain.tip(), vec![tx2.clone(), tx4.clone()], vec![]);
+    assert!(blockchain.add_block::<N>(&block2, vec![], validators.clone()).is_ok());
+
+    // make sure we won't return ok for the block before we actually got the txs
+    let TransactionKind::Provided(order) = tx1.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+    // provide the first tx
+    blockchain.provide_transaction(tx1).unwrap();
+    // it should be ok for this order now, since the second tx has different order.
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+
+    // give the second tx
+    let TransactionKind::Provided(order) = tx3.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx3).unwrap();
+    // it should be ok now for the first block
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block1.hash(),
+      order
+    ));
+
+    // provide the second block txs
+    let TransactionKind::Provided(order) = tx4.kind() else { panic!("tx wasn't provided") };
+    // not ok yet
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx4).unwrap();
+    // ok now
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+
+    // provide the second block txs
+    let TransactionKind::Provided(order) = tx2.kind() else { panic!("tx wasn't provided") };
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+    blockchain.provide_transaction(tx2).unwrap();
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
+      &db,
+      &genesis,
+      &block2.hash(),
+      order
+    ));
+  }
 }
 
 #[tokio::test]
@@ -287,7 +379,7 @@ async fn tendermint_evidence_tx() {
     }
 
     // Verify and add the block
-    blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+    blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
     assert!(blockchain.add_block::<N>(&block, vec![], validators.clone()).is_ok());
     assert_eq!(blockchain.tip(), block.hash());
   };
@@ -396,7 +488,8 @@ async fn block_tx_ordering() {
     assert!(blockchain.add_transaction::<N>(true, unsigned_tx.clone(), validators.clone()));
     mempool.push(unsigned_tx);
 
-    let provided_tx = SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng)));
+    let provided_tx =
+      SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng, "order1")));
     blockchain.provide_transaction(provided_tx.clone()).unwrap();
     provided_txs.push(provided_tx);
   }
@@ -424,7 +517,7 @@ async fn block_tx_ordering() {
   }
 
   // should be a valid block
-  blockchain.verify_block::<N>(&block, validators.clone()).unwrap();
+  blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
 
   // Unsigned before Provided
   {
@@ -433,7 +526,7 @@ async fn block_tx_ordering() {
     let unsigned = block.transactions.remove(128);
     block.transactions.insert(0, unsigned);
     assert_eq!(
-      blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+      blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap_err(),
       BlockError::WrongTransactionOrder
     );
   }
@@ -444,7 +537,7 @@ async fn block_tx_ordering() {
     let signed = block.transactions.remove(256);
     block.transactions.insert(0, signed);
     assert_eq!(
-      blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+      blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap_err(),
       BlockError::WrongTransactionOrder
     );
   }
@@ -454,7 +547,7 @@ async fn block_tx_ordering() {
     let mut block = block;
     block.transactions.swap(128, 256);
     assert_eq!(
-      blockchain.verify_block::<N>(&block, validators.clone()).unwrap_err(),
+      blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap_err(),
       BlockError::WrongTransactionOrder
     );
   }

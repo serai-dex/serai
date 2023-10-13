@@ -649,6 +649,18 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
               log::trace!("providing transaction {}", hex::encode(tx.hash()));
               let res = tributary.tributary.provide_transaction(tx).await;
               if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+                if res == Err(ProvidedError::LocalMismatchesOnChain) {
+                  // Spin, since this is a crit for this Tributary
+                  loop {
+                    log::error!(
+                      "{}. tributary: {}, provided: SubstrateBlock({})",
+                      "tributary added distinct provided to delayed locally provided TX",
+                      hex::encode(tributary.spec.genesis()),
+                      block,
+                    );
+                    sleep(Duration::from_secs(60)).await;
+                  }
+                }
                 panic!("provided an invalid transaction: {res:?}");
               }
             }
@@ -1019,8 +1031,20 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
           match tx.kind() {
             TransactionKind::Provided(_) => {
               log::trace!("providing transaction {}", hex::encode(tx.hash()));
-              let res = tributary.provide_transaction(tx).await;
+              let res = tributary.provide_transaction(tx.clone()).await;
               if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+                if res == Err(ProvidedError::LocalMismatchesOnChain) {
+                  // Spin, since this is a crit for this Tributary
+                  loop {
+                    log::error!(
+                      "{}. tributary: {}, provided: {:?}",
+                      "tributary added distinct provided to delayed locally provided TX",
+                      hex::encode(spec.genesis()),
+                      &tx,
+                    );
+                    sleep(Duration::from_secs(60)).await;
+                  }
+                }
                 panic!("provided an invalid transaction: {res:?}");
               }
             }

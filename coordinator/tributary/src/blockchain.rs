@@ -50,6 +50,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
   }
+  fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
+    D::key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
+  }
   fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
     D::key(
       b"tributary_blockchain",
@@ -136,6 +139,23 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
+  pub(crate) fn locally_provided_txs_in_block(
+    db: &D,
+    genesis: &[u8; 32],
+    block: &[u8; 32],
+    order: &str,
+  ) -> bool {
+    let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
+    let local =
+      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let block_key =
+      ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
+    let block =
+      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+
+    local >= block
+  }
+
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
     db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
   }
@@ -182,7 +202,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.mempool.block(&self.next_nonces, unsigned_in_chain),
     );
     // build_block should not return invalid blocks
-    self.verify_block::<N>(&block, schema).unwrap();
+    self.verify_block::<N>(&block, schema, false).unwrap();
     block
   }
 
@@ -190,10 +210,13 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     &self,
     block: &Block<T>,
     schema: N::SignatureScheme,
+    allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain =
       |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+    let provided_in_chain =
+      |hash: [u8; 32]| db.get(Self::provided_included_key(&self.genesis, &hash)).is_some();
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
@@ -207,6 +230,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       schema,
       &commit,
       unsigned_in_chain,
+      provided_in_chain,
+      allow_non_local_provided,
     )
   }
 
@@ -217,7 +242,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     commit: Vec<u8>,
     schema: N::SignatureScheme,
   ) -> Result<(), BlockError> {
-    self.verify_block::<N>(block, schema)?;
+    self.verify_block::<N>(block, schema, true)?;
 
     log::info!(
       "adding block {} to tributary {} with {} TXs",
@@ -249,7 +274,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided(order) => {
-          self.provided.complete(&mut txn, order, tx.hash());
+          let hash = tx.hash();
+          self.provided.complete(&mut txn, order, self.tip, hash);
+          txn.put(Self::provided_included_key(&self.genesis, &hash), []);
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();

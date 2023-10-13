@@ -7,7 +7,7 @@ use ciphersuite::{Ciphersuite, Ristretto};
 use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
 
 use tributary::{
-  Transaction as TributaryTransaction, Block, TributaryReader,
+  TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
   tendermint::{
     tx::{TendermintTx, decode_evidence},
     TendermintNetwork,
@@ -120,6 +120,20 @@ pub(crate) async fn handle_new_blocks<
   let mut last_block = db.last_block(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
+
+    // Make sure we have all of the provided transactions for this block
+    for tx in &block.transactions {
+      // Provided TXs will appear first in the Block, so we can break after we hit a non-Provided
+      let TransactionKind::Provided(order) = tx.kind() else {
+        break;
+      };
+
+      // make sure we have all the provided txs in this block locally
+      if !tributary.locally_provided_txs_in_block(&block.hash(), order) {
+        return;
+      }
+    }
+
     handle_block::<_, _, _, _, _, _, P>(
       db,
       key,
