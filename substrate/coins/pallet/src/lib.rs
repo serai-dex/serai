@@ -31,14 +31,14 @@ pub mod pallet {
 
   /// The amount of funds each account has.
   #[pallet::storage]
-  #[pallet::getter(fn balances)]
-  pub type Balances<T: Config> =
+  #[pallet::getter(fn coins)]
+  pub type Coins<T: Config> =
     StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Identity, Coin, SubstrateAmount>;
 
   impl<T: Config> Pallet<T> {
     /// Returns the balance of a given account for `coin`.
     pub fn balance(of: T::AccountId, coin: Coin) -> SubstrateAmount {
-      Self::balances(of, coin).unwrap_or(0)
+      Self::coins(of, coin).unwrap_or(0)
     }
 
     /// Mints amount at the given account, errors if amount overflows.
@@ -49,13 +49,13 @@ pub mod pallet {
       }
 
       // add amount to account
-      let new_amount = Self::balances(at, coin)
+      let new_amount = Self::coins(at, coin)
         .unwrap_or(0)
         .checked_add(amount)
         .ok_or(Error::<T>::AmountOverflowed)?;
 
       // save
-      Balances::<T>::set(at, coin, Some(new_amount));
+      Coins::<T>::set(at, coin, Some(new_amount));
 
       Self::deposit_event(Event::Minted { at, coin, amount });
       Ok(())
@@ -68,17 +68,14 @@ pub mod pallet {
         return Ok(());
       }
 
-      // add amount to account
-      let new_amount = Self::balances(at, coin)
-        .unwrap_or(0)
-        .checked_sub(amount)
-        .ok_or(Error::<T>::NotEnoughFunds)?;
+      // sub amount from account
+      let new_amount =
+        Self::coins(at, coin).unwrap_or(0).checked_sub(amount).ok_or(Error::<T>::NotEnoughFunds)?;
 
-      // save
       if new_amount == 0 {
-        Balances::<T>::remove(at, coin);
+        Coins::<T>::remove(at, coin);
       } else {
-        Balances::<T>::set(at, coin, Some(new_amount));
+        Coins::<T>::set(at, coin, Some(new_amount));
       }
 
       Self::deposit_event(Event::Burnt { at, coin, amount });
@@ -99,23 +96,23 @@ pub mod pallet {
       }
 
       // sub the amount from "from"
-      let from_amount = Self::balances(from, coin)
+      let from_amount = Self::coins(from, coin)
         .unwrap_or(0)
         .checked_sub(amount)
         .ok_or(Error::<T>::NotEnoughFunds)?;
 
       // add to "to"
-      let to_amount = Self::balances(to, coin)
+      let to_amount = Self::coins(to, coin)
         .unwrap_or(0)
         .checked_add(amount)
         .ok_or(Error::<T>::AmountOverflowed)?;
 
       // save
-      Balances::<T>::set(to, coin, Some(to_amount));
+      Coins::<T>::set(to, coin, Some(to_amount));
       if from_amount == 0 {
-        Balances::<T>::remove(from, coin);
+        Coins::<T>::remove(from, coin);
       } else {
-        Balances::<T>::set(from, coin, Some(from_amount));
+        Coins::<T>::set(from, coin, Some(from_amount));
       }
 
       Self::deposit_event(Event::Transferred { from, to, coin, amount });
