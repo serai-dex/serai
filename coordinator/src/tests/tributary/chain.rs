@@ -54,7 +54,7 @@ pub fn new_spec<R: RngCore + CryptoRng>(
 
   let set_participants = keys
     .iter()
-    .map(|key| sr25519::Public((<Ristretto as Ciphersuite>::generator() * **key).to_bytes()))
+    .map(|key| (sr25519::Public((<Ristretto as Ciphersuite>::generator() * **key).to_bytes()), 1))
     .collect::<Vec<_>>();
 
   let res = TributarySpec::new(serai_block, start_time, set, set_participants);

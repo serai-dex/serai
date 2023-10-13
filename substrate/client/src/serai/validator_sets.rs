@@ -61,7 +61,9 @@ impl Serai {
     key: Public,
     at_hash: [u8; 32],
   ) -> Result<Option<Amount>, SeraiError> {
-    self.storage(PALLET, "Allocations", Some(vec![scale_value(network), scale_value(key)]), at_hash).await
+    self
+      .storage(PALLET, "Allocations", Some(vec![scale_value(network), scale_value(key)]), at_hash)
+      .await
   }
 
   pub async fn get_validator_set_musig_key(
