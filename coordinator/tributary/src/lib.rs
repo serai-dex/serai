@@ -127,6 +127,11 @@ pub trait ReadWrite: Sized {
 
 #[async_trait]
 pub trait P2p: 'static + Send + Sync + Clone + Debug {
+  /// Broadcast a message to all other members of the Tributary with the specified genesis.
+  ///
+  /// The Tributary will re-broadcast consensus messages on a fixed interval to ensure they aren't
+  /// prematurely dropped from the P2P layer. THe P2P layer SHOULD perform content-based
+  /// deduplication to ensure a sane amount of load.
   async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>);
 }
 
@@ -178,7 +183,25 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
-    let network = TendermintNetwork { genesis, signer, validators, blockchain, p2p };
+    let to_rebroadcast = Arc::new(RwLock::new(vec![]));
+    // Actively rebroadcast consensus messages to ensure they aren't prematurely dropped from the
+    // P2P layer
+    tokio::spawn({
+      let to_rebroadcast = to_rebroadcast.clone();
+      let p2p = p2p.clone();
+      async move {
+        loop {
+          let to_rebroadcast = to_rebroadcast.read().await.clone();
+          for msg in to_rebroadcast {
+            p2p.broadcast(genesis, msg).await;
+          }
+          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+        }
+      }
+    });
+
+    let network =
+      TendermintNetwork { genesis, signer, validators, blockchain, to_rebroadcast, p2p };
 
     let TendermintHandle { synced_block, synced_block_result, messages, machine } =
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
