@@ -41,10 +41,7 @@ pub mod pallet {
 
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig {
-        networks: Default::default(),
-        participants: Default::default(),
-      }
+      GenesisConfig { networks: Default::default(), participants: Default::default() }
     }
   }
 
