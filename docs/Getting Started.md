@@ -35,9 +35,9 @@ rustup target add wasm32-unknown-unknown --toolchain nightly
 ### Install Solidity
 
 ```
-sudo pip3 install solc-select
-solc-select install 0.8.16
-solc-select use 0.8.16
+cargo install svm-rs
+svm install 0.8.16
+svm use 0.8.16
 ```
 
 ### Install Solidity Compiler Version Manager
