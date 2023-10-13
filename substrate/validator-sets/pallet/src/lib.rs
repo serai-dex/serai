@@ -480,7 +480,7 @@ pub mod pallet {
           }
         }
       }
-      if !active {
+      if (!active) || (decrease_in_key_shares == 0) {
         return Ok(true);
       }
 
@@ -491,7 +491,6 @@ pub mod pallet {
         // next set ends
         to_unlock_on.0 += 2;
       } else {
-        // TODO: We can immediately free it if the deallocation doesn't cross a key share threshold
         to_unlock_on.0 += 1;
       }
       // Increase the session by one, creating a cooldown period
