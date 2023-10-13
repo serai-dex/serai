@@ -364,11 +364,13 @@ pub mod pallet {
     ) -> DispatchResult {
       ensure_none(origin)?;
 
+      // signature isn't checked as this is an unsigned transaction, and validate_unsigned
+      // (called by pre_dispatch) checks it
+      let _ = signature;
+
       let session = Session(pallet_session::Pallet::<T>::current_index());
 
       let set = ValidatorSet { session, network };
-      // TODO: Is this needed? validate_unsigned should be called before this and ensure it's Ok
-      Self::verify_signature(set, &key_pair, &signature)?;
 
       Keys::<T>::set(set, Some(key_pair.clone()));
       Self::deposit_event(Event::KeyGen { set, key_pair });
@@ -411,6 +413,11 @@ pub mod pallet {
         .longevity(10)
         .propagate(true)
         .build()
+    }
+
+    // Explicitly provide a pre-dispatch which calls validate_unsigned
+    fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
+      Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
     }
   }
 
