@@ -183,14 +183,14 @@ async fn main() {
     Some(<Ristretto as Ciphersuite>::G::from_bytes(&repr).unwrap())
   };
 
-  const ALL_EXT_NETWORKS: [NetworkId; 3] =
-    [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
-
   let register_service = |service, key| {
     (*KEYS).write().unwrap().insert(service, key);
     let mut queues = (*QUEUES).write().unwrap();
     if service == Service::Coordinator {
-      for network in ALL_EXT_NETWORKS {
+      for network in serai_primitives::NETWORKS {
+        if network == NetworkId::Serai {
+          continue;
+        }
         queues.insert(
           (service, Service::Processor(network)),
           RwLock::new(Queue(db.clone(), service, Service::Processor(network))),
@@ -205,7 +205,10 @@ async fn main() {
   };
 
   // Make queues for each NetworkId, other than Serai
-  for network in ALL_EXT_NETWORKS {
+  for network in serai_primitives::NETWORKS {
+    if network == NetworkId::Serai {
+      continue;
+    }
     // Use a match so we error if the list of NetworkIds changes
     let Some(key) = read_key(match network {
       NetworkId::Serai => unreachable!(),

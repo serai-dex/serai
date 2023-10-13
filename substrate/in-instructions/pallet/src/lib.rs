@@ -108,8 +108,6 @@ pub mod pallet {
 
       let batch = batch.batch;
 
-      // TODO: Test validate_unsigned is actually called prior to execution, which is required for
-      // this to be safe
       LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
 
       LastBatch::<T>::insert(batch.network, batch.id);
@@ -203,6 +201,11 @@ pub mod pallet {
         .longevity(10)
         .propagate(true)
         .build()
+    }
+
+    // Explicitly provide a pre-dispatch which calls validate_unsigned
+    fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
+      Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
     }
   }
 }

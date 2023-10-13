@@ -271,6 +271,8 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) validators: Arc<Validators>,
   pub(crate) blockchain: Arc<RwLock<Blockchain<D, T>>>,
 
+  pub(crate) to_rebroadcast: Arc<RwLock<Vec<Vec<u8>>>>,
+
   pub(crate) p2p: P,
 }
 
@@ -304,8 +306,19 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   }
 
   async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
+    // Since we're broadcasting a Tendermint message, set it to be re-broadcasted every second
+    // until the block it's trying to build is complete
+    // If the P2P layer drops a message before all nodes obtained access, or a node had an
+    // intermittent failure, this will ensure reconcilliation
+    // Resolves halts caused by timing discrepancies, which technically are violations of
+    // Tendermint as a BFT protocol, and shouldn't occur yet have in low-powered testing
+    // environments
+    // This is atrocious if there's no content-based deduplication protocol for messages actively
+    // being gossiped
+    // LibP2p, as used by Serai, is configured to content-based deduplicate
     let mut to_broadcast = vec![TENDERMINT_MESSAGE];
     to_broadcast.extend(msg.encode());
+    self.to_rebroadcast.write().await.push(to_broadcast.clone());
     self.p2p.broadcast(self.genesis, to_broadcast).await
   }
 
@@ -406,6 +419,9 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         _ => return invalid_block(),
       }
     }
+
+    // Since we've added a valid block, clear to_rebroadcast
+    *self.to_rebroadcast.write().await = vec![];
 
     Some(TendermintBlock(
       self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize(),

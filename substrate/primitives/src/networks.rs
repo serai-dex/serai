@@ -31,6 +31,9 @@ pub enum NetworkId {
   Monero,
 }
 
+pub const NETWORKS: [NetworkId; 4] =
+  [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
+
 /// The type used to identify coins.
 #[derive(
   Clone,

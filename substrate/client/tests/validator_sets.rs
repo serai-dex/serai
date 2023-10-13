@@ -3,7 +3,7 @@ use rand_core::{RngCore, OsRng};
 use sp_core::{sr25519::Public, Pair};
 
 use serai_client::{
-  primitives::{NetworkId, insecure_pair_from_name},
+  primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
     primitives::{Session, ValidatorSet, musig_key},
     ValidatorSetsEvent,
@@ -38,7 +38,7 @@ serai_test!(
         .get_new_set_events(serai.get_block_by_number(0).await.unwrap().unwrap().hash())
         .await
         .unwrap(),
-      [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero]
+      NETWORKS
         .iter()
         .copied()
         .map(|network| ValidatorSetsEvent::NewSet {
