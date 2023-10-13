@@ -5,7 +5,7 @@ pub mod pallet {
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
-  use serai_primitives::{*, SeraiAddress, SubstrateAmount};
+  use serai_primitives::*;
 
   #[pallet::config]
   pub trait Config: frame_system::Config<AccountId = PublicKey> {
@@ -21,8 +21,9 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Minted { at: T::AccountId, amount: SubstrateAmount },
-    Transferred { from: T::AccountId, to: T::AccountId, amount: SubstrateAmount },
+    Minted { at: T::AccountId, coin: Coin, amount: SubstrateAmount },
+    Burnt { at: T::AccountId, coin: Coin, amount: SubstrateAmount },
+    Transferred { from: T::AccountId, to: T::AccountId, coin: Coin, amount: SubstrateAmount },
   }
 
   #[pallet::pallet]
@@ -32,29 +33,55 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn balances)]
   pub type Balances<T: Config> =
-    StorageMap<_, Blake2_128Concat, T::AccountId, SubstrateAmount, OptionQuery>;
+    StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Identity, Coin, SubstrateAmount>;
 
   impl<T: Config> Pallet<T> {
-    /// Returns the balance of a given account.
-    pub fn balance(of: T::AccountId) -> SubstrateAmount {
-      Self::balances(of).unwrap_or(0)
+    /// Returns the balance of a given account for `coin`.
+    pub fn balance(of: T::AccountId, coin: Coin) -> SubstrateAmount {
+      Self::balances(of, coin).unwrap_or(0)
     }
 
-    /// Mints amount in the given account, errors if amounts overflows.
-    pub fn mint(at: T::AccountId, amount: SubstrateAmount) -> Result<(), Error<T>> {
+    /// Mints amount at the given account, errors if amount overflows.
+    pub fn mint(at: T::AccountId, coin: Coin, amount: SubstrateAmount) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
       if amount == 0 {
         return Ok(());
       }
 
       // add amount to account
-      let to_amount =
-        Self::balances(at).unwrap_or(0).checked_add(amount).ok_or(Error::<T>::AmountOverflowed)?;
+      let new_amount = Self::balances(at, coin)
+        .unwrap_or(0)
+        .checked_add(amount)
+        .ok_or(Error::<T>::AmountOverflowed)?;
 
       // save
-      Balances::<T>::set(at, Some(to_amount));
+      Balances::<T>::set(at, coin, Some(new_amount));
 
-      Self::deposit_event(Event::Minted { at, amount });
+      Self::deposit_event(Event::Minted { at, coin, amount });
+      Ok(())
+    }
+
+    /// Burns amount at the given account, errors if not enough funds to burn.
+    pub fn burn(at: T::AccountId, coin: Coin, amount: SubstrateAmount) -> Result<(), Error<T>> {
+      // don't waste time if amount 0.
+      if amount == 0 {
+        return Ok(());
+      }
+
+      // add amount to account
+      let new_amount = Self::balances(at, coin)
+        .unwrap_or(0)
+        .checked_sub(amount)
+        .ok_or(Error::<T>::NotEnoughFunds)?;
+
+      // save
+      if new_amount == 0 {
+        Balances::<T>::remove(at, coin);
+      } else {
+        Balances::<T>::set(at, coin, Some(new_amount));
+      }
+
+      Self::deposit_event(Event::Burnt { at, coin, amount });
       Ok(())
     }
 
@@ -63,6 +90,7 @@ pub mod pallet {
     fn transfer_internal(
       from: T::AccountId,
       to: T::AccountId,
+      coin: Coin,
       amount: SubstrateAmount,
     ) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
@@ -71,22 +99,26 @@ pub mod pallet {
       }
 
       // sub the amount from "from"
-      let from_amount =
-        Self::balances(from).unwrap_or(0).checked_sub(amount).ok_or(Error::<T>::NotEnoughFunds)?;
+      let from_amount = Self::balances(from, coin)
+        .unwrap_or(0)
+        .checked_sub(amount)
+        .ok_or(Error::<T>::NotEnoughFunds)?;
 
       // add to "to"
-      let to_amount =
-        Self::balances(to).unwrap_or(0).checked_add(amount).ok_or(Error::<T>::AmountOverflowed)?;
+      let to_amount = Self::balances(to, coin)
+        .unwrap_or(0)
+        .checked_add(amount)
+        .ok_or(Error::<T>::AmountOverflowed)?;
 
       // save
-      Balances::<T>::set(to, Some(to_amount));
+      Balances::<T>::set(to, coin, Some(to_amount));
       if from_amount == 0 {
-        Balances::<T>::remove(from);
+        Balances::<T>::remove(from, coin);
       } else {
-        Balances::<T>::set(from, Some(from_amount));
+        Balances::<T>::set(from, coin, Some(from_amount));
       }
 
-      Self::deposit_event(Event::Transferred { from, to, amount });
+      Self::deposit_event(Event::Transferred { from, to, coin, amount });
       Ok(())
     }
   }
@@ -95,9 +127,14 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn transfer(o: OriginFor<T>, to: SeraiAddress, amount: SubstrateAmount) -> DispatchResult {
+    pub fn transfer(
+      o: OriginFor<T>,
+      to: SeraiAddress,
+      coin: Coin,
+      amount: SubstrateAmount,
+    ) -> DispatchResult {
       let from = ensure_signed(o)?;
-      Self::transfer_internal(from, to.into(), amount)?;
+      Self::transfer_internal(from, to.into(), coin, amount)?;
       Ok(())
     }
   }
