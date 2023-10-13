@@ -29,13 +29,12 @@ pub mod pallet {
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
     /// Stake requirement to join the initial validator sets.
+
+    /// Networks to spawn Serai with, and the stake requirement per key share.
     ///
     /// Every participant at genesis will automatically be assumed to have this much stake.
     /// This stake cannot be withdrawn however as there's no actual stake behind it.
-    // TODO: Localize stake to network
-    pub stake: Amount,
-    /// Networks to spawn Serai with.
-    pub networks: Vec<NetworkId>,
+    pub networks: Vec<(NetworkId, Amount)>,
     /// List of participants to place in the initial validator sets.
     pub participants: Vec<T::AccountId>,
   }
@@ -43,7 +42,6 @@ pub mod pallet {
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
       GenesisConfig {
-        stake: Amount(1),
         networks: Default::default(),
         participants: Default::default(),
       }
@@ -327,10 +325,10 @@ pub mod pallet {
         }
       }
 
-      for id in self.networks.clone() {
-        AllocationPerKeyShare::<T>::set(id, Some(self.stake));
+      for (id, stake) in self.networks.clone() {
+        AllocationPerKeyShare::<T>::set(id, Some(stake));
         for participant in self.participants.clone() {
-          Pallet::<T>::set_allocation(id, participant, self.stake);
+          Pallet::<T>::set_allocation(id, participant, stake);
         }
         Pallet::<T>::new_set(id);
       }
