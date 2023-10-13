@@ -15,8 +15,8 @@ use sp_std::vec::Vec;
 
 use serai_primitives::NetworkId;
 
-/// The maximum amount of validators per set.
-pub const MAX_VALIDATORS_PER_SET: u32 = 150;
+/// The maximum amount of key shares per set.
+pub const MAX_KEY_SHARES_PER_SET: u32 = 150;
 // Support keys up to 96 bytes (BLS12-381 G2).
 const MAX_KEY_LEN: u32 = 96;
 

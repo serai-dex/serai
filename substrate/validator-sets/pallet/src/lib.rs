@@ -77,7 +77,7 @@ pub mod pallet {
     _,
     Identity,
     NetworkId,
-    BoundedVec<Public, ConstU32<{ MAX_VALIDATORS_PER_SET }>>,
+    BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
     ValueQuery,
   >;
   /// The validators selected to be in-set, yet with the ability to perform a check for presence.
@@ -195,15 +195,15 @@ pub mod pallet {
           top = Some(key_shares);
         }
 
-        if key_shares > u64::from(MAX_VALIDATORS_PER_SET) {
+        if key_shares > u64::from(MAX_KEY_SHARES_PER_SET) {
           break;
         }
       }
 
       let Some(top) = top else { return false };
 
-      // key_shares may be over MAX_VALIDATORS_PER_SET, which will cause an off-chain reduction of
-      // each validator's key shares until their sum is MAX_VALIDATORS_PER_SET
+      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause an off-chain reduction of
+      // each validator's key shares until their sum is MAX_KEY_SHARES_PER_SET
       // That isn't modeled here, allowing an inaccuracy in an extreme edge case
       // This may cause mis-reporting as BFT when not BFT (TODO: Investigate impact of this)
       (top * 3) < key_shares
@@ -258,7 +258,7 @@ pub mod pallet {
         let mut in_set_key = InSet::<T>::final_prefix().to_vec();
         in_set_key.extend(network.encode());
         assert!(matches!(
-          sp_io::storage::clear_prefix(&in_set_key, Some(MAX_VALIDATORS_PER_SET)),
+          sp_io::storage::clear_prefix(&in_set_key, Some(MAX_KEY_SHARES_PER_SET)),
           sp_io::KillStorageResult::AllRemoved(_)
         ));
       }
@@ -268,13 +268,13 @@ pub mod pallet {
       let mut iter = SortedAllocationsIter::<T>::new(network);
       let mut participants = vec![];
       let mut key_shares = 0;
-      while key_shares < u64::from(MAX_VALIDATORS_PER_SET) {
+      while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
         InSet::<T>::set(Self::in_set_key(network, key), Some(()));
         participants.push(key);
 
-        // This can technically set key_shares to a value exceeding MAX_VALIDATORS_PER_SET
+        // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
         key_shares += amount.0 / allocation_per_key_share;
       }
