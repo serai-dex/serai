@@ -188,6 +188,33 @@ pub mod pallet {
     }
   }
 
+  impl<T: Config> Pallet<T> {
+    fn is_bft(network: NetworkId) -> bool {
+      let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
+
+      let mut top = None;
+      let mut key_shares = 0;
+      for (_, amount) in SortedAllocationsIter::<T>::new(network) {
+        key_shares += amount.0 / allocation_per_key_share;
+        if top.is_none() {
+          top = Some(key_shares);
+        }
+
+        if key_shares > u64::from(MAX_VALIDATORS_PER_SET) {
+          break;
+        }
+      }
+
+      let Some(top) = top else { return false };
+
+      // key_shares may be over MAX_VALIDATORS_PER_SET, which will cause an off-chain reduction of
+      // each validator's key shares until their sum is MAX_VALIDATORS_PER_SET
+      // That isn't modeled here, allowing an inaccuracy in an extreme edge case
+      // This may cause mis-reporting as BFT when not BFT (TODO: Investigate impact of this)
+      (top * 3) < key_shares
+    }
+  }
+
   /// Pending deallocations, keyed by the Session they become unlocked on.
   #[pallet::storage]
   type PendingDeallocations<T: Config> =
@@ -274,6 +301,8 @@ pub mod pallet {
     InsufficientAllocation,
     /// Trying to deallocate more than allocated.
     NotEnoughAllocated,
+    /// Allocation would cause the validator set to no longer achieve fault tolerance.
+    AllocationWouldRemoveFaultTolerance,
     /// Deallocation would remove the participant from the set, despite the validator not
     /// specifying so.
     DeallocationWouldRemoveParticipant,
@@ -372,6 +401,7 @@ pub mod pallet {
         Err(Error::NonExistentValidatorSet) |
         Err(Error::InsufficientAllocation) |
         Err(Error::NotEnoughAllocated) |
+        Err(Error::AllocationWouldRemoveFaultTolerance) |
         Err(Error::DeallocationWouldRemoveParticipant) |
         Err(Error::DeallocationWouldRemoveFaultTolerance) |
         Err(Error::NonExistentValidator) |
@@ -390,16 +420,36 @@ pub mod pallet {
   }
 
   impl<T: Config> Pallet<T> {
+    #[frame_support::transactional]
     pub fn increase_allocation(
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
-    ) -> Result<(), Error<T>> {
-      let new_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0 + amount.0;
-      if new_allocation < Self::allocation_per_key_share(network).unwrap().0 {
+    ) -> DispatchResult {
+      let old_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0;
+      let new_allocation = old_allocation + amount.0;
+      let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
+      if new_allocation < allocation_per_key_share {
         Err(Error::<T>::InsufficientAllocation)?;
       }
+
+      let increased_key_shares =
+        (old_allocation / allocation_per_key_share) < (new_allocation / allocation_per_key_share);
+
+      let mut was_bft = None;
+      if increased_key_shares {
+        was_bft = Some(Self::is_bft(network));
+      }
+
+      // Increase the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
+
+      if let Some(was_bft) = was_bft {
+        if was_bft && (!Self::is_bft(network)) {
+          Err(Error::<T>::AllocationWouldRemoveFaultTolerance)?;
+        }
+      }
+
       Ok(())
     }
 
@@ -414,11 +464,12 @@ pub mod pallet {
     /// doesn't become used (preventing deallocation).
     ///
     /// Returns if the amount is immediately eligible for deallocation.
+    #[frame_support::transactional]
     pub fn decrease_allocation(
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
-    ) -> Result<bool, Error<T>> {
+    ) -> Result<bool, DispatchError> {
       // TODO: Check it's safe to decrease this set's stake by this amount
 
       let old_allocation =
@@ -433,37 +484,24 @@ pub mod pallet {
         Err(Error::<T>::DeallocationWouldRemoveParticipant)?;
       }
 
-      let decrease_in_key_shares =
-        (old_allocation / allocation_per_key_share) - (new_allocation / allocation_per_key_share);
+      let decreased_key_shares =
+        (old_allocation / allocation_per_key_share) > (new_allocation / allocation_per_key_share);
 
       // If this decreases the validator's key shares, error if the new set is unable to handle
       // byzantine faults
-      if decrease_in_key_shares != 0 {
-        // This is naive in that it only checks a key share may go offline, instead of checking the
-        // top validator may go offline
-        // TODO: Update accordingly. We'll also need to update increase_allocation to prevent
-        // becoming a 34% party
-        let mut key_shares = 0;
-        for (_, amount) in SortedAllocationsIter::<T>::new(network) {
-          key_shares += amount.0 / allocation_per_key_share;
-          // This first clause sets an execution bound on this iteration, one present during
-          // selection
-          // It should be impossible to reach though as it'll only trigger if
-          // decrease_in_key_shares is insanely close to it, when we'll error upon becoming 34%
-          if (key_shares > u64::from(MAX_VALIDATORS_PER_SET)) ||
-            ((key_shares - decrease_in_key_shares) >= 4)
-          {
-            break;
-          }
-        }
-        // If key_shares was already not BFT, don't error
-        if (key_shares >= 4) && ((key_shares - decrease_in_key_shares) < 4) {
-          Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
-        }
+      let mut was_bft = None;
+      if decreased_key_shares {
+        was_bft = Some(Self::is_bft(network));
       }
 
       // Decrease the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
+
+      if let Some(was_bft) = was_bft {
+        if was_bft && (!Self::is_bft(network)) {
+          Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
+        }
+      }
 
       // If we're not in-set, allow immediate deallocation
       let mut active = InSet::<T>::contains_key(Self::in_set_key(network, account));
@@ -480,7 +518,8 @@ pub mod pallet {
           }
         }
       }
-      if (!active) || (decrease_in_key_shares == 0) {
+      // Also allow immediate deallocation of the key shares remain the same
+      if (!active) || (!decreased_key_shares) {
         return Ok(true);
       }
 
