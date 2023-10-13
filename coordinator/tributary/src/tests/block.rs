@@ -82,6 +82,7 @@ fn empty_block() {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
   let unsigned_in_chain = |_: [u8; 32]| false;
+  let provided_in_chain = |_: [u8; 32]| false;
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
     .verify::<N>(
       GENESIS,
@@ -91,7 +92,7 @@ fn empty_block() {
       validators,
       commit,
       unsigned_in_chain,
-      unsigned_in_chain,
+      provided_in_chain,
       false,
     )
     .unwrap();
@@ -116,6 +117,7 @@ fn duplicate_nonces() {
       Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
     };
     let unsigned_in_chain = |_: [u8; 32]| false;
+    let provided_in_chain = |_: [u8; 32]| false;
 
     let res = Block::new(LAST, vec![], mempool).verify::<N>(
       GENESIS,
@@ -125,7 +127,7 @@ fn duplicate_nonces() {
       validators.clone(),
       commit,
       unsigned_in_chain,
-      unsigned_in_chain,
+      provided_in_chain,
       false,
     );
     if i == 1 {

@@ -276,7 +276,7 @@ fn provided_transaction() {
 
     // make sure we won't return ok for the block before we actually got the txs
     let TransactionKind::Provided(order) = tx1.kind() else { panic!("tx wasn't provided") };
-    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block1.hash(),
@@ -285,7 +285,7 @@ fn provided_transaction() {
     // provide the first tx
     blockchain.provide_transaction(tx1).unwrap();
     // it should be ok for this order now, since the second tx has different order.
-    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block1.hash(),
@@ -294,7 +294,7 @@ fn provided_transaction() {
 
     // give the second tx
     let TransactionKind::Provided(order) = tx3.kind() else { panic!("tx wasn't provided") };
-    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block1.hash(),
@@ -302,7 +302,7 @@ fn provided_transaction() {
     ));
     blockchain.provide_transaction(tx3).unwrap();
     // it should be ok now for the first block
-    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block1.hash(),
@@ -312,7 +312,7 @@ fn provided_transaction() {
     // provide the second block txs
     let TransactionKind::Provided(order) = tx4.kind() else { panic!("tx wasn't provided") };
     // not ok yet
-    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block2.hash(),
@@ -320,7 +320,7 @@ fn provided_transaction() {
     ));
     blockchain.provide_transaction(tx4).unwrap();
     // ok now
-    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block2.hash(),
@@ -329,14 +329,14 @@ fn provided_transaction() {
 
     // provide the second block txs
     let TransactionKind::Provided(order) = tx2.kind() else { panic!("tx wasn't provided") };
-    assert!(!Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(!Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block2.hash(),
       order
     ));
     blockchain.provide_transaction(tx2).unwrap();
-    assert!(Blockchain::<MemDb, ProvidedTransaction>::provided_txs_ok_for_block(
+    assert!(Blockchain::<MemDb, ProvidedTransaction>::locally_provided_txs_in_block(
       &db,
       &genesis,
       &block2.hash(),

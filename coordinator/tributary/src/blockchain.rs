@@ -139,32 +139,21 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
   }
 
-  // TODO: no idea what to call this function
-  pub(crate) fn provided_txs_ok_for_block(
+  pub(crate) fn locally_provided_txs_in_block(
     db: &D,
     genesis: &[u8; 32],
     block: &[u8; 32],
     order: &str,
   ) -> bool {
-    let local_key = ProvidedTransactions::<D, T>::local_transaction_no_key(genesis, order);
-    let on_chain_key = ProvidedTransactions::<D, T>::last_tx_block_order_key(genesis, block, order);
-    #[allow(clippy::unwrap_or_default)]
-    let local = u32::from_le_bytes(
-      db.get(local_key)
-        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
-        .try_into()
-        .unwrap(),
-    );
-    let on_chain = u32::from_le_bytes(
-      db.get(on_chain_key)
-        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
-        .try_into()
-        .unwrap(),
-    );
+    let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
+    let local =
+      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let block_key =
+      ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
+    let block =
+      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
 
-    // TODO: clean up the old used keys? since we don't need block-order -> tx_no
-    // info once we get pass the block.
-    local >= on_chain
+    local >= block
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
@@ -221,7 +210,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     &self,
     block: &Block<T>,
     schema: N::SignatureScheme,
-    ignore_non_local_provided: bool,
+    allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain =
@@ -242,7 +231,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       &commit,
       unsigned_in_chain,
       provided_in_chain,
-      ignore_non_local_provided,
+      allow_non_local_provided,
     )
   }
 

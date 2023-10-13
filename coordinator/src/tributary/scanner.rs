@@ -7,12 +7,11 @@ use ciphersuite::{Ciphersuite, Ristretto};
 use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
 
 use tributary::{
-  Transaction as TributaryTransaction, Block, TributaryReader,
+  TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
   tendermint::{
     tx::{TendermintTx, decode_evidence},
     TendermintNetwork,
   },
-  TransactionKind,
 };
 
 use serai_db::DbTxn;
@@ -122,16 +121,15 @@ pub(crate) async fn handle_new_blocks<
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
 
+    // Make sure we have all of the provided transactions for this block
     for tx in &block.transactions {
-      // since we know provided txs are the first in the block, we can assume that
-      // all of them were ok if we haven't returned yet and got a new kind, so we can
-      // break and continue to scan the block.
+      // Provided TXs will appear first in the Block, so we can break after we hit a non-Provided
       let TransactionKind::Provided(order) = tx.kind() else {
         break;
       };
 
       // make sure we have all the provided txs in this block locally
-      if !tributary.provided_txs_ok_for_block(&block.hash(), order) {
+      if !tributary.locally_provided_txs_in_block(&block.hash(), order) {
         return;
       }
     }

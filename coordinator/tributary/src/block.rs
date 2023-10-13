@@ -179,7 +179,7 @@ impl<T: TransactionTrait> Block<T> {
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     provided_in_chain: impl Fn([u8; 32]) -> bool, // TODO: merge this with unsigned_on_chain?
-    ignore_non_local_provided: bool,
+    allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     enum Order {
@@ -218,21 +218,17 @@ impl<T: TransactionTrait> Block<T> {
             Err(BlockError::ProvidedAlreadyIncluded)?;
           }
 
-          let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front())
-          else {
-            if !ignore_non_local_provided {
+          if let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) {
+            // Since this was a provided TX, it must be an application TX
+            let Transaction::Application(tx) = tx else {
               Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-            } else {
-              continue;
+            };
+            if tx != &local {
+              Err(BlockError::DistinctProvided)?;
             }
-          };
-          // Since this was a provided TX, it must be an application TX
-          let Transaction::Application(tx) = tx else {
+          } else if !allow_non_local_provided {
             Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
           };
-          if tx != &local {
-            Err(BlockError::DistinctProvided)?;
-          }
 
           Order::Provided
         }
@@ -253,12 +249,6 @@ impl<T: TransactionTrait> Block<T> {
         Err(BlockError::WrongTransactionOrder)?;
       }
       last_tx_order = current_tx_order;
-
-      if current_tx_order == Order::Provided {
-        // We don't need to call verify_transaction since we did when we locally provided this
-        // transaction. Since it's identical, it must be valid
-        continue;
-      }
 
       // TODO: should we modify the verify_transaction to take `Transaction<T>` or
       // use this pattern of verifying tendermint Txs and app txs differently?

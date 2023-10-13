@@ -11,12 +11,15 @@ pub enum ProvidedError {
   /// The provided transaction's kind wasn't Provided
   #[error("transaction wasn't a provided transaction")]
   NotProvided,
-  /// The provided transaction was invalid.
+  /// The provided transaction was invalid
   #[error("provided transaction was invalid")]
   InvalidProvided(TransactionError),
   /// Transaction was already provided
   #[error("transaction was already provided")]
   AlreadyProvided,
+  /// Local transaction mismatches the on-chain provided
+  #[error("local provides mismatches on-chain provided")]
+  LocalMismatchesOnChain,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -34,18 +37,26 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
   fn current_provided_key(&self) -> Vec<u8> {
     D::key(b"tributary_provided", b"current", self.genesis)
   }
-  pub(crate) fn local_transaction_no_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
-    D::key(b"tributary_provided", b"local", [genesis, order.as_bytes()].concat())
+  pub(crate) fn locally_provided_quantity_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
+    D::key(b"tributary_provided", b"local_quantity", [genesis, order.as_bytes()].concat())
   }
-  pub(crate) fn on_chain_transaction_no_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
-    D::key(b"tributary_provided", b"on_chain", [genesis, order.as_bytes()].concat())
+  pub(crate) fn on_chain_provided_quantity_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
+    D::key(b"tributary_provided", b"on_chain_quantity", [genesis, order.as_bytes()].concat())
   }
-  pub(crate) fn last_tx_block_order_key(
+  pub(crate) fn block_provided_quantity_key(
     genesis: &[u8; 32],
-    hash: &[u8; 32],
+    block: &[u8; 32],
     order: &str,
   ) -> Vec<u8> {
-    D::key(b"tributary_provided", b"on_chain", [genesis, hash, order.as_bytes()].concat())
+    D::key(b"tributary_provided", b"block_quantity", [genesis, block, order.as_bytes()].concat())
+  }
+
+  pub(crate) fn on_chain_provided_key(genesis: &[u8; 32], order: &str, id: u32) -> Vec<u8> {
+    D::key(
+      b"tributary_provided",
+      b"on_chain_tx",
+      [genesis, order.as_bytes(), &id.to_le_bytes()].concat(),
+    )
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
@@ -84,41 +95,49 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     }
     let tx_hash = tx.hash();
 
+    // Check it wasn't already provided
+    let provided_key = self.transaction_key(&tx_hash);
+    if self.db.get(&provided_key).is_some() {
+      Err(ProvidedError::AlreadyProvided)?;
+    }
+
     // get local and on-chain tx numbers
-    let local_key = Self::local_transaction_no_key(&self.genesis, order);
-    let on_chain_key = Self::on_chain_transaction_no_key(&self.genesis, order);
-    #[allow(clippy::unwrap_or_default)]
-    let on_chain_tx_no = u32::from_le_bytes(
-      self
-        .db
-        .get(on_chain_key)
-        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
-        .try_into()
-        .unwrap(),
-    );
-    let mut local_tx_no = u32::from_le_bytes(
-      self
-        .db
-        .get(&local_key)
-        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
-        .try_into()
-        .unwrap(),
-    );
+    let local_key = Self::locally_provided_quantity_key(&self.genesis, order);
+    let mut local_quantity = self
+      .db
+      .get(&local_key)
+      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+      .unwrap_or(0);
+    let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
+    let on_chain_quantity = self
+      .db
+      .get(on_chain_key)
+      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+      .unwrap_or(0);
 
-    // try add to mempool if this is a new provided(we haven't seen it on-chain before).
-    if local_tx_no >= on_chain_tx_no {
-      // check whether we already have the tx in pool
-      let provided_key = self.transaction_key(&tx_hash);
-      if self.db.get(&provided_key).is_some() {
-        Err(ProvidedError::AlreadyProvided)?;
+    let current_provided_key = self.current_provided_key();
+
+    // This would have a race-condition with multiple calls to provide, though this takes &mut self
+    // peventing multiple calls at once
+    let mut txn = self.db.txn();
+    txn.put(provided_key, tx.serialize());
+
+    let this_provided_id = local_quantity;
+
+    local_quantity += 1;
+    txn.put(local_key, local_quantity.to_le_bytes());
+
+    if this_provided_id < on_chain_quantity {
+      // Verify against the on-chain version
+      if tx_hash.as_ref() !=
+        txn.get(Self::on_chain_provided_key(&self.genesis, order, this_provided_id)).unwrap()
+      {
+        Err(ProvidedError::LocalMismatchesOnChain)?;
       }
-
-      let current_provided_key = self.current_provided_key();
+      txn.commit();
+    } else {
       #[allow(clippy::unwrap_or_default)]
-      let mut currently_provided = self.db.get(&current_provided_key).unwrap_or(vec![]);
-
-      let mut txn = self.db.txn();
-      txn.put(provided_key, tx.serialize());
+      let mut currently_provided = txn.get(&current_provided_key).unwrap_or(vec![]);
       currently_provided.extend(tx_hash);
       txn.put(current_provided_key, currently_provided);
       txn.commit();
@@ -128,12 +147,6 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
       }
       self.transactions.get_mut(order).unwrap().push_back(tx);
     }
-
-    // bump the tx number for the local order
-    local_tx_no += 1;
-    let mut txn = self.db.txn();
-    txn.put(local_key, local_tx_no.to_le_bytes());
-    txn.commit();
 
     Ok(())
   }
@@ -146,9 +159,8 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     block: [u8; 32],
     tx: [u8; 32],
   ) {
-    let txs = self.transactions.get_mut(order);
-    if txs.is_some() && txs.as_ref().unwrap().iter().any(|t| t.hash() == tx) {
-      assert_eq!(txs.unwrap().pop_front().unwrap().hash(), tx);
+    if let Some(next_tx) = self.transactions.get_mut(order).and_then(|queue| queue.pop_front()) {
+      assert_eq!(next_tx.hash(), tx);
 
       let current_provided_key = self.current_provided_key();
       let mut currently_provided = txn.get(&current_provided_key).unwrap();
@@ -171,31 +183,19 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     }
 
     // bump the on-chain tx number.
-    let on_chain_key = Self::on_chain_transaction_no_key(&self.genesis, order);
-    let block_order_key = Self::last_tx_block_order_key(&self.genesis, &block, order);
-    let mut on_chain_tx_no = u32::from_le_bytes(
-      self
-        .db
-        .get(&on_chain_key)
-        .unwrap_or(u32::try_from(0).unwrap().to_le_bytes().to_vec())
-        .try_into()
-        .unwrap(),
-    );
+    let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
+    let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
+    let mut on_chain_quantity = self
+      .db
+      .get(&on_chain_key)
+      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+      .unwrap_or(0);
 
-    // TODO: use block hash or block number block-order key?
-    // - Block hash is easy to use for keys and doesn't require additional api
-    // but it takes up too much space.
-    // - Block numbers are not that suitable as keys and requires additional tributary scanner
-    // api(block_hash -> block_no) but doesn't take much space.
+    let this_provided_id = on_chain_quantity;
+    txn.put(Self::on_chain_provided_key(&self.genesis, order, this_provided_id), tx);
 
-    // TODO: do we need both a global save and block-order save?
-    // Technically it should be enough to save the tx for block-order only, but that requires
-    // api change in `provide` function to take block hash as well(last block of the chain),
-    // we should be able pass the last block from where we call it, but we do we want that?
-
-    // save it
-    on_chain_tx_no += 1;
-    txn.put(on_chain_key, on_chain_tx_no.to_le_bytes());
-    txn.put(block_order_key, on_chain_tx_no.to_le_bytes());
+    on_chain_quantity += 1;
+    txn.put(on_chain_key, on_chain_quantity.to_le_bytes());
+    txn.put(block_order_key, on_chain_quantity.to_le_bytes());
   }
 }
