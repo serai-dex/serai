@@ -35,6 +35,12 @@ pub mod pallet {
     StorageMap<_, Blake2_128Concat, T::AccountId, SubstrateAmount, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
+    /// Returns the balance of a given account.
+    pub fn balance(of: T::AccountId) -> SubstrateAmount {
+      Self::balances(of).unwrap_or(0)
+    }
+
+    /// Mints amount in the given account, errors if amounts overflows.
     pub fn mint(at: T::AccountId, amount: SubstrateAmount) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
       if amount == 0 {
@@ -53,6 +59,7 @@ pub mod pallet {
     }
 
     // TODO: fees are deducted beforehand?
+    /// Transfers coins from `from` to `to`.
     fn transfer_internal(
       from: T::AccountId,
       to: T::AccountId,
@@ -64,7 +71,6 @@ pub mod pallet {
       }
 
       // sub the amount from "from"
-      // TODO: implement Default 0 for substrate amount instead of doing unwrap_or each time?
       let from_amount =
         Self::balances(from).unwrap_or(0).checked_sub(amount).ok_or(Error::<T>::NotEnoughFunds)?;
 
