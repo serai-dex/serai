@@ -58,7 +58,7 @@ pub struct ActiveTributary<D: Db, P: P2p> {
   pub tributary: Arc<Tributary<D, Transaction, P>>,
 }
 
-// Adds a tributary into the specified HashMap
+// Creates a new tributary and sends it to all listeners.
 async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -1050,15 +1050,17 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     async move {
       loop {
         let spec = new_tributary_spec_recv.recv().await.unwrap();
-        add_tributary(
-          raw_db.clone(),
-          key.clone(),
-          &processors,
-          p2p.clone(),
-          &new_tributary,
-          spec.clone(),
-        )
-        .await;
+        // Uses an inner task as Tributary::new may take several seconds
+        tokio::spawn({
+          let raw_db = raw_db.clone();
+          let key = key.clone();
+          let processors = processors.clone();
+          let p2p = p2p.clone();
+          let new_tributary = new_tributary.clone();
+          async move {
+            add_tributary(raw_db, key, &processors, p2p, &new_tributary, spec).await;
+          }
+        });
       }
     }
   });
