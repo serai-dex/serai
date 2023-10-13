@@ -84,6 +84,6 @@ impl Zeroize for SignedBatch {
 
 // TODO: Make this an associated method?
 /// The message for the batch signature.
-pub fn batch_message(is_first_batch_of_set: bool, batch: &Batch) -> Vec<u8> {
-  [b"InInstructions-batch".as_ref(), &(is_first_batch_of_set, batch).encode()].concat()
+pub fn batch_message(batch: &Batch) -> Vec<u8> {
+  [b"InInstructions-batch".as_ref(), &batch.encode()].concat()
 }

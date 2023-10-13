@@ -924,6 +924,15 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                   MainDb::<D>::set_did_handover(&mut txn, spec.set());
                 }
 
+                // TODO: There is a race condition here. We may verify all `Batch`s from the prior
+                // set, start signing the handover Batch `n`, start signing `n+1`, have `n+1`
+                // signed before `n` (or at the same time), yet then the prior set forges a
+                // malicious Batch `n`.
+                //
+                // The malicious Batch `n` would be publishable to Serai, as Serai can't
+                // distinguish what's intended to be a handover `Batch`, yet then anyone could
+                // publish the new set's `n+1`, causing their acceptance of the handover.
+
                 Some(Transaction::Batch(block.0, id.id))
               } else {
                 Some(Transaction::BatchPreprocess(SignData {
