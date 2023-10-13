@@ -162,6 +162,32 @@ pub mod pallet {
     }
   }
 
+  struct SortedAllocationsIter<T: Config> {
+    _t: PhantomData<T>,
+    prefix: Vec<u8>,
+    last: Vec<u8>,
+  }
+  impl<T: Config> SortedAllocationsIter<T> {
+    fn new(network: NetworkId) -> Self {
+      let mut prefix = SortedAllocations::<T>::final_prefix().to_vec();
+      prefix.extend(&network.encode());
+      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
+    }
+  }
+  impl<T: Config> Iterator for SortedAllocationsIter<T> {
+    type Item = (Public, Amount);
+    fn next(&mut self) -> Option<Self::Item> {
+      let next = sp_io::storage::next_key(&self.last)?;
+      if !next.starts_with(&self.prefix) {
+        return None;
+      }
+      let key = Pallet::<T>::recover_key_from_sorted_allocation_key(&next);
+      let amount = Pallet::<T>::recover_amount_from_sorted_allocation_key(&next);
+      self.last = next;
+      Some((key, amount))
+    }
+  }
+
   /// Pending deallocations, keyed by the Session they become unlocked on.
   #[pallet::storage]
   type PendingDeallocations<T: Config> =
@@ -217,31 +243,18 @@ pub mod pallet {
 
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
-      let mut prefix = SortedAllocations::<T>::final_prefix().to_vec();
-      prefix.extend(&network.encode());
-      let prefix = prefix;
-
-      let mut last = prefix.clone();
-
+      let mut iter = SortedAllocationsIter::<T>::new(network);
       let mut participants = vec![];
       let mut key_shares = 0;
       while key_shares < u64::from(MAX_VALIDATORS_PER_SET) {
-        let Some(next) = sp_io::storage::next_key(&last) else { break };
-        if !next.starts_with(&prefix) {
-          break;
-        }
-        let key = Self::recover_key_from_sorted_allocation_key(&next);
+        let Some((key, amount)) = iter.next() else { break };
 
         InSet::<T>::set(Self::in_set_key(network, key), Some(()));
         participants.push(key);
 
         // This can technically set key_shares to a value exceeding MAX_VALIDATORS_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
-        // TODO: Recover the amount from `next` to avoud a new storage lookup
-        key_shares +=
-          Self::recover_amount_from_sorted_allocation_key(&next).0 / allocation_per_key_share;
-
-        last = next;
+        key_shares += amount.0 / allocation_per_key_share;
       }
 
       let set = ValidatorSet { network, session };
@@ -264,6 +277,8 @@ pub mod pallet {
     /// Deallocation would remove the participant from the set, despite the validator not
     /// specifying so.
     DeallocationWouldRemoveParticipant,
+    /// Deallocation would cause the validator set to no longer achieve fault tolerance.
+    DeallocationWouldRemoveFaultTolerance,
     /// Validator Set already generated keys.
     AlreadyGeneratedKeys,
     /// An invalid MuSig signature was provided.
@@ -358,6 +373,7 @@ pub mod pallet {
         Err(Error::InsufficientAllocation) |
         Err(Error::NotEnoughAllocated) |
         Err(Error::DeallocationWouldRemoveParticipant) |
+        Err(Error::DeallocationWouldRemoveFaultTolerance) |
         Err(Error::NonExistentValidator) |
         Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
         Err(Error::__Ignore(_, _)) => unreachable!(),
@@ -405,19 +421,46 @@ pub mod pallet {
     ) -> Result<bool, Error<T>> {
       // TODO: Check it's safe to decrease this set's stake by this amount
 
-      let new_allocation = Self::allocation((network, account))
-        .ok_or(Error::<T>::NonExistentValidator)?
-        .0
-        .checked_sub(amount.0)
-        .ok_or(Error::<T>::NotEnoughAllocated)?;
+      let old_allocation =
+        Self::allocation((network, account)).ok_or(Error::<T>::NonExistentValidator)?.0;
+      let new_allocation =
+        old_allocation.checked_sub(amount.0).ok_or(Error::<T>::NotEnoughAllocated)?;
+
       // If we're not removing the entire allocation, yet the allocation is no longer at or above
       // the threshold for a key share, error
-      if (new_allocation != 0) &&
-        (new_allocation < Self::allocation_per_key_share(network).unwrap_or(Amount(0)).0)
-      {
+      let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
+      if (new_allocation != 0) && (new_allocation < allocation_per_key_share) {
         Err(Error::<T>::DeallocationWouldRemoveParticipant)?;
       }
-      // TODO: Error if we're about to be removed, and the remaining set size would be <4
+
+      let decrease_in_key_shares =
+        (old_allocation / allocation_per_key_share) - (new_allocation / allocation_per_key_share);
+
+      // If this decreases the validator's key shares, error if the new set is unable to handle
+      // byzantine faults
+      if decrease_in_key_shares != 0 {
+        // This is naive in that it only checks a key share may go offline, instead of checking the
+        // top validator may go offline
+        // TODO: Update accordingly. We'll also need to update increase_allocation to prevent
+        // becoming a 34% party
+        let mut key_shares = 0;
+        for (_, amount) in SortedAllocationsIter::<T>::new(network) {
+          key_shares += amount.0 / allocation_per_key_share;
+          // This first clause sets an execution bound on this iteration, one present during
+          // selection
+          // It should be impossible to reach though as it'll only trigger if
+          // decrease_in_key_shares is insanely close to it, when we'll error upon becoming 34%
+          if (key_shares > u64::from(MAX_VALIDATORS_PER_SET)) ||
+            ((key_shares - decrease_in_key_shares) >= 4)
+          {
+            break;
+          }
+        }
+        // If key_shares was already not BFT, don't error
+        if (key_shares >= 4) && ((key_shares - decrease_in_key_shares) < 4) {
+          Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
+        }
+      }
 
       // Decrease the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
