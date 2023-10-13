@@ -1,6 +1,6 @@
 use sp_core::sr25519::{Public, Signature};
 
-use serai_runtime::{validator_sets, ValidatorSets, Runtime};
+use serai_runtime::{primitives::Amount, validator_sets, ValidatorSets, Runtime};
 pub use validator_sets::primitives;
 use primitives::{Session, ValidatorSet, KeyPair};
 
@@ -45,6 +45,23 @@ impl Serai {
     at_hash: [u8; 32],
   ) -> Result<Option<Vec<Public>>, SeraiError> {
     self.storage(PALLET, "Participants", Some(vec![scale_value(network)]), at_hash).await
+  }
+
+  pub async fn get_allocation_per_key_share(
+    &self,
+    network: NetworkId,
+    at_hash: [u8; 32],
+  ) -> Result<Option<Amount>, SeraiError> {
+    self.storage(PALLET, "AllocationPerKeyShare", Some(vec![scale_value(network)]), at_hash).await
+  }
+
+  pub async fn get_allocation(
+    &self,
+    network: NetworkId,
+    key: Public,
+    at_hash: [u8; 32],
+  ) -> Result<Option<Amount>, SeraiError> {
+    self.storage(PALLET, "Allocations", Some(vec![scale_value(network), scale_value(key)]), at_hash).await
   }
 
   pub async fn get_validator_set_musig_key(

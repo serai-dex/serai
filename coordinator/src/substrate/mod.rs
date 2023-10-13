@@ -9,7 +9,7 @@ use serai_client::{
   SeraiError, Block, Serai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
-    primitives::{ValidatorSet, KeyPair},
+    primitives::{ValidatorSet, KeyPair, amortize_excess_key_shares},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
@@ -61,6 +61,23 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
       .await?
       .expect("NewSet for set which doesn't exist");
 
+    let allocation_per_key_share = serai
+      .get_allocation_per_key_share(set.network, block.hash())
+      .await?
+      .expect("NewSet for set which didn't have an allocation per key share")
+      .0;
+
+    let mut set_data = vec![];
+    for participant in set_participants {
+      let allocation = serai
+        .get_allocation(set.network, participant, block.hash())
+        .await?
+        .expect("validator selected for set yet didn't have an allocation")
+        .0;
+      set_data.push((participant, allocation / allocation_per_key_share));
+    }
+    amortize_excess_key_shares(&mut set_data);
+
     let time = if let Ok(time) = block.time() {
       time
     } else {
@@ -82,7 +99,7 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
     const SUBSTRATE_TO_TRIBUTARY_TIME_DELAY: u64 = 120;
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
-    let spec = TributarySpec::new(block.hash(), time, set, set_participants);
+    let spec = TributarySpec::new(block.hash(), time, set, set_data);
     create_new_tributary(db, spec.clone());
   } else {
     log::info!("not present in set {:?}", set);
