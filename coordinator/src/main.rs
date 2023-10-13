@@ -732,6 +732,8 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
               next += 1;
             }
 
+            let start_id = batches.front().map(|batch| batch.batch.id);
+            let last_id = batches.back().map(|batch| batch.batch.id);
             while let Some(batch) = batches.pop_front() {
               // If this Batch should no longer be published, continue
               if get_next(&serai, network).await > batch.batch.id {
@@ -768,8 +770,30 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                 sleep(Duration::from_secs(5)).await;
               }
             }
+            // Verify the `Batch`s we just published
+            if let Some(last_id) = last_id {
+              loop {
+                let verified = verify_published_batches::<D>(&mut txn, msg.network, last_id).await;
+                if verified == Some(last_id) {
+                  break;
+                }
+              }
+            }
 
-            None
+            // Check if any of these `Batch`s were a handover `Batch`
+            // If so, we need to publish any delayed `Batch` provided transactions
+            let mut relevant = None;
+            if let Some(start_id) = start_id {
+              let last_id = last_id.unwrap();
+              for batch in start_id .. last_id {
+                if let Some(set) = MainDb::<D>::is_handover_batch(&txn, msg.network, batch) {
+                  // TODO: relevant may malready be Some. This is a safe over-write, yet we do need
+                  // to explicitly not bother with old tributaries
+                  relevant = Some(set.session);
+                }
+              }
+            }
+            relevant
           }
         },
       };
@@ -791,11 +815,15 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
 
         let genesis = spec.genesis();
 
-        let tx = match msg.msg.clone() {
+        let txs = match msg.msg.clone() {
           ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-            key_gen::ProcessorMessage::Commitments { id, commitments } => Some(
-              Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed()),
-            ),
+            key_gen::ProcessorMessage::Commitments { id, commitments } => {
+              vec![Transaction::DkgCommitments(
+                id.attempt,
+                commitments,
+                Transaction::empty_signed(),
+              )]
+            }
             key_gen::ProcessorMessage::Shares { id, mut shares } => {
               // Create a MuSig-based machine to inform Substrate of this key generation
               let nonces = crate::tributary::dkg_confirmation_nonces(&key, spec, id.attempt);
@@ -815,12 +843,12 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                 );
               }
 
-              Some(Transaction::DkgShares {
+              vec![Transaction::DkgShares {
                 attempt: id.attempt,
                 shares: tx_shares,
                 confirmation_nonces: nonces,
                 signed: Transaction::empty_signed(),
-              })
+              }]
             }
             key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
               assert_eq!(
@@ -840,7 +868,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
 
               match share {
                 Ok(share) => {
-                  Some(Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed()))
+                  vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
                 }
                 Err(p) => {
                   todo!("participant {p:?} sent invalid DKG confirmation preprocesses")
@@ -853,22 +881,22 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
               if id.attempt == 0 {
                 MainDb::<D>::save_first_preprocess(&mut txn, network, id.id, preprocess);
 
-                None
+                vec![]
               } else {
-                Some(Transaction::SignPreprocess(SignData {
+                vec![Transaction::SignPreprocess(SignData {
                   plan: id.id,
                   attempt: id.attempt,
                   data: preprocess,
                   signed: Transaction::empty_signed(),
-                }))
+                })]
               }
             }
-            sign::ProcessorMessage::Share { id, share } => Some(Transaction::SignShare(SignData {
+            sign::ProcessorMessage::Share { id, share } => vec![Transaction::SignShare(SignData {
               plan: id.id,
               attempt: id.attempt,
               data: share,
               signed: Transaction::empty_signed(),
-            })),
+            })],
             sign::ProcessorMessage::Completed { key: _, id, tx } => {
               let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
               #[allow(non_snake_case)]
@@ -886,7 +914,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                 }
                 _ => unreachable!(),
               }
-              Some(tx)
+              vec![tx]
             }
           },
           ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
@@ -906,9 +934,11 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
 
                 // If this is the new key's first Batch, only create this TX once we verify all
                 // all prior published `Batch`s
-                if (spec.set().session.0 != 0) && (!MainDb::<D>::did_handover(&txn, spec.set())) {
-                  let last_received = MainDb::<D>::last_received_batch(&txn, msg.network);
-                  if let Some(last_received) = last_received {
+                let last_received = MainDb::<D>::last_received_batch(&txn, msg.network).unwrap();
+                let handover_batch = MainDb::<D>::handover_batch(&txn, spec.set());
+                if handover_batch.is_none() {
+                  MainDb::<D>::set_handover_batch(&mut txn, spec.set(), last_received);
+                  if last_received != 0 {
                     // Decrease by 1, to get the ID of the Batch prior to this Batch
                     let prior_sets_last_batch = last_received - 1;
                     loop {
@@ -921,45 +951,69 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
                       sleep(Duration::from_secs(5)).await;
                     }
                   }
-                  MainDb::<D>::set_did_handover(&mut txn, spec.set());
                 }
 
-                // TODO: There is a race condition here. We may verify all `Batch`s from the prior
-                // set, start signing the handover Batch `n`, start signing `n+1`, have `n+1`
-                // signed before `n` (or at the same time), yet then the prior set forges a
-                // malicious Batch `n`.
+                // There is a race condition here. We may verify all `Batch`s from the prior set,
+                // start signing the handover `Batch` `n`, start signing `n+1`, have `n+1` signed
+                // before `n` (or at the same time), yet then the prior set forges a malicious
+                // `Batch` `n`.
                 //
-                // The malicious Batch `n` would be publishable to Serai, as Serai can't
+                // The malicious `Batch` `n` would be publishable to Serai, as Serai can't
                 // distinguish what's intended to be a handover `Batch`, yet then anyone could
                 // publish the new set's `n+1`, causing their acceptance of the handover.
+                //
+                // To fix this, if this is after the handover `Batch` and we have yet to verify
+                // publication of the handover `Batch`, don't yet yield the provided.
+                let handover_batch = MainDb::<D>::handover_batch(&txn, spec.set()).unwrap();
+                let intended = Transaction::Batch(block.0, id.id);
+                let mut res = vec![intended.clone()];
+                if last_received > handover_batch {
+                  if let Some(last_verified) = MainDb::<D>::last_verified_batch(&txn, msg.network) {
+                    if last_verified < handover_batch {
+                      res = vec![];
+                    }
+                  } else {
+                    res = vec![];
+                  }
+                }
 
-                Some(Transaction::Batch(block.0, id.id))
+                if res.is_empty() {
+                  MainDb::<D>::queue_batch(&mut txn, spec.set(), intended);
+                }
+
+                res
               } else {
-                Some(Transaction::BatchPreprocess(SignData {
+                vec![Transaction::BatchPreprocess(SignData {
                   plan: id.id,
                   attempt: id.attempt,
                   data: preprocess,
                   signed: Transaction::empty_signed(),
-                }))
+                })]
               }
             }
             coordinator::ProcessorMessage::BatchShare { id, share } => {
-              Some(Transaction::BatchShare(SignData {
+              vec![Transaction::BatchShare(SignData {
                 plan: id.id,
                 attempt: id.attempt,
                 data: share.to_vec(),
                 signed: Transaction::empty_signed(),
-              }))
+              })]
             }
           },
           ProcessorMessage::Substrate(inner_msg) => match inner_msg {
             processor_messages::substrate::ProcessorMessage::Batch { .. } => unreachable!(),
-            processor_messages::substrate::ProcessorMessage::SignedBatch { .. } => unreachable!(),
+            processor_messages::substrate::ProcessorMessage::SignedBatch { .. } => {
+              // We only reach here if this SignedBatch triggered the publication of a handover
+              // Batch
+              // Since the handover `Batch` was successfully published and verified, we no longer
+              // have to worry about the above n+1 attack
+              MainDb::<D>::take_queued_batches(&mut txn, spec.set())
+            }
           },
         };
 
-        // If this created a transaction, publish it
-        if let Some(mut tx) = tx {
+        // If this created transactions, publish them
+        for mut tx in txs {
           log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
 
           match tx.kind() {
