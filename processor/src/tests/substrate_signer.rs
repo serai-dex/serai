@@ -146,8 +146,9 @@ async fn test_substrate_signer() {
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(signed_batch.batch, batch);
+      // SubstrateSigner will believe this is the first batch for this set, hence `true`
       assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
-        .verify(&batch_message(&batch), &signed_batch.signature));
+        .verify(&batch_message(true, &batch), &signed_batch.signature));
     } else {
       panic!("didn't get signed batch back");
     }

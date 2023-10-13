@@ -52,6 +52,18 @@ impl<D: Db> SubstrateSignerDb<D> {
     D::key(b"SUBSTRATE_SIGNER", dst, key)
   }
 
+  fn first_batch_key(key: [u8; 32]) -> Vec<u8> {
+    Self::sign_key(b"first_batch", key)
+  }
+  fn save_first_batch(txn: &mut D::Transaction<'_>, key: [u8; 32], id: u32) {
+    txn.put(Self::first_batch_key(key), id.to_le_bytes());
+  }
+  fn first_batch<G: Get>(getter: &G, key: [u8; 32]) -> Option<u32> {
+    getter
+      .get(Self::first_batch_key(key))
+      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+  }
+
   fn completed_key(id: [u8; 32]) -> Vec<u8> {
     Self::sign_key(b"completed", id)
   }
@@ -229,6 +241,11 @@ impl<D: Db> SubstrateSigner<D> {
       return;
     }
 
+    let group_key = self.keys.group_key().to_bytes();
+    if SubstrateSignerDb::<D>::first_batch(txn, group_key).is_none() {
+      SubstrateSignerDb::<D>::save_first_batch(txn, group_key, batch.id);
+    }
+
     self.signable.insert(id, batch);
     self.attempt(txn, id, 0).await;
   }
@@ -270,8 +287,13 @@ impl<D: Db> SubstrateSigner<D> {
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
+        let batch = &self.signable[&id.id];
+        let is_first_batch =
+          SubstrateSignerDb::<D>::first_batch(txn, self.keys.group_key().to_bytes()).unwrap() ==
+            batch.id;
+
         let (machine, share) =
-          match machine.sign(preprocesses, &batch_message(&self.signable[&id.id])) {
+          match machine.sign(preprocesses, &batch_message(is_first_batch, batch)) {
             Ok(res) => res,
             Err(e) => todo!("malicious signer: {:?}", e),
           };

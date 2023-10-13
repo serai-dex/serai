@@ -155,14 +155,21 @@ pub mod pallet {
       // verify the signature
       let network = batch.batch.network;
       let (current_session, prior, current) = keys_for_network::<T>(network)?;
-      let batch_message = batch_message(&batch.batch);
       // Check the prior key first since only a single `Batch` (the last one) will be when prior is
       // Some yet prior wasn't the signing key
-      let valid_by_prior =
-        if let Some(key) = prior { key.verify(&batch_message, &batch.signature) } else { false };
+      let valid_by_prior = if let Some(key) = prior {
+        key.verify(&batch_message(false, &batch.batch), &batch.signature)
+      } else {
+        false
+      };
       let valid = valid_by_prior ||
         (if let Some(key) = current {
-          key.verify(&batch_message, &batch.signature)
+          key.verify(
+            // This `== 0` is valid as either it'll be the first Batch for the first set, or if
+            // they never had a Batch, the first Batch for the next set
+            &batch_message((batch.batch.id == 0) || prior.is_some(), &batch.batch),
+            &batch.signature,
+          )
         } else {
           false
         });

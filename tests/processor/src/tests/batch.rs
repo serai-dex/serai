@@ -137,8 +137,10 @@ pub(crate) async fn sign_batch(
           messages::substrate::ProcessorMessage::SignedBatch { batch: this_batch },
         ) => {
           if batch.is_none() {
-            assert!(PublicKey::from_raw(key)
-              .verify(&batch_message(&this_batch.batch), &this_batch.signature));
+            assert!(PublicKey::from_raw(key).verify(
+              &batch_message(this_batch.batch.id == 0, &this_batch.batch),
+              &this_batch.signature
+            ));
 
             batch = Some(this_batch.clone());
           }

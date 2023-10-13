@@ -165,7 +165,7 @@ pub async fn batch(
   let signature = Signature(
     schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
       .unwrap()
-      .sign_simple(b"substrate", &batch_message(&batch))
+      .sign_simple(b"substrate", &batch_message(batch.id == 0, &batch))
       .to_bytes(),
   );
 

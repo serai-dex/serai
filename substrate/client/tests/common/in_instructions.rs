@@ -39,7 +39,8 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
 
   let block = publish_tx(&Serai::execute_batch(SignedBatch {
     batch: batch.clone(),
-    signature: pair.sign(&batch_message(&batch)),
+    // TODO: This `batch.id == 0` line only works when session == 0
+    signature: pair.sign(&batch_message(batch.id == 0, &batch)),
   }))
   .await;
 
