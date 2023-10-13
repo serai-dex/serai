@@ -70,7 +70,7 @@ async fn sync_test() {
 
   // Now that we've confirmed the other tributaries formed a net without issue, drop the syncer's
   // pending P2P messages
-  syncer_p2p.1.write().await.last_mut().unwrap().clear();
+  syncer_p2p.1.write().await.1.last_mut().unwrap().clear();
 
   // Have it join the net
   let syncer_key = Ristretto::generator() * *syncer_key;
