@@ -187,9 +187,12 @@ pub mod pallet {
     fn is_bft(network: NetworkId) -> bool {
       let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
 
+      let mut validators_len = 0;
       let mut top = None;
       let mut key_shares = 0;
       for (_, amount) in SortedAllocationsIter::<T>::new(network) {
+        validators_len += 1;
+
         key_shares += amount.0 / allocation_per_key_share;
         if top.is_none() {
           top = Some(key_shares);
@@ -204,9 +207,10 @@ pub mod pallet {
 
       // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause an off-chain reduction of
       // each validator's key shares until their sum is MAX_KEY_SHARES_PER_SET
-      // That isn't modeled here, allowing an inaccuracy in an extreme edge case
-      // This may cause mis-reporting as BFT when not BFT (TODO: Investigate impact of this)
-      (top * 3) < key_shares
+      // post_amortization_key_shares_for_top_validator yields what the top validator's key shares
+      // would be after such a reduction, letting us evaluate this correctly
+      let top = post_amortization_key_shares_for_top_validator(validators_len, top, key_shares);
+      (top * 3) < key_shares.min(MAX_KEY_SHARES_PER_SET.into())
     }
   }
 

@@ -92,3 +92,29 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
 pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
   [b"ValidatorSets-key_pair".as_ref(), &(set, key_pair).encode()].concat()
 }
+
+/// For a set of validators whose key shares may exceed the maximum, reduce until they equal the
+/// maximum.
+///
+/// Reduction occurs by reducing each validator in a reverse round-robin.
+pub fn amortize_excess_key_shares(validators: &mut [(Public, u64)]) {
+  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u64>();
+  for i in
+    0 .. usize::try_from(total_key_shares.saturating_sub(MAX_KEY_SHARES_PER_SET.into())).unwrap()
+  {
+    validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
+  }
+}
+
+/// Returns the post-amortization key shares for the top validator.
+///
+/// Panics when `validators == 0`.
+pub fn post_amortization_key_shares_for_top_validator(
+  validators: usize,
+  top: u64,
+  key_shares: u64,
+) -> u64 {
+  top -
+    (key_shares.saturating_sub(MAX_KEY_SHARES_PER_SET.into()) /
+      u64::try_from(validators).unwrap())
+}
