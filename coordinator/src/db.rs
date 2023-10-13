@@ -8,7 +8,7 @@ use blake2::{
 use scale::{Encode, Decode};
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::ValidatorSet,
+  validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::{Batch, SignedBatch},
 };
 
@@ -142,13 +142,49 @@ impl<D: Db> MainDb<D> {
       .map(|id| u32::from_le_bytes(id.try_into().unwrap()))
   }
 
-  fn did_handover_key(set: ValidatorSet) -> Vec<u8> {
-    Self::main_key(b"did_handover", set.encode())
+  fn handover_batch_key(set: ValidatorSet) -> Vec<u8> {
+    Self::main_key(b"handover_batch", set.encode())
   }
-  pub fn set_did_handover(txn: &mut D::Transaction<'_>, set: ValidatorSet) {
-    txn.put(Self::did_handover_key(set), []);
+  fn lookup_handover_batch_key(network: NetworkId, batch: u32) -> Vec<u8> {
+    Self::main_key(b"lookup_handover_batch", (network, batch).encode())
   }
-  pub fn did_handover<G: Get>(getter: &G, set: ValidatorSet) -> bool {
-    getter.get(Self::did_handover_key(set)).is_some()
+  pub fn set_handover_batch(txn: &mut D::Transaction<'_>, set: ValidatorSet, batch: u32) {
+    txn.put(Self::handover_batch_key(set), batch.to_le_bytes());
+    txn.put(Self::lookup_handover_batch_key(set.network, batch), set.session.0.to_le_bytes());
+  }
+  pub fn handover_batch<G: Get>(getter: &G, set: ValidatorSet) -> Option<u32> {
+    getter.get(Self::handover_batch_key(set)).map(|id| u32::from_le_bytes(id.try_into().unwrap()))
+  }
+  pub fn is_handover_batch<G: Get>(
+    getter: &G,
+    network: NetworkId,
+    batch: u32,
+  ) -> Option<ValidatorSet> {
+    getter.get(Self::lookup_handover_batch_key(network, batch)).map(|session| ValidatorSet {
+      network,
+      session: Session(u32::from_le_bytes(session.try_into().unwrap())),
+    })
+  }
+
+  fn queued_batches_key(set: ValidatorSet) -> Vec<u8> {
+    Self::main_key(b"queued_batches", set.encode())
+  }
+  pub fn queue_batch(txn: &mut D::Transaction<'_>, set: ValidatorSet, batch: Transaction) {
+    let key = Self::queued_batches_key(set);
+    let mut batches = txn.get(&key).unwrap_or(vec![]);
+    batches.extend(batch.serialize());
+    txn.put(&key, batches);
+  }
+  pub fn take_queued_batches(txn: &mut D::Transaction<'_>, set: ValidatorSet) -> Vec<Transaction> {
+    let key = Self::queued_batches_key(set);
+    let batches_vec = txn.get(&key).unwrap_or(vec![]);
+    txn.del(&key);
+    let mut batches: &[u8] = &batches_vec;
+
+    let mut res = vec![];
+    while !batches.is_empty() {
+      res.push(Transaction::read(&mut batches).unwrap());
+    }
+    res
   }
 }
