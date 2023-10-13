@@ -32,7 +32,7 @@ pub mod pallet {
     ///
     /// Every participant at genesis will automatically be assumed to have this much stake.
     /// This stake cannot be withdrawn however as there's no actual stake behind it.
-    // TODO: Localize stake to network?
+    // TODO: Localize stake to network
     pub stake: Amount,
     /// Networks to spawn Serai with.
     pub networks: Vec<NetworkId>,
@@ -572,9 +572,7 @@ pub mod pallet {
     }
 
     pub fn new_session() {
-      // TODO: Define an array of all networks in primitives
-      let networks = [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
-      for network in networks {
+      for network in serai_primitives::NETWORKS {
         let current_session = Self::session(network);
         // Only spawn a NewSet if the current set was actually established with a completed
         // handover protocol

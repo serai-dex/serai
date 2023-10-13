@@ -987,7 +987,10 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
 ) {
   let mut channels = HashMap::new();
-  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
+  for network in serai_client::primitives::NETWORKS {
+    if network == NetworkId::Serai {
+      continue;
+    }
     let (send, recv) = mpsc::unbounded_channel();
     tokio::spawn(handle_processor_messages(
       db.clone(),
