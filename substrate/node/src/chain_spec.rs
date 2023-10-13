@@ -58,10 +58,10 @@ fn testnet_genesis(
       networks: serai_runtime::primitives::NETWORKS
         .iter()
         .map(|network| match network {
-          NetworkId::Serai => (NetworkId::Serai, Amount(100_000 * 10_u64.pow(8))),
+          NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
           NetworkId::Bitcoin => (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
-          NetworkId::Ethereum => (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
-          NetworkId::Monero => (NetworkId::Bitcoin, Amount(100_000 * 10_u64.pow(8))),
+          NetworkId::Ethereum => (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+          NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
         })
         .collect(),
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
