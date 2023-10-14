@@ -110,7 +110,7 @@ async fn handle_block<
     event_id += 1;
   }
 
-  // TODO2: Trigger any necessary re-attempts
+  // TODO: Trigger any necessary re-attempts
 }
 
 pub(crate) async fn handle_new_blocks<
