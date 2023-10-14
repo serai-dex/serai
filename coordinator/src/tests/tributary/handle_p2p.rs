@@ -13,7 +13,8 @@ use tributary::Tributary;
 
 use crate::{
   tributary::Transaction,
-  ActiveTributary, handle_p2p,
+  ActiveTributary,
+  p2p::handle_p2p_task,
   tests::{
     LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries},
@@ -33,7 +34,7 @@ async fn handle_p2p_test() {
     let tributary = Arc::new(tributary);
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
-    tokio::spawn(handle_p2p(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
+    tokio::spawn(handle_p2p_task(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
     new_tributary_send
       .send(ActiveTributary { spec: spec.clone(), tributary })
       .map_err(|_| "failed to send ActiveTributary")

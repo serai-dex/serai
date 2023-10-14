@@ -13,7 +13,8 @@ use tributary::Tributary;
 
 use crate::{
   tributary::Transaction,
-  ActiveTributary, handle_p2p, heartbeat_tributaries,
+  ActiveTributary,
+  p2p::{heartbeat_tributaries_task, handle_p2p_task},
   tests::{
     LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries},
@@ -42,7 +43,7 @@ async fn sync_test() {
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
     let thread =
-      tokio::spawn(handle_p2p(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
+      tokio::spawn(handle_p2p_task(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
     new_tributary_send
       .send(ActiveTributary { spec: spec.clone(), tributary })
       .map_err(|_| "failed to send ActiveTributary")
@@ -77,7 +78,7 @@ async fn sync_test() {
   let syncer_key = Ristretto::generator() * *syncer_key;
   let syncer_tributary = Arc::new(syncer_tributary);
   let (syncer_tributary_send, syncer_tributary_recv) = broadcast::channel(5);
-  tokio::spawn(handle_p2p(syncer_key, syncer_p2p.clone(), syncer_tributary_recv));
+  tokio::spawn(handle_p2p_task(syncer_key, syncer_p2p.clone(), syncer_tributary_recv));
   syncer_tributary_send
     .send(ActiveTributary { spec: spec.clone(), tributary: syncer_tributary.clone() })
     .map_err(|_| "failed to send ActiveTributary to syncer")
@@ -95,7 +96,7 @@ async fn sync_test() {
 
   // Start the heartbeat protocol
   let (syncer_heartbeat_tributary_send, syncer_heartbeat_tributary_recv) = broadcast::channel(5);
-  tokio::spawn(heartbeat_tributaries(syncer_p2p, syncer_heartbeat_tributary_recv));
+  tokio::spawn(heartbeat_tributaries_task(syncer_p2p, syncer_heartbeat_tributary_recv));
   syncer_heartbeat_tributary_send
     .send(ActiveTributary { spec: spec.clone(), tributary: syncer_tributary.clone() })
     .map_err(|_| "failed to send ActiveTributary to heartbeat")
