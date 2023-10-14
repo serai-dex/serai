@@ -791,11 +791,14 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   });
 
   // When we reach synchrony on an event requiring signing, send our preprocess for it
+  // TODO: Properly place this into the Tributary scanner, as it's a mess out here
   let recognized_id = {
     let raw_db = raw_db.clone();
     let key = key.clone();
 
     let tributaries = Arc::new(RwLock::new(HashMap::new()));
+    // Spawn a task to maintain a local view of the tributaries for whenever recognized_id is
+    // called
     tokio::spawn({
       let tributaries = tributaries.clone();
       let mut set_to_genesis = HashMap::new();

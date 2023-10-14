@@ -1,4 +1,4 @@
-use core::future::Future;
+use core::{future::Future, time::Duration};
 use std::sync::Arc;
 
 use zeroize::Zeroizing;
@@ -43,7 +43,6 @@ impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, [u8; 32], u32
 }
 
 // Handle a specific Tributary block
-#[allow(clippy::needless_pass_by_ref_mut)] // False positive?
 async fn handle_block<
   D: Db,
   Pro: Processors,
@@ -192,6 +191,11 @@ pub(crate) async fn scan_tributaries_task<
             let reader = tributary.reader();
             let mut tributary_db = TributaryDb::new(raw_db.clone());
             loop {
+              // Check if the set was retired, and if so, don't further operate
+              if crate::MainDb::<D>::is_tributary_retired(&raw_db, spec.set()) {
+                break;
+              }
+
               // Obtain the next block notification now to prevent obtaining it immediately after
               // the next block occurs
               let next_block_notification = tributary.next_block_notification().await;
@@ -256,16 +260,18 @@ pub(crate) async fn scan_tributaries_task<
               )
               .await;
 
-              next_block_notification
-                .await
-                .map_err(|_| "")
-                .expect("tributary dropped its notifications?");
+              // Run either when the notification fires, or every interval of block_time
+              let _ = tokio::time::timeout(
+                Duration::from_secs(tributary::Tributary::<D, Transaction, P>::block_time().into()),
+                next_block_notification,
+              )
+              .await;
             }
           }
         });
       }
-      // TODO
-      Ok(crate::TributaryEvent::TributaryRetired(_)) => todo!(),
+      // The above loop simply checks the DB every few seconds, voiding the need for this event
+      Ok(crate::TributaryEvent::TributaryRetired(_)) => {}
       Err(broadcast::error::RecvError::Lagged(_)) => {
         panic!("scan_tributaries lagged to handle tributary_event")
       }

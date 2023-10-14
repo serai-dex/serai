@@ -450,6 +450,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
             let (send, mut recv) = mpsc::unbounded_channel();
             channels.write().await.insert(genesis, send);
 
+            // Per-Tributary P2P message handler
             tokio::spawn({
               let p2p = p2p.clone();
               async move {
