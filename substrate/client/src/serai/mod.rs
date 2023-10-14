@@ -287,6 +287,7 @@ impl Serai {
       .map_err(SeraiError::RpcError)
   }
 
+  /// Create a TemporalSerai using whatever is currently the latest block.
   pub async fn with_current_latest_block(&self) -> Result<TemporalSerai, SeraiError> {
     let latest = self.latest_block_hash().await?;
     Ok(TemporalSerai(self, latest))
