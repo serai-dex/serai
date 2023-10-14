@@ -52,12 +52,13 @@ async fn sync_test() {
   }
   let tributaries = tributary_arcs;
 
-  // After three blocks of time, we should have a new block
+  // After four blocks of time, we should have a new block
   // We don't wait one block of time as we may have missed the chance for the first block
   // We don't wait two blocks because we may have missed the chance, and then had a failure to
-  // propose by our 'offline' validator
+  // propose by our 'offline' validator, which would cause the Tendermint round time to increase,
+  // requiring a longer delay
   let block_time = u64::from(Tributary::<MemDb, Transaction, LocalP2p>::block_time());
-  sleep(Duration::from_secs(3 * block_time)).await;
+  sleep(Duration::from_secs(4 * block_time)).await;
   let tip = tributaries[0].tip().await;
   assert!(tip != spec.genesis());
 
