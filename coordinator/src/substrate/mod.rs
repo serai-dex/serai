@@ -451,19 +451,19 @@ pub async fn scan_task<D: Db, Pro: Processors>(
 pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
   // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
   // call, instead of a series of network requests
-  let latest = loop {
-    let Ok(res) = serai.latest_block_hash().await else {
+  let serai = loop {
+    let Ok(serai) = serai.with_current_latest_block().await else {
       log::error!(
         "couldn't get the latest block hash from serai when checking tributary relevancy"
       );
       sleep(Duration::from_secs(5)).await;
       continue;
     };
-    break res;
+    break serai.validator_sets();
   };
 
   let latest_session = loop {
-    let Ok(res) = serai.as_of(latest).validator_sets().session(set.network).await else {
+    let Ok(res) = serai.session(set.network).await else {
       log::error!("couldn't get the latest session from serai when checking tributary relevancy");
       sleep(Duration::from_secs(5)).await;
       continue;
@@ -482,7 +482,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
     } else {
       // Since the next session has started, check its handover status
       let keys = loop {
-        let Ok(res) = serai.as_of(latest).validator_sets().keys(set).await else {
+        let Ok(res) = serai.keys(set).await else {
           log::error!(
             "couldn't get the keys for a session from serai when checking tributary relevancy"
           );
