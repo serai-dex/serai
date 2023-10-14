@@ -163,7 +163,7 @@ pub(crate) async fn handle_new_blocks<
   }
 }
 
-pub(crate) async fn scan_tributaries<
+pub(crate) async fn scan_tributaries_task<
   D: Db,
   Pro: Processors,
   P: P2p,

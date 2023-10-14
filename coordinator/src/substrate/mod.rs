@@ -1,5 +1,8 @@
 use core::{ops::Deref, time::Duration};
-use std::collections::{HashSet, HashMap};
+use std::{
+  sync::Arc,
+  collections::{HashSet, HashMap},
+};
 
 use zeroize::Zeroizing;
 
@@ -20,7 +23,8 @@ use serai_db::DbTxn;
 
 use processor_messages::SubstrateContext;
 
-use tokio::time::sleep;
+use futures::stream::StreamExt;
+use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
   Db,
@@ -313,7 +317,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
   Ok(())
 }
 
-pub async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
+async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   create_new_tributary: CNT,
@@ -406,4 +410,87 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
   }
 
   true
+}
+
+pub async fn scan_task<D: Db, Pro: Processors>(
+  db: D,
+  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  processors: Pro,
+  serai: Arc<Serai>,
+  new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
+) {
+  log::info!("scanning substrate");
+
+  let mut db = SubstrateDb::new(db);
+  let mut next_substrate_block = db.next_block();
+
+  let new_substrate_block_notifier = {
+    let serai = &serai;
+    move || async move {
+      loop {
+        match serai.newly_finalized_block().await {
+          Ok(sub) => return sub,
+          Err(e) => {
+            log::error!("couldn't communicate with serai node: {e}");
+            sleep(Duration::from_secs(5)).await;
+          }
+        }
+      }
+    }
+  };
+  let mut substrate_block_notifier = new_substrate_block_notifier().await;
+
+  loop {
+    // await the next block, yet if our notifier had an error, re-create it
+    {
+      let Ok(next_block) =
+        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.next()).await
+      else {
+        // Timed out, which may be because Serai isn't finalizing or may be some issue with the
+        // notifier
+        if serai.get_latest_block().await.map(|block| block.number()).ok() ==
+          Some(next_substrate_block.saturating_sub(1))
+        {
+          log::info!("serai hasn't finalized a block in the last 60s...");
+        } else {
+          substrate_block_notifier = new_substrate_block_notifier().await;
+        }
+        continue;
+      };
+
+      // next_block is a Option<Result>
+      if next_block.and_then(Result::ok).is_none() {
+        substrate_block_notifier = new_substrate_block_notifier().await;
+        continue;
+      }
+    }
+
+    match handle_new_blocks(
+      &mut db,
+      &key,
+      |db: &mut D, spec: TributarySpec| {
+        log::info!("creating new tributary for {:?}", spec.set());
+
+        // Save it to the database
+        let mut txn = db.txn();
+        crate::MainDb::<D>::add_active_tributary(&mut txn, &spec);
+        txn.commit();
+
+        // If we reboot before this is read, the fact it was saved to the database means it'll be
+        // handled on reboot
+        new_tributary_spec.send(spec).unwrap();
+      },
+      &processors,
+      &serai,
+      &mut next_substrate_block,
+    )
+    .await
+    {
+      Ok(()) => {}
+      Err(e) => {
+        log::error!("couldn't communicate with serai node: {e}");
+        sleep(Duration::from_secs(5)).await;
+      }
+    }
+  }
 }

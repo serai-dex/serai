@@ -22,7 +22,6 @@ use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorS
 
 use message_queue::{Service, client::MessageQueue};
 
-use futures::stream::StreamExt;
 use tokio::{
   sync::{RwLock, mpsc, broadcast},
   time::sleep,
@@ -106,89 +105,6 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
     .send(ActiveTributary { spec, tributary: Arc::new(tributary) })
     .map_err(|_| "all ActiveTributary recipients closed")
     .unwrap();
-}
-
-pub async fn scan_substrate<D: Db, Pro: Processors>(
-  db: D,
-  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  processors: Pro,
-  serai: Arc<Serai>,
-  new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
-) {
-  log::info!("scanning substrate");
-
-  let mut db = SubstrateDb::new(db);
-  let mut next_substrate_block = db.next_block();
-
-  let new_substrate_block_notifier = {
-    let serai = &serai;
-    move || async move {
-      loop {
-        match serai.newly_finalized_block().await {
-          Ok(sub) => return sub,
-          Err(e) => {
-            log::error!("couldn't communicate with serai node: {e}");
-            sleep(Duration::from_secs(5)).await;
-          }
-        }
-      }
-    }
-  };
-  let mut substrate_block_notifier = new_substrate_block_notifier().await;
-
-  loop {
-    // await the next block, yet if our notifier had an error, re-create it
-    {
-      let Ok(next_block) =
-        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.next()).await
-      else {
-        // Timed out, which may be because Serai isn't finalizing or may be some issue with the
-        // notifier
-        if serai.get_latest_block().await.map(|block| block.number()).ok() ==
-          Some(next_substrate_block.saturating_sub(1))
-        {
-          log::info!("serai hasn't finalized a block in the last 60s...");
-        } else {
-          substrate_block_notifier = new_substrate_block_notifier().await;
-        }
-        continue;
-      };
-
-      // next_block is a Option<Result>
-      if next_block.and_then(Result::ok).is_none() {
-        substrate_block_notifier = new_substrate_block_notifier().await;
-        continue;
-      }
-    }
-
-    match substrate::handle_new_blocks(
-      &mut db,
-      &key,
-      |db: &mut D, spec: TributarySpec| {
-        log::info!("creating new tributary for {:?}", spec.set());
-
-        // Save it to the database
-        let mut txn = db.txn();
-        MainDb::<D>::add_active_tributary(&mut txn, &spec);
-        txn.commit();
-
-        // If we reboot before this is read, the fact it was saved to the database means it'll be
-        // handled on reboot
-        new_tributary_spec.send(spec).unwrap();
-      },
-      &processors,
-      &serai,
-      &mut next_substrate_block,
-    )
-    .await
-    {
-      Ok(()) => {}
-      Err(e) => {
-        log::error!("couldn't communicate with serai node: {e}");
-        sleep(Duration::from_secs(5)).await;
-      }
-    }
-  }
 }
 
 pub async fn heartbeat_tributaries<D: Db, P: P2p>(
@@ -1032,7 +948,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   }
 
   // Handle new Substrate blocks
-  tokio::spawn(scan_substrate(
+  tokio::spawn(crate::substrate::scan_task(
     raw_db.clone(),
     key.clone(),
     processors.clone(),
@@ -1147,7 +1063,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   // Handle new blocks for each Tributary
   {
     let raw_db = raw_db.clone();
-    tokio::spawn(tributary::scanner::scan_tributaries(
+    tokio::spawn(tributary::scanner::scan_tributaries_task(
       raw_db,
       key.clone(),
       recognized_id,
