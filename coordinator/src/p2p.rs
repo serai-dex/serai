@@ -493,6 +493,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                         }
                         */
 
+                        /*
                         // Have up to three nodes respond
                         let responders = u64::from(spec.n().min(3));
 
@@ -521,7 +522,13 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                         }
 
                         log::debug!("received heartbeat and selected to respond");
+                        */
 
+                        // Have every node respond
+                        // While we could only have a subset respond, LibP2P will sync all messages
+                        // it isn't aware of
+                        // It's cheaper to be aware from our disk than from over the network
+                        // TODO: Spawn a dedicated topic for this heartbeat response?
                         let mut latest = msg.msg[.. 32].try_into().unwrap();
                         while let Some(next) = reader.block_after(&latest) {
                           let mut res = reader.block(&next).unwrap().serialize();

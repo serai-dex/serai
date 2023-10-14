@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use rand_core::OsRng;
 
-use ciphersuite::{Ciphersuite, Ristretto};
-
 use tokio::{sync::broadcast, time::sleep};
 
 use serai_db::MemDb;
@@ -30,11 +28,11 @@ async fn handle_p2p_test() {
 
   let mut tributary_senders = vec![];
   let mut tributary_arcs = vec![];
-  for (i, (p2p, tributary)) in tributaries.drain(..).enumerate() {
+  for (p2p, tributary) in tributaries.drain(..) {
     let tributary = Arc::new(tributary);
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
-    tokio::spawn(handle_p2p_task(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
+    tokio::spawn(handle_p2p_task(p2p, new_tributary_recv));
     new_tributary_send
       .send(TributaryEvent::NewTributary(ActiveTributary { spec: spec.clone(), tributary }))
       .map_err(|_| "failed to send ActiveTributary")
