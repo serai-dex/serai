@@ -12,10 +12,10 @@ use serai_client::{
 };
 
 mod common;
-use common::{serai, validator_sets::set_validator_set_keys};
+use common::{serai, validator_sets::set_keys};
 
 serai_test!(
-  async fn set_validator_set_keys_test() {
+  async fn set_keys_test() {
     let network = NetworkId::Bitcoin;
     let set = ValidatorSet { session: Session(0), network };
 
@@ -35,7 +35,9 @@ serai_test!(
     // Make sure the genesis is as expected
     assert_eq!(
       serai
-        .get_new_set_events(serai.get_block_by_number(0).await.unwrap().unwrap().hash())
+        .as_of(serai.block_by_number(0).await.unwrap().unwrap().hash())
+        .validator_sets()
+        .new_set_events()
         .await
         .unwrap(),
       NETWORKS
@@ -47,30 +49,23 @@ serai_test!(
         .collect::<Vec<_>>(),
     );
 
-    let participants = serai
-      .get_validator_set_participants(set.network, serai.get_latest_block_hash().await.unwrap())
-      .await
-      .unwrap()
-      .unwrap();
-    let participants_ref: &[_] = participants.as_ref();
-    assert_eq!(participants_ref, [public].as_ref());
-    assert_eq!(
-      serai
-        .get_validator_set_musig_key(set, serai.get_latest_block_hash().await.unwrap())
-        .await
-        .unwrap()
-        .unwrap(),
-      musig_key(set, &[public]).0
-    );
+    {
+      let vs_serai = serai.with_current_latest_block().await.unwrap().validator_sets();
+      let participants = vs_serai.participants(set.network).await.unwrap().unwrap();
+      let participants_ref: &[_] = participants.as_ref();
+      assert_eq!(participants_ref, [public].as_ref());
+      assert_eq!(vs_serai.musig_key(set).await.unwrap().unwrap(), musig_key(set, &[public]).0);
+    }
 
-    let block = set_validator_set_keys(set, key_pair.clone()).await;
+    let block = set_keys(set, key_pair.clone()).await;
 
-    // While the set_validator_set_keys function should handle this, it's beneficial to
+    // While the set_keys function should handle this, it's beneficial to
     // independently test it
+    let serai = serai.as_of(block).validator_sets();
     assert_eq!(
-      serai.get_key_gen_events(block).await.unwrap(),
+      serai.key_gen_events().await.unwrap(),
       vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]
     );
-    assert_eq!(serai.get_keys(set, block).await.unwrap(), Some(key_pair));
+    assert_eq!(serai.keys(set).await.unwrap(), Some(key_pair));
   }
 );

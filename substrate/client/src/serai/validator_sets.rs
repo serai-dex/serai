@@ -6,89 +6,67 @@ use primitives::{Session, ValidatorSet, KeyPair};
 
 use subxt::utils::Encoded;
 
-use crate::{primitives::NetworkId, Serai, SeraiError, scale_value};
+use crate::{primitives::NetworkId, Serai, TemporalSerai, SeraiError, scale_value};
 
 const PALLET: &str = "ValidatorSets";
 
 pub type ValidatorSetsEvent = validator_sets::Event<Runtime>;
 
-impl Serai {
-  pub async fn get_new_set_events(
-    &self,
-    block: [u8; 32],
-  ) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+#[derive(Clone, Copy)]
+pub struct SeraiValidatorSets<'a>(pub(crate) TemporalSerai<'a>);
+impl<'a> SeraiValidatorSets<'a> {
+  pub fn into_inner(self) -> TemporalSerai<'a> {
+    self.0
+  }
+
+  pub async fn new_set_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
-      .events::<ValidatorSets, _>(block, |event| matches!(event, ValidatorSetsEvent::NewSet { .. }))
+      .0
+      .events::<ValidatorSets, _>(|event| matches!(event, ValidatorSetsEvent::NewSet { .. }))
       .await
   }
 
-  pub async fn get_key_gen_events(
-    &self,
-    block: [u8; 32],
-  ) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+  pub async fn key_gen_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
-      .events::<ValidatorSets, _>(block, |event| matches!(event, ValidatorSetsEvent::KeyGen { .. }))
+      .0
+      .events::<ValidatorSets, _>(|event| matches!(event, ValidatorSetsEvent::KeyGen { .. }))
       .await
   }
 
-  pub async fn get_session(
-    &self,
-    network: NetworkId,
-    at_hash: [u8; 32],
-  ) -> Result<Option<Session>, SeraiError> {
-    self.storage(PALLET, "CurrentSession", Some(vec![scale_value(network)]), at_hash).await
+  pub async fn session(&self, network: NetworkId) -> Result<Option<Session>, SeraiError> {
+    self.0.storage(PALLET, "CurrentSession", Some(vec![scale_value(network)])).await
   }
 
-  pub async fn get_validator_set_participants(
-    &self,
-    network: NetworkId,
-    at_hash: [u8; 32],
-  ) -> Result<Option<Vec<Public>>, SeraiError> {
-    self.storage(PALLET, "Participants", Some(vec![scale_value(network)]), at_hash).await
+  pub async fn participants(&self, network: NetworkId) -> Result<Option<Vec<Public>>, SeraiError> {
+    self.0.storage(PALLET, "Participants", Some(vec![scale_value(network)])).await
   }
 
-  pub async fn get_allocation_per_key_share(
+  pub async fn allocation_per_key_share(
     &self,
     network: NetworkId,
-    at_hash: [u8; 32],
   ) -> Result<Option<Amount>, SeraiError> {
-    self.storage(PALLET, "AllocationPerKeyShare", Some(vec![scale_value(network)]), at_hash).await
+    self.0.storage(PALLET, "AllocationPerKeyShare", Some(vec![scale_value(network)])).await
   }
 
-  pub async fn get_allocation(
+  pub async fn allocation(
     &self,
     network: NetworkId,
     key: Public,
-    at_hash: [u8; 32],
   ) -> Result<Option<Amount>, SeraiError> {
-    self
-      .storage(PALLET, "Allocations", Some(vec![scale_value(network), scale_value(key)]), at_hash)
-      .await
+    self.0.storage(PALLET, "Allocations", Some(vec![scale_value(network), scale_value(key)])).await
   }
 
-  pub async fn get_validator_set_musig_key(
-    &self,
-    set: ValidatorSet,
-    at_hash: [u8; 32],
-  ) -> Result<Option<[u8; 32]>, SeraiError> {
-    self.storage(PALLET, "MuSigKeys", Some(vec![scale_value(set)]), at_hash).await
+  pub async fn musig_key(&self, set: ValidatorSet) -> Result<Option<[u8; 32]>, SeraiError> {
+    self.0.storage(PALLET, "MuSigKeys", Some(vec![scale_value(set)])).await
   }
 
   // TODO: Store these separately since we almost never need both at once?
-  pub async fn get_keys(
-    &self,
-    set: ValidatorSet,
-    at_hash: [u8; 32],
-  ) -> Result<Option<KeyPair>, SeraiError> {
-    self.storage(PALLET, "Keys", Some(vec![scale_value(set)]), at_hash).await
+  pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
+    self.0.storage(PALLET, "Keys", Some(vec![scale_value(set)])).await
   }
 
-  pub fn set_validator_set_keys(
-    network: NetworkId,
-    key_pair: KeyPair,
-    signature: Signature,
-  ) -> Encoded {
-    Self::unsigned::<ValidatorSets, _>(&validator_sets::Call::<Runtime>::set_keys {
+  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Encoded {
+    Serai::unsigned::<ValidatorSets, _>(&validator_sets::Call::<Runtime>::set_keys {
       network,
       key_pair,
       signature,

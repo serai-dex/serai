@@ -11,11 +11,11 @@ serai_test!(
   async fn time() {
     let serai = serai().await;
 
-    let mut number = serai.get_latest_block().await.unwrap().number();
+    let mut number = serai.latest_block().await.unwrap().number();
     let mut done = 0;
     while done < 3 {
       // Wait for the next block
-      let block = serai.get_latest_block().await.unwrap();
+      let block = serai.latest_block().await.unwrap();
       if block.number() == number {
         sleep(Duration::from_secs(1)).await;
         continue;

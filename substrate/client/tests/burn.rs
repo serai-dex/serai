@@ -19,8 +19,8 @@ use serai_client::{
     InInstructionsEvent,
     primitives::{InInstruction, InInstructionWithBalance, Batch},
   },
-  tokens::{primitives::OutInstruction, TokensEvent},
-  PairSigner, Serai,
+  coins::{primitives::OutInstruction, TokensEvent},
+  PairSigner, Serai, SeraiCoins,
 };
 
 mod common;
@@ -55,7 +55,8 @@ serai_test!(
     let block = provide_batch(batch.clone()).await;
 
     let serai = serai().await;
-    let batches = serai.get_batch_events(block).await.unwrap();
+    let serai = serai.as_of(block);
+    let batches = serai.in_instructions().batch_events().await.unwrap();
     assert_eq!(
       batches,
       vec![InInstructionsEvent::Batch {
@@ -67,11 +68,11 @@ serai_test!(
     );
 
     assert_eq!(
-      serai.get_mint_events(block).await.unwrap(),
+      serai.coins().mint_events().await.unwrap(),
       vec![TokensEvent::Mint { address, balance }]
     );
-    assert_eq!(serai.get_token_supply(block, coin).await.unwrap(), amount);
-    assert_eq!(serai.get_token_balance(block, coin, address).await.unwrap(), amount);
+    assert_eq!(serai.coins().token_supply(coin).await.unwrap(), amount);
+    assert_eq!(serai.coins().token_balance(coin, address).await.unwrap(), amount);
 
     // Now burn it
     let mut rand_bytes = vec![0; 32];
@@ -83,11 +84,12 @@ serai_test!(
     let data = Data::new(rand_bytes).unwrap();
 
     let out = OutInstruction { address: external_address, data: Some(data) };
+    let serai = serai.into_inner();
     let block = publish_tx(
       &serai
         .sign(
           &PairSigner::new(pair),
-          &Serai::burn(balance, out.clone()),
+          &SeraiCoins::burn(balance, out.clone()),
           0,
           BaseExtrinsicParamsBuilder::new(),
         )
@@ -95,9 +97,10 @@ serai_test!(
     )
     .await;
 
-    let events = serai.get_burn_events(block).await.unwrap();
+    let serai = serai.as_of(block).coins();
+    let events = serai.burn_events().await.unwrap();
     assert_eq!(events, vec![TokensEvent::Burn { address, balance, instruction: out }]);
-    assert_eq!(serai.get_token_supply(block, coin).await.unwrap(), Amount(0));
-    assert_eq!(serai.get_token_balance(block, coin, address).await.unwrap(), Amount(0));
+    assert_eq!(serai.token_supply(coin).await.unwrap(), Amount(0));
+    assert_eq!(serai.token_balance(coin, address).await.unwrap(), Amount(0));
   }
 );
