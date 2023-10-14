@@ -34,7 +34,7 @@ use libp2p::{
 
 pub(crate) use tributary::{ReadWrite, P2p as TributaryP2p};
 
-use crate::{Transaction, Block, Tributary, ActiveTributary};
+use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 
 // TODO: Use distinct topics
 const LIBP2P_TOPIC: &str = "serai-coordinator";
@@ -383,27 +383,30 @@ impl TributaryP2p for LibP2p {
 
 pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
   p2p: P,
-  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
+  mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
   let ten_blocks_of_time =
     Duration::from_secs((10 * Tributary::<D, Transaction, P>::block_time()).into());
 
-  let mut readers = vec![];
+  let mut readers = HashMap::new();
   loop {
-    while let Ok(ActiveTributary { spec: _, tributary }) = {
-      match new_tributary.try_recv() {
-        Ok(tributary) => Ok(tributary),
-        Err(broadcast::error::TryRecvError::Empty) => Err(()),
-        Err(broadcast::error::TryRecvError::Lagged(_)) => {
-          panic!("heartbeat_tributaries lagged to handle new_tributary")
+    loop {
+      match tributary_event.try_recv() {
+        Ok(TributaryEvent::NewTributary(ActiveTributary { spec, tributary })) => {
+          readers.insert(spec.set(), tributary.reader());
         }
-        Err(broadcast::error::TryRecvError::Closed) => panic!("new_tributary sender closed"),
+        Ok(TributaryEvent::TributaryRetired(set)) => {
+          readers.remove(&set);
+        }
+        Err(broadcast::error::TryRecvError::Empty) => break,
+        Err(broadcast::error::TryRecvError::Lagged(_)) => {
+          panic!("heartbeat_tributaries lagged to handle tributary_event")
+        }
+        Err(broadcast::error::TryRecvError::Closed) => panic!("tributary_event sender closed"),
       }
-    } {
-      readers.push(tributary.reader());
     }
 
-    for tributary in &readers {
+    for tributary in readers.values() {
       let tip = tributary.tip();
       let block_time =
         SystemTime::UNIX_EPOCH + Duration::from_secs(tributary.time_of_block(&tip).unwrap_or(0));
@@ -433,7 +436,7 @@ pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
 pub async fn handle_p2p_task<D: Db, P: P2p>(
   our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
-  mut new_tributary: broadcast::Receiver<ActiveTributary<D, P>>,
+  mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
   let channels = Arc::new(RwLock::new(HashMap::new()));
   tokio::spawn({
@@ -441,111 +444,122 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
     let channels = channels.clone();
     async move {
       loop {
-        let tributary = new_tributary.recv().await.unwrap();
-        let genesis = tributary.spec.genesis();
+        match tributary_event.recv().await.unwrap() {
+          TributaryEvent::NewTributary(tributary) => {
+            let genesis = tributary.spec.genesis();
 
-        let (send, mut recv) = mpsc::unbounded_channel();
-        channels.write().await.insert(genesis, send);
+            let (send, mut recv) = mpsc::unbounded_channel();
+            channels.write().await.insert(genesis, send);
 
-        tokio::spawn({
-          let p2p = p2p.clone();
-          async move {
-            loop {
-              let mut msg: Message<P> = recv.recv().await.unwrap();
-              match msg.kind {
-                P2pMessageKind::KeepAlive => {}
+            tokio::spawn({
+              let p2p = p2p.clone();
+              async move {
+                loop {
+                  let mut msg: Message<P> = recv.recv().await.unwrap();
+                  match msg.kind {
+                    P2pMessageKind::KeepAlive => {}
 
-                P2pMessageKind::Tributary(msg_genesis) => {
-                  assert_eq!(msg_genesis, genesis);
-                  log::trace!("handling message for tributary {:?}", tributary.spec.set());
-                  if tributary.tributary.handle_message(&msg.msg).await {
-                    P2p::broadcast(&p2p, msg.kind, msg.msg).await;
-                  }
-                }
-
-                // TODO2: Rate limit this per timestamp
-                // And/or slash on Heartbeat which justifies a response, since the node obviously
-                // was offline and we must now use our bandwidth to compensate for them?
-                P2pMessageKind::Heartbeat(msg_genesis) => {
-                  assert_eq!(msg_genesis, genesis);
-                  if msg.msg.len() != 40 {
-                    log::error!("validator sent invalid heartbeat");
-                    continue;
-                  }
-
-                  let p2p = p2p.clone();
-                  let spec = tributary.spec.clone();
-                  let reader = tributary.tributary.reader();
-                  // Spawn a dedicated task as this may require loading large amounts of data from
-                  // disk and take a notable amount of time
-                  tokio::spawn(async move {
-                    /*
-                    // Have sqrt(n) nodes reply with the blocks
-                    let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
-                    // Try to have at least 3 responders
-                    if responders < 3 {
-                      responders = tributary.spec.n().min(3).into();
-                    }
-                    */
-
-                    // Have up to three nodes respond
-                    let responders = u64::from(spec.n().min(3));
-
-                    // Decide which nodes will respond by using the latest block's hash as a
-                    // mutually agreed upon entropy source
-                    // This isn't a secure source of entropy, yet it's fine for this
-                    let entropy = u64::from_le_bytes(reader.tip()[.. 8].try_into().unwrap());
-                    // If n = 10, responders = 3, we want `start` to be 0 ..= 7
-                    // (so the highest is 7, 8, 9)
-                    // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
-                    let start =
-                      usize::try_from(entropy % (u64::from(spec.n() + 1) - responders)).unwrap();
-                    let mut selected = false;
-                    for validator in
-                      &spec.validators()[start .. (start + usize::try_from(responders).unwrap())]
-                    {
-                      if our_key == validator.0 {
-                        selected = true;
-                        break;
+                    P2pMessageKind::Tributary(msg_genesis) => {
+                      assert_eq!(msg_genesis, genesis);
+                      log::trace!("handling message for tributary {:?}", tributary.spec.set());
+                      if tributary.tributary.handle_message(&msg.msg).await {
+                        P2p::broadcast(&p2p, msg.kind, msg.msg).await;
                       }
                     }
-                    if !selected {
-                      log::debug!("received heartbeat and not selected to respond");
-                      return;
+
+                    // TODO2: Rate limit this per timestamp
+                    // And/or slash on Heartbeat which justifies a response, since the node
+                    // obviously was offline and we must now use our bandwidth to compensate for
+                    // them?
+                    P2pMessageKind::Heartbeat(msg_genesis) => {
+                      assert_eq!(msg_genesis, genesis);
+                      if msg.msg.len() != 40 {
+                        log::error!("validator sent invalid heartbeat");
+                        continue;
+                      }
+
+                      let p2p = p2p.clone();
+                      let spec = tributary.spec.clone();
+                      let reader = tributary.tributary.reader();
+                      // Spawn a dedicated task as this may require loading large amounts of data
+                      // from disk and take a notable amount of time
+                      tokio::spawn(async move {
+                        /*
+                        // Have sqrt(n) nodes reply with the blocks
+                        let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
+                        // Try to have at least 3 responders
+                        if responders < 3 {
+                          responders = tributary.spec.n().min(3).into();
+                        }
+                        */
+
+                        // Have up to three nodes respond
+                        let responders = u64::from(spec.n().min(3));
+
+                        // Decide which nodes will respond by using the latest block's hash as a
+                        // mutually agreed upon entropy source
+                        // This isn't a secure source of entropy, yet it's fine for this
+                        let entropy = u64::from_le_bytes(reader.tip()[.. 8].try_into().unwrap());
+                        // If n = 10, responders = 3, we want `start` to be 0 ..= 7
+                        // (so the highest is 7, 8, 9)
+                        // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
+                        let start =
+                          usize::try_from(entropy % (u64::from(spec.n() + 1) - responders))
+                            .unwrap();
+                        let mut selected = false;
+                        for validator in &spec.validators()
+                          [start .. (start + usize::try_from(responders).unwrap())]
+                        {
+                          if our_key == validator.0 {
+                            selected = true;
+                            break;
+                          }
+                        }
+                        if !selected {
+                          log::debug!("received heartbeat and not selected to respond");
+                          return;
+                        }
+
+                        log::debug!("received heartbeat and selected to respond");
+
+                        let mut latest = msg.msg[.. 32].try_into().unwrap();
+                        while let Some(next) = reader.block_after(&latest) {
+                          let mut res = reader.block(&next).unwrap().serialize();
+                          res.extend(reader.commit(&next).unwrap());
+                          // Also include the timestamp used within the Heartbeat
+                          res.extend(&msg.msg[32 .. 40]);
+                          p2p.send(msg.sender, P2pMessageKind::Block(spec.genesis()), res).await;
+                          latest = next;
+                        }
+                      });
                     }
 
-                    log::debug!("received heartbeat and selected to respond");
+                    P2pMessageKind::Block(msg_genesis) => {
+                      assert_eq!(msg_genesis, genesis);
+                      let mut msg_ref: &[u8] = msg.msg.as_ref();
+                      let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
+                        log::error!("received block message with an invalidly serialized block");
+                        continue;
+                      };
+                      // Get just the commit
+                      msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
+                      msg.msg.drain((msg.msg.len() - 8) ..);
 
-                    let mut latest = msg.msg[.. 32].try_into().unwrap();
-                    while let Some(next) = reader.block_after(&latest) {
-                      let mut res = reader.block(&next).unwrap().serialize();
-                      res.extend(reader.commit(&next).unwrap());
-                      // Also include the timestamp used within the Heartbeat
-                      res.extend(&msg.msg[32 .. 40]);
-                      p2p.send(msg.sender, P2pMessageKind::Block(spec.genesis()), res).await;
-                      latest = next;
+                      let res = tributary.tributary.sync_block(block, msg.msg).await;
+                      log::debug!(
+                        "received block from {:?}, sync_block returned {}",
+                        msg.sender,
+                        res
+                      );
                     }
-                  });
-                }
-
-                P2pMessageKind::Block(msg_genesis) => {
-                  assert_eq!(msg_genesis, genesis);
-                  let mut msg_ref: &[u8] = msg.msg.as_ref();
-                  let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
-                    log::error!("received block message with an invalidly serialized block");
-                    continue;
-                  };
-                  // Get just the commit
-                  msg.msg.drain(.. (msg.msg.len() - msg_ref.len()));
-                  msg.msg.drain((msg.msg.len() - 8) ..);
-
-                  let res = tributary.tributary.sync_block(block, msg.msg).await;
-                  log::debug!("received block from {:?}, sync_block returned {}", msg.sender, res);
+                  }
                 }
               }
-            }
+            });
           }
-        });
+          // TODO
+          TributaryEvent::TributaryRetired(_) => todo!(),
+        }
       }
     }
   });

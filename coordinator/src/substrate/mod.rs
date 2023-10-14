@@ -423,6 +423,17 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       |db: &mut D, spec: TributarySpec| {
         log::info!("creating new tributary for {:?}", spec.set());
 
+        // Check it isn't already present in the DB due to rescanning this block upon reboot
+        for existing_spec in crate::MainDb::<D>::active_tributaries(db).1 {
+          if spec.set() == existing_spec.set() {
+            log::warn!(
+              "already created tributary {:?}, this should only happen on reboot",
+              spec.set()
+            );
+            return;
+          }
+        }
+
         // Save it to the database
         let mut txn = db.txn();
         crate::MainDb::<D>::add_active_tributary(&mut txn, &spec);
@@ -453,9 +464,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
   // call, instead of a series of network requests
   let serai = loop {
     let Ok(serai) = serai.with_current_latest_block().await else {
-      log::error!(
-        "couldn't get the latest block hash from serai when checking tributary relevancy"
-      );
+      log::error!("couldn't get the latest block hash from serai when checking if set is active");
       sleep(Duration::from_secs(5)).await;
       continue;
     };
@@ -464,7 +473,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
 
   let latest_session = loop {
     let Ok(res) = serai.session(set.network).await else {
-      log::error!("couldn't get the latest session from serai when checking tributary relevancy");
+      log::error!("couldn't get the latest session from serai when checking if set is active");
       sleep(Duration::from_secs(5)).await;
       continue;
     };
@@ -484,7 +493,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
       let keys = loop {
         let Ok(res) = serai.keys(set).await else {
           log::error!(
-            "couldn't get the keys for a session from serai when checking tributary relevancy"
+            "couldn't get the keys for a session from serai when checking if set is active"
           );
           sleep(Duration::from_secs(5)).await;
           continue;
