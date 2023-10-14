@@ -14,10 +14,10 @@ use serai_client::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
   },
-  Serai,
+  SeraiInInstructions,
 };
 
-use crate::common::{serai, tx::publish_tx, validator_sets::set_validator_set_keys};
+use crate::common::{serai, tx::publish_tx, validator_sets::set_keys};
 
 #[allow(dead_code)]
 pub async fn provide_batch(batch: Batch) -> [u8; 32] {
@@ -27,23 +27,23 @@ pub async fn provide_batch(batch: Batch) -> [u8; 32] {
   let set = ValidatorSet { session: Session(0), network: batch.network };
   let pair = insecure_pair_from_name(&format!("ValidatorSet {:?}", set));
   let keys = if let Some(keys) =
-    serai.get_keys(set, serai.get_latest_block_hash().await.unwrap()).await.unwrap()
+    serai.with_current_latest_block().await.unwrap().validator_sets().keys(set).await.unwrap()
   {
     keys
   } else {
     let keys = (pair.public(), vec![].try_into().unwrap());
-    set_validator_set_keys(set, keys.clone()).await;
+    set_keys(set, keys.clone()).await;
     keys
   };
   assert_eq!(keys.0, pair.public());
 
-  let block = publish_tx(&Serai::execute_batch(SignedBatch {
+  let block = publish_tx(&SeraiInInstructions::execute_batch(SignedBatch {
     batch: batch.clone(),
     signature: pair.sign(&batch_message(&batch)),
   }))
   .await;
 
-  let batches = serai.get_batch_events(block).await.unwrap();
+  let batches = serai.as_of(block).in_instructions().batch_events().await.unwrap();
   // TODO: impl From<Batch> for BatchEvent?
   assert_eq!(
     batches,

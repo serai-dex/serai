@@ -11,7 +11,7 @@ pub async fn publish_tx(tx: &Encoded) -> [u8; 32] {
   let serai = serai().await;
 
   let mut latest =
-    serai.get_block(serai.get_latest_block_hash().await.unwrap()).await.unwrap().unwrap().number();
+    serai.block(serai.latest_block_hash().await.unwrap()).await.unwrap().unwrap().number();
 
   serai.publish(tx).await.unwrap();
 
@@ -24,7 +24,7 @@ pub async fn publish_tx(tx: &Encoded) -> [u8; 32] {
     let block = {
       let mut block;
       while {
-        block = serai.get_block_by_number(latest).await.unwrap();
+        block = serai.block_by_number(latest).await.unwrap();
         block.is_none()
       } {
         sleep(Duration::from_secs(1)).await;
