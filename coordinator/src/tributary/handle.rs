@@ -35,8 +35,9 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, nonce_decider::NonceDecider,
-    scanner::RecognizedIdType,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb,
+    nonce_decider::NonceDecider,
+    scanner::{RecognizedIdType, RIDTrait},
   },
 };
 
@@ -240,7 +241,7 @@ pub(crate) async fn handle_application_tx<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: crate::RIDTrait<FRid>,
+  RID: RIDTrait<FRid>,
 >(
   tx: Transaction,
   spec: &TributarySpec,

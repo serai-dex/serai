@@ -1,10 +1,15 @@
 use core::future::Future;
+use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded};
+use tokio::sync::broadcast;
+
+use serai_client::{
+  primitives::NetworkId, validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai,
+};
 
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
@@ -30,6 +35,15 @@ pub enum RecognizedIdType {
   Plan,
 }
 
+pub(crate) trait RIDTrait<FRid>:
+  Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid
+{
+}
+impl<FRid, F: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid>
+  RIDTrait<FRid> for F
+{
+}
+
 // Handle a specific Tributary block
 #[allow(clippy::needless_pass_by_ref_mut)] // False positive?
 async fn handle_block<
@@ -38,7 +52,7 @@ async fn handle_block<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: crate::RIDTrait<FRid>,
+  RID: RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
@@ -105,7 +119,7 @@ pub(crate) async fn handle_new_blocks<
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: crate::RIDTrait<FRid>,
+  RID: RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut TributaryDb<D>,
@@ -146,5 +160,115 @@ pub(crate) async fn handle_new_blocks<
     .await;
     last_block = next;
     db.set_last_block(genesis, next);
+  }
+}
+
+pub(crate) async fn scan_tributaries<
+  D: Db,
+  Pro: Processors,
+  P: P2p,
+  FRid: Send + Future<Output = ()>,
+  RID: 'static + Send + Sync + RIDTrait<FRid>,
+>(
+  raw_db: D,
+  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  recognized_id: RID,
+  processors: Pro,
+  serai: Arc<Serai>,
+  mut new_tributary: broadcast::Receiver<crate::ActiveTributary<D, P>>,
+) {
+  log::info!("scanning tributaries");
+
+  loop {
+    match new_tributary.recv().await {
+      Ok(crate::ActiveTributary { spec, tributary }) => {
+        // For each Tributary, spawn a dedicated scanner task
+        tokio::spawn({
+          let raw_db = raw_db.clone();
+          let key = key.clone();
+          let recognized_id = recognized_id.clone();
+          let processors = processors.clone();
+          let serai = serai.clone();
+          async move {
+            let spec = &spec;
+            let reader = tributary.reader();
+            let mut tributary_db = TributaryDb::new(raw_db.clone());
+            loop {
+              // Obtain the next block notification now to prevent obtaining it immediately after
+              // the next block occurs
+              let next_block_notification = tributary.next_block_notification().await;
+
+              handle_new_blocks::<_, _, _, _, _, _, P>(
+                &mut tributary_db,
+                &key,
+                recognized_id.clone(),
+                &processors,
+                |set, tx| {
+                  let serai = serai.clone();
+                  async move {
+                    loop {
+                      match serai.publish(&tx).await {
+                        Ok(_) => {
+                          log::info!("set key pair for {set:?}");
+                          break;
+                        }
+                        // This is assumed to be some ephemeral error due to the assumed fault-free
+                        // creation
+                        // TODO2: Differentiate connection errors from invariants
+                        Err(e) => {
+                          if let Ok(latest) = serai.get_latest_block_hash().await {
+                            // Check if this failed because the keys were already set by someone
+                            // else
+                            if matches!(serai.get_keys(spec.set(), latest).await, Ok(Some(_))) {
+                              log::info!("another coordinator set key pair for {:?}", set);
+                              break;
+                            }
+
+                            // The above block may return false if the keys have been pruned from
+                            // the state
+                            // Check if this session is no longer the latest session, meaning it at
+                            // some point did set keys, and we're just operating off very
+                            // historical data
+                            if let Ok(Some(current_session)) =
+                              serai.get_session(spec.set().network, latest).await
+                            {
+                              if current_session.0 > spec.set().session.0 {
+                                log::warn!(
+                                  "trying to set keys for a set which isn't the latest {:?}",
+                                  set
+                                );
+                                break;
+                              }
+                            }
+                          }
+
+                          log::error!(
+                            "couldn't connect to Serai node to publish set_keys TX: {:?}",
+                            e
+                          );
+                          tokio::time::sleep(core::time::Duration::from_secs(10)).await;
+                        }
+                      }
+                    }
+                  }
+                },
+                spec,
+                &reader,
+              )
+              .await;
+
+              next_block_notification
+                .await
+                .map_err(|_| "")
+                .expect("tributary dropped its notifications?");
+            }
+          }
+        });
+      }
+      Err(broadcast::error::RecvError::Lagged(_)) => {
+        panic!("scan_tributaries lagged to handle new_tributary")
+      }
+      Err(broadcast::error::RecvError::Closed) => panic!("new_tributary sender closed"),
+    }
   }
 }
