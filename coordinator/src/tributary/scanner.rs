@@ -216,10 +216,11 @@ pub(crate) async fn scan_tributaries_task<
                         // creation
                         // TODO2: Differentiate connection errors from invariants
                         Err(e) => {
-                          if let Ok(latest) = serai.get_latest_block_hash().await {
+                          if let Ok(latest) = serai.latest_block_hash().await {
+                            let serai = serai.as_of(latest).validator_sets();
                             // Check if this failed because the keys were already set by someone
                             // else
-                            if matches!(serai.get_keys(spec.set(), latest).await, Ok(Some(_))) {
+                            if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
                               log::info!("another coordinator set key pair for {:?}", set);
                               break;
                             }
@@ -230,7 +231,7 @@ pub(crate) async fn scan_tributaries_task<
                             // some point did set keys, and we're just operating off very
                             // historical data
                             if let Ok(Some(current_session)) =
-                              serai.get_session(spec.set().network, latest).await
+                              serai.session(spec.set().network).await
                             {
                               if current_session.0 > spec.set().session.0 {
                                 log::warn!(

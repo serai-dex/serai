@@ -19,7 +19,7 @@ use serai_client::{
   Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
   subxt::utils::Encoded,
-  Serai,
+  SeraiValidatorSets,
 };
 
 use tributary::Signed;
@@ -413,7 +413,7 @@ pub(crate) async fn handle_application_tx<
 
           publish_serai_tx(
             spec.set(),
-            Serai::set_validator_set_keys(spec.set().network, key_pair, Signature(sig)),
+            SeraiValidatorSets::set_keys(spec.set().network, key_pair, Signature(sig)),
           )
           .await;
         }
