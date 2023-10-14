@@ -21,7 +21,7 @@ use serai_env as env;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
-  Public, Serai,
+  Public, Serai, SeraiInInstructions,
 };
 
 use message_queue::{Service, client::MessageQueue};
@@ -286,7 +286,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             continue;
           }
 
-          let tx = Serai::execute_batch(batch.clone());
+          let tx = SeraiInInstructions::execute_batch(batch.clone());
           log::debug!("attempting to publish batch {:?} {}", batch.batch.network, batch.batch.id,);
           // This publish may fail if this transactions already exists in the mempool, which is
           // possible, or if this batch was already executed on-chain
@@ -833,7 +833,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           let mut txn = raw_db.txn();
           publish_signed_transaction(&mut txn, tributary, tx).await;
           txn.commit();
-          break
+          break;
         }
       }
     }

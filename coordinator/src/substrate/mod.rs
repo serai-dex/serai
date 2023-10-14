@@ -9,14 +9,14 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use serai_client::{
-  SeraiError, Block, Serai,
+  SeraiError, Block, Serai, TemporalSerai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
     primitives::{ValidatorSet, KeyPair, amortize_excess_key_shares},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
-  tokens::{primitives::OutInstructionWithBalance, TokensEvent},
+  coins::{primitives::OutInstructionWithBalance, TokensEvent},
 };
 
 use serai_db::DbTxn;
@@ -37,12 +37,10 @@ pub use db::*;
 
 async fn in_set(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai: &Serai,
+  serai: &TemporalSerai<'_>,
   set: ValidatorSet,
-  block_hash: [u8; 32],
 ) -> Result<Option<bool>, SeraiError> {
-  let Some(participants) = serai.get_validator_set_participants(set.network, block_hash).await?
-  else {
+  let Some(participants) = serai.validator_sets().participants(set.network).await? else {
     return Ok(None);
   };
   let key = (Ristretto::generator() * key.deref()).to_bytes();
@@ -57,30 +55,35 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
   block: &Block,
   set: ValidatorSet,
 ) -> Result<(), SeraiError> {
-  if in_set(key, serai, set, block.hash()).await?.expect("NewSet for set which doesn't exist") {
+  if in_set(key, &serai.as_of(block.hash()), set)
+    .await?
+    .expect("NewSet for set which doesn't exist")
+  {
     log::info!("present in set {:?}", set);
 
-    let set_participants = serai
-      .get_validator_set_participants(set.network, block.hash())
-      .await?
-      .expect("NewSet for set which doesn't exist");
+    let set_data = {
+      let serai = serai.as_of(block.hash()).validator_sets();
+      let set_participants =
+        serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 
-    let allocation_per_key_share = serai
-      .get_allocation_per_key_share(set.network, block.hash())
-      .await?
-      .expect("NewSet for set which didn't have an allocation per key share")
-      .0;
-
-    let mut set_data = vec![];
-    for participant in set_participants {
-      let allocation = serai
-        .get_allocation(set.network, participant, block.hash())
+      let allocation_per_key_share = serai
+        .allocation_per_key_share(set.network)
         .await?
-        .expect("validator selected for set yet didn't have an allocation")
+        .expect("NewSet for set which didn't have an allocation per key share")
         .0;
-      set_data.push((participant, allocation / allocation_per_key_share));
-    }
-    amortize_excess_key_shares(&mut set_data);
+
+      let mut set_data = vec![];
+      for participant in set_participants {
+        let allocation = serai
+          .allocation(set.network, participant)
+          .await?
+          .expect("validator selected for set yet didn't have an allocation")
+          .0;
+        set_data.push((participant, allocation / allocation_per_key_share));
+      }
+      amortize_excess_key_shares(&mut set_data);
+      set_data
+    };
 
     let time = if let Ok(time) = block.time() {
       time
@@ -88,7 +91,7 @@ async fn handle_new_set<D: Db, CNT: Clone + Fn(&mut D, TributarySpec)>(
       assert_eq!(block.number(), 0);
       // Use the next block's time
       loop {
-        let Ok(Some(res)) = serai.get_block_by_number(1).await else {
+        let Ok(Some(res)) = serai.block_by_number(1).await else {
           sleep(Duration::from_secs(5)).await;
           continue;
         };
@@ -132,7 +135,9 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
         context: SubstrateContext {
           serai_time: block.time().unwrap() / 1000,
           network_latest_finalized_block: serai
-            .get_latest_block_for_network(block.hash(), set.network)
+            .as_of(block.hash())
+            .in_instructions()
+            .latest_block_for_network(set.network)
             .await?
             // The processor treats this as a magic value which will cause it to find a network
             // block which has a time greater than or equal to the Serai time
@@ -153,8 +158,6 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
   serai: &Serai,
   block: &Block,
 ) -> Result<(), SeraiError> {
-  let hash = block.hash();
-
   // Track which networks had events with a Vec in ordr to preserve the insertion order
   // While that shouldn't be needed, ensuring order never hurts, and may enable design choices
   // with regards to Processor <-> Coordinator message passing
@@ -173,7 +176,8 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
   let mut batches = HashMap::<NetworkId, Vec<u32>>::new();
   let mut burns = HashMap::new();
 
-  for batch in serai.get_batch_events(hash).await? {
+  let serai = serai.as_of(block.hash());
+  for batch in serai.in_instructions().batch_events().await? {
     if let InInstructionsEvent::Batch { network, id, block: network_block, instructions_hash } =
       batch
     {
@@ -193,7 +197,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
     }
   }
 
-  for burn in serai.get_burn_events(hash).await? {
+  for burn in serai.coins().burn_events().await? {
     if let TokensEvent::Burn { address: _, balance, instruction } = burn {
       let network = balance.coin.network();
       network_had_event(&mut burns, &mut batches, network);
@@ -213,7 +217,8 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
     } else {
       // If it's had a batch or a burn, it must have had a block acknowledged
       serai
-        .get_latest_block_for_network(hash, network)
+        .in_instructions()
+        .latest_block_for_network(network)
         .await?
         .expect("network had a batch/burn yet never set a latest block")
     };
@@ -255,7 +260,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
   let mut event_id = 0;
 
   // If a new validator set was activated, create tributary/inform processor to do a DKG
-  for new_set in serai.get_new_set_events(hash).await? {
+  for new_set in serai.as_of(hash).validator_sets().new_set_events().await? {
     // Individually mark each event as handled so on reboot, we minimize duplicates
     // Additionally, if the Serai connection also fails 1/100 times, this means a block with 1000
     // events will successfully be incrementally handled (though the Serai connection should be
@@ -281,7 +286,7 @@ async fn handle_block<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: Proces
   }
 
   // If a key pair was confirmed, inform the processor
-  for key_gen in serai.get_key_gen_events(hash).await? {
+  for key_gen in serai.as_of(hash).validator_sets().key_gen_events().await? {
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
@@ -326,7 +331,7 @@ async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: P
   next_block: &mut u64,
 ) -> Result<(), SeraiError> {
   // Check if there's been a new Substrate block
-  let latest = serai.get_latest_block().await?;
+  let latest = serai.latest_block().await?;
   let latest_number = latest.number();
   if latest_number < *next_block {
     return Ok(());
@@ -345,7 +350,7 @@ async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: P
         latest.take().unwrap()
       } else {
         serai
-          .get_block_by_number(b)
+          .block_by_number(b)
           .await?
           .expect("couldn't get block before the latest finalized block")
       },
@@ -395,7 +400,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       else {
         // Timed out, which may be because Serai isn't finalizing or may be some issue with the
         // notifier
-        if serai.get_latest_block().await.map(|block| block.number()).ok() ==
+        if serai.latest_block().await.map(|block| block.number()).ok() ==
           Some(next_substrate_block.saturating_sub(1))
         {
           log::info!("serai hasn't finalized a block in the last 60s...");
@@ -447,7 +452,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
   // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
   // call, instead of a series of network requests
   let latest = loop {
-    let Ok(res) = serai.get_latest_block_hash().await else {
+    let Ok(res) = serai.latest_block_hash().await else {
       log::error!(
         "couldn't get the latest block hash from serai when checking tributary relevancy"
       );
@@ -458,7 +463,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
   };
 
   let latest_session = loop {
-    let Ok(res) = serai.get_session(set.network, latest).await else {
+    let Ok(res) = serai.as_of(latest).validator_sets().session(set.network).await else {
       log::error!("couldn't get the latest session from serai when checking tributary relevancy");
       sleep(Duration::from_secs(5)).await;
       continue;
@@ -477,7 +482,7 @@ pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
     } else {
       // Since the next session has started, check its handover status
       let keys = loop {
-        let Ok(res) = serai.get_keys(set, latest).await else {
+        let Ok(res) = serai.as_of(latest).validator_sets().keys(set).await else {
           log::error!(
             "couldn't get the keys for a session from serai when checking tributary relevancy"
           );
@@ -506,10 +511,12 @@ pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -
     }
     first = false;
 
-    let Ok(latest_block) = serai.get_latest_block().await else {
+    let Ok(latest_block) = serai.latest_block().await else {
       continue;
     };
-    let Ok(last) = serai.get_last_batch_for_network(latest_block.hash(), network).await else {
+    let Ok(last) =
+      serai.as_of(latest_block.hash()).in_instructions().last_batch_for_network(network).await
+    else {
       continue;
     };
     break if let Some(last) = last { last + 1 } else { 0 };
