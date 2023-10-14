@@ -216,8 +216,8 @@ pub(crate) async fn scan_tributaries_task<
                         // creation
                         // TODO2: Differentiate connection errors from invariants
                         Err(e) => {
-                          if let Ok(latest) = serai.latest_block_hash().await {
-                            let serai = serai.as_of(latest).validator_sets();
+                          if let Ok(serai) = serai.with_current_latest_block().await {
+                            let serai = serai.validator_sets();
                             // Check if this failed because the keys were already set by someone
                             // else
                             if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
