@@ -359,59 +359,6 @@ async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pro: P
   Ok(())
 }
 
-pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
-  // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
-  // call, instead of a series of network requests
-  let latest = loop {
-    let Ok(res) = serai.get_latest_block_hash().await else {
-      log::error!(
-        "couldn't get the latest block hash from serai when checking tributary relevancy"
-      );
-      sleep(Duration::from_secs(5)).await;
-      continue;
-    };
-    break res;
-  };
-
-  let latest_session = loop {
-    let Ok(res) = serai.get_session(set.network, latest).await else {
-      log::error!("couldn't get the latest session from serai when checking tributary relevancy");
-      sleep(Duration::from_secs(5)).await;
-      continue;
-    };
-    // If the on-chain Session is None, then this Session is greater and therefore, for the
-    // purposes here, active
-    let Some(res) = res else { return true };
-    break res;
-  };
-
-  if latest_session.0 > set.session.0 {
-    // If we're on the Session after the Session after this Session, then this Session is
-    // definitively completed
-    if latest_session.0 > (set.session.0 + 1) {
-      return false;
-    } else {
-      // Since the next session has started, check its handover status
-      let keys = loop {
-        let Ok(res) = serai.get_keys(set, latest).await else {
-          log::error!(
-            "couldn't get the keys for a session from serai when checking tributary relevancy"
-          );
-          sleep(Duration::from_secs(5)).await;
-          continue;
-        };
-        break res;
-      };
-      // If the keys have been deleted, then this Tributary is retired
-      if keys.is_none() {
-        return false;
-      }
-    }
-  }
-
-  true
-}
-
 pub async fn scan_task<D: Db, Pro: Processors>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -493,4 +440,111 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       }
     }
   }
+}
+
+/// Returns if a ValidatorSet has yet to be retired.
+pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
+  // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
+  // call, instead of a series of network requests
+  let latest = loop {
+    let Ok(res) = serai.get_latest_block_hash().await else {
+      log::error!(
+        "couldn't get the latest block hash from serai when checking tributary relevancy"
+      );
+      sleep(Duration::from_secs(5)).await;
+      continue;
+    };
+    break res;
+  };
+
+  let latest_session = loop {
+    let Ok(res) = serai.get_session(set.network, latest).await else {
+      log::error!("couldn't get the latest session from serai when checking tributary relevancy");
+      sleep(Duration::from_secs(5)).await;
+      continue;
+    };
+    // If the on-chain Session is None, then this Session is greater and therefore, for the
+    // purposes here, active
+    let Some(res) = res else { return true };
+    break res;
+  };
+
+  if latest_session.0 > set.session.0 {
+    // If we're on the Session after the Session after this Session, then this Session is
+    // definitively completed
+    if latest_session.0 > (set.session.0 + 1) {
+      return false;
+    } else {
+      // Since the next session has started, check its handover status
+      let keys = loop {
+        let Ok(res) = serai.get_keys(set, latest).await else {
+          log::error!(
+            "couldn't get the keys for a session from serai when checking tributary relevancy"
+          );
+          sleep(Duration::from_secs(5)).await;
+          continue;
+        };
+        break res;
+      };
+      // If the keys have been deleted, then this Tributary is retired
+      if keys.is_none() {
+        return false;
+      }
+    }
+  }
+
+  true
+}
+
+/// Gets the expected ID for the next Batch.
+pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -> u32 {
+  let mut first = true;
+  loop {
+    if !first {
+      log::error!("{} {network:?}", "couldn't connect to Serai node to get the next batch ID for",);
+      sleep(Duration::from_secs(5)).await;
+    }
+    first = false;
+
+    let Ok(latest_block) = serai.get_latest_block().await else {
+      continue;
+    };
+    let Ok(last) = serai.get_last_batch_for_network(latest_block.hash(), network).await else {
+      continue;
+    };
+    break if let Some(last) = last { last + 1 } else { 0 };
+  }
+}
+
+/// Verifies `Batch`s which have already been indexed from Substrate.
+pub(crate) async fn verify_published_batches<D: Db>(
+  txn: &mut D::Transaction<'_>,
+  network: NetworkId,
+  optimistic_up_to: u32,
+) -> Option<u32> {
+  // TODO: Localize from MainDb to SubstrateDb
+  let last = crate::MainDb::<D>::last_verified_batch(txn, network);
+  for id in last.map(|last| last + 1).unwrap_or(0) ..= optimistic_up_to {
+    let Some(on_chain) = SubstrateDb::<D>::batch_instructions_hash(txn, network, id) else {
+      break;
+    };
+    let off_chain = crate::MainDb::<D>::expected_batch(txn, network, id).unwrap();
+    if on_chain != off_chain {
+      // Halt operations on this network and spin, as this is a critical fault
+      loop {
+        log::error!(
+          "{}! network: {:?} id: {} off-chain: {} on-chain: {}",
+          "on-chain batch doesn't match off-chain",
+          network,
+          id,
+          hex::encode(off_chain),
+          hex::encode(on_chain),
+        );
+        sleep(Duration::from_secs(60)).await;
+      }
+    }
+    crate::MainDb::<D>::save_last_verified_batch(txn, network, id);
+  }
+
+  crate::MainDb::<D>::last_verified_batch(txn, network)
 }
