@@ -354,3 +354,56 @@ pub async fn handle_new_blocks<D: Db, CNT: Clone + Fn(&mut D, TributarySpec), Pr
 
   Ok(())
 }
+
+pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
+  // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
+  // call, instead of a series of network requests
+  let latest = loop {
+    let Ok(res) = serai.get_latest_block_hash().await else {
+      log::error!(
+        "couldn't get the latest block hash from serai when checking tributary relevancy"
+      );
+      sleep(Duration::from_secs(5)).await;
+      continue;
+    };
+    break res;
+  };
+
+  let latest_session = loop {
+    let Ok(res) = serai.get_session(set.network, latest).await else {
+      log::error!("couldn't get the latest session from serai when checking tributary relevancy");
+      sleep(Duration::from_secs(5)).await;
+      continue;
+    };
+    // If the on-chain Session is None, then this Session is greater and therefore, for the
+    // purposes here, active
+    let Some(res) = res else { return true };
+    break res;
+  };
+
+  if latest_session.0 > set.session.0 {
+    // If we're on the Session after the Session after this Session, then this Session is
+    // definitively completed
+    if latest_session.0 > (set.session.0 + 1) {
+      return false;
+    } else {
+      // Since the next session has started, check its handover status
+      let keys = loop {
+        let Ok(res) = serai.get_keys(set, latest).await else {
+          log::error!(
+            "couldn't get the keys for a session from serai when checking tributary relevancy"
+          );
+          sleep(Duration::from_secs(5)).await;
+          continue;
+        };
+        break res;
+      };
+      // If the keys have been deleted, then this Tributary is retired
+      if keys.is_none() {
+        return false;
+      }
+    }
+  }
+
+  true
+}

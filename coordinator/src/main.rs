@@ -18,7 +18,7 @@ use frost::Participant;
 use serai_db::{DbTxn, Db};
 use serai_env as env;
 
-use serai_client::{primitives::NetworkId, Public, Serai};
+use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet, Public, Serai};
 
 use message_queue::{Service, client::MessageQueue};
 
@@ -47,7 +47,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::SubstrateDb;
+use substrate::{SubstrateDb, is_active_set};
 
 #[cfg(test)]
 pub mod tests;
@@ -604,7 +604,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     if !MainDb::<D>::handled_message(&db, msg.network, msg.id) {
       let mut txn = db.txn();
 
-      let relevant_tributary = match &msg.msg {
+      let mut relevant_tributary = match &msg.msg {
         // We'll only receive these if we fired GenerateKey, which we'll only do if if we're
         // in-set, making the Tributary relevant
         ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
@@ -799,8 +799,12 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
               let last_id = last_id.unwrap();
               for batch in start_id .. last_id {
                 if let Some(set) = MainDb::<D>::is_handover_batch(&txn, msg.network, batch) {
-                  // TODO: relevant may malready be Some. This is a safe over-write, yet we do need
-                  // to explicitly not bother with old tributaries
+                  // relevant may already be Some. This is a safe over-write, as we don't need to
+                  // be concerned for handovers of Tributaries which have completed their handovers
+                  // While this does bypass the checks that Tributary would've performed at the
+                  // time, if we ever actually participate in a handover, we will verify *all*
+                  // prior `Batch`s, including the ones which would've been explicitly verified
+                  // then
                   relevant = Some(set.session);
                 }
               }
@@ -810,13 +814,25 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
         },
       };
 
+      // If we have a relevant Tributary, check it's actually still relevant and has yet to be
+      // retired
+      if let Some(relevant_tributary_value) = relevant_tributary {
+        if !is_active_set(
+          &serai,
+          ValidatorSet { network: msg.network, session: relevant_tributary_value },
+        )
+        .await
+        {
+          relevant_tributary = None;
+        }
+      }
+
       // If there's a relevant Tributary...
       if let Some(relevant_tributary) = relevant_tributary {
         // Make sure we have it
         // Per the reasoning above, we only return a Tributary as relevant if we're a participant
         // Accordingly, we do *need* to have this Tributary now to handle it UNLESS the Tributary
         // has already completed and this is simply an old message
-        // TODO: Check if the Tributary has already been completed
         let Some(ActiveTributary { spec, tributary }) = tributaries.get(&relevant_tributary) else {
           // Since we don't, sleep for a fraction of a second and move to the next loop iteration
           // At the start of the loop, we'll check for new tributaries, making this eventually
