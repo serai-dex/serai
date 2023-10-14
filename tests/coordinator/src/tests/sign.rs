@@ -17,11 +17,12 @@ use serai_client::{
     NetworkId, Coin, Amount, Balance, BlockHash, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
   },
-  tokens::{
+  coins::{
     primitives::{OutInstruction, OutInstructionWithBalance},
     TokensEvent,
   },
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  SeraiCoins,
 };
 use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
 
@@ -210,7 +211,7 @@ async fn sign_test() {
             &serai
               .sign(
                 &PairSigner::new(insecure_pair_from_name("Ferdie")),
-                &Serai::transfer_sri(address, Amount(1_000_000_000)),
+                &SeraiCoins::transfer_sri(address, Amount(1_000_000_000)),
                 0,
                 Default::default(),
               )
@@ -243,27 +244,21 @@ async fn sign_test() {
       )
       .await;
 
-      let block_included_in_hash =
-        serai.get_block_by_number(block_included_in).await.unwrap().unwrap().hash();
+      {
+        let block_included_in_hash =
+          serai.block_by_number(block_included_in).await.unwrap().unwrap().hash();
 
-      assert_eq!(
-        serai.get_sri_balance(block_included_in_hash, serai_addr).await.unwrap(),
-        1_000_000_000
-      );
+        let serai = serai.as_of(block_included_in_hash).coins();
+        assert_eq!(serai.sri_balance(serai_addr).await.unwrap(), 1_000_000_000);
 
-      // Verify the mint occurred as expected
-      assert_eq!(
-        serai.get_mint_events(block_included_in_hash).await.unwrap(),
-        vec![TokensEvent::Mint { address: serai_addr, balance }]
-      );
-      assert_eq!(
-        serai.get_token_supply(block_included_in_hash, Coin::Bitcoin).await.unwrap(),
-        amount
-      );
-      assert_eq!(
-        serai.get_token_balance(block_included_in_hash, Coin::Bitcoin, serai_addr).await.unwrap(),
-        amount
-      );
+        // Verify the mint occurred as expected
+        assert_eq!(
+          serai.mint_events().await.unwrap(),
+          vec![TokensEvent::Mint { address: serai_addr, balance }]
+        );
+        assert_eq!(serai.token_supply(Coin::Bitcoin).await.unwrap(), amount);
+        assert_eq!(serai.token_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
+      }
 
       // Trigger a burn
       let out_instruction =
@@ -273,7 +268,7 @@ async fn sign_test() {
           &serai
             .sign(
               &serai_pair,
-              &Serai::burn(balance, out_instruction.clone()),
+              &SeraiCoins::burn(balance, out_instruction.clone()),
               0,
               Default::default(),
             )
@@ -290,11 +285,11 @@ async fn sign_test() {
           tokio::time::sleep(Duration::from_secs(6)).await;
         }
 
-        while last_serai_block <= serai.get_latest_block().await.unwrap().number() {
+        while last_serai_block <= serai.latest_block().await.unwrap().number() {
           let burn_events = serai
-            .get_burn_events(
-              serai.get_block_by_number(last_serai_block).await.unwrap().unwrap().hash(),
-            )
+            .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+            .coins()
+            .burn_events()
             .await
             .unwrap();
 
@@ -314,16 +309,11 @@ async fn sign_test() {
         }
       }
 
-      let last_serai_block = serai.get_block_by_number(last_serai_block).await.unwrap().unwrap();
+      let last_serai_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
       let last_serai_block_hash = last_serai_block.hash();
-      assert_eq!(
-        serai.get_token_supply(last_serai_block_hash, Coin::Bitcoin).await.unwrap(),
-        Amount(0)
-      );
-      assert_eq!(
-        serai.get_token_balance(last_serai_block_hash, Coin::Bitcoin, serai_addr).await.unwrap(),
-        Amount(0)
-      );
+      let serai = serai.as_of(last_serai_block_hash).coins();
+      assert_eq!(serai.token_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
+      assert_eq!(serai.token_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
 
       let mut plan_id = [0; 32];
       OsRng.fill_bytes(&mut plan_id);
