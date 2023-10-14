@@ -14,7 +14,7 @@ mod other_primitives {
   pub mod in_instructions {
     pub use serai_runtime::in_instructions::primitives;
   }
-  pub mod tokens {
+  pub mod coins {
     pub use serai_runtime::tokens::primitives;
   }
   pub mod validator_sets {

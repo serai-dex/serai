@@ -10,7 +10,7 @@ use messages::{sign::SignId, SubstrateContext};
 use serai_client::{
   primitives::{BlockHash, NetworkId},
   in_instructions::primitives::Batch,
-  tokens::primitives::{OutInstruction, OutInstructionWithBalance},
+  coins::primitives::{OutInstruction, OutInstructionWithBalance},
 };
 
 use crate::{*, tests::*};
