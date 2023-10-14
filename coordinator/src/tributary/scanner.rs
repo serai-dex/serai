@@ -7,9 +7,7 @@ use ciphersuite::{Ciphersuite, Ristretto};
 
 use tokio::sync::broadcast;
 
-use serai_client::{
-  primitives::NetworkId, validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai,
-};
+use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai};
 
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
@@ -36,10 +34,10 @@ pub enum RecognizedIdType {
 }
 
 pub(crate) trait RIDTrait<FRid>:
-  Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid
+  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid
 {
 }
-impl<FRid, F: Clone + Fn(NetworkId, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid>
+impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, [u8; 32], u32) -> FRid>
   RIDTrait<FRid> for F
 {
 }

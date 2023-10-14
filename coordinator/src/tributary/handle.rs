@@ -426,7 +426,7 @@ pub(crate) async fn handle_application_tx<
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
       let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
-      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch, nonce).await;
+      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch, nonce).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -438,7 +438,7 @@ pub(crate) async fn handle_application_tx<
       let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
       for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id, nonce).await;
+        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id, nonce).await;
       }
     }
 

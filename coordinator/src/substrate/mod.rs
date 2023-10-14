@@ -260,6 +260,7 @@ async fn handle_block<D: Db, Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
+  tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
   processors: &Pro,
   serai: &Serai,
   block: Block,
@@ -317,6 +318,26 @@ async fn handle_block<D: Db, Pro: Processors>(
     event_id += 1;
   }
 
+  for retired_set in serai.as_of(hash).validator_sets().set_retired_events().await? {
+    let ValidatorSetsEvent::SetRetired { set } = retired_set else {
+      panic!("SetRetired event wasn't SetRetired: {retired_set:?}");
+    };
+
+    if set.network == NetworkId::Serai {
+      continue;
+    }
+
+    if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
+      log::info!("found fresh set retired event {:?}", retired_set);
+      let mut txn = db.0.txn();
+      crate::MainDb::<D>::retire_tributary(&mut txn, set);
+      tributary_retired.send(set).unwrap();
+      SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
+      txn.commit();
+    }
+    event_id += 1;
+  }
+
   // Finally, tell the processor of acknowledged blocks/burns
   // This uses a single event as. unlike prior events which individually executed code, all
   // following events share data collection
@@ -336,6 +357,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   db: &mut SubstrateDb<D>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
+  tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
   processors: &Pro,
   serai: &Serai,
   next_block: &mut u64,
@@ -354,6 +376,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       db,
       key,
       new_tributary_spec,
+      tributary_retired,
       processors,
       serai,
       if b == latest_number {
@@ -380,6 +403,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   processors: Pro,
   serai: Arc<Serai>,
   new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
+  tributary_retired: mpsc::UnboundedSender<ValidatorSet>,
 ) {
   log::info!("scanning substrate");
 
@@ -431,6 +455,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       &mut db,
       &key,
       &new_tributary_spec,
+      &tributary_retired,
       &processors,
       &serai,
       &mut next_substrate_block,
@@ -444,58 +469,6 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       }
     }
   }
-}
-
-/// Returns if a ValidatorSet has yet to be retired.
-pub async fn is_active_set(serai: &Serai, set: ValidatorSet) -> bool {
-  // TODO: Track this from the Substrate scanner to reduce our overhead? We'd only have a DB
-  // call, instead of a series of network requests
-  let serai = loop {
-    let Ok(serai) = serai.with_current_latest_block().await else {
-      log::error!("couldn't get the latest block hash from serai when checking if set is active");
-      sleep(Duration::from_secs(5)).await;
-      continue;
-    };
-    break serai.validator_sets();
-  };
-
-  let latest_session = loop {
-    let Ok(res) = serai.session(set.network).await else {
-      log::error!("couldn't get the latest session from serai when checking if set is active");
-      sleep(Duration::from_secs(5)).await;
-      continue;
-    };
-    // If the on-chain Session is None, then this Session is greater and therefore, for the
-    // purposes here, active
-    let Some(res) = res else { return true };
-    break res;
-  };
-
-  if latest_session.0 > set.session.0 {
-    // If we're on the Session after the Session after this Session, then this Session is
-    // definitively completed
-    if latest_session.0 > (set.session.0 + 1) {
-      return false;
-    } else {
-      // Since the next session has started, check its handover status
-      let keys = loop {
-        let Ok(res) = serai.keys(set).await else {
-          log::error!(
-            "couldn't get the keys for a session from serai when checking if set is active"
-          );
-          sleep(Duration::from_secs(5)).await;
-          continue;
-        };
-        break res;
-      };
-      // If the keys have been deleted, then this Tributary is retired
-      if keys.is_none() {
-        return false;
-      }
-    }
-  }
-
-  true
 }
 
 /// Gets the expected ID for the next Batch.

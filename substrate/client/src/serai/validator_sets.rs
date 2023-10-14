@@ -33,6 +33,13 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn set_retired_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+    self
+      .0
+      .events::<ValidatorSets, _>(|event| matches!(event, ValidatorSetsEvent::SetRetired { .. }))
+      .await
+  }
+
   pub async fn session(&self, network: NetworkId) -> Result<Option<Session>, SeraiError> {
     self.0.storage(PALLET, "CurrentSession", Some(vec![scale_value(network)])).await
   }

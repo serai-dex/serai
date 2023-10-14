@@ -174,7 +174,10 @@ pub mod pallet {
       // key is publishing `Batch`s. This should only happen once the current key has verified all
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
       if prior.is_some() && (!valid_by_prior) {
-        ValidatorSets::<T>::retire_session(network, Session(current_session.0 - 1));
+        ValidatorSets::<T>::retire_set(ValidatorSet {
+          network,
+          session: Session(current_session.0 - 1),
+        });
       }
 
       // check that this validator set isn't publishing a batch more than once per block

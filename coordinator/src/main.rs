@@ -50,7 +50,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::{SubstrateDb, is_active_set};
+use substrate::SubstrateDb;
 
 #[cfg(test)]
 pub mod tests;
@@ -67,18 +67,18 @@ pub enum TributaryEvent<D: Db, P: P2p> {
   TributaryRetired(ValidatorSet),
 }
 
+// TODO: Clean up the actual underlying Tributary/Tendermint tasks
+
 // Creates a new tributary and sends it to all listeners.
-// TODO: retire_tributary
 async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai: &Serai,
   processors: &Pro,
   p2p: P,
   tributaries: &broadcast::Sender<TributaryEvent<D, P>>,
   spec: TributarySpec,
 ) {
-  if !is_active_set(serai, spec.set()).await {
+  if MainDb::<D>::is_tributary_retired(&db, spec.set()) {
     log::info!("not adding tributary {:?} since it's been retired", spec.set());
   }
 
@@ -363,12 +363,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
   // If we have a relevant Tributary, check it's actually still relevant and has yet to be retired
   if let Some(relevant_tributary_value) = relevant_tributary {
-    if !is_active_set(
-      serai,
+    if MainDb::<D>::is_tributary_retired(
+      &txn,
       ValidatorSet { network: msg.network, session: relevant_tributary_value },
-    )
-    .await
-    {
+    ) {
       relevant_tributary = None;
     }
   }
@@ -382,8 +380,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
     let Some(ActiveTributary { spec, tributary }) = tributaries.get(&relevant_tributary) else {
       // Since we don't, sleep for a fraction of a second and return false, signaling we didn't
       // handle this message
-      // At the start of the loop which calls this function, we'll check for new tributaries, making
-      // this eventually resolve
+      // At the start of the loop which calls this function, we'll check for new tributaries,
+      // making this eventually resolve
       sleep(Duration::from_millis(100)).await;
       return false;
     };
@@ -659,24 +657,21 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   let mut tributaries = HashMap::new();
   loop {
     match tributary_event.try_recv() {
-      Ok(event) => {
-        match event {
-          TributaryEvent::NewTributary(tributary) => {
-            let set = tributary.spec.set();
-            assert_eq!(set.network, network);
-            tributaries.insert(set.session, tributary);
-          }
-          // TOOD
-          TributaryEvent::TributaryRetired(_) => todo!(),
+      Ok(event) => match event {
+        TributaryEvent::NewTributary(tributary) => {
+          let set = tributary.spec.set();
+          assert_eq!(set.network, network);
+          tributaries.insert(set.session, tributary);
         }
-      }
+        TributaryEvent::TributaryRetired(set) => {
+          tributaries.remove(&set.session);
+        }
+      },
       Err(mpsc::error::TryRecvError::Empty) => {}
       Err(mpsc::error::TryRecvError::Disconnected) => {
         panic!("handle_processor_messages tributary_event sender closed")
       }
     }
-
-    // TODO: Remove the Tributary if it's retired
 
     // TODO: Check this ID is sane (last handled ID or expected next ID)
     let msg = processors.recv(network).await;
@@ -716,8 +711,9 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
       TributaryEvent::NewTributary(tributary) => channels[&tributary.spec.set().network]
         .send(TributaryEvent::NewTributary(tributary))
         .unwrap(),
-      // TODO
-      TributaryEvent::TributaryRetired(_) => todo!(),
+      TributaryEvent::TributaryRetired(set) => {
+        channels[&set.network].send(TributaryEvent::TributaryRetired(set)).unwrap()
+      }
     };
   }
 }
@@ -737,6 +733,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     new_tributary_spec_send.send(spec).unwrap();
   }
 
+  let (tributary_retired_send, mut tributary_retired_recv) = mpsc::unbounded_channel();
+
   // Handle new Substrate blocks
   tokio::spawn(crate::substrate::scan_task(
     raw_db.clone(),
@@ -744,6 +742,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     processors.clone(),
     serai.clone(),
     new_tributary_spec_send,
+    tributary_retired_send,
   ));
 
   // Handle the Tributaries
@@ -756,11 +755,21 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   let tributary_event_listener_4 = tributary_event.subscribe();
   let tributary_event_listener_5 = tributary_event.subscribe();
 
+  // Emit TributaryEvent::TributaryRetired
+  tokio::spawn({
+    let tributary_event = tributary_event.clone();
+    async move {
+      loop {
+        let retired = tributary_retired_recv.recv().await.unwrap();
+        tributary_event.send(TributaryEvent::TributaryRetired(retired)).map_err(|_| ()).unwrap();
+      }
+    }
+  });
+
   // Spawn a task to further add Tributaries as needed
   tokio::spawn({
     let raw_db = raw_db.clone();
     let key = key.clone();
-    let serai = serai.clone();
     let processors = processors.clone();
     let p2p = p2p.clone();
     async move {
@@ -770,12 +779,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         tokio::spawn({
           let raw_db = raw_db.clone();
           let key = key.clone();
-          let serai = serai.clone();
           let processors = processors.clone();
           let p2p = p2p.clone();
           let tributary_event = tributary_event.clone();
           async move {
-            add_tributary(raw_db, key, &serai, &processors, p2p, &tributary_event, spec).await;
+            add_tributary(raw_db, key, &processors, p2p, &tributary_event, spec).await;
           }
         });
       }
@@ -790,14 +798,19 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let tributaries = Arc::new(RwLock::new(HashMap::new()));
     tokio::spawn({
       let tributaries = tributaries.clone();
+      let mut set_to_genesis = HashMap::new();
       async move {
         loop {
           match tributary_event_listener_1.recv().await {
             Ok(TributaryEvent::NewTributary(tributary)) => {
+              set_to_genesis.insert(tributary.spec.set(), tributary.spec.genesis());
               tributaries.write().await.insert(tributary.spec.genesis(), tributary.tributary);
             }
-            // TODO
-            Ok(TributaryEvent::TributaryRetired(_)) => todo!(),
+            Ok(TributaryEvent::TributaryRetired(set)) => {
+              if let Some(genesis) = set_to_genesis.remove(&set) {
+                tributaries.write().await.remove(&genesis);
+              }
+            }
             Err(broadcast::error::RecvError::Lagged(_)) => {
               panic!("recognized_id lagged to handle tributary_event")
             }
@@ -807,7 +820,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       }
     });
 
-    move |network, genesis, id_type, id, nonce| {
+    move |set: ValidatorSet, genesis, id_type, id, nonce| {
       let mut raw_db = raw_db.clone();
       let key = key.clone();
       let tributaries = tributaries.clone();
@@ -815,10 +828,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         // The transactions for these are fired before the preprocesses are actually
         // received/saved, creating a race between Tributary ack and the availability of all
         // Preprocesses
-        // This waits until the necessary preprocess is available
+        // This waits until the necessary preprocess is available 0,
+        // TODO: Incorporate RecognizedIdType here?
         let get_preprocess = |raw_db, id| async move {
           loop {
-            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, network, id) else {
+            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, set.network, id) else {
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -853,11 +867,19 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
           let tributaries = tributaries.read().await;
           let Some(tributary) = tributaries.get(&genesis) else {
+            // If we don't have this Tributary because it's retired, break and move on
+            if MainDb::<D>::is_tributary_retired(&raw_db, set) {
+              break;
+            }
+
             // This may happen if the task above is simply slow
             log::warn!("tributary we don't have yet came to consensus on an Batch");
             continue;
           };
-          // This is safe to perform multiple times and solely needs atomicity within itself
+          // This is safe to perform multiple times and solely needs atomicity with regards to
+          // itself
+          // TODO: Should this not take a TXN accordingly? It's best practice to take a txn, yet
+          // taking a txn fails to declare its achieved independence
           let mut txn = raw_db.txn();
           publish_signed_transaction(&mut txn, tributary, tx).await;
           txn.commit();
@@ -885,11 +907,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   tokio::spawn(p2p::heartbeat_tributaries_task(p2p.clone(), tributary_event_listener_3));
 
   // Handle P2P messages
-  tokio::spawn(p2p::handle_p2p_task(
-    Ristretto::generator() * key.deref(),
-    p2p,
-    tributary_event_listener_4,
-  ));
+  tokio::spawn(p2p::handle_p2p_task(p2p, tributary_event_listener_4));
 
   // Handle all messages from processors
   handle_processors(raw_db, key, serai, processors, tributary_event_listener_5).await;

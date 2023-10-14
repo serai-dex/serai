@@ -37,6 +37,9 @@ impl<D: Db> MainDb<D> {
   fn acive_tributaries_key() -> Vec<u8> {
     Self::main_key(b"active_tributaries", [])
   }
+  fn retired_tributary_key(set: ValidatorSet) -> Vec<u8> {
+    Self::main_key(b"retired_tributary", set.encode())
+  }
   pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
     let bytes = getter.get(Self::acive_tributaries_key()).unwrap_or(vec![]);
     let mut bytes_ref: &[u8] = bytes.as_ref();
@@ -59,6 +62,25 @@ impl<D: Db> MainDb<D> {
 
     spec.write(&mut existing_bytes).unwrap();
     txn.put(key, existing_bytes);
+  }
+  pub fn retire_tributary(txn: &mut D::Transaction<'_>, set: ValidatorSet) {
+    let mut active = Self::active_tributaries(txn).1;
+    for i in 0 .. active.len() {
+      if active[i].set() == set {
+        active.remove(i);
+        break;
+      }
+    }
+
+    let mut bytes = vec![];
+    for active in active {
+      active.write(&mut bytes).unwrap();
+    }
+    txn.put(Self::acive_tributaries_key(), bytes);
+    txn.put(Self::retired_tributary_key(set), []);
+  }
+  pub fn is_tributary_retired<G: Get>(getter: &G, set: ValidatorSet) -> bool {
+    getter.get(Self::retired_tributary_key(set)).is_some()
   }
 
   fn signed_transaction_key(nonce: u32) -> Vec<u8> {

@@ -8,8 +8,6 @@ use std::{
 
 use async_trait::async_trait;
 
-use ciphersuite::{Ciphersuite, Ristretto};
-
 use serai_db::Db;
 
 use tokio::{
@@ -434,19 +432,20 @@ pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
 }
 
 pub async fn handle_p2p_task<D: Db, P: P2p>(
-  our_key: <Ristretto as Ciphersuite>::G,
   p2p: P,
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
-  let channels = Arc::new(RwLock::new(HashMap::new()));
+  let channels = Arc::new(RwLock::new(HashMap::<_, mpsc::UnboundedSender<Message<P>>>::new()));
   tokio::spawn({
     let p2p = p2p.clone();
     let channels = channels.clone();
+    let mut set_to_genesis = HashMap::new();
     async move {
       loop {
         match tributary_event.recv().await.unwrap() {
           TributaryEvent::NewTributary(tributary) => {
             let genesis = tributary.spec.genesis();
+            set_to_genesis.insert(tributary.spec.set(), genesis);
 
             let (send, mut recv) = mpsc::unbounded_channel();
             channels.write().await.insert(genesis, send);
@@ -455,7 +454,10 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
               let p2p = p2p.clone();
               async move {
                 loop {
-                  let mut msg: Message<P> = recv.recv().await.unwrap();
+                  let Some(mut msg) = recv.recv().await else {
+                    // Channel closure happens when the tributary retires
+                    break;
+                  };
                   match msg.kind {
                     P2pMessageKind::KeepAlive => {}
 
@@ -564,8 +566,11 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
               }
             });
           }
-          // TODO
-          TributaryEvent::TributaryRetired(_) => todo!(),
+          TributaryEvent::TributaryRetired(set) => {
+            if let Some(genesis) = set_to_genesis.remove(&set) {
+              channels.write().await.remove(&genesis);
+            }
+          }
         }
       }
     }

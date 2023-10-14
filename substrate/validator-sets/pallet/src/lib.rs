@@ -235,6 +235,7 @@ pub mod pallet {
   pub enum Event<T: Config> {
     NewSet { set: ValidatorSet },
     KeyGen { set: ValidatorSet, key_pair: KeyPair },
+    SetRetired { set: ValidatorSet },
   }
 
   impl<T: Config> Pallet<T> {
@@ -592,10 +593,10 @@ pub mod pallet {
       Self::participants(network).into()
     }
 
-    pub fn retire_session(network: NetworkId, session: Session) {
-      let set = ValidatorSet { network, session };
+    pub fn retire_set(set: ValidatorSet) {
       MuSigKeys::<T>::remove(set);
       Keys::<T>::remove(set);
+      Pallet::<T>::deposit_event(Event::SetRetired { set });
     }
 
     /// Take the amount deallocatable.
