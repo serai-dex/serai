@@ -67,8 +67,6 @@ pub enum TributaryEvent<D: Db, P: P2p> {
   TributaryRetired(ValidatorSet),
 }
 
-// TODO: Clean up the actual underlying Tributary/Tendermint tasks
-
 // Creates a new tributary and sends it to all listeners.
 async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   db: D,
@@ -86,6 +84,7 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
 
   let tributary = Tributary::<_, Transaction, _>::new(
     // TODO2: Use a db on a distinct volume to protect against DoS attacks
+    // TODO2: Delete said db once the Tributary is dropped
     db,
     spec.genesis(),
     spec.start_time(),

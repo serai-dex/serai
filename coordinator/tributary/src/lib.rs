@@ -152,6 +152,14 @@ pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
   synced_block: Arc<RwLock<SyncedBlockSender<TendermintNetwork<D, T, P>>>>,
   synced_block_result: Arc<RwLock<SyncedBlockResultReceiver>>,
   messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
+
+  p2p_meta_task_handle: Arc<tokio::task::AbortHandle>,
+}
+
+impl<D: Db, T: TransactionTrait, P: P2p> Drop for Tributary<D, T, P> {
+  fn drop(&mut self) {
+    self.p2p_meta_task_handle.abort();
+  }
 }
 
 impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
@@ -186,26 +194,29 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let to_rebroadcast = Arc::new(RwLock::new(vec![]));
     // Actively rebroadcast consensus messages to ensure they aren't prematurely dropped from the
     // P2P layer
-    tokio::spawn({
-      let to_rebroadcast = to_rebroadcast.clone();
-      let p2p = p2p.clone();
-      async move {
-        loop {
-          let to_rebroadcast = to_rebroadcast.read().await.clone();
-          for msg in to_rebroadcast {
-            p2p.broadcast(genesis, msg).await;
+    let p2p_meta_task_handle = Arc::new(
+      tokio::spawn({
+        let to_rebroadcast = to_rebroadcast.clone();
+        let p2p = p2p.clone();
+        async move {
+          loop {
+            let to_rebroadcast = to_rebroadcast.read().await.clone();
+            for msg in to_rebroadcast {
+              p2p.broadcast(genesis, msg).await;
+            }
+            tokio::time::sleep(core::time::Duration::from_secs(1)).await;
           }
-          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
         }
-      }
-    });
+      })
+      .abort_handle(),
+    );
 
     let network =
       TendermintNetwork { genesis, signer, validators, blockchain, to_rebroadcast, p2p };
 
     let TendermintHandle { synced_block, synced_block_result, messages, machine } =
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
-    tokio::task::spawn(machine.run());
+    tokio::spawn(machine.run());
 
     Some(Self {
       db,
@@ -214,6 +225,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       synced_block: Arc::new(RwLock::new(synced_block)),
       synced_block_result: Arc::new(RwLock::new(synced_block_result)),
       messages: Arc::new(RwLock::new(messages)),
+      p2p_meta_task_handle,
     })
   }
 
