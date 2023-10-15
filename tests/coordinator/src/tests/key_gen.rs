@@ -106,7 +106,7 @@ pub async fn key_gen<C: Ciphersuite>(
   let network_key = (C::generator() * *network_priv_key).to_bytes().as_ref().to_vec();
 
   let serai = processors[0].serai().await;
-  let mut last_serai_block = serai.get_latest_block().await.unwrap().number();
+  let mut last_serai_block = serai.latest_block().await.unwrap().number();
 
   wait_for_tributary().await;
   for (i, processor) in processors.iter_mut().enumerate() {
@@ -148,11 +148,11 @@ pub async fn key_gen<C: Ciphersuite>(
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
 
-    while last_serai_block <= serai.get_latest_block().await.unwrap().number() {
+    while last_serai_block <= serai.latest_block().await.unwrap().number() {
       if !serai
-        .get_key_gen_events(
-          serai.get_block_by_number(last_serai_block).await.unwrap().unwrap().hash(),
-        )
+        .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+        .validator_sets()
+        .key_gen_events()
         .await
         .unwrap()
         .is_empty()
@@ -196,7 +196,9 @@ pub async fn key_gen<C: Ciphersuite>(
   }
   assert_eq!(
     serai
-      .get_keys(set, serai.get_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+      .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+      .validator_sets()
+      .keys(set)
       .await
       .unwrap()
       .unwrap(),

@@ -8,7 +8,9 @@ use tendermint::ext::{Network, Commit};
 
 use crate::{
   ACCOUNT_MEMPOOL_LIMIT, ReadWrite,
-  transaction::{Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction},
+  transaction::{
+    Signed, TransactionKind, TransactionError, Transaction as TransactionTrait, verify_transaction,
+  },
   tendermint::tx::verify_tendermint_tx,
   Transaction,
 };
@@ -92,7 +94,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     res
   }
 
-  /// Returns true if this is a valid, new transaction.
+  // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<N: Network>(
     &mut self,
     blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
@@ -101,7 +103,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     schema: N::SignatureScheme,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
-  ) -> bool {
+  ) -> Result<bool, TransactionError> {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
         // All Tendermint transactions should be unsigned
@@ -109,13 +111,11 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
         // check we have the tx in the pool/chain
         if self.unsigned_already_exist(tx.hash(), unsigned_in_chain) {
-          return false;
+          return Ok(false);
         }
 
         // verify the tx
-        if verify_tendermint_tx::<N>(tendermint_tx, schema, commit).is_err() {
-          return false;
-        }
+        verify_tendermint_tx::<N>(tendermint_tx, schema, commit)?;
       }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {
@@ -123,7 +123,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             // Get the nonce from the blockchain
             let Some(blockchain_next_nonce) = blockchain_next_nonces.get(signer).cloned() else {
               // Not a participant
-              return false;
+              Err(TransactionError::InvalidSigner)?
             };
 
             // If the blockchain's nonce is greater than the mempool's, use it
@@ -140,32 +140,28 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             // If we have too many transactions from this sender, don't add this yet UNLESS we are
             // this sender
             if !internal && (nonce >= &(blockchain_next_nonce + ACCOUNT_MEMPOOL_LIMIT)) {
-              return false;
+              Err(TransactionError::TooManyInMempool)?;
             }
 
-            if verify_transaction(app_tx, self.genesis, &mut self.next_nonces).is_err() {
-              return false;
-            }
+            verify_transaction(app_tx, self.genesis, &mut self.next_nonces)?;
             debug_assert_eq!(self.next_nonces[signer], nonce + 1);
           }
           TransactionKind::Unsigned => {
             // check we have the tx in the pool/chain
             if self.unsigned_already_exist(tx.hash(), unsigned_in_chain) {
-              return false;
+              return Ok(false);
             }
 
-            if app_tx.verify().is_err() {
-              return false;
-            }
+            app_tx.verify()?;
           }
-          TransactionKind::Provided(_) => return false,
+          TransactionKind::Provided(_) => Err(TransactionError::ProvidedAddedToMempool)?,
         }
       }
     }
 
     // Save the TX to the pool
     self.save_tx(tx);
-    true
+    Ok(true)
   }
 
   // Returns None if the mempool doesn't have a nonce tracked.

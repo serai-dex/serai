@@ -176,7 +176,7 @@ impl TestNetwork {
             TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
           )
           .await;
-        tokio::task::spawn(machine.run());
+        tokio::spawn(machine.run());
         write.push((messages, synced_block, synced_block_result));
       }
     }

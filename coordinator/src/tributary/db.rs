@@ -79,19 +79,24 @@ impl<D: Db> TributaryDb<D> {
   }
 
   // If a validator has been fatally slashed
-  fn fatal_slash_key(genesis: [u8; 32]) -> Vec<u8> {
-    Self::tributary_key(b"fatal_slash", genesis)
+  fn fatal_slashes_key(genesis: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"fatal_slashes", genesis)
   }
-  pub fn set_fatally_slashed(txn: &mut D::Transaction<'_>, genesis: [u8; 32], id: [u8; 32]) {
-    let key = Self::fatal_slash_key(genesis);
+  fn fatally_slashed_key(account: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"fatally_slashed", account)
+  }
+  pub fn set_fatally_slashed(txn: &mut D::Transaction<'_>, genesis: [u8; 32], account: [u8; 32]) {
+    txn.put(Self::fatally_slashed_key(account), []);
+
+    let key = Self::fatal_slashes_key(genesis);
     let mut existing = txn.get(&key).unwrap_or(vec![]);
 
     // Don't append if we already have it
-    if existing.chunks(32).any(|ex_id| ex_id == id) {
+    if existing.chunks(32).any(|existing| existing == account) {
       return;
     }
 
-    existing.extend(id);
+    existing.extend(account);
     txn.put(key, existing);
   }
 

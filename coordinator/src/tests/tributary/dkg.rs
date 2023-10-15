@@ -56,7 +56,7 @@ async fn dkg_test() {
 
   // Publish all commitments but one
   for (i, tx) in txs.iter().enumerate().skip(1) {
-    assert!(tributaries[i].1.add_transaction(tx.clone()).await);
+    assert_eq!(tributaries[i].1.add_transaction(tx.clone()).await, Ok(true));
   }
 
   // Wait until these are included
@@ -104,7 +104,7 @@ async fn dkg_test() {
 
   // Publish the last commitment
   let block_before_tx = tributaries[0].1.tip().await;
-  assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
+  assert_eq!(tributaries[0].1.add_transaction(txs[0].clone()).await, Ok(true));
   wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
@@ -181,7 +181,7 @@ async fn dkg_test() {
 
   let block_before_tx = tributaries[0].1.tip().await;
   for (i, tx) in txs.iter().enumerate().skip(1) {
-    assert!(tributaries[i].1.add_transaction(tx.clone()).await);
+    assert_eq!(tributaries[i].1.add_transaction(tx.clone()).await, Ok(true));
   }
   for tx in txs.iter().skip(1) {
     wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;
@@ -205,7 +205,7 @@ async fn dkg_test() {
 
   // Publish the final set of shares
   let block_before_tx = tributaries[0].1.tip().await;
-  assert!(tributaries[0].1.add_transaction(txs[0].clone()).await);
+  assert_eq!(tributaries[0].1.add_transaction(txs[0].clone()).await, Ok(true));
   wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, txs[0].hash()).await;
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
@@ -296,7 +296,7 @@ async fn dkg_test() {
   }
   let block_before_tx = tributaries[0].1.tip().await;
   for (i, tx) in txs.iter().enumerate() {
-    assert!(tributaries[i].1.add_transaction(tx.clone()).await);
+    assert_eq!(tributaries[i].1.add_transaction(tx.clone()).await, Ok(true));
   }
   for tx in txs.iter() {
     wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;

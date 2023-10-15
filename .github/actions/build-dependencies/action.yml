@@ -28,8 +28,6 @@ runs:
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
         sudo apt autoremove -y
-        sudo apt update
-        sudo apt install python3 python3-pip -y
         sudo apt clean
         docker system prune -a --volumes
 
@@ -41,9 +39,9 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        pip3 install solc-select==0.2.1
-        solc-select install 0.8.16
-        solc-select use 0.8.16
+        cargo install svm-rs
+        svm install 0.8.16
+        svm use 0.8.16
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@5cb429dd810e16ff67df78472fa81cf760f4d1c0

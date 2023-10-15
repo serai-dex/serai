@@ -11,7 +11,7 @@ use serai_client::{
   in_instructions::primitives::{
     InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
   },
-  tokens::primitives::{OutInstruction, OutInstructionWithBalance},
+  coins::primitives::{OutInstruction, OutInstructionWithBalance},
 };
 
 use log::{info, error};

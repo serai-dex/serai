@@ -140,8 +140,14 @@ pub mod coordinator {
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  pub struct PlanMeta {
+    pub key: Vec<u8>,
+    pub id: [u8; 32],
+  }
+
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
-    SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<[u8; 32]> },
+    SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
     BatchPreprocess { id: SignId, block: BlockHash, preprocess: Vec<u8> },
     BatchShare { id: SignId, share: [u8; 32] },
   }

@@ -139,7 +139,7 @@ parameter_types! {
       NORMAL_DISPATCH_RATIO,
     );
 
-  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_VALIDATORS_PER_SET;
+  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
 }
 
 pub struct CallFilter;

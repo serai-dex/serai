@@ -112,8 +112,6 @@ pub mod pallet {
 
       let batch = batch.batch;
 
-      // TODO: Test validate_unsigned is actually called prior to execution, which is required for
-      // this to be safe
       LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
 
       LastBatch::<T>::insert(batch.network, batch.id);
@@ -180,7 +178,10 @@ pub mod pallet {
       // key is publishing `Batch`s. This should only happen once the current key has verified all
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
       if prior.is_some() && (!valid_by_prior) {
-        ValidatorSets::<T>::retire_session(network, Session(current_session.0 - 1));
+        ValidatorSets::<T>::retire_set(ValidatorSet {
+          network,
+          session: Session(current_session.0 - 1),
+        });
       }
 
       // check that this validator set isn't publishing a batch more than once per block
@@ -207,6 +208,11 @@ pub mod pallet {
         .longevity(10)
         .propagate(true)
         .build()
+    }
+
+    // Explicitly provide a pre-dispatch which calls validate_unsigned
+    fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
+      Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
     }
   }
 }

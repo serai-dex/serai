@@ -3,23 +3,14 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
-use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::{Ciphersuite, Ristretto};
-use frost::{
-  FrostError,
-  dkg::{Participant, musig::musig},
-  sign::*,
-};
-use frost_schnorrkel::Schnorrkel;
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use frost::dkg::Participant;
 
 use serai_client::{
   Signature,
-  validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
   subxt::utils::Encoded,
-  Serai,
+  SeraiValidatorSets,
 };
 
 use tributary::Signed;
@@ -35,8 +26,10 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, nonce_decider::NonceDecider,
-    scanner::RecognizedIdType,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb,
+    nonce_decider::NonceDecider,
+    dkg_confirmer::DkgConfirmer,
+    scanner::{RecognizedIdType, RIDTrait},
   },
 };
 
@@ -52,122 +45,6 @@ const BATCH_SHARE: &str = "b_share";
 
 const SIGN_PREPROCESS: &str = "s_preprocess";
 const SIGN_SHARE: &str = "s_share";
-
-// Instead of maintaing state, this simply re-creates the machine(s) in-full on every call (which
-// should only be once per tributary).
-// This simplifies data flow and prevents requiring multiple paths.
-// While more expensive, this only runs an O(n) algorithm, which is tolerable to run multiple
-// times.
-struct DkgConfirmer;
-impl DkgConfirmer {
-  fn preprocess_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-  ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    // TODO: Does Substrate already have a validator-uniqueness check?
-    let validators = spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-
-    let context = musig_context(spec.set());
-    let mut chacha = ChaCha20Rng::from_seed({
-      let mut entropy_transcript = RecommendedTranscript::new(b"DkgConfirmer Entropy");
-      entropy_transcript.append_message(b"spec", spec.serialize());
-      entropy_transcript.append_message(b"key", Zeroizing::new(key.to_bytes()));
-      entropy_transcript.append_message(b"attempt", attempt.to_le_bytes());
-      Zeroizing::new(entropy_transcript).rng_seed(b"preprocess")
-    });
-    let (machine, preprocess) = AlgorithmMachine::new(
-      Schnorrkel::new(b"substrate"),
-      musig(&context, key, &validators)
-        .expect("confirming the DKG for a set we aren't in/validator present multiple times")
-        .into(),
-    )
-    .preprocess(&mut chacha);
-
-    (machine, preprocess.serialize().try_into().unwrap())
-  }
-  // Get the preprocess for this confirmation.
-  fn preprocess(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-  ) -> [u8; 64] {
-    Self::preprocess_internal(spec, key, attempt).1
-  }
-
-  fn share_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let machine = Self::preprocess_internal(spec, key, attempt).0;
-    let preprocesses = preprocesses
-      .into_iter()
-      .map(|(p, preprocess)| {
-        machine
-          .read_preprocess(&mut preprocess.as_slice())
-          .map(|preprocess| (p, preprocess))
-          .map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let (machine, share) = machine
-      .sign(preprocesses, &set_keys_message(&spec.set(), key_pair))
-      .map_err(|e| match e {
-        FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-        FrostError::InvalidParticipant(_, _) |
-        FrostError::InvalidSigningSet(_) |
-        FrostError::InvalidParticipantQuantity(_, _) |
-        FrostError::DuplicatedParticipant(_) |
-        FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-        FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-      })?;
-
-    Ok((machine, share.serialize().try_into().unwrap()))
-  }
-  // Get the share for this confirmation, if the preprocesses are valid.
-  fn share(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<[u8; 32], Participant> {
-    Self::share_internal(spec, key, attempt, preprocesses, key_pair).map(|(_, share)| share)
-  }
-
-  fn complete(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-    shares: HashMap<Participant, Vec<u8>>,
-  ) -> Result<[u8; 64], Participant> {
-    let machine = Self::share_internal(spec, key, attempt, preprocesses, key_pair)
-      .expect("trying to complete a machine which failed to preprocess")
-      .0;
-
-    let shares = shares
-      .into_iter()
-      .map(|(p, share)| {
-        machine.read_share(&mut share.as_slice()).map(|share| (p, share)).map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let signature = machine.complete(shares).map_err(|e| match e {
-      FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-      FrostError::InvalidParticipant(_, _) |
-      FrostError::InvalidSigningSet(_) |
-      FrostError::InvalidParticipantQuantity(_, _) |
-      FrostError::DuplicatedParticipant(_) |
-      FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-      FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-    })?;
-
-    Ok(signature.to_bytes())
-  }
-}
 
 fn read_known_to_exist_data<D: Db, G: Get>(
   getter: &G,
@@ -234,13 +111,24 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
+pub(crate) fn fatal_slash<D: Db>(
+  txn: &mut D::Transaction<'_>,
+  genesis: [u8; 32],
+  account: [u8; 32],
+  reason: &str,
+) {
+  log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
+  TributaryDb::<D>::set_fatally_slashed(txn, genesis, account);
+  // TODO: disconnect the node from network/ban from further participation in all Tributaries
+}
+
 pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
   FRid: Future<Output = ()>,
-  RID: crate::RIDTrait<FRid>,
+  RID: RIDTrait<FRid>,
 >(
   tx: Transaction,
   spec: &TributarySpec,
@@ -252,20 +140,24 @@ pub(crate) async fn handle_application_tx<
 ) {
   let genesis = spec.genesis();
 
-  let handle = |txn: &mut _, data_spec: &DataSpecification, bytes: Vec<u8>, signed: &Signed| {
+  let handle = |txn: &mut <D as Db>::Transaction<'_>,
+                data_spec: &DataSpecification,
+                bytes: Vec<u8>,
+                signed: &Signed| {
     let Some(curr_attempt) = TributaryDb::<D>::attempt(txn, genesis, data_spec.topic) else {
-      // TODO: Full slash
-      todo!();
+      // Premature publication of a valid ID/publication of an invalid ID
+      fatal_slash::<D>(
+        txn,
+        genesis,
+        signed.signer.to_bytes(),
+        "published data for ID without an attempt",
+      );
+      return None;
     };
 
     // If they've already published a TX for this attempt, slash
-    if let Some(data) = TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer) {
-      if data != bytes {
-        // TODO: Full slash
-        todo!();
-      }
-
-      // TODO: Slash
+    if TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer).is_some() {
+      fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return None;
     }
 
@@ -274,9 +166,15 @@ pub(crate) async fn handle_application_tx<
       // TODO: Slash for being late
       return None;
     }
+    // If the attempt is greater, this is a premature publication, full slash
     if data_spec.attempt > curr_attempt {
-      // TODO: Full slash
-      todo!();
+      fatal_slash::<D>(
+        txn,
+        genesis,
+        signed.signer.to_bytes(),
+        "published data with an attempt which hasn't started",
+      );
+      return None;
     }
 
     // TODO: We can also full slash if shares before all commitments, or share before the
@@ -323,8 +221,8 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
       if shares.len() != (usize::from(spec.n()) - 1) {
-        // TODO: Full slash
-        todo!();
+        fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
+        return;
       }
 
       let sender_i = spec
@@ -412,7 +310,7 @@ pub(crate) async fn handle_application_tx<
 
           publish_serai_tx(
             spec.set(),
-            Serai::set_validator_set_keys(spec.set().network, key_pair, Signature(sig)),
+            SeraiValidatorSets::set_keys(spec.set().network, key_pair, Signature(sig)),
           )
           .await;
         }
@@ -425,7 +323,7 @@ pub(crate) async fn handle_application_tx<
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
       let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
-      recognized_id(spec.set().network, genesis, RecognizedIdType::Batch, batch, nonce).await;
+      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch, nonce).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -437,7 +335,7 @@ pub(crate) async fn handle_application_tx<
       let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
       for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set().network, genesis, RecognizedIdType::Plan, id, nonce).await;
+        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id, nonce).await;
       }
     }
 

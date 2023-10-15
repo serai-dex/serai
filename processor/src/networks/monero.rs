@@ -438,8 +438,7 @@ impl Network for Monero {
       &spendable_outputs,
     )
     .await
-    .map_err(|_| NetworkError::ConnectionError)
-    .unwrap();
+    .map_err(|_| NetworkError::ConnectionError)?;
 
     let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 

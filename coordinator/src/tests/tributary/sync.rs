@@ -13,7 +13,8 @@ use tributary::Tributary;
 
 use crate::{
   tributary::Transaction,
-  ActiveTributary, handle_p2p, heartbeat_tributaries,
+  ActiveTributary, TributaryEvent,
+  p2p::{heartbeat_tributaries_task, handle_p2p_task},
   tests::{
     LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries},
@@ -37,14 +38,13 @@ async fn sync_test() {
   let mut tributary_senders = vec![];
   let mut tributary_arcs = vec![];
   let mut p2p_threads = vec![];
-  for (i, (p2p, tributary)) in tributaries.drain(..).enumerate() {
+  for (p2p, tributary) in tributaries.drain(..) {
     let tributary = Arc::new(tributary);
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
-    let thread =
-      tokio::spawn(handle_p2p(Ristretto::generator() * *keys[i], p2p, new_tributary_recv));
+    let thread = tokio::spawn(handle_p2p_task(p2p, new_tributary_recv));
     new_tributary_send
-      .send(ActiveTributary { spec: spec.clone(), tributary })
+      .send(TributaryEvent::NewTributary(ActiveTributary { spec: spec.clone(), tributary }))
       .map_err(|_| "failed to send ActiveTributary")
       .unwrap();
     tributary_senders.push(new_tributary_send);
@@ -52,12 +52,13 @@ async fn sync_test() {
   }
   let tributaries = tributary_arcs;
 
-  // After three blocks of time, we should have a new block
+  // After four blocks of time, we should have a new block
   // We don't wait one block of time as we may have missed the chance for the first block
   // We don't wait two blocks because we may have missed the chance, and then had a failure to
-  // propose by our 'offline' validator
+  // propose by our 'offline' validator, which would cause the Tendermint round time to increase,
+  // requiring a longer delay
   let block_time = u64::from(Tributary::<MemDb, Transaction, LocalP2p>::block_time());
-  sleep(Duration::from_secs(3 * block_time)).await;
+  sleep(Duration::from_secs(4 * block_time)).await;
   let tip = tributaries[0].tip().await;
   assert!(tip != spec.genesis());
 
@@ -70,15 +71,18 @@ async fn sync_test() {
 
   // Now that we've confirmed the other tributaries formed a net without issue, drop the syncer's
   // pending P2P messages
-  syncer_p2p.1.write().await.last_mut().unwrap().clear();
+  syncer_p2p.1.write().await.1.last_mut().unwrap().clear();
 
   // Have it join the net
   let syncer_key = Ristretto::generator() * *syncer_key;
   let syncer_tributary = Arc::new(syncer_tributary);
   let (syncer_tributary_send, syncer_tributary_recv) = broadcast::channel(5);
-  tokio::spawn(handle_p2p(syncer_key, syncer_p2p.clone(), syncer_tributary_recv));
+  tokio::spawn(handle_p2p_task(syncer_p2p.clone(), syncer_tributary_recv));
   syncer_tributary_send
-    .send(ActiveTributary { spec: spec.clone(), tributary: syncer_tributary.clone() })
+    .send(TributaryEvent::NewTributary(ActiveTributary {
+      spec: spec.clone(),
+      tributary: syncer_tributary.clone(),
+    }))
     .map_err(|_| "failed to send ActiveTributary to syncer")
     .unwrap();
 
@@ -94,9 +98,12 @@ async fn sync_test() {
 
   // Start the heartbeat protocol
   let (syncer_heartbeat_tributary_send, syncer_heartbeat_tributary_recv) = broadcast::channel(5);
-  tokio::spawn(heartbeat_tributaries(syncer_p2p, syncer_heartbeat_tributary_recv));
+  tokio::spawn(heartbeat_tributaries_task(syncer_p2p, syncer_heartbeat_tributary_recv));
   syncer_heartbeat_tributary_send
-    .send(ActiveTributary { spec: spec.clone(), tributary: syncer_tributary.clone() })
+    .send(TributaryEvent::NewTributary(ActiveTributary {
+      spec: spec.clone(),
+      tributary: syncer_tributary.clone(),
+    }))
     .map_err(|_| "failed to send ActiveTributary to heartbeat")
     .unwrap();
 

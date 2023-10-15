@@ -141,7 +141,7 @@ impl Handles {
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
       let Ok(client) = Serai::new(&serai_rpc).await else { continue };
-      if client.get_latest_block_hash().await.is_err() {
+      if client.latest_block_hash().await.is_err() {
         continue;
       }
       return client;
