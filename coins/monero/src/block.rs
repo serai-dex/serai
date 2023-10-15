@@ -79,20 +79,25 @@ impl Block {
     merkle_root(self.miner_tx.hash(), &self.txs)
   }
 
+  /// Serializes the block into the format required to get the proof of work hash, this is different
+  /// to the format for the block hash, to get the block hash use the [`Block::hash`] function.
   pub fn serialize_hashable(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
     blob.extend_from_slice(&self.tx_merkle_root());
     write_varint(&(1 + u64::try_from(self.txs.len()).unwrap()), &mut blob).unwrap();
 
-    let mut out = Vec::with_capacity(8 + blob.len());
-    write_varint(&u64::try_from(blob.len()).unwrap(), &mut out).unwrap();
-    out.append(&mut blob);
-
-    out
+    blob
   }
 
   pub fn hash(&self) -> [u8; 32] {
-    let hash = hash(&self.serialize_hashable());
+    let mut hashable = self.serialize_hashable();
+    // Monero pre-appends a VarInt of the block hashing blobs length before getting the block hash
+    // but doesn't do this when getting the proof of work hash :)
+    let mut hashing_blob = Vec::with_capacity(8 + hashable.len());
+    write_varint(&u64::try_from(hashable.len()).unwrap(), &mut hashing_blob).unwrap();
+    hashing_blob.append(&mut hashable);
+
+    let hash = hash(&hashing_blob);
     if hash == CORRECT_BLOCK_HASH_202612 {
       return EXISTING_BLOCK_HASH_202612;
     };
