@@ -57,7 +57,7 @@ impl<D: Db> MainDb<D> {
 
     (bytes, tributaries)
   }
-  pub fn add_active_tributary(txn: &mut D::Transaction<'_>, spec: &TributarySpec) {
+  pub fn add_participating_in_tributary(txn: &mut D::Transaction<'_>, spec: &TributarySpec) {
     txn.put(Self::in_tributary_key(spec.set()), []);
 
     let key = Self::active_tributaries_key();

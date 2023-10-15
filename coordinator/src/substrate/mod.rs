@@ -116,7 +116,7 @@ async fn handle_new_set<D: Db>(
     // If this txn doesn't finish, this will be re-fired
     // If we waited to save to the DB, this txn may be finished, preventing re-firing, yet the
     // prior fired event may have not been received yet
-    crate::MainDb::<D>::add_active_tributary(txn, &spec);
+    crate::MainDb::<D>::add_participating_in_tributary(txn, &spec);
 
     new_tributary_spec.send(spec).unwrap();
   } else {
