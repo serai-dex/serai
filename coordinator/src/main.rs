@@ -31,7 +31,9 @@ use tokio::{
   time::sleep,
 };
 
-use ::tributary::{ProvidedError, TransactionKind, TransactionTrait, Block, Tributary};
+use ::tributary::{
+  ProvidedError, TransactionKind, TransactionError, TransactionTrait, Block, Tributary,
+};
 
 mod tributary;
 use crate::tributary::{
@@ -150,10 +152,16 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
       .await
       .expect("we don't have a nonce, meaning we aren't a participant on this tributary"),
   ) {
-    // TODO: Assert if we didn't create a valid transaction
     // We need to return a proper error here to enable that, due to a race condition around
     // multiple publications
-    tributary.add_transaction(tx).await;
+    match tributary.add_transaction(tx.clone()).await {
+      Ok(_) => {}
+      // Some asynchonicity if InvalidNonce, assumed safe to deterministic nonces
+      Err(TransactionError::InvalidNonce) => {
+        log::warn!("publishing TX {tx:?} returned InvalidNonce. was it already added?")
+      }
+      Err(e) => panic!("created an invalid transaction: {e:?}"),
+    }
   }
 }
 
@@ -630,10 +638,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         TransactionKind::Unsigned => {
           log::trace!("publishing unsigned transaction {}", hex::encode(tx.hash()));
-          // Ignores the result since we can't differentiate already in-mempool from
-          // already on-chain from invalid
-          // TODO: Don't ignore the result
-          tributary.add_transaction(tx).await;
+          match tributary.add_transaction(tx.clone()).await {
+            Ok(_) => {}
+            Err(e) => panic!("created an invalid unsigned transaction: {e:?}"),
+          }
         }
         TransactionKind::Signed(_) => {
           log::trace!("getting next nonce for Tributary TX in response to processor message");

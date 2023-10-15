@@ -43,7 +43,7 @@ async fn tx_test() {
     Transaction::DkgCommitments(attempt, commitments.clone(), Transaction::empty_signed());
   tx.sign(&mut OsRng, spec.genesis(), &key, 0);
 
-  assert!(tributaries[sender].1.add_transaction(tx.clone()).await);
+  assert_eq!(tributaries[sender].1.add_transaction(tx.clone()).await, Ok(true));
   let included_in = wait_for_tx_inclusion(&tributaries[sender].1, block_before_tx, tx.hash()).await;
   // Also sleep for the block time to ensure the block is synced around before we run checks on it
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;

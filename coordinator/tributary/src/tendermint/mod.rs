@@ -349,7 +349,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       true,
       Transaction::Tendermint(tx),
       self.signature_scheme(),
-    ) {
+    ) == Ok(true)
+    {
       self.p2p.broadcast(signer.genesis, to_broadcast).await;
     }
   }

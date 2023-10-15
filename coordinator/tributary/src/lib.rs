@@ -256,10 +256,10 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.read().await.next_nonce(signer)
   }
 
-  // Returns if the transaction was new and valid.
+  // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
   // successfully acquires its own write lock
-  pub async fn add_transaction(&self, tx: T) -> bool {
+  pub async fn add_transaction(&self, tx: T) -> Result<bool, TransactionError> {
     let tx = Transaction::Application(tx);
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
@@ -268,7 +268,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       tx,
       self.network.signature_scheme(),
     );
-    if res {
+    if res == Ok(true) {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
     }
     res
@@ -339,8 +339,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
             tx,
             self.network.signature_scheme(),
           );
-        log::debug!("received transaction message. valid new transaction: {res}");
-        res
+        log::debug!("received transaction message. valid new transaction: {res:?}");
+        res == Ok(true)
       }
 
       Some(&TENDERMINT_MESSAGE) => {

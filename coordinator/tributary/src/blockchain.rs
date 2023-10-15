@@ -10,7 +10,7 @@ use tendermint::ext::{Network, Commit};
 
 use crate::{
   ReadWrite, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
-  transaction::{Signed, TransactionKind, Transaction as TransactionTrait},
+  transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
 };
 
 #[derive(Debug)]
@@ -165,7 +165,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     internal: bool,
     tx: Transaction<T>,
     schema: N::SignatureScheme,
-  ) -> bool {
+  ) -> Result<bool, TransactionError> {
     let db = self.db.as_ref().unwrap();
     let genesis = self.genesis;
 

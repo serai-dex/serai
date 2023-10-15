@@ -31,6 +31,12 @@ pub enum TransactionError {
   /// Transaction's content is invalid.
   #[error("transaction content is invalid")]
   InvalidContent,
+  /// Transaction's signer has too many transactions in the mempool.
+  #[error("signer has too many transactions in the mempool")]
+  TooManyInMempool,
+  /// Provided Transaction added to mempool.
+  #[error("provided transaction added to mempool")]
+  ProvidedAddedToMempool,
 }
 
 /// Data for a signed transaction.

@@ -10,7 +10,7 @@ use tendermint::ext::Commit;
 use serai_db::MemDb;
 
 use crate::{
-  transaction::Transaction as TransactionTrait,
+  transaction::{TransactionError, Transaction as TransactionTrait},
   tendermint::{TendermintBlock, Validators, Signer, TendermintNetwork},
   ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
   tests::{SignedTransaction, signed_transaction, p2p::DummyP2p, random_evidence_tx},
@@ -43,69 +43,85 @@ async fn mempool_addition() {
 
   // Add TX 0
   let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
-  assert!(mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Application(first_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+  assert!(mempool
+    .add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Application(first_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    )
+    .unwrap());
   assert_eq!(mempool.next_nonce(&signer), Some(1));
 
   // add a tendermint evidence tx
   let evidence_tx =
     random_evidence_tx::<N>(Signer::new(genesis, key.clone()).into(), TendermintBlock(vec![]))
       .await;
-  assert!(mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Tendermint(evidence_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+  assert!(mempool
+    .add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Tendermint(evidence_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    )
+    .unwrap());
 
   // Test reloading works
   assert_eq!(mempool, Mempool::new(db, genesis));
 
-  // Adding it again should fail
-  assert!(!mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Application(first_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
-  assert!(!mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Tendermint(evidence_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+  // Adding them again should fail
+  assert_eq!(
+    mempool.add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Application(first_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    ),
+    Err(TransactionError::InvalidNonce)
+  );
+  assert_eq!(
+    mempool.add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Tendermint(evidence_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    ),
+    Ok(false)
+  );
 
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
-  assert!(mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Application(second_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+  assert_eq!(
+    mempool.add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Application(second_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    ),
+    Ok(true)
+  );
   assert_eq!(mempool.next_nonce(&signer), Some(2));
-  assert!(!mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Application(second_tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+  assert_eq!(
+    mempool.add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Application(second_tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit,
+    ),
+    Err(TransactionError::InvalidNonce)
+  );
 
   // If the mempool doesn't have a nonce for an account, it should successfully use the
   // blockchain's
@@ -114,14 +130,16 @@ async fn mempool_addition() {
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce(&second_signer), None);
   blockchain_next_nonces.insert(second_signer, 2);
-  assert!(mempool.add::<N>(
-    &blockchain_next_nonces,
-    true,
-    Transaction::Application(tx.clone()),
-    validators.clone(),
-    unsigned_in_chain,
-    commit
-  ));
+  assert!(mempool
+    .add::<N>(
+      &blockchain_next_nonces,
+      true,
+      Transaction::Application(tx.clone()),
+      validators.clone(),
+      unsigned_in_chain,
+      commit
+    )
+    .unwrap());
   assert_eq!(mempool.next_nonce(&second_signer), Some(3));
 
   // Getting a block should work
@@ -159,22 +177,32 @@ fn too_many_mempool() {
 
   // We should be able to add transactions up to the limit
   for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {
-    assert!(mempool.add::<N>(
+    assert!(mempool
+      .add::<N>(
+        &HashMap::from([(signer, 0)]),
+        false,
+        Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
+        validators.clone(),
+        unsigned_in_chain,
+        commit,
+      )
+      .unwrap());
+  }
+  // Yet adding more should fail
+  assert_eq!(
+    mempool.add::<N>(
       &HashMap::from([(signer, 0)]),
       false,
-      Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
+      Transaction::Application(signed_transaction(
+        &mut OsRng,
+        genesis,
+        &key,
+        ACCOUNT_MEMPOOL_LIMIT
+      )),
       validators.clone(),
       unsigned_in_chain,
       commit,
-    ));
-  }
-  // Yet adding more should fail
-  assert!(!mempool.add::<N>(
-    &HashMap::from([(signer, 0)]),
-    false,
-    Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, ACCOUNT_MEMPOOL_LIMIT)),
-    validators.clone(),
-    unsigned_in_chain,
-    commit,
-  ));
+    ),
+    Err(TransactionError::TooManyInMempool)
+  );
 }

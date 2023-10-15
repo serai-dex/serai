@@ -105,11 +105,9 @@ fn invalid_block() {
   {
     // Add a valid transaction
     let (_, mut blockchain) = new_blockchain(genesis, &[tx.1.signer]);
-    assert!(blockchain.add_transaction::<N>(
-      true,
-      Transaction::Application(tx.clone()),
-      validators.clone()
-    ));
+    blockchain
+      .add_transaction::<N>(true, Transaction::Application(tx.clone()), validators.clone())
+      .unwrap();
     let mut block = blockchain.build_block::<N>(validators.clone());
     assert_eq!(block.header.transactions, merkle(&[tx.hash()]));
     blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
@@ -130,11 +128,9 @@ fn invalid_block() {
   {
     // Invalid signature
     let (_, mut blockchain) = new_blockchain(genesis, &[tx.1.signer]);
-    assert!(blockchain.add_transaction::<N>(
-      true,
-      Transaction::Application(tx),
-      validators.clone()
-    ));
+    blockchain
+      .add_transaction::<N>(true, Transaction::Application(tx), validators.clone())
+      .unwrap();
     let mut block = blockchain.build_block::<N>(validators.clone());
     blockchain.verify_block::<N>(&block, validators.clone(), false).unwrap();
     match &mut block.transactions[0] {
@@ -170,11 +166,9 @@ fn signed_transaction() {
         panic!("tendermint tx found");
       };
       let next_nonce = blockchain.next_nonce(signer).unwrap();
-      assert!(blockchain.add_transaction::<N>(
-        true,
-        Transaction::Application(tx),
-        validators.clone()
-      ));
+      blockchain
+        .add_transaction::<N>(true, Transaction::Application(tx), validators.clone())
+        .unwrap();
       assert_eq!(next_nonce + 1, blockchain.next_nonce(signer).unwrap());
     }
     let block = blockchain.build_block::<N>(validators.clone());
@@ -363,11 +357,9 @@ async fn tendermint_evidence_tx() {
       let Transaction::Tendermint(tx) = tx else {
         panic!("non-tendermint tx found");
       };
-      assert!(blockchain.add_transaction::<N>(
-        true,
-        Transaction::Tendermint(tx),
-        validators.clone()
-      ));
+      blockchain
+        .add_transaction::<N>(true, Transaction::Tendermint(tx), validators.clone())
+        .unwrap();
     }
     let block = blockchain.build_block::<N>(validators.clone());
     assert_eq!(blockchain.tip(), tip);
@@ -475,7 +467,7 @@ async fn block_tx_ordering() {
     let signed_tx = Transaction::Application(SignedTx::Signed(Box::new(
       crate::tests::signed_transaction(&mut OsRng, genesis, &key, i),
     )));
-    assert!(blockchain.add_transaction::<N>(true, signed_tx.clone(), validators.clone()));
+    blockchain.add_transaction::<N>(true, signed_tx.clone(), validators.clone()).unwrap();
     mempool.push(signed_tx);
 
     let unsigned_tx = Transaction::Tendermint(
@@ -485,7 +477,7 @@ async fn block_tx_ordering() {
       )
       .await,
     );
-    assert!(blockchain.add_transaction::<N>(true, unsigned_tx.clone(), validators.clone()));
+    blockchain.add_transaction::<N>(true, unsigned_tx.clone(), validators.clone()).unwrap();
     mempool.push(unsigned_tx);
 
     let provided_tx =
