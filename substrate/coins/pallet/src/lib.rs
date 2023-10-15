@@ -2,7 +2,7 @@
 
 #[frame_support::pallet]
 pub mod pallet {
-  use frame_support::pallet_prelude::*;
+  use frame_support::pallet_prelude::{*, ValueQuery, OptionQuery};
   use frame_system::pallet_prelude::*;
 
   use sp_runtime::{
@@ -53,14 +53,34 @@ pub mod pallet {
   /// The amount of funds each account has.
   #[pallet::storage]
   #[pallet::getter(fn coins)]
-  pub type Coins<T: Config> =
-    StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Identity, Coin, SubstrateAmount>;
+  pub type Coins<T: Config> = StorageDoubleMap<
+    _,
+    Blake2_128Concat,
+    T::AccountId,
+    Identity,
+    Coin,
+    SubstrateAmount,
+    OptionQuery,
+  >;
+
+  /// The total supply of each coin.
+  #[pallet::storage]
+  #[pallet::getter(fn supply)]
+  pub type Supply<T: Config> = StorageMap<_, Blake2_128Concat, Coin, SubstrateAmount, ValueQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      // initialize the supply of the coins
+      for c in COINS.iter() {
+        Supply::<T>::set(c, 0);
+      }
+
+      // initialize the genesis accounts
       for (account, coin, amount) in self.accounts.iter() {
-        Coins::<T>::set(account, *coin, Some(*amount));
+        Coins::<T>::set(account, coin, Some(*amount));
+        let current_supply = Supply::<T>::get(coin);
+        Supply::<T>::set(coin, current_supply.checked_add(*amount).unwrap());
       }
     }
   }
@@ -69,6 +89,20 @@ pub mod pallet {
     /// Returns the balance of a given account for `coin`.
     pub fn balance(of: &T::AccountId, coin: Coin) -> SubstrateAmount {
       Self::coins(of, coin).unwrap_or(0)
+    }
+
+    fn increase_supply(coin: Coin, by: SubstrateAmount) -> Result<(), Error<T>> {
+      // update the supply
+      let new_supply = Self::supply(coin).checked_add(by).ok_or(Error::<T>::AmountOverflowed)?;
+      Supply::<T>::set(coin, new_supply);
+      Ok(())
+    }
+
+    fn decrease_supply(coin: Coin, by: SubstrateAmount) -> Result<(), Error<T>> {
+      // update the supply
+      let new_supply = Self::supply(coin).checked_sub(by).ok_or(Error::<T>::AmountOverflowed)?;
+      Supply::<T>::set(coin, new_supply);
+      Ok(())
     }
 
     /// Mints amount at the given account, errors if amount overflows.
@@ -86,6 +120,7 @@ pub mod pallet {
 
       // save
       Coins::<T>::set(at, coin, Some(new_amount));
+      Self::increase_supply(coin, amount)?;
 
       Self::deposit_event(Event::Minted { at: *at, coin, amount });
       Ok(())
@@ -111,6 +146,11 @@ pub mod pallet {
         Coins::<T>::remove(at, coin);
       } else {
         Coins::<T>::set(at, coin, Some(new_amount));
+      }
+
+      // something should have gone horribly wrong if we error on this.
+      if Self::decrease_supply(coin, amount).is_err() {
+        panic!("we tried to burn more assets than what we have");
       }
 
       Self::deposit_event(Event::Burnt { at: *at, coin, amount, instruction });
@@ -148,6 +188,9 @@ pub mod pallet {
       } else {
         Coins::<T>::set(from, coin, Some(from_amount));
       }
+
+      // TODO: update the supply if fees are really being burned or do that
+      // within the fee code.
 
       Self::deposit_event(Event::Transferred { from: *from, to: *to, coin, amount });
       Ok(())
