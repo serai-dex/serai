@@ -14,7 +14,8 @@ pub mod pallet {
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
   use serai_primitives::*;
-  use coins_primitives::OutInstruction;
+  pub use coins_primitives as primitives;
+  use primitives::*;
 
   #[pallet::config]
   pub trait Config: frame_system::Config<AccountId = PublicKey> + TpConfig {
@@ -42,9 +43,9 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Minted { at: T::AccountId, coin: Coin, amount: SubstrateAmount },
-    Burnt { at: T::AccountId, coin: Coin, amount: SubstrateAmount, instruction: OutInstruction },
-    Transferred { from: T::AccountId, to: T::AccountId, coin: Coin, amount: SubstrateAmount },
+    Mint { address: SeraiAddress, balance: Balance },
+    Burn { address: SeraiAddress, balance: Balance, instruction: OutInstruction },
+    Transfer { from: SeraiAddress, to: SeraiAddress, balance: Balance },
   }
 
   #[pallet::pallet]
@@ -122,7 +123,8 @@ pub mod pallet {
       Coins::<T>::set(at, coin, Some(new_amount));
       Self::increase_supply(coin, amount)?;
 
-      Self::deposit_event(Event::Minted { at: *at, coin, amount });
+      let balance = Balance { coin, amount: Amount(amount) };
+      Self::deposit_event(Event::Mint { address: SeraiAddress(at.0), balance });
       Ok(())
     }
 
@@ -153,7 +155,8 @@ pub mod pallet {
         panic!("we tried to burn more assets than what we have");
       }
 
-      Self::deposit_event(Event::Burnt { at: *at, coin, amount, instruction });
+      let balance = Balance { coin, amount: Amount(amount) };
+      Self::deposit_event(Event::Burn { address: SeraiAddress(at.0), balance, instruction });
       Ok(())
     }
 
@@ -192,7 +195,12 @@ pub mod pallet {
       // TODO: update the supply if fees are really being burned or do that
       // within the fee code.
 
-      Self::deposit_event(Event::Transferred { from: *from, to: *to, coin, amount });
+      let balance = Balance { coin, amount: Amount(amount) };
+      Self::deposit_event(Event::Transfer {
+        from: SeraiAddress(from.0),
+        to: SeraiAddress(to.0),
+        balance,
+      });
       Ok(())
     }
   }

@@ -19,7 +19,7 @@ use serai_client::{
   },
   coins::{
     primitives::{OutInstruction, OutInstructionWithBalance},
-    TokensEvent,
+    CoinsEvent,
   },
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
   SeraiCoins,
@@ -254,7 +254,7 @@ async fn sign_test() {
         // Verify the mint occurred as expected
         assert_eq!(
           serai.mint_events().await.unwrap(),
-          vec![TokensEvent::Mint { address: serai_addr, balance }]
+          vec![CoinsEvent::Mint { address: serai_addr, balance }]
         );
         assert_eq!(serai.token_supply(Coin::Bitcoin).await.unwrap(), amount);
         assert_eq!(serai.token_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
@@ -297,7 +297,7 @@ async fn sign_test() {
             assert_eq!(burn_events.len(), 1);
             assert_eq!(
               burn_events[0],
-              TokensEvent::Burn {
+              CoinsEvent::Burn {
                 address: serai_addr,
                 balance,
                 instruction: out_instruction.clone()
