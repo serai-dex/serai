@@ -33,6 +33,8 @@ pub use db::*;
 mod nonce_decider;
 pub use nonce_decider::*;
 
+mod dkg_confirmer;
+
 mod handle;
 pub use handle::*;
 

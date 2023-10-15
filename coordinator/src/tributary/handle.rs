@@ -3,21 +3,12 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::{
-  FrostError,
-  dkg::{Participant, musig::musig},
-  sign::*,
-};
-use frost_schnorrkel::Schnorrkel;
+use frost::dkg::Participant;
 
 use serai_client::{
   Signature,
-  validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
   subxt::utils::Encoded,
   SeraiValidatorSets,
 };
@@ -37,6 +28,7 @@ use crate::{
   tributary::{
     Transaction, TributarySpec, Topic, DataSpecification, TributaryDb,
     nonce_decider::NonceDecider,
+    dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
   },
 };
@@ -53,122 +45,6 @@ const BATCH_SHARE: &str = "b_share";
 
 const SIGN_PREPROCESS: &str = "s_preprocess";
 const SIGN_SHARE: &str = "s_share";
-
-// Instead of maintaing state, this simply re-creates the machine(s) in-full on every call (which
-// should only be once per tributary).
-// This simplifies data flow and prevents requiring multiple paths.
-// While more expensive, this only runs an O(n) algorithm, which is tolerable to run multiple
-// times.
-struct DkgConfirmer;
-impl DkgConfirmer {
-  fn preprocess_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-  ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    // TODO: Does Substrate already have a validator-uniqueness check?
-    let validators = spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-
-    let context = musig_context(spec.set());
-    let mut chacha = ChaCha20Rng::from_seed({
-      let mut entropy_transcript = RecommendedTranscript::new(b"DkgConfirmer Entropy");
-      entropy_transcript.append_message(b"spec", spec.serialize());
-      entropy_transcript.append_message(b"key", Zeroizing::new(key.to_bytes()));
-      entropy_transcript.append_message(b"attempt", attempt.to_le_bytes());
-      Zeroizing::new(entropy_transcript).rng_seed(b"preprocess")
-    });
-    let (machine, preprocess) = AlgorithmMachine::new(
-      Schnorrkel::new(b"substrate"),
-      musig(&context, key, &validators)
-        .expect("confirming the DKG for a set we aren't in/validator present multiple times")
-        .into(),
-    )
-    .preprocess(&mut chacha);
-
-    (machine, preprocess.serialize().try_into().unwrap())
-  }
-  // Get the preprocess for this confirmation.
-  fn preprocess(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-  ) -> [u8; 64] {
-    Self::preprocess_internal(spec, key, attempt).1
-  }
-
-  fn share_internal(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let machine = Self::preprocess_internal(spec, key, attempt).0;
-    let preprocesses = preprocesses
-      .into_iter()
-      .map(|(p, preprocess)| {
-        machine
-          .read_preprocess(&mut preprocess.as_slice())
-          .map(|preprocess| (p, preprocess))
-          .map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let (machine, share) = machine
-      .sign(preprocesses, &set_keys_message(&spec.set(), key_pair))
-      .map_err(|e| match e {
-        FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-        FrostError::InvalidParticipant(_, _) |
-        FrostError::InvalidSigningSet(_) |
-        FrostError::InvalidParticipantQuantity(_, _) |
-        FrostError::DuplicatedParticipant(_) |
-        FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-        FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-      })?;
-
-    Ok((machine, share.serialize().try_into().unwrap()))
-  }
-  // Get the share for this confirmation, if the preprocesses are valid.
-  fn share(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-  ) -> Result<[u8; 32], Participant> {
-    Self::share_internal(spec, key, attempt, preprocesses, key_pair).map(|(_, share)| share)
-  }
-
-  fn complete(
-    spec: &TributarySpec,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    attempt: u32,
-    preprocesses: HashMap<Participant, Vec<u8>>,
-    key_pair: &KeyPair,
-    shares: HashMap<Participant, Vec<u8>>,
-  ) -> Result<[u8; 64], Participant> {
-    let machine = Self::share_internal(spec, key, attempt, preprocesses, key_pair)
-      .expect("trying to complete a machine which failed to preprocess")
-      .0;
-
-    let shares = shares
-      .into_iter()
-      .map(|(p, share)| {
-        machine.read_share(&mut share.as_slice()).map(|share| (p, share)).map_err(|_| p)
-      })
-      .collect::<Result<HashMap<_, _>, _>>()?;
-    let signature = machine.complete(shares).map_err(|e| match e {
-      FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
-      FrostError::InvalidParticipant(_, _) |
-      FrostError::InvalidSigningSet(_) |
-      FrostError::InvalidParticipantQuantity(_, _) |
-      FrostError::DuplicatedParticipant(_) |
-      FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
-      FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
-    })?;
-
-    Ok(signature.to_bytes())
-  }
-}
 
 fn read_known_to_exist_data<D: Db, G: Get>(
   getter: &G,
@@ -280,7 +156,7 @@ pub(crate) async fn handle_application_tx<
     };
 
     // If they've already published a TX for this attempt, slash
-    if let Some(_) = TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer) {
+    if TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer).is_some() {
       fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return None;
     }
