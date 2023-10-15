@@ -7,7 +7,7 @@ use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::{
   FrostError,
   dkg::{Participant, musig::musig},
@@ -235,6 +235,17 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
+pub(crate) fn fatal_slash<D: Db>(
+  txn: &mut D::Transaction<'_>,
+  genesis: [u8; 32],
+  account: [u8; 32],
+  reason: &str,
+) {
+  log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
+  TributaryDb::<D>::set_fatally_slashed(txn, genesis, account);
+  // TODO: disconnect the node from network/ban from further participation in all Tributaries
+}
+
 pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
@@ -253,20 +264,24 @@ pub(crate) async fn handle_application_tx<
 ) {
   let genesis = spec.genesis();
 
-  let handle = |txn: &mut _, data_spec: &DataSpecification, bytes: Vec<u8>, signed: &Signed| {
+  let handle = |txn: &mut <D as Db>::Transaction<'_>,
+                data_spec: &DataSpecification,
+                bytes: Vec<u8>,
+                signed: &Signed| {
     let Some(curr_attempt) = TributaryDb::<D>::attempt(txn, genesis, data_spec.topic) else {
-      // TODO: Full slash
-      todo!();
+      // Premature publication of a valid ID/publication of an invalid ID
+      fatal_slash::<D>(
+        txn,
+        genesis,
+        signed.signer.to_bytes(),
+        "published data for ID without an attempt",
+      );
+      return None;
     };
 
     // If they've already published a TX for this attempt, slash
-    if let Some(data) = TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer) {
-      if data != bytes {
-        // TODO: Full slash
-        todo!();
-      }
-
-      // TODO: Slash
+    if let Some(_) = TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer) {
+      fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return None;
     }
 
@@ -275,9 +290,15 @@ pub(crate) async fn handle_application_tx<
       // TODO: Slash for being late
       return None;
     }
+    // If the attempt is greater, this is a premature publication, full slash
     if data_spec.attempt > curr_attempt {
-      // TODO: Full slash
-      todo!();
+      fatal_slash::<D>(
+        txn,
+        genesis,
+        signed.signer.to_bytes(),
+        "published data with an attempt which hasn't started",
+      );
+      return None;
     }
 
     // TODO: We can also full slash if shares before all commitments, or share before the
@@ -324,8 +345,8 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
       if shares.len() != (usize::from(spec.n()) - 1) {
-        // TODO: Full slash
-        todo!();
+        fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
+        return;
       }
 
       let sender_i = spec

@@ -22,7 +22,7 @@ use serai_db::DbTxn;
 
 use crate::{
   Db,
-  tributary::handle::handle_application_tx,
+  tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
   tributary::{TributaryDb, TributarySpec, Transaction},
   P2p,
@@ -84,9 +84,12 @@ async fn handle_block<
 
         // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
-        TributaryDb::<D>::set_fatally_slashed(&mut txn, genesis, msgs.0.msg.sender);
-
-        // TODO2: disconnect the node from network/ban from further participation in Tributary
+        fatal_slash::<D>(
+          &mut txn,
+          genesis,
+          msgs.0.msg.sender,
+          &format!("invalid tendermint messages: {:?}", msgs),
+        );
       }
       TributaryTransaction::Application(tx) => {
         handle_application_tx::<D, _, _, _, _, _>(
