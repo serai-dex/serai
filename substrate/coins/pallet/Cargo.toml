@@ -18,12 +18,25 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 serai-primitives = { path = "../../primitives", default-features = false }
+coins-primitives = { package = "serai-coins-primitives", path = "../primitives", default-features = false }
 
 [features]
 std = [
   "frame-system/std",
   "frame-support/std",
+
+  "sp-runtime/std",
+
+  "pallet-transaction-payment/std",
+
+  "serai-primitives/std",
+  "coins-primitives/std",
 ]
 
 runtime-benchmarks = [

@@ -6,15 +6,14 @@ pub mod pallet {
   use sp_std::vec::Vec;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{
-    pallet_prelude::*,
-    traits::{Currency, tokens::ExistenceRequirement},
-  };
+  use frame_support::pallet_prelude::*;
 
-  use serai_primitives::{NetworkId, Amount, PublicKey};
+  use serai_primitives::*;
 
   use validator_sets_pallet::{primitives::Session, Config as VsConfig, Pallet as VsPallet};
   use pallet_session::{Config as SessionConfig, SessionManager};
+
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
 
   #[pallet::error]
   pub enum Error<T> {
@@ -26,9 +25,8 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config + VsConfig + SessionConfig<ValidatorId = PublicKey>
+    frame_system::Config + CoinsConfig + VsConfig + SessionConfig<ValidatorId = PublicKey>
   {
-    type Currency: Currency<Self::AccountId, Balance = u64>;
   }
 
   #[pallet::pallet]
@@ -95,10 +93,7 @@ pub mod pallet {
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn stake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
-      // Serai accounts are solely public keys. Accordingly, there's no harm to letting accounts
-      // die. They'll simply be re-instantiated later
-      // AllowDeath accordingly to not add additional requirements (and therefore annoyances)
-      T::Currency::transfer(&signer, &Self::account(), amount, ExistenceRequirement::AllowDeath)?;
+      Coins::<T>::transfer_internal(&signer, &Self::account(), Coin::Serai, amount)?;
       Self::add_stake(&signer, amount);
       Ok(())
     }
@@ -109,8 +104,7 @@ pub mod pallet {
     pub fn unstake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       Self::remove_stake(&signer, amount)?;
-      // This should never be out of funds as there should always be stakers. Accordingly...
-      T::Currency::transfer(&Self::account(), &signer, amount, ExistenceRequirement::KeepAlive)?;
+      Coins::<T>::transfer_internal(&Self::account(), &signer, Coin::Serai, amount)?;
       Ok(())
     }
 

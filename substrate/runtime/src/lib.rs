@@ -14,11 +14,9 @@ pub use frame_support as support;
 
 pub use pallet_timestamp as timestamp;
 
-pub use pallet_balances as balances;
 pub use pallet_transaction_payment as transaction_payment;
 
-pub use pallet_assets as assets;
-pub use tokens_pallet as tokens;
+pub use coins_pallet as coins;
 pub use in_instructions_pallet as in_instructions;
 
 pub use staking_pallet as staking;
@@ -45,18 +43,16 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount, Coin};
+use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains},
+  traits::{ConstU8, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
   parameter_types, construct_runtime,
 };
-
-use transaction_payment::CurrencyAdapter;
 
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
@@ -153,22 +149,10 @@ impl Contains<RuntimeCall> for CallFilter {
       return matches!(call, timestamp::Call::set { .. });
     }
 
-    if let RuntimeCall::Balances(call) = call {
-      return matches!(call, balances::Call::transfer { .. } | balances::Call::transfer_all { .. });
+    if let RuntimeCall::Coins(call) = call {
+      return matches!(call, coins::Call::transfer { .. } | coins::Call::burn { .. });
     }
 
-    if let RuntimeCall::Assets(call) = call {
-      return matches!(
-        call,
-        assets::Call::approve_transfer { .. } |
-          assets::Call::cancel_approval { .. } |
-          assets::Call::transfer { .. } |
-          assets::Call::transfer_approved { .. }
-      );
-    }
-    if let RuntimeCall::Tokens(call) = call {
-      return matches!(call, tokens::Call::burn { .. });
-    }
     if let RuntimeCall::InInstructions(call) = call {
       return matches!(call, in_instructions::Call::execute_batch { .. });
     }
@@ -217,7 +201,7 @@ impl system::Config for Runtime {
   type OnKilledAccount = ();
   type OnSetCode = ();
 
-  type AccountData = balances::AccountData<SubstrateAmount>;
+  type AccountData = SubstrateAmount;
   type SystemWeightInfo = ();
   type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
@@ -231,83 +215,16 @@ impl timestamp::Config for Runtime {
   type WeightInfo = ();
 }
 
-impl balances::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
-  type Balance = SubstrateAmount;
-
-  type ReserveIdentifier = ();
-  type FreezeIdentifier = ();
-  type RuntimeHoldReason = ();
-
-  type MaxLocks = ();
-  type MaxReserves = ();
-  type MaxHolds = ();
-  type MaxFreezes = ();
-
-  type DustRemoval = ();
-  type ExistentialDeposit = ConstU64<1>;
-  // TODO: What's the benefit to this?
-  type AccountStore = System;
-  type WeightInfo = balances::weights::SubstrateWeight<Runtime>;
-}
-
 impl transaction_payment::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
+  type OnChargeTransaction = Coins;
   type OperationalFeeMultiplier = ConstU8<5>;
   type WeightToFee = IdentityFee<SubstrateAmount>;
   type LengthToFee = IdentityFee<SubstrateAmount>;
   type FeeMultiplierUpdate = ();
 }
 
-#[cfg(feature = "runtime-benchmarks")]
-pub struct SeraiAssetBenchmarkHelper;
-#[cfg(feature = "runtime-benchmarks")]
-impl assets::BenchmarkHelper<Coin> for SeraiAssetBenchmarkHelper {
-  fn create_asset_id_parameter(id: u32) -> Coin {
-    match (id % 4) + 1 {
-      1 => Coin::Bitcoin,
-      2 => Coin::Ether,
-      3 => Coin::Dai,
-      4 => Coin::Monero,
-      _ => panic!("(id % 4) + 1 wasn't in [1, 4]"),
-    }
-  }
-}
-
-impl assets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  type Balance = SubstrateAmount;
-  type Currency = Balances;
-
-  type AssetId = Coin;
-  type AssetIdParameter = Coin;
-  type StringLimit = ConstU32<32>;
-
-  // Don't allow anyone to create assets
-  type CreateOrigin = support::traits::AsEnsureOriginWithArg<system::EnsureNever<PublicKey>>;
-  type ForceOrigin = system::EnsureRoot<PublicKey>;
-
-  // Don't charge fees nor kill accounts
-  type RemoveItemsLimit = ConstU32<0>;
-  type AssetDeposit = ConstU64<0>;
-  type AssetAccountDeposit = ConstU64<0>;
-  type MetadataDepositBase = ConstU64<0>;
-  type MetadataDepositPerByte = ConstU64<0>;
-  type ApprovalDeposit = ConstU64<0>;
-
-  // Unused hooks
-  type CallbackHandle = ();
-  type Freezer = ();
-  type Extra = ();
-
-  type WeightInfo = assets::weights::SubstrateWeight<Runtime>;
-  #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = SeraiAssetBenchmarkHelper;
-}
-
-impl tokens::Config for Runtime {
+impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
@@ -315,9 +232,7 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl staking::Config for Runtime {
-  type Currency = Balances;
-}
+impl staking::Config for Runtime {}
 
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
@@ -403,11 +318,9 @@ construct_runtime!(
 
     Timestamp: timestamp,
 
-    Balances: balances,
     TransactionPayment: transaction_payment,
 
-    Assets: assets,
-    Tokens: tokens,
+    Coins: coins,
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,

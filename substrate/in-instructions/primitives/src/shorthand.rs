@@ -8,7 +8,7 @@ use scale_info::TypeInfo;
 
 use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress};
 
-use tokens_primitives::OutInstruction;
+use coins_primitives::OutInstruction;
 
 use crate::RefundableInInstruction;
 #[cfg(feature = "std")]

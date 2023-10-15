@@ -5,9 +5,9 @@ use sp_core::Pair as PairTrait;
 use sc_service::ChainType;
 
 use serai_runtime::{
-  primitives::*, tokens::primitives::ADDRESS as TOKENS_ADDRESS, WASM_BINARY, opaque::SessionKeys,
-  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, BalancesConfig, AssetsConfig,
-  ValidatorSetsConfig, SessionConfig, BabeConfig, GrandpaConfig, AuthorityDiscoveryConfig,
+  primitives::*, WASM_BINARY, opaque::SessionKeys, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig,
+  SystemConfig, ValidatorSetsConfig, SessionConfig, BabeConfig, GrandpaConfig,
+  AuthorityDiscoveryConfig, CoinsConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -34,24 +34,10 @@ fn testnet_genesis(
   RuntimeGenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
-    balances: BalancesConfig {
-      balances: endowed_accounts.into_iter().map(|k| (k, 1 << 60)).collect(),
-    },
     transaction_payment: Default::default(),
 
-    assets: AssetsConfig {
-      assets: [Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero]
-        .iter()
-        .map(|coin| (*coin, TOKENS_ADDRESS.into(), true, 1))
-        .collect(),
-      metadata: vec![
-        (Coin::Bitcoin, b"Bitcoin".to_vec(), b"BTC".to_vec(), 8),
-        // Reduce to 8 decimals to feasibly fit within u64 (instead of its native u256)
-        (Coin::Ether, b"Ether".to_vec(), b"ETH".to_vec(), 8),
-        (Coin::Dai, b"Dai Stablecoin".to_vec(), b"DAI".to_vec(), 8),
-        (Coin::Monero, b"Monero".to_vec(), b"XMR".to_vec(), 12),
-      ],
-      accounts: vec![],
+    coins: CoinsConfig {
+      accounts: endowed_accounts.into_iter().map(|a| (a, Coin::Serai, 1 << 60)).collect(),
     },
 
     validator_sets: ValidatorSetsConfig {

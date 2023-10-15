@@ -5,11 +5,32 @@ pub mod pallet {
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
+  use sp_runtime::{
+    traits::{DispatchInfoOf, PostDispatchInfoOf},
+    transaction_validity::{TransactionValidityError, InvalidTransaction},
+  };
+  use sp_std::vec::Vec;
+
+  use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
+
   use serai_primitives::*;
+  use coins_primitives::OutInstruction;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = PublicKey> {
+  pub trait Config: frame_system::Config<AccountId = PublicKey> + TpConfig {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+  }
+
+  #[pallet::genesis_config]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  pub struct GenesisConfig<T: Config> {
+    pub accounts: Vec<(T::AccountId, Coin, SubstrateAmount)>,
+  }
+
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      GenesisConfig { accounts: Default::default() }
+    }
   }
 
   #[pallet::error]
@@ -22,7 +43,7 @@ pub mod pallet {
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
     Minted { at: T::AccountId, coin: Coin, amount: SubstrateAmount },
-    Burnt { at: T::AccountId, coin: Coin, amount: SubstrateAmount },
+    Burnt { at: T::AccountId, coin: Coin, amount: SubstrateAmount, instruction: OutInstruction },
     Transferred { from: T::AccountId, to: T::AccountId, coin: Coin, amount: SubstrateAmount },
   }
 
@@ -35,14 +56,23 @@ pub mod pallet {
   pub type Coins<T: Config> =
     StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Identity, Coin, SubstrateAmount>;
 
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      for (account, coin, amount) in self.accounts.iter() {
+        Coins::<T>::set(account, *coin, Some(*amount));
+      }
+    }
+  }
+
   impl<T: Config> Pallet<T> {
     /// Returns the balance of a given account for `coin`.
-    pub fn balance(of: T::AccountId, coin: Coin) -> SubstrateAmount {
+    pub fn balance(of: &T::AccountId, coin: Coin) -> SubstrateAmount {
       Self::coins(of, coin).unwrap_or(0)
     }
 
     /// Mints amount at the given account, errors if amount overflows.
-    pub fn mint(at: T::AccountId, coin: Coin, amount: SubstrateAmount) -> Result<(), Error<T>> {
+    pub fn mint(at: &T::AccountId, coin: Coin, amount: SubstrateAmount) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
       if amount == 0 {
         return Ok(());
@@ -57,12 +87,17 @@ pub mod pallet {
       // save
       Coins::<T>::set(at, coin, Some(new_amount));
 
-      Self::deposit_event(Event::Minted { at, coin, amount });
+      Self::deposit_event(Event::Minted { at: *at, coin, amount });
       Ok(())
     }
 
     /// Burns amount at the given account, errors if not enough funds to burn.
-    pub fn burn(at: T::AccountId, coin: Coin, amount: SubstrateAmount) -> Result<(), Error<T>> {
+    pub fn burn_internal(
+      at: &T::AccountId,
+      coin: Coin,
+      amount: SubstrateAmount,
+      instruction: OutInstruction,
+    ) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
       if amount == 0 {
         return Ok(());
@@ -78,15 +113,14 @@ pub mod pallet {
         Coins::<T>::set(at, coin, Some(new_amount));
       }
 
-      Self::deposit_event(Event::Burnt { at, coin, amount });
+      Self::deposit_event(Event::Burnt { at: *at, coin, amount, instruction });
       Ok(())
     }
 
-    // TODO: fees are deducted beforehand?
     /// Transfers coins from `from` to `to`.
-    fn transfer_internal(
-      from: T::AccountId,
-      to: T::AccountId,
+    pub fn transfer_internal(
+      from: &T::AccountId,
+      to: &T::AccountId,
       coin: Coin,
       amount: SubstrateAmount,
     ) -> Result<(), Error<T>> {
@@ -115,7 +149,7 @@ pub mod pallet {
         Coins::<T>::set(from, coin, Some(from_amount));
       }
 
-      Self::deposit_event(Event::Transferred { from, to, coin, amount });
+      Self::deposit_event(Event::Transferred { from: *from, to: *to, coin, amount });
       Ok(())
     }
   }
@@ -131,7 +165,71 @@ pub mod pallet {
       amount: SubstrateAmount,
     ) -> DispatchResult {
       let from = ensure_signed(o)?;
-      Self::transfer_internal(from, to.into(), coin, amount)?;
+      Self::transfer_internal(&from, &to.into(), coin, amount)?;
+      Ok(())
+    }
+
+    #[pallet::call_index(1)]
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    pub fn burn(o: OriginFor<T>, balance: Balance, instruction: OutInstruction) -> DispatchResult {
+      let at = ensure_signed(o)?;
+      Self::burn_internal(&at, balance.coin, balance.amount.0, instruction)?;
+      Ok(())
+    }
+  }
+
+  #[derive(Default)]
+  pub struct Imbalance {
+    pub amount: u64,
+  }
+
+  impl<T: Config> OnChargeTransaction<T> for Pallet<T> {
+    type Balance = SubstrateAmount;
+    type LiquidityInfo = Option<Imbalance>;
+
+    /// Before the transaction is executed the payment of the transaction fees
+    /// need to be secured.
+    ///
+    /// Note: The `fee` already includes the `tip`.
+    fn withdraw_fee(
+      who: &T::AccountId,
+      _call: &T::RuntimeCall,
+      _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
+      fee: Self::Balance,
+      _tip: Self::Balance,
+    ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
+      // TODO: Could we have a 0 fee tx? Error in this case?
+      if fee == 0 {
+        return Ok(None);
+      }
+
+      // TODO: Where should the fees go? O_o.
+      let dummy = [0u8; 32];
+      let out = OutInstruction::decode(&mut dummy.as_slice()).unwrap();
+      match Self::burn_internal(who, Coin::Serai, fee, out) {
+        Err(_) => Err(InvalidTransaction::Payment.into()),
+        Ok(()) => Ok(Some(Imbalance { amount: fee })),
+      }
+    }
+
+    /// After the transaction was executed the actual fee can be calculated.
+    /// This function should refund any overpaid fees and optionally deposit
+    /// the corrected amount.
+    ///
+    /// Note: The `fee` already includes the `tip`.
+    fn correct_and_deposit_fee(
+      who: &T::AccountId,
+      _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
+      _post_info: &PostDispatchInfoOf<T::RuntimeCall>,
+      corrected_fee: Self::Balance,
+      _tip: Self::Balance,
+      already_withdrawn: Self::LiquidityInfo,
+    ) -> Result<(), TransactionValidityError> {
+      if let Some(paid) = already_withdrawn {
+        let refund_amount = paid.amount.saturating_sub(corrected_fee);
+        Self::mint(who, Coin::Serai, refund_amount)
+          .map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
+      }
       Ok(())
     }
   }
