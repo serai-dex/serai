@@ -7,6 +7,7 @@ use ciphersuite::{Ciphersuite, Ristretto};
 
 use tokio::sync::broadcast;
 
+use scale::{Encode, Decode};
 use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai};
 
 use tributary::{
@@ -27,7 +28,7 @@ use crate::{
   P2p,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum RecognizedIdType {
   Batch,
   Plan,

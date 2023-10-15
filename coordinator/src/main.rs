@@ -476,7 +476,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
       ProcessorMessage::Sign(msg) => match msg {
         sign::ProcessorMessage::Preprocess { id, preprocess } => {
           if id.attempt == 0 {
-            MainDb::<D>::save_first_preprocess(&mut txn, network, id.id, preprocess);
+            MainDb::<D>::save_first_preprocess(
+              &mut txn,
+              network,
+              RecognizedIdType::Plan,
+              id.id,
+              preprocess,
+            );
 
             vec![]
           } else {
@@ -527,7 +533,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // If this is the first attempt instance, wait until we synchronize around the batch
           // first
           if id.attempt == 0 {
-            MainDb::<D>::save_first_preprocess(&mut txn, spec.set().network, id.id, preprocess);
+            MainDb::<D>::save_first_preprocess(
+              &mut txn,
+              spec.set().network,
+              RecognizedIdType::Batch,
+              id.id,
+              preprocess,
+            );
 
             // If this is the new key's first Batch, only create this TX once we verify all
             // all prior published `Batch`s
@@ -860,10 +872,10 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         // received/saved, creating a race between Tributary ack and the availability of all
         // Preprocesses
         // This waits until the necessary preprocess is available 0,
-        // TODO: Incorporate RecognizedIdType here?
-        let get_preprocess = |raw_db, id| async move {
+        let get_preprocess = |raw_db, id_type, id| async move {
           loop {
-            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, set.network, id) else {
+            let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, set.network, id_type, id)
+            else {
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -875,14 +887,14 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           RecognizedIdType::Batch => Transaction::BatchPreprocess(SignData {
             plan: id,
             attempt: 0,
-            data: get_preprocess(&raw_db, id).await,
+            data: get_preprocess(&raw_db, id_type, id).await,
             signed: Transaction::empty_signed(),
           }),
 
           RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
             plan: id,
             attempt: 0,
-            data: get_preprocess(&raw_db, id).await,
+            data: get_preprocess(&raw_db, id_type, id).await,
             signed: Transaction::empty_signed(),
           }),
         };
@@ -909,7 +921,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           };
           // This is safe to perform multiple times and solely needs atomicity with regards to
           // itself
-          // TODO: Should this not take a TXN accordingly? It's best practice to take a txn, yet
+          // TODO: Should this not take a txn accordingly? It's best practice to take a txn, yet
           // taking a txn fails to declare its achieved independence
           let mut txn = raw_db.txn();
           publish_signed_transaction(&mut txn, tributary, tx).await;

@@ -15,7 +15,7 @@ use serai_client::{
 pub use serai_db::*;
 
 use ::tributary::ReadWrite;
-use crate::tributary::{TributarySpec, Transaction};
+use crate::tributary::{TributarySpec, Transaction, scanner::RecognizedIdType};
 
 #[derive(Debug)]
 pub struct MainDb<D: Db>(PhantomData<D>);
@@ -106,24 +106,30 @@ impl<D: Db> MainDb<D> {
     res
   }
 
-  fn first_preprocess_key(network: NetworkId, id: [u8; 32]) -> Vec<u8> {
-    Self::main_key(b"first_preprocess", (network, id).encode())
+  fn first_preprocess_key(network: NetworkId, id_type: RecognizedIdType, id: [u8; 32]) -> Vec<u8> {
+    Self::main_key(b"first_preprocess", (network, id_type, id).encode())
   }
   pub fn save_first_preprocess(
     txn: &mut D::Transaction<'_>,
     network: NetworkId,
+    id_type: RecognizedIdType,
     id: [u8; 32],
     preprocess: Vec<u8>,
   ) {
-    let key = Self::first_preprocess_key(network, id);
+    let key = Self::first_preprocess_key(network, id_type, id);
     if let Some(existing) = txn.get(&key) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
       return;
     }
     txn.put(key, preprocess);
   }
-  pub fn first_preprocess<G: Get>(getter: &G, network: NetworkId, id: [u8; 32]) -> Option<Vec<u8>> {
-    getter.get(Self::first_preprocess_key(network, id))
+  pub fn first_preprocess<G: Get>(
+    getter: &G,
+    network: NetworkId,
+    id_type: RecognizedIdType,
+    id: [u8; 32],
+  ) -> Option<Vec<u8>> {
+    getter.get(Self::first_preprocess_key(network, id_type, id))
   }
 
   fn last_received_batch_key(network: NetworkId) -> Vec<u8> {
