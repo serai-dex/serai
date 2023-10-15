@@ -24,7 +24,7 @@ use serai_client::{
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
   SeraiCoins,
 };
-use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
+use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
@@ -346,7 +346,10 @@ async fn sign_test() {
             messages::coordinator::ProcessorMessage::SubstrateBlockAck {
               network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
-              plans: vec![plan_id],
+              plans: vec![PlanMeta {
+                key: (Secp256k1::generator() * *network_key).to_bytes().to_vec(),
+                id: plan_id,
+              }],
             },
           ))
           .await;

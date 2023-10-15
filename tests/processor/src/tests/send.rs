@@ -236,7 +236,7 @@ fn send_test() {
       let (mut id, mut preprocesses) =
         recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), 0).await;
       // TODO: Should this use the Substrate key?
-      assert_eq!(id, SignId { key: key_pair.1.to_vec(), id: plans[0], attempt: 0 });
+      assert_eq!(id, SignId { key: key_pair.1.to_vec(), id: plans[0].id, attempt: 0 });
 
       // Trigger a random amount of re-attempts
       for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {

@@ -2,7 +2,7 @@ use core::ops::Deref;
 use std::{
   sync::Arc,
   time::Duration,
-  collections::{VecDeque, HashMap},
+  collections::{VecDeque, HashSet, HashMap},
 };
 
 use zeroize::{Zeroize, Zeroizing};
@@ -204,12 +204,33 @@ async fn handle_processor_message<D: Db, P: P2p>(
           "processor claimed to be a different network than it was for SubstrateBlockAck",
         );
 
-        // TODO: Find all Tributaries active at this Substrate block, and make sure we have
-        // them all (if we were present in them)
+        // Get the sessions for these keys
+        let keys = plans.iter().map(|plan| plan.key.clone()).collect::<HashSet<_>>();
+        let mut sessions = vec![];
+        for key in keys {
+          let session = SubstrateDb::<D>::session_for_key(&txn, &key).unwrap();
+          // Only keep them if we're in the Tributary AND they haven't been retied
+          let set = ValidatorSet { network: *network, session };
+          if MainDb::<D>::in_tributary(&txn, set) && (!MainDb::<D>::is_tributary_retired(&txn, set))
+          {
+            sessions.push((session, key));
+          }
+        }
 
-        for tributary in tributaries.values() {
-          // TODO: This needs to be scoped per multisig
-          TributaryDb::<D>::set_plan_ids(&mut txn, tributary.spec.genesis(), *block, plans);
+        // Ensure we have the Tributaries
+        for (session, _) in &sessions {
+          if !tributaries.contains_key(session) {
+            return false;
+          }
+        }
+
+        for (session, key) in sessions {
+          let tributary = &tributaries[&session];
+          let plans = plans
+            .iter()
+            .filter_map(|plan| Some(plan.id).filter(|_| plan.key == key))
+            .collect::<Vec<_>>();
+          TributaryDb::<D>::set_plan_ids(&mut txn, tributary.spec.genesis(), *block, &plans);
 
           let tx = Transaction::SubstrateBlock(*block);
           log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
