@@ -56,8 +56,8 @@ impl<'a> SeraiCoins<'a> {
       self
         .0
         .storage::<SubstrateAmount>(
-          "Assets",
-          "Account",
+          PALLET,
+          "Coins",
           Some(vec![scale_value(address), scale_value(coin)]),
         )
         .await?
@@ -81,7 +81,7 @@ impl<'a> SeraiCoins<'a> {
     Payload::new(
       PALLET,
       "burn",
-      scale_composite(coins::Call::<Runtime>::burn { balance, instruction }),
+      scale_composite(coins::Call::<Runtime>::burn { balance, instruction: Some(instruction) }),
     )
   }
 }
