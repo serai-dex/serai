@@ -24,7 +24,7 @@ fn new_test(network: NetworkId) -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)
     let (handles, coord_key, compositions) = processor_stack(network);
     coordinators.push((handles, coord_key));
     for composition in compositions {
-      test.add_composition(composition);
+      test.provide_container(composition);
     }
   }
   (coordinators, test)

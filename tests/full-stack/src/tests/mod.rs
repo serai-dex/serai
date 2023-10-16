@@ -26,7 +26,7 @@ pub(crate) fn new_test() -> (Vec<Handles>, DockerTest) {
     });
     validators.push(handles);
     for composition in compositions {
-      test.add_composition(composition);
+      test.provide_container(composition);
     }
   }
   (validators, test)

@@ -18,8 +18,8 @@ use serai_message_queue::{Service, Metadata, client::MessageQueue};
 use serai_client::Serai;
 
 use dockertest::{
-  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
-  DockerOperations,
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy,
+  TestBodySpecification, DockerOperations,
 };
 
 #[cfg(test)]
@@ -30,13 +30,13 @@ static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 pub fn coordinator_instance(
   name: &str,
   message_queue_key: <Ristretto as Ciphersuite>::F,
-) -> Composition {
+) -> TestBodySpecification {
   serai_docker_tests::build("coordinator".to_string());
 
-  Composition::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-coordinator").pull_policy(PullPolicy::Never),
   )
-  .with_env(
+  .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
       ("DB_PATH".to_string(), "./coordinator-db".to_string()),
@@ -53,10 +53,10 @@ pub fn coordinator_instance(
   )
 }
 
-pub fn serai_composition(name: &str) -> Composition {
+pub fn serai_composition(name: &str) -> TestBodySpecification {
   serai_docker_tests::build("serai".to_string());
 
-  let mut composition = Composition::with_image(
+  let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
   .with_cmd(vec![
@@ -67,13 +67,15 @@ pub fn serai_composition(name: &str) -> Composition {
     "--chain".to_string(),
     "local".to_string(),
     format!("--{}", name.to_lowercase()),
-  ]);
-  composition.publish_all_ports();
-  composition
+  ])
+  .set_publish_all_ports(true);
+  TestBodySpecification
 }
 
 pub type Handles = (String, String, String);
-pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+pub fn coordinator_stack(
+  name: &str,
+) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
   let serai_composition = serai_composition(name);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
@@ -111,10 +113,10 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
     let name = format!("{}-{}", composition.handle(), &unique_id);
 
     compositions.push(
-      composition
+      TestBodySpecification
         .with_start_policy(StartPolicy::Strict)
         .with_container_name(name.clone())
-        .with_log_options(Some(LogOptions {
+        .set_log_options(Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
           } else {

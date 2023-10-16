@@ -7,7 +7,7 @@ use std::{
 use serai_client::{primitives::NetworkId, Serai};
 
 use dockertest::{
-  LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition, DockerOperations,
+  LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, TestBodySpecification, DockerOperations,
 };
 
 #[cfg(test)]
@@ -31,7 +31,7 @@ pub struct Handles {
   serai: String,
 }
 
-pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
+pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
   let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance();
 
   let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin);
@@ -83,10 +83,10 @@ pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
     let name = format!("{}-{}", composition.handle(), &unique_id);
 
     compositions.push(
-      composition
+      TestBodySpecification
         .with_start_policy(StartPolicy::Strict)
         .with_container_name(name.clone())
-        .with_log_options(Some(LogOptions {
+        .set_log_options(Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
           } else {

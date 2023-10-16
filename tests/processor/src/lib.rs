@@ -12,8 +12,8 @@ use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
 use dockertest::{
-  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
-  DockerOperations,
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy,
+  TestBodySpecification, DockerOperations,
 };
 
 mod networks;
@@ -28,16 +28,16 @@ pub fn processor_instance(
   network: NetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
-) -> Composition {
+) -> TestBodySpecification {
   serai_docker_tests::build("processor".to_string());
 
   let mut entropy = [0; 32];
   OsRng.fill_bytes(&mut entropy);
 
-  Composition::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-processor").pull_policy(PullPolicy::Never),
   )
-  .with_env(
+  .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
       ("ENTROPY".to_string(), hex::encode(entropy)),
@@ -63,7 +63,7 @@ pub fn processor_instance(
 pub type Handles = (String, String, String);
 pub fn processor_stack(
   network: NetworkId,
-) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
   let (network_composition, network_rpc_port) = network_instance(network);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
@@ -87,10 +87,10 @@ pub fn processor_stack(
   for composition in [network_composition, message_queue_composition, processor_composition] {
     let handle = composition.handle();
     compositions.push(
-      composition
+      TestBodySpecification
         .with_start_policy(StartPolicy::Strict)
         .with_container_name(format!("{handle}-{}", &unique_id))
-        .with_log_options(Some(LogOptions {
+        .set_log_options(Some(LogOptions {
           action: LogAction::Forward,
           policy: if handle.contains("processor") { LogPolicy::Always } else { LogPolicy::OnError },
           source: LogSource::Both,

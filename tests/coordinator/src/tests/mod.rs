@@ -35,7 +35,7 @@ pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, Dock
     });
     coordinators.push((handles, coord_key));
     for composition in compositions {
-      test.add_composition(composition);
+      test.provide_container(composition);
     }
   }
   (coordinators, test)
