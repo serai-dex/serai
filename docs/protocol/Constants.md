@@ -9,14 +9,13 @@ protocol.
 |-----------------|----------------------------------------------|
 | SeraiAddress    | sr25519::Public (unchecked [u8; 32] wrapper) |
 | Amount          | u64                                          |
-| NetworkId       | u16                                          |
-| Coin            | u32                                          |
-| Network         | Vec<Coin>                                    |
+| NetworkId       | NetworkId (Rust enum, SCALE-encoded)         |
+| Coin            | Coin (Rust enum, SCALE-encoded)              |
 | Session         | u32                                          |
-| Validator Set   | (Session, NetworkId)                         |
+| Validator Set   | (NetworkId, Session)                         |
 | Key             | BoundedVec\<u8, 96>                          |
 | KeyPair         | (SeraiAddress, Key)                          |
-| ExternalAddress | BoundedVec\<u8, 128>                         |
+| ExternalAddress | BoundedVec\<u8, 196>                         |
 | Data            | BoundedVec\<u8, 512>                         |
 
 ### Networks
