@@ -3936,11 +3936,10 @@ checksum = "3f35c735096c0293d313e8f2a641627472b83d01b937177fe76e5e2708d31e0d"
 
 [[package]]
 name = "lazy_static"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+version = "1.5.0"
+source = "git+https://github.com/rust-lang-nursery/lazy-static.rs?rev=5735630d46572f1e5377c8f2ba0f79d18f53b10c#5735630d46572f1e5377c8f2ba0f79d18f53b10c"
 dependencies = [
- "spin 0.5.2",
+ "spin 0.9.8",
 ]
 
 [[package]]
