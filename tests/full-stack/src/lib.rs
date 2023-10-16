@@ -83,7 +83,7 @@ pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
     let name = format!("{}-{}", composition.handle(), &unique_id);
 
     compositions.push(
-      TestBodySpecification
+      composition
         .set_start_policy(StartPolicy::Strict)
         .set_handle(name.clone())
         .set_log_options(Some(LogOptions {
