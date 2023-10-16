@@ -89,7 +89,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
- "getrandom 0.2.10",
+ "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -512,7 +512,7 @@ dependencies = [
  "hex",
  "k256",
  "modular-frost",
- "rand_core 0.6.4",
+ "rand_core",
  "reqwest",
  "secp256k1",
  "serde",
@@ -630,7 +630,7 @@ dependencies = [
  "ff",
  "group",
  "pairing",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -927,7 +927,7 @@ dependencies = [
  "k256",
  "minimal-ed448",
  "p256",
- "rand_core 0.6.4",
+ "rand_core",
  "sha2",
  "sha3",
  "std-shims",
@@ -1108,7 +1108,7 @@ version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d7d6ab3c3a2282db210df5f02c4dab6e0a7057af0fb7ebd4070f30fe05c0ddb"
 dependencies = [
- "getrandom 0.2.10",
+ "getrandom",
  "once_cell",
  "proc-macro-hack",
  "tiny-keccak",
@@ -1350,7 +1350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "740fe28e594155f10cfc383984cbefd529d7396050557148f79cb0f621204124"
 dependencies = [
  "generic-array",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
  "zeroize",
 ]
@@ -1385,19 +1385,6 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
@@ -1409,7 +1396,7 @@ dependencies = [
  "fiat-crypto",
  "group",
  "platforms",
- "rand_core 0.6.4",
+ "rand_core",
  "rustc_version",
  "subtle",
  "zeroize",
@@ -1475,12 +1462,12 @@ name = "dalek-ff-group"
 version = "0.4.1"
 dependencies = [
  "crypto-bigint",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "digest 0.10.7",
  "ff",
  "ff-group-tests",
  "group",
- "rand_core 0.6.4",
+ "rand_core",
  "rustversion",
  "sha2",
  "subtle",
@@ -1817,7 +1804,7 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "multiexp",
- "rand_core 0.6.4",
+ "rand_core",
  "schnorr-signatures",
  "serde",
  "std-shims",
@@ -1838,7 +1825,7 @@ dependencies = [
  "hex-literal",
  "k256",
  "multiexp",
- "rand_core 0.6.4",
+ "rand_core",
  "rustversion",
  "thiserror",
  "zeroize",
@@ -1941,9 +1928,9 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "ed25519",
- "rand_core 0.6.4",
+ "rand_core",
  "serde",
  "sha2",
  "zeroize",
@@ -1955,11 +1942,11 @@ version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d9ce6874da5d4415896cd45ffbc4d1cfc0c4f9c079427bd870742c30f2f65a9"
 dependencies = [
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "ed25519",
  "hashbrown 0.14.1",
  "hex",
- "rand_core 0.6.4",
+ "rand_core",
  "sha2",
  "zeroize",
 ]
@@ -1983,7 +1970,7 @@ dependencies = [
  "generic-array",
  "group",
  "pkcs8",
- "rand_core 0.6.4",
+ "rand_core",
  "sec1",
  "subtle",
  "tap",
@@ -2137,7 +2124,7 @@ dependencies = [
  "group",
  "k256",
  "modular-frost",
- "rand_core 0.6.4",
+ "rand_core",
  "serde",
  "serde_json",
  "sha2",
@@ -2481,7 +2468,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
 dependencies = [
  "bitvec",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2495,7 +2482,7 @@ dependencies = [
  "k256",
  "p256",
  "pasta_curves",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2862,7 +2849,7 @@ dependencies = [
  "flexible-transcript",
  "group",
  "modular-frost",
- "rand_core 0.6.4",
+ "rand_core",
  "schnorr-signatures",
  "schnorrkel",
  "zeroize",
@@ -3094,17 +3081,6 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
-dependencies = [
- "cfg-if",
- "libc",
- "wasi 0.9.0+wasi-snapshot-preview1",
-]
-
-[[package]]
-name = "getrandom"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
@@ -3112,7 +3088,7 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "wasm-bindgen",
 ]
 
@@ -3181,7 +3157,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
  "ff",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -3302,6 +3278,15 @@ name = "hex_lit"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3011d1213f159867b13cfd6ac92d2cd5f1345762c63be3554e84092d85a50bbd"
+
+[[package]]
+name = "hkdf"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
+dependencies = [
+ "hmac",
+]
 
 [[package]]
 name = "hmac"
@@ -3985,7 +3970,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-timer",
- "getrandom 0.2.10",
+ "getrandom",
  "instant",
  "libp2p-allow-block-list",
  "libp2p-connection-limits",
@@ -4091,7 +4076,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-ticker",
- "getrandom 0.2.10",
+ "getrandom",
  "hex_fmt",
  "instant",
  "libp2p-core",
@@ -4133,12 +4118,13 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.3"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686e73aff5e23efbb99bc85340ea6fd8686986aa7b283a881ba182cfca535ca9"
+checksum = "57bf6e730ec5e7022958da53ffb03b326e681b7316939012ae9b3c7449a812d4"
 dependencies = [
  "bs58",
  "ed25519-dalek",
+ "hkdf",
  "log",
  "multihash 0.19.1",
  "quick-protobuf",
@@ -4218,12 +4204,12 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.43.1"
+version = "0.43.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71ce70757f2c0d82e9a3ef738fb10ea0723d16cec37f078f719e2c247704c1bb"
+checksum = "d2eeec39ad3ad0677551907dd304b2f13f17208ccebe333bef194076cd2e8921"
 dependencies = [
  "bytes",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "futures",
  "libp2p-core",
  "libp2p-identity",
@@ -4715,7 +4701,7 @@ checksum = "58c38e2799fc0978b65dfff8023ec7843e2330bb462f19198840b34b6582397d"
 dependencies = [
  "byteorder",
  "keccak",
- "rand_core 0.6.4",
+ "rand_core",
  "zeroize",
 ]
 
@@ -4742,7 +4728,7 @@ dependencies = [
  "generic-array",
  "group",
  "hex",
- "rand_core 0.6.4",
+ "rand_core",
  "rustversion",
  "subtle",
  "zeroize",
@@ -4770,7 +4756,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
 dependencies = [
  "libc",
- "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasi",
  "windows-sys",
 ]
 
@@ -4815,7 +4801,7 @@ dependencies = [
  "minimal-ed448",
  "multiexp",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
  "schnorr-signatures",
  "serde_json",
  "subtle",
@@ -4827,7 +4813,7 @@ dependencies = [
 name = "monero-generators"
 version = "0.4.0"
 dependencies = [
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "dalek-ff-group",
  "group",
  "sha3",
@@ -4842,7 +4828,7 @@ dependencies = [
  "async-trait",
  "base58-monero",
  "crc",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "dalek-ff-group",
  "digest_auth",
  "dleq",
@@ -4857,7 +4843,7 @@ dependencies = [
  "pbkdf2 0.12.2",
  "rand",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
  "rand_distr",
  "reqwest",
  "serde",
@@ -4908,7 +4894,7 @@ dependencies = [
  "ff",
  "group",
  "k256",
- "rand_core 0.6.4",
+ "rand_core",
  "rustversion",
  "std-shims",
  "zeroize",
@@ -5734,7 +5720,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
 dependencies = [
  "base64ct",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -6377,7 +6363,7 @@ checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -6387,16 +6373,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
-dependencies = [
- "getrandom 0.1.16",
+ "rand_core",
 ]
 
 [[package]]
@@ -6405,7 +6382,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.10",
+ "getrandom",
 ]
 
 [[package]]
@@ -6424,7 +6401,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
 dependencies = [
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -6489,7 +6466,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
- "getrandom 0.2.10",
+ "getrandom",
  "redox_syscall 0.2.16",
  "thiserror",
 ]
@@ -7955,7 +7932,7 @@ dependencies = [
  "flexible-transcript",
  "hex",
  "multiexp",
- "rand_core 0.6.4",
+ "rand_core",
  "sha2",
  "std-shims",
  "zeroize",
@@ -7969,10 +7946,10 @@ checksum = "da18ffd9f2f5d01bc0b3050b37ce7728665f926b4dd1157fe3221b05737d924f"
 dependencies = [
  "arrayref",
  "arrayvec",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "merlin",
  "rand",
- "rand_core 0.6.4",
+ "rand_core",
  "serde_bytes",
  "sha2",
  "subtle",
@@ -8135,7 +8112,7 @@ dependencies = [
  "modular-frost",
  "monero-serai",
  "parity-scale-codec",
- "rand_core 0.6.4",
+ "rand_core",
  "scale-info",
  "serai-runtime",
  "sp-core",
@@ -8162,7 +8139,7 @@ dependencies = [
  "modular-frost",
  "parity-scale-codec",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
  "schnorr-signatures",
  "serai-client",
  "serai-db",
@@ -8187,7 +8164,7 @@ dependencies = [
  "dockertest",
  "hex",
  "parity-scale-codec",
- "rand_core 0.6.4",
+ "rand_core",
  "schnorrkel",
  "serai-client",
  "serai-docker-tests",
@@ -8223,12 +8200,12 @@ name = "serai-full-stack-tests"
 version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "dockertest",
  "hex",
  "monero-serai",
  "parity-scale-codec",
- "rand_core 0.6.4",
+ "rand_core",
  "serai-client",
  "serai-coordinator-tests",
  "serai-docker-tests",
@@ -8287,7 +8264,7 @@ dependencies = [
  "jsonrpsee",
  "lazy_static",
  "log",
- "rand_core 0.6.4",
+ "rand_core",
  "reqwest",
  "schnorr-signatures",
  "serai-db",
@@ -8306,7 +8283,7 @@ dependencies = [
  "ciphersuite",
  "dockertest",
  "hex",
- "rand_core 0.6.4",
+ "rand_core",
  "serai-docker-tests",
  "serai-message-queue",
  "serai-primitives",
@@ -8406,7 +8383,7 @@ dependencies = [
  "monero-serai",
  "parity-scale-codec",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
  "secp256k1",
  "serai-client",
  "serai-db",
@@ -8441,13 +8418,13 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "dkg",
  "dockertest",
  "hex",
  "monero-serai",
  "parity-scale-codec",
- "rand_core 0.6.4",
+ "rand_core",
  "serai-client",
  "serai-docker-tests",
  "serai-message-queue",
@@ -8466,7 +8443,7 @@ version = "0.1.0"
 dependencies = [
  "dockertest",
  "hex",
- "rand_core 0.6.4",
+ "rand_core",
  "serai-docker-tests",
  "tokio",
 ]
@@ -8567,6 +8544,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-io",
+ "sp-runtime",
  "sp-std",
 ]
 
@@ -8744,7 +8722,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
 dependencies = [
  "digest 0.10.7",
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -8814,8 +8792,8 @@ dependencies = [
  "aes-gcm",
  "blake2",
  "chacha20poly1305",
- "curve25519-dalek 4.1.1",
- "rand_core 0.6.4",
+ "curve25519-dalek",
+ "rand_core",
  "ring",
  "rustc_version",
  "sha2",
@@ -9726,7 +9704,7 @@ dependencies = [
  "either",
  "frame-metadata 15.1.0",
  "futures",
- "getrandom 0.2.10",
+ "getrandom",
  "hex",
  "impl-serde",
  "jsonrpsee",
@@ -10525,7 +10503,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "getrandom 0.2.10",
+ "getrandom",
  "serde",
 ]
 
@@ -10583,12 +10561,6 @@ checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
 dependencies = [
  "try-lock",
 ]
-
-[[package]]
-name = "wasi"
-version = "0.9.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 
 [[package]]
 name = "wasi"
@@ -11190,12 +11162,13 @@ dependencies = [
 
 [[package]]
 name = "x25519-dalek"
-version = "1.1.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a0c105152107e3b96f6a00a65e86ce82d9b125230e1c4302940eca58ff71f4f"
+checksum = "fb66477291e7e8d2b0ff1bcb900bf29489a9692816d79874bea351e7a8b6de96"
 dependencies = [
- "curve25519-dalek 3.2.0",
- "rand_core 0.5.1",
+ "curve25519-dalek",
+ "rand_core",
+ "serde",
  "zeroize",
 ]
 
