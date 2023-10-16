@@ -13,7 +13,10 @@ pub mod pallet {
 
   use serai_primitives::{NetworkId, Amount, PublicKey};
 
-  use validator_sets_pallet::{primitives::Session, Config as VsConfig, Pallet as VsPallet};
+  use validator_sets_pallet::{
+    primitives::{Session, ValidatorSet},
+    Config as VsConfig, Pallet as VsPallet,
+  };
   use pallet_session::{Config as SessionConfig, SessionManager};
 
   #[pallet::error]
@@ -183,7 +186,12 @@ pub mod pallet {
       Some(VsPallet::<T>::select_validators(NetworkId::Serai))
     }
 
-    fn end_session(_end_index: u32) {}
+    fn end_session(end_index: u32) {
+      VsPallet::<T>::retire_set(ValidatorSet {
+        network: NetworkId::Serai,
+        session: Session(end_index),
+      })
+    }
 
     fn start_session(_start_index: u32) {}
   }

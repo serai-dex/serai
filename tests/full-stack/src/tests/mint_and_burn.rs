@@ -15,8 +15,8 @@ use serai_client::{
   },
   validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::Shorthand,
-  tokens::primitives::OutInstruction,
-  PairTrait, PairSigner,
+  coins::primitives::OutInstruction,
+  PairTrait, PairSigner, SeraiCoins,
 };
 
 use crate::tests::*;
@@ -196,10 +196,11 @@ async fn mint_and_burn_test() {
             let print_at = halt_at / 2;
             for i in 0 .. halt_at {
               if let Some(key_pair) = serai
-                .get_keys(
-                  ValidatorSet { network, session: Session(0) },
-                  serai.get_latest_block_hash().await.unwrap(),
-                )
+                .with_current_latest_block()
+                .await
+                .unwrap()
+                .validator_sets()
+                .keys(ValidatorSet { network, session: Session(0) })
                 .await
                 .unwrap()
               {
@@ -240,7 +241,7 @@ async fn mint_and_burn_test() {
             &serai
               .sign(
                 &PairSigner::new(insecure_pair_from_name("Ferdie")),
-                &Serai::transfer_sri(address, Amount(1_000_000_000)),
+                &SeraiCoins::transfer_sri(address, Amount(1_000_000_000)),
                 0,
                 Default::default(),
               )
@@ -408,7 +409,11 @@ async fn mint_and_burn_test() {
             let print_at = halt_at / 2;
             for i in 0 .. halt_at {
               if serai
-                .get_last_batch_for_network(serai.get_latest_block_hash().await.unwrap(), network)
+                .with_current_latest_block()
+                .await
+                .unwrap()
+                .in_instructions()
+                .last_batch_for_network(network)
                 .await
                 .unwrap()
                 .is_some()
@@ -490,7 +495,7 @@ async fn mint_and_burn_test() {
                 &serai
                   .sign(
                     serai_pair,
-                    &Serai::burn(Balance { coin, amount: Amount(amount) }, out_instruction),
+                    &SeraiCoins::burn(Balance { coin, amount: Amount(amount) }, out_instruction),
                     nonce,
                     Default::default(),
                   )

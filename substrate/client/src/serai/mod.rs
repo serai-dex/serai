@@ -33,9 +33,12 @@ use serai_runtime::{
   system::Config, support::traits::PalletInfo as PalletInfoTrait, PalletInfo, Runtime,
 };
 
-pub mod tokens;
+pub mod coins;
+pub use coins::SeraiCoins;
 pub mod in_instructions;
+pub use in_instructions::SeraiInInstructions;
 pub mod validator_sets;
+pub use validator_sets::SeraiValidatorSets;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Encode, Decode)]
 pub struct Tip {
@@ -136,151 +139,12 @@ pub enum SeraiError {
 #[derive(Clone)]
 pub struct Serai(OnlineClient<SeraiConfig>);
 
+#[derive(Clone, Copy)]
+pub struct TemporalSerai<'a>(pub(crate) &'a Serai, pub(crate) [u8; 32]);
+
 impl Serai {
   pub async fn new(url: &str) -> Result<Self, SeraiError> {
     Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(SeraiError::RpcError)?))
-  }
-
-  async fn storage<R: Decode>(
-    &self,
-    pallet: &'static str,
-    name: &'static str,
-    keys: Option<Vec<Value>>,
-    block: [u8; 32],
-  ) -> Result<Option<R>, SeraiError> {
-    let storage = self.0.storage();
-    #[allow(clippy::unwrap_or_default)]
-    let address = subxt::dynamic::storage(pallet, name, keys.unwrap_or(vec![]));
-    debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
-
-    storage
-      .at(block.into())
-      .fetch(&address)
-      .await
-      .map_err(SeraiError::RpcError)?
-      .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
-      .transpose()
-  }
-
-  async fn events<P: 'static, E: Decode>(
-    &self,
-    block: [u8; 32],
-    filter: impl Fn(&E) -> bool,
-  ) -> Result<Vec<E>, SeraiError> {
-    let mut res = vec![];
-    for event in self.0.events().at(block.into()).await.map_err(SeraiError::RpcError)?.iter() {
-      let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
-      if PalletInfo::index::<P>().unwrap() == usize::from(event.pallet_index()) {
-        let mut with_variant: &[u8] =
-          &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
-        let event = E::decode(&mut with_variant).map_err(|_| SeraiError::InvalidRuntime)?;
-        if filter(&event) {
-          res.push(event);
-        }
-      }
-    }
-    Ok(res)
-  }
-
-  pub async fn get_latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
-    Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
-  }
-
-  pub async fn get_latest_block(&self) -> Result<Block, SeraiError> {
-    Block::new(
-      self
-        .0
-        .rpc()
-        .block(Some(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?))
-        .await
-        .map_err(SeraiError::RpcError)?
-        .ok_or(SeraiError::InvalidNode)?
-        .block,
-    )
-  }
-
-  // There is no provided method for this
-  // TODO: Add one to Serai
-  pub async fn is_finalized(&self, header: &Header) -> Result<Option<bool>, SeraiError> {
-    // Get the latest finalized block
-    let finalized = self.get_latest_block_hash().await?.into();
-    // If the latest finalized block is this block, return true
-    if finalized == header.hash() {
-      return Ok(Some(true));
-    }
-
-    let Some(finalized) =
-      self.0.rpc().header(Some(finalized)).await.map_err(SeraiError::RpcError)?
-    else {
-      return Ok(None);
-    };
-
-    // If the finalized block has a lower number, this block can't be finalized
-    if finalized.number() < header.number() {
-      return Ok(Some(false));
-    }
-
-    // This block, if finalized, comes before the finalized block
-    // If we request the hash of this block's number, Substrate will return the hash on the main
-    // chain
-    // If that hash is this hash, this block is finalized
-    let Some(hash) =
-      self.0.rpc().block_hash(Some(header.number().into())).await.map_err(SeraiError::RpcError)?
-    else {
-      // This is an error since there is a block at this index
-      Err(SeraiError::InvalidNode)?
-    };
-
-    Ok(Some(header.hash() == hash))
-  }
-
-  pub async fn get_block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
-    let Some(res) = self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)?
-    else {
-      return Ok(None);
-    };
-
-    // Only return finalized blocks
-    if self.is_finalized(&res.block.header).await? != Some(true) {
-      return Ok(None);
-    }
-
-    Ok(Some(Block::new(res.block)?))
-  }
-
-  // Ideally, this would be get_block_hash, not get_block_by_number
-  // Unfortunately, in order to only operate over only finalized data, we have to check the
-  // returned hash is for a finalized block. We can only do that by calling the extensive
-  // is_finalized method, which at least requires the header
-  // In practice, the block is likely more useful than the header
-  pub async fn get_block_by_number(&self, number: u64) -> Result<Option<Block>, SeraiError> {
-    let Some(hash) =
-      self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)?
-    else {
-      return Ok(None);
-    };
-    self.get_block(hash.into()).await
-  }
-
-  /// A stream which yields whenever new block(s) have been finalized.
-  pub async fn newly_finalized_block(
-    &self,
-  ) -> Result<impl Stream<Item = Result<(), SeraiError>>, SeraiError> {
-    Ok(self.0.rpc().subscribe_finalized_block_headers().await.map_err(SeraiError::RpcError)?.map(
-      |next| {
-        next.map_err(SeraiError::RpcError)?;
-        Ok(())
-      },
-    ))
-  }
-
-  pub async fn get_nonce(&self, address: &SeraiAddress) -> Result<u32, SeraiError> {
-    self
-      .0
-      .rpc()
-      .system_account_next_index(&sp_core::sr25519::Public(address.0).to_string())
-      .await
-      .map_err(SeraiError::RpcError)
   }
 
   fn unsigned<P: 'static, C: Encode>(call: &C) -> Encoded {
@@ -322,28 +186,173 @@ impl Serai {
     self.0.rpc().submit_extrinsic(tx).await.map(|_| ()).map_err(SeraiError::RpcError)
   }
 
-  pub async fn get_sri_balance(
-    &self,
-    block: [u8; 32],
-    address: SeraiAddress,
-  ) -> Result<u64, SeraiError> {
-    let data: Option<
-      serai_runtime::system::AccountInfo<u32, serai_runtime::balances::AccountData<u64>>,
-    > = self.storage("System", "Account", Some(vec![scale_value(address)]), block).await?;
-    Ok(data.map(|data| data.data.free).unwrap_or(0))
+  pub async fn latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {
+    Ok(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?.into())
   }
 
-  pub fn transfer_sri(to: SeraiAddress, amount: Amount) -> Payload<Composite<()>> {
-    Payload::new(
-      "Balances",
-      // TODO: Use transfer_allow_death?
-      // TODO: Replace the Balances pallet with something much simpler
-      "transfer",
-      scale_composite(serai_runtime::balances::Call::<Runtime>::transfer {
-        dest: to,
-        value: amount.0,
-      }),
+  pub async fn latest_block(&self) -> Result<Block, SeraiError> {
+    Block::new(
+      self
+        .0
+        .rpc()
+        .block(Some(self.0.rpc().finalized_head().await.map_err(SeraiError::RpcError)?))
+        .await
+        .map_err(SeraiError::RpcError)?
+        .ok_or(SeraiError::InvalidNode)?
+        .block,
     )
+  }
+
+  // There is no provided method for this
+  // TODO: Add one to Serai
+  pub async fn is_finalized(&self, header: &Header) -> Result<Option<bool>, SeraiError> {
+    // Get the latest finalized block
+    let finalized = self.latest_block_hash().await?.into();
+    // If the latest finalized block is this block, return true
+    if finalized == header.hash() {
+      return Ok(Some(true));
+    }
+
+    let Some(finalized) =
+      self.0.rpc().header(Some(finalized)).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
+
+    // If the finalized block has a lower number, this block can't be finalized
+    if finalized.number() < header.number() {
+      return Ok(Some(false));
+    }
+
+    // This block, if finalized, comes before the finalized block
+    // If we request the hash of this block's number, Substrate will return the hash on the main
+    // chain
+    // If that hash is this hash, this block is finalized
+    let Some(hash) =
+      self.0.rpc().block_hash(Some(header.number().into())).await.map_err(SeraiError::RpcError)?
+    else {
+      // This is an error since there is a block at this index
+      Err(SeraiError::InvalidNode)?
+    };
+
+    Ok(Some(header.hash() == hash))
+  }
+
+  pub async fn block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
+    let Some(res) = self.0.rpc().block(Some(hash.into())).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
+
+    // Only return finalized blocks
+    if self.is_finalized(&res.block.header).await? != Some(true) {
+      return Ok(None);
+    }
+
+    Ok(Some(Block::new(res.block)?))
+  }
+
+  // Ideally, this would be block_hash, not block_by_number
+  // Unfortunately, in order to only operate over only finalized data, we have to check the
+  // returned hash is for a finalized block. We can only do that by calling the extensive
+  // is_finalized method, which at least requires the header
+  // In practice, the block is likely more useful than the header
+  pub async fn block_by_number(&self, number: u64) -> Result<Option<Block>, SeraiError> {
+    let Some(hash) =
+      self.0.rpc().block_hash(Some(number.into())).await.map_err(SeraiError::RpcError)?
+    else {
+      return Ok(None);
+    };
+    self.block(hash.into()).await
+  }
+
+  /// A stream which yields whenever new block(s) have been finalized.
+  pub async fn newly_finalized_block(
+    &self,
+  ) -> Result<impl Stream<Item = Result<(), SeraiError>>, SeraiError> {
+    Ok(self.0.rpc().subscribe_finalized_block_headers().await.map_err(SeraiError::RpcError)?.map(
+      |next| {
+        next.map_err(SeraiError::RpcError)?;
+        Ok(())
+      },
+    ))
+  }
+
+  pub async fn nonce(&self, address: &SeraiAddress) -> Result<u32, SeraiError> {
+    self
+      .0
+      .rpc()
+      .system_account_next_index(&sp_core::sr25519::Public(address.0).to_string())
+      .await
+      .map_err(SeraiError::RpcError)
+  }
+
+  /// Create a TemporalSerai using whatever is currently the latest block.
+  pub async fn with_current_latest_block(&self) -> Result<TemporalSerai, SeraiError> {
+    let latest = self.latest_block_hash().await?;
+    Ok(TemporalSerai(self, latest))
+  }
+
+  /// Returns a TemporalSerai able to retrieve state as of the specified block.
+  pub fn as_of(&self, block: [u8; 32]) -> TemporalSerai {
+    TemporalSerai(self, block)
+  }
+}
+
+impl<'a> TemporalSerai<'a> {
+  pub fn into_inner(&self) -> &Serai {
+    self.0
+  }
+
+  async fn events<P: 'static, E: Decode>(
+    &self,
+    filter: impl Fn(&E) -> bool,
+  ) -> Result<Vec<E>, SeraiError> {
+    let mut res = vec![];
+    for event in self.0 .0.events().at(self.1.into()).await.map_err(SeraiError::RpcError)?.iter() {
+      let event = event.map_err(|_| SeraiError::InvalidRuntime)?;
+      if PalletInfo::index::<P>().unwrap() == usize::from(event.pallet_index()) {
+        let mut with_variant: &[u8] =
+          &[[event.variant_index()].as_ref(), event.field_bytes()].concat();
+        let event = E::decode(&mut with_variant).map_err(|_| SeraiError::InvalidRuntime)?;
+        if filter(&event) {
+          res.push(event);
+        }
+      }
+    }
+    Ok(res)
+  }
+
+  async fn storage<R: Decode>(
+    &self,
+    pallet: &'static str,
+    name: &'static str,
+    keys: Option<Vec<Value>>,
+  ) -> Result<Option<R>, SeraiError> {
+    let storage = self.0 .0.storage();
+    #[allow(clippy::unwrap_or_default)]
+    let address = subxt::dynamic::storage(pallet, name, keys.unwrap_or(vec![]));
+    debug_assert!(storage.validate(&address).is_ok(), "invalid storage address");
+
+    storage
+      .at(self.1.into())
+      .fetch(&address)
+      .await
+      .map_err(SeraiError::RpcError)?
+      .map(|res| R::decode(&mut res.encoded()).map_err(|_| SeraiError::InvalidRuntime))
+      .transpose()
+  }
+
+  pub fn coins(self) -> SeraiCoins<'a> {
+    SeraiCoins(self)
+  }
+
+  pub fn in_instructions(self) -> SeraiInInstructions<'a> {
+    SeraiInInstructions(self)
+  }
+
+  pub fn validator_sets(self) -> SeraiValidatorSets<'a> {
+    SeraiValidatorSets(self)
   }
 }
 

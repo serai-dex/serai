@@ -60,7 +60,7 @@ macro_rules! serai_test {
             tokio::time::sleep(Duration::from_secs(1)).await;
           }
           let serai = serai().await;
-          while serai.get_latest_block_hash().await.is_err() {
+          while serai.latest_block_hash().await.is_err() {
             tokio::time::sleep(Duration::from_secs(1)).await;
           }
           // TODO: https://github.com/serai-dex/serai/247

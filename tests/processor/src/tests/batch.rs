@@ -5,7 +5,7 @@ use std::{
 
 use dkg::{Participant, tests::clone_without};
 
-use messages::{sign::SignId, SubstrateContext};
+use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext};
 
 use serai_client::{
   primitives::{BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId},
@@ -155,7 +155,7 @@ pub(crate) async fn sign_batch(
 pub(crate) async fn substrate_block(
   coordinator: &mut Coordinator,
   block: messages::substrate::CoordinatorMessage,
-) -> Vec<[u8; 32]> {
+) -> Vec<PlanMeta> {
   match block.clone() {
     messages::substrate::CoordinatorMessage::SubstrateBlock {
       context: _,

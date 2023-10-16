@@ -13,7 +13,7 @@ use serai_client::{
   validator_sets::primitives::{ValidatorSet, KeyPair},
 };
 
-use messages::CoordinatorMessage;
+use messages::{coordinator::PlanMeta, CoordinatorMessage};
 
 use serai_env as env;
 
@@ -350,7 +350,13 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
               .send(messages::coordinator::ProcessorMessage::SubstrateBlockAck {
                 network: N::NETWORK,
                 block: substrate_block,
-                plans: to_sign.iter().map(|signable| signable.1).collect(),
+                plans: to_sign
+                  .iter()
+                  .map(|signable| PlanMeta {
+                    key: signable.0.to_bytes().as_ref().to_vec(),
+                    id: signable.1,
+                  })
+                  .collect(),
               })
               .await;
           }

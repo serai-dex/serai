@@ -33,6 +33,8 @@ pub use db::*;
 mod nonce_decider;
 pub use nonce_decider::*;
 
+mod dkg_confirmer;
+
 mod handle;
 pub use handle::*;
 
@@ -51,16 +53,15 @@ impl TributarySpec {
     serai_block: [u8; 32],
     start_time: u64,
     set: ValidatorSet,
-    set_participants: Vec<PublicKey>,
+    set_participants: Vec<(PublicKey, u64)>,
   ) -> TributarySpec {
     let mut validators = vec![];
-    for participant in set_participants {
+    for (participant, shares) in set_participants {
       // TODO: Ban invalid keys from being validators on the Serai side
       // (make coordinator key a session key?)
       let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
         .expect("invalid key registered as participant");
-      // TODO: Give one weight on Tributary per bond instance
-      validators.push((participant, 1));
+      validators.push((participant, shares));
     }
 
     Self { serai_block, start_time, set, validators }

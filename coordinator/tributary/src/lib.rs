@@ -152,6 +152,14 @@ pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
   synced_block: Arc<RwLock<SyncedBlockSender<TendermintNetwork<D, T, P>>>>,
   synced_block_result: Arc<RwLock<SyncedBlockResultReceiver>>,
   messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
+
+  p2p_meta_task_handle: Arc<tokio::task::AbortHandle>,
+}
+
+impl<D: Db, T: TransactionTrait, P: P2p> Drop for Tributary<D, T, P> {
+  fn drop(&mut self) {
+    self.p2p_meta_task_handle.abort();
+  }
 }
 
 impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
@@ -186,26 +194,29 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let to_rebroadcast = Arc::new(RwLock::new(vec![]));
     // Actively rebroadcast consensus messages to ensure they aren't prematurely dropped from the
     // P2P layer
-    tokio::spawn({
-      let to_rebroadcast = to_rebroadcast.clone();
-      let p2p = p2p.clone();
-      async move {
-        loop {
-          let to_rebroadcast = to_rebroadcast.read().await.clone();
-          for msg in to_rebroadcast {
-            p2p.broadcast(genesis, msg).await;
+    let p2p_meta_task_handle = Arc::new(
+      tokio::spawn({
+        let to_rebroadcast = to_rebroadcast.clone();
+        let p2p = p2p.clone();
+        async move {
+          loop {
+            let to_rebroadcast = to_rebroadcast.read().await.clone();
+            for msg in to_rebroadcast {
+              p2p.broadcast(genesis, msg).await;
+            }
+            tokio::time::sleep(core::time::Duration::from_secs(1)).await;
           }
-          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
         }
-      }
-    });
+      })
+      .abort_handle(),
+    );
 
     let network =
       TendermintNetwork { genesis, signer, validators, blockchain, to_rebroadcast, p2p };
 
     let TendermintHandle { synced_block, synced_block_result, messages, machine } =
       TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
-    tokio::task::spawn(machine.run());
+    tokio::spawn(machine.run());
 
     Some(Self {
       db,
@@ -214,6 +225,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       synced_block: Arc::new(RwLock::new(synced_block)),
       synced_block_result: Arc::new(RwLock::new(synced_block_result)),
       messages: Arc::new(RwLock::new(messages)),
+      p2p_meta_task_handle,
     })
   }
 
@@ -244,10 +256,10 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.read().await.next_nonce(signer)
   }
 
-  // Returns if the transaction was new and valid.
+  // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
   // successfully acquires its own write lock
-  pub async fn add_transaction(&self, tx: T) -> bool {
+  pub async fn add_transaction(&self, tx: T) -> Result<bool, TransactionError> {
     let tx = Transaction::Application(tx);
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
@@ -256,7 +268,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       tx,
       self.network.signature_scheme(),
     );
-    if res {
+    if res == Ok(true) {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
     }
     res
@@ -327,8 +339,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
             tx,
             self.network.signature_scheme(),
           );
-        log::debug!("received transaction message. valid new transaction: {res}");
-        res
+        log::debug!("received transaction message. valid new transaction: {res:?}");
+        res == Ok(true)
       }
 
       Some(&TENDERMINT_MESSAGE) => {
@@ -395,6 +407,10 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
     self
       .commit(hash)
       .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
+  }
+
+  pub fn locally_provided_txs_in_block(&self, hash: &[u8; 32], order: &str) -> bool {
+    Blockchain::<D, T>::locally_provided_txs_in_block(&self.0, &self.1, hash, order)
   }
 
   // This isn't static, yet can be read with only minor discrepancy risks
