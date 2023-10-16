@@ -1848,8 +1848,12 @@ dependencies = [
 [[package]]
 name = "dockertest"
 version = "0.3.1"
+<<<<<<< HEAD
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5e89cd7c59faf3cf0e31369fce2382807dd794d4fcce6380adcefdf5987796"
+=======
+source = "git+https://github.com/kayabaNerve/dockertest-rs?branch=bollard-0.15#8bbc402a142b16d8a1bb8860d12d1e122e6d55a6"
+>>>>>>> 06bb7fb7 (Update Cargo.lock to dockertest with handle restored)
 dependencies = [
  "anyhow",
  "async-trait",
