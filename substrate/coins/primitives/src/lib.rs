@@ -44,5 +44,5 @@ pub enum Destination {
 #[test]
 fn address() {
   use sp_runtime::traits::TrailingZeroInput;
-  assert_eq!(FEE_ACCOUNT, SeraiAddress::decode(&mut TrailingZeroInput::new(b"Coins")).unwrap());
+  assert_eq!(FEE_ACCOUNT, SeraiAddress::decode(&mut TrailingZeroInput::new(b"FeeAccount")).unwrap());
 }
