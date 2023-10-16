@@ -42,6 +42,8 @@ tributary = { package = "tributary-chain", path = "./tributary" }
 serai-client = { path = "../substrate/client", features = ["serai"] }
 
 hex = "0.4"
+bincode = { version = "1", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
 serde_json = { version = "1", default-features = false }
 
 log = "0.4"
