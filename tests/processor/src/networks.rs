@@ -27,7 +27,7 @@ pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "bitcoind".to_string(),
     "-txindex".to_string(),
     "-regtest".to_string(),
@@ -47,7 +47,7 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "monerod".to_string(),
     "--regtest".to_string(),
     "--offline".to_string(),
@@ -58,7 +58,7 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
     "--confirm-external-bind".to_string(),
     "--non-interactive".to_string(),
   ])
-  .with_start_policy(StartPolicy::Strict)
+  .set_start_policy(StartPolicy::Strict)
   .set_publish_all_ports(true);
   (composition, XMR_PORT)
 }

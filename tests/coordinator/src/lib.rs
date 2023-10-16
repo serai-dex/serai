@@ -59,7 +59,7 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "serai-node".to_string(),
     "--unsafe-rpc-external".to_string(),
     "--rpc-cors".to_string(),
@@ -114,8 +114,8 @@ pub fn coordinator_stack(
 
     compositions.push(
       TestBodySpecification
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(name.clone())
+        .set_start_policy(StartPolicy::Strict)
+        .set_handle(name.clone())
         .set_log_options(Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward

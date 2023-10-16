@@ -22,8 +22,8 @@ pub fn reproducibly_builds() {
       TestBodySpecification::with_image(
         Image::with_repository("serai-dev-runtime").pull_policy(PullPolicy::Never),
       )
-      .with_container_name(format!("runtime-build-{}", hex::encode(id)))
-      .with_cmd(vec![
+      .set_handle(format!("runtime-build-{}", hex::encode(id)))
+      .replace_cmd(vec![
         "sh".to_string(),
         "-c".to_string(),
         // Sleep for a minute after building to prevent the container from closing before we

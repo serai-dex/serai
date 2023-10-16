@@ -87,9 +87,9 @@ pub fn processor_stack(
   for composition in [network_composition, message_queue_composition, processor_composition] {
     let handle = composition.handle();
     compositions.push(
-      TestBodySpecification
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(format!("{handle}-{}", &unique_id))
+      composition
+        .set_start_policy(StartPolicy::Strict)
+        .set_handle(format!("{handle}-{}", &unique_id))
         .set_log_options(Some(LogOptions {
           action: LogAction::Forward,
           policy: if handle.contains("processor") { LogPolicy::Always } else { LogPolicy::OnError },

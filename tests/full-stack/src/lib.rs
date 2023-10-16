@@ -84,8 +84,8 @@ pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
 
     compositions.push(
       TestBodySpecification
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(name.clone())
+        .set_start_policy(StartPolicy::Strict)
+        .set_handle(name.clone())
         .set_log_options(Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
