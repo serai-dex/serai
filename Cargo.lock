@@ -8559,7 +8559,6 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
- "hashbrown 0.14.1",
  "pallet-session",
  "parity-scale-codec",
  "scale-info",
@@ -8568,7 +8567,6 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-io",
- "sp-runtime",
  "sp-std",
 ]
 
