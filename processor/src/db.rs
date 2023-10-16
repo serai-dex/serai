@@ -6,7 +6,7 @@ pub use serai_db::*;
 
 use crate::networks::{Block, Network};
 
-createDb!(
+create_db!(
   MainDb {
     HandledMessageDb: Vec<u8>,
     PendingActivationsDb: Vec<u8>

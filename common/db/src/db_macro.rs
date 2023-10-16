@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! createDb {
+macro_rules! create_db {
   ($db_name: ident
     { $($field_name: ident: $field_type: ty),*}
   ) => {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serai_db::createDb;
+use serai_db::create_db;
 use zeroize::Zeroizing;
 
 use rand_core::SeedableRng;
@@ -27,7 +27,7 @@ pub struct KeyConfirmed<C: Ciphersuite> {
   pub network_keys: ThresholdKeys<C>,
 }
 
-createDb!(
+create_db!(
   KeyGenDb {
     ParamsDb: ThresholdParams,
     CommitmentsDb: HashMap<Participant, Vec<u8>>,
