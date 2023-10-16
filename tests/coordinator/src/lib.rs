@@ -56,7 +56,7 @@ pub fn coordinator_instance(
 pub fn serai_composition(name: &str) -> TestBodySpecification {
   serai_docker_tests::build("serai".to_string());
 
-  let composition = TestBodySpecification::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
   .replace_cmd(vec![
@@ -68,8 +68,7 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
     "local".to_string(),
     format!("--{}", name.to_lowercase()),
   ])
-  .set_publish_all_ports(true);
-  TestBodySpecification
+  .set_publish_all_ports(true)
 }
 
 pub type Handles = (String, String, String);
@@ -113,7 +112,7 @@ pub fn coordinator_stack(
     let name = format!("{}-{}", composition.handle(), &unique_id);
 
     compositions.push(
-      TestBodySpecification
+      composition
         .set_start_policy(StartPolicy::Strict)
         .set_handle(name.clone())
         .set_log_options(Some(LogOptions {
