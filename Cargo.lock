@@ -8150,6 +8150,7 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bincode",
  "blake2",
  "ciphersuite",
  "env_logger",
@@ -8169,6 +8170,7 @@ dependencies = [
  "serai-env",
  "serai-message-queue",
  "serai-processor-messages",
+ "serde",
  "serde_json",
  "sp-application-crypto",
  "sp-runtime",
@@ -8567,6 +8569,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-core",
  "sp-io",
+ "sp-runtime",
  "sp-std",
 ]
 
