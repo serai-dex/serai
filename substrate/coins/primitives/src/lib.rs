@@ -12,7 +12,7 @@ use scale_info::TypeInfo;
 
 use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, pallet_address};
 
-pub const ADDRESS: SeraiAddress = pallet_address(b"Coins");
+pub const FEE_ACCOUNT: SeraiAddress = pallet_address(b"FeeAccount");
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
@@ -44,5 +44,5 @@ pub enum Destination {
 #[test]
 fn address() {
   use sp_runtime::traits::TrailingZeroInput;
-  assert_eq!(ADDRESS, SeraiAddress::decode(&mut TrailingZeroInput::new(b"Coins")).unwrap());
+  assert_eq!(FEE_ACCOUNT, SeraiAddress::decode(&mut TrailingZeroInput::new(b"Coins")).unwrap());
 }

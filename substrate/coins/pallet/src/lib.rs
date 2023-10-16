@@ -45,6 +45,7 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Mint { address: SeraiAddress, balance: Balance },
     Burn { address: SeraiAddress, balance: Balance, instruction: OutInstruction },
+    SriBurn { address: SeraiAddress, amount: Amount },
     Transfer { from: SeraiAddress, to: SeraiAddress, balance: Balance },
   }
 
@@ -83,6 +84,20 @@ pub mod pallet {
         let current_supply = Supply::<T>::get(coin);
         Supply::<T>::set(coin, current_supply.checked_add(*amount).unwrap());
       }
+    }
+  }
+
+  #[pallet::hooks]
+  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_initialize(_: BlockNumberFor<T>) -> Weight {
+      // burn the fees collected previous block
+      let k1: T::AccountId = FEE_ACCOUNT.into();
+      let amount = Self::coins(k1, Coin::Serai).unwrap_or(0);
+      if amount != 0 {
+        // we can unwrap, we are not burning more then what we have.
+        Self::burn_internal(&FEE_ACCOUNT.into(), Coin::Serai, amount, None).unwrap();
+      }
+      Weight::zero() // TODO
     }
   }
 
@@ -133,7 +148,7 @@ pub mod pallet {
       at: &T::AccountId,
       coin: Coin,
       amount: SubstrateAmount,
-      instruction: OutInstruction,
+      instruction: Option<OutInstruction>,
     ) -> Result<(), Error<T>> {
       // don't waste time if amount 0.
       if amount == 0 {
@@ -155,8 +170,17 @@ pub mod pallet {
         panic!("we tried to burn more assets than what we have");
       }
 
-      let balance = Balance { coin, amount: Amount(amount) };
-      Self::deposit_event(Event::Burn { address: SeraiAddress(at.0), balance, instruction });
+      if coin == Coin::Serai {
+        Self::deposit_event(Event::SriBurn { address: SeraiAddress(at.0), amount: Amount(amount) });
+      } else {
+        let balance = Balance { coin, amount: Amount(amount) };
+        // TODO: error for no instruction?
+        Self::deposit_event(Event::Burn {
+          address: SeraiAddress(at.0),
+          balance,
+          instruction: instruction.unwrap(),
+        });
+      }
       Ok(())
     }
 
@@ -222,7 +246,11 @@ pub mod pallet {
 
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn burn(o: OriginFor<T>, balance: Balance, instruction: OutInstruction) -> DispatchResult {
+    pub fn burn(
+      o: OriginFor<T>,
+      balance: Balance,
+      instruction: Option<OutInstruction>,
+    ) -> DispatchResult {
       let at = ensure_signed(o)?;
       Self::burn_internal(&at, balance.coin, balance.amount.0, instruction)?;
       Ok(())
@@ -254,10 +282,7 @@ pub mod pallet {
         return Ok(None);
       }
 
-      // TODO: Where should the fees go? O_o.
-      let dummy = [0u8; 32];
-      let out = OutInstruction::decode(&mut dummy.as_slice()).unwrap();
-      match Self::burn_internal(who, Coin::Serai, fee, out) {
+      match Self::transfer_internal(who, &FEE_ACCOUNT.into(), Coin::Serai, fee) {
         Err(_) => Err(InvalidTransaction::Payment.into()),
         Ok(()) => Ok(Some(Imbalance { amount: fee })),
       }
@@ -278,7 +303,7 @@ pub mod pallet {
     ) -> Result<(), TransactionValidityError> {
       if let Some(paid) = already_withdrawn {
         let refund_amount = paid.amount.saturating_sub(corrected_fee);
-        Self::mint(who, Coin::Serai, refund_amount)
+        Self::transfer_internal(&FEE_ACCOUNT.into(), who, Coin::Serai, refund_amount)
           .map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
       }
       Ok(())
