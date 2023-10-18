@@ -544,7 +544,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
   }
 
-  // Returns Ok(true) if this was a Precommit which had its signature validated
+  // Returns Ok(true) if this was a Precommit which had either no signature or its signature
+  // validated
   // Returns Ok(false) if it wasn't a Precommit or the signature wasn't validated yet
   // Returns Err if the signature was invalid
   fn verify_precommit_signature(
@@ -552,7 +553,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
     signed: &SignedMessageFor<N>,
   ) -> Result<bool, TendermintError<N>> {
     let msg = &signed.msg;
-    if let Data::Precommit(Some((id, sig))) = &msg.data {
+    if let Data::Precommit(precommit) = &msg.data {
+      let Some((id, sig)) = precommit else { return Ok(true) };
       // Also verify the end_time of the commit
       // Only perform this verification if we already have the end_time
       // Else, there's a DoS where we receive a precommit for some round infinitely in the future
