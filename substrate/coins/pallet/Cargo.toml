@@ -3,8 +3,8 @@ name = "serai-coins-pallet"
 version = "0.1.0"
 description = "Coins pallet for Serai"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/staking/pallet"
-authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/coins/pallet"
+authors = ["Akil Demir <aeg_asd@hotmail.com>"]
 edition = "2021"
 
 [package.metadata.docs.rs]

@@ -96,7 +96,8 @@ pub mod pallet {
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn stake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
-      Coins::<T>::transfer_internal(&signer, &Self::account(), Coin::Serai, amount)?;
+      let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
+      Coins::<T>::transfer_internal(&signer, &Self::account(), balance)?;
       Self::add_stake(&signer, amount);
       Ok(())
     }
@@ -107,7 +108,8 @@ pub mod pallet {
     pub fn unstake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       Self::remove_stake(&signer, amount)?;
-      Coins::<T>::transfer_internal(&Self::account(), &signer, Coin::Serai, amount)?;
+      let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
+      Coins::<T>::transfer_internal(&Self::account(), &signer, balance)?;
       Ok(())
     }
 

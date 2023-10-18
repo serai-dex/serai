@@ -70,6 +70,16 @@ impl Coin {
       Coin::Monero => NetworkId::Monero,
     }
   }
+
+  pub fn precision(&self) -> u32 {
+    match self {
+      Coin::Serai => 8,
+      Coin::Bitcoin => 8,
+      Coin::Ether => 8,
+      Coin::Dai => 8,
+      Coin::Monero => 12,
+    }
+  }
 }
 
 // Max of 8 coins per network

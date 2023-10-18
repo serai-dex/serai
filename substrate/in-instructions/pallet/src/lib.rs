@@ -74,10 +74,7 @@ pub mod pallet {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), ()> {
       match instruction.instruction {
         InInstruction::Transfer(address) => {
-          // TODO: pass balance directly here instead of coin and amount?
-          // but coins pallet deals only with SubstrateAmount and Balance type has Amount type.
-          Coins::<T>::mint(&address.into(), instruction.balance.coin, instruction.balance.amount.0)
-            .map_err(|_| ())
+          Coins::<T>::mint(&address.into(), instruction.balance).map_err(|_| ())
         }
         _ => panic!("unsupported instruction"),
       }

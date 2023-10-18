@@ -10,9 +10,9 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, pallet_address};
+use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, system_address};
 
-pub const FEE_ACCOUNT: SeraiAddress = pallet_address(b"FeeAccount");
+pub const FEE_ACCOUNT: SeraiAddress = system_address(b"FeeAccount");
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,

@@ -16,7 +16,7 @@ use serai_client::{
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
-  coins::{primitives::OutInstructionWithBalance, CoinsEvent},
+  coins::CoinsEvent,
 };
 
 use serai_db::DbTxn;
@@ -209,12 +209,12 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
   }
 
   for burn in serai.coins().burn_events().await? {
-    if let CoinsEvent::Burn { address: _, balance, instruction } = burn {
-      let network = balance.coin.network();
+    if let CoinsEvent::Burn { address: _, instruction } = burn {
+      let network = instruction.balance.coin.network();
       network_had_event(&mut burns, &mut batches, network);
 
       // network_had_event should register an entry in burns
-      burns.get_mut(&network).unwrap().push(OutInstructionWithBalance { balance, instruction });
+      burns.get_mut(&network).unwrap().push(instruction);
     } else {
       panic!("Burn event wasn't Burn: {burn:?}");
     }

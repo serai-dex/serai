@@ -3,7 +3,7 @@ use serai_runtime::{
   coins, Coins, Runtime,
 };
 pub use coins::primitives;
-use primitives::OutInstruction;
+use primitives::OutInstructionWithBalance;
 
 use subxt::tx::Payload;
 
@@ -28,16 +28,7 @@ impl<'a> SeraiCoins<'a> {
     self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::Burn { .. })).await
   }
 
-  pub async fn sri_balance(&self, address: SeraiAddress) -> Result<u64, SeraiError> {
-    let amount: Option<SubstrateAmount> = self
-      .0
-      .storage(PALLET, "Coins", Some(vec![scale_value(address), scale_value(Coin::Serai)]))
-      .await?;
-    Ok(amount.unwrap_or(0))
-  }
-
-  // TODO: shouldn't these token functions be renamed to coins now?
-  pub async fn token_supply(&self, coin: Coin) -> Result<Amount, SeraiError> {
+  pub async fn coin_supply(&self, coin: Coin) -> Result<Amount, SeraiError> {
     Ok(Amount(
       self
         .0
@@ -47,7 +38,7 @@ impl<'a> SeraiCoins<'a> {
     ))
   }
 
-  pub async fn token_balance(
+  pub async fn coin_balance(
     &self,
     coin: Coin,
     address: SeraiAddress,
@@ -57,7 +48,7 @@ impl<'a> SeraiCoins<'a> {
         .0
         .storage::<SubstrateAmount>(
           PALLET,
-          "Coins",
+          "Balances",
           Some(vec![scale_value(address), scale_value(coin)]),
         )
         .await?
@@ -65,23 +56,15 @@ impl<'a> SeraiCoins<'a> {
     ))
   }
 
-  pub fn transfer_sri(to: SeraiAddress, amount: Amount) -> Payload<Composite<()>> {
+  pub fn transfer(to: SeraiAddress, balance: Balance) -> Payload<Composite<()>> {
     Payload::new(
       PALLET,
       "transfer",
-      scale_composite(serai_runtime::coins::Call::<Runtime>::transfer {
-        to,
-        coin: Coin::Serai,
-        amount: amount.0,
-      }),
+      scale_composite(serai_runtime::coins::Call::<Runtime>::transfer { to, balance }),
     )
   }
 
-  pub fn burn(balance: Balance, instruction: OutInstruction) -> Payload<Composite<()>> {
-    Payload::new(
-      PALLET,
-      "burn",
-      scale_composite(coins::Call::<Runtime>::burn { balance, instruction: Some(instruction) }),
-    )
+  pub fn burn(instruction: OutInstructionWithBalance) -> Payload<Composite<()>> {
+    Payload::new(PALLET, "burn", scale_composite(coins::Call::<Runtime>::burn { instruction }))
   }
 }

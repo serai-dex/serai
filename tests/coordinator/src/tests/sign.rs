@@ -206,12 +206,13 @@ async fn sign_test() {
         let address = SeraiAddress::from(pair.public());
 
         // Fund the new account to pay for fees
+        let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
         serai
           .publish(
             &serai
               .sign(
                 &PairSigner::new(insecure_pair_from_name("Ferdie")),
-                &SeraiCoins::transfer_sri(address, Amount(1_000_000_000)),
+                &SeraiCoins::transfer(address, balance),
                 0,
                 Default::default(),
               )
@@ -249,29 +250,32 @@ async fn sign_test() {
           serai.block_by_number(block_included_in).await.unwrap().unwrap().hash();
 
         let serai = serai.as_of(block_included_in_hash).coins();
-        assert_eq!(serai.sri_balance(serai_addr).await.unwrap(), 1_000_000_000);
+        assert_eq!(
+          serai.coin_balance(Coin::Serai, serai_addr).await.unwrap(),
+          Amount(1_000_000_000)
+        );
 
         // Verify the mint occurred as expected
         assert_eq!(
           serai.mint_events().await.unwrap(),
           vec![CoinsEvent::Mint { address: serai_addr, balance }]
         );
-        assert_eq!(serai.token_supply(Coin::Bitcoin).await.unwrap(), amount);
-        assert_eq!(serai.token_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
+        assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), amount);
+        assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
       }
 
       // Trigger a burn
-      let out_instruction =
-        OutInstruction { address: ExternalAddress::new(b"external".to_vec()).unwrap(), data: None };
+      let out_instruction = OutInstructionWithBalance {
+        balance,
+        instruction: OutInstruction {
+          address: ExternalAddress::new(b"external".to_vec()).unwrap(),
+          data: None,
+        },
+      };
       serai
         .publish(
           &serai
-            .sign(
-              &serai_pair,
-              &SeraiCoins::burn(balance, out_instruction.clone()),
-              0,
-              Default::default(),
-            )
+            .sign(&serai_pair, &SeraiCoins::burn(out_instruction.clone()), 0, Default::default())
             .unwrap(),
         )
         .await
@@ -297,11 +301,7 @@ async fn sign_test() {
             assert_eq!(burn_events.len(), 1);
             assert_eq!(
               burn_events[0],
-              CoinsEvent::Burn {
-                address: serai_addr,
-                balance,
-                instruction: out_instruction.clone()
-              }
+              CoinsEvent::Burn { address: serai_addr, instruction: out_instruction.clone() }
             );
             break 'outer;
           }
@@ -312,8 +312,8 @@ async fn sign_test() {
       let last_serai_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
       let last_serai_block_hash = last_serai_block.hash();
       let serai = serai.as_of(last_serai_block_hash).coins();
-      assert_eq!(serai.token_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
-      assert_eq!(serai.token_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
+      assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
+      assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
 
       let mut plan_id = [0; 32];
       OsRng.fill_bytes(&mut plan_id);
@@ -331,10 +331,7 @@ async fn sign_test() {
               },
               network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
-              burns: vec![OutInstructionWithBalance {
-                instruction: out_instruction.clone(),
-                balance: Balance { coin: Coin::Bitcoin, amount }
-              }],
+              burns: vec![out_instruction.clone()],
               batches: vec![],
             }
           )

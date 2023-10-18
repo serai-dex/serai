@@ -37,7 +37,10 @@ fn testnet_genesis(
     transaction_payment: Default::default(),
 
     coins: CoinsConfig {
-      accounts: endowed_accounts.into_iter().map(|a| (a, Coin::Serai, 1 << 60)).collect(),
+      accounts: endowed_accounts
+        .into_iter()
+        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
+        .collect(),
     },
 
     validator_sets: ValidatorSetsConfig {
