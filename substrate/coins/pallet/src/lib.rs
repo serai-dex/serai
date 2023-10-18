@@ -234,14 +234,9 @@ pub mod pallet {
     }
   }
 
-  #[derive(Default)]
-  pub struct Imbalance {
-    pub amount: u64,
-  }
-
   impl<T: Config> OnChargeTransaction<T> for Pallet<T> {
     type Balance = SubstrateAmount;
-    type LiquidityInfo = Option<Imbalance>;
+    type LiquidityInfo = Option<SubstrateAmount>;
 
     fn withdraw_fee(
       who: &T::AccountId,
@@ -257,7 +252,7 @@ pub mod pallet {
       let balance = Balance { coin: Coin::Serai, amount: Amount(fee) };
       match Self::transfer_internal(who, &FEE_ACCOUNT.into(), balance) {
         Err(_) => Err(InvalidTransaction::Payment.into()),
-        Ok(()) => Ok(Some(Imbalance { amount: fee })),
+        Ok(()) => Ok(Some(fee)),
       }
     }
 
@@ -270,7 +265,7 @@ pub mod pallet {
       already_withdrawn: Self::LiquidityInfo,
     ) -> Result<(), TransactionValidityError> {
       if let Some(paid) = already_withdrawn {
-        let refund_amount = paid.amount.saturating_sub(corrected_fee);
+        let refund_amount = paid.saturating_sub(corrected_fee);
         let balance = Balance { coin: Coin::Serai, amount: Amount(refund_amount) };
         Self::transfer_internal(&FEE_ACCOUNT.into(), who, balance)
           .map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
