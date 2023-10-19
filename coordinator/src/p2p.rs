@@ -18,16 +18,16 @@ use tokio::{
 use libp2p::{
   futures::StreamExt,
   identity::Keypair,
-  PeerId, Transport,
-  core::upgrade,
-  tcp::{Config, tokio as libp2p_tokio},
+  PeerId,
+  tcp::Config as TcpConfig,
   noise, yamux,
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
     IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
     Behaviour as GsBehavior,
   },
-  swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent, Swarm},
+  swarm::{NetworkBehaviour, SwarmEvent, Swarm},
+  SwarmBuilder,
 };
 
 pub(crate) use tributary::{ReadWrite, P2p as TributaryP2p};
@@ -181,15 +181,6 @@ impl LibP2p {
     let throwaway_key_pair = Keypair::generate_ed25519();
     let throwaway_peer_id = PeerId::from(throwaway_key_pair.public());
 
-    // Uses noise for authentication, yamux for multiplexing
-    // TODO: Do we want to add a custom authentication protocol to only accept connections from
-    // fellow validators? Doing so would reduce the potential for spam
-    let transport = libp2p_tokio::Transport::new(Config::default().nodelay(true))
-      .upgrade(upgrade::Version::V1)
-      .authenticate(noise::Config::new(&throwaway_key_pair).unwrap())
-      .multiplex(yamux::Config::default())
-      .boxed();
-
     let behavior = Behavior {
       gossipsub: {
         // Block size limit + 1 KB of space for signatures/metadata
@@ -222,7 +213,7 @@ impl LibP2p {
           })
           .build();
         let mut gossipsub = GsBehavior::<IdentityTransform, AllowAllSubscriptionFilter>::new(
-          MessageAuthenticity::Signed(throwaway_key_pair),
+          MessageAuthenticity::Signed(throwaway_key_pair.clone()),
           config.unwrap(),
         )
         .unwrap();
@@ -245,8 +236,17 @@ impl LibP2p {
       },
     };
 
-    let mut swarm =
-      SwarmBuilder::with_tokio_executor(transport, behavior, throwaway_peer_id).build();
+    // Uses noise for authentication, yamux for multiplexing
+    // TODO: Do we want to add a custom authentication protocol to only accept connections from
+    // fellow validators? Doing so would reduce the potential for spam
+    // TODO: Relay client?
+    let mut swarm = SwarmBuilder::with_existing_identity(throwaway_key_pair)
+      .with_tokio()
+      .with_tcp(TcpConfig::default().nodelay(true), noise::Config::new, yamux::Config::default)
+      .unwrap()
+      .with_behaviour(|_| behavior)
+      .unwrap()
+      .build();
     const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
     swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
 

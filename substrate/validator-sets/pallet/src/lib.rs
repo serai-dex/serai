@@ -145,7 +145,8 @@ pub mod pallet {
     fn recover_key_from_sorted_allocation_key(key: &[u8]) -> Public {
       Public(key[(key.len() - 32) ..].try_into().unwrap())
     }
-    fn set_allocation(network: NetworkId, key: Public, amount: Amount) {
+    // Returns if this validator already had an allocation set.
+    fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> bool {
       let prior = Allocations::<T>::take((network, key));
       if let Some(amount) = prior {
         SortedAllocations::<T>::remove(Self::sorted_allocation_key(network, key, amount));
@@ -154,6 +155,7 @@ pub mod pallet {
         Allocations::<T>::set((network, key), Some(amount));
         SortedAllocations::<T>::set(Self::sorted_allocation_key(network, key, amount), Some(()));
       }
+      prior.is_some()
     }
   }
 
@@ -319,18 +321,12 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
-      {
-        let hash_set =
-          self.participants.iter().map(|key| key.0).collect::<hashbrown::HashSet<[u8; 32]>>();
-        if hash_set.len() != self.participants.len() {
-          panic!("participants contained duplicates");
-        }
-      }
-
       for (id, stake) in self.networks.clone() {
         AllocationPerKeyShare::<T>::set(id, Some(stake));
         for participant in self.participants.clone() {
-          Pallet::<T>::set_allocation(id, participant, stake);
+          if Pallet::<T>::set_allocation(id, participant, stake) {
+            panic!("participants contained duplicates");
+          }
         }
         Pallet::<T>::new_set(id);
       }

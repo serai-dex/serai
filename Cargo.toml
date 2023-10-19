@@ -86,6 +86,9 @@ monero-serai = { opt-level = 3 }
 panic = "unwind"
 
 [patch.crates-io]
+# https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
+lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
+
 # subxt *can* pull these off crates.io yet there's no benefit to this
 sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
 sp-std = { git = "https://github.com/serai-dex/substrate" }
