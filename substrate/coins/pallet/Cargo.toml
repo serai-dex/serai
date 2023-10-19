@@ -18,8 +18,9 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -31,6 +32,7 @@ std = [
   "frame-system/std",
   "frame-support/std",
 
+  "sp-std/std",
   "sp-runtime/std",
 
   "pallet-transaction-payment/std",

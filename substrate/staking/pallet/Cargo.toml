@@ -15,19 +15,19 @@ rustdoc-args = ["--cfg", "docsrs"]
 parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
-pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+serai-primitives = { path = "../../primitives", default-features = false }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
-serai-validator-sets-primitives = { path = "../../validator-sets/primitives", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+
+pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
 std = [
@@ -35,10 +35,14 @@ std = [
   "frame-support/std",
 
   "sp-std/std",
-  
+  "sp-runtime/std",
+
+  "serai-primitives/std",
+
   "coins-pallet/std",
 
   "validator-sets-pallet/std",
+
   "pallet-session/std",
 ]
 

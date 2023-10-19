@@ -8202,6 +8202,7 @@ dependencies = [
  "scale-info",
  "serai-coins-primitives",
  "serai-primitives",
+ "sp-core",
  "sp-runtime",
  "sp-std",
 ]
@@ -8595,7 +8596,6 @@ dependencies = [
  "serai-coins-pallet",
  "serai-primitives",
  "serai-validator-sets-pallet",
- "serai-validator-sets-primitives",
  "sp-runtime",
  "sp-std",
 ]

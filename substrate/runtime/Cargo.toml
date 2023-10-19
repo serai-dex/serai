@@ -122,8 +122,8 @@ runtime-benchmarks = [
 
   "pallet-timestamp/runtime-benchmarks",
 
-	"pallet-babe/runtime-benchmarks",
-	"pallet-grandpa/runtime-benchmarks",
+  "pallet-babe/runtime-benchmarks",
+  "pallet-grandpa/runtime-benchmarks",
 ]
 
 default = ["std"]

@@ -54,13 +54,13 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "tributary-chain" },
   { allow = ["AGPL-3.0"], name = "serai-coordinator" },
 
+  { allow = ["AGPL-3.0"], name = "serai-coins-pallet" },
+
   { allow = ["AGPL-3.0"], name = "serai-in-instructions-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-validator-sets-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-staking-pallet" },
-  
-  { allow = ["AGPL-3.0"], name = "serai-coins-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
   { allow = ["AGPL-3.0"], name = "serai-node" },

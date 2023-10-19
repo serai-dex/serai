@@ -10,13 +10,13 @@ pub mod pallet {
 
   use serai_primitives::*;
 
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
+
   use validator_sets_pallet::{
     primitives::{Session, ValidatorSet},
     Config as VsConfig, Pallet as VsPallet,
   };
   use pallet_session::{Config as SessionConfig, SessionManager};
-
-  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
 
   #[pallet::error]
   pub enum Error<T> {
