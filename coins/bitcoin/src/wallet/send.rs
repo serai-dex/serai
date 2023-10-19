@@ -26,14 +26,14 @@ use crate::{
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L27
-const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
+pub const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
 // As the above notes, a lower amount may not be considered dust if contained in a SegWit output
 // This doesn't bother with delineation due to how marginal these values are, and because it isn't
 // worth the complexity to implement differentation
-const DUST: u64 = 546;
+pub const DUST: u64 = 546;
 
 #[rustfmt::skip]
 // The constant is from:
@@ -44,7 +44,7 @@ const DUST: u64 = 546;
 // https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5721-L5732
 // And then the fee itself is fee per thousand units, not fee per unit
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/feerate.cpp#L23-L37
-const MIN_FEE_PER_KILO_VSIZE: u64 = 1000;
+pub const MIN_FEE_PER_KILO_VSIZE: u64 = 1000;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {

@@ -435,6 +435,7 @@ impl<N: Network> Scheduler<N> {
     let mut remainder = diff - (per_payment * payments_len);
 
     for payment in payments.iter_mut() {
+      // TODO: This usage of saturating_sub is invalid as we *need* to subtract this value
       payment.amount = payment.amount.saturating_sub(per_payment + remainder);
       // Only subtract the remainder once
       remainder = 0;

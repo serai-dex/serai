@@ -132,6 +132,11 @@ impl<N: Network> Plan<N> {
     res
   }
 
+  pub fn expected_change(&self) -> u64 {
+    self.inputs.iter().map(|input| input.amount()).sum::<u64>() -
+      self.payments.iter().map(|payment| payment.amount).sum::<u64>()
+  }
+
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(self.key.to_bytes().as_ref())?;
 

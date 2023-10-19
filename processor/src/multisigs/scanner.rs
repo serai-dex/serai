@@ -553,7 +553,9 @@ impl<N: Network, D: Db> Scanner<N, D> {
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
           for output in network.get_outputs(&block, key).await {
             assert_eq!(output.key(), key);
-            outputs.push(output);
+            if output.amount() >= N::DUST {
+              outputs.push(output);
+            }
           }
 
           for (id, (block_number, tx)) in network

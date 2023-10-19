@@ -1,6 +1,17 @@
 #[cfg(feature = "bitcoin")]
 mod bitcoin {
-  use crate::networks::Bitcoin;
+  use crate::networks::{Network, Bitcoin};
+
+  #[test]
+  fn test_dust_constant() {
+    struct IsTrue<const V: bool>;
+    trait True {}
+    impl True for IsTrue<true> {}
+    fn check<T: True>() {
+      core::hint::black_box(());
+    }
+    check::<IsTrue<{ Bitcoin::DUST >= bitcoin_serai::wallet::DUST }>>();
+  }
 
   async fn bitcoin() -> Bitcoin {
     let bitcoin = Bitcoin::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await;
