@@ -34,6 +34,8 @@ pub enum NetworkId {
 pub const NETWORKS: [NetworkId; 4] =
   [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
 
+pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero];
+
 /// The type used to identify coins.
 #[derive(
   Clone,
@@ -66,6 +68,37 @@ impl Coin {
       Coin::Ether => NetworkId::Ethereum,
       Coin::Dai => NetworkId::Ethereum,
       Coin::Monero => NetworkId::Monero,
+    }
+  }
+
+  pub fn name(&self) -> &'static str {
+    match self {
+      Coin::Serai => "Serai",
+      Coin::Bitcoin => "Bitcoin",
+      Coin::Ether => "Ether",
+      Coin::Dai => "Dai Stablecoin",
+      Coin::Monero => "Monero",
+    }
+  }
+
+  pub fn symbol(&self) -> &'static str {
+    match self {
+      Coin::Serai => "SRI",
+      Coin::Bitcoin => "BTC",
+      Coin::Ether => "ETH",
+      Coin::Dai => "DAI",
+      Coin::Monero => "XMR",
+    }
+  }
+
+  pub fn decimals(&self) -> u32 {
+    match self {
+      Coin::Serai => 8,
+      Coin::Bitcoin => 8,
+      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
+      Coin::Ether => 8,
+      Coin::Dai => 8,
+      Coin::Monero => 12,
     }
   }
 }

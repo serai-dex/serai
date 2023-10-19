@@ -13,7 +13,7 @@ use serai_client::{
     primitives::{InInstruction, InInstructionWithBalance, Batch},
     InInstructionsEvent,
   },
-  coins::TokensEvent,
+  coins::CoinsEvent,
   Serai,
 };
 
@@ -65,8 +65,8 @@ serai_test!(
     }
 
     let serai = serai.coins();
-    assert_eq!(serai.mint_events().await.unwrap(), vec![TokensEvent::Mint { address, balance }],);
-    assert_eq!(serai.token_supply(coin).await.unwrap(), amount);
-    assert_eq!(serai.token_balance(coin, address).await.unwrap(), amount);
+    assert_eq!(serai.mint_events().await.unwrap(), vec![CoinsEvent::Mint { address, balance }],);
+    assert_eq!(serai.coin_supply(coin).await.unwrap(), amount);
+    assert_eq!(serai.coin_balance(coin, address).await.unwrap(), amount);
   }
 );

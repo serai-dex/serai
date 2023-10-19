@@ -15,7 +15,7 @@ use serai_client::{
   },
   validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::Shorthand,
-  coins::primitives::OutInstruction,
+  coins::primitives::{OutInstruction, OutInstructionWithBalance},
   PairTrait, PairSigner, SeraiCoins,
 };
 
@@ -236,12 +236,13 @@ async fn mint_and_burn_test() {
         let address = SeraiAddress::from(pair.public());
 
         // Fund the new account to pay for fees
+        let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
         serai
           .publish(
             &serai
               .sign(
                 &PairSigner::new(insecure_pair_from_name("Ferdie")),
-                &SeraiCoins::transfer_sri(address, Amount(1_000_000_000)),
+                &SeraiCoins::transfer(address, balance),
                 0,
                 Default::default(),
               )
@@ -488,17 +489,15 @@ async fn mint_and_burn_test() {
           let serai = &serai;
           let serai_pair = &serai_pair;
           move |nonce, coin, amount, address| async move {
-            let out_instruction = OutInstruction { address, data: None };
+            let out_instruction = OutInstructionWithBalance {
+              balance: Balance { coin, amount: Amount(amount) },
+              instruction: OutInstruction { address, data: None },
+            };
 
             serai
               .publish(
                 &serai
-                  .sign(
-                    serai_pair,
-                    &SeraiCoins::burn(Balance { coin, amount: Amount(amount) }, out_instruction),
-                    nonce,
-                    Default::default(),
-                  )
+                  .sign(serai_pair, &SeraiCoins::burn(out_instruction), nonce, Default::default())
                   .unwrap(),
               )
               .await

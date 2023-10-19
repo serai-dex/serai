@@ -1,7 +1,7 @@
 [package]
-name = "serai-tokens-primitives"
+name = "serai-coins-primitives"
 version = "0.1.0"
-description = "Serai tokens primitives"
+description = "Serai coins primitives"
 license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"

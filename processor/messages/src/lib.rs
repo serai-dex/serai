@@ -9,7 +9,7 @@ use dkg::{Participant, ThresholdParams};
 
 use serai_primitives::{BlockHash, NetworkId};
 use in_instructions_primitives::{Batch, SignedBatch};
-use tokens_primitives::OutInstructionWithBalance;
+use coins_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]

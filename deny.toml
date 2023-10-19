@@ -54,7 +54,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "tributary-chain" },
   { allow = ["AGPL-3.0"], name = "serai-coordinator" },
 
-  { allow = ["AGPL-3.0"], name = "serai-tokens-pallet" },
+  { allow = ["AGPL-3.0"], name = "serai-coins-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-in-instructions-pallet" },
 

@@ -37,8 +37,8 @@ members = [
 
   "substrate/primitives",
 
-  "substrate/tokens/primitives",
-  "substrate/tokens/pallet",
+  "substrate/coins/primitives",
+  "substrate/coins/pallet",
 
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",

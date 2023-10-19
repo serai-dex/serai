@@ -23,5 +23,5 @@ dkg = { path = "../../crypto/dkg", features = ["serde"] }
 
 serai-primitives = { path = "../../substrate/primitives" }
 in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../../substrate/in-instructions/primitives" }
-tokens-primitives = { package = "serai-tokens-primitives", path = "../../substrate/tokens/primitives" }
+coins-primitives = { package = "serai-coins-primitives", path = "../../substrate/coins/primitives" }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../substrate/validator-sets/primitives" }

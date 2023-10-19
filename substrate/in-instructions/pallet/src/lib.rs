@@ -30,7 +30,7 @@ pub mod pallet {
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
-  use tokens_pallet::{Config as TokensConfig, Pallet as Tokens};
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use validator_sets_pallet::{
     primitives::{Session, ValidatorSet},
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
@@ -39,7 +39,7 @@ pub mod pallet {
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + ValidatorSetsConfig + TokensConfig {
+  pub trait Config: frame_system::Config + ValidatorSetsConfig + CoinsConfig {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -73,10 +73,11 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), ()> {
       match instruction.instruction {
-        InInstruction::Transfer(address) => Tokens::<T>::mint(address, instruction.balance),
+        InInstruction::Transfer(address) => {
+          Coins::<T>::mint(&address.into(), instruction.balance).map_err(|_| ())
+        }
         _ => panic!("unsupported instruction"),
       }
-      Ok(())
     }
   }
 

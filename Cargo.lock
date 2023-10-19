@@ -5489,21 +5489,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-assets"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#98ab693fdf71f371d5059aa6924a410c8bb0a675"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "pallet-authority-discovery"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#98ab693fdf71f371d5059aa6924a410c8bb0a675"
@@ -5554,21 +5539,6 @@ dependencies = [
  "sp-runtime",
  "sp-session",
  "sp-staking",
- "sp-std",
-]
-
-[[package]]
-name = "pallet-balances"
-version = "4.0.0-dev"
-source = "git+https://github.com/serai-dex/substrate#98ab693fdf71f371d5059aa6924a410c8bb0a675"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "parity-scale-codec",
- "scale-info",
- "sp-runtime",
  "sp-std",
 ]
 
@@ -8222,6 +8192,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-coins-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-transaction-payment",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-coins-primitives",
+ "serai-primitives",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "serai-coins-primitives"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serde",
+ "sp-runtime",
+ "zeroize",
+]
+
+[[package]]
 name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
@@ -8325,9 +8323,9 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
+ "serai-coins-pallet",
  "serai-in-instructions-primitives",
  "serai-primitives",
- "serai-tokens-pallet",
  "serai-validator-sets-pallet",
  "sp-application-crypto",
  "sp-core",
@@ -8342,8 +8340,8 @@ version = "0.1.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
+ "serai-coins-primitives",
  "serai-primitives",
- "serai-tokens-primitives",
  "serde",
  "sp-application-crypto",
  "sp-runtime",
@@ -8503,9 +8501,9 @@ version = "0.1.0"
 dependencies = [
  "dkg",
  "parity-scale-codec",
+ "serai-coins-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
- "serai-tokens-primitives",
  "serai-validator-sets-primitives",
  "serde",
  "zeroize",
@@ -8556,10 +8554,8 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
- "pallet-assets",
  "pallet-authority-discovery",
  "pallet-babe",
- "pallet-balances",
  "pallet-grandpa",
  "pallet-session",
  "pallet-timestamp",
@@ -8567,10 +8563,10 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
+ "serai-coins-pallet",
  "serai-in-instructions-pallet",
  "serai-primitives",
  "serai-staking-pallet",
- "serai-tokens-pallet",
  "serai-validator-sets-pallet",
  "sp-api",
  "sp-authority-discovery",
@@ -8597,36 +8593,11 @@ dependencies = [
  "pallet-session",
  "parity-scale-codec",
  "scale-info",
+ "serai-coins-pallet",
  "serai-primitives",
  "serai-validator-sets-pallet",
- "serai-validator-sets-primitives",
  "sp-runtime",
  "sp-std",
-]
-
-[[package]]
-name = "serai-tokens-pallet"
-version = "0.1.0"
-dependencies = [
- "frame-support",
- "frame-system",
- "pallet-assets",
- "parity-scale-codec",
- "scale-info",
- "serai-primitives",
- "serai-tokens-primitives",
-]
-
-[[package]]
-name = "serai-tokens-primitives"
-version = "0.1.0"
-dependencies = [
- "parity-scale-codec",
- "scale-info",
- "serai-primitives",
- "serde",
- "sp-runtime",
- "zeroize",
 ]
 
 [[package]]

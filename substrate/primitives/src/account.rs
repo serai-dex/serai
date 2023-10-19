@@ -88,7 +88,7 @@ impl StaticLookup for AccountLookup {
   }
 }
 
-pub const fn pallet_address(pallet: &'static [u8]) -> SeraiAddress {
+pub const fn system_address(pallet: &'static [u8]) -> SeraiAddress {
   let mut address = [0; 32];
   let mut set = false;
   // Implement a while loop since we can't use a for loop

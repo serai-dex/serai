@@ -60,8 +60,8 @@ jobs:
         run: |
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-primitives \
-            -p serai-tokens-primitives \
-            -p serai-tokens-pallet \
+            -p serai-coins-primitives \
+            -p serai-coins-pallet \
             -p serai-in-instructions-primitives \
             -p serai-in-instructions-pallet \
             -p serai-validator-sets-primitives \
