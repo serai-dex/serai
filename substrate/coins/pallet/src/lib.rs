@@ -59,15 +59,8 @@ pub mod pallet {
   // ID.
   #[pallet::storage]
   #[pallet::getter(fn balances)]
-  pub type Balances<T: Config> = StorageDoubleMap<
-    _,
-    Blake2_128Concat,
-    Public,
-    Identity,
-    Coin,
-    SubstrateAmount,
-    ValueQuery,
-  >;
+  pub type Balances<T: Config> =
+    StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Coin, SubstrateAmount, ValueQuery>;
 
   /// The total supply of each coin.
   // We use Identity type here again due to reasons stated in the Balances Storage.
@@ -158,10 +151,7 @@ pub mod pallet {
     }
 
     // Burn `balance` from the specified account.
-    fn burn_internal(
-      from: Public,
-      balance: Balance,
-    ) -> Result<(), Error<T>> {
+    fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T>> {
       // don't waste time if amount == 0
       if balance.amount.0 == 0 {
         return Ok(());
@@ -171,18 +161,13 @@ pub mod pallet {
       Self::decrease_balance_internal(from, balance)?;
 
       // update the supply
-      let new_supply = Self::supply(balance.coin)
-        .checked_sub(balance.amount.0)
-        .unwrap();
+      let new_supply = Self::supply(balance.coin).checked_sub(balance.amount.0).unwrap();
       Supply::<T>::set(balance.coin, new_supply);
 
       Ok(())
     }
 
-    pub fn burn_sri(
-      from: Public,
-      amount: Amount,
-    ) -> Result<(), Error<T>> {
+    pub fn burn_sri(from: Public, amount: Amount) -> Result<(), Error<T>> {
       Self::burn_internal(from, Balance { coin: Coin::Serai, amount })?;
       Self::deposit_event(Event::SriBurn { from, amount });
       Ok(())
@@ -201,11 +186,7 @@ pub mod pallet {
     }
 
     /// Transfer `balance` from `from` to `to`.
-    pub fn transfer_internal(
-      from: Public,
-      to: Public,
-      balance: Balance,
-    ) -> Result<(), Error<T>> {
+    pub fn transfer_internal(from: Public, to: Public, balance: Balance) -> Result<(), Error<T>> {
       // update balances of accounts
       Self::decrease_balance_internal(from, balance)?;
       Self::increase_balance_internal(to, balance)?;
