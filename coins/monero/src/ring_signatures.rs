@@ -3,7 +3,7 @@ use std_shims::{
   vec::Vec,
 };
 
-use curve25519_dalek::{EdwardsPoint, Scalar, constants::ED25519_BASEPOINT_TABLE};
+use curve25519_dalek::{EdwardsPoint, Scalar};
 
 use monero_generators::hash_to_point;
 
@@ -50,6 +50,10 @@ impl RingSignature {
     ring: &[EdwardsPoint],
     key_image: &EdwardsPoint,
   ) -> bool {
+    if ring.len() != self.sigs.len() {
+      return false;
+    }
+
     let mut buf = Vec::with_capacity(32 + 32 * 2 * ring.len());
     buf.extend_from_slice(msg);
 
@@ -57,7 +61,7 @@ impl RingSignature {
 
     for (ring_member, sig) in ring.iter().zip(&self.sigs) {
       #[allow(non_snake_case)]
-      let Li = &sig.r * ED25519_BASEPOINT_TABLE + sig.c * ring_member;
+      let Li = EdwardsPoint::vartime_double_scalar_mul_basepoint(&sig.c, ring_member, &sig.r);
       buf.extend_from_slice(Li.compress().as_bytes());
       #[allow(non_snake_case)]
       let Ri = sig.r * hash_to_point(ring_member.compress().to_bytes()) + sig.c * key_image;

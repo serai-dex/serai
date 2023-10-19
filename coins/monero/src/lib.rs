@@ -23,8 +23,7 @@ mod merkle;
 mod serialize;
 use serialize::{read_byte, read_u16};
 
-/// UnreducedScalar struct with functionality for recovering incorrectly reduced
-/// scalars.
+/// UnreducedScalar struct with functionality for recovering incorrectly reduced scalars.
 mod unreduced_scalar;
 
 /// RingCT structs and functionality.
@@ -32,7 +31,7 @@ pub mod ringct;
 use ringct::RctType;
 
 /// Ring Signature structs with verifying functions.
-mod ring_signatures;
+pub mod ring_signatures;
 
 /// Transaction structs.
 pub mod transaction;
