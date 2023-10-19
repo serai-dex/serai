@@ -60,7 +60,7 @@ impl<'a> SeraiCoins<'a> {
     Payload::new(
       PALLET,
       "transfer",
-      scale_composite(serai_runtime::coins::Call::<Runtime>::transfer { to, balance }),
+      scale_composite(serai_runtime::coins::Call::<Runtime>::transfer { to: to.into(), balance }),
     )
   }
 

@@ -74,7 +74,7 @@ pub mod pallet {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), ()> {
       match instruction.instruction {
         InInstruction::Transfer(address) => {
-          Coins::<T>::mint(&address.into(), instruction.balance).map_err(|_| ())
+          Coins::<T>::mint(address.into(), instruction.balance).map_err(|_| ())
         }
         _ => panic!("unsupported instruction"),
       }

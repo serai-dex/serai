@@ -70,7 +70,7 @@ serai_test!(
 
     assert_eq!(
       serai.coins().mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { address, balance }]
+      vec![CoinsEvent::Mint { to: address.into(), balance }]
     );
     assert_eq!(serai.coins().coin_supply(coin).await.unwrap(), amount);
     assert_eq!(serai.coins().coin_balance(coin, address).await.unwrap(), amount);
@@ -103,7 +103,7 @@ serai_test!(
 
     let serai = serai.as_of(block).coins();
     let events = serai.burn_events().await.unwrap();
-    assert_eq!(events, vec![CoinsEvent::Burn { address, instruction }]);
+    assert_eq!(events, vec![CoinsEvent::Burn { from: address.into(), instruction }]);
     assert_eq!(serai.coin_supply(coin).await.unwrap(), Amount(0));
     assert_eq!(serai.coin_balance(coin, address).await.unwrap(), Amount(0));
   }
