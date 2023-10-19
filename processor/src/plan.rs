@@ -74,7 +74,19 @@ impl<N: Network> Payment<N> {
 pub struct Plan<N: Network> {
   pub key: <N::Curve as Ciphersuite>::G,
   pub inputs: Vec<N::Output>,
+  /// The payments this Plan is inteded to create.
+  ///
+  /// This should only contain payments leaving Serai. While it is acceptable for users to enter
+  /// Serai's address(es) as the payment address, as that'll be handled by anything which expects
+  /// certain properties, Serai as a system MUST NOT use payments for internal transfers. Doing
+  /// so will cause a reduction in their value by the TX fee/operating costs, creating an
+  /// incomplete transfer.
   pub payments: Vec<Payment<N>>,
+  /// The change this Plan should use.
+  ///
+  /// This MUST contain a Serai address. Operating costs may be deducted from the payments in this
+  /// Plan on the premise that the change address is Serai's, and accordingly, Serai will recoup
+  /// the operating costs.
   pub change: Option<N::Address>,
 }
 impl<N: Network> core::fmt::Debug for Plan<N> {

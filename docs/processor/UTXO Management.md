@@ -130,7 +130,7 @@ Input accumulation refers to transactions which exist to merge inputs. Just as
 there is a `max_outputs_per_tx`, there is a `max_inputs_per_tx`. When the amount
 of inputs belonging to Serai exceeds `max_inputs_per_tx`, a TX merging them is
 created. This TX incurs fees yet has no outputs mapping to burns to amortize
-them over, creating an insolvency.
+them over, accumulating operating costs.
 
 Please note that this merging occurs in parallel to create a logarithmic
 execution, similar to how outputs are also processed in parallel.
@@ -154,18 +154,16 @@ initially filled, yet requires:
 while still risking insolvency, if the actual fees keep increasing in a way
 preventing successful estimation.
 
-The solution Serai implements is to accrue insolvency, tracking each output with
-a virtual amount (the amount it represents on Serai) and the actual amount. When
-the output, or a descendant of it, is used to handle burns, the discrepancy
-between the virtual amount and the amount is amortized over outputs. This
-restores solvency while solely charging the actual fees, making Serai a
-generally insolvent, always eventually solvent system.
+The solution Serai implements is to accrue operating costs, tracking with each
+created transaction the running operating costs. When a created transaction has
+payments out, all of the operating costs incurred so far, which have yet to be
+amortized, are immediately and fully amortized.
 
 There is the concern that a significant amount of outputs could be created,
-which when merged as inputs, create a significant amount of fees as an
-insolvency. This would then be forced onto random users, while the party who
-created the insolvency would then be able to burn their own `sriXYZ` without
-the notable insolvency.
+which when merged as inputs, create a significant amount of operating costs.
+This would then be forced onto random users who burn `sriXYZ` soon after, while
+the party who caused the operating costs would then be able to burn their own
+`sriXYZ` without notable fees.
 
 To describe this attack in its optimal form, assume a sole malicious block
 producer for an external network where `max_inputs_per_tx` is 16. The malicious

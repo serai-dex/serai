@@ -38,8 +38,8 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
-    amortize_fee,
+    Eventuality as EventualityTrait, EventualitiesTracker, AmortizeFeeRes, PreparedSend, Network,
+    drop_branches, amortize_fee,
   },
 };
 
@@ -399,7 +399,8 @@ impl Network for Monero {
     block_number: usize,
     mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(Option<(SignableTransaction, Eventuality)>, Vec<PostFeeBranch>), NetworkError> {
+    operating_costs: u64,
+  ) -> Result<PreparedSend<Self>, NetworkError> {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
@@ -522,20 +523,28 @@ impl Network for Monero {
 
     let tx_fee = match signable(plan.clone(), None)? {
       Some(tx) => tx.fee(),
-      None => return Ok((None, drop_branches(&plan))),
+      None => {
+        return Ok(PreparedSend {
+          tx: None,
+          post_fee_branches: drop_branches(&plan),
+          // We expected a change output of sum(inputs) - sum(outputs)
+          // Since we can no longer create this change output, it becomes an operating cost
+          operating_costs: operating_costs +
+            plan.inputs.iter().map(|input| input.amount()).sum::<u64>() -
+            plan.payments.iter().map(|payment| payment.amount).sum::<u64>(),
+        });
+      }
     };
 
-    let branch_outputs = amortize_fee(&mut plan, tx_fee);
+    let AmortizeFeeRes { post_fee_branches, operating_costs } =
+      amortize_fee(&mut plan, operating_costs, tx_fee);
 
-    let signable = SignableTransaction {
-      transcript,
-      actual: match signable(plan, Some(tx_fee))? {
-        Some(signable) => signable,
-        None => return Ok((None, branch_outputs)),
-      },
-    };
+    // TODO: If the change output was dropped by Monero, increase operating costs
+
+    let signable =
+      SignableTransaction { transcript, actual: signable(plan, Some(tx_fee))?.unwrap() };
     let eventuality = signable.actual.eventuality().unwrap();
-    Ok((Some((signable, eventuality)), branch_outputs))
+    Ok(PreparedSend { tx: Some((signable, eventuality)), post_fee_branches, operating_costs })
   }
 
   async fn attempt_send(

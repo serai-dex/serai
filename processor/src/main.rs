@@ -23,7 +23,7 @@ mod plan;
 pub use plan::*;
 
 mod networks;
-use networks::{PostFeeBranch, Block, Network, get_latest_block_number, get_block};
+use networks::{Block, Network, get_latest_block_number, get_block};
 #[cfg(feature = "bitcoin")]
 use networks::Bitcoin;
 #[cfg(feature = "monero")]

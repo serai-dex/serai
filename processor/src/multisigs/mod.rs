@@ -35,8 +35,10 @@ pub mod scheduler;
 use scheduler::Scheduler;
 
 use crate::{
-  Get, Db, Payment, PostFeeBranch, Plan,
-  networks::{OutputType, Output, Transaction, SignableTransaction, Block, Network, get_block},
+  Get, Db, Payment, Plan,
+  networks::{
+    OutputType, Output, Transaction, SignableTransaction, Block, PreparedSend, Network, get_block,
+  },
 };
 
 // InInstructionWithBalance from an external output
@@ -57,8 +59,12 @@ fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructi
   let Ok(shorthand) = Shorthand::decode(&mut data) else { None? };
   let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { None? };
 
+  let balance = output.balance();
+  // TODO: Decrease amount by
+  // `2 * (the estimation of an input-merging transaction fee) / max_inputs_per_tx`
+
   // TODO2: Set instruction.origin if not set (and handle refunds in general)
-  Some(InInstructionWithBalance { instruction: instruction.instruction, balance: output.balance() })
+  Some(InInstructionWithBalance { instruction: instruction.instruction, balance })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -74,7 +80,7 @@ enum RotationStep {
   ClosingExisting,
 }
 
-async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
+async fn get_fee_rate<N: Network>(network: &N, block_number: usize) -> N::Fee {
   // TODO2: Use an fee representative of several blocks
   get_block(network, block_number).await.median_fee()
 }
@@ -82,11 +88,12 @@ async fn get_fee<N: Network>(network: &N, block_number: usize) -> N::Fee {
 async fn prepare_send<N: Network>(
   network: &N,
   block_number: usize,
-  fee: N::Fee,
+  fee_rate: N::Fee,
   plan: Plan<N>,
-) -> (Option<(N::SignableTransaction, N::Eventuality)>, Vec<PostFeeBranch>) {
+  operating_costs: u64,
+) -> PreparedSend<N> {
   loop {
-    match network.prepare_send(block_number, plan.clone(), fee).await {
+    match network.prepare_send(block_number, plan.clone(), fee_rate, operating_costs).await {
       Ok(prepared) => {
         return prepared;
       }
@@ -145,18 +152,20 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
-      for (block_number, plan) in MultisigsDb::<N, D>::active_plans(raw_db, key.as_ref()) {
+      for (block_number, plan, operating_costs) in
+        MultisigsDb::<N, D>::active_plans(raw_db, key.as_ref())
+      {
         let block_number = block_number.try_into().unwrap();
 
-        let fee = get_fee(network, block_number).await;
+        let fee_rate = get_fee_rate(network, block_number).await;
 
         let id = plan.id();
         info!("reloading plan {}: {:?}", hex::encode(id), plan);
 
         let key_bytes = plan.key.to_bytes();
 
-        let (Some((tx, eventuality)), _) =
-          prepare_send(network, block_number, fee, plan.clone()).await
+        let Some((tx, eventuality)) =
+          prepare_send(network, block_number, fee_rate, plan.clone(), operating_costs).await.tx
         else {
           panic!("previously created transaction is no longer being created")
         };
@@ -666,7 +675,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     let res = {
       let mut res = Vec::with_capacity(plans.len());
-      let fee = get_fee(network, block_number).await;
+      let fee_rate = get_fee_rate(network, block_number).await;
 
       for plan in plans {
         let id = plan.id();
@@ -674,18 +683,27 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
         let key = plan.key;
         let key_bytes = key.to_bytes();
+
+        let running_operating_costs = MultisigsDb::<N, D>::take_operating_costs(txn);
+
         MultisigsDb::<N, D>::save_active_plan(
           txn,
           key_bytes.as_ref(),
           block_number.try_into().unwrap(),
           &plan,
+          running_operating_costs,
         );
 
         let to_be_forwarded = forwarded_external_outputs.remove(plan.inputs[0].id().as_ref());
         if to_be_forwarded.is_some() {
           assert_eq!(plan.inputs.len(), 1);
         }
-        let (tx, branches) = prepare_send(network, block_number, fee, plan).await;
+        let PreparedSend { tx, post_fee_branches, operating_costs } =
+          prepare_send(network, block_number, fee_rate, plan, running_operating_costs).await;
+        // 'Drop' running_operating_costs to ensure only operating_costs is used from here on out
+        #[allow(unused, clippy::let_unit_value)]
+        let running_operating_costs: () = ();
+        MultisigsDb::<N, D>::set_operating_costs(txn, operating_costs);
 
         // If this is a Plan for an output we're forwarding, we need to save the InInstruction for
         // its output under the amount successfully forwarded
@@ -697,7 +715,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
         }
 
-        for branch in branches {
+        for branch in post_fee_branches {
           let existing = self.existing.as_mut().unwrap();
           let to_use = if key == existing.key {
             existing

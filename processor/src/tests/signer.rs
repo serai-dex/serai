@@ -171,10 +171,11 @@ pub async fn test_signer<N: Network>(network: N) {
           change: Some(N::change_address(key)),
         },
         fee,
+        0,
       )
       .await
       .unwrap()
-      .0
+      .tx
       .unwrap();
 
     eventualities.push(eventuality.clone());

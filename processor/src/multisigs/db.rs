@@ -45,6 +45,7 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     key: &[u8],
     block_number: u64,
     plan: &Plan<N>,
+    operating_costs_at_time: u64,
   ) {
     let id = plan.id();
 
@@ -66,11 +67,12 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     {
       let mut buf = block_number.to_le_bytes().to_vec();
       plan.write(&mut buf).unwrap();
+      buf.extend(&operating_costs_at_time.to_le_bytes());
       txn.put(Self::plan_key(&id), &buf);
     }
   }
 
-  pub fn active_plans<G: Get>(getter: &G, key: &[u8]) -> Vec<(u64, Plan<N>)> {
+  pub fn active_plans<G: Get>(getter: &G, key: &[u8]) -> Vec<(u64, Plan<N>, u64)> {
     let signing = getter.get(Self::signing_key(key)).unwrap_or(vec![]);
     let mut res = vec![];
 
@@ -82,10 +84,28 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
       let block_number = u64::from_le_bytes(buf[.. 8].try_into().unwrap());
       let plan = Plan::<N>::read::<&[u8]>(&mut &buf[8 ..]).unwrap();
       assert_eq!(id, &plan.id());
-      res.push((block_number, plan));
+      let operating_costs = u64::from_le_bytes(buf[(buf.len() - 8) ..].try_into().unwrap());
+      res.push((block_number, plan, operating_costs));
     }
 
     res
+  }
+
+  fn operating_costs_key() -> Vec<u8> {
+    Self::multisigs_key(b"operating_costs", [])
+  }
+  pub fn take_operating_costs(txn: &mut D::Transaction<'_>) -> u64 {
+    let existing = txn
+      .get(Self::operating_costs_key())
+      .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+      .unwrap_or(0);
+    txn.del(Self::operating_costs_key());
+    existing
+  }
+  pub fn set_operating_costs(txn: &mut D::Transaction<'_>, amount: u64) {
+    if amount != 0 {
+      txn.put(Self::operating_costs_key(), amount.to_le_bytes());
+    }
   }
 
   pub fn resolved_plan<G: Get>(

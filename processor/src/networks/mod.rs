@@ -209,19 +209,47 @@ pub fn drop_branches<N: Network>(plan: &Plan<N>) -> Vec<PostFeeBranch> {
   branch_outputs
 }
 
+pub struct AmortizeFeeRes {
+  post_fee_branches: Vec<PostFeeBranch>,
+  operating_costs: u64,
+}
+
 // Amortize a fee over the plan's payments
-pub fn amortize_fee<N: Network>(plan: &mut Plan<N>, tx_fee: u64) -> Vec<PostFeeBranch> {
-  // No payments to amortize over
-  if plan.payments.is_empty() {
-    return vec![];
-  }
+pub fn amortize_fee<N: Network>(
+  plan: &mut Plan<N>,
+  operating_costs: u64,
+  tx_fee: u64,
+) -> AmortizeFeeRes {
+  let total_fee = {
+    let mut total_fee = tx_fee;
+    // Since we're creating a change output, letting us recoup coins, amortize the operating costs
+    // as well
+    if plan.change.is_some() {
+      total_fee += operating_costs;
+    }
+    total_fee
+  };
 
   let original_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+  // If this isn't enough for the total fee, drop and move on
+  if original_outputs < total_fee {
+    let mut remaining_operating_costs = operating_costs;
+    if plan.change.is_some() {
+      // Operating costs increase by the TX fee
+      remaining_operating_costs += tx_fee;
+      // Yet decrease by the payments we managed to drop
+      remaining_operating_costs = remaining_operating_costs.saturating_sub(original_outputs);
+    }
+    return AmortizeFeeRes {
+      post_fee_branches: drop_branches(plan),
+      operating_costs: remaining_operating_costs,
+    };
+  }
 
   // Amortize the transaction fee across outputs
   let mut payments_len = u64::try_from(plan.payments.len()).unwrap();
   // Use a formula which will round up
-  let per_output_fee = |payments| (tx_fee + (payments - 1)) / payments;
+  let per_output_fee = |payments| (total_fee + (payments - 1)) / payments;
 
   let post_fee = |payment: &Payment<N>, per_output_fee| {
     let mut post_fee = payment.amount.checked_sub(per_output_fee);
@@ -266,9 +294,26 @@ pub fn amortize_fee<N: Network>(plan: &mut Plan<N>, tx_fee: u64) -> Vec<PostFeeB
 
   // Sanity check the fee wa successfully amortized
   let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
-  assert!((new_outputs + tx_fee) <= original_outputs);
+  assert!((new_outputs + total_fee) <= original_outputs);
 
-  branch_outputs
+  AmortizeFeeRes {
+    post_fee_branches: branch_outputs,
+    operating_costs: if plan.change.is_none() {
+      // If the change is None, this had no effect on the operating costs
+      operating_costs
+    } else {
+      // Since the change is some, and we successfully amortized, the operating costs were recouped
+      0
+    },
+  }
+}
+
+pub struct PreparedSend<N: Network> {
+  /// None for the transaction if the SignableTransaction was dropped due to lack of value.
+  pub tx: Option<(N::SignableTransaction, N::Eventuality)>,
+  pub post_fee_branches: Vec<PostFeeBranch>,
+  /// The updated operating costs after preparing this transaction.
+  pub operating_costs: u64,
 }
 
 #[async_trait]
@@ -364,18 +409,15 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   ) -> HashMap<[u8; 32], (usize, Self::Transaction)>;
 
   /// Prepare a SignableTransaction for a transaction.
-  ///
-  /// Returns None for the transaction if the SignableTransaction was dropped due to lack of value.
-  #[rustfmt::skip]
+  // TODO: These have common code inside them
+  // Provide prepare_send, have coins offers prepare_send_inner
   async fn prepare_send(
     &self,
     block_number: usize,
     plan: Plan<Self>,
-    fee: Self::Fee,
-  ) -> Result<
-    (Option<(Self::SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>),
-    NetworkError
-  >;
+    fee_rate: Self::Fee,
+    running_operating_costs: u64,
+  ) -> Result<PreparedSend<Self>, NetworkError>;
 
   /// Attempt to sign a SignableTransaction.
   async fn attempt_send(

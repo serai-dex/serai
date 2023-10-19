@@ -96,10 +96,10 @@ pub async fn test_wallet<N: Network>(network: N) {
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
     let (signable, eventuality) = network
-      .prepare_send(network.get_block_number(&block_id).await, plans[0].clone(), fee)
+      .prepare_send(network.get_block_number(&block_id).await, plans[0].clone(), fee, 0)
       .await
       .unwrap()
-      .0
+      .tx
       .unwrap();
 
     eventualities.push(eventuality.clone());

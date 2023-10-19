@@ -47,8 +47,8 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, PostFeeBranch, Network, drop_branches,
-    amortize_fee,
+    Eventuality as EventualityTrait, EventualitiesTracker, AmortizeFeeRes, PreparedSend, Network,
+    drop_branches, amortize_fee,
   },
   Plan,
 };
@@ -509,8 +509,8 @@ impl Network for Bitcoin {
     _: usize,
     mut plan: Plan<Self>,
     fee: Fee,
-  ) -> Result<(Option<(SignableTransaction, Self::Eventuality)>, Vec<PostFeeBranch>), NetworkError>
-  {
+    operating_costs: u64,
+  ) -> Result<PreparedSend<Self>, NetworkError> {
     let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
       let mut payments = vec![];
       for payment in &plan.payments {
@@ -558,23 +558,37 @@ impl Network for Bitcoin {
 
     let tx_fee = match signable(&plan, None) {
       Some(tx) => tx.needed_fee(),
-      None => return Ok((None, drop_branches(&plan))),
+      None => {
+        return Ok(PreparedSend {
+          tx: None,
+          post_fee_branches: drop_branches(&plan),
+          // We expected a change output of sum(inputs) - sum(outputs)
+          // Since we can no longer create this change output, it becomes an operating cost
+          operating_costs: operating_costs +
+            plan.inputs.iter().map(|input| input.amount()).sum::<u64>() -
+            plan.payments.iter().map(|payment| payment.amount).sum::<u64>(),
+        });
+      }
     };
 
-    let branch_outputs = amortize_fee(&mut plan, tx_fee);
+    let AmortizeFeeRes { post_fee_branches, operating_costs } =
+      amortize_fee(&mut plan, operating_costs, tx_fee);
 
     let signable = signable(&plan, Some(tx_fee)).unwrap();
+
+    // TODO: If the change output was dropped by Bitcoin, increase operating costs
 
     let plan_binding_input = *plan.inputs[0].output.outpoint();
     let outputs = signable.outputs().to_vec();
 
-    Ok((
-      Some((
+    Ok(PreparedSend {
+      tx: Some((
         SignableTransaction { transcript: plan.transcript(), actual: signable },
         Eventuality { plan_binding_input, outputs },
       )),
-      branch_outputs,
-    ))
+      post_fee_branches,
+      operating_costs,
+    })
   }
 
   async fn attempt_send(
