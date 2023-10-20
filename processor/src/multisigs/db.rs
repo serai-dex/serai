@@ -112,7 +112,7 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     getter: &G,
     tx: <N::Transaction as Transaction<N>>::Id,
   ) -> Option<[u8; 32]> {
-    getter.get(tx.as_ref()).map(|id| id.try_into().unwrap())
+    getter.get(Self::resolved_key(tx.as_ref())).map(|id| id.try_into().unwrap())
   }
   pub fn plan_by_key_with_self_change<G: Get>(
     getter: &G,
