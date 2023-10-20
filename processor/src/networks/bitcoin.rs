@@ -565,7 +565,8 @@ impl Network for Bitcoin {
           // This plan expects a change output valued at sum(inputs) - sum(outputs)
           // Since we can no longer create this change output, it becomes an operating cost
           // TODO: Look at input restoration to reduce this operating cost
-          operating_costs: operating_costs + plan.expected_change(),
+          operating_costs: operating_costs +
+            if plan.change.is_some() { plan.expected_change() } else { 0 },
         });
       }
     };
@@ -575,21 +576,25 @@ impl Network for Bitcoin {
 
     let signable = signable(&plan, Some(tx_fee)).unwrap();
 
-    // Now that we've amortized the fee (which may raise the expected change value), grab it again
-    // Then, subtract the TX fee
-    //
-    // The first `expected_change` call gets the theoretically expected change from the theoretical
-    // Plan object, and accordingly doesn't subtract the fee (expecting the payments to bare it)
-    // This call wants the actual value, and since Plan is unaware of the fee, has to manually
-    // adjust
-    let on_chain_expected_change = plan.expected_change() - tx_fee;
-    // If the change value is less than the dust threshold, it becomes an operating cost
-    // This may be slightly inaccurate as dropping payments may reduce the fee, raising the change
-    // above dust
-    // That's fine since it'd have to be in a very precarious state AND then it's over-eager in
-    // tabulating costs
-    if on_chain_expected_change < Self::DUST {
-      operating_costs += on_chain_expected_change;
+    if plan.change.is_some() {
+      // Now that we've amortized the fee (which may raise the expected change value), grab it
+      // again
+      // Then, subtract the TX fee
+      //
+      // The first `expected_change` call gets the theoretically expected change from the
+      // theoretical Plan object, and accordingly doesn't subtract the fee (expecting the payments
+      // to bare it)
+      // This call wants the actual value, post-amortization over outputs, and since Plan is
+      // unaware of the fee, has to manually adjust
+      let on_chain_expected_change = plan.expected_change() - tx_fee;
+      // If the change value is less than the dust threshold, it becomes an operating cost
+      // This may be slightly inaccurate as dropping payments may reduce the fee, raising the
+      // change above dust
+      // That's fine since it'd have to be in a very precarious state AND then it's over-eager in
+      // tabulating costs
+      if on_chain_expected_change < Self::DUST {
+        operating_costs += on_chain_expected_change;
+      }
     }
 
     let plan_binding_input = *plan.inputs[0].output.outpoint();
