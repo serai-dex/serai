@@ -87,6 +87,10 @@ pub mod pallet {
   pub type InSet<T: Config> =
     StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
 
+  /// The total stake allocated to this network by the active set of validators.
+  #[pallet::storage]
+  pub type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
+
   /// The current amount allocated to a validator set by a validator.
   #[pallet::storage]
   #[pallet::getter(fn allocation)]
@@ -275,6 +279,7 @@ pub mod pallet {
       let mut iter = SortedAllocationsIter::<T>::new(network);
       let mut participants = vec![];
       let mut key_shares = 0;
+      let mut total_stake = 0;
       while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
@@ -284,7 +289,9 @@ pub mod pallet {
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
         key_shares += amount.0 / allocation_per_key_share;
+        total_stake += amount.0;
       }
+      TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
@@ -453,6 +460,13 @@ pub mod pallet {
         }
       }
 
+      if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
+        TotalAllocatedStake::<T>::set(
+          network,
+          Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
+        );
+      }
+
       Ok(())
     }
 
@@ -521,8 +535,15 @@ pub mod pallet {
           }
         }
       }
-      // Also allow immediate deallocation of the key shares remain the same
+      // Also allow immediate deallocation if the key shares remain the same
       if (!active) || (!decreased_key_shares) {
+        if active {
+          // Since it's being immediately deallocated, decrease TotalAllocatedStake
+          TotalAllocatedStake::<T>::set(
+            network,
+            Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 - amount.0)),
+          );
+        }
         return Ok(true);
       }
 
