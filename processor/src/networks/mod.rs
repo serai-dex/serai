@@ -26,7 +26,7 @@ pub mod monero;
 #[cfg(feature = "monero")]
 pub use monero::Monero;
 
-use crate::{Payment, Plan};
+use crate::Plan;
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum NetworkError {
@@ -343,7 +343,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
-    let Some(fee) = self.needed_fee(block_number, &plan, fee_rate).await? else {
+    let Some(tx_fee) = self.needed_fee(block_number, &plan, fee_rate).await? else {
       // This Plan is not fulfillable
       // TODO: Have Plan explicitly distinguish payments and branches in two separate Vecs?
       return Ok(PreparedSend {
@@ -358,120 +358,90 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       });
     };
 
-    let (post_fee_branches, mut operating_costs) = {
-      pub struct AmortizeFeeRes {
-        post_fee_branches: Vec<PostFeeBranch>,
-        operating_costs: u64,
+    // Amortize a fee over the plan's payments
+    let (post_fee_branches, mut operating_costs) = (|| {
+      // If we're creating a change output, letting us recoup coins, amortize the operating costs
+      // as well
+      let total_fee = tx_fee + if plan.change.is_some() { operating_costs } else { 0 };
+
+      let original_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+      // If this isn't enough for the total fee, drop and move on
+      if original_outputs < total_fee {
+        let mut remaining_operating_costs = operating_costs;
+        if plan.change.is_some() {
+          // Operating costs increase by the TX fee
+          remaining_operating_costs += tx_fee;
+          // Yet decrease by the payments we managed to drop
+          remaining_operating_costs = remaining_operating_costs.saturating_sub(original_outputs);
+        }
+        return (drop_branches(&plan), remaining_operating_costs);
       }
 
-      // Amortize a fee over the plan's payments
-      fn amortize_fee<N: Network>(
-        plan: &mut Plan<N>,
-        operating_costs: u64,
-        tx_fee: u64,
-      ) -> AmortizeFeeRes {
-        let total_fee = {
-          let mut total_fee = tx_fee;
-          // Since we're creating a change output, letting us recoup coins, amortize the operating
-          // costs
-          // as well
-          if plan.change.is_some() {
-            total_fee += operating_costs;
-          }
-          total_fee
-        };
+      let initial_payment_amounts =
+        plan.payments.iter().map(|payment| payment.amount).collect::<Vec<_>>();
 
-        let original_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
-        // If this isn't enough for the total fee, drop and move on
-        if original_outputs < total_fee {
-          let mut remaining_operating_costs = operating_costs;
-          if plan.change.is_some() {
-            // Operating costs increase by the TX fee
-            remaining_operating_costs += tx_fee;
-            // Yet decrease by the payments we managed to drop
-            remaining_operating_costs = remaining_operating_costs.saturating_sub(original_outputs);
-          }
-          return AmortizeFeeRes {
-            post_fee_branches: drop_branches(plan),
-            operating_costs: remaining_operating_costs,
-          };
-        }
+      // Amortize the transaction fee across outputs
+      let mut remaining_fee = total_fee;
+      // Run as many times as needed until we can successfully subtract this fee
+      while remaining_fee != 0 {
+        // This shouldn't be a / by 0 as these payments have enough value to cover the fee
+        let this_iter_fee = remaining_fee / u64::try_from(plan.payments.len()).unwrap();
+        let mut overage = remaining_fee % u64::try_from(plan.payments.len()).unwrap();
+        for payment in &mut plan.payments {
+          let this_payment_fee = this_iter_fee + overage;
+          // Only subtract the overage once
+          overage = 0;
 
-        // Amortize the transaction fee across outputs
-        let mut payments_len = u64::try_from(plan.payments.len()).unwrap();
-        // Use a formula which will round up
-        let per_output_fee = |payments| (total_fee + (payments - 1)) / payments;
-
-        let post_fee = |payment: &Payment<N>, per_output_fee| {
-          let mut post_fee = payment.amount.checked_sub(per_output_fee);
-          // If this is under our dust threshold, drop it
-          if let Some(amount) = post_fee {
-            if amount < N::DUST {
-              post_fee = None;
-            }
-          }
-          post_fee
-        };
-
-        // If we drop outputs for being less than the fee, we won't successfully reduce the amount
-        // spent (dropping a 800 output due to a 1000 fee leaves 200 we still have to deduct)
-        // Do initial runs until the amount of output we will drop is known
-        while {
-          let last = payments_len;
-          payments_len = u64::try_from(
-            plan
-              .payments
-              .iter()
-              .filter(|payment| post_fee(payment, per_output_fee(payments_len)).is_some())
-              .count(),
-          )
-          .unwrap();
-          last != payments_len
-        } {}
-
-        // Now that we know how many outputs will survive, calculate the actual per_output_fee
-        let per_output_fee = per_output_fee(payments_len);
-        let mut branch_outputs = vec![];
-        for payment in plan.payments.iter_mut() {
-          let post_fee = post_fee(payment, per_output_fee);
-          // Note the branch output, if this is one
-          if payment.address == N::branch_address(plan.key) {
-            branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: post_fee });
-          }
-          payment.amount = post_fee.unwrap_or(0);
-        }
-        // Drop payments now worth 0
-        plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
-
-        // Sanity check the fee wa successfully amortized
-        let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
-        assert!((new_outputs + total_fee) <= original_outputs);
-
-        AmortizeFeeRes {
-          post_fee_branches: branch_outputs,
-          operating_costs: if plan.change.is_none() {
-            // If the change is None, this had no effect on the operating costs
-            operating_costs
-          } else {
-            // Since the change is some, and we successfully amortized, the operating costs were
-            // recouped
-            0
-          },
+          let subtractable = payment.amount.min(this_payment_fee);
+          remaining_fee -= subtractable;
+          payment.amount -= subtractable;
         }
       }
 
-      let AmortizeFeeRes { post_fee_branches, operating_costs } =
-        amortize_fee(&mut plan, operating_costs, fee);
+      // If any payment is now below the dust threshold, set its value to 0 so it'll be dropped
+      for payment in &mut plan.payments {
+        if payment.amount < Self::DUST {
+          payment.amount = 0;
+        }
+      }
 
-      (post_fee_branches, operating_costs)
-    };
+      // Note the branch outputs' new values
+      let mut branch_outputs = vec![];
+      for (initial_amount, payment) in initial_payment_amounts.into_iter().zip(&plan.payments) {
+        if payment.address == Self::branch_address(plan.key) {
+          branch_outputs.push(PostFeeBranch {
+            expected: initial_amount,
+            actual: if payment.amount == 0 { None } else { Some(payment.amount) },
+          });
+        }
+      }
+
+      // Drop payments now worth 0
+      plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+
+      // Sanity check the fee wa successfully amortized
+      let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+      assert!((new_outputs + total_fee) <= original_outputs);
+
+      (
+        branch_outputs,
+        if plan.change.is_none() {
+          // If the change is None, this had no effect on the operating costs
+          operating_costs
+        } else {
+          // Since the change is some, and we successfully amortized, the operating costs were
+          // recouped
+          0
+        },
+      )
+    })();
 
     let Some(tx) = self.signable_transaction(block_number, &plan, fee_rate).await? else {
       panic!(
         "{}. post-amortization plan: {:?}, successfully amoritized fee: {}",
         "signable_transaction returned None for a TX we prior successfully calculated the fee for",
         &plan,
-        fee,
+        tx_fee,
       )
     };
 
@@ -485,7 +455,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       // to bare it)
       // This call wants the actual value, post-amortization over outputs, and since Plan is
       // unaware of the fee, has to manually adjust
-      let on_chain_expected_change = plan.expected_change() - fee;
+      let on_chain_expected_change = plan.expected_change() - tx_fee;
       // If the change value is less than the dust threshold, it becomes an operating cost
       // This may be slightly inaccurate as dropping payments may reduce the fee, raising the
       // change above dust

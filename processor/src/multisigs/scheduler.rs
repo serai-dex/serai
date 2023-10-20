@@ -423,29 +423,37 @@ impl<N: Network> Scheduler<N> {
       None => return,
     };
 
-    // Amortize the fee amongst all payments
-    // While some networks, like Ethereum, may have some payments take notably more gas, those
-    // payments will have their own gas deducted when they're created. The difference in output
-    // value present here is solely the cost of the branch, which is used for all of these
-    // payments, regardless of how much they'll end up costing
-    let diff = actual - expected;
-    let payments_len = u64::try_from(payments.len()).unwrap();
-    let per_payment = diff / payments_len;
-    // The above division isn't perfect
-    let mut remainder = diff - (per_payment * payments_len);
+    // Amortize the fee amongst all payments underneath this branch
+    {
+      let mut to_amortize = actual - expected;
+      // If the payments are worth less than this fee we need to amortize, return, dropping them
+      if payments.iter().map(|payment| payment.amount).sum::<u64>() < to_amortize {
+        return;
+      }
+      while to_amortize != 0 {
+        let payments_len = u64::try_from(payments.len()).unwrap();
+        let per_payment = to_amortize / payments_len;
+        let mut overage = to_amortize % payments_len;
 
-    for payment in payments.iter_mut() {
-      // TODO: This usage of saturating_sub is invalid as we *need* to subtract this value
-      payment.amount = payment.amount.saturating_sub(per_payment + remainder);
-      // Only subtract the remainder once
-      remainder = 0;
+        for payment in payments.iter_mut() {
+          let to_subtract = per_payment + overage;
+          // Only subtract the overage once
+          overage = 0;
+
+          let subtractable = payment.amount.min(to_subtract);
+          to_amortize -= subtractable;
+          payment.amount -= subtractable;
+        }
+      }
     }
 
     // Drop payments now below the dust threshold
     let payments =
-      payments.drain(..).filter(|payment| payment.amount >= N::DUST).collect::<Vec<_>>();
+      payments.into_iter().filter(|payment| payment.amount >= N::DUST).collect::<Vec<_>>();
     // Sanity check this was done properly
     assert!(actual >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+
+    // If there's no payments left, return
     if payments.is_empty() {
       return;
     }
