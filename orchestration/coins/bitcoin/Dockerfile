@@ -1,7 +1,7 @@
 # Configure Environment
 FROM alpine:latest as builder
 
-ENV BITCOIN_VERSION=25.0
+ENV BITCOIN_VERSION=25.1
 ENV GLIBC_VERSION=2.28-r0
 ENV BITCOIN_DATA=/home/bitcoin/.bitcoin
 

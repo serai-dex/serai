@@ -328,7 +328,7 @@ impl Bitcoin {
     let median_fee = || {
       // TODO
       let _ = block_for_fee;
-      Fee(20)
+      Fee(2)
     };
     let fee = median_fee();
 
