@@ -1,4 +1,4 @@
-// This file is part of Substrate.
+// This file was originally:
 
 // Copyright (C) Parity Technologies (UK) Ltd.
 // SPDX-License-Identifier: Apache-2.0
@@ -14,6 +14,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// It has been forked into a crate distributed under the AGPL 3.0.
+// Please check the current distribution for up-to-date copyright and licensing information.
 
 use super::*;
 
