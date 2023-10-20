@@ -41,7 +41,6 @@ async fn spend<N: Network, D: Db>(
               payments: vec![],
               change: Some(N::change_address(key)),
             },
-            network.get_fee().await,
             0,
           )
           .await

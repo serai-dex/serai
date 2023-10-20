@@ -161,11 +161,6 @@ impl BlockTrait<Monero> for Block {
   fn time(&self) -> u64 {
     self.header.timestamp
   }
-
-  fn median_fee(&self) -> Fee {
-    // TODO
-    Fee { per_weight: 10000000, mask: 10000 }
-  }
 }
 
 #[derive(Clone, Debug)]
@@ -206,7 +201,6 @@ impl Monero {
     scanner
   }
 
-  #[allow(clippy::too_many_arguments)]
   async fn make_signable_transaction(
     &self,
     block_number: usize,
@@ -214,9 +208,17 @@ impl Monero {
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee_rate: Fee,
     calculating_fee: bool,
   ) -> Result<Option<(RecommendedTranscript, MSignableTransaction)>, NetworkError> {
+    // TODO2: Use an fee representative of several blocks, cached inside Self
+    let block_for_fee = self.get_block(block_number).await?;
+    let median_fee = || {
+      // TODO
+      let _ = block_for_fee;
+      Fee { per_weight: 10000000, mask: 10000 }
+    };
+    let fee_rate = median_fee();
+
     // Get the protocol for the specified block number
     // For now, this should just be v16, the latest deployed protocol, since there's no upcoming
     // hard fork to be mindful of
@@ -352,7 +354,6 @@ impl Monero {
 impl Network for Monero {
   type Curve = Ed25519;
 
-  type Fee = Fee;
   type Transaction = Transaction;
   type Block = Block;
 
@@ -525,11 +526,10 @@ impl Network for Monero {
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee_rate: Fee,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(block_number, plan_id, inputs, payments, change, fee_rate, true)
+        .make_signable_transaction(block_number, plan_id, inputs, payments, change, true)
         .await?
         .map(|(_, signable)| signable.fee()),
     )
@@ -542,11 +542,10 @@ impl Network for Monero {
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee_rate: Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(block_number, plan_id, inputs, payments, change, fee_rate, false)
+        .make_signable_transaction(block_number, plan_id, inputs, payments, change, false)
         .await?
         .map(|(transcript, signable)| {
           let signable = SignableTransaction { transcript, actual: signable };
@@ -588,13 +587,6 @@ impl Network for Monero {
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block(*id).await.unwrap().number()
-  }
-
-  #[cfg(test)]
-  async fn get_fee(&self) -> Fee {
-    use monero_serai::wallet::FeePriority;
-
-    self.rpc.get_fee(self.rpc.get_protocol().await.unwrap(), FeePriority::Low).await.unwrap()
   }
 
   #[cfg(test)]

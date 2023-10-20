@@ -249,11 +249,6 @@ impl BlockTrait<Bitcoin> for Block {
   fn time(&self) -> u64 {
     self.header.time.into()
   }
-
-  fn median_fee(&self) -> Fee {
-    // TODO
-    Fee(20)
-  }
 }
 
 const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
@@ -322,12 +317,21 @@ impl Bitcoin {
 
   async fn make_signable_transaction(
     &self,
+    block_number: usize,
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee: Fee,
     calculating_fee: bool,
-  ) -> Option<BSignableTransaction> {
+  ) -> Result<Option<BSignableTransaction>, NetworkError> {
+    // TODO2: Use an fee representative of several blocks, cached inside Self
+    let block_for_fee = self.get_block(block_number).await?;
+    let median_fee = || {
+      // TODO
+      let _ = block_for_fee;
+      Fee(20)
+    };
+    let fee = median_fee();
+
     let payments = payments
       .iter()
       .map(|payment| {
@@ -348,22 +352,20 @@ impl Bitcoin {
       None,
       fee.0,
     ) {
-      Ok(signable) => Some(signable),
+      Ok(signable) => Ok(Some(signable)),
       Err(TransactionError::NoInputs) => {
         panic!("trying to create a bitcoin transaction without inputs")
       }
       // No outputs left and the change isn't worth enough
-      Err(TransactionError::NoOutputs) => None,
+      Err(TransactionError::NoOutputs) => Ok(None),
       // amortize_fee removes payments which fall below the dust threshold
       Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
       Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
       Err(TransactionError::TooLowFee) => {
         panic!("created a transaction whose fee is below the minimum")
       }
-      Err(TransactionError::NotEnoughFunds) => {
-        // Mot even enough funds to pay the fee
-        None
-      }
+      // Mot even enough funds to pay the fee
+      Err(TransactionError::NotEnoughFunds) => Ok(None),
       Err(TransactionError::TooLargeTransaction) => {
         panic!("created a too large transaction despite limiting inputs/outputs")
       }
@@ -375,7 +377,6 @@ impl Bitcoin {
 impl Network for Bitcoin {
   type Curve = Secp256k1;
 
-  type Fee = Fee;
   type Transaction = Transaction;
   type Block = Block;
 
@@ -555,31 +556,29 @@ impl Network for Bitcoin {
 
   async fn needed_fee(
     &self,
-    _: usize,
+    block_number: usize,
     _: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee_rate: Fee,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(inputs, payments, change, fee_rate, true)
-        .await
+        .make_signable_transaction(block_number, inputs, payments, change, true)
+        .await?
         .map(|signable| signable.needed_fee()),
     )
   }
 
   async fn signable_transaction(
     &self,
-    _: usize,
+    block_number: usize,
     plan_id: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
-    fee_rate: Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    Ok(self.make_signable_transaction(inputs, payments, change, fee_rate, false).await.map(
+    Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
       |signable| {
         let mut transcript =
           RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction Transcript");
@@ -633,11 +632,6 @@ impl Network for Bitcoin {
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block_number(id).await.unwrap()
-  }
-
-  #[cfg(test)]
-  async fn get_fee(&self) -> Fee {
-    Fee(1)
   }
 
   #[cfg(test)]

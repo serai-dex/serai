@@ -91,12 +91,11 @@ pub async fn test_wallet<N: Network>(network: N) {
   }
 
   // Execute the plan
-  let fee = network.get_fee().await;
   let mut keys_txs = HashMap::new();
   let mut eventualities = vec![];
   for (i, keys) in keys.drain() {
     let (signable, eventuality) = network
-      .prepare_send(network.get_block_number(&block_id).await, plans[0].clone(), fee, 0)
+      .prepare_send(network.get_block_number(&block_id).await, plans[0].clone(), 0)
       .await
       .unwrap()
       .tx

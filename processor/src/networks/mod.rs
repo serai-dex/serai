@@ -189,7 +189,6 @@ pub trait Block<N: Network>: Send + Sync + Sized + Clone + Debug {
   fn parent(&self) -> Self::Id;
   // The monotonic network time at this block.
   fn time(&self) -> u64;
-  fn median_fee(&self) -> N::Fee;
 }
 
 // The post-fee value of an expected branch.
@@ -224,10 +223,6 @@ pub struct PreparedSend<N: Network> {
 pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// The elliptic curve used for this network.
   type Curve: Curve;
-
-  /// The type representing the fee for this network.
-  // This should likely be a u64, wrapped in a type which implements appropriate fee logic.
-  type Fee: Send + Copy;
 
   /// The type representing the transaction for this network.
   type Transaction: Transaction<Self>;
@@ -322,7 +317,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
-    fee_rate: Self::Fee,
   ) -> Result<Option<u64>, NetworkError>;
 
   /// Create a SignableTransaction for the given Plan.
@@ -338,7 +332,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
-    fee_rate: Self::Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError>;
 
   /// Prepare a SignableTransaction for a transaction.
@@ -346,7 +339,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     block_number: usize,
     plan: Plan<Self>,
-    fee_rate: Self::Fee,
     operating_costs: u64,
   ) -> Result<PreparedSend<Self>, NetworkError> {
     // Sanity check this has at least one output planned
@@ -357,8 +349,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     let theoretical_change_amount = inputs.iter().map(|input| input.amount()).sum::<u64>() -
       payments.iter().map(|payment| payment.amount).sum::<u64>();
 
-    let Some(tx_fee) =
-      self.needed_fee(block_number, &plan_id, &inputs, &payments, &change, fee_rate).await?
+    let Some(tx_fee) = self.needed_fee(block_number, &plan_id, &inputs, &payments, &change).await?
     else {
       // This Plan is not fulfillable
       // TODO: Have Plan explicitly distinguish payments and branches in two separate Vecs?
@@ -462,9 +453,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       )
     })();
 
-    let Some(tx) = self
-      .signable_transaction(block_number, &plan_id, &inputs, &payments, &change, fee_rate)
-      .await?
+    let Some(tx) =
+      self.signable_transaction(block_number, &plan_id, &inputs, &payments, &change).await?
     else {
       panic!(
         "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}",
@@ -524,9 +514,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
-
-  #[cfg(test)]
-  async fn get_fee(&self) -> Self::Fee;
 
   #[cfg(test)]
   async fn mine_block(&self);

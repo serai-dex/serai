@@ -155,7 +155,6 @@ pub async fn test_signer<N: Network>(network: N) {
 
   let outputs = network.get_outputs(&network.test_send(N::address(key)).await, key).await;
   let sync_block = network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS;
-  let fee = network.get_fee().await;
 
   let amount = 2 * N::DUST;
   let mut keys_txs = HashMap::new();
@@ -170,7 +169,6 @@ pub async fn test_signer<N: Network>(network: N) {
           payments: vec![Payment { address: N::address(key), data: None, amount }],
           change: Some(N::change_address(key)),
         },
-        fee,
         0,
       )
       .await
