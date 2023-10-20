@@ -34,7 +34,7 @@ pub use serai_client::{
 };
 
 use crate::{
-  Payment, Plan, additional_key,
+  Payment, additional_key,
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
@@ -206,10 +206,14 @@ impl Monero {
     scanner
   }
 
+  #[allow(clippy::too_many_arguments)]
   async fn make_signable_transaction(
     &self,
     block_number: usize,
-    mut plan: Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee_rate: Fee,
     calculating_fee: bool,
   ) -> Result<Option<(RecommendedTranscript, MSignableTransaction)>, NetworkError> {
@@ -234,9 +238,11 @@ impl Monero {
     // Check a fork hasn't occurred which this processor hasn't been updated for
     assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| NetworkError::ConnectionError)?);
 
-    let spendable_outputs = plan.inputs.iter().cloned().map(|input| input.0).collect::<Vec<_>>();
+    let spendable_outputs = inputs.iter().map(|input| input.0.clone()).collect::<Vec<_>>();
 
-    let mut transcript = plan.transcript();
+    let mut transcript =
+      RecommendedTranscript::new(b"Serai Processor Monero Transaction Transcript");
+    transcript.append_message(b"plan", plan_id);
 
     // All signers need to select the same decoys
     // All signers use the same height and a seeded RNG to make sure they do so.
@@ -254,11 +260,12 @@ impl Monero {
 
     // Monero requires at least two outputs
     // If we only have one output planned, add a dummy payment
-    let outputs = plan.payments.len() + usize::from(u8::from(plan.change.is_some()));
+    let mut payments = payments.to_vec();
+    let outputs = payments.len() + usize::from(u8::from(change.is_some()));
     if outputs == 0 {
       return Ok(None);
     } else if outputs == 1 {
-      plan.payments.push(Payment {
+      payments.push(Payment {
         address: Address::new(
           ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
             .address(MoneroNetwork::Mainnet, AddressSpec::Standard),
@@ -269,23 +276,22 @@ impl Monero {
       });
     }
 
-    let mut payments = vec![];
-    for payment in &plan.payments {
+    let payments = payments
+      .into_iter()
       // If we're solely estimating the fee, don't actually specify an amount
       // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
-      payments
-        .push((payment.address.clone().into(), if calculating_fee { 0 } else { payment.amount }));
-    }
+      .map(|payment| (payment.address.into(), if calculating_fee { 0 } else { payment.amount }))
+      .collect::<Vec<_>>();
 
     match MSignableTransaction::new(
       protocol,
       // Use the plan ID as the r_seed
       // This perfectly binds the plan while simultaneously allowing verifying the plan was
       // executed with no additional communication
-      Some(Zeroizing::new(plan.id())),
+      Some(Zeroizing::new(*plan_id)),
       inputs.clone(),
       payments,
-      plan.change.map(|change| Change::fingerprintable(change.into())),
+      change.clone().map(|change| Change::fingerprintable(change.into())),
       vec![],
       fee_rate,
     ) {
@@ -375,15 +381,15 @@ impl Network for Monero {
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
-  fn address(key: EdwardsPoint) -> Self::Address {
+  fn address(key: EdwardsPoint) -> Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
-  fn branch_address(key: EdwardsPoint) -> Self::Address {
+  fn branch_address(key: EdwardsPoint) -> Address {
     Self::address_internal(key, BRANCH_SUBADDRESS)
   }
 
-  fn change_address(key: EdwardsPoint) -> Self::Address {
+  fn change_address(key: EdwardsPoint) -> Address {
     Self::address_internal(key, CHANGE_SUBADDRESS)
   }
 
@@ -404,7 +410,7 @@ impl Network for Monero {
     )
   }
 
-  async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Self::Output> {
+  async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Output> {
     let outputs = loop {
       match Self::scanner(key).scan(&self.rpc, block).await {
         Ok(outputs) => break outputs,
@@ -515,12 +521,15 @@ impl Network for Monero {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan: &Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee_rate: Fee,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(block_number, plan.clone(), fee_rate, true)
+        .make_signable_transaction(block_number, plan_id, inputs, payments, change, fee_rate, true)
         .await?
         .map(|(_, signable)| signable.fee()),
     )
@@ -529,16 +538,22 @@ impl Network for Monero {
   async fn signable_transaction(
     &self,
     block_number: usize,
-    plan: &Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee_rate: Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    Ok(self.make_signable_transaction(block_number, plan.clone(), fee_rate, false).await?.map(
-      |(transcript, signable)| {
-        let signable = SignableTransaction { transcript, actual: signable };
-        let eventuality = signable.actual.eventuality().unwrap();
-        (signable, eventuality)
-      },
-    ))
+    Ok(
+      self
+        .make_signable_transaction(block_number, plan_id, inputs, payments, change, fee_rate, false)
+        .await?
+        .map(|(transcript, signable)| {
+          let signable = SignableTransaction { transcript, actual: signable };
+          let eventuality = signable.actual.eventuality().unwrap();
+          (signable, eventuality)
+        }),
+    )
   }
 
   async fn attempt_send(
@@ -606,7 +621,7 @@ impl Network for Monero {
   }
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) -> Block {
+  async fn test_send(&self, address: Address) -> Block {
     use zeroize::Zeroizing;
     use rand_core::OsRng;
     use monero_serai::wallet::FeePriority;

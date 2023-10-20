@@ -26,7 +26,7 @@ pub mod monero;
 #[cfg(feature = "monero")]
 pub use monero::Monero;
 
-use crate::Plan;
+use crate::{Payment, Plan};
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum NetworkError {
@@ -199,10 +199,13 @@ pub struct PostFeeBranch {
 }
 
 // Return the PostFeeBranches needed when dropping a transaction
-fn drop_branches<N: Network>(plan: &Plan<N>) -> Vec<PostFeeBranch> {
+fn drop_branches<N: Network>(
+  key: <N::Curve as Ciphersuite>::G,
+  payments: &[Payment<N>],
+) -> Vec<PostFeeBranch> {
   let mut branch_outputs = vec![];
-  for payment in &plan.payments {
-    if payment.address == N::branch_address(plan.key) {
+  for payment in payments {
+    if payment.address == N::branch_address(key) {
       branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
     }
   }
@@ -315,7 +318,10 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan: &Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Self::Output],
+    payments: &[Payment<Self>],
+    change: &Option<Self::Address>,
     fee_rate: Self::Fee,
   ) -> Result<Option<u64>, NetworkError>;
 
@@ -328,7 +334,10 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn signable_transaction(
     &self,
     block_number: usize,
-    plan: &Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Self::Output],
+    payments: &[Payment<Self>],
+    change: &Option<Self::Address>,
     fee_rate: Self::Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError>;
 
@@ -336,25 +345,32 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn prepare_send(
     &self,
     block_number: usize,
-    mut plan: Plan<Self>,
+    plan: Plan<Self>,
     fee_rate: Self::Fee,
     operating_costs: u64,
   ) -> Result<PreparedSend<Self>, NetworkError> {
     // Sanity check this has at least one output planned
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
-    let Some(tx_fee) = self.needed_fee(block_number, &plan, fee_rate).await? else {
+    let plan_id = plan.id();
+    let Plan { key, inputs, mut payments, change } = plan;
+    let theoretical_change_amount = inputs.iter().map(|input| input.amount()).sum::<u64>() -
+      payments.iter().map(|payment| payment.amount).sum::<u64>();
+
+    let Some(tx_fee) =
+      self.needed_fee(block_number, &plan_id, &inputs, &payments, &change, fee_rate).await?
+    else {
       // This Plan is not fulfillable
       // TODO: Have Plan explicitly distinguish payments and branches in two separate Vecs?
       return Ok(PreparedSend {
         tx: None,
         // Have all of its branches dropped
-        post_fee_branches: drop_branches(&plan),
+        post_fee_branches: drop_branches(key, &payments),
         // This plan expects a change output valued at sum(inputs) - sum(outputs)
         // Since we can no longer create this change output, it becomes an operating cost
         // TODO: Look at input restoration to reduce this operating cost
         operating_costs: operating_costs +
-          if plan.change.is_some() { plan.expected_change() } else { 0 },
+          if change.is_some() { theoretical_change_amount } else { 0 },
       });
     };
 
@@ -362,32 +378,32 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     let (post_fee_branches, mut operating_costs) = (|| {
       // If we're creating a change output, letting us recoup coins, amortize the operating costs
       // as well
-      let total_fee = tx_fee + if plan.change.is_some() { operating_costs } else { 0 };
+      let total_fee = tx_fee + if change.is_some() { operating_costs } else { 0 };
 
-      let original_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+      let original_outputs = payments.iter().map(|payment| payment.amount).sum::<u64>();
       // If this isn't enough for the total fee, drop and move on
       if original_outputs < total_fee {
         let mut remaining_operating_costs = operating_costs;
-        if plan.change.is_some() {
+        if change.is_some() {
           // Operating costs increase by the TX fee
           remaining_operating_costs += tx_fee;
           // Yet decrease by the payments we managed to drop
           remaining_operating_costs = remaining_operating_costs.saturating_sub(original_outputs);
         }
-        return (drop_branches(&plan), remaining_operating_costs);
+        return (drop_branches(key, &payments), remaining_operating_costs);
       }
 
       let initial_payment_amounts =
-        plan.payments.iter().map(|payment| payment.amount).collect::<Vec<_>>();
+        payments.iter().map(|payment| payment.amount).collect::<Vec<_>>();
 
       // Amortize the transaction fee across outputs
       let mut remaining_fee = total_fee;
       // Run as many times as needed until we can successfully subtract this fee
       while remaining_fee != 0 {
         // This shouldn't be a / by 0 as these payments have enough value to cover the fee
-        let this_iter_fee = remaining_fee / u64::try_from(plan.payments.len()).unwrap();
-        let mut overage = remaining_fee % u64::try_from(plan.payments.len()).unwrap();
-        for payment in &mut plan.payments {
+        let this_iter_fee = remaining_fee / u64::try_from(payments.len()).unwrap();
+        let mut overage = remaining_fee % u64::try_from(payments.len()).unwrap();
+        for payment in &mut payments {
           let this_payment_fee = this_iter_fee + overage;
           // Only subtract the overage once
           overage = 0;
@@ -399,7 +415,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       }
 
       // If any payment is now below the dust threshold, set its value to 0 so it'll be dropped
-      for payment in &mut plan.payments {
+      for payment in &mut payments {
         if payment.amount < Self::DUST {
           payment.amount = 0;
         }
@@ -407,8 +423,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
       // Note the branch outputs' new values
       let mut branch_outputs = vec![];
-      for (initial_amount, payment) in initial_payment_amounts.into_iter().zip(&plan.payments) {
-        if payment.address == Self::branch_address(plan.key) {
+      for (initial_amount, payment) in initial_payment_amounts.into_iter().zip(&payments) {
+        if payment.address == Self::branch_address(key) {
           branch_outputs.push(PostFeeBranch {
             expected: initial_amount,
             actual: if payment.amount == 0 { None } else { Some(payment.amount) },
@@ -417,27 +433,25 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       }
 
       // Drop payments now worth 0
-      let plan_id = plan.id();
-      plan.payments = plan
-        .payments
+      payments = payments
         .drain(..)
         .filter(|payment| {
           if payment.amount != 0 {
             true
           } else {
-            log::debug!("dropping dust payment from plan {}", hex::encode(&plan_id));
+            log::debug!("dropping dust payment from plan {}", hex::encode(plan_id));
             false
           }
         })
         .collect();
 
       // Sanity check the fee was successfully amortized
-      let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
+      let new_outputs = payments.iter().map(|payment| payment.amount).sum::<u64>();
       assert!((new_outputs + total_fee) <= original_outputs);
 
       (
         branch_outputs,
-        if plan.change.is_none() {
+        if change.is_none() {
           // If the change is None, this had no effect on the operating costs
           operating_costs
         } else {
@@ -448,33 +462,37 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       )
     })();
 
-    let Some(tx) = self.signable_transaction(block_number, &plan, fee_rate).await? else {
+    let Some(tx) = self
+      .signable_transaction(block_number, &plan_id, &inputs, &payments, &change, fee_rate)
+      .await?
+    else {
       panic!(
-        "{}. post-amortization plan: {:?}, successfully amoritized fee: {}",
+        "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}",
         "signable_transaction returned None for a TX we prior successfully calculated the fee for",
-        &plan,
+        "id",
+        hex::encode(plan_id),
+        "inputs",
+        inputs,
+        "post-amortization payments",
+        payments,
+        "change",
+        change,
+        "successfully amoritized fee",
         tx_fee,
       )
     };
 
-    if plan.change.is_some() {
-      // Now that we've amortized the fee (which may raise the expected change value), grab it
-      // again
-      // Then, subtract the TX fee
-      //
-      // The first `expected_change` call gets the theoretically expected change from the
-      // theoretical Plan object, and accordingly doesn't subtract the fee (expecting the payments
-      // to bare it)
-      // This call wants the actual value, post-amortization over outputs, and since Plan is
-      // unaware of the fee, has to manually adjust
-      let on_chain_expected_change = plan.expected_change() - tx_fee;
+    if change.is_some() {
+      let on_chain_expected_change = inputs.iter().map(|input| input.amount()).sum::<u64>() -
+        payments.iter().map(|payment| payment.amount).sum::<u64>() -
+        tx_fee;
       // If the change value is less than the dust threshold, it becomes an operating cost
       // This may be slightly inaccurate as dropping payments may reduce the fee, raising the
       // change above dust
       // That's fine since it'd have to be in a very precarious state AND then it's over-eager in
       // tabulating costs
       if on_chain_expected_change < Self::DUST {
-        operating_costs += on_chain_expected_change;
+        operating_costs += theoretical_change_amount;
       }
     }
 

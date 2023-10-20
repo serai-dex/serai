@@ -113,16 +113,10 @@ impl<N: Network> Plan<N> {
       transcript.append_message(b"input", input.id());
     }
 
-    // Don't transcript the payments as these will change between the intended Plan and the actual
-    // Plan, once various fee logics have executed
-    // TODO: Distinguish IntendedPlan and ActualPlan, or make actual payments a distinct field,
-    // letting us transcript this
-    /*
     transcript.domain_separate(b"payments");
     for payment in &self.payments {
       payment.transcript(&mut transcript);
     }
-    */
 
     if let Some(change) = &self.change {
       transcript.append_message(b"change", change.to_string());
@@ -136,11 +130,6 @@ impl<N: Network> Plan<N> {
     let mut res = [0; 32];
     res.copy_from_slice(&challenge[.. 32]);
     res
-  }
-
-  pub fn expected_change(&self) -> u64 {
-    self.inputs.iter().map(|input| input.amount()).sum::<u64>() -
-      self.payments.iter().map(|payment| payment.amount).sum::<u64>()
   }
 
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

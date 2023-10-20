@@ -2,7 +2,7 @@ use std::{time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::ff::PrimeField;
 use k256::{ProjectivePoint, Scalar};
 use frost::{
@@ -49,7 +49,7 @@ use crate::{
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
     Eventuality as EventualityTrait, EventualitiesTracker, Network,
   },
-  Plan,
+  Payment,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -322,25 +322,29 @@ impl Bitcoin {
 
   async fn make_signable_transaction(
     &self,
-    plan: &Plan<Self>,
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee: Fee,
     calculating_fee: bool,
   ) -> Option<BSignableTransaction> {
-    let mut payments = vec![];
-    for payment in &plan.payments {
-      // If we're solely estimating the fee, don't specify the actual amount
-      // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
-      // error
-      payments.push((
-        payment.address.0.clone(),
-        if calculating_fee { Self::DUST } else { payment.amount },
-      ));
-    }
+    let payments = payments
+      .iter()
+      .map(|payment| {
+        (
+          payment.address.0.clone(),
+          // If we're solely estimating the fee, don't specify the actual amount
+          // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
+          // error
+          if calculating_fee { Self::DUST } else { payment.amount },
+        )
+      })
+      .collect::<Vec<_>>();
 
     match BSignableTransaction::new(
-      plan.inputs.iter().map(|input| input.output.clone()).collect(),
+      inputs.iter().map(|input| input.output.clone()).collect(),
       &payments,
-      plan.change.as_ref().map(|change| change.0.clone()),
+      change.as_ref().map(|change| change.0.clone()),
       None,
       fee.0,
     ) {
@@ -415,12 +419,12 @@ impl Network for Bitcoin {
     Address(BAddress::<NetworkChecked>::new(BitcoinNetwork::Bitcoin, address_payload(key).unwrap()))
   }
 
-  fn branch_address(key: ProjectivePoint) -> Self::Address {
+  fn branch_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
   }
 
-  fn change_address(key: ProjectivePoint) -> Self::Address {
+  fn change_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
   }
@@ -435,7 +439,7 @@ impl Network for Bitcoin {
     self.rpc.get_block(&block_hash).await.map_err(|_| NetworkError::ConnectionError)
   }
 
-  async fn get_outputs(&self, block: &Self::Block, key: ProjectivePoint) -> Vec<Self::Output> {
+  async fn get_outputs(&self, block: &Self::Block, key: ProjectivePoint) -> Vec<Output> {
     let (scanner, _, kinds) = scanner(key);
 
     let mut outputs = vec![];
@@ -552,12 +556,15 @@ impl Network for Bitcoin {
   async fn needed_fee(
     &self,
     _: usize,
-    plan: &Plan<Self>,
+    _: &[u8; 32],
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee_rate: Fee,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(plan, fee_rate, true)
+        .make_signable_transaction(inputs, payments, change, fee_rate, true)
         .await
         .map(|signable| signable.needed_fee()),
     )
@@ -566,17 +573,27 @@ impl Network for Bitcoin {
   async fn signable_transaction(
     &self,
     _: usize,
-    plan: &Plan<Self>,
+    plan_id: &[u8; 32],
+    inputs: &[Output],
+    payments: &[Payment<Self>],
+    change: &Option<Address>,
     fee_rate: Fee,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    Ok(self.make_signable_transaction(plan, fee_rate, false).await.map(|signable| {
-      let plan_binding_input = *plan.inputs[0].output.outpoint();
-      let outputs = signable.outputs().to_vec();
-      (
-        SignableTransaction { transcript: plan.transcript(), actual: signable },
-        Eventuality { plan_binding_input, outputs },
-      )
-    }))
+    Ok(self.make_signable_transaction(inputs, payments, change, fee_rate, false).await.map(
+      |signable| {
+        let mut transcript =
+          RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction Transcript");
+        transcript.append_message(b"plan", plan_id);
+
+        let plan_binding_input = *inputs[0].output.outpoint();
+        let outputs = signable.outputs().to_vec();
+
+        (
+          SignableTransaction { transcript, actual: signable },
+          Eventuality { plan_binding_input, outputs },
+        )
+      },
+    ))
   }
 
   async fn attempt_send(
@@ -636,7 +653,7 @@ impl Network for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn test_send(&self, address: Self::Address) -> Block {
+  async fn test_send(&self, address: Address) -> Block {
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, BitcoinNetwork::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
