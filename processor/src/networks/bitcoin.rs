@@ -47,8 +47,7 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, AmortizeFeeRes, PreparedSend, Network,
-    drop_branches, amortize_fee,
+    Eventuality as EventualityTrait, EventualitiesTracker, Network,
   },
   Plan,
 };
@@ -320,6 +319,52 @@ impl Bitcoin {
         .unwrap()
     }
   }
+
+  async fn make_signable_transaction(
+    &self,
+    plan: &Plan<Self>,
+    fee: Fee,
+    calculating_fee: bool,
+  ) -> Option<BSignableTransaction> {
+    let mut payments = vec![];
+    for payment in &plan.payments {
+      // If we're solely estimating the fee, don't specify the actual amount
+      // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
+      // error
+      payments.push((
+        payment.address.0.clone(),
+        if calculating_fee { Self::DUST } else { payment.amount },
+      ));
+    }
+
+    match BSignableTransaction::new(
+      plan.inputs.iter().map(|input| input.output.clone()).collect(),
+      &payments,
+      plan.change.as_ref().map(|change| change.0.clone()),
+      None,
+      fee.0,
+    ) {
+      Ok(signable) => Some(signable),
+      Err(TransactionError::NoInputs) => {
+        panic!("trying to create a bitcoin transaction without inputs")
+      }
+      // No outputs left and the change isn't worth enough
+      Err(TransactionError::NoOutputs) => None,
+      // amortize_fee removes payments which fall below the dust threshold
+      Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
+      Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
+      Err(TransactionError::TooLowFee) => {
+        panic!("created a transaction whose fee is below the minimum")
+      }
+      Err(TransactionError::NotEnoughFunds) => {
+        // Mot even enough funds to pay the fee
+        None
+      }
+      Err(TransactionError::TooLargeTransaction) => {
+        panic!("created a too large transaction despite limiting inputs/outputs")
+      }
+    }
+  }
 }
 
 #[async_trait]
@@ -504,110 +549,34 @@ impl Network for Bitcoin {
     res
   }
 
-  async fn prepare_send(
+  async fn needed_fee(
     &self,
     _: usize,
-    mut plan: Plan<Self>,
-    fee: Fee,
-    operating_costs: u64,
-  ) -> Result<PreparedSend<Self>, NetworkError> {
-    let signable = |plan: &Plan<Self>, tx_fee: Option<_>| {
-      let mut payments = vec![];
-      for payment in &plan.payments {
-        // If we're solely estimating the fee, don't specify the actual amount
-        // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
-        // error
-        payments.push((
-          payment.address.0.clone(),
-          if tx_fee.is_none() { Self::DUST } else { payment.amount },
-        ));
-      }
+    plan: &Plan<Self>,
+    fee_rate: Fee,
+  ) -> Result<Option<u64>, NetworkError> {
+    Ok(
+      self
+        .make_signable_transaction(plan, fee_rate, true)
+        .await
+        .map(|signable| signable.needed_fee()),
+    )
+  }
 
-      match BSignableTransaction::new(
-        plan.inputs.iter().map(|input| input.output.clone()).collect(),
-        &payments,
-        plan.change.as_ref().map(|change| change.0.clone()),
-        None,
-        fee.0,
-      ) {
-        Ok(signable) => Some(signable),
-        Err(TransactionError::NoInputs) => {
-          panic!("trying to create a bitcoin transaction without inputs")
-        }
-        // No outputs left and the change isn't worth enough
-        Err(TransactionError::NoOutputs) => None,
-        // amortize_fee removes payments which fall below the dust threshold
-        Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
-        Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
-        Err(TransactionError::TooLowFee) => {
-          panic!("created a transaction whose fee is below the minimum")
-        }
-        Err(TransactionError::NotEnoughFunds) => {
-          if tx_fee.is_none() {
-            // Mot even enough funds to pay the fee
-            None
-          } else {
-            panic!("not enough funds for bitcoin TX despite amortizing the fee")
-          }
-        }
-        Err(TransactionError::TooLargeTransaction) => {
-          panic!("created a too large transaction despite limiting inputs/outputs")
-        }
-      }
-    };
-
-    let tx_fee = match signable(&plan, None) {
-      Some(tx) => tx.needed_fee(),
-      None => {
-        return Ok(PreparedSend {
-          tx: None,
-          post_fee_branches: drop_branches(&plan),
-          // This plan expects a change output valued at sum(inputs) - sum(outputs)
-          // Since we can no longer create this change output, it becomes an operating cost
-          // TODO: Look at input restoration to reduce this operating cost
-          operating_costs: operating_costs +
-            if plan.change.is_some() { plan.expected_change() } else { 0 },
-        });
-      }
-    };
-
-    let AmortizeFeeRes { post_fee_branches, mut operating_costs } =
-      amortize_fee(&mut plan, operating_costs, tx_fee);
-
-    let signable = signable(&plan, Some(tx_fee)).unwrap();
-
-    if plan.change.is_some() {
-      // Now that we've amortized the fee (which may raise the expected change value), grab it
-      // again
-      // Then, subtract the TX fee
-      //
-      // The first `expected_change` call gets the theoretically expected change from the
-      // theoretical Plan object, and accordingly doesn't subtract the fee (expecting the payments
-      // to bare it)
-      // This call wants the actual value, post-amortization over outputs, and since Plan is
-      // unaware of the fee, has to manually adjust
-      let on_chain_expected_change = plan.expected_change() - tx_fee;
-      // If the change value is less than the dust threshold, it becomes an operating cost
-      // This may be slightly inaccurate as dropping payments may reduce the fee, raising the
-      // change above dust
-      // That's fine since it'd have to be in a very precarious state AND then it's over-eager in
-      // tabulating costs
-      if on_chain_expected_change < Self::DUST {
-        operating_costs += on_chain_expected_change;
-      }
-    }
-
-    let plan_binding_input = *plan.inputs[0].output.outpoint();
-    let outputs = signable.outputs().to_vec();
-
-    Ok(PreparedSend {
-      tx: Some((
+  async fn signable_transaction(
+    &self,
+    _: usize,
+    plan: &Plan<Self>,
+    fee_rate: Fee,
+  ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
+    Ok(self.make_signable_transaction(plan, fee_rate, false).await.map(|signable| {
+      let plan_binding_input = *plan.inputs[0].output.outpoint();
+      let outputs = signable.outputs().to_vec();
+      (
         SignableTransaction { transcript: plan.transcript(), actual: signable },
         Eventuality { plan_binding_input, outputs },
-      )),
-      post_fee_branches,
-      operating_costs,
-    })
+      )
+    }))
   }
 
   async fn attempt_send(
@@ -650,7 +619,7 @@ impl Network for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn get_fee(&self) -> Self::Fee {
+  async fn get_fee(&self) -> Fee {
     Fee(1)
   }
 
