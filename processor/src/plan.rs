@@ -113,10 +113,16 @@ impl<N: Network> Plan<N> {
       transcript.append_message(b"input", input.id());
     }
 
+    // Don't transcript the payments as these will change between the intended Plan and the actual
+    // Plan, once various fee logics have executed
+    // TODO: Distinguish IntendedPlan and ActualPlan, or make actual payments a distinct field,
+    // letting us transcript this
+    /*
     transcript.domain_separate(b"payments");
     for payment in &self.payments {
       payment.transcript(&mut transcript);
     }
+    */
 
     if let Some(change) = &self.change {
       transcript.append_message(b"change", change.to_string());

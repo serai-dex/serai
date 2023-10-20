@@ -358,7 +358,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       });
     };
 
-    // Amortize a fee over the plan's payments
+    // Amortize the fee over the plan's payments
     let (post_fee_branches, mut operating_costs) = (|| {
       // If we're creating a change output, letting us recoup coins, amortize the operating costs
       // as well
@@ -417,9 +417,21 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       }
 
       // Drop payments now worth 0
-      plan.payments = plan.payments.drain(..).filter(|payment| payment.amount != 0).collect();
+      let plan_id = plan.id();
+      plan.payments = plan
+        .payments
+        .drain(..)
+        .filter(|payment| {
+          if payment.amount != 0 {
+            true
+          } else {
+            log::debug!("dropping dust payment from plan {}", hex::encode(&plan_id));
+            false
+          }
+        })
+        .collect();
 
-      // Sanity check the fee wa successfully amortized
+      // Sanity check the fee was successfully amortized
       let new_outputs = plan.payments.iter().map(|payment| payment.amount).sum::<u64>();
       assert!((new_outputs + total_fee) <= original_outputs);
 
