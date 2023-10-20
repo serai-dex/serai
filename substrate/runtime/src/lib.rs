@@ -17,6 +17,7 @@ pub use pallet_timestamp as timestamp;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
+pub use dex_pallet as dex;
 
 pub use validator_sets_pallet as validator_sets;
 pub use pallet_session as session;
@@ -42,10 +43,10 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, Perbill,
+  ApplyExtrinsicResult, Perbill, Permill,
 };
 
-use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
+use primitives::{PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount, system_address};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -53,12 +54,14 @@ use support::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
-  parameter_types, construct_runtime,
+  PalletId, ord_parameter_types, parameter_types, construct_runtime,
 };
 
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
+
+use dex::{MultiAssetIdConverter, MultiAssetIdConversionResult};
 
 /// An index to a block.
 pub type BlockNumber = u64;
@@ -142,6 +145,14 @@ parameter_types! {
     );
 
   pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
+
+  // PalletId has to be exactly 8 byte. Hence It is "DexPalet" instead of "DexPallet".
+  pub const DexPalletId: PalletId = PalletId(*b"DexPalet");
+  pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
+}
+
+ord_parameter_types! {
+  pub const AssetConversionOrigin: PublicKey = PublicKey::from(system_address(DexPalletId::get().0.as_slice()));
 }
 
 pub struct CallFilter;
@@ -243,6 +254,62 @@ impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+pub struct CoinConverter;
+impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
+  /// Returns the MultiAssetId representing the native currency of the chain.
+  fn get_native() -> Coin {
+    Coin::Serai
+  }
+
+  /// Returns true if the given MultiAssetId is the native currency.
+  fn is_native(coin: &Coin) -> bool {
+    coin.is_native()
+  }
+
+  /// If it's not native, returns the AssetId for the given MultiAssetId.
+  fn try_convert(coin: &Coin) -> MultiAssetIdConversionResult<Coin, Coin> {
+    if coin.is_native() {
+      MultiAssetIdConversionResult::Native
+    } else {
+      MultiAssetIdConversionResult::Converted(*coin)
+    }
+  }
+}
+
+impl dex::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Currency = Coins;
+  type Balance = SubstrateAmount;
+  type AssetBalance = SubstrateAmount;
+  // TODO review if this should be u64/u128 or u64/u256 (and rounding in general).
+  type HigherPrecisionBalance = u128;
+
+  type AssetId = Coin;
+  type MultiAssetId = Coin;
+  type MultiAssetIdConverter = CoinConverter;
+  type PoolAssetId = u32;
+
+  type Assets = Coins;
+  type PoolAssets = LiquidityTokens;
+
+  type LPFee = ConstU32<3>; // 0.3%
+  type PoolSetupFee = ConstU64<0>; // Asset class deposit fees are sufficient to prevent spam
+  type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
+  type MintMinLiquidity = ConstU64<10000>;
+
+  type MaxSwapPathLength = ConstU32<3>; // asset1 -> SRI -> asset2
+
+  type PalletId = DexPalletId;
+  type PoolSetupFeeReceiver = AssetConversionOrigin;
+  type AllowMultiAssetPools = ConstBool<false>;
+
+  type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
+  // TODO: Enabling following lines fails the clippy. "No BenchmarkHelper
+  // on trait dex::Config" :(.
+  // #[cfg(feature = "runtime-benchmarks")]
+  // type BenchmarkHelper = SeraiAssetBenchmarkHelper;
+}
+
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
@@ -342,6 +409,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Coins: coins,
+    Dex: dex,
 
     ValidatorSets: validator_sets,
     Session: session,

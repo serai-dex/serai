@@ -42,6 +42,8 @@ pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai
   Copy,
   PartialEq,
   Eq,
+  PartialOrd,
+  Ord,
   Hash,
   Debug,
   Serialize,
@@ -100,6 +102,10 @@ impl Coin {
       Coin::Dai => 8,
       Coin::Monero => 12,
     }
+  }
+
+  pub fn is_native(&self) -> bool {
+    matches!(self, Coin::Serai)
   }
 }
 
