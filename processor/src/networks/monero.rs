@@ -215,7 +215,7 @@ impl Monero {
     let median_fee = || {
       // TODO
       let _ = block_for_fee;
-      Fee { per_weight: 10000000, mask: 10000 }
+      Fee { per_weight: 1500000, mask: 10000 }
     };
     let fee_rate = median_fee();
 
