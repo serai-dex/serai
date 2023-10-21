@@ -8328,6 +8328,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-liquidity-tokens-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-dex-pallet",
+ "serai-primitives",
+ "sp-core",
+]
+
+[[package]]
 name = "serai-message-queue"
 version = "0.1.0"
 dependencies = [
@@ -8545,6 +8558,7 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-in-instructions-pallet",
+ "serai-liquidity-tokens-pallet",
  "serai-primitives",
  "serai-signals-pallet",
  "serai-validator-sets-pallet",

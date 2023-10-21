@@ -156,6 +156,24 @@ pub trait Assets<AccountId>: Sized {
   fn transfer(asset: Self::AssetId, from: &AccountId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
 }
 
+/// Liquidity tokens trait for Dex pallet.
+pub trait LiquidityTokens<AccountId>: Sized {
+  /// Amount type.
+  type Balance: Balance;
+
+  /// Asset identifier.
+  type AssetId: AssetId;
+
+  /// Mints `amount` to `to`.
+  fn mint_into(token: Self::AssetId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+
+  /// Burns `amount` from `from`.
+  fn burn_from(token: Self::AssetId, from: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+
+  /// Returns total supply for `token`.
+  fn total_issuance(token: Self::AssetId) -> Self::Balance;
+}
+
 /// An implementation of MultiAssetId that can be either Native or an asset.
 #[derive(Decode, Encode, Default, MaxEncodedLen, TypeInfo, Clone, Copy, Debug)]
 pub enum NativeOrAssetId<AssetId>

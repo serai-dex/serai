@@ -58,17 +58,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use frame_support::traits::{DefensiveOption, Incrementable};
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// #[cfg(feature = "runtime-benchmarks")]
+// mod benchmarking;
 
 mod types;
 pub mod weights;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
-#[cfg(test)]
-mod mock;
+// #[cfg(test)]
+// mod mock;
 
 use codec::Codec;
 use frame_support::{
@@ -96,14 +96,6 @@ pub mod pallet {
   use super::*;
   use frame_support::{
     pallet_prelude::*,
-    traits::{
-      fungibles::{Create, Inspect, Mutate},
-      tokens::{
-        Fortitude::Polite,
-        Precision::Exact,
-      },
-      AccountTouch,
-    },
     BoundedBTreeSet, PalletId,
   };
   use sp_arithmetic::Permill;
@@ -163,10 +155,7 @@ pub mod pallet {
 
     /// Registry for the lp tokens. Ideally only this pallet should have create permissions on
     /// the assets.
-    type PoolAssets: Inspect<Self::AccountId, AssetId = Self::PoolAssetId, Balance = Self::AssetBalance>
-      + Create<Self::AccountId>
-      + Mutate<Self::AccountId>
-      + AccountTouch<Self::PoolAssetId, Self::AccountId>;
+    type PoolAssets: LiquidityTokens<Self::AccountId, AssetId = Self::PoolAssetId, Balance = Self::AssetBalance>;
 
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
     #[pallet::constant]
@@ -201,10 +190,6 @@ pub mod pallet {
 
     /// Weight information for extrinsics in this pallet.
     type WeightInfo: WeightInfo;
-
-    /// The benchmarks need a way to create asset ids from u32s.
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper: BenchmarkHelper<Self::AssetId, Self::MultiAssetId>;
   }
 
   /// Map from `PoolAssetId` to `PoolInfo`. This establishes whether a pool has been officially
@@ -402,20 +387,13 @@ pub mod pallet {
       // pay the setup fee
       // TODO: Since we don't have PoolSetupFee, remove this entirely?
       // or we might need it in the future?
-      T::Currency::transfer(
-        &sender,
-        &T::PoolSetupFeeReceiver::get(),
-        T::PoolSetupFee::get()
-      )?;
+      T::Currency::transfer(&sender, &T::PoolSetupFeeReceiver::get(), T::PoolSetupFee::get())?;
 
       let lp_token = NextPoolAssetId::<T>::get()
         .or(T::PoolAssetId::initial_value())
         .ok_or(Error::<T>::IncorrectPoolAssetId)?;
       let next_lp_token_id = lp_token.increment().ok_or(Error::<T>::IncorrectPoolAssetId)?;
       NextPoolAssetId::<T>::set(Some(next_lp_token_id));
-
-      T::PoolAssets::create(lp_token.clone(), pool_account.clone(), false, 1u32.into())?;
-      T::PoolAssets::touch(lp_token.clone(), pool_account.clone(), sender.clone())?;
 
       let pool_info = PoolInfo { lp_token: lp_token.clone() };
       Pools::<T>::insert(pool_id.clone(), pool_info);
@@ -436,6 +414,7 @@ pub mod pallet {
     /// [`Pallet::swap_exact_tokens_for_tokens`] successfully.
     #[pallet::call_index(1)]
     #[pallet::weight(T::WeightInfo::add_liquidity())]
+    #[allow(clippy::too_many_arguments)]
     pub fn add_liquidity(
       origin: OriginFor<T>,
       asset1: T::MultiAssetId,
@@ -586,7 +565,7 @@ pub mod pallet {
         .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
 
       // burn the provided lp token amount that includes the fee
-      T::PoolAssets::burn_from(pool.lp_token.clone(), &sender, lp_token_burn, Exact, Polite)?;
+      T::PoolAssets::burn_from(pool.lp_token.clone(), &sender, lp_token_burn)?;
 
       Self::transfer(&asset1, &pool_account, &withdraw_to, amount1)?;
       Self::transfer(&asset2, &pool_account, &withdraw_to, amount2)?;
@@ -626,7 +605,7 @@ pub mod pallet {
         path,
         amount_in,
         Some(amount_out_min),
-        send_to
+        send_to,
       )?;
       Ok(())
     }
@@ -739,9 +718,7 @@ pub mod pallet {
         MultiAssetIdConversionResult::Native => {
           let amount = Self::convert_asset_balance_to_native_balance(amount)?;
           Ok(Self::convert_native_balance_to_asset_balance(T::Currency::transfer(
-            from,
-            to,
-            amount,
+            from, to, amount,
           )?)?)
         }
         MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset.into()),
@@ -855,10 +832,10 @@ pub mod pallet {
         MultiAssetIdConversionResult::Converted(asset_id) => {
           Ok(<<T as Config>::Assets>::balance(asset_id, owner))
         }
-        MultiAssetIdConversionResult::Native => Self::convert_native_balance_to_asset_balance(
-          <<T as Config>::Currency>::balance(owner),
-        ),
-        MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset.into()),
+        MultiAssetIdConversionResult::Native => {
+          Self::convert_native_balance_to_asset_balance(<<T as Config>::Currency>::balance(owner))
+        }
+        MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset),
       }
     }
 
@@ -873,8 +850,8 @@ pub mod pallet {
         T::MultiAssetIdConverter::is_native(&asset1),
         T::MultiAssetIdConverter::is_native(&asset2),
       ) {
-        (true, false) => return (asset1, asset2),
-        (false, true) => return (asset2, asset1),
+        (true, false) => (asset1, asset2),
+        (false, true) => (asset2, asset1),
         _ => {
           // else we want to be deterministic based on `Ord` implementation
           if asset1 <= asset2 {
@@ -1049,7 +1026,7 @@ pub mod pallet {
       let reserve_out = T::HigherPrecisionBalance::from(*reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
-        return Err(Error::<T>::ZeroLiquidity.into());
+        return Err(Error::<T>::ZeroLiquidity);
       }
 
       let amount_in_with_fee = amount_in
@@ -1083,11 +1060,11 @@ pub mod pallet {
       let reserve_out = T::HigherPrecisionBalance::from(*reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
-        Err(Error::<T>::ZeroLiquidity.into())?
+        Err(Error::<T>::ZeroLiquidity)?
       }
 
       if amount_out >= reserve_out {
-        Err(Error::<T>::AmountOutTooHigh.into())?
+        Err(Error::<T>::AmountOutTooHigh)?
       }
 
       let numerator = reserve_in

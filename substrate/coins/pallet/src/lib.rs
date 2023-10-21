@@ -14,14 +14,14 @@ pub mod pallet {
 
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
-  use dex_pallet::{Currency, Assets};
+  use dex_pallet::{Currency, Assets, Config as DexConfig};
 
   use serai_primitives::*;
   pub use coins_primitives as primitives;
   use primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> + TpConfig {
+  pub trait Config: frame_system::Config<AccountId = Public> + TpConfig + DexConfig<Balance = SubstrateAmount, AssetId = Coin> {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -217,7 +217,7 @@ pub mod pallet {
   }
 
   impl<T: Config> Currency<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
+    type Balance = T::Balance;
 
     fn balance(of: &Public) -> Self::Balance {
       Self::balance(*of, Coin::Serai).0
@@ -236,8 +236,8 @@ pub mod pallet {
   }
 
   impl<T: Config> Assets<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
-    type AssetId = Coin;
+    type Balance = T::Balance;
+    type AssetId = T::AssetId;
 
     fn balance(coin: Self::AssetId, of: &Public) -> Self::Balance {
       Self::balance(*of, coin).0

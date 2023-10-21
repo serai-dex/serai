@@ -46,6 +46,7 @@ pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-fea
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../coins/pallet", default-features = false }
+liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../liquidity-tokens/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../dex/pallet", default-features = false }
 
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets/pallet", default-features = false }
@@ -101,6 +102,7 @@ std = [
   "pallet-transaction-payment/std",
 
   "coins-pallet/std",
+  "liquidity-tokens-pallet/std",
   "dex-pallet/std",
 
   "validator-sets-pallet/std",

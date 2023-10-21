@@ -17,6 +17,7 @@ pub use pallet_timestamp as timestamp;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
+pub use liquidity_tokens_pallet as liquidity_tokens;
 pub use dex_pallet as dex;
 
 pub use validator_sets_pallet as validator_sets;
@@ -152,7 +153,7 @@ parameter_types! {
 }
 
 ord_parameter_types! {
-  pub const AssetConversionOrigin: PublicKey = PublicKey::from(system_address(DexPalletId::get().0.as_slice()));
+  pub const AssetConversionOrigin: PublicKey = PublicKey::from(system_address(b"DexPalet"));
 }
 
 pub struct CallFilter;
@@ -254,6 +255,10 @@ impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl liquidity_tokens::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
 pub struct CoinConverter;
 impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
   /// Returns the MultiAssetId representing the native currency of the chain.
@@ -304,10 +309,6 @@ impl dex::Config for Runtime {
   type AllowMultiAssetPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
-  // TODO: Enabling following lines fails the clippy. "No BenchmarkHelper
-  // on trait dex::Config" :(.
-  // #[cfg(feature = "runtime-benchmarks")]
-  // type BenchmarkHelper = SeraiAssetBenchmarkHelper;
 }
 
 impl validator_sets::Config for Runtime {
@@ -409,6 +410,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Coins: coins,
+    LiquidityTokens: liquidity_tokens,
     Dex: dex,
 
     ValidatorSets: validator_sets,
