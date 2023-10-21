@@ -14,6 +14,8 @@ pub mod pallet {
 
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
+  use dex_pallet::{Currency, Assets};
+
   use serai_primitives::*;
   pub use coins_primitives as primitives;
   use primitives::*;
@@ -211,6 +213,44 @@ pub mod pallet {
       let from = ensure_signed(origin)?;
       Self::burn_non_sri(from, instruction)?;
       Ok(())
+    }
+  }
+
+  impl<T: Config> Currency<T::AccountId> for Pallet<T> {
+    type Balance = SubstrateAmount;
+
+    fn balance(of: &Public) -> Self::Balance {
+      Self::balance(*of, Coin::Serai).0
+    }
+
+    /// TODO: make sure of coin precision here.
+    fn minimum_balance() -> Self::Balance {
+      1
+    }
+
+    fn transfer(from: &Public, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+      let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
+      Self::transfer_internal(*from, *to, balance)?;
+      Ok(amount)
+    }
+  }
+
+  impl<T: Config> Assets<T::AccountId> for Pallet<T> {
+    type Balance = SubstrateAmount;
+    type AssetId = Coin;
+
+    fn balance(coin: Self::AssetId, of: &Public) -> Self::Balance {
+      Self::balance(*of, coin).0
+    }
+
+    fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+      1
+    }
+
+    fn transfer(coin: Self::AssetId, from: &Public, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+      let balance = Balance { coin, amount: Amount(amount) };
+      Self::transfer_internal(*from, *to, balance)?;
+      Ok(amount)
     }
   }
 

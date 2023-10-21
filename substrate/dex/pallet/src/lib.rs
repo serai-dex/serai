@@ -97,14 +97,12 @@ pub mod pallet {
   use frame_support::{
     pallet_prelude::*,
     traits::{
-      fungible::{Inspect as InspectFungible, Mutate as MutateFungible},
       fungibles::{Create, Inspect, Mutate},
       tokens::{
         Fortitude::Polite,
         Precision::Exact,
-        Preservation::{Expendable, Preserve},
       },
-      AccountTouch, ContainsPair,
+      AccountTouch,
     },
     BoundedBTreeSet, PalletId,
   };
@@ -123,8 +121,7 @@ pub mod pallet {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
     /// Currency type that this works on.
-    type Currency: InspectFungible<Self::AccountId, Balance = Self::Balance>
-      + MutateFungible<Self::AccountId>;
+    type Currency: Currency<Self::AccountId, Balance = Self::Balance>;
 
     /// The `Currency::Balance` type of the native currency.
     type Balance: Balance;
@@ -162,10 +159,7 @@ pub mod pallet {
     type PoolAssetId: AssetId + PartialOrd + Incrementable + From<u32>;
 
     /// Registry for the assets.
-    type Assets: Inspect<Self::AccountId, AssetId = Self::AssetId, Balance = Self::AssetBalance>
-      + Mutate<Self::AccountId>
-      + AccountTouch<Self::AssetId, Self::AccountId>
-      + ContainsPair<Self::AssetId, Self::AccountId>;
+    type Assets: Assets<Self::AccountId, AssetId = Self::AssetId, Balance = Self::AssetBalance>;
 
     /// Registry for the lp tokens. Ideally only this pallet should have create permissions on
     /// the assets.
@@ -397,7 +391,7 @@ pub mod pallet {
       // prepare pool_id
       let pool_id = Self::get_pool_id(asset1, asset2);
       ensure!(!Pools::<T>::contains_key(&pool_id), Error::<T>::PoolExists);
-      let (asset1, asset2) = &pool_id;
+      let (asset1, _) = &pool_id;
       if !T::AllowMultiAssetPools::get() && !T::MultiAssetIdConverter::is_native(asset1) {
         Err(Error::<T>::PoolMustContainNativeCurrency)?;
       }
@@ -406,32 +400,13 @@ pub mod pallet {
       frame_system::Pallet::<T>::inc_providers(&pool_account);
 
       // pay the setup fee
+      // TODO: Since we don't have PoolSetupFee, remove this entirely?
+      // or we might need it in the future?
       T::Currency::transfer(
         &sender,
         &T::PoolSetupFeeReceiver::get(),
-        T::PoolSetupFee::get(),
-        Preserve,
+        T::PoolSetupFee::get()
       )?;
-
-      // try to convert both assets
-      match T::MultiAssetIdConverter::try_convert(asset1) {
-        MultiAssetIdConversionResult::Converted(asset) => {
-          if !T::Assets::contains(&asset, &pool_account) {
-            T::Assets::touch(asset, pool_account.clone(), sender.clone())?
-          }
-        }
-        MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset)?,
-        MultiAssetIdConversionResult::Native => (),
-      }
-      match T::MultiAssetIdConverter::try_convert(asset2) {
-        MultiAssetIdConversionResult::Converted(asset) => {
-          if !T::Assets::contains(&asset, &pool_account) {
-            T::Assets::touch(asset, pool_account.clone(), sender.clone())?
-          }
-        }
-        MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset)?,
-        MultiAssetIdConversionResult::Native => (),
-      }
 
       let lp_token = NextPoolAssetId::<T>::get()
         .or(T::PoolAssetId::initial_value())
@@ -519,8 +494,8 @@ pub mod pallet {
       Self::validate_minimal_amount(amount2.saturating_add(reserve2), asset2)
         .map_err(|_| Error::<T>::AmountTwoLessThanMinimal)?;
 
-      Self::transfer(asset1, &sender, &pool_account, amount1, true)?;
-      Self::transfer(asset2, &sender, &pool_account, amount2, true)?;
+      Self::transfer(asset1, &sender, &pool_account, amount1)?;
+      Self::transfer(asset2, &sender, &pool_account, amount2)?;
 
       let total_supply = T::PoolAssets::total_issuance(pool.lp_token.clone());
 
@@ -613,8 +588,8 @@ pub mod pallet {
       // burn the provided lp token amount that includes the fee
       T::PoolAssets::burn_from(pool.lp_token.clone(), &sender, lp_token_burn, Exact, Polite)?;
 
-      Self::transfer(&asset1, &pool_account, &withdraw_to, amount1, false)?;
-      Self::transfer(&asset2, &pool_account, &withdraw_to, amount2, false)?;
+      Self::transfer(&asset1, &pool_account, &withdraw_to, amount1)?;
+      Self::transfer(&asset2, &pool_account, &withdraw_to, amount2)?;
 
       Self::deposit_event(Event::LiquidityRemoved {
         who: sender,
@@ -644,7 +619,6 @@ pub mod pallet {
       amount_in: T::AssetBalance,
       amount_out_min: T::AssetBalance,
       send_to: T::AccountId,
-      keep_alive: bool,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
       Self::do_swap_exact_tokens_for_tokens(
@@ -652,8 +626,7 @@ pub mod pallet {
         path,
         amount_in,
         Some(amount_out_min),
-        send_to,
-        keep_alive,
+        send_to
       )?;
       Ok(())
     }
@@ -672,7 +645,6 @@ pub mod pallet {
       amount_out: T::AssetBalance,
       amount_in_max: T::AssetBalance,
       send_to: T::AccountId,
-      keep_alive: bool,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
       Self::do_swap_tokens_for_exact_tokens(
@@ -681,7 +653,6 @@ pub mod pallet {
         amount_out,
         Some(amount_in_max),
         send_to,
-        keep_alive,
       )?;
       Ok(())
     }
@@ -692,8 +663,7 @@ pub mod pallet {
     /// If an `amount_out_min` is specified, it will return an error if it is unable to acquire
     /// the amount desired.
     ///
-    /// Withdraws the `path[0]` asset from `sender`, deposits the `path[1]` asset to `send_to`,
-    /// respecting `keep_alive`.
+    /// Withdraws the `path[0]` asset from `sender`, deposits the `path[1]` asset to `send_to`.
     ///
     /// If successful, returns the amount of `path[1]` acquired for the `amount_in`.
     pub fn do_swap_exact_tokens_for_tokens(
@@ -702,7 +672,6 @@ pub mod pallet {
       amount_in: T::AssetBalance,
       amount_out_min: Option<T::AssetBalance>,
       send_to: T::AccountId,
-      keep_alive: bool,
     ) -> Result<T::AssetBalance, DispatchError> {
       ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
       if let Some(amount_out_min) = amount_out_min {
@@ -719,7 +688,7 @@ pub mod pallet {
         ensure!(amount_out >= amount_out_min, Error::<T>::ProvidedMinimumNotSufficientForSwap);
       }
 
-      Self::do_swap(sender, &amounts, path, send_to, keep_alive)?;
+      Self::do_swap(sender, &amounts, path, send_to)?;
       Ok(amount_out)
     }
 
@@ -728,7 +697,6 @@ pub mod pallet {
     /// too costly.
     ///
     /// Withdraws `path[0]` asset from `sender`, deposits the `path[1]` asset to `send_to`,
-    /// respecting `keep_alive`.
     ///
     /// If successful returns the amount of the `path[0]` taken to provide `path[1]`.
     pub fn do_swap_tokens_for_exact_tokens(
@@ -737,7 +705,6 @@ pub mod pallet {
       amount_out: T::AssetBalance,
       amount_in_max: Option<T::AssetBalance>,
       send_to: T::AccountId,
-      keep_alive: bool,
     ) -> Result<T::AssetBalance, DispatchError> {
       ensure!(amount_out > Zero::zero(), Error::<T>::ZeroAmount);
       if let Some(amount_in_max) = amount_in_max {
@@ -754,33 +721,27 @@ pub mod pallet {
         ensure!(amount_in <= amount_in_max, Error::<T>::ProvidedMaximumNotSufficientForSwap);
       }
 
-      Self::do_swap(sender, &amounts, path, send_to, keep_alive)?;
+      Self::do_swap(sender, &amounts, path, send_to)?;
       Ok(amount_in)
     }
 
-    /// Transfer an `amount` of `asset_id`, respecting the `keep_alive` requirements.
+    /// Transfer an `amount` of `asset_id`.
     fn transfer(
       asset_id: &T::MultiAssetId,
       from: &T::AccountId,
       to: &T::AccountId,
       amount: T::AssetBalance,
-      keep_alive: bool,
     ) -> Result<T::AssetBalance, DispatchError> {
       let result = match T::MultiAssetIdConverter::try_convert(asset_id) {
         MultiAssetIdConversionResult::Converted(asset_id) => {
-          T::Assets::transfer(asset_id, from, to, amount, Expendable)
+          T::Assets::transfer(asset_id, from, to, amount)
         }
         MultiAssetIdConversionResult::Native => {
-          let preservation = match keep_alive {
-            true => Preserve,
-            false => Expendable,
-          };
           let amount = Self::convert_asset_balance_to_native_balance(amount)?;
           Ok(Self::convert_native_balance_to_asset_balance(T::Currency::transfer(
             from,
             to,
             amount,
-            preservation,
           )?)?)
         }
         MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset.into()),
@@ -824,7 +785,6 @@ pub mod pallet {
       amounts: &Vec<T::AssetBalance>,
       path: BoundedVec<T::MultiAssetId, T::MaxSwapPathLength>,
       send_to: T::AccountId,
-      keep_alive: bool,
     ) -> Result<(), DispatchError> {
       ensure!(amounts.len() > 1, Error::<T>::CorrespondenceError);
       if let Some([asset1, asset2]) = &path.get(0 .. 2) {
@@ -833,7 +793,7 @@ pub mod pallet {
         // amounts should always contain a corresponding element to path.
         let first_amount = amounts.first().ok_or(Error::<T>::CorrespondenceError)?;
 
-        Self::transfer(asset1, &sender, &pool_account, *first_amount, keep_alive)?;
+        Self::transfer(asset1, &sender, &pool_account, *first_amount)?;
 
         let mut i = 0;
         let path_len = path.len() as u32;
@@ -857,7 +817,7 @@ pub mod pallet {
             Self::validate_minimal_amount(reserve_left, asset2)
               .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
 
-            Self::transfer(asset2, &pool_account, &to, *amount_out, true)?;
+            Self::transfer(asset2, &pool_account, &to, *amount_out)?;
           }
           i.saturating_inc();
         }
@@ -893,10 +853,10 @@ pub mod pallet {
     ) -> Result<T::AssetBalance, Error<T>> {
       match T::MultiAssetIdConverter::try_convert(asset) {
         MultiAssetIdConversionResult::Converted(asset_id) => {
-          Ok(<<T as Config>::Assets>::reducible_balance(asset_id, owner, Expendable, Polite))
+          Ok(<<T as Config>::Assets>::balance(asset_id, owner))
         }
         MultiAssetIdConversionResult::Native => Self::convert_native_balance_to_asset_balance(
-          <<T as Config>::Currency>::reducible_balance(owner, Expendable, Polite),
+          <<T as Config>::Currency>::balance(owner),
         ),
         MultiAssetIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedAsset.into()),
       }
@@ -1205,7 +1165,6 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiAssetId> f
     amount_in: T::HigherPrecisionBalance,
     amount_out_min: Option<T::HigherPrecisionBalance>,
     send_to: T::AccountId,
-    keep_alive: bool,
   ) -> Result<T::HigherPrecisionBalance, DispatchError> {
     let path = path.try_into().map_err(|_| Error::<T>::PathError)?;
     let amount_out_min = amount_out_min.map(Self::convert_hpb_to_asset_balance).transpose()?;
@@ -1215,7 +1174,6 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiAssetId> f
       Self::convert_hpb_to_asset_balance(amount_in)?,
       amount_out_min,
       send_to,
-      keep_alive,
     )?;
     Ok(amount_out.into())
   }
@@ -1226,7 +1184,6 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiAssetId> f
     amount_out: T::HigherPrecisionBalance,
     amount_in_max: Option<T::HigherPrecisionBalance>,
     send_to: T::AccountId,
-    keep_alive: bool,
   ) -> Result<T::HigherPrecisionBalance, DispatchError> {
     let path = path.try_into().map_err(|_| Error::<T>::PathError)?;
     let amount_in_max = amount_in_max.map(Self::convert_hpb_to_asset_balance).transpose()?;
@@ -1236,7 +1193,6 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiAssetId> f
       Self::convert_hpb_to_asset_balance(amount_out)?,
       amount_in_max,
       send_to,
-      keep_alive,
     )?;
     Ok(amount_in.into())
   }

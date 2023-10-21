@@ -93,7 +93,6 @@ pub trait Swap<AccountId, Balance, MultiAssetId> {
   /// the amount desired.
   ///
   /// Withdraws the `path[0]` asset from `sender`, deposits the `path[1]` asset to `send_to`,
-  /// respecting `keep_alive`.
   ///
   /// If successful, returns the amount of `path[1]` acquired for the `amount_in`.
   fn swap_exact_tokens_for_tokens(
@@ -102,7 +101,6 @@ pub trait Swap<AccountId, Balance, MultiAssetId> {
     amount_in: Balance,
     amount_out_min: Option<Balance>,
     send_to: AccountId,
-    keep_alive: bool,
   ) -> Result<Balance, DispatchError>;
 
   /// Take the `path[0]` asset and swap some amount for `amount_out` of the `path[1]`. If an
@@ -110,7 +108,6 @@ pub trait Swap<AccountId, Balance, MultiAssetId> {
   /// too costly.
   ///
   /// Withdraws `path[0]` asset from `sender`, deposits `path[1]` asset to `send_to`,
-  /// respecting `keep_alive`.
   ///
   /// If successful returns the amount of the `path[0]` taken to provide `path[1]`.
   fn swap_tokens_for_exact_tokens(
@@ -119,8 +116,44 @@ pub trait Swap<AccountId, Balance, MultiAssetId> {
     amount_out: Balance,
     amount_in_max: Option<Balance>,
     send_to: AccountId,
-    keep_alive: bool,
   ) -> Result<Balance, DispatchError>;
+}
+
+
+// TODO: Sized should be there?
+/// Native coin trait for Dex pallet.
+pub trait Currency<AccountId>: Sized {
+  /// Balance of an Account.
+  type Balance: Balance;
+
+  /// Returns the balance of an account.
+  fn balance(of: &AccountId) -> Self::Balance;
+
+  /// Returns the minimum allowed balance of an account
+  /// TODO: make sure of coin precision here?
+  fn minimum_balance() -> Self::Balance;
+
+  /// Transfers the given `amount` from `from` to `to`.
+  fn transfer(from: &AccountId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+}
+
+/// External coin trait for Dex pallet.
+pub trait Assets<AccountId>: Sized {
+  /// Balance of an Account.
+  type Balance: Balance;
+
+  /// Asset identifier.
+  type AssetId: AssetId;
+
+  /// Returns the balance of an account.
+  fn balance(asset: Self::AssetId, of: &AccountId) -> Self::Balance;
+
+  /// Returns the minimum allowed balance of an account
+  /// TODO: make sure of coin precision here?
+  fn minimum_balance(asset: Self::AssetId) -> Self::Balance;
+
+  /// Transfers the given `amount` from `from` to `to`.
+  fn transfer(asset: Self::AssetId, from: &AccountId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
 }
 
 /// An implementation of MultiAssetId that can be either Native or an asset.
@@ -135,6 +168,9 @@ where
   /// A non-native asset id.
   Asset(AssetId),
 }
+
+// TODO: get rid of all this NativeOrAssetId code and move the implementation from runtime
+// to here.
 
 impl<AssetId: Ord> From<AssetId> for NativeOrAssetId<AssetId> {
   fn from(asset: AssetId) -> Self {

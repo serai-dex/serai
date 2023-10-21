@@ -8179,6 +8179,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
+ "serai-dex-pallet",
  "serai-primitives",
  "sp-core",
  "sp-runtime",
