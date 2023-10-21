@@ -47,7 +47,9 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill, Permill,
 };
 
-use primitives::{PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount, system_address};
+use primitives::{
+  PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount, system_address,
+};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},

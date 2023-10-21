@@ -21,7 +21,11 @@ pub mod pallet {
   use primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> + TpConfig + DexConfig<Balance = SubstrateAmount, AssetId = Coin> {
+  pub trait Config:
+    frame_system::Config<AccountId = Public>
+    + TpConfig
+    + DexConfig<Balance = SubstrateAmount, AssetId = Coin>
+  {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -228,7 +232,11 @@ pub mod pallet {
       1
     }
 
-    fn transfer(from: &Public, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+    fn transfer(
+      from: &Public,
+      to: &Public,
+      amount: Self::Balance,
+    ) -> Result<Self::Balance, DispatchError> {
       let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
       Self::transfer_internal(*from, *to, balance)?;
       Ok(amount)
@@ -247,7 +255,12 @@ pub mod pallet {
       1
     }
 
-    fn transfer(coin: Self::AssetId, from: &Public, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+    fn transfer(
+      coin: Self::AssetId,
+      from: &Public,
+      to: &Public,
+      amount: Self::Balance,
+    ) -> Result<Self::Balance, DispatchError> {
       let balance = Balance { coin, amount: Amount(amount) };
       Self::transfer_internal(*from, *to, balance)?;
       Ok(amount)

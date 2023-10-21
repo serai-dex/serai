@@ -20,7 +20,8 @@
 
 //! # Substrate Asset Conversion pallet
 //!
-//! Substrate Asset Conversion pallet based on the [Uniswap V2](https://github.com/Uniswap/v2-core) logic.
+//! Substrate Asset Conversion pallet based on the [Uniswap V2](https://github.com/Uniswap/v2-core)
+//! logic.
 //!
 //! ## Overview
 //!
@@ -50,7 +51,12 @@
 //!
 //! ```text
 //! curl -sS -H "Content-Type: application/json" -d \
-//! '{"id":1, "jsonrpc":"2.0", "method": "state_call", "params": ["AssetConversionApi_quote_price_tokens_for_exact_tokens", "0x0101000000000000000000000011000000000000000000"]}' \
+//! '{"id":1, "jsonrpc":"2.0", "method": "state_call",
+//!   "params": [
+//!       "AssetConversionApi_quote_price_tokens_for_exact_tokens",
+//!       "0x0101000000000000000000000011000000000000000000"
+//!   ]
+//! }' \
 //! http://localhost:9933/
 //! ```
 //! (This can be run against the kitchen sync node in the `node` folder of this repo.)
@@ -94,10 +100,7 @@ pub use weights::WeightInfo;
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
-  use frame_support::{
-    pallet_prelude::*,
-    BoundedBTreeSet, PalletId,
-  };
+  use frame_support::{pallet_prelude::*, BoundedBTreeSet, PalletId};
   use sp_arithmetic::Permill;
   use sp_runtime::{
     traits::{IntegerSquareRoot, One, Zero},
@@ -155,7 +158,11 @@ pub mod pallet {
 
     /// Registry for the lp tokens. Ideally only this pallet should have create permissions on
     /// the assets.
-    type PoolAssets: LiquidityTokens<Self::AccountId, AssetId = Self::PoolAssetId, Balance = Self::AssetBalance>;
+    type PoolAssets: LiquidityTokens<
+      Self::AccountId,
+      AssetId = Self::PoolAssetId,
+      Balance = Self::AssetBalance,
+    >;
 
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
     #[pallet::constant]
@@ -1187,13 +1194,23 @@ sp_api::decl_runtime_apis! {
     ///
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_in_max` to control slippage.)
-    fn quote_price_tokens_for_exact_tokens(asset1: AssetId, asset2: AssetId, amount: AssetBalance, include_fee: bool) -> Option<Balance>;
+    fn quote_price_tokens_for_exact_tokens(
+      asset1: AssetId,
+      asset2: AssetId,
+      amount: AssetBalance,
+      include_fee: bool
+    ) -> Option<Balance>;
 
     /// Provides a quote for [`Pallet::swap_exact_tokens_for_tokens`].
     ///
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_out_min` to control slippage.)
-    fn quote_price_exact_tokens_for_tokens(asset1: AssetId, asset2: AssetId, amount: AssetBalance, include_fee: bool) -> Option<Balance>;
+    fn quote_price_exact_tokens_for_tokens(
+      asset1: AssetId,
+      asset2: AssetId,
+      amount: AssetBalance,
+      include_fee: bool
+    ) -> Option<Balance>;
 
     /// Returns the size of the liquidity pool for the given asset pair.
     fn get_reserves(asset1: AssetId, asset2: AssetId) -> Option<(Balance, Balance)>;

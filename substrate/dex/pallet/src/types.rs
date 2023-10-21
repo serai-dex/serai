@@ -119,7 +119,6 @@ pub trait Swap<AccountId, Balance, MultiAssetId> {
   ) -> Result<Balance, DispatchError>;
 }
 
-
 // TODO: Sized should be there?
 /// Native coin trait for Dex pallet.
 pub trait Currency<AccountId>: Sized {
@@ -134,7 +133,11 @@ pub trait Currency<AccountId>: Sized {
   fn minimum_balance() -> Self::Balance;
 
   /// Transfers the given `amount` from `from` to `to`.
-  fn transfer(from: &AccountId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+  fn transfer(
+    from: &AccountId,
+    to: &AccountId,
+    amount: Self::Balance,
+  ) -> Result<Self::Balance, DispatchError>;
 }
 
 /// External coin trait for Dex pallet.
@@ -153,7 +156,12 @@ pub trait Assets<AccountId>: Sized {
   fn minimum_balance(asset: Self::AssetId) -> Self::Balance;
 
   /// Transfers the given `amount` from `from` to `to`.
-  fn transfer(asset: Self::AssetId, from: &AccountId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+  fn transfer(
+    asset: Self::AssetId,
+    from: &AccountId,
+    to: &AccountId,
+    amount: Self::Balance,
+  ) -> Result<Self::Balance, DispatchError>;
 }
 
 /// Liquidity tokens trait for Dex pallet.
@@ -165,10 +173,18 @@ pub trait LiquidityTokens<AccountId>: Sized {
   type AssetId: AssetId;
 
   /// Mints `amount` to `to`.
-  fn mint_into(token: Self::AssetId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+  fn mint_into(
+    token: Self::AssetId,
+    to: &AccountId,
+    amount: Self::Balance,
+  ) -> Result<Self::Balance, DispatchError>;
 
   /// Burns `amount` from `from`.
-  fn burn_from(token: Self::AssetId, from: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+  fn burn_from(
+    token: Self::AssetId,
+    from: &AccountId,
+    amount: Self::Balance,
+  ) -> Result<Self::Balance, DispatchError>;
 
   /// Returns total supply for `token`.
   fn total_issuance(token: Self::AssetId) -> Self::Balance;
