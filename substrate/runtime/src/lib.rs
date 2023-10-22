@@ -18,7 +18,6 @@ pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
 
-pub use staking_pallet as staking;
 pub use validator_sets_pallet as validator_sets;
 pub use pallet_session as session;
 
@@ -169,7 +168,6 @@ impl Contains<RuntimeCall> for CallFilter {
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
-      RuntimeCall::Staking(call) => !matches!(call, staking::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
 
@@ -248,9 +246,6 @@ impl coins::Config for Runtime {
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
-impl staking::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
@@ -265,7 +260,7 @@ impl session::Config for Runtime {
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Babe;
   type NextSessionRotation = Babe;
-  type SessionManager = Staking;
+  type SessionManager = ValidatorSets;
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
@@ -349,7 +344,6 @@ construct_runtime!(
     Coins: coins,
 
     ValidatorSets: validator_sets,
-    Staking: staking,
     Session: session,
 
     InInstructions: in_instructions,

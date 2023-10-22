@@ -29,6 +29,8 @@ pallet-session = { git = "https://github.com/serai-dex/substrate", default-featu
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
 
+coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+
 [features]
 std = [
   "scale/std",
@@ -47,6 +49,8 @@ std = [
 
   "serai-primitives/std",
   "validator-sets-primitives/std",
+
+  "coins-pallet/std",
 ]
 
 runtime-benchmarks = [

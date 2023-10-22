@@ -8567,7 +8567,6 @@ dependencies = [
  "serai-in-instructions-pallet",
  "serai-primitives",
  "serai-signals-pallet",
- "serai-staking-pallet",
  "serai-validator-sets-pallet",
  "sp-api",
  "sp-authority-discovery",
@@ -8600,22 +8599,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serai-staking-pallet"
-version = "0.1.0"
-dependencies = [
- "frame-support",
- "frame-system",
- "pallet-session",
- "parity-scale-codec",
- "scale-info",
- "serai-coins-pallet",
- "serai-primitives",
- "serai-validator-sets-pallet",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "serai-validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
@@ -8624,6 +8607,7 @@ dependencies = [
  "pallet-session",
  "parity-scale-codec",
  "scale-info",
+ "serai-coins-pallet",
  "serai-primitives",
  "serai-validator-sets-primitives",
  "sp-application-crypto",

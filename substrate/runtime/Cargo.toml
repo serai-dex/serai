@@ -48,7 +48,6 @@ pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", d
 coins-pallet = { package = "serai-coins-pallet", path = "../coins/pallet", default-features = false }
 
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets/pallet", default-features = false }
-staking-pallet = { package = "serai-staking-pallet", path = "../staking/pallet", default-features = false }
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../in-instructions/pallet", default-features = false }
@@ -103,7 +102,6 @@ std = [
   "coins-pallet/std",
 
   "validator-sets-pallet/std",
-  "staking-pallet/std",
   "pallet-session/std",
 
   "in-instructions-pallet/std",

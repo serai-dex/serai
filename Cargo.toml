@@ -46,8 +46,6 @@ members = [
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
 
-  "substrate/staking/pallet",
-
   "substrate/signals/pallet",
 
   "substrate/runtime",
