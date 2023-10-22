@@ -25,26 +25,11 @@ use crate::{
 };
 
 #[rustfmt::skip]
-// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L27
-pub const MAX_STANDARD_TX_WEIGHT: u64 = 400_000;
-
-#[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
 // As the above notes, a lower amount may not be considered dust if contained in a SegWit output
 // This doesn't bother with delineation due to how marginal these values are, and because it isn't
 // worth the complexity to implement differentation
 pub const DUST: u64 = 546;
-
-#[rustfmt::skip]
-// The constant is from:
-// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.h#L56-L57
-// It's used here:
-// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5386-L5390
-// Peers won't relay TXs below the filter's fee rate, yet they calculate the fee not against weight yet vsize
-// https://github.com/bitcoin/bitcoin/blob/296735f7638749906243c9e203df7bd024493806/src/net_processing.cpp#L5721-L5732
-// And then the fee itself is fee per thousand units, not fee per unit
-// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/feerate.cpp#L23-L37
-pub const MIN_FEE_PER_KILO_VSIZE: u64 = 1000;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
@@ -198,10 +183,19 @@ impl SignableTransaction {
     // We only use 1 signature per input, and our inputs have a weight exceeding 20
     // Accordingly, our inputs' weight will always be greater than the cost of the signature ops
     let vsize = weight.div_ceil(4);
+    debug_assert_eq!(
+      u64::try_from(bitcoin::policy::get_virtual_tx_size(
+        weight.try_into().unwrap(),
+        tx_ins.len().try_into().unwrap()
+      ))
+      .unwrap(),
+      vsize
+    );
     // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
     // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
     // specified fee rate is too low to be valid
-    if needed_fee < ((MIN_FEE_PER_KILO_VSIZE * vsize) / 1000) {
+    // bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE is in sats/kilo-vbyte
+    if needed_fee < ((u64::from(bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE) * vsize) / 1000) {
       Err(TransactionError::TooLowFee)?;
     }
 
@@ -226,7 +220,7 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
-    if weight > MAX_STANDARD_TX_WEIGHT {
+    if weight > u64::from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT) {
       Err(TransactionError::TooLargeTransaction)?;
     }
 
