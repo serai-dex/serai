@@ -291,13 +291,30 @@ pub mod pallet {
   #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
-  // TODO: Expand
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    NewSet { set: ValidatorSet },
-    KeyGen { set: ValidatorSet, key_pair: KeyPair },
-    SetRetired { set: ValidatorSet },
+    NewSet {
+      set: ValidatorSet,
+    },
+    KeyGen {
+      set: ValidatorSet,
+      key_pair: KeyPair,
+    },
+    AllocationIncreased {
+      validator: T::AccountId,
+      network: NetworkId,
+      amount: Amount,
+    },
+    AllocationDecreased {
+      validator: T::AccountId,
+      network: NetworkId,
+      amount: Amount,
+      delayed_until: Option<Session>,
+    },
+    SetRetired {
+      set: ValidatorSet,
+    },
   }
 
   impl<T: Config> Pallet<T> {
@@ -502,6 +519,7 @@ pub mod pallet {
 
       // Increase the allocation now
       Self::set_allocation(network, account, Amount(new_allocation));
+      Self::deposit_event(Event::AllocationIncreased { validator: account, network, amount });
 
       if let Some(was_bft) = was_bft {
         if was_bft && (!Self::is_bft(network)) {
@@ -582,6 +600,12 @@ pub mod pallet {
             Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 - amount.0)),
           );
         }
+        Self::deposit_event(Event::AllocationDecreased {
+          validator: account,
+          network,
+          amount,
+          delayed_until: None,
+        });
         return Ok(true);
       }
 
@@ -603,6 +627,13 @@ pub mod pallet {
         (network, to_unlock_on, account),
         Some(Amount(existing.0 + amount.0)),
       );
+
+      Self::deposit_event(Event::AllocationDecreased {
+        validator: account,
+        network,
+        amount,
+        delayed_until: Some(to_unlock_on),
+      });
 
       Ok(false)
     }
