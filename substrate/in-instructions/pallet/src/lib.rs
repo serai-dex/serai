@@ -71,13 +71,17 @@ pub mod pallet {
     StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
-    fn execute(instruction: InInstructionWithBalance) -> Result<(), ()> {
+    // Use a dedicated transaction layer when executing this InInstruction
+    // This lets it individually error without causing any storage modifications
+    #[frame_support::transactional]
+    fn execute(instruction: InInstructionWithBalance) -> Result<(), DispatchError> {
       match instruction.instruction {
         InInstruction::Transfer(address) => {
-          Coins::<T>::mint(address.into(), instruction.balance).map_err(|_| ())
+          Coins::<T>::mint(address.into(), instruction.balance)?;
         }
         _ => panic!("unsupported instruction"),
       }
+      Ok(())
     }
   }
 
