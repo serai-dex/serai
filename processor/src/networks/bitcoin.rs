@@ -333,7 +333,6 @@ impl Bitcoin {
       }
     }
     fees.sort();
-    // Prefer the higher fee
     let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
 
     // The DUST constant documentation details a 5000 sat/kilo-vbyte minimum fee policy.

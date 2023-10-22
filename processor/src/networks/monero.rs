@@ -15,6 +15,7 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_serai::{
   Protocol,
+  ringct::RctType,
   transaction::Transaction,
   block::Block,
   rpc::{RpcError, HttpRpc, Rpc},
@@ -201,6 +202,27 @@ impl Monero {
     scanner
   }
 
+  async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
+    let mut fees = vec![];
+    for tx_hash in &block.txs {
+      let tx = self.get_transaction(tx_hash).await?;
+      // Only consider fees from RCT transactions, else the fee property read wouldn't be accurate
+      if tx.rct_signatures.rct_type() != RctType::Null {
+        continue;
+      }
+      // This isn't entirely accurate as Bulletproof TXs will have a higher weight than their
+      // serialization length
+      // It's likely 'good enough'
+      // TODO: Improve
+      fees.push(tx.rct_signatures.base.fee / u64::try_from(tx.serialize().len()).unwrap());
+    }
+    fees.sort();
+    let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
+
+    // TODO: Set a sane minimum fee
+    Ok(Fee { per_weight: fee.max(1500000), mask: 10000 })
+  }
+
   async fn make_signable_transaction(
     &self,
     block_number: usize,
@@ -212,12 +234,7 @@ impl Monero {
   ) -> Result<Option<(RecommendedTranscript, MSignableTransaction)>, NetworkError> {
     // TODO2: Use an fee representative of several blocks, cached inside Self
     let block_for_fee = self.get_block(block_number).await?;
-    let median_fee = || {
-      // TODO
-      let _ = block_for_fee;
-      Fee { per_weight: 1500000, mask: 10000 }
-    };
-    let fee_rate = median_fee();
+    let fee_rate = self.median_fee(&block_for_fee).await?;
 
     // Get the protocol for the specified block number
     // For now, this should just be v16, the latest deployed protocol, since there's no upcoming
@@ -377,6 +394,7 @@ impl Network for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   // 0.01 XMR
+  // TODO: Set a sane dust
   const DUST: u64 = 10000000000;
 
   // Monero doesn't require/benefit from tweaking
