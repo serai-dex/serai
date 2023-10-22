@@ -711,11 +711,7 @@ pub mod pallet {
         account,
         Balance { coin: Coin::Serai, amount },
       )?;
-      Self::deposit_event(Event::DeallocationClaimed {
-        validator: account,
-        network,
-        session,
-      });
+      Self::deposit_event(Event::DeallocationClaimed { validator: account, network, session });
       Ok(())
     }
   }

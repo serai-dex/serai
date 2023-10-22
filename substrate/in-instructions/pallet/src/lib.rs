@@ -122,9 +122,6 @@ pub mod pallet {
         instructions_hash: blake2_256(&batch.instructions.encode()),
       });
       for (i, instruction) in batch.instructions.into_iter().enumerate() {
-        // TODO: Check this balance's coin belongs to this network
-        // If they don't, the validator set should be completely slashed, without question
-
         if Self::execute(instruction).is_err() {
           Self::deposit_event(Event::InstructionFailure {
             network: batch.network,
@@ -199,6 +196,20 @@ pub mod pallet {
       }
       if batch.batch.id > expected {
         Err(InvalidTransaction::Future)?;
+      }
+
+      // Verify all Balances in this Batch are for this network
+      for instruction in &batch.batch.instructions {
+        // Verify this coin is for this network
+        // If this is ever hit, it means the validator set has turned malicious and should be fully
+        // slashed
+        // Because we have an error here, no validator set which turns malicious should execute
+        // this code path
+        // Accordingly, there's no value in writing code to fully slash the network, when such an
+        // even would require a runtime upgrade to fully resolve anyways
+        if instruction.balance.coin.network() != batch.batch.network {
+          Err(InvalidTransaction::Custom(0))?;
+        }
       }
 
       ValidTransaction::with_tag_prefix("in-instructions")
