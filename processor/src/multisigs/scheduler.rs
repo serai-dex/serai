@@ -312,17 +312,18 @@ impl<N: Network> Scheduler<N> {
     let utxos = utxo_chunks.remove(0);
 
     // If the last chunk exists and only has one output, don't try aggregating it
-    // Just immediately consider it another output
+    // Set it to be restored to UTXO set
+    let mut to_restore = None;
     if let Some(mut chunk) = utxo_chunks.pop() {
       if chunk.len() == 1 {
-        self.utxos.push(chunk.pop().unwrap());
+        to_restore = Some(chunk.pop().unwrap());
       } else {
         utxo_chunks.push(chunk);
       }
     }
 
     for chunk in utxo_chunks.drain(..) {
-      log::debug!("aggregating a chunk of {} inputs", N::MAX_INPUTS);
+      log::debug!("aggregating a chunk of {} inputs", chunk.len());
       plans.push(Plan {
         key: self.key,
         inputs: chunk,
@@ -375,6 +376,14 @@ impl<N: Network> Scheduler<N> {
         payments: vec![],
         change: Some(N::change_address(key_for_any_change)),
       });
+    }
+
+    // If there's a UTXO to restore, restore it
+    // This is down now as if there is a to_restore output, and it was inserted into self.utxos
+    // earlier, self.utxos.len() may become `N::MAX_INPUTS + 1`
+    // The prior block requires the len to be `<= N::MAX_INPUTS`
+    if let Some(to_restore) = to_restore {
+      self.utxos.push(to_restore);
     }
 
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
