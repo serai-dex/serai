@@ -115,9 +115,6 @@ pub mod pallet {
 
       let batch = batch.batch;
 
-      LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
-
-      LastBatch::<T>::insert(batch.network, batch.id);
       LatestNetworkBlock::<T>::insert(batch.network, batch.block);
       Self::deposit_event(Event::Batch {
         network: batch.network,
@@ -195,6 +192,7 @@ pub mod pallet {
       if last_block >= current_block {
         Err(InvalidTransaction::Future)?;
       }
+      LastBatchBlock::<T>::insert(batch.batch.network, frame_system::Pallet::<T>::block_number());
 
       // Verify the batch is sequential
       // LastBatch has the last ID set. The next ID should be it + 1
@@ -206,6 +204,7 @@ pub mod pallet {
       if batch.batch.id > expected {
         Err(InvalidTransaction::Future)?;
       }
+      LastBatch::<T>::insert(batch.batch.network, batch.batch.id);
 
       // Verify all Balances in this Batch are for this network
       for instruction in &batch.batch.instructions {
