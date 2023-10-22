@@ -335,11 +335,14 @@ impl Bitcoin {
     fees.sort();
     let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
 
-    // The DUST constant documentation details a 5000 sat/kilo-vbyte minimum fee policy.
-    // 5000 sat/kilo-vbyte is 5000 sat/4-kilo-weight (1250 sat/kilo-weight).
-    // Since bitcoin-serai takes fee per weight, use a minimum of 2
-    // (the ceil div of 1250 by 1000)
-    Ok(Fee(fee.max(2)))
+    // The DUST constant documentation notes a relay rule practically enforcing a
+    // 1000 sat/kilo-vbyte minimum fee.
+    //
+    // 1000 sat/kilo-vbyte is 1000 sat/4-kilo-weight (250 sat/kilo-weight).
+    // Since bitcoin-serai takes fee per weight, we'd need to pass 0.25 to achieve this fee rate.
+    // Accordingly, setting 1 is 4x the current relay rule minimum (and should be more than safe).
+    // TODO: Rewrite to fee_per_vbyte, not fee_per_weight?
+    Ok(Fee(fee.max(1)))
   }
 
   async fn make_signable_transaction(
@@ -430,9 +433,12 @@ impl Network for Bitcoin {
     (4 * (36 + 1 + 4)) + (1 + 1 + 64) = 164 + 66 = 230 weight units
     230 ceil div 4 = 57 vbytes
 
-    Bitcoin defines multiple minimum feerate constants *per kilo-vbyte*. Currently, these are
-    1000 and 3000. Since these are solely relay rules, and may be raised, we use a
-    5000 sat/kilo-vbyte minimum fee rate.
+    Bitcoin defines multiple minimum feerate constants *per kilo-vbyte*. Currently, these are:
+    - 1000 sat/kilo-vbyte for a transaction to be relayed
+    - Each output's value must exceed the fee of the TX spending it at 3000 sat/kilo-vbyte
+    The DUST constant needs to be determined by the latter.
+    Since these are solely relay rules, and may be raised, we require all outputs be spendable
+    under a 5000 sat/kilo-vbyte fee rate.
 
     5000 sat/kilo-vbyte = 5 sat/vbyte
     5 * 57 = 285 sats/spent-output
@@ -440,7 +446,8 @@ impl Network for Bitcoin {
     Even if an output took 100 bytes (it should be just ~29-43), taking 400 weight units, adding
     100 vbytes, tripling the transaction size, then the sats/tx would be < 1000.
 
-    Increase by an order of magnitude, 10,000 satoshis.
+    Increase by an order of magnitude, in order to ensure this is actually worth our time, and we
+    get 10,000 satoshis.
   */
   const DUST: u64 = 10_000;
 
@@ -450,7 +457,7 @@ impl Network for Bitcoin {
   // issues in the future (if the size decreases or we mis-evaluate it)
   // It also offers a minimal amount of benefit when we are able to logarithmically accumulate
   // inputs
-  // For 128-byte inputs (40-byte output specification, 64-byte signature, whatever overhead) and
+  // For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
   // 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
   // bytes
   // 100,000 / 192 = 520
