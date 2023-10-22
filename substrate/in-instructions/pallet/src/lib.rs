@@ -152,8 +152,13 @@ pub mod pallet {
         Err(InvalidTransaction::ExhaustsResources)?;
       }
 
-      // verify the signature
       let network = batch.batch.network;
+      // Don't allow the Serai set to publish `Batch`s as-if Serai itself was an external network
+      if network == NetworkId::Serai {
+        Err(InvalidTransaction::Custom(0))?;
+      }
+
+      // verify the signature
       let (current_session, prior, current) = keys_for_network::<T>(network)?;
       let batch_message = batch_message(&batch.batch);
       // Check the prior key first since only a single `Batch` (the last one) will be when prior is
@@ -208,7 +213,7 @@ pub mod pallet {
         // Accordingly, there's no value in writing code to fully slash the network, when such an
         // even would require a runtime upgrade to fully resolve anyways
         if instruction.balance.coin.network() != batch.batch.network {
-          Err(InvalidTransaction::Custom(0))?;
+          Err(InvalidTransaction::Custom(1))?;
         }
       }
 
