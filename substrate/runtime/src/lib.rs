@@ -18,9 +18,9 @@ pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
 
-pub use pallet_session as session;
 pub use staking_pallet as staking;
 pub use validator_sets_pallet as validator_sets;
+pub use pallet_session as session;
 
 pub use in_instructions_pallet as in_instructions;
 
@@ -166,18 +166,18 @@ impl Contains<RuntimeCall> for CallFilter {
         timestamp::Call::__Ignore(_, _) => false,
       },
 
-      RuntimeCall::Session(call) => match call {
-        session::Call::set_keys { .. } => true,
-        session::Call::purge_keys { .. } => true,
-        session::Call::__Ignore(_, _) => false,
-      },
-
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::Staking(call) => !matches!(call, staking::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
+
+      RuntimeCall::Session(call) => match call {
+        session::Call::set_keys { .. } => true,
+        session::Call::purge_keys { .. } => false,
+        session::Call::__Ignore(_, _) => false,
+      },
 
       RuntimeCall::Babe(call) => match call {
         babe::Call::report_equivocation { .. } => true,
@@ -245,6 +245,11 @@ impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl validator_sets::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+impl staking::Config for Runtime {}
+
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
   fn convert(key: PublicKey) -> Option<PublicKey> {
@@ -263,11 +268,6 @@ impl session::Config for Runtime {
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
 }
-
-impl validator_sets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-impl staking::Config for Runtime {}
 
 impl signals::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
@@ -346,9 +346,9 @@ construct_runtime!(
 
     Coins: coins,
 
-    Session: session,
     ValidatorSets: validator_sets,
     Staking: staking,
+    Session: session,
 
     InInstructions: in_instructions,
 
