@@ -272,6 +272,10 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   const MAX_OUTPUTS: usize;
 
   /// Minimum output value which will be handled.
+  ///
+  /// For any received output, there's the cost to spend the output. This value MUST exceed the
+  /// cost to spend said output, and should by a notable margin (not just 2x, yet an order of
+  /// magnitude).
   const DUST: u64;
 
   /// Tweak keys for this network.

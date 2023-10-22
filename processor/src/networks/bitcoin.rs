@@ -315,6 +315,34 @@ impl Bitcoin {
     }
   }
 
+  // This function panics on a node which doesn't follow the Bitcoin protocol, which is deemed fine
+  async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
+    let mut fees = vec![];
+    if block.txdata.len() > 1 {
+      for tx in &block.txdata[1 ..] {
+        let mut in_value = 0;
+        for input in &tx.input {
+          let mut input_tx = input.previous_output.txid.to_raw_hash().to_byte_array();
+          input_tx.reverse();
+          in_value += self.get_transaction(&input_tx).await?.output
+            [usize::try_from(input.previous_output.vout).unwrap()]
+          .value;
+        }
+        let out = tx.output.iter().map(|output| output.value).sum::<u64>();
+        fees.push((in_value - out) / tx.weight().to_wu());
+      }
+    }
+    fees.sort();
+    // Prefer the higher fee
+    let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
+
+    // The DUST constant documentation details a 5000 sat/kilo-vbyte minimum fee policy.
+    // 5000 sat/kilo-vbyte is 5000 sat/4-kilo-weight (1250 sat/kilo-weight).
+    // Since bitcoin-serai takes fee per weight, use a minimum of 2
+    // (the ceil div of 1250 by 1000)
+    Ok(Fee(fee.max(2)))
+  }
+
   async fn make_signable_transaction(
     &self,
     block_number: usize,
@@ -325,12 +353,7 @@ impl Bitcoin {
   ) -> Result<Option<BSignableTransaction>, NetworkError> {
     // TODO2: Use an fee representative of several blocks, cached inside Self
     let block_for_fee = self.get_block(block_number).await?;
-    let median_fee = || {
-      // TODO
-      let _ = block_for_fee;
-      Fee(2)
-    };
-    let fee = median_fee();
+    let fee = self.median_fee(&block_for_fee).await?;
 
     let payments = payments
       .iter()
@@ -392,9 +415,35 @@ impl Network for Bitcoin {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
   const CONFIRMATIONS: usize = 6;
 
-  // 0.0001 BTC, 10,000 satoshis
-  #[allow(clippy::inconsistent_digit_grouping)]
-  const DUST: u64 = 1_00_000_000 / 10_000;
+  /*
+    A Taproot input is:
+    - 36 bytes for the OutPoint
+    - 0 bytes for the script (+1 byte for the length)
+    - 4 bytes for the sequence
+    Per https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
+
+    There's also:
+    - 1 byte for the witness length
+    - 1 byte for the signature length
+    - 64 bytes for the signature
+    which have the SegWit discount.
+
+    (4 * (36 + 1 + 4)) + (1 + 1 + 64) = 164 + 66 = 230 weight units
+    230 ceil div 4 = 57 vbytes
+
+    Bitcoin defines multiple minimum feerate constants *per kilo-vbyte*. Currently, these are
+    1000 and 3000. Since these are solely relay rules, and may be raised, we use a
+    5000 sat/kilo-vbyte minimum fee rate.
+
+    5000 sat/kilo-vbyte = 5 sat/vbyte
+    5 * 57 = 285 sats/spent-output
+
+    Even if an output took 100 bytes (it should be just ~29-43), taking 400 weight units, adding
+    100 vbytes, tripling the transaction size, then the sats/tx would be < 1000.
+
+    Increase by an order of magnitude, 10,000 satoshis.
+  */
+  const DUST: u64 = 10_000;
 
   // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
   // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
