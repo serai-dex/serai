@@ -84,7 +84,10 @@ pub mod pallet {
   fn keys_for_network<T: Config>(
     network: NetworkId,
   ) -> Result<(Session, Option<Public>, Option<Public>), InvalidTransaction> {
-    let session = ValidatorSets::<T>::session(network);
+    // If there's no session set, and therefore no keys set, then this must be an invalid signature
+    let Some(session) = ValidatorSets::<T>::session(network) else {
+      Err(InvalidTransaction::BadProof)?
+    };
     let mut set = ValidatorSet { session, network };
     let latest = ValidatorSets::<T>::keys(set).map(|keys| keys.0);
     let prior = if set.session.0 != 0 {
@@ -93,7 +96,6 @@ pub mod pallet {
     } else {
       None
     };
-    // If there's no keys set, then this must be an invalid signature
     if prior.is_none() && latest.is_none() {
       Err(InvalidTransaction::BadProof)?;
     }

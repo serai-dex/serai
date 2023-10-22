@@ -8566,6 +8566,7 @@ dependencies = [
  "serai-coins-pallet",
  "serai-in-instructions-pallet",
  "serai-primitives",
+ "serai-signals-pallet",
  "serai-staking-pallet",
  "serai-validator-sets-pallet",
  "sp-api",
@@ -8582,6 +8583,20 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "serai-signals-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-primitives",
+ "serai-validator-sets-pallet",
+ "sp-core",
+ "sp-io",
 ]
 
 [[package]]

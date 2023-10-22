@@ -62,6 +62,8 @@ exceptions = [
 
   { allow = ["AGPL-3.0"], name = "serai-staking-pallet" },
 
+  { allow = ["AGPL-3.0"], name = "serai-signals-pallet" },
+
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
   { allow = ["AGPL-3.0"], name = "serai-node" },
 

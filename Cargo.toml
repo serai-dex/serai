@@ -48,6 +48,8 @@ members = [
 
   "substrate/staking/pallet",
 
+  "substrate/signals/pallet",
+
   "substrate/runtime",
   "substrate/node",
 

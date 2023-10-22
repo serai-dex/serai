@@ -22,6 +22,8 @@ pub use in_instructions_pallet as in_instructions;
 pub use staking_pallet as staking;
 pub use validator_sets_pallet as validator_sets;
 
+pub use signals_pallet as signals;
+
 pub use pallet_session as session;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
@@ -46,7 +48,7 @@ use sp_runtime::{
 use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
 
 use support::{
-  traits::{ConstU8, ConstU64, Contains},
+  traits::{ConstU8, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -232,10 +234,17 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl staking::Config for Runtime {}
-
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
+}
+impl staking::Config for Runtime {}
+
+impl signals::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  // 1 week
+  type ValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
+  // 2 weeks
+  type LockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 
 pub struct IdentityValidatorIdOf;
@@ -324,8 +333,9 @@ construct_runtime!(
     InInstructions: in_instructions,
 
     ValidatorSets: validator_sets,
-
     Staking: staking,
+
+    Signals: signals,
 
     Session: session,
     Babe: babe,

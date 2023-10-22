@@ -55,12 +55,16 @@ pub mod pallet {
   #[pallet::storage]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
   impl<T: Config> Pallet<T> {
-    pub fn session(network: NetworkId) -> Session {
+    pub fn session(network: NetworkId) -> Option<Session> {
       if network == NetworkId::Serai {
-        Session(pallet_session::Pallet::<T>::current_index())
+        Some(Session(pallet_session::Pallet::<T>::current_index()))
       } else {
-        CurrentSession::<T>::get(network).unwrap()
+        CurrentSession::<T>::get(network)
       }
+    }
+
+    pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
+      CurrentSession::<T>::get(network)
     }
   }
 
@@ -86,9 +90,61 @@ pub mod pallet {
   #[pallet::storage]
   pub type InSet<T: Config> =
     StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
+  impl<T: Config> Pallet<T> {
+    fn in_set_key(
+      network: NetworkId,
+      account: T::AccountId,
+    ) -> (NetworkId, [u8; 16], T::AccountId) {
+      (network, sp_io::hashing::blake2_128(&(network, account).encode()), account)
+    }
+
+    // This exists as InSet, for Serai, is the validators set for the next session, *not* the
+    // current set's validators
+    #[inline]
+    fn in_active_serai_set(account: Public) -> bool {
+      // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with InSet?
+      for validator in pallet_session::Pallet::<T>::validators() {
+        if validator == account {
+          return true;
+        }
+      }
+      false
+    }
+
+    /// Returns true if the account is included in an active set.
+    pub fn in_active_set(network: NetworkId, account: Public) -> bool {
+      if network == NetworkId::Serai {
+        Self::in_active_serai_set(account)
+      } else {
+        InSet::<T>::contains_key(Self::in_set_key(network, account))
+      }
+    }
+
+    /// Returns true if the account has been definitively included in an active or upcoming set.
+    pub fn in_set(network: NetworkId, account: Public) -> bool {
+      if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
+        return true;
+      }
+
+      if network == NetworkId::Serai {
+        return Self::in_active_serai_set(account);
+      }
+
+      false
+    }
+
+    /// Returns true if the account is present in the latest decided set.
+    ///
+    /// This is useful when working with `allocation` and `total_allocated_stake`, which return the
+    /// latest information.
+    pub fn in_latest_decided_set(network: NetworkId, account: Public) -> bool {
+      InSet::<T>::contains_key(Self::in_set_key(network, account))
+    }
+  }
 
   /// The total stake allocated to this network by the active set of validators.
   #[pallet::storage]
+  #[pallet::getter(fn total_allocated_stake)]
   pub type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
 
   /// The current amount allocated to a validator set by a validator.
@@ -245,13 +301,6 @@ pub mod pallet {
   }
 
   impl<T: Config> Pallet<T> {
-    fn in_set_key(
-      network: NetworkId,
-      account: T::AccountId,
-    ) -> (NetworkId, [u8; 16], T::AccountId) {
-      (network, sp_io::hashing::blake2_128(&(network, account).encode()), account)
-    }
-
     fn new_set(network: NetworkId) {
       // Update CurrentSession
       let session = if network != NetworkId::Serai {
@@ -261,7 +310,7 @@ pub mod pallet {
         CurrentSession::<T>::set(network, Some(new_session));
         new_session
       } else {
-        Self::session(network)
+        Self::session(network).unwrap_or(Session(0))
       };
 
       // Clear the current InSet
@@ -512,6 +561,9 @@ pub mod pallet {
       }
 
       // Decrease the allocation now
+      // Since we don't also update TotalAllocatedStake here, TotalAllocatedStake may be greater
+      // than the sum of all allocations, according to the Allocations StorageMap
+      // This is intentional as this allocation has only been queued for deallocation at this time
       Self::set_allocation(network, account, Amount(new_allocation));
 
       if let Some(was_bft) = was_bft {
@@ -520,22 +572,8 @@ pub mod pallet {
         }
       }
 
-      // If we're not in-set, allow immediate deallocation
-      let mut active = InSet::<T>::contains_key(Self::in_set_key(network, account));
-      // If the network is Serai, also check pallet_session's list of active validators, as our
-      // InSet is actually the queued for next session's validators
-      // Only runs if active isn't already true in order to short-circuit
-      if (!active) && (network == NetworkId::Serai) {
-        // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with
-        // InSet?
-        for validator in pallet_session::Pallet::<T>::validators() {
-          if validator == account {
-            active = true;
-            break;
-          }
-        }
-      }
-      // Also allow immediate deallocation if the key shares remain the same
+      // If we're not in-set, or this doesn't decrease our key shares, allow immediate deallocation
+      let active = Self::in_set(network, account);
       if (!active) || (!decreased_key_shares) {
         if active {
           // Since it's being immediately deallocated, decrease TotalAllocatedStake
@@ -548,7 +586,8 @@ pub mod pallet {
       }
 
       // Set it to PendingDeallocations, letting the staking pallet release it on a future session
-      let mut to_unlock_on = Self::session(network);
+      // This unwrap should be fine as this account is active, meaning a session has occurred
+      let mut to_unlock_on = Self::session(network).unwrap();
       if network == NetworkId::Serai {
         // Since the next Serai set will already have been decided, we can only deallocate once the
         // next set ends
@@ -570,7 +609,7 @@ pub mod pallet {
 
     // Checks if this session has completed the handover from the prior session.
     fn handover_completed(network: NetworkId, session: Session) -> bool {
-      let current_session = Self::session(network);
+      let Some(current_session) = Self::session(network) else { return false };
       // No handover occurs on genesis
       if current_session.0 == 0 {
         return true;
@@ -597,7 +636,8 @@ pub mod pallet {
 
     pub fn new_session() {
       for network in serai_primitives::NETWORKS {
-        let current_session = Self::session(network);
+        // If this network hasn't started sessions yet, don't start one now
+        let Some(current_session) = Self::session(network) else { continue };
         // Only spawn a NewSet if the current set was actually established with a completed
         // handover protocol
         if Self::handover_completed(network, current_session) {
