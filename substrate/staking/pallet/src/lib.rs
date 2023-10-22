@@ -24,12 +24,35 @@ pub mod pallet {
     NoDeallocation,
   }
 
-  // TODO: Event
+  #[pallet::event]
+  #[pallet::generate_deposit(pub(super) fn deposit_event)]
+  pub enum Event<T: Config> {
+    Staked {
+      validator: T::AccountId,
+      amount: Amount,
+    },
+    Unstaked {
+      validator: T::AccountId,
+      amount: Amount,
+    },
+    ImmediateDeallocation {
+      validator: T::AccountId,
+      network: NetworkId,
+      amount: Amount,
+    },
+    DeallocationClaimed {
+      validator: T::AccountId,
+      network: NetworkId,
+      session: Session,
+      amount: Amount,
+    },
+  }
 
   #[pallet::config]
   pub trait Config:
     frame_system::Config + CoinsConfig + VsConfig + SessionConfig<ValidatorId = PublicKey>
   {
+    type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
   }
 
   #[pallet::pallet]
@@ -52,17 +75,19 @@ pub mod pallet {
       T::AccountId::decode(&mut TrailingZeroInput::new(b"staking")).unwrap()
     }
 
-    fn add_stake(account: &T::AccountId, amount: u64) {
+    fn add_stake(account: T::AccountId, amount: u64) {
       Staked::<T>::mutate(account, |staked| *staked += amount);
+      Self::deposit_event(Event::Staked { validator: account, amount: Amount(amount) });
     }
 
-    fn remove_stake(account: &T::AccountId, amount: u64) -> Result<(), Error<T>> {
+    fn remove_stake(account: T::AccountId, amount: u64) -> Result<(), Error<T>> {
       Staked::<T>::mutate(account, |staked| {
         let available = *staked - Self::allocated(account);
         if available < amount {
           Err(Error::<T>::StakeUnavilable)?;
         }
         *staked -= amount;
+        Self::deposit_event(Event::Unstaked { validator: account, amount: Amount(amount) });
         Ok::<_, Error<T>>(())
       })
     }
@@ -98,7 +123,7 @@ pub mod pallet {
       let signer = ensure_signed(origin)?;
       let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
       Coins::<T>::transfer_internal(signer, Self::account(), balance)?;
-      Self::add_stake(&signer, amount);
+      Self::add_stake(signer, amount);
       Ok(())
     }
 
@@ -107,7 +132,7 @@ pub mod pallet {
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn unstake(origin: OriginFor<T>, #[pallet::compact] amount: u64) -> DispatchResult {
       let signer = ensure_signed(origin)?;
-      Self::remove_stake(&signer, amount)?;
+      Self::remove_stake(signer, amount)?;
       let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
       Coins::<T>::transfer_internal(Self::account(), signer, balance)?;
       Ok(())
@@ -125,6 +150,7 @@ pub mod pallet {
 
       // add to amount allocated
       Self::allocate_internal(&account, amount)?;
+      // This does not emit an event as the validator-sets pallet will
 
       // increase allocation for participant in validator set
       VsPallet::<T>::increase_allocation(network, account, Amount(amount))?;
@@ -146,6 +172,11 @@ pub mod pallet {
         VsPallet::<T>::decrease_allocation(network, account, Amount(amount))?;
       if can_immediately_deallocate {
         Self::deallocate_internal(&account, amount)?;
+        Self::deposit_event(Event::ImmediateDeallocation {
+          validator: account,
+          network,
+          amount: Amount(amount),
+        });
       }
 
       Ok(())
@@ -163,6 +194,12 @@ pub mod pallet {
         Err(Error::<T>::NoDeallocation)?
       };
       Self::deallocate_internal(&account, amount.0)?;
+      Self::deposit_event(Event::DeallocationClaimed {
+        validator: account,
+        network,
+        session,
+        amount,
+      });
       Ok(())
     }
   }

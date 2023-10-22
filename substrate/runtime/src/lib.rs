@@ -248,7 +248,9 @@ impl coins::Config for Runtime {
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
-impl staking::Config for Runtime {}
+impl staking::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
 
 pub struct IdentityValidatorIdOf;
 impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
