@@ -459,6 +459,10 @@ async fn boot<N: Network, D: Db>(
     signers.insert(key.as_ref().to_vec(), signer);
   }
 
+  // Spawn a task to rebroadcast signed TXs yet to be mined into a finalized block
+  // This hedges against being dropped due to full mempools, temporarily too low of a fee...
+  tokio::spawn(Signer::<N, D>::rebroadcast_task(raw_db.clone(), network.clone()));
+
   (main_db, TributaryMutable { key_gen, substrate_signer, signers }, multisig_manager)
 }
 

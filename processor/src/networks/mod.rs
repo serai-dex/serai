@@ -119,6 +119,7 @@ pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn serialize(&self) -> Vec<u8>;
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
 
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;

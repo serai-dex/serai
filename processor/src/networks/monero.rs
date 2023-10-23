@@ -114,6 +114,10 @@ impl TransactionTrait<Monero> for Transaction {
   fn serialize(&self) -> Vec<u8> {
     self.serialize()
   }
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    Transaction::read(reader)
+  }
+
   #[cfg(test)]
   async fn fee(&self, _: &Monero) -> u64 {
     self.rct_signatures.base.fee

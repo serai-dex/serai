@@ -163,6 +163,11 @@ impl TransactionTrait<Bitcoin> for Transaction {
     self.consensus_encode(&mut buf).unwrap();
     buf
   }
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    Transaction::consensus_decode(reader)
+      .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{e}")))
+  }
+
   #[cfg(test)]
   async fn fee(&self, network: &Bitcoin) -> u64 {
     let mut value = 0;
