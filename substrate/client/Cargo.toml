@@ -43,7 +43,7 @@ schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }
 
 tokio = "1"
 
-dockertest = "0.3"
+dockertest = "0.4"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]

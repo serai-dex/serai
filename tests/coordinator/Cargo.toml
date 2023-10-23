@@ -36,6 +36,6 @@ serde_json = { version = "1", default-features = false }
 
 tokio = { version = "1", features = ["time"] }
 
-dockertest = "0.3"
+dockertest = "0.4"
 serai-docker-tests = { path = "../docker" }
 serai-message-queue-tests = { path = "../message-queue" }

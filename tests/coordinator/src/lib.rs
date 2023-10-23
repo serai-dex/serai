@@ -108,14 +108,16 @@ pub fn coordinator_stack(
 
   let mut compositions = vec![];
   let mut handles = vec![];
-  for composition in [serai_composition, message_queue_composition, coordinator_composition] {
-    let name = format!("{}-{}", composition.handle(), &unique_id);
+  for (name, composition) in [
+    ("serai_node", serai_composition),
+    ("message_queue", message_queue_composition),
+    ("coordinator", coordinator_composition),
+  ] {
+    let handle = format!("coordinator-{name}-{}", &unique_id);
 
     compositions.push(
-      composition
-        .set_start_policy(StartPolicy::Strict)
-        .set_handle(name.clone())
-        .set_log_options(Some(LogOptions {
+      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
+        Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
           } else {
@@ -123,18 +125,19 @@ pub fn coordinator_stack(
           },
           policy: LogPolicy::Always,
           source: LogSource::Both,
-        })),
+        }),
+      ),
     );
 
-    handles.push(compositions.last().unwrap().handle());
+    handles.push(handle);
   }
 
   let coordinator_composition = compositions.last_mut().unwrap();
-  coordinator_composition.inject_container_name(handles.remove(0), "SERAI_HOSTNAME");
-  coordinator_composition.inject_container_name(handles.remove(0), "MESSAGE_QUEUE_RPC");
+  coordinator_composition.inject_container_name(handles[0].clone(), "SERAI_HOSTNAME");
+  coordinator_composition.inject_container_name(handles[1].clone(), "MESSAGE_QUEUE_RPC");
 
   (
-    (compositions[0].handle(), compositions[1].handle(), compositions[2].handle()),
+    (handles[0].clone(), handles[1].clone(), handles[2].clone()),
     message_queue_keys[&NetworkId::Bitcoin],
     compositions,
   )

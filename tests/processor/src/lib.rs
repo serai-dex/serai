@@ -84,30 +84,41 @@ pub fn processor_stack(
 
   let mut compositions = vec![];
   let mut handles = vec![];
-  for composition in [network_composition, message_queue_composition, processor_composition] {
-    let handle = composition.handle();
+  for (name, composition) in [
+    (
+      match network {
+        NetworkId::Serai => unreachable!(),
+        NetworkId::Bitcoin => "bitcoin",
+        NetworkId::Ethereum => "ethereum",
+        NetworkId::Monero => "monero",
+      },
+      network_composition,
+    ),
+    ("message_queue", message_queue_composition),
+    ("processor", processor_composition),
+  ] {
+    let handle = format!("processor-{name}-{}", &unique_id);
     compositions.push(
-      composition
-        .set_start_policy(StartPolicy::Strict)
-        .set_handle(format!("{handle}-{}", &unique_id))
-        .set_log_options(Some(LogOptions {
+      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
+        Some(LogOptions {
           action: LogAction::Forward,
-          policy: if handle.contains("processor") { LogPolicy::Always } else { LogPolicy::OnError },
+          policy: if handle.contains("-processor-") {
+            LogPolicy::Always
+          } else {
+            LogPolicy::OnError
+          },
           source: LogSource::Both,
-        })),
+        }),
+      ),
     );
-    handles.push(compositions.last().unwrap().handle());
+    handles.push(handle);
   }
 
   let processor_composition = compositions.last_mut().unwrap();
-  processor_composition.inject_container_name(handles.remove(0), "NETWORK_RPC_HOSTNAME");
-  processor_composition.inject_container_name(handles.remove(0), "MESSAGE_QUEUE_RPC");
+  processor_composition.inject_container_name(handles[0].clone(), "NETWORK_RPC_HOSTNAME");
+  processor_composition.inject_container_name(handles[1].clone(), "MESSAGE_QUEUE_RPC");
 
-  (
-    (compositions[0].handle(), compositions[1].handle(), compositions[2].handle()),
-    coord_key,
-    compositions,
-  )
+  ((handles[0].clone(), handles[1].clone(), handles[2].clone()), coord_key, compositions)
 }
 
 #[derive(serde::Deserialize, Debug)]
