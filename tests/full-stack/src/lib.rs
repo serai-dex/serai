@@ -51,7 +51,7 @@ pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
     let first = *unique_id_lock == 0;
-    let unique_id = hex::encode(unique_id_lock.to_be_bytes());
+    let unique_id = *unique_id_lock;
     *unique_id_lock += 1;
     (first, unique_id)
   };

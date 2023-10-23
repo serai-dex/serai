@@ -88,7 +88,7 @@ pub fn coordinator_stack(
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
     let first = *unique_id_lock == 0;
-    let unique_id = hex::encode(unique_id_lock.to_be_bytes());
+    let unique_id = *unique_id_lock;
     *unique_id_lock += 1;
     (first, unique_id)
   };
@@ -113,7 +113,7 @@ pub fn coordinator_stack(
     ("message_queue", message_queue_composition),
     ("coordinator", coordinator_composition),
   ] {
-    let handle = format!("coordinator-{name}-{}", &unique_id);
+    let handle = format!("coordinator-{name}-{unique_id}");
 
     compositions.push(
       composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
