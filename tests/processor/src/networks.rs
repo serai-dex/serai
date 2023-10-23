@@ -11,7 +11,7 @@ use serai_client::{
   in_instructions::primitives::{InInstruction, RefundableInInstruction, Shorthand},
 };
 
-use dockertest::{PullPolicy, Image, StartPolicy, Composition, DockerOperations};
+use dockertest::{PullPolicy, Image, StartPolicy, TestBodySpecification, DockerOperations};
 
 use crate::*;
 
@@ -21,13 +21,13 @@ pub const RPC_PASS: &str = "seraidex";
 pub const BTC_PORT: u32 = 8332;
 pub const XMR_PORT: u32 = 18081;
 
-pub fn bitcoin_instance() -> (Composition, u32) {
+pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
   serai_docker_tests::build("bitcoin".to_string());
 
-  let mut composition = Composition::with_image(
+  let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "bitcoind".to_string(),
     "-txindex".to_string(),
     "-regtest".to_string(),
@@ -36,18 +36,18 @@ pub fn bitcoin_instance() -> (Composition, u32) {
     "-rpcbind=0.0.0.0".to_string(),
     "-rpcallowip=0.0.0.0/0".to_string(),
     "-rpcport=8332".to_string(),
-  ]);
-  composition.publish_all_ports();
+  ])
+  .set_publish_all_ports(true);
   (composition, BTC_PORT)
 }
 
-pub fn monero_instance() -> (Composition, u32) {
+pub fn monero_instance() -> (TestBodySpecification, u32) {
   serai_docker_tests::build("monero".to_string());
 
-  let mut composition = Composition::with_image(
+  let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "monerod".to_string(),
     "--regtest".to_string(),
     "--offline".to_string(),
@@ -58,12 +58,12 @@ pub fn monero_instance() -> (Composition, u32) {
     "--confirm-external-bind".to_string(),
     "--non-interactive".to_string(),
   ])
-  .with_start_policy(StartPolicy::Strict);
-  composition.publish_all_ports();
+  .set_start_policy(StartPolicy::Strict)
+  .set_publish_all_ports(true);
   (composition, XMR_PORT)
 }
 
-pub fn network_instance(network: NetworkId) -> (Composition, u32) {
+pub fn network_instance(network: NetworkId) -> (TestBodySpecification, u32) {
   match network {
     NetworkId::Bitcoin => bitcoin_instance(),
     NetworkId::Ethereum => todo!(),

@@ -9,37 +9,38 @@ macro_rules! serai_test {
       #[tokio::test]
       async fn $name() {
         use dockertest::{
-          PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image, Composition,
-          DockerTest,
+          PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
+          TestBodySpecification, DockerTest,
         };
 
         serai_docker_tests::build("serai".to_string());
 
-        let mut composition = Composition::with_image(
+        let handle = concat!("serai_client-serai_node-", stringify!($name));
+
+        let composition = TestBodySpecification::with_image(
           Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
         )
-        .with_cmd(vec![
+        .replace_cmd(vec![
           "serai-node".to_string(),
           "--dev".to_string(),
           "--unsafe-rpc-external".to_string(),
           "--rpc-cors".to_string(),
           "all".to_string(),
         ])
-        .with_start_policy(StartPolicy::Strict)
-        .with_log_options(Some(LogOptions {
+        .set_publish_all_ports(true)
+        .set_handle(handle)
+        .set_start_policy(StartPolicy::Strict)
+        .set_log_options(Some(LogOptions {
           action: LogAction::Forward,
           policy: LogPolicy::Always,
           source: LogSource::Both,
         }));
-        composition.publish_all_ports();
 
-        let handle = composition.handle();
-
-        let mut test = DockerTest::new();
-        test.add_composition(composition);
+        let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
+        test.provide_container(composition);
         test.run_async(|ops| async move {
           // Sleep until the Substrate RPC starts
-          let serai_rpc = ops.handle(&handle).host_port(9944).unwrap();
+          let serai_rpc = ops.handle(handle).host_port(9944).unwrap();
           let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
           // Bound execution to 60 seconds
           for _ in 0 .. 60 {

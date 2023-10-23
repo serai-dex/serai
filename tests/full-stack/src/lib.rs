@@ -7,7 +7,7 @@ use std::{
 use serai_client::{primitives::NetworkId, Serai};
 
 use dockertest::{
-  LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition, DockerOperations,
+  LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, TestBodySpecification, DockerOperations,
 };
 
 #[cfg(test)]
@@ -31,7 +31,7 @@ pub struct Handles {
   serai: String,
 }
 
-pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
+pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
   let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance();
 
   let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin);
@@ -51,7 +51,7 @@ pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
     let first = *unique_id_lock == 0;
-    let unique_id = hex::encode(unique_id_lock.to_be_bytes());
+    let unique_id = *unique_id_lock;
     *unique_id_lock += 1;
     (first, unique_id)
   };
@@ -71,22 +71,19 @@ pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
 
   let mut compositions = vec![];
   let mut handles = vec![];
-  for composition in [
-    message_queue_composition,
-    bitcoin_composition,
-    bitcoin_processor_composition,
-    monero_composition,
-    monero_processor_composition,
-    coordinator_composition,
-    serai_composition,
+  for (name, composition) in [
+    ("message_queue", message_queue_composition),
+    ("bitcoin", bitcoin_composition),
+    ("bitcoin_processor", bitcoin_processor_composition),
+    ("monero", monero_composition),
+    ("monero_processor", monero_processor_composition),
+    ("coordinator", coordinator_composition),
+    ("serai", serai_composition),
   ] {
-    let name = format!("{}-{}", composition.handle(), &unique_id);
-
+    let handle = format!("full_stack-{name}-{unique_id}");
     compositions.push(
-      composition
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(name.clone())
-        .with_log_options(Some(LogOptions {
+      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
+        Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
           } else {
@@ -94,19 +91,19 @@ pub fn full_stack(name: &str) -> (Handles, Vec<Composition>) {
           },
           policy: LogPolicy::Always,
           source: LogSource::Both,
-        })),
+        }),
+      ),
     );
-
-    handles.push(compositions.last().unwrap().handle());
+    handles.push(handle);
   }
   let handles = Handles {
-    message_queue: handles.remove(0),
-    bitcoin: (handles.remove(0), bitcoin_port),
-    bitcoin_processor: handles.remove(0),
-    monero: (handles.remove(0), monero_port),
-    monero_processor: handles.remove(0),
-    coordinator: handles.remove(0),
-    serai: handles.remove(0),
+    message_queue: handles[0].clone(),
+    bitcoin: (handles[1].clone(), bitcoin_port),
+    bitcoin_processor: handles[2].clone(),
+    monero: (handles[3].clone(), monero_port),
+    monero_processor: handles[4].clone(),
+    coordinator: handles[5].clone(),
+    serai: handles[6].clone(),
   };
 
   {

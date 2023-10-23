@@ -18,8 +18,8 @@ use serai_message_queue::{Service, Metadata, client::MessageQueue};
 use serai_client::Serai;
 
 use dockertest::{
-  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
-  DockerOperations,
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy,
+  TestBodySpecification, DockerOperations,
 };
 
 #[cfg(test)]
@@ -30,13 +30,13 @@ static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 pub fn coordinator_instance(
   name: &str,
   message_queue_key: <Ristretto as Ciphersuite>::F,
-) -> Composition {
+) -> TestBodySpecification {
   serai_docker_tests::build("coordinator".to_string());
 
-  Composition::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-coordinator").pull_policy(PullPolicy::Never),
   )
-  .with_env(
+  .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
       ("DB_PATH".to_string(), "./coordinator-db".to_string()),
@@ -53,13 +53,13 @@ pub fn coordinator_instance(
   )
 }
 
-pub fn serai_composition(name: &str) -> Composition {
+pub fn serai_composition(name: &str) -> TestBodySpecification {
   serai_docker_tests::build("serai".to_string());
 
-  let mut composition = Composition::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
-  .with_cmd(vec![
+  .replace_cmd(vec![
     "serai-node".to_string(),
     "--unsafe-rpc-external".to_string(),
     "--rpc-cors".to_string(),
@@ -67,13 +67,14 @@ pub fn serai_composition(name: &str) -> Composition {
     "--chain".to_string(),
     "local".to_string(),
     format!("--{}", name.to_lowercase()),
-  ]);
-  composition.publish_all_ports();
-  composition
+  ])
+  .set_publish_all_ports(true)
 }
 
 pub type Handles = (String, String, String);
-pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+pub fn coordinator_stack(
+  name: &str,
+) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
   let serai_composition = serai_composition(name);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
@@ -87,7 +88,7 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
     let first = *unique_id_lock == 0;
-    let unique_id = hex::encode(unique_id_lock.to_be_bytes());
+    let unique_id = *unique_id_lock;
     *unique_id_lock += 1;
     (first, unique_id)
   };
@@ -107,14 +108,16 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
 
   let mut compositions = vec![];
   let mut handles = vec![];
-  for composition in [serai_composition, message_queue_composition, coordinator_composition] {
-    let name = format!("{}-{}", composition.handle(), &unique_id);
+  for (name, composition) in [
+    ("serai_node", serai_composition),
+    ("message_queue", message_queue_composition),
+    ("coordinator", coordinator_composition),
+  ] {
+    let handle = format!("coordinator-{name}-{unique_id}");
 
     compositions.push(
-      composition
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(name.clone())
-        .with_log_options(Some(LogOptions {
+      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
+        Some(LogOptions {
           action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
             LogAction::Forward
           } else {
@@ -122,18 +125,19 @@ pub fn coordinator_stack(name: &str) -> (Handles, <Ristretto as Ciphersuite>::F,
           },
           policy: LogPolicy::Always,
           source: LogSource::Both,
-        })),
+        }),
+      ),
     );
 
-    handles.push(compositions.last().unwrap().handle());
+    handles.push(handle);
   }
 
   let coordinator_composition = compositions.last_mut().unwrap();
-  coordinator_composition.inject_container_name(handles.remove(0), "SERAI_HOSTNAME");
-  coordinator_composition.inject_container_name(handles.remove(0), "MESSAGE_QUEUE_RPC");
+  coordinator_composition.inject_container_name(handles[0].clone(), "SERAI_HOSTNAME");
+  coordinator_composition.inject_container_name(handles[1].clone(), "MESSAGE_QUEUE_RPC");
 
   (
-    (compositions[0].handle(), compositions[1].handle(), compositions[2].handle()),
+    (handles[0].clone(), handles[1].clone(), handles[2].clone()),
     message_queue_keys[&NetworkId::Bitcoin],
     compositions,
   )

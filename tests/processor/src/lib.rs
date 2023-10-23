@@ -12,8 +12,8 @@ use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
 use dockertest::{
-  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, Composition,
-  DockerOperations,
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy,
+  TestBodySpecification, DockerOperations,
 };
 
 mod networks;
@@ -28,16 +28,16 @@ pub fn processor_instance(
   network: NetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
-) -> Composition {
+) -> TestBodySpecification {
   serai_docker_tests::build("processor".to_string());
 
   let mut entropy = [0; 32];
   OsRng.fill_bytes(&mut entropy);
 
-  Composition::with_image(
+  TestBodySpecification::with_image(
     Image::with_repository("serai-dev-processor").pull_policy(PullPolicy::Never),
   )
-  .with_env(
+  .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
       ("ENTROPY".to_string(), hex::encode(entropy)),
@@ -63,7 +63,7 @@ pub fn processor_instance(
 pub type Handles = (String, String, String);
 pub fn processor_stack(
   network: NetworkId,
-) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<Composition>) {
+) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
   let (network_composition, network_rpc_port) = network_instance(network);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
@@ -77,37 +77,48 @@ pub fn processor_stack(
   let unique_id = {
     let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
     let mut unique_id_lock = unique_id_mutex.lock().unwrap();
-    let unique_id = hex::encode(unique_id_lock.to_be_bytes());
+    let unique_id = *unique_id_lock;
     *unique_id_lock += 1;
     unique_id
   };
 
   let mut compositions = vec![];
   let mut handles = vec![];
-  for composition in [network_composition, message_queue_composition, processor_composition] {
-    let handle = composition.handle();
+  for (name, composition) in [
+    (
+      match network {
+        NetworkId::Serai => unreachable!(),
+        NetworkId::Bitcoin => "bitcoin",
+        NetworkId::Ethereum => "ethereum",
+        NetworkId::Monero => "monero",
+      },
+      network_composition,
+    ),
+    ("message_queue", message_queue_composition),
+    ("processor", processor_composition),
+  ] {
+    let handle = format!("processor-{name}-{unique_id}");
     compositions.push(
-      composition
-        .with_start_policy(StartPolicy::Strict)
-        .with_container_name(format!("{handle}-{}", &unique_id))
-        .with_log_options(Some(LogOptions {
+      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
+        Some(LogOptions {
           action: LogAction::Forward,
-          policy: if handle.contains("processor") { LogPolicy::Always } else { LogPolicy::OnError },
+          policy: if handle.contains("-processor-") {
+            LogPolicy::Always
+          } else {
+            LogPolicy::OnError
+          },
           source: LogSource::Both,
-        })),
+        }),
+      ),
     );
-    handles.push(compositions.last().unwrap().handle());
+    handles.push(handle);
   }
 
   let processor_composition = compositions.last_mut().unwrap();
-  processor_composition.inject_container_name(handles.remove(0), "NETWORK_RPC_HOSTNAME");
-  processor_composition.inject_container_name(handles.remove(0), "MESSAGE_QUEUE_RPC");
+  processor_composition.inject_container_name(handles[0].clone(), "NETWORK_RPC_HOSTNAME");
+  processor_composition.inject_container_name(handles[1].clone(), "MESSAGE_QUEUE_RPC");
 
-  (
-    (compositions[0].handle(), compositions[1].handle(), compositions[2].handle()),
-    coord_key,
-    compositions,
-  )
+  ((handles[0].clone(), handles[1].clone(), handles[2].clone()), coord_key, compositions)
 }
 
 #[derive(serde::Deserialize, Debug)]

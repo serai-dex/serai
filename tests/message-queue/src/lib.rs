@@ -9,11 +9,13 @@ use ciphersuite::{
 
 use serai_primitives::NetworkId;
 
-use dockertest::{PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, Composition};
+use dockertest::{
+  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, TestBodySpecification,
+};
 
 pub type MessageQueuePrivateKey = <Ristretto as Ciphersuite>::F;
 pub fn instance(
-) -> (MessageQueuePrivateKey, HashMap<NetworkId, MessageQueuePrivateKey>, Composition) {
+) -> (MessageQueuePrivateKey, HashMap<NetworkId, MessageQueuePrivateKey>, TestBodySpecification) {
   serai_docker_tests::build("message-queue".to_string());
 
   let coord_key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
@@ -23,15 +25,15 @@ pub fn instance(
     (NetworkId::Monero, <Ristretto as Ciphersuite>::F::random(&mut OsRng)),
   ]);
 
-  let mut composition = Composition::with_image(
+  let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-message-queue").pull_policy(PullPolicy::Never),
   )
-  .with_log_options(Some(LogOptions {
+  .set_log_options(Some(LogOptions {
     action: LogAction::Forward,
     policy: LogPolicy::Always,
     source: LogSource::Both,
   }))
-  .with_env(
+  .replace_env(
     [
       ("COORDINATOR_KEY".to_string(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
       (
@@ -50,8 +52,8 @@ pub fn instance(
       ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
     ]
     .into(),
-  );
-  composition.publish_all_ports();
+  )
+  .set_publish_all_ports(true);
 
   (coord_key, priv_keys, composition)
 }
@@ -64,9 +66,9 @@ fn basic_functionality() {
 
   use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let (coord_key, priv_keys, composition) = instance();
-  test.add_composition(composition);
+  test.provide_container(composition);
   test.run(|ops| async move {
     // Sleep for a second for the message-queue to boot
     // It isn't an error to start immediately, it just silences an error

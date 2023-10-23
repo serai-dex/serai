@@ -13,7 +13,7 @@ pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) fn new_test() -> (Vec<Handles>, DockerTest) {
   let mut validators = vec![];
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for i in 0 .. VALIDATORS {
     let (handles, compositions) = full_stack(match i {
       0 => "Alice",
@@ -26,7 +26,7 @@ pub(crate) fn new_test() -> (Vec<Handles>, DockerTest) {
     });
     validators.push(handles);
     for composition in compositions {
-      test.add_composition(composition);
+      test.provide_container(composition);
     }
   }
   (validators, test)
