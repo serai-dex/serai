@@ -21,22 +21,28 @@
 //! Test environment for Asset Conversion pallet.
 
 use super::*;
-use crate as pallet_asset_conversion;
+use crate as dex;
 
 use frame_support::{
 	construct_runtime,
-	instances::{Instance1, Instance2},
 	ord_parameter_types, parameter_types,
-	traits::{AsEnsureOriginWithArg, ConstU128, ConstU32, ConstU64},
+	traits::{ConstU32, ConstU64, ConstU8},
+	weights::IdentityFee,
 	PalletId,
 };
-use frame_system::{EnsureSigned, EnsureSignedBy};
+
 use sp_arithmetic::Permill;
-use sp_core::H256;
+use sp_core::{H256, sr25519::Public};
 use sp_runtime::{
-	traits::{AccountIdConversion, BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup},
 	BuildStorage,
 };
+
+use serai_primitives::{Coin, Balance, Amount, system_address};
+
+pub use coins_pallet as coins;
+pub use liquidity_tokens_pallet as liquidity_tokens;
+pub use pallet_transaction_payment as transaction_payment;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -44,10 +50,10 @@ construct_runtime!(
 	pub enum Test
 	{
 		System: frame_system,
-		Balances: pallet_balances,
-		Assets: pallet_assets::<Instance1>,
-		PoolAssets: pallet_assets::<Instance2>,
-		AssetConversion: pallet_asset_conversion,
+		TransactionPayment: transaction_payment,
+		Coins: coins,
+		LiquidityTokens: liquidity_tokens,
+		Dex: dex,
 	}
 );
 
@@ -60,7 +66,7 @@ impl frame_system::Config for Test {
 	type Nonce = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u128;
+	type AccountId = Public;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Block = Block;
 	type RuntimeEvent = RuntimeEvent;
@@ -68,7 +74,7 @@ impl frame_system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u128>;
+	type AccountData = ();
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -77,69 +83,21 @@ impl frame_system::Config for Test {
 	type MaxConsumers = ConstU32<16>;
 }
 
-impl pallet_balances::Config for Test {
-	type Balance = u128;
-	type DustRemoval = ();
+impl transaction_payment::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type ExistentialDeposit = ConstU128<100>;
-	type AccountStore = System;
-	type WeightInfo = ();
-	type MaxLocks = ();
-	type MaxReserves = ConstU32<50>;
-	type ReserveIdentifier = [u8; 8];
-	type FreezeIdentifier = ();
-	type MaxFreezes = ();
-	type RuntimeHoldReason = ();
-	type MaxHolds = ();
+	type OnChargeTransaction = Coins;
+	type OperationalFeeMultiplier = ConstU8<5>;
+	type WeightToFee = IdentityFee<u64>;
+	type LengthToFee = IdentityFee<u64>;
+	type FeeMultiplierUpdate = ();
 }
 
-impl pallet_assets::Config<Instance1> for Test {
+impl coins::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type Balance = u128;
-	type RemoveItemsLimit = ConstU32<1000>;
-	type AssetId = u32;
-	type AssetIdParameter = u32;
-	type Currency = Balances;
-	type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<Self::AccountId>>;
-	type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type AssetDeposit = ConstU128<1>;
-	type AssetAccountDeposit = ConstU128<10>;
-	type MetadataDepositBase = ConstU128<1>;
-	type MetadataDepositPerByte = ConstU128<1>;
-	type ApprovalDeposit = ConstU128<1>;
-	type StringLimit = ConstU32<50>;
-	type Freezer = ();
-	type Extra = ();
-	type WeightInfo = ();
-	type CallbackHandle = ();
-	pallet_assets::runtime_benchmarks_enabled! {
-		type BenchmarkHelper = ();
-	}
 }
 
-impl pallet_assets::Config<Instance2> for Test {
+impl liquidity_tokens::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type Balance = u128;
-	type RemoveItemsLimit = ConstU32<1000>;
-	type AssetId = u32;
-	type AssetIdParameter = u32;
-	type Currency = Balances;
-	type CreateOrigin =
-		AsEnsureOriginWithArg<EnsureSignedBy<AssetConversionOrigin, Self::AccountId>>;
-	type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
-	type AssetDeposit = ConstU128<0>;
-	type AssetAccountDeposit = ConstU128<0>;
-	type MetadataDepositBase = ConstU128<0>;
-	type MetadataDepositPerByte = ConstU128<0>;
-	type ApprovalDeposit = ConstU128<0>;
-	type StringLimit = ConstU32<50>;
-	type Freezer = ();
-	type Extra = ();
-	type WeightInfo = ();
-	type CallbackHandle = ();
-	pallet_assets::runtime_benchmarks_enabled! {
-		type BenchmarkHelper = ();
-	}
 }
 
 parameter_types! {
@@ -149,44 +107,63 @@ parameter_types! {
 }
 
 ord_parameter_types! {
-	pub const AssetConversionOrigin: u128 = AccountIdConversion::<u128>::into_account_truncating(&AssetConversionPalletId::get());
+	pub const AssetConversionOrigin: Public = Public::from(system_address(b"py/ascon"));
+}
+
+pub struct CoinConverter;
+impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
+  /// Returns the MultiAssetId representing the native currency of the chain.
+  fn get_native() -> Coin {
+    Coin::Serai
+  }
+
+  /// Returns true if the given MultiAssetId is the native currency.
+  fn is_native(coin: &Coin) -> bool {
+    coin.is_native()
+  }
+
+  /// If it's not native, returns the AssetId for the given MultiAssetId.
+  fn try_convert(coin: &Coin) -> MultiAssetIdConversionResult<Coin, Coin> {
+    if coin.is_native() {
+      MultiAssetIdConversionResult::Native
+    } else {
+      MultiAssetIdConversionResult::Converted(*coin)
+    }
+  }
 }
 
 impl Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type AssetBalance = <Self as pallet_balances::Config>::Balance;
-	type AssetId = u32;
+	type Currency = Coins;
+	type AssetBalance = u64;
+	type AssetId = Coin;
 	type PoolAssetId = u32;
-	type Assets = Assets;
-	type PoolAssets = PoolAssets;
+	type Assets = Coins;
+	type PoolAssets = LiquidityTokens;
 	type PalletId = AssetConversionPalletId;
 	type WeightInfo = ();
 	type LPFee = ConstU32<3>; // means 0.3%
-	type PoolSetupFee = ConstU128<100>; // should be more or equal to the existential deposit
+	type PoolSetupFee = ConstU64<0>; // should be more or equal to the existential deposit
 	type PoolSetupFeeReceiver = AssetConversionOrigin;
 	type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
 	type AllowMultiAssetPools = AllowMultiAssetPools;
 	type MaxSwapPathLength = ConstU32<4>;
-	type MintMinLiquidity = ConstU128<100>; // 100 is good enough when the main currency has 12 decimals.
+	type MintMinLiquidity = ConstU64<100>; // 100 is good enough when the main currency has 12 decimals.
 
-	type Balance = u128;
-	type HigherPrecisionBalance = sp_core::U256;
+	type Balance = u64;
+	type HigherPrecisionBalance = u128;
 
-	type MultiAssetId = NativeOrAssetId<u32>;
-	type MultiAssetIdConverter = NativeOrAssetIdConverter<u32>;
-
-	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = ();
+	type MultiAssetId = Coin;
+	type MultiAssetIdConverter = CoinConverter;
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 
-	pallet_balances::GenesisConfig::<Test> {
-		balances: vec![(1, 10000), (2, 20000), (3, 30000), (4, 40000)],
-	}
-	.assimilate_storage(&mut t)
+	let accounts: Vec<Public> = vec![system_address(b"account1").into(), system_address(b"account2").into(), system_address(b"account3").into(), system_address(b"account4").into()];
+	coins::GenesisConfig::<Test> {
+		accounts: accounts.into_iter().map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) })).collect()
+	}.assimilate_storage(&mut t)
 	.unwrap();
 
 	let mut ext = sp_io::TestExternalities::new(t);

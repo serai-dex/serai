@@ -3,18 +3,13 @@
 #[frame_support::pallet]
 pub mod pallet {
   use sp_core::sr25519::Public;
-
   use frame_support::pallet_prelude::*;
 
-  use dex_pallet::{LiquidityTokens, Config as DexConfig};
-
+  use dex_primitives::LiquidityTokens;
   use serai_primitives::*;
 
   #[pallet::config]
-  pub trait Config:
-    frame_system::Config<AccountId = Public>
-    + DexConfig<Balance = SubstrateAmount, PoolAssetId = u32>
-  {
+  pub trait Config: frame_system::Config<AccountId = Public> {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -57,12 +52,17 @@ pub mod pallet {
 
   // TODO: apis: supply, mint, burn, transfer
   impl<T: Config> Pallet<T> {
+    /// Returns the balance of a given account for `token`.
+    pub fn balance(token: u32, of: T::AccountId) -> SubstrateAmount {
+      Self::balances(of, token).unwrap_or(0)
+    }
+
     /// Mint `balance` to the given account.
     ///
     /// Errors if any amount overflows.
     pub fn mint_into(
       token: u32,
-      to: T::AccountId,
+      to: Public,
       amount: SubstrateAmount,
     ) -> Result<(), Error<T>> {
       let balance = Self::balances(to, token).unwrap_or(0);
@@ -85,7 +85,7 @@ pub mod pallet {
     // Burn `balance` from the specified account.
     pub fn burn_from(
       token: u32,
-      from: T::AccountId,
+      from: Public,
       amount: SubstrateAmount,
     ) -> Result<(), Error<T>> {
       let balance = Self::balances(from, token);
@@ -105,7 +105,12 @@ pub mod pallet {
 
       // update the supply
       let new_supply = Self::supply(token).checked_sub(amount).unwrap();
-      Supply::<T>::set(token, new_supply);
+      if new_supply == 0 {
+        Supply::<T>::remove(token);
+      } else {
+        Supply::<T>::set(token, new_supply);
+      }
+
 
       Self::deposit_event(Event::LtBurn { from, token, amount: Amount(amount) });
       Ok(())
@@ -117,8 +122,8 @@ pub mod pallet {
   }
 
   impl<T: Config> LiquidityTokens<T::AccountId> for Pallet<T> {
-    type Balance = T::Balance;
-    type AssetId = T::PoolAssetId;
+    type Balance = SubstrateAmount;
+    type AssetId = u32;
 
     fn mint_into(
       token: Self::AssetId,
@@ -140,6 +145,14 @@ pub mod pallet {
 
     fn total_issuance(token: Self::AssetId) -> Self::Balance {
       Self::total_issuance(token)
+    }
+
+    fn asset_ids() -> Vec<Self::AssetId> {
+      Supply::<T>::iter_keys().collect::<Vec<Self::AssetId>>()
+    }
+
+    fn balance(token: Self::AssetId, of: &Public) -> Self::Balance {
+      Self::balance(token, *of)
     }
   }
 }

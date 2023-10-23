@@ -261,28 +261,6 @@ impl liquidity_tokens::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-pub struct CoinConverter;
-impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
-  /// Returns the MultiAssetId representing the native currency of the chain.
-  fn get_native() -> Coin {
-    Coin::Serai
-  }
-
-  /// Returns true if the given MultiAssetId is the native currency.
-  fn is_native(coin: &Coin) -> bool {
-    coin.is_native()
-  }
-
-  /// If it's not native, returns the AssetId for the given MultiAssetId.
-  fn try_convert(coin: &Coin) -> MultiAssetIdConversionResult<Coin, Coin> {
-    if coin.is_native() {
-      MultiAssetIdConversionResult::Native
-    } else {
-      MultiAssetIdConversionResult::Converted(*coin)
-    }
-  }
-}
-
 impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Currency = Coins;
@@ -293,7 +271,7 @@ impl dex::Config for Runtime {
 
   type AssetId = Coin;
   type MultiAssetId = Coin;
-  type MultiAssetIdConverter = CoinConverter;
+  type MultiAssetIdConverter = serai_dex_primitives::CoinConverter;
   type PoolAssetId = u32;
 
   type Assets = Coins;

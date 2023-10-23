@@ -63,6 +63,10 @@ pub enum Coin {
 }
 
 impl Coin {
+  pub fn native() -> Coin {
+    Coin::Serai
+  }
+
   pub fn network(&self) -> NetworkId {
     match self {
       Coin::Serai => NetworkId::Serai,

@@ -67,14 +67,13 @@ use frame_support::traits::{DefensiveOption, Incrementable};
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
 
-mod types;
 pub mod weights;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
-// #[cfg(test)]
-// mod mock;
+#[cfg(test)]
+mod mock;
 
 use codec::Codec;
 use frame_support::{
@@ -94,7 +93,7 @@ use sp_runtime::{
   DispatchError,
 };
 use sp_std::prelude::*;
-pub use types::*;
+use dex_primitives::*;
 pub use weights::WeightInfo;
 
 #[frame_support::pallet]
@@ -106,6 +105,12 @@ pub mod pallet {
     traits::{IntegerSquareRoot, One, Zero},
     Saturating,
   };
+
+  /// Pool ID.
+  ///
+  /// The pool's `AccountId` is derived from this type. Any changes to the type may necessitate a
+  /// migration.
+  pub type PoolIdOf<T> = (<T as Config>::MultiAssetId, <T as Config>::MultiAssetId);
 
   #[pallet::pallet]
   pub struct Pallet<T>(_);

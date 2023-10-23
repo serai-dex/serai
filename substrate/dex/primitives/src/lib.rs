@@ -18,17 +18,12 @@
 // It has been forked into a crate distributed under the AGPL 3.0.
 // Please check the current distribution for up-to-date copyright and licensing information.
 
-use super::*;
-
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_std::{cmp::Ordering, marker::PhantomData};
+use sp_runtime::DispatchError;
+use frame_support::traits::tokens::{Balance, AssetId};
 
-/// Pool ID.
-///
-/// The pool's `AccountId` is derived from this type. Any changes to the type may necessitate a
-/// migration.
-pub(super) type PoolIdOf<T> = (<T as Config>::MultiAssetId, <T as Config>::MultiAssetId);
+use serai_primitives::Coin;
 
 /// Stores the lp_token asset id a particular pool has been assigned.
 #[derive(Decode, Encode, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo)]
@@ -172,6 +167,9 @@ pub trait LiquidityTokens<AccountId>: Sized {
   /// Asset identifier.
   type AssetId: AssetId;
 
+  /// Returns the `token` balance of and account.
+  fn balance(token: Self::AssetId, of: &AccountId) -> Self::Balance;
+
   /// Mints `amount` to `to`.
   fn mint_into(
     token: Self::AssetId,
@@ -188,74 +186,29 @@ pub trait LiquidityTokens<AccountId>: Sized {
 
   /// Returns total supply for `token`.
   fn total_issuance(token: Self::AssetId) -> Self::Balance;
+
+	/// Returns an iterator of the collections in existence.
+	fn asset_ids() -> Vec<Self::AssetId>;
 }
 
-/// An implementation of MultiAssetId that can be either Native or an asset.
-#[derive(Decode, Encode, Default, MaxEncodedLen, TypeInfo, Clone, Copy, Debug)]
-pub enum NativeOrAssetId<AssetId>
-where
-  AssetId: Ord,
-{
-  /// Native asset. For example, on the Polkadot Asset Hub this would be DOT.
-  #[default]
-  Native,
-  /// A non-native asset id.
-  Asset(AssetId),
-}
-
-// TODO: get rid of all this NativeOrAssetId code and move the implementation from runtime
-// to here.
-
-impl<AssetId: Ord> From<AssetId> for NativeOrAssetId<AssetId> {
-  fn from(asset: AssetId) -> Self {
-    Self::Asset(asset)
-  }
-}
-
-impl<AssetId: Ord> Ord for NativeOrAssetId<AssetId> {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (self, other) {
-      (Self::Native, Self::Native) => Ordering::Equal,
-      (Self::Native, Self::Asset(_)) => Ordering::Less,
-      (Self::Asset(_), Self::Native) => Ordering::Greater,
-      (Self::Asset(id1), Self::Asset(id2)) => <AssetId as Ord>::cmp(id1, id2),
-    }
-  }
-}
-impl<AssetId: Ord> PartialOrd for NativeOrAssetId<AssetId> {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(<Self as Ord>::cmp(self, other))
-  }
-}
-impl<AssetId: Ord> PartialEq for NativeOrAssetId<AssetId> {
-  fn eq(&self, other: &Self) -> bool {
-    self.cmp(other) == Ordering::Equal
-  }
-}
-impl<AssetId: Ord> Eq for NativeOrAssetId<AssetId> {}
-
-/// Converts between a MultiAssetId and an AssetId (or the native currency).
-pub struct NativeOrAssetIdConverter<AssetId> {
-  _phantom: PhantomData<AssetId>,
-}
-
-impl<AssetId: Ord + Clone> MultiAssetIdConverter<NativeOrAssetId<AssetId>, AssetId>
-  for NativeOrAssetIdConverter<AssetId>
-{
-  fn get_native() -> NativeOrAssetId<AssetId> {
-    NativeOrAssetId::Native
+pub struct CoinConverter;
+impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
+  /// Returns the MultiAssetId representing the native currency of the chain.
+  fn get_native() -> Coin {
+    Coin::Serai
   }
 
-  fn is_native(asset: &NativeOrAssetId<AssetId>) -> bool {
-    *asset == Self::get_native()
+  /// Returns true if the given MultiAssetId is the native currency.
+  fn is_native(coin: &Coin) -> bool {
+    coin.is_native()
   }
 
-  fn try_convert(
-    asset: &NativeOrAssetId<AssetId>,
-  ) -> MultiAssetIdConversionResult<NativeOrAssetId<AssetId>, AssetId> {
-    match asset {
-      NativeOrAssetId::Asset(asset) => MultiAssetIdConversionResult::Converted(asset.clone()),
-      NativeOrAssetId::Native => MultiAssetIdConversionResult::Native,
+  /// If it's not native, returns the AssetId for the given MultiAssetId.
+  fn try_convert(coin: &Coin) -> MultiAssetIdConversionResult<Coin, Coin> {
+    if coin.is_native() {
+      MultiAssetIdConversionResult::Native
+    } else {
+      MultiAssetIdConversionResult::Converted(*coin)
     }
   }
 }

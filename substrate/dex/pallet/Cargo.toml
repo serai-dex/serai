@@ -25,8 +25,13 @@ sp-std = { git = "https://github.com/serai-dex/substrate", default-features = fa
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-arithmetic = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
+
 [dev-dependencies]
-serai-coins-pallet = { path = "../../coins/pallet", default-features = false }
+coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
+pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
+serai-primitives = { path = "../../primitives", default-features = false }
 
 [features]
 default = [ "std" ]
@@ -36,6 +41,14 @@ std = [
   "frame-support/std",
   "frame-system/std",
   "scale-info/std",
+
+  "coins-pallet/std",
+  "liquidity-tokens-pallet/std",
+  "pallet-transaction-payment/std",
+
+  "dex-primitives/std",
+  "serai-primitives/std",
+
   "sp-api/std",
   "sp-arithmetic/std",
   "sp-core/std",
