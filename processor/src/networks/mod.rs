@@ -278,6 +278,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// magnitude).
   const DUST: u64;
 
+  /// The cost to perform input aggregation with a 2-input 1-output TX.
+  const COST_TO_AGGREGATE: u64;
+
   /// Tweak keys for this network.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 

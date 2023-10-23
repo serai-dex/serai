@@ -57,9 +57,10 @@ fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructi
   let Ok(shorthand) = Shorthand::decode(&mut data) else { None? };
   let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { None? };
 
-  let balance = output.balance();
-  // TODO: Decrease amount by
-  // `2 * (the estimation of an input-merging transaction fee) / max_inputs_per_tx`
+  let mut balance = output.balance();
+  // Deduct twice the cost to aggregate to prevent economic attacks by malicious miners against
+  // other users
+  balance.amount.0 -= 2 * N::COST_TO_AGGREGATE;
 
   // TODO2: Set instruction.origin if not set (and handle refunds in general)
   Some(InInstructionWithBalance { instruction: instruction.instruction, balance })

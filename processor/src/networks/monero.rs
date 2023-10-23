@@ -397,6 +397,9 @@ impl Network for Monero {
   // TODO: Set a sane dust
   const DUST: u64 = 10000000000;
 
+  // TODO
+  const COST_TO_AGGREGATE: u64 = 0;
+
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 

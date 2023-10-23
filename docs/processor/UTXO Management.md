@@ -5,7 +5,7 @@ effectively be guaranteed to terminate with a safe end state. This document
 attempts to detail such requirements, and the implementations in Serai resolving
 them.
 
-### Fees From Effecting Transactions Out
+## Fees From Effecting Transactions Out
 
 When `sriXYZ` is burnt, Serai is expected to create an output for `XYZ` as
 instructed. The transaction containing this output will presumably have some fee
@@ -25,7 +25,7 @@ before the burn is included on-chain. Not only would this require more data be
 published to Serai (widening data pipeline requirements), it'd prevent any
 RBF-based solutions to dynamic fee markets causing transactions to get stuck.
 
-### Output Frequency
+## Output Frequency
 
 Outputs can be created on an external network at rate
 `max_outputs_per_tx / external_tick_rate`, where `external_tick_rate` is the
@@ -86,7 +86,7 @@ fulfill an output, increasing the fee amortized over the output and its
 siblings, this fee scales linearly with the logarithmically scaling tree depth.
 This is considered acceptable.
 
-### Input Availability
+## Input Availability
 
 The following section refers to spending an output, and then spending it again.
 Spending it again, which is impossible under the UTXO model, refers to spending
@@ -118,7 +118,7 @@ notably large burn, then the entire global queue will be consumed as full input
 availability means the ability to satisfy all potential burns in a solvent
 system.
 
-### Fees Incurred During Operations
+## Fees Incurred During Operations
 
 While fees incurred when satisfying burn were covered above, with documentation
 on how solvency is maintained, two other operating costs exists.
@@ -159,6 +159,8 @@ created transaction the running operating costs. When a created transaction has
 payments out, all of the operating costs incurred so far, which have yet to be
 amortized, are immediately and fully amortized.
 
+## Attacks by a Malicious Miner
+
 There is the concern that a significant amount of outputs could be created,
 which when merged as inputs, create a significant amount of operating costs.
 This would then be forced onto random users who burn `sriXYZ` soon after, while
@@ -166,32 +168,55 @@ the party who caused the operating costs would then be able to burn their own
 `sriXYZ` without notable fees.
 
 To describe this attack in its optimal form, assume a sole malicious block
-producer for an external network where `max_inputs_per_tx` is 16. The malicious
-miner adds 256 outputs to Serai, not paying any fees as the block producer.
-Serai must create 16 transactions to produce a set of 16 inputs, paying for 16
-transaction fees in the process (the fees of which go to the malicious miner).
+producer for an external network. The malicious miner adds an output to Serai,
+not paying any fees as the block producer. This single output alone may trigger
+an aggregation transaction. Serai would pay for the transaction fee, the fee
+going to the malicious miner.
 
-When Serai users burn `sriXYZ`, they are hit with the 16 transaction fees plus
-the normally amortized fee. Then, the malicious miner burns their `sriXYZ`,
-having the fee they capture be amortized over their output. In this process,
-they remain net except for the 16 transaction fees they gain from other users,
-which they profit.
-
-A miner only has to have 7% of the external network's hash power to execute this
-attack profitably. By only minting `sriXYZ` during their blocks, they pay no
-fees. Then, _a miner_, which has a 7% chance of being themselves, collects the
-16 transaction fees. Finally, they burn, with a 7% chance of collecting their
-own fee, or a 93% chance of losing a single transaction fee.
-
-16 attempts, costing 16 transaction fees if they always lose their single
-transaction fee, will cause a slight edge they gain the 16 transaction fees at
-least once, offsetting their costs.
+When Serai users burn `sriXYZ`, they are hit with the aggregation transaction's
+fee plus the normally amortized fee. Then, the malicious miner burns their
+`sriXYZ`, having the fee they capture be amortized over their output. In this
+process, they remain net except for the increased transaction fees they gain
+from other users, which they profit.
 
 To limit this attack vector, a flat fee of
-`2 * (the estimation of an input-merging transaction fee) / max_inputs_per_tx`
-is applied to each input. This means, assuming an inability to manipulate
-Serai's fee estimations, creating 16 outputs to force a merge transaction (and
-the associated fee) costs the attacker twice as much as the associated fee.
+`2 * (the estimation of a 2-input-merging transaction fee)` is applied to each
+input. This means, assuming an inability to manipulate Serai's fee estimations,
+creating an output to force a merge transaction (and the associated fee) costs
+the attacker twice as much as the associated fee.
+
+A 2-input TX's fee is used as aggregating multiple inputs at once actually
+yields in Serai's favor so long as the per-input fee exceeds the cost of the
+per-input addition to the TX. Since the per-input fee is the cost of an entire
+TX, this property is true.
+
+### Profitability Without the Flat Fee With a Minority of Hash Power
+
+Ignoring the above flat fee, a malicious miner could use aggregating multiple
+inputs to achieve profit with a minority of hash power. The following is how a
+miner with 7% of the external network's hash power could execute this attack
+profitably over a network with a `max_inputs_per_tx` value of 16:
+
+1) Mint `sriXYZ` with 256 outputs during their own blocks. This incurs no fees
+and would force 16 aggregation transactions to be created.
+
+2) _A miner_, which has a 7% chance of being the malicious miner, collects the
+16 transaction fees.
+
+3) The malicious miner burns their sriXYZ, with a 7% chance of collecting their
+own fee or a 93% chance of losing a single transaction fee.
+
+16 attempts would cost 16 transaction fees if they always lose their single
+transaction fee. Gaining the 16 transaction fees once, offsetting costs, is
+expected to happen with just 6.25% of the hash power. Since the malicious miner
+has 7%, they're statistically likely to recoup their costs and eventually turn
+a profit.
+
+With a flat fee of at least the cost to aggregate a single input in a full
+aggregation transaction, this attack falls apart. Serai's flat fee is the higher
+cost of the fee to aggregate two inputs in an aggregation transaction.
+
+### Solvency Without the Flat Fee
 
 Even without the above flat fee, Serai remains solvent. With the above flat fee,
 malicious miners on external networks can only steal from other users if they

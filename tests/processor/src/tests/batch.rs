@@ -8,11 +8,15 @@ use dkg::{Participant, tests::clone_without};
 use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext};
 
 use serai_client::{
-  primitives::{BlockHash, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId},
+  primitives::{
+    BlockHash, Amount, Balance, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId,
+  },
   in_instructions::primitives::{
     InInstruction, InInstructionWithBalance, Batch, SignedBatch, batch_message,
   },
 };
+
+use processor::networks::{Network, Bitcoin, Monero};
 
 use crate::{*, tests::*};
 
@@ -247,7 +251,20 @@ fn batch_test() {
           id: i,
           block: BlockHash(block_with_tx.unwrap()),
           instructions: if let Some(instruction) = instruction {
-            vec![InInstructionWithBalance { instruction, balance: balance_sent }]
+            vec![InInstructionWithBalance {
+              instruction,
+              balance: Balance {
+                coin: balance_sent.coin,
+                amount: Amount(
+                  balance_sent.amount.0 -
+                    (2 * if network == NetworkId::Bitcoin {
+                      Bitcoin::COST_TO_AGGREGATE
+                    } else {
+                      Monero::COST_TO_AGGREGATE
+                    }),
+                ),
+              },
+            }]
           } else {
             // This shouldn't have an instruction as we didn't add any data into the TX we sent
             // Empty batches remain valuable as they let us achieve consensus on the block and spend
