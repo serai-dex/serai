@@ -60,11 +60,7 @@ pub mod pallet {
     /// Mint `balance` to the given account.
     ///
     /// Errors if any amount overflows.
-    pub fn mint_into(
-      token: u32,
-      to: Public,
-      amount: SubstrateAmount,
-    ) -> Result<(), Error<T>> {
+    pub fn mint_into(token: u32, to: Public, amount: SubstrateAmount) -> Result<(), Error<T>> {
       let balance = Self::balances(to, token).unwrap_or(0);
 
       // update the balance
@@ -83,11 +79,7 @@ pub mod pallet {
     }
 
     // Burn `balance` from the specified account.
-    pub fn burn_from(
-      token: u32,
-      from: Public,
-      amount: SubstrateAmount,
-    ) -> Result<(), Error<T>> {
+    pub fn burn_from(token: u32, from: Public, amount: SubstrateAmount) -> Result<(), Error<T>> {
       let balance = Self::balances(from, token);
       if balance.is_none() {
         Err(Error::<T>::NotEnoughCoins)?;
@@ -110,7 +102,6 @@ pub mod pallet {
       } else {
         Supply::<T>::set(token, new_supply);
       }
-
 
       Self::deposit_event(Event::LtBurn { from, token, amount: Amount(amount) });
       Ok(())

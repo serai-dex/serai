@@ -187,8 +187,8 @@ pub trait LiquidityTokens<AccountId>: Sized {
   /// Returns total supply for `token`.
   fn total_issuance(token: Self::AssetId) -> Self::Balance;
 
-	/// Returns an iterator of the collections in existence.
-	fn asset_ids() -> Vec<Self::AssetId>;
+  /// Returns an iterator of the collections in existence.
+  fn asset_ids() -> Vec<Self::AssetId>;
 }
 
 pub struct CoinConverter;
