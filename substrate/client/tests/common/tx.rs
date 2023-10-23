@@ -2,14 +2,10 @@ use core::time::Duration;
 
 use tokio::time::sleep;
 
-use serai_client::subxt::utils::Encoded;
-
-use crate::common::serai;
+use serai_client::{subxt::utils::Encoded, Serai};
 
 #[allow(dead_code)]
-pub async fn publish_tx(tx: &Encoded) -> [u8; 32] {
-  let serai = serai().await;
-
+pub async fn publish_tx(serai: &Serai, tx: &Encoded) -> [u8; 32] {
   let mut latest =
     serai.block(serai.latest_block_hash().await.unwrap()).await.unwrap().unwrap().number();
 

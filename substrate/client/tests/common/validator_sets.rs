@@ -15,17 +15,16 @@ use serai_client::{
     primitives::{ValidatorSet, KeyPair, musig_context, musig_key, set_keys_message},
     ValidatorSetsEvent,
   },
-  SeraiValidatorSets,
+  SeraiValidatorSets, Serai,
 };
 
-use crate::common::{serai, tx::publish_tx};
+use crate::common::tx::publish_tx;
 
 #[allow(dead_code)]
-pub async fn set_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
+pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
   let pair = insecure_pair_from_name("Alice");
   let public = pair.public();
 
-  let serai = serai().await;
   let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
   assert_eq!(
     serai
@@ -71,11 +70,10 @@ pub async fn set_keys(set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
   );
 
   // Vote in a key pair
-  let block = publish_tx(&SeraiValidatorSets::set_keys(
-    set.network,
-    key_pair.clone(),
-    Signature(sig.to_bytes()),
-  ))
+  let block = publish_tx(
+    serai,
+    &SeraiValidatorSets::set_keys(set.network, key_pair.clone(), Signature(sig.to_bytes())),
+  )
   .await;
 
   assert_eq!(

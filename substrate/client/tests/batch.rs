@@ -18,10 +18,10 @@ use serai_client::{
 };
 
 mod common;
-use common::{serai, in_instructions::provide_batch};
+use common::in_instructions::provide_batch;
 
 serai_test!(
-  async fn publish_batch() {
+  publish_batch: (|serai: Serai| async move {
     let network = NetworkId::Bitcoin;
     let id = 0;
 
@@ -45,9 +45,8 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(batch.clone()).await;
+    let block = provide_batch(&serai, batch.clone()).await;
 
-    let serai = serai().await;
     let serai = serai.as_of(block);
     {
       let serai = serai.in_instructions();
@@ -71,5 +70,5 @@ serai_test!(
     );
     assert_eq!(serai.coin_supply(coin).await.unwrap(), amount);
     assert_eq!(serai.coin_balance(coin, address).await.unwrap(), amount);
-  }
+  })
 );

@@ -32,9 +32,8 @@ ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = t
 monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }
 
 [dev-dependencies]
-lazy_static = "1"
-
 rand_core = "0.6"
+hex = "0.4"
 
 blake2 = "0.10"
 
@@ -43,6 +42,9 @@ frost = { package = "modular-frost", path = "../../crypto/frost", features = ["t
 schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }
 
 tokio = "1"
+
+dockertest = "0.3"
+serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
 serai = ["thiserror", "scale-info", "subxt"]

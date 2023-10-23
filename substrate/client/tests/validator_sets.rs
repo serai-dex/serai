@@ -12,10 +12,10 @@ use serai_client::{
 };
 
 mod common;
-use common::{serai, validator_sets::set_keys};
+use common::validator_sets::set_keys;
 
 serai_test!(
-  async fn set_keys_test() {
+  set_keys_test: (|serai: Serai| async move {
     let network = NetworkId::Bitcoin;
     let set = ValidatorSet { session: Session(0), network };
 
@@ -29,8 +29,6 @@ serai_test!(
     let mut external_key = vec![0; 33];
     OsRng.fill_bytes(&mut external_key);
     let key_pair = (Public(ristretto_key), external_key.try_into().unwrap());
-
-    let serai = serai().await;
 
     // Make sure the genesis is as expected
     assert_eq!(
@@ -57,7 +55,7 @@ serai_test!(
       assert_eq!(vs_serai.musig_key(set).await.unwrap().unwrap(), musig_key(set, &[public]).0);
     }
 
-    let block = set_keys(set, key_pair.clone()).await;
+    let block = set_keys(&serai, set, key_pair.clone()).await;
 
     // While the set_keys function should handle this, it's beneficial to
     // independently test it
@@ -67,5 +65,5 @@ serai_test!(
       vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]
     );
     assert_eq!(serai.keys(set).await.unwrap(), Some(key_pair));
-  }
+  })
 );

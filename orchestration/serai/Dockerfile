@@ -4,6 +4,9 @@ LABEL description="STAGE 1: Build"
 # Upgrade and add dev dependencies
 RUN apt update && apt upgrade -y && apt install -y git pkg-config make clang libssl-dev protobuf-compiler && apt autoremove -y && apt clean
 
+# Add the wasm toolchain
+RUN rustup target add wasm32-unknown-unknown
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -19,9 +22,6 @@ ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
 WORKDIR /serai
-
-# Add the wasm toolchain
-RUN rustup target add wasm32-unknown-unknown
 
 # Mount the caches and build
 RUN --mount=type=cache,target=/root/.cargo \

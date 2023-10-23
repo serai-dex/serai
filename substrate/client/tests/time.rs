@@ -5,12 +5,9 @@ use tokio::time::sleep;
 use serai_client::Serai;
 
 mod common;
-use common::serai;
 
 serai_test!(
-  async fn time() {
-    let serai = serai().await;
-
+  time: (|serai: Serai| async move {
     let mut number = serai.latest_block().await.unwrap().number();
     let mut done = 0;
     while done < 3 {
@@ -27,5 +24,5 @@ serai_test!(
       assert!(now.saturating_sub(block.time().unwrap()) < 5);
       done += 1;
     }
-  }
+  })
 );
