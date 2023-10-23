@@ -66,7 +66,7 @@ fn basic_functionality() {
 
   use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let (coord_key, priv_keys, composition) = instance();
   test.provide_container(composition);
   test.run(|ops| async move {

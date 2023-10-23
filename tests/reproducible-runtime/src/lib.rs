@@ -16,7 +16,7 @@ pub fn reproducibly_builds() {
     OsRng.fill_bytes(id);
   }
 
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for id in &ids {
     test.provide_container(
       TestBodySpecification::with_image(

@@ -22,7 +22,7 @@ pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
   let mut coordinators = vec![];
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for i in 0 .. COORDINATORS {
     let (handles, coord_key, compositions) = coordinator_stack(match i {
       0 => "Alice",

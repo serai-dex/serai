@@ -19,7 +19,7 @@ pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
 fn new_test(network: NetworkId) -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
   let mut coordinators = vec![];
-  let mut test = DockerTest::new();
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for _ in 0 .. COORDINATORS {
     let (handles, coord_key, compositions) = processor_stack(network);
     coordinators.push((handles, coord_key));

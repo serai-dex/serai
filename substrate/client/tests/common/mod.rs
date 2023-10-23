@@ -36,8 +36,8 @@ macro_rules! serai_test {
           source: LogSource::Both,
         }));
 
-        let mut test = DockerTest::new();
-        test.provide_container(composition);
+        let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
+        test.add_composition(composition);
         test.run_async(|ops| async move {
           // Sleep until the Substrate RPC starts
           let serai_rpc = ops.handle(handle).host_port(9944).unwrap();
