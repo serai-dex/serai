@@ -70,6 +70,9 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["test
 
 env_logger = "0.10"
 
+dockertest = "0.4"
+serai-docker-tests = { path = "../tests/docker" }
+
 [features]
 secp256k1 = ["k256", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]

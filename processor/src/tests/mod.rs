@@ -21,38 +21,10 @@ lazy_static::lazy_static! {
 }
 
 #[macro_export]
-macro_rules! sequential {
-  () => {
-    lazy_static::lazy_static! {
-      static ref SEQUENTIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
-    }
-  };
-}
-
-#[macro_export]
-macro_rules! async_sequential {
-  ($(async fn $name: ident() $body: block)*) => {
-    $(
-      #[tokio::test]
-      async fn $name() {
-        *$crate::tests::INIT_LOGGER;
-        let guard = SEQUENTIAL.lock().await;
-        let local = tokio::task::LocalSet::new();
-        local.run_until(async move {
-          if let Err(err) = tokio::task::spawn_local(async move { $body }).await {
-            drop(guard);
-            Err(err).unwrap()
-          }
-        }).await;
-      }
-    )*
-  }
-}
-
-#[macro_export]
 macro_rules! test_network {
   (
     $N: ident,
+    $docker: ident,
     $network: ident,
     $key_gen: ident,
     $scanner: ident,
@@ -66,42 +38,50 @@ macro_rules! test_network {
       test_addresses,
     };
 
-    // This doesn't interact with a node and accordingly doesn't need to be run sequentially
+    // This doesn't interact with a node and accordingly doesn't need to be run
     #[tokio::test]
     async fn $key_gen() {
       test_key_gen::<$N>().await;
     }
 
-    sequential!();
-
-    async_sequential! {
-      async fn $scanner() {
-        test_scanner($network().await).await;
-      }
+    #[test]
+    fn $scanner() {
+      let docker = $docker();
+      docker.run(|ops| async move {
+        test_scanner($network(&ops).await).await;
+      });
     }
 
-    async_sequential! {
-      async fn $signer() {
-        test_signer($network().await).await;
-      }
+    #[test]
+    fn $signer() {
+      let docker = $docker();
+      docker.run(|ops| async move {
+        test_signer($network(&ops).await).await;
+      });
     }
 
-    async_sequential! {
-      async fn $wallet() {
-        test_wallet($network().await).await;
-      }
+    #[test]
+    fn $wallet() {
+      let docker = $docker();
+      docker.run(|ops| async move {
+        test_wallet($network(&ops).await).await;
+      });
     }
 
-    async_sequential! {
-      async fn $addresses() {
-        test_addresses($network().await).await;
-      }
+    #[test]
+    fn $addresses() {
+      let docker = $docker();
+      docker.run(|ops| async move {
+        test_addresses($network(&ops).await).await;
+      });
     }
 
-    async_sequential! {
-      async fn $no_deadlock_in_multisig_completed() {
-        test_no_deadlock_in_multisig_completed($network().await).await;
-      }
+    #[test]
+    fn $no_deadlock_in_multisig_completed() {
+      let docker = $docker();
+      docker.run(|ops| async move {
+        test_no_deadlock_in_multisig_completed($network(&ops).await).await;
+      });
     }
   };
 }
