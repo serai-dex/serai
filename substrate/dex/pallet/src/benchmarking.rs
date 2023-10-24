@@ -314,10 +314,9 @@ benchmarks! {
       caller.clone(),
     )?;
 
-    let path;
     // if we only allow the native-asset pools, then the worst case scenario would be to swap
     // asset1-native-asset2
-    if !T::AllowMultiAssetPools::get() {
+    let path = if !T::AllowMultiAssetPools::get() {
       AssetConversion::<T>::create_pool(
         SystemOrigin::Signed(caller.clone()).into(),
         native.clone(),
@@ -333,7 +332,7 @@ benchmarks! {
         0.into(),
         caller.clone(),
       )?;
-      path = vec![asset1.clone(), native.clone(), asset2.clone()];
+      vec![asset1.clone(), native.clone(), asset2.clone()]
     } else {
       AssetConversion::<T>::create_pool(
         SystemOrigin::Signed(caller.clone()).into(),
@@ -368,8 +367,8 @@ benchmarks! {
         0.into(),
         caller.clone(),
       )?;
-      path = vec![native.clone(), asset1.clone(), asset2.clone(), asset3.clone()];
-    }
+      vec![native.clone(), asset1.clone(), asset2.clone(), asset3.clone()]
+    };
 
     let path: BoundedVec<_, T::MaxSwapPathLength> = BoundedVec::try_from(path).unwrap();
     let asset2_balance = T::Assets::balance(T::BenchmarkHelper::asset_id(2), &caller);
