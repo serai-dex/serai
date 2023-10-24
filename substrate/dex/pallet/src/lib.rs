@@ -204,8 +204,8 @@ pub mod pallet {
     type WeightInfo: WeightInfo;
 
     /// The benchmarks need a way to create asset ids from u32s.
-		#[cfg(feature = "runtime-benchmarks")]
-		type BenchmarkHelper: BenchmarkHelper<Self::AssetId, Self::MultiAssetId>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper: BenchmarkHelper<Self::AssetId, Self::MultiAssetId>;
   }
 
   /// Map from `PoolAssetId` to `PoolInfo`. This establishes whether a pool has been officially

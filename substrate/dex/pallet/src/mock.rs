@@ -158,7 +158,7 @@ impl Config for Test {
   type MultiAssetIdConverter = CoinConverter;
 
   #[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = ();
+  type BenchmarkHelper = ();
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {

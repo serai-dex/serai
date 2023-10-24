@@ -289,7 +289,7 @@ impl dex::Config for Runtime {
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
 
   #[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = ();
+  type BenchmarkHelper = ();
 }
 
 impl validator_sets::Config for Runtime {

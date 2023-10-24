@@ -72,8 +72,7 @@ pub trait BenchmarkHelper<AssetId, MultiAssetId> {
 }
 
 #[cfg(feature = "runtime-benchmarks")]
-impl BenchmarkHelper<Coin, Coin> for ()
-{
+impl BenchmarkHelper<Coin, Coin> for () {
   fn asset_id(asset_id: u32) -> Coin {
     // we shift id 1 unit to the left, since id 0 is the native coin.
     COINS[(usize::try_from(asset_id).unwrap() % COINS.len()) + 1]
@@ -164,7 +163,11 @@ pub trait Assets<AccountId>: Sized {
   ) -> Result<Self::Balance, DispatchError>;
 
   /// mints the given `amount` of `asset` into `to`.
-  fn mint(asset: Self::AssetId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
+  fn mint(
+    asset: Self::AssetId,
+    to: &AccountId,
+    amount: Self::Balance,
+  ) -> Result<Self::Balance, DispatchError>;
 }
 
 /// Liquidity tokens trait for Dex pallet.

@@ -267,7 +267,11 @@ pub mod pallet {
       Ok(amount)
     }
 
-    fn mint(coin: Self::AssetId, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+    fn mint(
+      coin: Self::AssetId,
+      to: &Public,
+      amount: Self::Balance,
+    ) -> Result<Self::Balance, DispatchError> {
       Self::mint(*to, Balance { coin, amount: Amount(amount) })?;
       Ok(amount)
     }
