@@ -1,5 +1,4 @@
 use core::{ops::Deref, future::Future};
-use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
@@ -21,12 +20,13 @@ use processor_messages::{
   sign::{self, SignId},
 };
 
-use serai_db::{Get, Db};
+use serai_db::Db;
 
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb,
+    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, DataSet, Accumulation,
+    TributaryState,
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
@@ -46,41 +46,6 @@ const BATCH_SHARE: &str = "b_share";
 const SIGN_PREPROCESS: &str = "s_preprocess";
 const SIGN_SHARE: &str = "s_share";
 
-fn read_known_to_exist_data<D: Db, G: Get>(
-  getter: &G,
-  spec: &TributarySpec,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  data_spec: &DataSpecification,
-  needed: u16,
-) -> Option<HashMap<Participant, Vec<u8>>> {
-  let mut data = HashMap::new();
-  for validator in spec.validators().iter().map(|validator| validator.0) {
-    data.insert(
-      spec.i(validator).unwrap(),
-      if let Some(data) = TributaryDb::<D>::data(getter, spec.genesis(), data_spec, validator) {
-        data
-      } else {
-        continue;
-      },
-    );
-  }
-  assert_eq!(data.len(), usize::from(needed));
-
-  // Remove our own piece of data, if we were involved
-  if data
-    .remove(
-      &spec
-        .i(Ristretto::generator() * key.deref())
-        .expect("handling a message for a Tributary we aren't part of"),
-    )
-    .is_some()
-  {
-    Some(data)
-  } else {
-    None
-  }
-}
-
 pub fn dkg_confirmation_nonces(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
@@ -98,16 +63,7 @@ pub fn generated_key_pair<D: Db>(
   attempt: u32,
 ) -> Result<[u8; 32], Participant> {
   TributaryDb::<D>::save_currently_completing_key_pair(txn, spec.genesis(), key_pair);
-
-  let Some(preprocesses) = read_known_to_exist_data::<D, _>(
-    txn,
-    spec,
-    key,
-    &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
-    spec.n(),
-  ) else {
-    panic!("wasn't a participant in confirming a key pair");
-  };
+  let preprocesses = TributaryDb::<D>::confirmation_nonces(txn, spec.genesis(), attempt).unwrap();
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
@@ -152,19 +108,19 @@ pub(crate) async fn handle_application_tx<
         signed.signer.to_bytes(),
         "published data for ID without an attempt",
       );
-      return None;
+      return Accumulation::NotReady;
     };
 
     // If they've already published a TX for this attempt, slash
     if TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer).is_some() {
       fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
-      return None;
+      return Accumulation::NotReady;
     }
 
     // If the attempt is lesser than the blockchain's, slash
     if data_spec.attempt < curr_attempt {
       // TODO: Slash for being late
-      return None;
+      return Accumulation::NotReady;
     }
     // If the attempt is greater, this is a premature publication, full slash
     if data_spec.attempt > curr_attempt {
@@ -174,7 +130,7 @@ pub(crate) async fn handle_application_tx<
         signed.signer.to_bytes(),
         "published data with an attempt which hasn't started",
       );
-      return None;
+      return Accumulation::NotReady;
     }
 
     // TODO: We can also full slash if shares before all commitments, or share before the
@@ -182,16 +138,8 @@ pub(crate) async fn handle_application_tx<
 
     // TODO: If this is shares, we need to check they are part of the selected signing set
 
-    // Store this data
-    let received = TributaryDb::<D>::set_data(txn, genesis, data_spec, signed.signer, &bytes);
-
-    // If we have all the needed commitments/preprocesses/shares, tell the processor
-    // TODO: This needs to be coded by weight, not by validator count
-    let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
-    if received == needed {
-      return Some(read_known_to_exist_data::<D, _>(txn, spec, key, data_spec, needed));
-    }
-    None
+    // Accumulate this data
+    TributaryState::<D>::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
   };
 
   match tx {
@@ -202,7 +150,7 @@ pub(crate) async fn handle_application_tx<
         bytes,
         &signed,
       ) {
-        Some(Some(commitments)) => {
+        Accumulation::Ready(DataSet::Participating(commitments)) => {
           log::info!("got all DkgCommitments for {}", hex::encode(genesis));
           processors
             .send(
@@ -214,8 +162,10 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => panic!("wasn't a participant in DKG commitments"),
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {
+          panic!("wasn't a participant in DKG commitments")
+        }
+        Accumulation::NotReady => {}
       }
     }
 
@@ -257,9 +207,16 @@ pub(crate) async fn handle_application_tx<
         bytes,
         &signed,
       ) {
-        Some(Some(shares)) => {
+        Accumulation::Ready(DataSet::Participating(shares)) => {
           log::info!("got all DkgShares for {}", hex::encode(genesis));
-          assert!(confirmation_nonces.is_some());
+
+          let Accumulation::Ready(DataSet::Participating(confirmation_nonces)) =
+            confirmation_nonces
+          else {
+            panic!("got all DKG shares yet confirmation nonces aren't Ready(Participating(_))");
+          };
+          TributaryDb::<D>::save_confirmation_nonces(txn, genesis, attempt, confirmation_nonces);
+
           processors
             .send(
               spec.set().network,
@@ -270,8 +227,10 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => panic!("wasn't a participant in DKG shares"),
-        None => assert!(confirmation_nonces.is_none()),
+        Accumulation::Ready(DataSet::NotParticipating) => {
+          panic!("wasn't a participant in DKG shares")
+        }
+        Accumulation::NotReady => assert!(matches!(confirmation_nonces, Accumulation::NotReady)),
       }
     }
 
@@ -282,19 +241,12 @@ pub(crate) async fn handle_application_tx<
         shares.to_vec(),
         &signed,
       ) {
-        Some(Some(shares)) => {
+        Accumulation::Ready(DataSet::Participating(shares)) => {
           log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
-          let Some(preprocesses) = read_known_to_exist_data::<D, _>(
-            txn,
-            spec,
-            key,
-            &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
-            spec.n(),
-          ) else {
-            panic!("wasn't a participant in DKG confirmation nonces");
-          };
-
+          let preprocesses = TributaryDb::<D>::confirmation_nonces(txn, genesis, attempt).unwrap();
+          // TODO: This can technically happen under very very very specific timing as the txn put
+          // happens before DkgConfirmed, yet the txn commit isn't guaranteed to
           let key_pair = TributaryDb::<D>::currently_completing_key_pair(txn, genesis)
             .unwrap_or_else(|| {
               panic!(
@@ -314,8 +266,10 @@ pub(crate) async fn handle_application_tx<
           )
           .await;
         }
-        Some(None) => panic!("wasn't a participant in DKG confirmination shares"),
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {
+          panic!("wasn't a participant in DKG confirmination shares")
+        }
+        Accumulation::NotReady => {}
       }
     }
 
@@ -350,7 +304,7 @@ pub(crate) async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        Some(Some(preprocesses)) => {
+        Accumulation::Ready(DataSet::Participating(preprocesses)) => {
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
@@ -363,8 +317,8 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => {}
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {}
+        Accumulation::NotReady => {}
       }
     }
     Transaction::BatchShare(data) => {
@@ -378,7 +332,7 @@ pub(crate) async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        Some(Some(shares)) => {
+        Accumulation::Ready(DataSet::Participating(shares)) => {
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
@@ -393,8 +347,8 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => {}
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {}
+        Accumulation::NotReady => {}
       }
     }
 
@@ -410,7 +364,7 @@ pub(crate) async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        Some(Some(preprocesses)) => {
+        Accumulation::Ready(DataSet::Participating(preprocesses)) => {
           NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
@@ -429,8 +383,8 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => {}
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {}
+        Accumulation::NotReady => {}
       }
     }
     Transaction::SignShare(data) => {
@@ -445,7 +399,7 @@ pub(crate) async fn handle_application_tx<
         data.data,
         &data.signed,
       ) {
-        Some(Some(shares)) => {
+        Accumulation::Ready(DataSet::Participating(shares)) => {
           processors
             .send(
               spec.set().network,
@@ -463,8 +417,8 @@ pub(crate) async fn handle_application_tx<
             )
             .await;
         }
-        Some(None) => {}
-        None => {}
+        Accumulation::Ready(DataSet::NotParticipating) => {}
+        Accumulation::NotReady => {}
       }
     }
     Transaction::SignCompleted { plan, tx_hash, .. } => {

@@ -283,8 +283,7 @@ async fn dkg_test() {
   let mut txs = vec![];
   for key in keys.iter() {
     let attempt = 0;
-    // This is fine to re-use the one DB as such, due to exactly how this specific call is coded,
-    // albeit poor
+    let (mut scanner_db, _) = new_processors(key, &spec, &tributaries[0].1).await;
     let mut txn = scanner_db.0.txn();
     let share =
       crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();

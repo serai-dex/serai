@@ -1,12 +1,17 @@
-use std::io::Read;
+use core::{marker::PhantomData, ops::Deref};
+use std::{io::Read, collections::HashMap};
 
 use scale::{Encode, Decode};
 
+use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use frost::Participant;
 
 use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
 pub use serai_db::*;
+
+use crate::tributary::TributarySpec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Topic {
@@ -125,6 +130,29 @@ impl<D: Db> TributaryDb<D> {
     })
   }
 
+  fn confirmation_nonces_key(genesis: [u8; 32], attempt: u32) -> Vec<u8> {
+    Self::tributary_key(b"confirmation_nonces", (genesis, attempt).encode())
+  }
+  pub fn save_confirmation_nonces(
+    txn: &mut D::Transaction<'_>,
+    genesis: [u8; 32],
+    attempt: u32,
+    nonces: HashMap<Participant, Vec<u8>>,
+  ) {
+    let nonces =
+      nonces.into_iter().map(|(key, value)| (u16::from(key), value)).collect::<HashMap<_, _>>();
+    txn.put(Self::confirmation_nonces_key(genesis, attempt), bincode::serialize(&nonces).unwrap())
+  }
+  pub fn confirmation_nonces<G: Get>(
+    getter: &G,
+    genesis: [u8; 32],
+    attempt: u32,
+  ) -> Option<HashMap<Participant, Vec<u8>>> {
+    let bytes = getter.get(Self::confirmation_nonces_key(genesis, attempt))?;
+    let map: HashMap<u16, Vec<u8>> = bincode::deserialize(&bytes).unwrap();
+    Some(map.into_iter().map(|(key, value)| (Participant::new(key).unwrap(), value)).collect())
+  }
+
   // The key pair which we're actively working on completing
   fn currently_completing_key_pair_key(genesis: [u8; 32]) -> Vec<u8> {
     Self::tributary_key(b"currently_completing_key_pair", genesis)
@@ -219,5 +247,67 @@ impl<D: Db> TributaryDb<D> {
   pub fn handle_event(txn: &mut D::Transaction<'_>, id: [u8; 32], index: u32) {
     assert!(!Self::handled_event(txn, id, index));
     txn.put(Self::event_key(&id, index), []);
+  }
+}
+
+pub enum DataSet {
+  Participating(HashMap<Participant, Vec<u8>>),
+  NotParticipating,
+}
+
+pub enum Accumulation {
+  Ready(DataSet),
+  NotReady,
+}
+
+pub struct TributaryState<D: Db>(PhantomData<D>);
+impl<D: Db> TributaryState<D> {
+  pub fn accumulate(
+    txn: &mut D::Transaction<'_>,
+    our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    spec: &TributarySpec,
+    data_spec: &DataSpecification,
+    signer: <Ristretto as Ciphersuite>::G,
+    data: &[u8],
+  ) -> Accumulation {
+    if TributaryDb::<D>::data(txn, spec.genesis(), data_spec, signer).is_some() {
+      panic!("accumulating data for a participant multiple times");
+    }
+    let received = TributaryDb::<D>::set_data(txn, spec.genesis(), data_spec, signer, data);
+
+    // If we have all the needed commitments/preprocesses/shares, tell the processor
+    // TODO: This needs to be coded by weight, not by validator count
+    let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
+    if received == needed {
+      return Accumulation::Ready({
+        let mut data = HashMap::new();
+        for validator in spec.validators().iter().map(|validator| validator.0) {
+          data.insert(
+            spec.i(validator).unwrap(),
+            if let Some(data) = TributaryDb::<D>::data(txn, spec.genesis(), data_spec, validator) {
+              data
+            } else {
+              continue;
+            },
+          );
+        }
+        assert_eq!(data.len(), usize::from(needed));
+
+        // Remove our own piece of data, if we were involved
+        if data
+          .remove(
+            &spec
+              .i(Ristretto::generator() * our_key.deref())
+              .expect("handling a message for a Tributary we aren't part of"),
+          )
+          .is_some()
+        {
+          DataSet::Participating(data)
+        } else {
+          DataSet::NotParticipating
+        }
+      });
+    }
+    Accumulation::NotReady
   }
 }

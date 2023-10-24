@@ -8188,6 +8188,7 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bincode",
  "blake2",
  "ciphersuite",
  "env_logger",
