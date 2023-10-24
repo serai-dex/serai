@@ -220,17 +220,18 @@ impl<D: Db> TributaryDb<D> {
   ) -> Option<Vec<u8>> {
     getter.get(Self::data_key(genesis, data_spec, signer))
   }
-  pub fn set_data(
+  fn set_data(
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
     data_spec: &DataSpecification,
     signer: <Ristretto as Ciphersuite>::G,
+    signer_shares: u16,
     data: &[u8],
   ) -> u16 {
     let received_key = Self::data_received_key(genesis, data_spec);
     let mut received =
       u16::from_le_bytes(txn.get(&received_key).unwrap_or(vec![0; 2]).try_into().unwrap());
-    received += 1;
+    received += signer_shares;
 
     txn.put(received_key, received.to_le_bytes());
     txn.put(Self::data_key(genesis, data_spec, signer), data);
@@ -273,15 +274,21 @@ impl<D: Db> TributaryState<D> {
     if TributaryDb::<D>::data(txn, spec.genesis(), data_spec, signer).is_some() {
       panic!("accumulating data for a participant multiple times");
     }
-    let received = TributaryDb::<D>::set_data(txn, spec.genesis(), data_spec, signer, data);
+    let signer_shares = {
+      let signer_i =
+        spec.i(signer).expect("transaction signed by a non-validator for this tributary");
+      u16::from(signer_i.end) - u16::from(signer_i.start)
+    };
+    let received =
+      TributaryDb::<D>::set_data(txn, spec.genesis(), data_spec, signer, signer_shares, data);
 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
-    // TODO: This needs to be coded by weight, not by validator count
     let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
     if received == needed {
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in spec.validators().iter().map(|validator| validator.0) {
+          // TODO(now): All calls of this function need to split this data back
           data.insert(
             spec.i(validator).unwrap().start,
             if let Some(data) = TributaryDb::<D>::data(txn, spec.genesis(), data_spec, validator) {
