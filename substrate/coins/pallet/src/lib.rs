@@ -14,7 +14,7 @@ pub mod pallet {
 
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
-  use dex_primitives::{Currency, Assets};
+  use dex_primitives::{Currency, Coins as CoinsTrait};
 
   use serai_primitives::*;
   pub use coins_primitives as primitives;
@@ -244,20 +244,20 @@ pub mod pallet {
     }
   }
 
-  impl<T: Config> Assets<T::AccountId> for Pallet<T> {
+  impl<T: Config> CoinsTrait<T::AccountId> for Pallet<T> {
     type Balance = SubstrateAmount;
-    type AssetId = Coin;
+    type CoinId = Coin;
 
-    fn balance(coin: Self::AssetId, of: &Public) -> Self::Balance {
+    fn balance(coin: Self::CoinId, of: &Public) -> Self::Balance {
       Self::balance(*of, coin).0
     }
 
-    fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+    fn minimum_balance(_: Self::CoinId) -> Self::Balance {
       1
     }
 
     fn transfer(
-      coin: Self::AssetId,
+      coin: Self::CoinId,
       from: &Public,
       to: &Public,
       amount: Self::Balance,
@@ -268,7 +268,7 @@ pub mod pallet {
     }
 
     fn mint(
-      coin: Self::AssetId,
+      coin: Self::CoinId,
       to: &Public,
       amount: Self::Balance,
     ) -> Result<Self::Balance, DispatchError> {

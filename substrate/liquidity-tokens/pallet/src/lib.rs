@@ -115,10 +115,10 @@ pub mod pallet {
 
   impl<T: Config> LiquidityTokens<T::AccountId> for Pallet<T> {
     type Balance = SubstrateAmount;
-    type AssetId = u32;
+    type CoinId = u32;
 
     fn mint_into(
-      token: Self::AssetId,
+      token: Self::CoinId,
       to: &Public,
       amount: Self::Balance,
     ) -> Result<Self::Balance, DispatchError> {
@@ -127,7 +127,7 @@ pub mod pallet {
     }
 
     fn burn_from(
-      token: Self::AssetId,
+      token: Self::CoinId,
       from: &Public,
       amount: Self::Balance,
     ) -> Result<Self::Balance, DispatchError> {
@@ -135,15 +135,15 @@ pub mod pallet {
       Ok(amount)
     }
 
-    fn total_issuance(token: Self::AssetId) -> Self::Balance {
+    fn total_issuance(token: Self::CoinId) -> Self::Balance {
       Self::total_issuance(token)
     }
 
-    fn asset_ids() -> Vec<Self::AssetId> {
-      Supply::<T>::iter_keys().collect::<Vec<Self::AssetId>>()
+    fn coin_ids() -> Vec<Self::CoinId> {
+      Supply::<T>::iter_keys().collect::<Vec<Self::CoinId>>()
     }
 
-    fn balance(token: Self::AssetId, of: &Public) -> Self::Balance {
+    fn balance(token: Self::CoinId, of: &Public) -> Self::Balance {
       Self::balance(token, *of)
     }
   }

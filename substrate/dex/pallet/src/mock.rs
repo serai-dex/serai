@@ -18,7 +18,7 @@
 // It has been forked into a crate distributed under the AGPL 3.0.
 // Please check the current distribution for up-to-date copyright and licensing information.
 
-//! Test environment for Asset Conversion pallet.
+//! Test environment for Dex pallet.
 
 use super::*;
 use crate as dex;
@@ -50,7 +50,7 @@ construct_runtime!(
   {
     System: frame_system,
     TransactionPayment: transaction_payment,
-    Coins: coins,
+    CoinsPallet: coins,
     LiquidityTokens: liquidity_tokens,
     Dex: dex,
   }
@@ -84,7 +84,7 @@ impl frame_system::Config for Test {
 
 impl transaction_payment::Config for Test {
   type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = Coins;
+  type OnChargeTransaction = CoinsPallet;
   type OperationalFeeMultiplier = ConstU8<5>;
   type WeightToFee = IdentityFee<u64>;
   type LengthToFee = IdentityFee<u64>;
@@ -100,53 +100,53 @@ impl liquidity_tokens::Config for Test {
 }
 
 parameter_types! {
-  pub const AssetConversionPalletId: PalletId = PalletId(*b"py/ascon");
-  pub storage AllowMultiAssetPools: bool = true;
-  // should be non-zero if AllowMultiAssetPools is true, otherwise can be zero
+  pub const CoinConversionPalletId: PalletId = PalletId(*b"py/ascon");
+  pub storage AllowMultiCoinPools: bool = true;
+  // should be non-zero if AllowMultiCoinPools is true, otherwise can be zero
   pub storage LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
 }
 
 ord_parameter_types! {
-  pub const AssetConversionOrigin: Public = Public::from(system_address(b"py/ascon"));
+  pub const CoinConversionOrigin: Public = Public::from(system_address(b"py/ascon"));
 }
 
 pub struct CoinConverter;
-impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
-  /// Returns the MultiAssetId representing the native currency of the chain.
+impl MultiCoinIdConverter<Coin, Coin> for CoinConverter {
+  /// Returns the MultiCoinId representing the native currency of the chain.
   fn get_native() -> Coin {
     Coin::Serai
   }
 
-  /// Returns true if the given MultiAssetId is the native currency.
+  /// Returns true if the given MultiCoinId is the native currency.
   fn is_native(coin: &Coin) -> bool {
     coin.is_native()
   }
 
-  /// If it's not native, returns the AssetId for the given MultiAssetId.
-  fn try_convert(coin: &Coin) -> MultiAssetIdConversionResult<Coin, Coin> {
+  /// If it's not native, returns the CoinId for the given MultiCoinId.
+  fn try_convert(coin: &Coin) -> MultiCoinIdConversionResult<Coin, Coin> {
     if coin.is_native() {
-      MultiAssetIdConversionResult::Native
+      MultiCoinIdConversionResult::Native
     } else {
-      MultiAssetIdConversionResult::Converted(*coin)
+      MultiCoinIdConversionResult::Converted(*coin)
     }
   }
 }
 
 impl Config for Test {
   type RuntimeEvent = RuntimeEvent;
-  type Currency = Coins;
-  type AssetBalance = u64;
-  type AssetId = Coin;
-  type PoolAssetId = u32;
-  type Assets = Coins;
-  type PoolAssets = LiquidityTokens;
-  type PalletId = AssetConversionPalletId;
+  type Currency = CoinsPallet;
+  type CoinBalance = u64;
+  type CoinId = Coin;
+  type PoolCoinId = u32;
+  type Coins = CoinsPallet;
+  type PoolCoins = LiquidityTokens;
+  type PalletId = CoinConversionPalletId;
   type WeightInfo = ();
   type LPFee = ConstU32<3>; // means 0.3%
   type PoolSetupFee = ConstU64<0>; // should be more or equal to the existential deposit
-  type PoolSetupFeeReceiver = AssetConversionOrigin;
+  type PoolSetupFeeReceiver = CoinConversionOrigin;
   type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
-  type AllowMultiAssetPools = AllowMultiAssetPools;
+  type AllowMultiCoinPools = AllowMultiCoinPools;
   type MaxSwapPathLength = ConstU32<4>;
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;
@@ -154,8 +154,8 @@ impl Config for Test {
   type Balance = u64;
   type HigherPrecisionBalance = u128;
 
-  type MultiAssetId = Coin;
-  type MultiAssetIdConverter = CoinConverter;
+  type MultiCoinId = Coin;
+  type MultiCoinIdConverter = CoinConverter;
 
   #[cfg(feature = "runtime-benchmarks")]
   type BenchmarkHelper = ();

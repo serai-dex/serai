@@ -153,7 +153,7 @@ parameter_types! {
 }
 
 ord_parameter_types! {
-  pub const AssetConversionOrigin: PublicKey = PublicKey::from(system_address(b"DexPalet"));
+  pub const CoinConversionOrigin: PublicKey = PublicKey::from(system_address(b"DexPalet"));
 }
 
 pub struct CallFilter;
@@ -263,28 +263,28 @@ impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   type Currency = Coins;
   type Balance = SubstrateAmount;
-  type AssetBalance = SubstrateAmount;
+  type CoinBalance = SubstrateAmount;
   // TODO review if this should be u64/u128 or u64/u256 (and rounding in general).
   type HigherPrecisionBalance = u128;
 
-  type AssetId = Coin;
-  type MultiAssetId = Coin;
-  type MultiAssetIdConverter = serai_dex_primitives::CoinConverter;
-  type PoolAssetId = u32;
+  type CoinId = Coin;
+  type MultiCoinId = Coin;
+  type MultiCoinIdConverter = serai_dex_primitives::CoinConverter;
+  type PoolCoinId = u32;
 
-  type Assets = Coins;
-  type PoolAssets = LiquidityTokens;
+  type Coins = Coins;
+  type PoolCoins = LiquidityTokens;
 
   type LPFee = ConstU32<3>; // 0.3%
-  type PoolSetupFee = ConstU64<0>; // Asset class deposit fees are sufficient to prevent spam
+  type PoolSetupFee = ConstU64<0>; // Coin class deposit fees are sufficient to prevent spam
   type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
   type MintMinLiquidity = ConstU64<10000>;
 
-  type MaxSwapPathLength = ConstU32<3>; // asset1 -> SRI -> asset2
+  type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
 
   type PalletId = DexPalletId;
-  type PoolSetupFeeReceiver = AssetConversionOrigin;
-  type AllowMultiAssetPools = ConstBool<false>;
+  type PoolSetupFeeReceiver = CoinConversionOrigin;
+  type AllowMultiCoinPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
 
