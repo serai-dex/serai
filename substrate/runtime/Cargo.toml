@@ -132,6 +132,8 @@ runtime-benchmarks = [
 
   "pallet-timestamp/runtime-benchmarks",
 
+  "dex-pallet/runtime-benchmarks",
+
   "pallet-babe/runtime-benchmarks",
   "pallet-grandpa/runtime-benchmarks",
 ]

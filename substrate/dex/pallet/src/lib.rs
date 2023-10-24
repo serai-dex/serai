@@ -64,8 +64,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use frame_support::traits::{DefensiveOption, Incrementable};
 
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 pub mod weights;
 
@@ -202,6 +202,10 @@ pub mod pallet {
 
     /// Weight information for extrinsics in this pallet.
     type WeightInfo: WeightInfo;
+
+    /// The benchmarks need a way to create asset ids from u32s.
+		#[cfg(feature = "runtime-benchmarks")]
+		type BenchmarkHelper: BenchmarkHelper<Self::AssetId, Self::MultiAssetId>;
   }
 
   /// Map from `PoolAssetId` to `PoolInfo`. This establishes whether a pool has been officially

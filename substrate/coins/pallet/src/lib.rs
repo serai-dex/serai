@@ -237,6 +237,11 @@ pub mod pallet {
       Self::transfer_internal(*from, *to, balance)?;
       Ok(amount)
     }
+
+    fn mint(to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+      Self::mint(*to, Balance { coin: Coin::native(), amount: Amount(amount) })?;
+      Ok(amount)
+    }
   }
 
   impl<T: Config> Assets<T::AccountId> for Pallet<T> {
@@ -259,6 +264,11 @@ pub mod pallet {
     ) -> Result<Self::Balance, DispatchError> {
       let balance = Balance { coin, amount: Amount(amount) };
       Self::transfer_internal(*from, *to, balance)?;
+      Ok(amount)
+    }
+
+    fn mint(coin: Self::AssetId, to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
+      Self::mint(*to, Balance { coin, amount: Amount(amount) })?;
       Ok(amount)
     }
   }

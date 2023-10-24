@@ -287,6 +287,9 @@ impl dex::Config for Runtime {
   type AllowMultiAssetPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
+
+  #[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = ();
 }
 
 impl validator_sets::Config for Runtime {

@@ -28,7 +28,7 @@ use sp_std::vec::Vec;
 
 use frame_support::traits::tokens::{Balance, AssetId};
 
-use serai_primitives::Coin;
+use serai_primitives::{Coin, COINS};
 
 /// Stores the lp_token asset id a particular pool has been assigned.
 #[derive(Decode, Encode, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo)]
@@ -72,17 +72,15 @@ pub trait BenchmarkHelper<AssetId, MultiAssetId> {
 }
 
 #[cfg(feature = "runtime-benchmarks")]
-impl<AssetId, MultiAssetId> BenchmarkHelper<AssetId, MultiAssetId> for ()
-where
-  AssetId: From<u32>,
-  MultiAssetId: From<u32>,
+impl BenchmarkHelper<Coin, Coin> for ()
 {
-  fn asset_id(asset_id: u32) -> AssetId {
-    asset_id.into()
+  fn asset_id(asset_id: u32) -> Coin {
+    // we shift id 1 unit to the left, since id 0 is the native coin.
+    COINS[(usize::try_from(asset_id).unwrap() % COINS.len()) + 1]
   }
 
-  fn multiasset_id(asset_id: u32) -> MultiAssetId {
-    asset_id.into()
+  fn multiasset_id(asset_id: u32) -> Coin {
+    COINS[usize::try_from(asset_id).unwrap() % COINS.len()]
   }
 }
 
@@ -138,6 +136,9 @@ pub trait Currency<AccountId>: Sized {
     to: &AccountId,
     amount: Self::Balance,
   ) -> Result<Self::Balance, DispatchError>;
+
+  /// mints the given `amount` into `to`.
+  fn mint(to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
 }
 
 /// External coin trait for Dex pallet.
@@ -152,7 +153,6 @@ pub trait Assets<AccountId>: Sized {
   fn balance(asset: Self::AssetId, of: &AccountId) -> Self::Balance;
 
   /// Returns the minimum allowed balance of an account
-  /// TODO: make sure of coin precision here?
   fn minimum_balance(asset: Self::AssetId) -> Self::Balance;
 
   /// Transfers the given `amount` from `from` to `to`.
@@ -162,6 +162,9 @@ pub trait Assets<AccountId>: Sized {
     to: &AccountId,
     amount: Self::Balance,
   ) -> Result<Self::Balance, DispatchError>;
+
+  /// mints the given `amount` of `asset` into `to`.
+  fn mint(asset: Self::AssetId, to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
 }
 
 /// Liquidity tokens trait for Dex pallet.
@@ -200,7 +203,7 @@ pub struct CoinConverter;
 impl MultiAssetIdConverter<Coin, Coin> for CoinConverter {
   /// Returns the MultiAssetId representing the native currency of the chain.
   fn get_native() -> Coin {
-    Coin::Serai
+    Coin::native()
   }
 
   /// Returns true if the given MultiAssetId is the native currency.
