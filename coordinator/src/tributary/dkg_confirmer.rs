@@ -84,12 +84,27 @@ use crate::tributary::TributarySpec;
 */
 pub(crate) struct DkgConfirmer;
 impl DkgConfirmer {
+  // Convert the passed in HashMap, which uses the validators' start index for their `s` threshold
+  // shares, to the indexes needed for MuSig
+  fn from_threshold_i_to_musig_i(
+    spec: &TributarySpec,
+    mut old_map: HashMap<Participant, Vec<u8>>,
+  ) -> HashMap<Participant, Vec<u8>> {
+    let mut new_map = HashMap::new();
+    for (new_i, validator) in spec.validators().into_iter().enumerate() {
+      let threshold_i = spec.i(validator.0).unwrap();
+      if let Some(value) = old_map.remove(&threshold_i.start) {
+        new_map.insert(Participant::new(u16::try_from(new_i + 1).unwrap()).unwrap(), value);
+      }
+    }
+    new_map
+  }
+
   fn preprocess_internal(
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     attempt: u32,
   ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    // TODO: Does Substrate already have a validator-uniqueness check?
     let validators = spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
 
     let context = musig_context(spec.set());
@@ -127,7 +142,7 @@ impl DkgConfirmer {
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
     let machine = Self::preprocess_internal(spec, key, attempt).0;
-    let preprocesses = preprocesses
+    let preprocesses = Self::from_threshold_i_to_musig_i(spec, preprocesses)
       .into_iter()
       .map(|(p, preprocess)| {
         machine
@@ -173,7 +188,7 @@ impl DkgConfirmer {
       .expect("trying to complete a machine which failed to preprocess")
       .0;
 
-    let shares = shares
+    let shares = Self::from_threshold_i_to_musig_i(spec, shares)
       .into_iter()
       .map(|(p, share)| {
         machine.read_share(&mut share.as_slice()).map(|share| (p, share)).map_err(|_| p)
