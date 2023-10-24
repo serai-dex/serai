@@ -18,9 +18,14 @@
 // It has been forked into a crate distributed under the AGPL 3.0.
 // Please check the current distribution for up-to-date copyright and licensing information.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
 use sp_runtime::DispatchError;
+use sp_std::vec::Vec;
+
 use frame_support::traits::tokens::{Balance, AssetId};
 
 use serai_primitives::Coin;

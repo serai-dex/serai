@@ -19,6 +19,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 dex-primitives = { package = "serai-dex-primitives", path = "../../dex/primitives", default-features = false }
 
@@ -30,6 +31,7 @@ std = [
   "frame-support/std",
 
   "sp-core/std",
+  "sp-std/std",
 
   "dex-primitives/std",
 

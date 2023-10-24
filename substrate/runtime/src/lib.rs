@@ -64,8 +64,6 @@ use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
-use dex::{MultiAssetIdConverter, MultiAssetIdConversionResult};
-
 /// An index to a block.
 pub type BlockNumber = u64;
 

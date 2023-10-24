@@ -3,6 +3,7 @@
 #[frame_support::pallet]
 pub mod pallet {
   use sp_core::sr25519::Public;
+  use sp_std::vec::Vec;
   use frame_support::pallet_prelude::*;
 
   use dex_primitives::LiquidityTokens;
