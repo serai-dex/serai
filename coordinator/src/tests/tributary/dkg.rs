@@ -281,9 +281,13 @@ async fn dkg_test() {
   let key_pair = (serai_client::Public(substrate_key), network_key.try_into().unwrap());
 
   let mut txs = vec![];
-  for key in keys.iter() {
+  for (i, key) in keys.iter().enumerate() {
     let attempt = 0;
-    let (mut scanner_db, _) = new_processors(key, &spec, &tributaries[0].1).await;
+    let mut scanner_db = &mut scanner_db;
+    let (mut local_scanner_db, _) = new_processors(key, &spec, &tributaries[0].1).await;
+    if i != 0 {
+      scanner_db = &mut local_scanner_db;
+    }
     let mut txn = scanner_db.0.txn();
     let share =
       crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
