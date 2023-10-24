@@ -33,7 +33,7 @@ pub mod key_gen {
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
-    GenerateKey { id: KeyGenId, params: ThresholdParams },
+    GenerateKey { id: KeyGenId, params: ThresholdParams, shares: u16 },
     // Received commitments for the specified key generation protocol.
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.

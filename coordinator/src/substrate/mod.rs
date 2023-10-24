@@ -79,7 +79,7 @@ async fn handle_new_set<D: Db>(
           .await?
           .expect("validator selected for set yet didn't have an allocation")
           .0;
-        set_data.push((participant, allocation / allocation_per_key_share));
+        set_data.push((participant, u16::try_from(allocation / allocation_per_key_share).unwrap()));
       }
       amortize_excess_key_shares(&mut set_data);
       set_data

@@ -101,19 +101,16 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   // If we're rebooting, we'll re-fire this message
   // This is safe due to the message-queue deduplicating based off the intent system
   let set = spec.set();
+  let our_i = spec
+    .i(Ristretto::generator() * key.deref())
+    .expect("adding a tributary for a set we aren't in set for");
   processors
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
         id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
-        params: frost::ThresholdParams::new(
-          spec.t(),
-          spec.n(),
-          spec
-            .i(Ristretto::generator() * key.deref())
-            .expect("adding a tributary for a set we aren't in set for"),
-        )
-        .unwrap(),
+        params: frost::ThresholdParams::new(spec.t(), spec.n(), our_i.start).unwrap(),
+        shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
     )
     .await;
@@ -426,14 +423,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // Create a MuSig-based machine to inform Substrate of this key generation
           let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
 
+          let our_i = spec
+            .i(pub_key)
+            .expect("processor message to DKG for a session we aren't a validator in");
+
           let mut tx_shares = Vec::with_capacity(shares.len());
           for i in 1 ..= spec.n() {
             let i = Participant::new(i).unwrap();
-            if i ==
-              spec
-                .i(pub_key)
-                .expect("processor message to DKG for a session we aren't a validator in")
-            {
+            if our_i.contains(&i) {
               continue;
             }
             tx_shares

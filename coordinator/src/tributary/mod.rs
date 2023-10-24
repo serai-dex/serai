@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
@@ -45,7 +45,7 @@ pub struct TributarySpec {
   serai_block: [u8; 32],
   start_time: u64,
   set: ValidatorSet,
-  validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
+  validators: Vec<(<Ristretto as Ciphersuite>::G, u16)>,
 }
 
 impl TributarySpec {
@@ -53,7 +53,7 @@ impl TributarySpec {
     serai_block: [u8; 32],
     start_time: u64,
     set: ValidatorSet,
-    set_participants: Vec<(PublicKey, u64)>,
+    set_participants: Vec<(PublicKey, u16)>,
   ) -> TributarySpec {
     let mut validators = vec![];
     for (participant, shares) in set_participants {
@@ -88,31 +88,29 @@ impl TributarySpec {
   }
 
   pub fn n(&self) -> u16 {
-    // TODO: Support multiple key shares
-    // self.validators.iter().map(|(_, weight)| u16::try_from(weight).unwrap()).sum()
-    self.validators().len().try_into().unwrap()
+    self.validators.iter().map(|(_, weight)| weight).sum()
   }
 
   pub fn t(&self) -> u16 {
     ((2 * self.n()) / 3) + 1
   }
 
-  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Participant> {
+  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Range<Participant>> {
     let mut i = 1;
-    // TODO: Support multiple key shares
-    for (validator, _weight) in &self.validators {
+    for (validator, weight) in &self.validators {
       if validator == &key {
-        // return (i .. (i + weight)).to_vec();
-        return Some(Participant::new(i).unwrap());
+        return Some(Range {
+          start: Participant::new(i).unwrap(),
+          end: Participant::new(i + weight).unwrap(),
+        });
       }
-      // i += weight;
-      i += 1;
+      i += weight;
     }
     None
   }
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
-    self.validators.clone()
+    self.validators.iter().map(|(validator, weight)| (*validator, u64::from(*weight))).collect()
   }
 
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -160,9 +158,9 @@ impl TributarySpec {
     let mut validators = Vec::with_capacity(validators_len);
     for _ in 0 .. validators_len {
       let key = Ristretto::read_G(reader)?;
-      let mut bond = [0; 8];
-      reader.read_exact(&mut bond)?;
-      validators.push((key, u64::from_le_bytes(bond)));
+      let mut weight = [0; 2];
+      reader.read_exact(&mut weight)?;
+      validators.push((key, u16::from_le_bytes(weight)));
     }
 
     Ok(Self { serai_block, start_time, set: ValidatorSet { session, network }, validators })

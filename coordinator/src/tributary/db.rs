@@ -283,7 +283,7 @@ impl<D: Db> TributaryState<D> {
         let mut data = HashMap::new();
         for validator in spec.validators().iter().map(|validator| validator.0) {
           data.insert(
-            spec.i(validator).unwrap(),
+            spec.i(validator).unwrap().start,
             if let Some(data) = TributaryDb::<D>::data(txn, spec.genesis(), data_spec, validator) {
               data
             } else {
@@ -298,7 +298,8 @@ impl<D: Db> TributaryState<D> {
           .remove(
             &spec
               .i(Ristretto::generator() * our_key.deref())
-              .expect("handling a message for a Tributary we aren't part of"),
+              .expect("handling a message for a Tributary we aren't part of")
+              .start,
           )
           .is_some()
         {

@@ -178,21 +178,31 @@ pub(crate) async fn handle_application_tx<
       let sender_i = spec
         .i(signed.signer)
         .expect("transaction added to tributary by signer who isn't a participant");
+      let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
 
       // Only save our share's bytes
       let our_i = spec
         .i(Ristretto::generator() * key.deref())
         .expect("in a tributary we're not a validator for");
 
-      let bytes = if sender_i == our_i {
+      let our_shares = if sender_i == our_i {
         vec![]
       } else {
-        // 1-indexed to 0-indexed, handling the omission of the sender's own data
-        let relative_i = usize::from(u16::from(our_i) - 1) -
-          (if u16::from(our_i) > u16::from(sender_i) { 1 } else { 0 });
-        // Safe since we length-checked shares
-        shares.swap_remove(relative_i)
+        // 1-indexed to 0-indexed
+        let mut our_i_pos = u16::from(our_i.start) - 1;
+        // Handle the omission of the sender's own data
+        if u16::from(our_i.start) > u16::from(sender_i.start) {
+          our_i_pos -= sender_is_len;
+        }
+        let our_i_pos = usize::from(our_i_pos);
+        shares
+          .drain(
+            our_i_pos .. (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
+          )
+          .flatten()
+          .collect::<Vec<_>>()
       };
+      // Drop shares as it's been mutated into invalidity
       drop(shares);
 
       let confirmation_nonces = handle(
@@ -204,7 +214,7 @@ pub(crate) async fn handle_application_tx<
       match handle(
         txn,
         &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
-        bytes,
+        our_shares,
         &signed,
       ) {
         Accumulation::Ready(DataSet::Participating(shares)) => {
