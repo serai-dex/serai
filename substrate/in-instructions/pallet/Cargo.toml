@@ -21,6 +21,7 @@ sp-core = { git = "https://github.com/serai-dex/substrate", default-features = f
 sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -28,6 +29,7 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 serai-primitives = { path = "../../primitives", default-features = false }
 in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../primitives", default-features = false }
 
+dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 
@@ -42,6 +44,7 @@ std = [
   "sp-io/std",
   "sp-application-crypto/std",
   "sp-runtime/std",
+  "sp-std/std",
 
   "frame-system/std",
   "frame-support/std",
@@ -49,6 +52,7 @@ std = [
   "serai-primitives/std",
   "in-instructions-primitives/std",
 
+  "dex-pallet/std",
   "coins-pallet/std",
   "validator-sets-pallet/std",
 ]

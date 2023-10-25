@@ -16,12 +16,18 @@ use sp_application_crypto::sr25519::Signature;
 use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, Data};
+#[rustfmt::skip]
+use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;
 
 pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
+
+// This is just an account that will make ops in behalf of users for the
+// in instructions that is coming in. Not to be confused with in_instructions pallet.
+// in_instructions are a pallet(a module) and that is just and account.
+pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructionExecutor");
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
@@ -29,7 +35,47 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
-  Dex(Data),
+  Dex(DexCall),
+}
+
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+pub enum OutAddress {
+  Serai(SeraiAddress),
+  External(ExternalAddress),
+}
+
+impl OutAddress {
+  pub fn is_native(&self) -> bool {
+    matches!(self, Self::Serai(_))
+  }
+
+  pub fn as_native(self) -> Option<SeraiAddress> {
+    match self {
+      Self::Serai(addr) => Some(addr),
+      _ => None,
+    }
+  }
+
+  pub fn as_external(self) -> Option<ExternalAddress> {
+    match self {
+      Self::External(addr) => Some(addr),
+      Self::Serai(_) => None,
+    }
+  }
+}
+
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+pub enum DexCall {
+  // address to sent the lp tokens to
+  AddLiquidity(SeraiAddress),
+  // out balance and out address
+  Swap(Balance, OutAddress),
 }
 
 #[derive(

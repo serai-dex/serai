@@ -42,7 +42,7 @@ async fn test_substrate_signer() {
         balance: Balance { coin: Coin::Bitcoin, amount: Amount(1000) },
       },
       InInstructionWithBalance {
-        instruction: InInstruction::Dex(Data::new(vec![0xcc; 128]).unwrap()),
+        instruction: InInstruction::Dex(DexCall::AddLiquidity(SeraiAddress([0xbb; 32]))),
         balance: Balance { coin: Coin::Monero, amount: Amount(9999999999999999) },
       },
     ],

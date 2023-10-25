@@ -8301,6 +8301,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
+ "serai-dex-pallet",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-pallet",
@@ -8308,6 +8309,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std",
  "thiserror",
 ]
 

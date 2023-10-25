@@ -26,20 +26,32 @@ pub mod pallet {
   use sp_application_crypto::RuntimePublic;
   use sp_runtime::traits::Zero;
   use sp_core::sr25519::Public;
+  use sp_std::vec;
 
   use frame_support::pallet_prelude::*;
-  use frame_system::pallet_prelude::*;
+  use frame_system::{pallet_prelude::*, RawOrigin};
 
-  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
+  use coins_pallet::{
+    Config as CoinsConfig, Pallet as Coins,
+    primitives::{OutInstructionWithBalance, OutInstruction},
+  };
   use validator_sets_pallet::{
     primitives::{Session, ValidatorSet},
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
+  use dex_pallet::{Config as DexConfig, Pallet as Dex};
+
+  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance};
 
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + ValidatorSetsConfig + CoinsConfig {
+  pub trait Config:
+    frame_system::Config
+    + ValidatorSetsConfig
+    + CoinsConfig
+    + DexConfig<MultiCoinId = Coin, CoinBalance = SubstrateAmount>
+  {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -48,6 +60,12 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
+  }
+
+  #[pallet::error]
+  pub enum Error<T> {
+    /// Coin and OutAddress types don't match.
+    InvalidAddressForCoin,
   }
 
   #[pallet::pallet]
@@ -79,7 +97,132 @@ pub mod pallet {
         InInstruction::Transfer(address) => {
           Coins::<T>::mint(address.into(), instruction.balance)?;
         }
-        _ => panic!("unsupported instruction"),
+        InInstruction::Dex(call) => {
+          // This will only be initiated by external chain txs. That is why we only need
+          // adding liquidity and swaps. Other functionalities(create_pool, remove_liq etc.)
+          // might be called directly from serai as a native operation.
+          //
+          // Hence, AddLiquidity call here actually swaps and adds liquidity.
+          // we will swap half of the given coin for SRI to be able to
+          // provide symmetric liquidity. So the pool has be be created before
+          // for this to be successful.
+          //
+          // And for swaps, they are done on an internal address like a temp account.
+          // we mint the deposited coin into that account, do swap on it and burn the
+          // received coin. This way account will be back on initial balance(since the minted coin
+          // will be moved to pool account.) and burned coin will be seen by processor and sent
+          // to given external address.
+
+          match call {
+            DexCall::AddLiquidity(address) => {
+              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              let coin = instruction.balance.coin;
+
+              // mint the given coin on the account
+              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+
+              // swap half of it for SRI
+              let half = instruction.balance.amount.0 / 2;
+              let path = BoundedVec::truncate_from(vec![coin, Coin::Serai]);
+              Dex::<T>::swap_exact_tokens_for_tokens(
+                origin.clone().into(),
+                path,
+                half,
+                1, // minimum out, so we accept whatever we get.
+                IN_INSTRUCTION_EXECUTOR.into(),
+              )?;
+
+              // get how much we got for our swap
+              let sri_amount = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai).0;
+
+              // add liquidity
+              Dex::<T>::add_liquidity(
+                origin.clone().into(),
+                coin,
+                Coin::Serai,
+                half,
+                sri_amount,
+                1,
+                1,
+                address.into(),
+              )?;
+
+              // TODO: minimums are set to 1 above to guarantee successful adding liq call.
+              // Ideally we either get this info from user or send the leftovers back to user.
+              // Let's send the leftovers back to user for now.
+              let coin_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), coin);
+              let sri_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai);
+              if coin_balance != Amount(0) {
+                Coins::<T>::transfer_internal(
+                  IN_INSTRUCTION_EXECUTOR.into(),
+                  address.into(),
+                  Balance { coin, amount: coin_balance },
+                )?;
+              }
+              if sri_balance != Amount(0) {
+                Coins::<T>::transfer_internal(
+                  IN_INSTRUCTION_EXECUTOR.into(),
+                  address.into(),
+                  Balance { coin: Coin::Serai, amount: sri_balance },
+                )?;
+              }
+            }
+            DexCall::Swap(out_balance, out_address) => {
+              let send_to_external = !out_address.is_native();
+              let native_coin = out_balance.coin.is_native();
+
+              // we can't send native coin to external chain
+              if native_coin && send_to_external {
+                Err(Error::<T>::InvalidAddressForCoin)?;
+              }
+
+              // mint the given coin on our account
+              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+
+              // get the path
+              let mut path = vec![instruction.balance.coin, Coin::Serai];
+              if !native_coin {
+                path.push(out_balance.coin);
+              }
+
+              // get the swap address
+              // if the address is internal, we can directly swap to it. if not, we swap to
+              // ourselves and burn the coins to send them back on the external chain.
+              let send_to = if send_to_external {
+                IN_INSTRUCTION_EXECUTOR
+              } else {
+                out_address.clone().as_native().unwrap()
+              };
+
+              // do the swap
+              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              Dex::<T>::swap_exact_tokens_for_tokens(
+                origin.into(),
+                BoundedVec::truncate_from(path),
+                instruction.balance.amount.0,
+                out_balance.amount.0,
+                send_to.into(),
+              )?;
+
+              // burn the received coins so that they sent back to the user
+              // if it is requested to an external address.
+              if send_to_external {
+                // see how much we got
+                let coin_balance =
+                  Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), out_balance.coin);
+                // TODO: data shouldn't come here from processor just to go back to it.
+                let instruction = OutInstructionWithBalance {
+                  instruction: OutInstruction {
+                    address: out_address.as_external().unwrap(),
+                    data: None,
+                  },
+                  balance: Balance { coin: out_balance.coin, amount: coin_balance },
+                };
+                Coins::<T>::burn_non_sri(IN_INSTRUCTION_EXECUTOR.into(), instruction)?;
+              }
+            }
+          }
+        }
       }
       Ok(())
     }
