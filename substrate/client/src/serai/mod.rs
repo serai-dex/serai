@@ -37,6 +37,8 @@ pub mod coins;
 pub use coins::SeraiCoins;
 pub mod in_instructions;
 pub use in_instructions::SeraiInInstructions;
+pub mod dex;
+pub use dex::SeraiDex;
 pub mod validator_sets;
 pub use validator_sets::SeraiValidatorSets;
 
@@ -349,6 +351,10 @@ impl<'a> TemporalSerai<'a> {
 
   pub fn in_instructions(self) -> SeraiInInstructions<'a> {
     SeraiInInstructions(self)
+  }
+
+  pub fn dex(self) -> SeraiDex<'a> {
+    SeraiDex(self)
   }
 
   pub fn validator_sets(self) -> SeraiValidatorSets<'a> {

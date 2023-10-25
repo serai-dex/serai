@@ -1,3 +1,4 @@
+use rand_core::{RngCore, OsRng};
 use blake2::{
   digest::{consts::U32, Digest},
   Blake2b,
@@ -8,10 +9,10 @@ use scale::Encode;
 use sp_core::Pair;
 
 use serai_client::{
-  primitives::insecure_pair_from_name,
+  primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
   validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::{
-    primitives::{Batch, SignedBatch, batch_message},
+    primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
     InInstructionsEvent,
   },
   SeraiInInstructions, Serai,
@@ -59,4 +60,27 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   // TODO: Check the tokens events
 
   block
+}
+
+#[allow(dead_code)]
+pub async fn mint_coin(
+  balance: Balance,
+  network: NetworkId,
+  batch_id: u32,
+  address: SeraiAddress,
+) -> [u8; 32] {
+  let mut block_hash = BlockHash([0; 32]);
+  OsRng.fill_bytes(&mut block_hash.0);
+
+  let batch = Batch {
+    network,
+    id: batch_id,
+    block: block_hash,
+    instructions: vec![InInstructionWithBalance {
+      instruction: InInstruction::Transfer(address),
+      balance,
+    }],
+  };
+
+  provide_batch(batch).await
 }
