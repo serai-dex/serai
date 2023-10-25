@@ -227,16 +227,16 @@ impl<D: Db> TributaryDb<D> {
     signer: <Ristretto as Ciphersuite>::G,
     signer_shares: u16,
     data: &[u8],
-  ) -> u16 {
+  ) -> (u16, u16) {
     let received_key = Self::data_received_key(genesis, data_spec);
-    let mut received =
+    let prior_received =
       u16::from_le_bytes(txn.get(&received_key).unwrap_or(vec![0; 2]).try_into().unwrap());
-    received += signer_shares;
+    let received = prior_received + signer_shares;
 
     txn.put(received_key, received.to_le_bytes());
     txn.put(Self::data_key(genesis, data_spec, signer), data);
 
-    received
+    (prior_received, received)
   }
 
   fn event_key(id: &[u8], index: u32) -> Vec<u8> {
@@ -279,12 +279,12 @@ impl<D: Db> TributaryState<D> {
         spec.i(signer).expect("transaction signed by a non-validator for this tributary");
       u16::from(signer_i.end) - u16::from(signer_i.start)
     };
-    let received =
+    let (prior_received, now_received) =
       TributaryDb::<D>::set_data(txn, spec.genesis(), data_spec, signer, signer_shares, data);
 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
     let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
-    if received == needed {
+    if (prior_received < needed) && (now_received >= needed) {
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in spec.validators().iter().map(|validator| validator.0) {
