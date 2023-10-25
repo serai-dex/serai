@@ -5,7 +5,8 @@ pub use mem::*;
 mod rocks;
 #[cfg(feature = "rocksdb")]
 pub use rocks::{RocksDB, new_rocksdb};
-
+mod create_db;
+pub use create_db::*;
 /// An object implementing get.
 pub trait Get {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
