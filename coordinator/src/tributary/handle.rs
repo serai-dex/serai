@@ -163,18 +163,10 @@ pub(crate) async fn handle_application_tx<
     Ok(())
   }
 
-  fn unflatten(
-    spec: &TributarySpec,
-    our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    data: &mut HashMap<Participant, Vec<u8>>,
-  ) {
+  fn unflatten(spec: &TributarySpec, data: &mut HashMap<Participant, Vec<u8>>) {
     for (validator, _) in spec.validators() {
       let range = spec.i(validator).unwrap();
       let Some(all_segments) = data.remove(&range.start) else {
-        assert_eq!(
-          range,
-          spec.i(<Ristretto as Ciphersuite>::generator() * our_key.deref()).unwrap()
-        );
         continue;
       };
       let mut data_vec = Vec::<_>::decode(&mut all_segments.as_slice()).unwrap();
@@ -198,7 +190,7 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut commitments)) => {
           log::info!("got all DkgCommitments for {}", hex::encode(genesis));
-          unflatten(spec, key, &mut commitments);
+          unflatten(spec, &mut commitments);
           processors
             .send(
               spec.set().network,
@@ -409,7 +401,7 @@ pub(crate) async fn handle_application_tx<
         &data.signed,
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
-          unflatten(spec, key, &mut preprocesses);
+          unflatten(spec, &mut preprocesses);
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
@@ -441,7 +433,7 @@ pub(crate) async fn handle_application_tx<
         &data.signed,
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
-          unflatten(spec, key, &mut shares);
+          unflatten(spec, &mut shares);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
@@ -477,7 +469,7 @@ pub(crate) async fn handle_application_tx<
         &data.signed,
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
-          unflatten(spec, key, &mut preprocesses);
+          unflatten(spec, &mut preprocesses);
           NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
@@ -516,7 +508,7 @@ pub(crate) async fn handle_application_tx<
         &data.signed,
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
-          unflatten(spec, key, &mut shares);
+          unflatten(spec, &mut shares);
           processors
             .send(
               spec.set().network,

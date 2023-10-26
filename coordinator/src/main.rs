@@ -433,7 +433,12 @@ async fn handle_processor_message<D: Db, P: P2p>(
           for i in 1 ..= spec.n() {
             let i = Participant::new(i).unwrap();
             if our_i.contains(&i) {
-              panic!("processor sent us our own shares");
+              for shares in &shares {
+                if shares.contains_key(&i) {
+                  panic!("processor sent us our own shares");
+                }
+              }
+              continue;
             }
             tx_shares.push(vec![]);
             for shares in &mut shares {

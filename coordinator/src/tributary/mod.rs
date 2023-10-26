@@ -534,8 +534,10 @@ impl TransactionTrait for Transaction {
 
   fn verify(&self) -> Result<(), TransactionError> {
     if let Transaction::BatchShare(data) = self {
-      if data.data.len() != 32 {
-        Err(TransactionError::InvalidContent)?;
+      for data in &data.data {
+        if data.len() != 32 {
+          Err(TransactionError::InvalidContent)?;
+        }
       }
     }
 
