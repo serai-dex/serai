@@ -557,6 +557,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
                 let prior_sets_last_batch = last_received - 1;
                 // TODO: If we're looping here, we're not handling the messages we need to in order
                 // to create the Batch we're looking for
+                // Don't have the processor yield the handover batch untill the batch before is
+                // acknowledged on-chain?
                 loop {
                   let successfully_verified = substrate::verify_published_batches::<D>(
                     &mut txn,

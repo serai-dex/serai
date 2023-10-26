@@ -54,6 +54,9 @@ impl<D: Db> NonceDecider<D> {
     Self::set_nonce(txn, genesis, BATCH_CODE, batch, nonce_for);
     nonce_for
   }
+  // TODO: The processor won't yield shares for this if the signing protocol aborts. We need to
+  // detect when we're expecting shares for an aborted protocol and insert a dummy transaction
+  // there.
   pub fn selected_for_signing_batch(
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
@@ -76,6 +79,7 @@ impl<D: Db> NonceDecider<D> {
     }
     res
   }
+  // TODO: Same TODO as selected_for_signing_batch
   pub fn selected_for_signing_plan(
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
