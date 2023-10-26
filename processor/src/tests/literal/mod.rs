@@ -89,6 +89,7 @@ mod monero {
       "--no-zmq".to_string(),
       "--disable-rpc-ban".to_string(),
       "--rpc-bind-ip=0.0.0.0".to_string(),
+      "--rpc-login=serai:seraidex".to_string(),
       "--rpc-access-control-origins=*".to_string(),
       "--confirm-external-bind".to_string(),
       "--non-interactive".to_string(),
@@ -110,7 +111,7 @@ mod monero {
     let handle = ops.handle("serai-dev-monero").host_port(18081).unwrap();
     // TODO: Replace with a check if the node has booted
     tokio::time::sleep(core::time::Duration::from_secs(20)).await;
-    let monero = Monero::new(format!("http://{}:{}", handle.0, handle.1));
+    let monero = Monero::new(format!("http://serai:seraidex@{}:{}", handle.0, handle.1));
     while monero.get_latest_block_number().await.unwrap() < 150 {
       monero.mine_block().await;
     }

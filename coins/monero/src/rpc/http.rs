@@ -6,9 +6,20 @@ use reqwest::Client;
 use crate::rpc::{RpcError, RpcConnection, Rpc};
 
 #[derive(Clone, Debug)]
+enum Authentication {
+  // If unauthenticated, reuse a single client
+  Unauthenticated(Client),
+  // If authenticated, don't reuse clients so that each connection makes its own connection
+  // This ensures that if a nonce is requested, another caller doesn't make a request invalidating
+  // it
+  // We could acquire a mutex over the client, yet creating a new client is preferred for the
+  // possibility of parallelism
+  Authenticated(String, String),
+}
+
+#[derive(Clone, Debug)]
 pub struct HttpRpc {
-  client: Client,
-  userpass: Option<(String, String)>,
+  authentication: Authentication,
   url: String,
 }
 
@@ -18,8 +29,8 @@ impl HttpRpc {
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
   pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
-    // Parse out the username and password
-    let userpass = if url.contains('@') {
+    let authentication = if url.contains('@') {
+      // Parse out the username and password
       let url_clone = url;
       let split_url = url_clone.split('@').collect::<Vec<_>>();
       if split_url.len() != 2 {
@@ -42,22 +53,31 @@ impl HttpRpc {
       if split_userpass.len() != 2 {
         Err(RpcError::InvalidNode)?;
       }
-      Some((split_userpass[0].to_string(), split_userpass[1].to_string()))
+      Authentication::Authenticated(split_userpass[0].to_string(), split_userpass[1].to_string())
     } else {
-      None
+      Authentication::Unauthenticated(Client::new())
     };
 
-    Ok(Rpc(HttpRpc { client: Client::new(), userpass, url }))
+    Ok(Rpc(HttpRpc { authentication, url }))
   }
 }
 
 #[async_trait]
 impl RpcConnection for HttpRpc {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    let mut builder = self.client.post(self.url.clone() + "/" + route).body(body);
+    #[allow(unused_assignments)] // False positive
+    let mut client_storage = None;
+    let client = match &self.authentication {
+      Authentication::Unauthenticated(client) => client,
+      Authentication::Authenticated(_, _) => {
+        client_storage = Some(Client::new());
+        client_storage.as_ref().unwrap()
+      }
+    };
 
-    if let Some((user, pass)) = &self.userpass {
-      let req = self.client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
+    let mut builder = client.post(self.url.clone() + "/" + route).body(body);
+    if let Authentication::Authenticated(user, pass) = &self.authentication {
+      let req = client.post(&self.url).send().await.map_err(|_| RpcError::InvalidNode)?;
       // Only provide authentication if this daemon actually expects it
       if let Some(header) = req.headers().get("www-authenticate") {
         builder = builder.header(
