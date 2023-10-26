@@ -21,8 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
 
-      - name: Test Dependencies
-        uses: ./.github/actions/test-dependencies
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
