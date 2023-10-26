@@ -288,7 +288,6 @@ impl<D: Db> TributaryState<D> {
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in spec.validators().iter().map(|validator| validator.0) {
-          // TODO(now): All calls of this function need to split this data back
           data.insert(
             spec.i(validator).unwrap().start,
             if let Some(data) = TributaryDb::<D>::data(txn, spec.genesis(), data_spec, validator) {

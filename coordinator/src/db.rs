@@ -114,8 +114,9 @@ impl<D: Db> MainDb<D> {
     network: NetworkId,
     id_type: RecognizedIdType,
     id: [u8; 32],
-    preprocess: Vec<u8>,
+    preprocess: Vec<Vec<u8>>,
   ) {
+    let preprocess = preprocess.encode();
     let key = Self::first_preprocess_key(network, id_type, id);
     if let Some(existing) = txn.get(&key) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
@@ -128,8 +129,10 @@ impl<D: Db> MainDb<D> {
     network: NetworkId,
     id_type: RecognizedIdType,
     id: [u8; 32],
-  ) -> Option<Vec<u8>> {
-    getter.get(Self::first_preprocess_key(network, id_type, id))
+  ) -> Option<Vec<Vec<u8>>> {
+    getter
+      .get(Self::first_preprocess_key(network, id_type, id))
+      .map(|bytes| Vec::<_>::decode(&mut bytes.as_slice()).unwrap())
   }
 
   fn last_received_batch_key(network: NetworkId) -> Vec<u8> {
