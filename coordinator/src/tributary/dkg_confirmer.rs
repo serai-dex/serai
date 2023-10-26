@@ -66,21 +66,19 @@ use crate::tributary::TributarySpec;
   1) The local view of received messages is static
   2) The local process doesn't rebuild after a byzantine fault produces multiple blockchains
 
-  We assume the former. The latter is deemed acceptable but sub-optimal.
+  We assume the former. We can prevent the latter (TODO) by:
 
-  The benefit for this behavior is that on a validator's infrastructure collapsing, they can
-  successfully rebuild on a new system.
+  1) Defining a per-build entropy, used so long as a DB is used.
+  2) Checking the initially used commitments for the DKG align with the per-build entropy.
 
-  TODO: Replace this with entropy. If a validator happens to have their infrastructure fail at this
-  exact moment, they should just be kicked out and accept the loss. The risk of losing a private
-  key on rebuild, by a feature meant to enable rebuild, can't be successfully argued for.
+  If a rebuild occurs, which is the only way we could follow a distinct blockchain, our entropy
+  will change (preventing nonce reuse).
 
-  Not only do we need to use randomly selected entropy, we need to confirm our local preprocess
-  matches the on-chain preprocess before actually publishing our shares.
+  This will allow a validator to still participate in DKGs within a single build, even if they have
+  spontaneous reboots, and on collapse triggering a rebuild, they don't lose safety.
 
-  We also need to review how we're handling Processor preprocesses and likely implement the same
-  on-chain-preprocess-matches-presumed-preprocess check before publishing shares (though a delay of
-  the re-attempt protocol's trigger length would also be sufficient).
+  TODO: We also need to review how we're handling Processor preprocesses and likely implement the
+  same on-chain-preprocess-matches-presumed-preprocess check before publishing shares.
 */
 pub(crate) struct DkgConfirmer;
 impl DkgConfirmer {
