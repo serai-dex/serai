@@ -54,12 +54,11 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 base58-monero = { version = "2", default-features = false, features = ["check"] }
 
-# Used for the provided RPC
+# Used for the provided HTTP RPC
 digest_auth = { version = "0.3", optional = true }
-reqwest = { version = "0.11", features = ["json"], optional = true }
-
-# Used for the binaries
-tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+hyper = { version = "0.14", default-features = false, features = ["http1", "tcp", "client", "backports", "deprecated"], optional = true }
+hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "native-tokio"], optional = true }
+tokio = { version = "1", default-features = false, optional = true }
 
 [build-dependencies]
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.4", default-features = false }
@@ -99,9 +98,9 @@ std = [
   "base58-monero/std",
 ]
 
-http_rpc = ["digest_auth", "reqwest"]
+http-rpc = ["digest_auth", "hyper", "hyper-rustls", "tokio/time", "tokio/rt"]
 multisig = ["transcript", "frost", "dleq", "std"]
-binaries = ["tokio"]
+binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
 experimental = []
 
-default = ["std", "http_rpc"]
+default = ["std", "http-rpc"]

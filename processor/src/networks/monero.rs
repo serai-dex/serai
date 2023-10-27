@@ -181,6 +181,13 @@ impl PartialEq for Monero {
 }
 impl Eq for Monero {}
 
+fn map_rpc_err(err: RpcError) -> NetworkError {
+  if let RpcError::InvalidNode(reason) = &err {
+    log::error!("Monero RpcError::InvalidNode({reason})");
+  }
+  NetworkError::ConnectionError
+}
+
 impl Monero {
   pub fn new(url: String) -> Monero {
     Monero { rpc: HttpRpc::new(url).unwrap() }
@@ -259,7 +266,7 @@ impl Monero {
     }
 
     // Check a fork hasn't occurred which this processor hasn't been updated for
-    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(|_| NetworkError::ConnectionError)?);
+    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(map_rpc_err)?);
 
     let spendable_outputs = inputs.iter().map(|input| input.0.clone()).collect::<Vec<_>>();
 
@@ -277,7 +284,7 @@ impl Monero {
       &spendable_outputs,
     )
     .await
-    .map_err(|_| NetworkError::ConnectionError)?;
+    .map_err(map_rpc_err)?;
 
     let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
@@ -348,7 +355,7 @@ impl Monero {
         }
         TransactionError::RpcError(e) => {
           log::error!("RpcError when preparing transaction: {e:?}");
-          Err(NetworkError::ConnectionError)
+          Err(map_rpc_err(e))
         }
       },
     }
@@ -421,18 +428,16 @@ impl Network for Monero {
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     // Monero defines height as chain length, so subtract 1 for block number
-    Ok(self.rpc.get_height().await.map_err(|_| NetworkError::ConnectionError)? - 1)
+    Ok(self.rpc.get_height().await.map_err(map_rpc_err)? - 1)
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
     Ok(
       self
         .rpc
-        .get_block(
-          self.rpc.get_block_hash(number).await.map_err(|_| NetworkError::ConnectionError)?,
-        )
+        .get_block(self.rpc.get_block_hash(number).await.map_err(map_rpc_err)?)
         .await
-        .map_err(|_| NetworkError::ConnectionError)?,
+        .map_err(map_rpc_err)?,
     )
   }
 
@@ -602,7 +607,7 @@ impl Network for Monero {
   }
 
   async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(*id).await.map_err(|_| NetworkError::ConnectionError)
+    self.rpc.get_transaction(*id).await.map_err(map_rpc_err)
   }
 
   fn confirm_completion(&self, eventuality: &Eventuality, tx: &Transaction) -> bool {
