@@ -58,6 +58,7 @@ impl KeysDb {
     }
     Some((keys_vec, (substrate_keys, network_keys)))
   }
+);
 
   fn confirm_keys<N: Network>(
     txn: &mut impl DbTxn,
@@ -87,6 +88,18 @@ impl KeysDb {
     let res = Self::read_keys::<N>(getter, &KeysDb::key(&key.to_bytes().as_ref().into()))?.1;
     assert_eq!(&res.1[0].group_key(), key);
     Some(res)
+  }
+}
+impl GeneratedKeysDb {
+  fn save_keys<N: Network>(
+    txn: &mut impl DbTxn,
+    id: &KeyGenId,
+    substrate_keys: &ThresholdCore<Ristretto>,
+    network_keys: &ThresholdKeys<N::Curve>,
+  ) {
+    let mut keys = substrate_keys.serialize();
+    keys.extend(network_keys.serialize().iter());
+    txn.put(Self::key(&id.set, &substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()), keys);
   }
 }
 impl GeneratedKeysDb {
