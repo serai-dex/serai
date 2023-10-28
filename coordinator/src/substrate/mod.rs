@@ -494,6 +494,9 @@ pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -
 }
 
 /// Verifies `Batch`s which have already been indexed from Substrate.
+///
+/// This has a slight malleability in that doesn't verify *who* published a Batch is as expected.
+/// This is deemed fine.
 pub(crate) async fn verify_published_batches<D: Db>(
   txn: &mut D::Transaction<'_>,
   network: NetworkId,
