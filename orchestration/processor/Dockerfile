@@ -52,7 +52,7 @@ COPY --from=mimalloc libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 # Upgrade packages and install openssl
-RUN apt update && apt upgrade -y && apt install -y libssl-dev
+RUN apt update && apt upgrade -y && apt install -y ca-certificates libssl-dev
 
 # Switch to a non-root user
 RUN useradd --system --create-home --shell /sbin/nologin processor
