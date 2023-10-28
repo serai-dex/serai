@@ -31,6 +31,10 @@ runs:
         sudo apt clean
         docker system prune -a --volumes
 
+    - name: Install apt dependencies
+      shell: bash
+      run: sudo apt install -y ca-certificates
+
     - name: Install Protobuf
       uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
       with:
