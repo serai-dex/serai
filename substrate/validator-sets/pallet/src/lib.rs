@@ -803,17 +803,12 @@ pub mod pallet {
             (AuthorityId::from(*id), allocation / allocation_per_key_share)
           })
           .collect::<Vec<(AuthorityId, u64)>>();
-
-        let next_authorities = WeakBoundedVec::<_, C::MaxAuthorities>::force_from(
-          next_authorities,
-          Some(
-            "Warning: The session has more queued validators than expected. \
-            A runtime configuration adjustment may be needed.",
-          ),
-        );
+        let next_authorities =
+          WeakBoundedVec::<_, C::MaxAuthorities>::try_from(next_authorities).unwrap();
 
         // get the current session index
         let session = Self::session(network).unwrap().0;
+
         BabePallet::<C>::enact_epoch_change(authorities, next_authorities, Some(session))
       }
     }
