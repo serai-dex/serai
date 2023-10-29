@@ -25,6 +25,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
@@ -46,6 +47,7 @@ std = [
   "frame-support/std",
 
   "pallet-session/std",
+  "pallet-babe/std",
 
   "serai-primitives/std",
   "validator-sets-primitives/std",

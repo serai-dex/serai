@@ -10,7 +10,10 @@ pub mod pallet {
   use sp_application_crypto::RuntimePublic;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, StoragePrefixedMap};
+  use frame_support::{pallet_prelude::*, StoragePrefixedMap, WeakBoundedVec};
+
+  use pallet_babe::{EpochChangeTrigger, AuthorityId, Config as BabeConfig, Pallet as BabePallet};
+  use pallet_session::Pallet as SessionsPallet;
 
   use serai_primitives::*;
   pub use validator_sets_primitives as primitives;
@@ -60,7 +63,7 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     pub fn session(network: NetworkId) -> Option<Session> {
       if network == NetworkId::Serai {
-        Some(Session(pallet_session::Pallet::<T>::current_index()))
+        Some(Session(SessionsPallet::<T>::current_index()))
       } else {
         CurrentSession::<T>::get(network)
       }
@@ -106,7 +109,7 @@ pub mod pallet {
     #[inline]
     fn in_active_serai_set(account: Public) -> bool {
       // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with InSet?
-      for validator in pallet_session::Pallet::<T>::validators() {
+      for validator in SessionsPallet::<T>::validators() {
         if validator == account {
           return true;
         }
@@ -656,7 +659,7 @@ pub mod pallet {
       // (called by pre_dispatch) checks it
       let _ = signature;
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Session(SessionsPallet::<T>::current_index());
 
       let set = ValidatorSet { session, network };
 
@@ -730,7 +733,7 @@ pub mod pallet {
         Call::__Ignore(_, _) => unreachable!(),
       };
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Session(SessionsPallet::<T>::current_index());
 
       let set = ValidatorSet { session, network: *network };
       match Self::verify_signature(set, key_pair, signature) {
@@ -782,6 +785,39 @@ pub mod pallet {
     }
 
     fn start_session(_start_index: u32) {}
+  }
+
+  impl<T: Config> EpochChangeTrigger for Pallet<T> {
+    fn trigger<C: BabeConfig>(now: BlockNumberFor<C>) {
+      if BabePallet::<C>::should_epoch_change(now) {
+        let network = NetworkId::Serai;
+
+        // get the current authorities
+        let authorities = BabePallet::<C>::authorities();
+
+        // get the next authorities
+        let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
+        let next_authorities = SessionsPallet::<T>::queued_keys()
+          .iter()
+          .map(|(id, _)| {
+            let allocation = Self::allocation((network, *id)).unwrap().0;
+            (AuthorityId::from(*id), allocation / allocation_per_key_share)
+          })
+          .collect::<Vec<(AuthorityId, u64)>>();
+
+        let next_authorities = WeakBoundedVec::<_, C::MaxAuthorities>::force_from(
+          next_authorities,
+          Some(
+            "Warning: The session has more queued validators than expected. \
+            A runtime configuration adjustment may be needed.",
+          ),
+        );
+
+        // get the current session index
+        let session = Self::session(network).unwrap().0;
+        BabePallet::<C>::enact_epoch_change(authorities, next_authorities, Some(session))
+      }
+    }
   }
 }
 

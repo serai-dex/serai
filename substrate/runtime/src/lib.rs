@@ -282,7 +282,7 @@ impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
-  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+  type EpochChangeTrigger = ValidatorSets;
   type DisabledValidators = Session;
 
   type WeightInfo = ();
