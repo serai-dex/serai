@@ -771,7 +771,6 @@ pub mod pallet {
   impl<T: Config> pallet_session::SessionManager<T::ValidatorId> for Pallet<T> {
     fn new_session(_new_index: u32) -> Option<Vec<T::ValidatorId>> {
       Self::new_session();
-      // TODO: Where do we return their stake?
       Some(Self::participants(NetworkId::Serai).into())
     }
 
