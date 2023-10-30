@@ -233,28 +233,28 @@ impl Wallet {
           sighash::{EcdsaSighashType, SighashCache},
           script::{PushBytesBuf, Script, ScriptBuf, Builder},
           address::Payload,
-          OutPoint, Sequence, Witness, TxIn, TxOut,
+          OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
           absolute::LockTime,
-          Transaction,
+          transaction::{Version, Transaction},
         };
 
         const AMOUNT: u64 = 100000000;
         let mut tx = Transaction {
-          version: 2,
+          version: Version(2),
           lock_time: LockTime::ZERO,
           input: vec![TxIn {
             previous_output: OutPoint { txid: input_tx.txid(), vout: 0 },
-            script_sig: Script::empty().into(),
+            script_sig: Script::new().into(),
             sequence: Sequence(u32::MAX),
             witness: Witness::default(),
           }],
           output: vec![
             TxOut {
-              value: input_tx.output[0].value - AMOUNT - 10000,
+              value: Amount::from_sat(input_tx.output[0].value.to_sat() - AMOUNT - 10000),
               script_pubkey: input_tx.output[0].script_pubkey.clone(),
             },
             TxOut {
-              value: AMOUNT,
+              value: Amount::from_sat(AMOUNT),
               script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
                 XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
               ))
@@ -265,9 +265,9 @@ impl Wallet {
 
         if let Some(instruction) = instruction {
           tx.output.push(TxOut {
-            value: 0,
+            value: Amount::ZERO,
             script_pubkey: ScriptBuf::new_op_return(
-              &PushBytesBuf::try_from(
+              PushBytesBuf::try_from(
                 Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode(),
               )
               .unwrap(),

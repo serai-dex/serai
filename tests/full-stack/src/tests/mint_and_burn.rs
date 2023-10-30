@@ -51,7 +51,7 @@ async fn mint_and_burn_test() {
             secp256k1::{SECP256K1, SecretKey},
             PrivateKey, PublicKey,
             consensus::Encodable,
-            network::constants::Network,
+            network::Network,
             address::Address,
           };
 
@@ -263,8 +263,9 @@ async fn mint_and_burn_test() {
           sighash::{EcdsaSighashType, SighashCache},
           script::{PushBytesBuf, Script, ScriptBuf, Builder},
           absolute::LockTime,
+          transaction::{Version, Transaction},
           address::Payload,
-          Sequence, Witness, OutPoint, TxIn, TxOut, Transaction, Network,
+          Sequence, Witness, OutPoint, TxIn, Amount, TxOut, Network,
         };
 
         let private_key =
@@ -278,17 +279,17 @@ async fn mint_and_burn_test() {
           rpc.get_block(&rpc.get_block_hash(1).await.unwrap()).await.unwrap().txdata.swap_remove(0);
         #[allow(clippy::inconsistent_digit_grouping)]
         let mut tx = Transaction {
-          version: 2,
+          version: Version(2),
           lock_time: LockTime::ZERO,
           input: vec![TxIn {
             previous_output: OutPoint { txid: tx.txid(), vout: 0 },
-            script_sig: Script::empty().into(),
+            script_sig: Script::new().into(),
             sequence: Sequence(u32::MAX),
             witness: Witness::default(),
           }],
           output: vec![
             TxOut {
-              value: 1_100_000_00,
+              value: Amount::from_sat(1_100_000_00),
               script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
                 XOnlyPublicKey::from_slice(&bitcoin_key_pair.1[1 ..]).unwrap(),
               ))
@@ -296,16 +297,16 @@ async fn mint_and_burn_test() {
             },
             TxOut {
               // change = amount spent - fee
-              value: tx.output[0].value - 1_100_000_00 - 1_000_00,
+              value: Amount::from_sat(tx.output[0].value.to_sat() - 1_100_000_00 - 1_000_00),
               script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
                 XOnlyPublicKey::from_slice(&public_key.inner.serialize()[1 ..]).unwrap(),
               ))
               .script_pubkey(),
             },
             TxOut {
-              value: 0,
+              value: Amount::ZERO,
               script_pubkey: ScriptBuf::new_op_return(
-                &PushBytesBuf::try_from(Shorthand::transfer(None, serai_addr).encode()).unwrap(),
+                PushBytesBuf::try_from(Shorthand::transfer(None, serai_addr).encode()).unwrap(),
               ),
             },
           ],
@@ -447,7 +448,7 @@ async fn mint_and_burn_test() {
 
       // Create a random Bitcoin/Monero address
       let bitcoin_addr = {
-        use bitcoin_serai::bitcoin::{network::constants::Network, key::PublicKey, address::Address};
+        use bitcoin_serai::bitcoin::{network::Network, key::PublicKey, address::Address};
         // Uses Network::Bitcoin since it doesn't actually matter, Serai strips it out
         // TODO: Move Serai to Payload from Address
         Address::p2pkh(
@@ -555,9 +556,9 @@ async fn mint_and_burn_test() {
                 .unwrap();
 
               let tx_fee = 1_100_000_00 -
-                block.txdata[1].output.iter().map(|output| output.value).sum::<u64>();
+                block.txdata[1].output.iter().map(|output| output.value.to_sat()).sum::<u64>();
 
-              assert_eq!(received_output.value, 1_000_000_00 - tx_fee);
+              assert_eq!(received_output.value.to_sat(), 1_000_000_00 - tx_fee);
               found = true;
             }
           } else {

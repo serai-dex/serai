@@ -16,7 +16,8 @@ use bitcoin::{
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
-  OutPoint, Sequence, Witness, TxIn, TxOut, Transaction, Address,
+  transaction::{Version, Transaction},
+  OutPoint, Sequence, Witness, TxIn, Amount, TxOut, Address,
 };
 
 use crate::{
@@ -62,7 +63,7 @@ impl SignableTransaction {
   fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: Option<&Address>) -> u64 {
     // Expand this a full transaction in order to use the bitcoin library's weight function
     let mut tx = Transaction {
-      version: 2,
+      version: Version(2),
       lock_time: LockTime::ZERO,
       input: vec![
         TxIn {
@@ -82,13 +83,16 @@ impl SignableTransaction {
         .iter()
         // The payment is a fixed size so we don't have to use it here
         // The script pub key is not of a fixed size and does have to be used here
-        .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
+        .map(|payment| TxOut {
+          value: Amount::from_sat(payment.1),
+          script_pubkey: payment.0.script_pubkey(),
+        })
         .collect(),
     };
     if let Some(change) = change {
       // Use a 0 value since we're currently unsure what the change amount will be, and since
       // the value is fixed size (so any value could be used here)
-      tx.output.push(TxOut { value: 0, script_pubkey: change.script_pubkey() });
+      tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.script_pubkey() });
     }
     u64::try_from(tx.weight()).unwrap()
   }
@@ -103,8 +107,8 @@ impl SignableTransaction {
 
   /// Returns the fee this transaction will use.
   pub fn fee(&self) -> u64 {
-    self.prevouts.iter().map(|prevout| prevout.value).sum::<u64>() -
-      self.tx.output.iter().map(|prevout| prevout.value).sum::<u64>()
+    self.prevouts.iter().map(|prevout| prevout.value.to_sat()).sum::<u64>() -
+      self.tx.output.iter().map(|prevout| prevout.value.to_sat()).sum::<u64>()
   }
 
   /// Create a new SignableTransaction.
@@ -139,7 +143,7 @@ impl SignableTransaction {
       Err(TransactionError::TooMuchData)?;
     }
 
-    let input_sat = inputs.iter().map(|input| input.output.value).sum::<u64>();
+    let input_sat = inputs.iter().map(|input| input.output.value.to_sat()).sum::<u64>();
     let offsets = inputs.iter().map(|input| input.offset).collect();
     let tx_ins = inputs
       .iter()
@@ -154,15 +158,18 @@ impl SignableTransaction {
     let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
     let mut tx_outs = payments
       .iter()
-      .map(|payment| TxOut { value: payment.1, script_pubkey: payment.0.script_pubkey() })
+      .map(|payment| TxOut {
+        value: Amount::from_sat(payment.1),
+        script_pubkey: payment.0.script_pubkey(),
+      })
       .collect::<Vec<_>>();
 
     // Add the OP_RETURN output
     if let Some(data) = data {
       tx_outs.push(TxOut {
-        value: 0,
+        value: Amount::ZERO,
         script_pubkey: ScriptBuf::new_op_return(
-          &PushBytesBuf::try_from(data)
+          PushBytesBuf::try_from(data)
             .expect("data didn't fit into PushBytes depsite being checked"),
         ),
       })
@@ -209,7 +216,8 @@ impl SignableTransaction {
       let fee_with_change = fee_per_weight * weight_with_change;
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         if value >= DUST {
-          tx_outs.push(TxOut { value, script_pubkey: change.script_pubkey() });
+          tx_outs
+            .push(TxOut { value: Amount::from_sat(value), script_pubkey: change.script_pubkey() });
           weight = weight_with_change;
           needed_fee = fee_with_change;
         }
@@ -225,7 +233,12 @@ impl SignableTransaction {
     }
 
     Ok(SignableTransaction {
-      tx: Transaction { version: 2, lock_time: LockTime::ZERO, input: tx_ins, output: tx_outs },
+      tx: Transaction {
+        version: Version(2),
+        lock_time: LockTime::ZERO,
+        input: tx_ins,
+        output: tx_outs,
+      },
       offsets,
       prevouts: inputs.drain(..).map(|input| input.output).collect(),
       needed_fee,
@@ -256,7 +269,7 @@ impl SignableTransaction {
     }
     for payment in &tx.output {
       transcript.append_message(b"output_script", payment.script_pubkey.as_bytes());
-      transcript.append_message(b"output_amount", payment.value.to_le_bytes());
+      transcript.append_message(b"output_amount", payment.value.to_sat().to_le_bytes());
     }
 
     let mut sigs = vec![];

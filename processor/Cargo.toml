@@ -42,7 +42,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel" }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 # Bitcoin
-secp256k1 = { version = "0.27", features = ["global-context", "rand-std"], optional = true }
+secp256k1 = { version = "0.28", features = ["global-context", "rand-std"], optional = true }
 k256 = { version = "^0.13.1", optional = true }
 bitcoin-serai = { path = "../coins/bitcoin", optional = true }
 

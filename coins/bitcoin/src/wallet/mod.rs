@@ -83,7 +83,7 @@ impl ReceivedOutput {
 
   /// The value of this output.
   pub fn value(&self) -> u64 {
-    self.output.value
+    self.output.value.to_sat()
   }
 
   /// Read a ReceivedOutput from a generic satisfying Read.

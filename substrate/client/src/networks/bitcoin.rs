@@ -5,10 +5,9 @@ use scale::{Encode, Decode};
 use bitcoin::{
   hashes::{Hash as HashTrait, hash160::Hash},
   PubkeyHash, ScriptHash,
-  network::constants::Network,
-  address::{
-    Error, WitnessVersion, Payload, WitnessProgram, NetworkChecked, Address as BAddressGeneric,
-  },
+  network::Network,
+  WitnessVersion, WitnessProgram,
+  address::{Error, Payload, NetworkChecked, Address as BAddressGeneric},
 };
 
 type BAddress = BAddressGeneric<NetworkChecked>;
@@ -18,28 +17,20 @@ pub struct Address(pub BAddress);
 
 impl PartialEq for Address {
   fn eq(&self, other: &Self) -> bool {
-    self.0.payload == other.0.payload
+    // Since Serai defines the Bitcoin-address specification as a variant of the payload alone,
+    // define equivalency as the payload alone
+    self.0.payload() == other.0.payload()
   }
 }
 
 impl FromStr for Address {
   type Err = Error;
   fn from_str(str: &str) -> Result<Address, Error> {
-    let mut original_address = BAddressGeneric::from_str(str)?;
-    // Standardize the network
-    original_address.network = Network::Bitcoin;
-    let address = original_address
-      .clone()
-      .require_network(Network::Bitcoin)
-      .expect("network wasn't mainnet despite overriding network");
-
-    // Also check this isn't caching the string internally
-    if BAddressGeneric::from_str(&address.to_string())? != original_address {
-      // TODO: Make this an error?
-      panic!("Address::from_str(address.to_string()) != address for Bitcoin");
-    }
-
-    Ok(Address(address))
+    Ok(Address(
+      BAddressGeneric::from_str(str)
+        .map_err(|_| Error::UnrecognizedScript)?
+        .require_network(Network::Bitcoin)?,
+    ))
   }
 }
 
@@ -90,7 +81,7 @@ impl TryInto<Vec<u8>> for Address {
   type Error = ();
   fn try_into(self) -> Result<Vec<u8>, ()> {
     Ok(
-      (match self.0.payload {
+      (match self.0.payload() {
         Payload::PubkeyHash(hash) => EncodedAddress::P2PKH(*hash.as_raw_hash().as_byte_array()),
         Payload::ScriptHash(hash) => EncodedAddress::P2SH(*hash.as_raw_hash().as_byte_array()),
         Payload::WitnessProgram(program) => match program.version() {

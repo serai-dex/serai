@@ -35,7 +35,8 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Sequence, Script, Witness, TxIn,
+  Sequence, Script, Witness, TxIn, Amount as BAmount,
+  transaction::Version,
 };
 
 use serai_client::{
@@ -106,7 +107,7 @@ impl OutputTrait<Bitcoin> for Output {
 
   fn key(&self) -> ProjectivePoint {
     let script = &self.output.output().script_pubkey;
-    assert!(script.is_v1_p2tr());
+    assert!(script.is_p2tr());
     let Instruction::PushBytes(key) = script.instructions_minimal().last().unwrap().unwrap() else {
       panic!("last item in v1 Taproot script wasn't bytes")
     };
@@ -177,10 +178,11 @@ impl TransactionTrait<Bitcoin> for Transaction {
       hash.reverse();
       value += network.rpc.get_transaction(&hash).await.unwrap().output
         [usize::try_from(output.vout).unwrap()]
-      .value;
+      .value
+      .to_sat();
     }
     for output in &self.output {
-      value -= output.value;
+      value -= output.value.to_sat();
     }
     value
   }
@@ -331,9 +333,10 @@ impl Bitcoin {
           input_tx.reverse();
           in_value += self.get_transaction(&input_tx).await?.output
             [usize::try_from(input.previous_output.vout).unwrap()]
-          .value;
+          .value
+          .to_sat();
         }
-        let out = tx.output.iter().map(|output| output.value).sum::<u64>();
+        let out = tx.output.iter().map(|output| output.value.to_sat()).sum::<u64>();
         fees.push((in_value - out) / tx.weight().to_wu());
       }
     }
@@ -708,7 +711,7 @@ impl Network for Bitcoin {
       .rpc
       .rpc_call::<Vec<String>>(
         "generatetoaddress",
-        serde_json::json!([1, BAddress::p2sh(Script::empty(), BitcoinNetwork::Regtest).unwrap()]),
+        serde_json::json!([1, BAddress::p2sh(Script::new(), BitcoinNetwork::Regtest).unwrap()]),
       )
       .await
       .unwrap();
@@ -734,16 +737,16 @@ impl Network for Bitcoin {
 
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
     let mut tx = Transaction {
-      version: 2,
+      version: Version(2),
       lock_time: LockTime::ZERO,
       input: vec![TxIn {
         previous_output: OutPoint { txid: tx.txid(), vout: 0 },
-        script_sig: Script::empty().into(),
+        script_sig: Script::new().into(),
         sequence: Sequence(u32::MAX),
         witness: Witness::default(),
       }],
       output: vec![TxOut {
-        value: tx.output[0].value - 10000,
+        value: tx.output[0].value - BAmount::from_sat(10000),
         script_pubkey: address.0.script_pubkey(),
       }],
     };
