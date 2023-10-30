@@ -251,7 +251,7 @@ impl Coordinator {
     match self.network {
       NetworkId::Bitcoin => {
         use bitcoin_serai::{
-          bitcoin::{consensus::Encodable, network::constants::Network, Script, Address},
+          bitcoin::{consensus::Encodable, network::Network, Script, Address},
           rpc::Rpc,
         };
 
@@ -260,7 +260,7 @@ impl Coordinator {
         rpc
           .rpc_call::<Vec<String>>(
             "generatetoaddress",
-            serde_json::json!([1, Address::p2sh(Script::empty(), Network::Regtest).unwrap()]),
+            serde_json::json!([1, Address::p2sh(Script::new(), Network::Regtest).unwrap()]),
           )
           .await
           .unwrap();

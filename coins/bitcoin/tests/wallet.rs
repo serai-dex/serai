@@ -23,7 +23,7 @@ use bitcoin_serai::{
     blockdata::opcodes::all::OP_RETURN,
     script::{PushBytesBuf, Instruction, Instructions, Script},
     address::NetworkChecked,
-    OutPoint, TxOut, Transaction, Network, Address,
+    OutPoint, Amount, TxOut, Transaction, Network, Address,
   },
   wallet::{
     tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
@@ -58,7 +58,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   rpc
     .rpc_call::<Vec<String>>(
       "generatetoaddress",
-      serde_json::json!([100, Address::p2sh(Script::empty(), Network::Regtest).unwrap()]),
+      serde_json::json!([100, Address::p2sh(Script::new(), Network::Regtest).unwrap()]),
     )
     .await
     .unwrap();
@@ -70,7 +70,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
 
   assert_eq!(outputs.len(), 1);
   assert_eq!(outputs[0].outpoint(), &OutPoint::new(block.txdata[0].txid(), 0));
-  assert_eq!(outputs[0].value(), block.txdata[0].output[0].value);
+  assert_eq!(outputs[0].value(), block.txdata[0].output[0].value.to_sat());
 
   assert_eq!(
     ReceivedOutput::read::<&[u8]>(&mut outputs[0].serialize().as_ref()).unwrap(),
@@ -296,21 +296,24 @@ async_sequential! {
 
     // Make sure the payments were properly created
     for ((output, scanned), payment) in tx.output.iter().zip(outputs.iter()).zip(payments.iter()) {
-      assert_eq!(output, &TxOut { script_pubkey: payment.0.script_pubkey(), value: payment.1 });
+      assert_eq!(
+        output,
+        &TxOut { script_pubkey: payment.0.script_pubkey(), value: Amount::from_sat(payment.1) },
+      );
       assert_eq!(scanned.value(), payment.1 );
     }
 
     // Make sure the change is correct
     assert_eq!(needed_fee, u64::try_from(tx.weight()).unwrap() * FEE);
     let input_value = output.value() + offset_output.value();
-    let output_value = tx.output.iter().map(|output| output.value).sum::<u64>();
+    let output_value = tx.output.iter().map(|output| output.value.to_sat()).sum::<u64>();
     assert_eq!(input_value - output_value, needed_fee);
 
     let change_amount =
       input_value - payments.iter().map(|payment| payment.1).sum::<u64>() - needed_fee;
     assert_eq!(
       tx.output[2],
-      TxOut { script_pubkey: change_addr.script_pubkey(), value: change_amount },
+      TxOut { script_pubkey: change_addr.script_pubkey(), value: Amount::from_sat(change_amount) },
     );
 
     // This also tests send_raw_transaction and get_transaction, which the RPC test can't
