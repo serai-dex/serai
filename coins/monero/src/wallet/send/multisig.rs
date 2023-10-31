@@ -365,7 +365,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       commitments.push(value.5);
     }
 
-    let msg = tx.signature_hash();
+    let msg = tx.signature_hash().unwrap();
 
     // Iterate over each CLSAG calling sign
     let mut shares = Vec::with_capacity(self.clsags.len());

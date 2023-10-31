@@ -834,7 +834,7 @@ impl SignableTransaction {
 
     let signable = prepare_inputs(&self.inputs, spend, &mut tx)?;
 
-    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash());
+    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash().unwrap());
     match tx.rct_signatures.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
