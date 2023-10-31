@@ -21,8 +21,8 @@ sha3 = { version = "0.10", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "precomputed-tables"] }
 
 group = { version = "0.13", default-features = false }
-dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4" }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4", default-features = false }
 
 [features]
-std = ["std-shims/std"]
+std = ["std-shims/std", "subtle/std", "sha3/std", "dalek-ff-group/std"]
 default = ["std"]

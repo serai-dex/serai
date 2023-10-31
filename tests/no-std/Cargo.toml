@@ -14,10 +14,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-flexible-transcript = { path = "../../crypto/transcript", features = ["recommended", "merlin"] }
+flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
-dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
-minimal-ed448 = { path = "../../crypto/ed448" }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
+minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "secp256k1", "p256", "ed25519", "ristretto", "ed448"] }
 
