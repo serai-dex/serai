@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 std-shims = { path = "../../common/std-shims", version = "^0.1.1", default-features = false }
 
 async-trait = { version = "0.1", default-features = false }
-thiserror = { version = "1", optional = true }
+thiserror = { version = "1", default-features = false, optional = true }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 subtle = { version = "^2.4", default-features = false }
@@ -40,8 +40,8 @@ multiexp = { path = "../../crypto/multiexp", version = "0.4", default-features =
 
 # Needed for multisig
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
-dleq = { path = "../../crypto/dleq", version = "0.4", features = ["serialize"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["ed25519"], optional = true }
+dleq = { path = "../../crypto/dleq", version = "0.4", default-features = false, features = ["serialize"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", default-features = false, features = ["ed25519"], optional = true }
 
 monero-generators = { path = "generators", version = "0.4", default-features = false }
 
@@ -55,7 +55,7 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 base58-monero = { version = "2", default-features = false, features = ["check"] }
 
 # Used for the provided HTTP RPC
-digest_auth = { version = "0.3", optional = true }
+digest_auth = { version = "0.3", default-features = false, optional = true }
 hyper = { version = "0.14", default-features = false, features = ["http1", "tcp", "client", "backports", "deprecated"], optional = true }
 hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "native-tokio"], optional = true }
 tokio = { version = "1", default-features = false, optional = true }
@@ -65,7 +65,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.4", defaul
 monero-generators = { path = "generators", version = "0.4", default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros"] }
 
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 
@@ -79,13 +79,17 @@ std = [
   "subtle/std",
 
   "rand_core/std",
-  "rand_chacha/std",
   "rand/std",
+  "rand_chacha/std",
   "rand_distr/std",
 
   "sha3/std",
+  "pbkdf2/std",
 
   "multiexp/std",
+
+  "transcript/std",
+  "dleq/std",
 
   "monero-generators/std",
 

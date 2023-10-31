@@ -29,6 +29,8 @@ sha2 = { version = "0.10", default-features = false }
 blake2 = { version = "0.10", default-features = false }
 
 [features]
+std = ["subtle/std", "zeroize/std", "digest/std", "blake2?/std", "merlin?/std"]
 recommended = ["blake2"]
 merlin = ["dep:merlin"]
 tests = []
+default = ["std"]

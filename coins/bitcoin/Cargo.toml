@@ -10,7 +10,7 @@ edition = "2021"
 [dependencies]
 std-shims = { version = "0.1.1", path = "../../common/std-shims", default-features = false }
 
-thiserror = { version = "1", optional = true }
+thiserror = { version = "1", default-features = false, optional = true }
 
 zeroize = { version = "^1.5", default-features = false }
 rand_core = { version = "0.6", default-features = false }
@@ -22,18 +22,18 @@ bitcoin = { version = "0.31", default-features = false, features = ["no-std"] }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", features = ["recommended"], optional = true }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", features = ["secp256k1"], optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", default-features = false, features = ["secp256k1"], optional = true }
 
-hex = { version = "0.4", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-reqwest = { version = "0.11", features = ["json"], optional = true }
+hex = { version = "0.4", default-features = false, optional = true }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+serde_json = { version = "1", default-features = false, optional = true }
+reqwest = { version = "0.11", default-features = false, features = ["default-tls", "json"], optional = true }
 
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros"] }
 
 [features]
 std = [
@@ -52,13 +52,13 @@ std = [
 
   "k256/std",
 
-  "transcript",
+  "transcript/std",
   "frost",
 
-  "hex",
-  "serde",
-  "serde_json",
-  "reqwest"
+  "hex/std",
+  "serde/std",
+  "serde_json/std",
+  "reqwest",
 ]
 hazmat = []
 default = ["std"]

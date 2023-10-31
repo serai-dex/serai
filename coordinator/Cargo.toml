@@ -14,23 +14,21 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-async-trait = "0.1"
+async-trait = { version = "0.1", default-features = false }
 
-zeroize = "^1.5"
-rand_core = "0.6"
-rand_chacha = "0.3"
+zeroize = { version = "^1.5", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-blake2 = "0.10"
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
 
-transcript = { package = "flexible-transcript", path = "../crypto/transcript", features = ["recommended"] }
-ciphersuite = { path = "../crypto/ciphersuite" }
-schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr" }
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
+schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
-scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
-
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 
 serai-db = { path = "../common/db", features = ["rocksdb"] }
 serai-env = { path = "../common/env" }
@@ -39,20 +37,21 @@ processor-messages = { package = "serai-processor-messages", path = "../processo
 message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary = { package = "tributary-chain", path = "./tributary" }
 
-serai-client = { path = "../substrate/client", features = ["serai"] }
+serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
-hex = "0.4"
-bincode = "1"
-serde_json = { version = "1", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["std"] }
+bincode = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
-log = "0.4"
-env_logger = "0.10"
+log = { version = "0.4", default-features = false, features = ["std"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 
-futures = "0.3"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
-libp2p = { version = "0.52", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "mdns", "macros"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "mdns", "macros"] }
 
 [dev-dependencies]
-futures = "0.3"
+futures = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }

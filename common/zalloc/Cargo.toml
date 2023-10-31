@@ -17,5 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 zeroize = { version = "^1.5", default-features = false }
 
 [features]
+std = ["zeroize/std"]
+default = ["std"]
 # Commented for now as it requires nightly and we don't use nightly
 # allocator = []

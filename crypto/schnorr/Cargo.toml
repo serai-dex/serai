@@ -36,5 +36,5 @@ dalek-ff-group = { path =  "../dalek-ff-group" }
 ciphersuite = { path = "../ciphersuite", features = ["ed25519"] }
 
 [features]
-std = ["std-shims/std", "ciphersuite/std", "multiexp/std"]
+std = ["std-shims/std", "rand_core/std", "zeroize/std", "transcript/std", "ciphersuite/std", "multiexp/std"]
 default = ["std"]

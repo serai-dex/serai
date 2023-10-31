@@ -41,15 +41,18 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }
 
 [features]
-std = []
+std = ["rand_core/std", "zeroize/std", "digest/std", "transcript/std", "ff/std", "multiexp?/std"]
 serialize = ["std"]
 
 # Needed for cross-group DLEqs
 secure_capacity_difference = []
 experimental = ["std", "thiserror", "multiexp"]
 
-# Only applies to experimental, yet is default to ensure security
-# experimental doesn't mandate it itself in case two curves with extreme
-# capacity differences are desired to be used together, in which case the user
-# must specify experimental without default features
-default = ["secure_capacity_difference"]
+default = [
+  "std",
+  # Only applies to experimental, yet is default to ensure security
+  # experimental doesn't mandate it itself in case two curves with extreme
+  # capacity differences are desired to be used together, in which case the user
+  # must specify experimental without default features
+  "secure_capacity_difference"
+]

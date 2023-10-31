@@ -28,8 +28,12 @@ generic-array = { version = "1", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
 
 [dev-dependencies]
-hex = "0.4"
+hex = { version = "0.4", default-features = false, features = ["std"] }
 
-rand_core = { version = "0.6", features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 ff-group-tests = { path = "../ff-group-tests" }
+
+[features]
+std = ["rand_core/std", "zeroize/std", "subtle/std", "ff/std"]
+default = ["std"]

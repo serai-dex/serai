@@ -8,16 +8,16 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1"
-thiserror = "1"
+async-trait = { version = "0.1", default-features = false }
+thiserror = { version = "1", default-features = false }
 
-hex = "0.4"
-log = "0.4"
+hex = { version = "0.4", default-features = false, features = ["std"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 
-parity-scale-codec = { version = "3", features = ["derive"] }
+parity-scale-codec = { version = "3", default-features = false, features = ["std", "derive"] }
 
-futures = "0.3"
-tokio = { version = "1", features = ["sync", "time"] }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

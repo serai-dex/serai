@@ -8,31 +8,31 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1"
-thiserror = "1"
+async-trait = { version = "0.1", default-features = false }
+thiserror = { version = "1", default-features = false }
 
-subtle = "^2"
-zeroize = "^1.5"
+subtle = { version = "^2", default-features = false, features = ["std"] }
+zeroize = { version = "^1.5", default-features = false, features = ["std"] }
 
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-blake2 = "0.10"
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", features = ["recommended"] }
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
 
-ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", features = ["ristretto"] }
-schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr" }
+ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 
-hex = "0.4"
-log = "0.4"
+hex = { version = "0.4", default-features = false, features = ["std"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../common/db" }
 
-scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
-futures = "0.3"
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
 
-tokio = { version = "1", features = ["sync", "time", "rt"] }
+tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

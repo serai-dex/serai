@@ -40,16 +40,22 @@ ciphersuite = { path = "../ciphersuite", default-features = false, features = ["
 [features]
 std = [
   "thiserror",
+
   "rand_core/std",
 
   "std-shims/std",
 
-  "ciphersuite/std",
+  "serde/std",
 
-  "multiexp/batch",
+  "transcript/std",
+  "chacha20/std",
+
+  "ciphersuite/std",
   "multiexp/std",
+  "multiexp/batch",
 
   "schnorr/std",
+  "dleq/std",
   "dleq/serialize"
 ]
 serde = ["dep:serde"]
