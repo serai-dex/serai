@@ -319,19 +319,19 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     self.p2p.broadcast(self.genesis, to_broadcast).await
   }
 
-  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>) {
+  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent) {
     log::error!(
       "validator {} triggered a slash event on tributary {} (with evidence: {})",
       hex::encode(validator),
       hex::encode(self.genesis),
-      matches!(slash_event, SlashEvent::WithEvidence(_, _)),
+      matches!(slash_event, SlashEvent::WithEvidence(_)),
     );
 
     let signer = self.signer();
     let Some(tx) = (match slash_event {
-      SlashEvent::WithEvidence(m1, m2) => {
+      SlashEvent::WithEvidence(evidence) => {
         // create an unsigned evidence tx
-        Some(TendermintTx::SlashEvidence((m1, m2).encode()))
+        Some(TendermintTx::SlashEvidence(evidence))
       }
       SlashEvent::Id(_reason, _block, _round) => {
         // TODO: Increase locally observed slash points

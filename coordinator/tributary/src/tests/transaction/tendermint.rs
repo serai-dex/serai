@@ -10,7 +10,7 @@ use scale::Encode;
 use tendermint::{
   time::CanonicalInstant,
   round::RoundData,
-  Data, SignedMessageFor, commit_msg,
+  Data, commit_msg, Evidence,
   ext::{RoundNumber, Commit, Signer as SignerTrait},
 };
 
@@ -51,7 +51,7 @@ async fn invalid_valid_round() {
     async move {
       let data = Data::Proposal(valid_round, TendermintBlock(vec![]));
       let signed = signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data).await;
-      (signed.clone(), TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode()))
+      (signed.clone(), TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.encode())))
     }
   };
 
@@ -69,7 +69,7 @@ async fn invalid_valid_round() {
   let mut random_sig = [0u8; 64];
   OsRng.fill_bytes(&mut random_sig);
   signed.sig = random_sig;
-  let tx = TendermintTx::SlashEvidence((signed.clone(), None::<SignedMessageFor<N>>).encode());
+  let tx = TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.clone().encode()));
 
   // should fail
   assert!(verify_tendermint_tx::<N>(&tx, validators, commit).is_err());
@@ -89,7 +89,7 @@ async fn invalid_precommit_signature() {
       let signed =
         signed_from_data::<N>(signer.clone().into(), signer_id, 1, 0, Data::Precommit(precommit))
           .await;
-      (signed.clone(), TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode()))
+      (signed.clone(), TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(signed.encode())))
     }
   };
 
@@ -119,7 +119,7 @@ async fn invalid_precommit_signature() {
     let mut random_sig = [0u8; 64];
     OsRng.fill_bytes(&mut random_sig);
     signed.sig = random_sig;
-    let tx = TendermintTx::SlashEvidence((signed.clone(), None::<SignedMessageFor<N>>).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(signed.clone().encode()));
     assert!(verify_tendermint_tx::<N>(&tx, validators, commit).is_err());
   }
 }
@@ -134,19 +134,43 @@ async fn evidence_with_prevote() {
   let prevote = |block_id| {
     let signer = signer.clone();
     async move {
-      TendermintTx::SlashEvidence(
-        (
-          signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
-            .await,
-          None::<SignedMessageFor<N>>,
-        )
+      // it should fail for all reasons.
+      let mut txs = vec![];
+      txs.push(TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
           .encode(),
-      )
+      )));
+      txs.push(TendermintTx::SlashEvidence(Evidence::InvalidVr(
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
+          .encode(),
+      )));
+      txs.push(TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
+          .encode(),
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
+          .encode(),
+      )));
+      txs.push(TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
+          .encode(),
+        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
+          .await
+          .encode(),
+      )));
+      txs
     }
   };
 
   // No prevote message should be valid as slash evidence at this time
-  for prevote in [prevote(None).await, prevote(Some([0x22u8; 32])).await] {
+  for prevote in prevote(None).await {
+    assert!(verify_tendermint_tx::<N>(&prevote, validators.clone(), commit).is_err());
+  }
+  for prevote in prevote(Some([0x22u8; 32])).await {
     assert!(verify_tendermint_tx::<N>(&prevote, validators.clone(), commit).is_err());
   }
 }
@@ -169,23 +193,35 @@ async fn conflicting_msgs_evidence_tx() {
   {
     // non-conflicting data should fail
     let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x11]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_1.encode(),
+    ));
     assert!(verify_tendermint_tx::<N>(&tx, validators.clone(), commit).is_err());
 
     // conflicting data should pass
     let signed_2 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap();
 
     // Except if it has a distinct round number, as we don't check cross-round conflicts
     // (except for Precommit)
     let signed_2 = signed_for_b_r(0, 1, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap_err();
 
     // Proposals for different block numbers should also fail as evidence
     let signed_2 = signed_for_b_r(1, 0, Data::Proposal(None, TendermintBlock(vec![0x22]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap_err();
   }
 
@@ -193,23 +229,35 @@ async fn conflicting_msgs_evidence_tx() {
   {
     // non-conflicting data should fail
     let signed_1 = signed_for_b_r(0, 0, Data::Prevote(Some([0x11; 32]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_1.encode(),
+    ));
     assert!(verify_tendermint_tx::<N>(&tx, validators.clone(), commit).is_err());
 
     // conflicting data should pass
     let signed_2 = signed_for_b_r(0, 0, Data::Prevote(Some([0x22; 32]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap();
 
     // Except if it has a distinct round number, as we don't check cross-round conflicts
     // (except for Precommit)
     let signed_2 = signed_for_b_r(0, 1, Data::Prevote(Some([0x22; 32]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap_err();
 
     // Proposals for different block numbers should also fail as evidence
     let signed_2 = signed_for_b_r(1, 0, Data::Prevote(Some([0x22; 32]))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap_err();
   }
 
@@ -218,17 +266,26 @@ async fn conflicting_msgs_evidence_tx() {
     let sig = signer.sign(&[]).await; // the inner signature doesn't matter
 
     let signed_1 = signed_for_b_r(0, 0, Data::Precommit(Some(([0x11; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(&signed_1)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
+      signed_1.encode(),
+      signed_1.encode(),
+    ));
     assert!(verify_tendermint_tx::<N>(&tx, validators.clone(), commit).is_err());
 
     // For precommit, the round number is ignored
     let signed_2 = signed_for_b_r(0, 1, Data::Precommit(Some(([0x22; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     verify_tendermint_tx::<N>(&tx, validators.clone(), commit).unwrap();
 
     // Yet the block number isn't
     let signed_2 = signed_for_b_r(1, 0, Data::Precommit(Some(([0x22; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence((&signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     assert!(verify_tendermint_tx::<N>(&tx, validators.clone(), commit).is_err());
   }
 
@@ -248,7 +305,10 @@ async fn conflicting_msgs_evidence_tx() {
     )
     .await;
 
-    let tx = TendermintTx::SlashEvidence((signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
 
     // update schema so that we don't fail due to invalid signature
     let signer_pub =
@@ -265,7 +325,10 @@ async fn conflicting_msgs_evidence_tx() {
   {
     let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![]))).await;
     let signed_2 = signed_for_b_r(0, 0, Data::Prevote(None)).await;
-    let tx = TendermintTx::SlashEvidence((signed_1, Some(signed_2)).encode());
+    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
+      signed_1.encode(),
+      signed_2.encode(),
+    ));
     assert!(verify_tendermint_tx::<N>(&tx, validators.clone(), commit).is_err());
   }
 }

@@ -15,6 +15,8 @@ use ::tendermint::{
   TendermintMachine, TendermintHandle,
 };
 
+pub use ::tendermint::Evidence;
+
 use serai_db::Db;
 
 use tokio::sync::RwLock;

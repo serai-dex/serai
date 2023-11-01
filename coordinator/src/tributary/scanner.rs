@@ -13,7 +13,7 @@ use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encod
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
   tendermint::{
-    tx::{TendermintTx, decode_evidence},
+    tx::{TendermintTx, Evidence, decode_signed_message},
     TendermintNetwork,
   },
 };
@@ -80,7 +80,23 @@ async fn handle_block<
       TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
         // Since the evidence is on the chain, it should already have been validated
         // We can just punish the signer
-        let msgs = decode_evidence::<TendermintNetwork<D, Transaction, P>>(&ev).unwrap();
+        let data = match ev {
+          Evidence::ConflictingMessages(first, second) => (first, Some(second)),
+          Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
+          Evidence::InvalidPrecommit(first) => (first, None),
+          Evidence::InvalidVr(first) => (first, None),
+        };
+        let msgs = (
+          decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
+          if data.1.is_some() {
+            Some(
+              decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.1.unwrap())
+                .unwrap(),
+            )
+          } else {
+            None
+          },
+        );
 
         // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
