@@ -123,7 +123,7 @@ where
     }
 
     slice
-      .get(0)
+      .first()
       .filter(|(_, value)| !bool::from(multiexp_vartime(value).is_identity()))
       .map(|(id, _)| *id)
   }

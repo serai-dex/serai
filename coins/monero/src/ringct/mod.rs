@@ -360,7 +360,7 @@ impl RctSignatures {
           self
             .base
             .encrypted_amounts
-            .get(0)
+            .first()
             .expect("MLSAG with Bulletproofs didn't have any outputs"),
           EncryptedAmount::Original { .. }
         ) {

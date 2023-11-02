@@ -59,7 +59,7 @@ pub struct Block {
 
 impl Block {
   pub fn number(&self) -> usize {
-    match self.miner_tx.prefix.inputs.get(0) {
+    match self.miner_tx.prefix.inputs.first() {
       Some(Input::Gen(number)) => (*number).try_into().unwrap(),
       _ => panic!("invalid block, miner TX didn't have a Input::Gen"),
     }

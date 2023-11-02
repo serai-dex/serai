@@ -470,7 +470,7 @@ impl Network for Monero {
     let mut outputs = Vec::with_capacity(txs.len());
     for mut tx_outputs in txs.drain(..) {
       for output in tx_outputs.drain(..) {
-        let mut data = output.arbitrary_data().get(0).cloned().unwrap_or(vec![]);
+        let mut data = output.arbitrary_data().first().cloned().unwrap_or(vec![]);
 
         // The Output serialization code above uses u16 to represent length
         data.truncate(u16::MAX.into());

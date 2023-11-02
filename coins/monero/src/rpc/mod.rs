@@ -247,7 +247,7 @@ impl<R: RpcConnection> Rpc<R> {
 
         // https://github.com/monero-project/monero/issues/8311
         if res.as_hex.is_empty() {
-          match tx.prefix.inputs.get(0) {
+          match tx.prefix.inputs.first() {
             Some(Input::Gen { .. }) => (),
             _ => Err(RpcError::PrunedTransaction)?,
           }
@@ -308,7 +308,7 @@ impl<R: RpcConnection> Rpc<R> {
     match self.get_block(self.get_block_hash(number).await?).await {
       Ok(block) => {
         // Make sure this is actually the block for this number
-        match block.miner_tx.prefix.inputs.get(0) {
+        match block.miner_tx.prefix.inputs.first() {
           Some(Input::Gen(actual)) => {
             if usize::try_from(*actual).unwrap() == number {
               Ok(block)
@@ -467,7 +467,7 @@ impl<R: RpcConnection> Rpc<R> {
             }
             b"status" => {
               if bytes_res
-                .get(0)
+                .first()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "status wasn't a string"))?
                 .as_slice() !=
                 b"OK"
