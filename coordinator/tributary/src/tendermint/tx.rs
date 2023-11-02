@@ -29,10 +29,12 @@ pub enum TendermintTx {
 
 impl ReadWrite for TendermintTx {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    // TODO: Since reader itself is a slice, there should be a better way of passing it to
+    // decode directly.
     let mut input = Vec::new();
     reader.read_to_end(&mut input)?;
     let ev = Evidence::decode(&mut input.as_slice())
-      .map_err(|_| io::Error::other("invalid evidence format"))?;
+      .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid evidence format"))?;
     Ok(TendermintTx::SlashEvidence(ev))
   }
 
