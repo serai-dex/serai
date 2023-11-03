@@ -22,7 +22,7 @@ pub fn db_key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```ignore
 /// create_db!(
 ///   TrubutariesDb {
 ///     AttemptsDb: (key_bytes: &[u8], attempt_id: u32) -> u64,
