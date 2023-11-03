@@ -23,8 +23,8 @@ use crate::{Get, DbTxn, Db, networks::Network};
 
 #[derive(Debug)]
 pub struct KeyConfirmed<C: Ciphersuite> {
-  pub substrate_keys: ThresholdKeys<Ristretto>,
-  pub network_keys: ThresholdKeys<C>,
+  pub substrate_keys: Vec<ThresholdKeys<Ristretto>>,
+  pub network_keys: Vec<ThresholdKeys<C>>,
 }
 
 #[derive(Clone, Debug)]
@@ -37,10 +37,15 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn params_key(set: &ValidatorSet) -> Vec<u8> {
     Self::key_gen_key(b"params", set.encode())
   }
-  fn save_params(txn: &mut D::Transaction<'_>, set: &ValidatorSet, params: &ThresholdParams) {
-    txn.put(Self::params_key(set), bincode::serialize(params).unwrap());
+  fn save_params(
+    txn: &mut D::Transaction<'_>,
+    set: &ValidatorSet,
+    params: &ThresholdParams,
+    shares: u16,
+  ) {
+    txn.put(Self::params_key(set), bincode::serialize(&(params, shares)).unwrap());
   }
-  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> Option<ThresholdParams> {
+  fn params<G: Get>(getter: &G, set: &ValidatorSet) -> Option<(ThresholdParams, u16)> {
     getter.get(Self::params_key(set)).map(|bytes| bincode::deserialize(&bytes).unwrap())
   }
 
@@ -70,17 +75,23 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn save_keys(
     txn: &mut D::Transaction<'_>,
     id: &KeyGenId,
-    substrate_keys: &ThresholdCore<Ristretto>,
-    network_keys: &ThresholdKeys<N::Curve>,
+    substrate_keys: &[ThresholdCore<Ristretto>],
+    network_keys: &[ThresholdKeys<N::Curve>],
   ) {
-    let mut keys = substrate_keys.serialize();
-    keys.extend(network_keys.serialize().iter());
+    let mut keys = Zeroizing::new(vec![]);
+    for (substrate_keys, network_keys) in substrate_keys.iter().zip(network_keys) {
+      keys.extend(substrate_keys.serialize().as_slice());
+      keys.extend(network_keys.serialize().as_slice());
+    }
     txn.put(
       Self::generated_keys_key(
         id.set,
-        (&substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()),
+        (
+          &substrate_keys[0].group_key().to_bytes(),
+          network_keys[0].group_key().to_bytes().as_ref(),
+        ),
       ),
-      keys,
+      &keys,
     );
   }
 
@@ -91,54 +102,60 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
   fn read_keys<G: Get>(
     getter: &G,
     key: &[u8],
-  ) -> Option<(Vec<u8>, (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>))> {
+  ) -> Option<(Vec<u8>, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
     let keys_vec = getter.get(key)?;
     let mut keys_ref: &[u8] = keys_vec.as_ref();
-    let substrate_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    let mut network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-    N::tweak_keys(&mut network_keys);
+
+    let mut substrate_keys = vec![];
+    let mut network_keys = vec![];
+    while !keys_ref.is_empty() {
+      substrate_keys.push(ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap()));
+      let mut these_network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+      N::tweak_keys(&mut these_network_keys);
+      network_keys.push(these_network_keys);
+    }
     Some((keys_vec, (substrate_keys, network_keys)))
   }
   fn confirm_keys(
     txn: &mut D::Transaction<'_>,
     set: ValidatorSet,
     key_pair: KeyPair,
-  ) -> (ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>) {
+  ) -> (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>) {
     let (keys_vec, keys) =
       Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())))
         .unwrap();
-    assert_eq!(key_pair.0 .0, keys.0.group_key().to_bytes());
+    assert_eq!(key_pair.0 .0, keys.0[0].group_key().to_bytes());
     assert_eq!(
       {
         let network_key: &[u8] = key_pair.1.as_ref();
         network_key
       },
-      keys.1.group_key().to_bytes().as_ref(),
+      keys.1[0].group_key().to_bytes().as_ref(),
     );
-    txn.put(Self::keys_key(&keys.1.group_key()), keys_vec);
+    txn.put(Self::keys_key(&keys.1[0].group_key()), keys_vec);
     keys
   }
   fn keys<G: Get>(
     getter: &G,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
     let res = Self::read_keys(getter, &Self::keys_key(key))?.1;
-    assert_eq!(&res.1.group_key(), key);
+    assert_eq!(&res.1[0].group_key(), key);
     Some(res)
   }
 }
 
-/// Coded so if the processor spontaneously reboots, one of two paths occur:
-/// 1) It either didn't send its response, so the attempt will be aborted
-/// 2) It did send its response, and has locally saved enough data to continue
+type SecretShareMachines<N> =
+  Vec<(SecretShareMachine<Ristretto>, SecretShareMachine<<N as Network>::Curve>)>;
+type KeyMachines<N> = Vec<(KeyMachine<Ristretto>, KeyMachine<<N as Network>::Curve>)>;
+
 #[derive(Debug)]
 pub struct KeyGen<N: Network, D: Db> {
   db: D,
   entropy: Zeroizing<[u8; 32]>,
 
-  active_commit:
-    HashMap<ValidatorSet, (SecretShareMachine<Ristretto>, SecretShareMachine<N::Curve>)>,
-  active_share: HashMap<ValidatorSet, (KeyMachine<Ristretto>, KeyMachine<N::Curve>)>,
+  active_commit: HashMap<ValidatorSet, (SecretShareMachines<N>, Vec<Vec<u8>>)>,
+  active_share: HashMap<ValidatorSet, (KeyMachines<N>, Vec<HashMap<Participant, Vec<u8>>>)>,
 }
 
 impl<N: Network, D: Db> KeyGen<N, D> {
@@ -155,7 +172,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
     // This is safe, despite not having a txn, since it's a static value
     // The only concern is it may not be set when expected, or it may be set unexpectedly
     //
@@ -191,57 +208,34 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     let secret_shares_rng = |id| rng(b"Key Gen Secret Shares", id);
     let share_rng = |id| rng(b"Key Gen Share", id);
 
-    let key_gen_machines = |id, params| {
+    let key_gen_machines = |id, params: ThresholdParams, shares| {
       let mut rng = coefficients_rng(id);
-      let substrate = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
-      let network = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
-      ((substrate.0, network.0), (substrate.1, network.1))
+      let mut machines = vec![];
+      let mut commitments = vec![];
+      for s in 0 .. shares {
+        let params = ThresholdParams::new(
+          params.t(),
+          params.n(),
+          Participant::new(u16::from(params.i()) + s).unwrap(),
+        )
+        .unwrap();
+        let substrate = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+        let network = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+        machines.push((substrate.0, network.0));
+        let mut serialized = vec![];
+        substrate.1.write(&mut serialized);
+        network.1.write(&mut serialized);
+        commitments.push(serialized);
+      }
+      (machines, commitments)
     };
 
-    match msg {
-      CoordinatorMessage::GenerateKey { id, params } => {
-        info!("Generating new key. ID: {:?} Params: {:?}", id, params);
-
-        // Remove old attempts
-        if self.active_commit.remove(&id.set).is_none() &&
-          self.active_share.remove(&id.set).is_none()
-        {
-          // If we haven't handled this set before, save the params
-          KeyGenDb::<N, D>::save_params(txn, &id.set, &params);
-        }
-
-        let (machines, commitments) = key_gen_machines(id, params);
-        let mut serialized = commitments.0.serialize();
-        serialized.extend(commitments.1.serialize());
-        self.active_commit.insert(id.set, machines);
-
-        ProcessorMessage::Commitments { id, commitments: serialized }
-      }
-
-      CoordinatorMessage::Commitments { id, commitments } => {
-        info!("Received commitments for {:?}", id);
-
-        if self.active_share.contains_key(&id.set) {
-          // We should've been told of a new attempt before receiving commitments again
-          // The coordinator is either missing messages or repeating itself
-          // Either way, it's faulty
-          panic!("commitments when already handled commitments");
-        }
-
-        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
-
-        // Unwrap the machines, rebuilding them if we didn't have them in our cache
-        // We won't if the processor rebooted
-        // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
-        // attempt y
-        // The coordinator is trusted to be proper in this regard
-        let machines =
-          self.active_commit.remove(&id.set).unwrap_or_else(|| key_gen_machines(id, params).0);
-
+    let secret_share_machines =
+      |id,
+       params: ThresholdParams,
+       (machines, our_commitments): (SecretShareMachines<N>, Vec<Vec<u8>>),
+       commitments: HashMap<Participant, Vec<u8>>| {
         let mut rng = secret_shares_rng(id);
-
-        let mut commitments_ref: HashMap<Participant, &[u8]> =
-          commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
 
         #[allow(clippy::type_complexity)]
         fn handle_machine<C: Ciphersuite>(
@@ -269,26 +263,88 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           }
         }
 
-        let (substrate_machine, mut substrate_shares) =
-          handle_machine::<Ristretto>(&mut rng, params, machines.0, &mut commitments_ref);
-        let (network_machine, network_shares) =
-          handle_machine(&mut rng, params, machines.1, &mut commitments_ref);
-
-        for (_, commitments) in commitments_ref {
-          if !commitments.is_empty() {
-            todo!("malicious signer: extra bytes");
+        let mut key_machines = vec![];
+        let mut shares = vec![];
+        for (m, (substrate_machine, network_machine)) in machines.into_iter().enumerate() {
+          let mut commitments_ref: HashMap<Participant, &[u8]> =
+            commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
+          for (i, our_commitments) in our_commitments.iter().enumerate() {
+            if m != i {
+              assert!(commitments_ref
+                .insert(
+                  Participant::new(u16::from(params.i()) + u16::try_from(i).unwrap()).unwrap(),
+                  our_commitments.as_ref(),
+                )
+                .is_none());
+            }
           }
+
+          let (substrate_machine, mut substrate_shares) =
+            handle_machine::<Ristretto>(&mut rng, params, substrate_machine, &mut commitments_ref);
+          let (network_machine, network_shares) =
+            handle_machine(&mut rng, params, network_machine, &mut commitments_ref);
+          key_machines.push((substrate_machine, network_machine));
+
+          for (_, commitments) in commitments_ref {
+            if !commitments.is_empty() {
+              todo!("malicious signer: extra bytes");
+            }
+          }
+
+          let mut these_shares: HashMap<_, _> =
+            substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
+          for (i, share) in these_shares.iter_mut() {
+            share.extend(network_shares[i].serialize());
+          }
+          shares.push(these_shares);
+        }
+        (key_machines, shares)
+      };
+
+    match msg {
+      CoordinatorMessage::GenerateKey { id, params, shares } => {
+        info!("Generating new key. ID: {id:?} Params: {params:?} Shares: {shares}");
+
+        // Remove old attempts
+        if self.active_commit.remove(&id.set).is_none() &&
+          self.active_share.remove(&id.set).is_none()
+        {
+          // If we haven't handled this set before, save the params
+          KeyGenDb::<N, D>::save_params(txn, &id.set, &params, shares);
         }
 
-        self.active_share.insert(id.set, (substrate_machine, network_machine));
+        let (machines, commitments) = key_gen_machines(id, params, shares);
+        self.active_commit.insert(id.set, (machines, commitments.clone()));
 
-        let mut shares: HashMap<_, _> =
-          substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
-        for (i, share) in shares.iter_mut() {
-          share.extend(network_shares[i].serialize());
+        ProcessorMessage::Commitments { id, commitments }
+      }
+
+      CoordinatorMessage::Commitments { id, commitments } => {
+        info!("Received commitments for {:?}", id);
+
+        if self.active_share.contains_key(&id.set) {
+          // We should've been told of a new attempt before receiving commitments again
+          // The coordinator is either missing messages or repeating itself
+          // Either way, it's faulty
+          panic!("commitments when already handled commitments");
         }
+
+        let (params, share_quantity) = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
+
+        // Unwrap the machines, rebuilding them if we didn't have them in our cache
+        // We won't if the processor rebooted
+        // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
+        // attempt y
+        // The coordinator is trusted to be proper in this regard
+        let prior = self
+          .active_commit
+          .remove(&id.set)
+          .unwrap_or_else(|| key_gen_machines(id, params, share_quantity));
 
         KeyGenDb::<N, D>::save_commitments(txn, &id, &commitments);
+        let (machines, shares) = secret_share_machines(id, params, prior, commitments);
+
+        self.active_share.insert(id.set, (machines, shares.clone()));
 
         ProcessorMessage::Shares { id, shares }
       }
@@ -296,47 +352,15 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let params = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
+        let (params, share_quantity) = KeyGenDb::<N, D>::params(txn, &id.set).unwrap();
 
         // Same commentary on inconsistency as above exists
-        let machines = self.active_share.remove(&id.set).unwrap_or_else(|| {
-          let machines = key_gen_machines(id, params).0;
-          let mut rng = secret_shares_rng(id);
-          let commitments = KeyGenDb::<N, D>::commitments(txn, &id);
-
-          let mut commitments_ref: HashMap<Participant, &[u8]> =
-            commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
-
-          fn parse_commitments<C: Ciphersuite>(
-            params: ThresholdParams,
-            commitments_ref: &mut HashMap<Participant, &[u8]>,
-          ) -> HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>> {
-            commitments_ref
-              .iter_mut()
-              .map(|(i, commitments)| {
-                (*i, EncryptionKeyMessage::<C, Commitments<C>>::read(commitments, params).unwrap())
-              })
-              .collect()
-          }
-
-          (
-            machines
-              .0
-              .generate_secret_shares(&mut rng, parse_commitments(params, &mut commitments_ref))
-              .unwrap()
-              .0,
-            machines
-              .1
-              .generate_secret_shares(&mut rng, parse_commitments(params, &mut commitments_ref))
-              .unwrap()
-              .0,
-          )
+        let (machines, our_shares) = self.active_share.remove(&id.set).unwrap_or_else(|| {
+          let prior = key_gen_machines(id, params, share_quantity);
+          secret_share_machines(id, params, prior, KeyGenDb::<N, D>::commitments(txn, &id))
         });
 
         let mut rng = share_rng(id);
-
-        let mut shares_ref: HashMap<Participant, &[u8]> =
-          shares.iter().map(|(i, shares)| (*i, shares.as_ref())).collect();
 
         fn handle_machine<C: Ciphersuite>(
           rng: &mut ChaCha20Rng,
@@ -364,24 +388,58 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           .complete()
         }
 
-        let substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
-        let network_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
-
-        for (_, shares) in shares_ref {
-          if !shares.is_empty() {
-            todo!("malicious signer: extra bytes");
+        let mut substrate_keys = vec![];
+        let mut network_keys = vec![];
+        for (m, machines) in machines.into_iter().enumerate() {
+          let mut shares_ref: HashMap<Participant, &[u8]> =
+            shares[m].iter().map(|(i, shares)| (*i, shares.as_ref())).collect();
+          for (i, our_shares) in our_shares.iter().enumerate() {
+            if m != i {
+              assert!(shares_ref
+                .insert(
+                  Participant::new(u16::from(params.i()) + u16::try_from(i).unwrap()).unwrap(),
+                  our_shares
+                    [&Participant::new(u16::from(params.i()) + u16::try_from(m).unwrap()).unwrap()]
+                    .as_ref(),
+                )
+                .is_none());
+            }
           }
+
+          let these_substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
+          let these_network_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
+
+          for (_, shares) in shares_ref {
+            if !shares.is_empty() {
+              todo!("malicious signer: extra bytes");
+            }
+          }
+
+          let mut these_network_keys = ThresholdKeys::new(these_network_keys);
+          N::tweak_keys(&mut these_network_keys);
+
+          substrate_keys.push(these_substrate_keys);
+          network_keys.push(these_network_keys);
         }
 
-        let mut network_keys = ThresholdKeys::new(network_keys);
-        N::tweak_keys(&mut network_keys);
+        let mut generated_substrate_key = None;
+        let mut generated_network_key = None;
+        for keys in substrate_keys.iter().zip(&network_keys) {
+          if generated_substrate_key.is_none() {
+            generated_substrate_key = Some(keys.0.group_key());
+            generated_network_key = Some(keys.1.group_key());
+          } else {
+            assert_eq!(generated_substrate_key, Some(keys.0.group_key()));
+            assert_eq!(generated_network_key, Some(keys.1.group_key()));
+          }
+        }
 
         KeyGenDb::<N, D>::save_keys(txn, &id, &substrate_keys, &network_keys);
 
         ProcessorMessage::GeneratedKeyPair {
           id,
-          substrate_key: substrate_keys.group_key().to_bytes(),
-          network_key: network_keys.group_key().to_bytes().as_ref().to_vec(),
+          substrate_key: generated_substrate_key.unwrap().to_bytes(),
+          network_key: generated_network_key.unwrap().to_bytes().as_ref().to_vec(),
         }
       }
     }
@@ -393,12 +451,12 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> KeyConfirmed<N::Curve> {
-    let (substrate_keys, network_keys) = KeyGenDb::<N, D>::confirm_keys(txn, set, key_pair);
+    let (substrate_keys, network_keys) = KeyGenDb::<N, D>::confirm_keys(txn, set, key_pair.clone());
 
     info!(
       "Confirmed key pair {} {} for set {:?}",
-      hex::encode(substrate_keys.group_key().to_bytes()),
-      hex::encode(network_keys.group_key().to_bytes()),
+      hex::encode(key_pair.0),
+      hex::encode(key_pair.1),
       set,
     );
 
