@@ -57,8 +57,8 @@ struct TransactionsResponse {
 pub enum RpcError {
   #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
-  #[cfg_attr(feature = "std", error("connection error"))]
-  ConnectionError,
+  #[cfg_attr(feature = "std", error("connection error ({0})"))]
+  ConnectionError(String),
   #[cfg_attr(feature = "std", error("invalid node ({0})"))]
   InvalidNode(&'static str),
   #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]

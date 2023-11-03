@@ -182,6 +182,9 @@ impl PartialEq for Monero {
 impl Eq for Monero {}
 
 fn map_rpc_err(err: RpcError) -> NetworkError {
+  if let RpcError::ConnectionError(e) = &err {
+    log::debug!("Monero ConnectionError: {e}");
+  }
   if let RpcError::InvalidNode(reason) = &err {
     log::error!("Monero RpcError::InvalidNode({reason})");
   }
@@ -599,7 +602,10 @@ impl Network for Monero {
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
     match self.rpc.publish_transaction(tx).await {
       Ok(_) => Ok(()),
-      Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
+      Err(RpcError::ConnectionError(e)) => {
+        log::debug!("Monero ConnectionError: {e}");
+        Err(NetworkError::ConnectionError)?
+      }
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
       Err(e) => panic!("failed to publish TX {}: {e}", hex::encode(tx.hash())),

@@ -1,7 +1,11 @@
+use core::str::FromStr;
+
 use async_trait::async_trait;
 
 use digest_auth::AuthContext;
-use hyper::{header::HeaderValue, Request, service::Service, client::connect::HttpConnector, Client};
+use hyper::{
+  Uri, header::HeaderValue, Request, service::Service, client::connect::HttpConnector, Client,
+};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::rpc::{RpcError, RpcConnection, Rpc};
@@ -41,7 +45,7 @@ impl HttpRpc {
       let url_clone = url;
       let split_url = url_clone.split('@').collect::<Vec<_>>();
       if split_url.len() != 2 {
-        Err(RpcError::ConnectionError)?;
+        Err(RpcError::ConnectionError("invalid amount of login specifications".to_string()))?;
       }
       let mut userpass = split_url[0];
       url = split_url[1].to_string();
@@ -50,20 +54,20 @@ impl HttpRpc {
       if userpass.contains("://") {
         let split_userpass = userpass.split("://").collect::<Vec<_>>();
         if split_userpass.len() != 2 {
-          Err(RpcError::ConnectionError)?;
+          Err(RpcError::ConnectionError("invalid amount of protocol specifications".to_string()))?;
         }
         url = split_userpass[0].to_string() + "://" + &url;
         userpass = split_userpass[1];
       }
 
       let split_userpass = userpass.split(':').collect::<Vec<_>>();
-      if split_userpass.len() != 2 {
-        Err(RpcError::ConnectionError)?;
+      if split_userpass.len() > 2 {
+        Err(RpcError::ConnectionError("invalid amount of passwords".to_string()))?;
       }
       Authentication::Authenticated(
         https_builder,
         split_userpass[0].to_string(),
-        split_userpass[1].to_string(),
+        split_userpass.get(1).unwrap_or(&"").to_string(),
       )
     } else {
       Authentication::Unauthenticated(Client::builder().build(https_builder))
@@ -93,23 +97,28 @@ impl HttpRpc {
       Authentication::Unauthenticated(client) => client
         .request(request(self.url.clone() + "/" + route))
         .await
-        .map_err(|_| RpcError::ConnectionError)?,
+        .map_err(|e| RpcError::ConnectionError(e.to_string()))?,
       Authentication::Authenticated(https_builder, user, pass) => {
         let connection = https_builder
           .clone()
-          .call(self.url.parse().map_err(|_| RpcError::ConnectionError)?)
+          .call(
+            self
+              .url
+              .parse()
+              .map_err(|e: <Uri as FromStr>::Err| RpcError::ConnectionError(e.to_string()))?,
+          )
           .await
-          .map_err(|_| RpcError::ConnectionError)?;
+          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         let (mut requester, connection) = hyper::client::conn::http1::handshake(connection)
           .await
-          .map_err(|_| RpcError::ConnectionError)?;
+          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         let connection_task = tokio::spawn(connection);
         connection_task_handle = Some(connection_task.abort_handle());
 
         let mut response = requester
           .send_request(request("/".to_string() + route))
           .await
-          .map_err(|_| RpcError::ConnectionError)?;
+          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         // Only provide authentication if this daemon actually expects it
         if let Some(header) = response.headers().get("www-authenticate") {
           let mut request = request("/".to_string() + route);
@@ -135,11 +144,13 @@ impl HttpRpc {
           );
 
           // Wait for the connection to be ready again
-          requester.ready().await.map_err(|_| RpcError::ConnectionError)?;
+          requester.ready().await.map_err(|e| RpcError::ConnectionError(e.to_string()))?;
 
           // Make the request with the response challenge
-          response =
-            requester.send_request(request).await.map_err(|_| RpcError::ConnectionError)?;
+          response = requester
+            .send_request(request)
+            .await
+            .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         }
 
         response
@@ -164,13 +175,13 @@ impl HttpRpc {
     let mut body = response.into_body();
     while res.len() < length {
       let Some(data) = body.data().await else { break };
-      res.extend(data.map_err(|_| RpcError::ConnectionError)?.as_ref());
+      res.extend(data.map_err(|e| RpcError::ConnectionError(e.to_string()))?.as_ref());
     }
     */
 
     let res = hyper::body::to_bytes(response.into_body())
       .await
-      .map_err(|_| RpcError::ConnectionError)?
+      .map_err(|e| RpcError::ConnectionError(e.to_string()))?
       .to_vec();
 
     if let Some(connection_task) = connection_task_handle {
@@ -188,6 +199,6 @@ impl RpcConnection for HttpRpc {
     // TODO: Make this timeout configurable
     tokio::time::timeout(core::time::Duration::from_secs(30), self.inner_post(route, body))
       .await
-      .map_err(|_| RpcError::ConnectionError)?
+      .map_err(|e| RpcError::ConnectionError(e.to_string()))?
   }
 }

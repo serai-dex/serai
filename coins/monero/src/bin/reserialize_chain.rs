@@ -26,8 +26,8 @@ mod binaries {
     let hash = loop {
       match rpc.get_block_hash(block_i).await {
         Ok(hash) => break hash,
-        Err(RpcError::ConnectionError) => {
-          println!("get_block_hash ConnectionError");
+        Err(RpcError::ConnectionError(e)) => {
+          println!("get_block_hash ConnectionError: {e}");
           continue;
         }
         Err(e) => panic!("couldn't get block {block_i}'s hash: {e:?}"),
@@ -42,8 +42,8 @@ mod binaries {
     let res: BlockResponse = loop {
       match rpc.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await {
         Ok(res) => break res,
-        Err(RpcError::ConnectionError) => {
-          println!("get_block ConnectionError");
+        Err(RpcError::ConnectionError(e)) => {
+          println!("get_block ConnectionError: {e}");
           continue;
         }
         Err(e) => panic!("couldn't get block {block_i} via block.hash(): {e:?}"),
@@ -85,8 +85,8 @@ mod binaries {
             .await
           {
             Ok(txs) => break txs,
-            Err(RpcError::ConnectionError) => {
-              println!("get_transactions ConnectionError");
+            Err(RpcError::ConnectionError(e)) => {
+              println!("get_transactions ConnectionError: {e}");
               continue;
             }
             Err(e) => panic!("couldn't call get_transactions: {e:?}"),
@@ -190,8 +190,8 @@ mod binaries {
                     .await
                   {
                     Ok(outs) => break outs,
-                    Err(RpcError::ConnectionError) => {
-                      println!("get_outs ConnectionError");
+                    Err(RpcError::ConnectionError(e)) => {
+                      println!("get_outs ConnectionError: {e}");
                       continue;
                     }
                     Err(e) => panic!("couldn't connect to RPC to get outs: {e:?}"),
