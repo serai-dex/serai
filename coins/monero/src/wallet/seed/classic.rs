@@ -9,8 +9,6 @@ use std_shims::{
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
-use crc::{Crc, CRC_32_ISO_HDLC};
-
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{random_scalar, wallet::seed::SeedError};
@@ -101,11 +99,38 @@ fn checksum_index(words: &[Zeroizing<String>], lang: &WordList) -> usize {
     *trimmed_words += &trim(w, lang.unique_prefix_length);
   }
 
-  let crc = Crc::<u32>::new(&CRC_32_ISO_HDLC);
-  let mut digest = crc.digest();
-  digest.update(trimmed_words.as_bytes());
+  const fn crc32_table() -> [u32; 256] {
+    let poly = 0xedb88320u32;
 
-  usize::try_from(digest.finalize()).unwrap() % words.len()
+    let mut res = [0; 256];
+    let mut i = 0;
+    while i < 256 {
+      let mut entry = i;
+      let mut b = 0;
+      while b < 8 {
+        let trigger = entry & 1;
+        entry >>= 1;
+        if trigger == 1 {
+          entry ^= poly;
+        }
+        b += 1;
+      }
+      res[i as usize] = entry;
+      i += 1;
+    }
+
+    res
+  }
+  const CRC32_TABLE: [u32; 256] = crc32_table();
+
+  let trimmed_words = trimmed_words.as_bytes();
+  let mut checksum = u32::MAX;
+  for i in 0 .. trimmed_words.len() {
+    checksum = CRC32_TABLE[usize::from(u8::try_from(checksum % 256).unwrap() ^ trimmed_words[i])] ^
+      (checksum >> 8);
+  }
+
+  usize::try_from(!checksum).unwrap() % words.len()
 }
 
 // Convert a private key to a seed

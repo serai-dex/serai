@@ -27,7 +27,6 @@ rand_chacha = { version = "0.3", default-features = false }
 # Used to select decoys
 rand_distr = { version = "0.4", default-features = false }
 
-crc = { version = "3", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
 
