@@ -8,6 +8,7 @@ use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   ThresholdKeys,
+  algorithm::Algorithm,
   sign::{
     Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
     AlgorithmSignMachine, AlgorithmSignatureMachine,
@@ -77,16 +78,27 @@ impl<D: Db> SubstrateSignerDb<D> {
   }
 }
 
+type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachine<
+  <Schnorrkel as Algorithm<Ristretto>>::Signature,
+>>::SignatureShare;
+
 pub struct SubstrateSigner<D: Db> {
   db: PhantomData<D>,
 
   network: NetworkId,
-  keys: ThresholdKeys<Ristretto>,
+  keys: Vec<ThresholdKeys<Ristretto>>,
 
   signable: HashMap<[u8; 32], Batch>,
   attempt: HashMap<[u8; 32], u32>,
-  preprocessing: HashMap<[u8; 32], AlgorithmSignMachine<Ristretto, Schnorrkel>>,
-  signing: HashMap<[u8; 32], AlgorithmSignatureMachine<Ristretto, Schnorrkel>>,
+  preprocessing: HashMap<
+    [u8; 32],
+    (
+      Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>,
+      Vec<<AlgorithmMachine<Ristretto, Schnorrkel> as PreprocessMachine>::Preprocess>,
+    ),
+  >,
+  signing:
+    HashMap<[u8; 32], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 
   pub events: VecDeque<SubstrateSignerEvent>,
 }
@@ -102,7 +114,7 @@ impl<D: Db> fmt::Debug for SubstrateSigner<D> {
 }
 
 impl<D: Db> SubstrateSigner<D> {
-  pub fn new(network: NetworkId, keys: ThresholdKeys<Ristretto>) -> SubstrateSigner<D> {
+  pub fn new(network: NetworkId, keys: Vec<ThresholdKeys<Ristretto>>) -> SubstrateSigner<D> {
     SubstrateSigner {
       db: PhantomData,
 
@@ -178,7 +190,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys.group_key().to_bytes().to_vec(), id, attempt };
+    let id = SignId { key: self.keys[0].group_key().to_bytes().to_vec(), id, attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
@@ -204,19 +216,27 @@ impl<D: Db> SubstrateSigner<D> {
 
     SubstrateSignerDb::<D>::attempt(txn, &id);
 
-    // b"substrate" is a literal from sp-core
-    let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), self.keys.clone());
+    let mut machines = vec![];
+    let mut preprocesses = vec![];
+    let mut serialized_preprocesses = vec![];
+    for keys in &self.keys {
+      // b"substrate" is a literal from sp-core
+      let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), keys.clone());
 
-    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
-    // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
-    // message, send distinct preprocess, and then attempt a signing session premised on the former
-    // with the latter
-    let (machine, preprocess) = machine.preprocess(&mut OsRng);
-    self.preprocessing.insert(id.id, machine);
+      // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
+      // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
+      // message, send distinct preprocess, and then attempt a signing session premised on the
+      // former with the latter
+      let (machine, preprocess) = machine.preprocess(&mut OsRng);
+      machines.push(machine);
+      serialized_preprocesses.push(preprocess.serialize());
+      preprocesses.push(preprocess);
+    }
+    self.preprocessing.insert(id.id, (machines, preprocesses));
 
-    // Broadcast our preprocess
+    // Broadcast our preprocesses
     self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
-      ProcessorMessage::BatchPreprocess { id, block, preprocess: preprocess.serialize() },
+      ProcessorMessage::BatchPreprocess { id, block, preprocesses: serialized_preprocesses },
     ));
   }
 
@@ -240,23 +260,23 @@ impl<D: Db> SubstrateSigner<D> {
           return;
         }
 
-        let machine = match self.preprocessing.remove(&id.id) {
+        let (machines, our_preprocesses) = match self.preprocessing.remove(&id.id) {
           // Either rebooted or RPC error, or some invariant
           None => {
             warn!(
               "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id.id)
+              hex::encode(id.id),
             );
             return;
           }
-          Some(machine) => machine,
+          Some(preprocess) => preprocess,
         };
 
         let preprocesses = match preprocesses
           .drain()
           .map(|(l, preprocess)| {
             let mut preprocess_ref = preprocess.as_ref();
-            let res = machine
+            let res = machines[0]
               .read_preprocess::<&[u8]>(&mut preprocess_ref)
               .map(|preprocess| (l, preprocess));
             if !preprocess_ref.is_empty() {
@@ -264,24 +284,44 @@ impl<D: Db> SubstrateSigner<D> {
             }
             res
           })
-          .collect::<Result<_, _>>()
+          .collect::<Result<HashMap<_, _>, _>>()
         {
           Ok(preprocesses) => preprocesses,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        let (machine, share) =
-          match machine.sign(preprocesses, &batch_message(&self.signable[&id.id])) {
-            Ok(res) => res,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
-        self.signing.insert(id.id, machine);
+        // Only keep a single machine as we only need one to get the signature
+        let mut signature_machine = None;
+        let mut shares = vec![];
+        let mut serialized_shares = vec![];
+        for (m, machine) in machines.into_iter().enumerate() {
+          let mut preprocesses = preprocesses.clone();
+          for (i, our_preprocess) in our_preprocesses.clone().into_iter().enumerate() {
+            if i != m {
+              assert!(preprocesses.insert(self.keys[i].params().i(), our_preprocess).is_none());
+            }
+          }
 
-        // Broadcast our share
-        let mut share_bytes = [0; 32];
-        share_bytes.copy_from_slice(&share.serialize());
+          let (machine, share) =
+            match machine.sign(preprocesses, &batch_message(&self.signable[&id.id])) {
+              Ok(res) => res,
+              Err(e) => todo!("malicious signer: {:?}", e),
+            };
+          if m == 0 {
+            signature_machine = Some(machine);
+          }
+
+          let mut share_bytes = [0; 32];
+          share_bytes.copy_from_slice(&share.serialize());
+          serialized_shares.push(share_bytes);
+
+          shares.push(share);
+        }
+        self.signing.insert(id.id, (signature_machine.unwrap(), shares));
+
+        // Broadcast our shares
         self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
-          ProcessorMessage::BatchShare { id, share: share_bytes },
+          ProcessorMessage::BatchShare { id, shares: serialized_shares },
         ));
       }
 
@@ -290,7 +330,7 @@ impl<D: Db> SubstrateSigner<D> {
           return;
         }
 
-        let machine = match self.signing.remove(&id.id) {
+        let (machine, our_shares) = match self.signing.remove(&id.id) {
           // Rebooted, RPC error, or some invariant
           None => {
             // If preprocessing has this ID, it means we were never sent the preprocess by the
@@ -305,10 +345,10 @@ impl<D: Db> SubstrateSigner<D> {
             );
             return;
           }
-          Some(machine) => machine,
+          Some(signing) => signing,
         };
 
-        let shares = match shares
+        let mut shares = match shares
           .drain()
           .map(|(l, share)| {
             let mut share_ref = share.as_ref();
@@ -318,11 +358,15 @@ impl<D: Db> SubstrateSigner<D> {
             }
             res
           })
-          .collect::<Result<_, _>>()
+          .collect::<Result<HashMap<_, _>, _>>()
         {
           Ok(shares) => shares,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
+
+        for (i, our_share) in our_shares.into_iter().enumerate().skip(1) {
+          assert!(shares.insert(self.keys[i].params().i(), our_share).is_none());
+        }
 
         let sig = match machine.complete(shares) {
           Ok(res) => res,
