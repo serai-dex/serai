@@ -171,7 +171,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (
       MultisigManager {
         scanner,
-        existing: current_keys.get(0).cloned().map(|(activation_block, key)| MultisigViewer {
+        existing: current_keys.first().cloned().map(|(activation_block, key)| MultisigViewer {
           activation_block,
           key,
           scheduler: schedulers.remove(0),

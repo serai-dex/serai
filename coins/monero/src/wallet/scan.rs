@@ -493,8 +493,9 @@ impl Scanner {
           .iter()
           // Filter to v2 miner TX outputs/RCT outputs since we're tracking the RCT output index
           .filter(|output| {
-            ((tx.prefix.version == 2) && matches!(tx.prefix.inputs.get(0), Some(Input::Gen(..)))) ||
-              output.amount.is_none()
+            let is_v2_miner_tx =
+              (tx.prefix.version == 2) && matches!(tx.prefix.inputs.first(), Some(Input::Gen(..)));
+            is_v2_miner_tx || output.amount.is_none()
           })
           .count(),
       )

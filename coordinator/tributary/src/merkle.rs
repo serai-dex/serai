@@ -33,5 +33,5 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
     hashes = interim;
   }
 
-  hashes.get(0).copied().map(Into::into).unwrap_or(zero)
+  hashes.first().copied().map(Into::into).unwrap_or(zero)
 }

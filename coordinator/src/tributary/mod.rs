@@ -392,7 +392,7 @@ impl ReadWrite for Transaction {
         // is impossible since we'll only read up to u16::MAX items.
         writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
 
-        let share_len = shares.get(0).map(|share| share.len()).unwrap_or(0);
+        let share_len = shares.first().map(|share| share.len()).unwrap_or(0);
         // For BLS12-381 G2, this would be:
         // - A 32-byte share
         // - A 96-byte ephemeral key

@@ -13,6 +13,7 @@ mod batch;
 pub use batch::batch;
 
 mod sign;
+#[allow(unused_imports)]
 pub use sign::sign;
 
 pub(crate) const COORDINATORS: usize = 4;
