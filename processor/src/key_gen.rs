@@ -58,7 +58,6 @@ impl KeysDb {
     }
     Some((keys_vec, (substrate_keys, network_keys)))
   }
-);
 
   fn confirm_keys<N: Network>(
     txn: &mut impl DbTxn,
@@ -84,7 +83,7 @@ impl KeysDb {
   fn keys<N: Network>(
     getter: &impl Get,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(ThresholdKeys<Ristretto>, ThresholdKeys<N::Curve>)> {
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
     let res = Self::read_keys::<N>(getter, &KeysDb::key(&key.to_bytes().as_ref().into()))?.1;
     assert_eq!(&res.1[0].group_key(), key);
     Some(res)
@@ -99,7 +98,14 @@ impl GeneratedKeysDb {
   ) {
     let mut keys = substrate_keys.serialize();
     keys.extend(network_keys.serialize().iter());
-    txn.put(Self::key(&id.set, &substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()), keys);
+    txn.put(
+      Self::key(
+        &id.set,
+        &substrate_keys.group_key().to_bytes(),
+        network_keys.group_key().to_bytes().as_ref(),
+      ),
+      keys,
+    );
   }
 }
 impl GeneratedKeysDb {
