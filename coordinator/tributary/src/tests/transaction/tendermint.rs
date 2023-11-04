@@ -69,7 +69,7 @@ async fn invalid_valid_round() {
   let mut random_sig = [0u8; 64];
   OsRng.fill_bytes(&mut random_sig);
   signed.sig = random_sig;
-  let tx = TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.clone().encode()));
+  let tx = TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.encode()));
 
   // should fail
   assert!(verify_tendermint_tx::<N>(&tx, validators, commit).is_err());
@@ -119,7 +119,7 @@ async fn invalid_precommit_signature() {
     let mut random_sig = [0u8; 64];
     OsRng.fill_bytes(&mut random_sig);
     signed.sig = random_sig;
-    let tx = TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(signed.clone().encode()));
+    let tx = TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(signed.encode()));
     assert!(verify_tendermint_tx::<N>(&tx, validators, commit).is_err());
   }
 }

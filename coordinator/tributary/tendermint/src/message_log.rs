@@ -36,7 +36,7 @@ impl<N: Network> MessageLog<N> {
         );
         Err(TendermintError::Malicious(
           msg.sender,
-          Some(Evidence::ConflictingMessages(existing.encode(), signed.clone().encode())),
+          Some(Evidence::ConflictingMessages(existing.encode(), signed.encode())),
         ))?;
       }
       return Ok(false);
@@ -50,7 +50,7 @@ impl<N: Network> MessageLog<N> {
             debug!(target: "tendermint", "Validator precommitted to multiple blocks");
             Err(TendermintError::Malicious(
               msg.sender,
-              Some(Evidence::ConflictingPrecommit(prev.encode(), signed.clone().encode())),
+              Some(Evidence::ConflictingPrecommit(prev.encode(), signed.encode())),
             ))?;
           }
         } else {

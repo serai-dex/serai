@@ -567,7 +567,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
           Err(TendermintError::Malicious(
             msg.sender,
-            Some(Evidence::InvalidPrecommit(signed.clone().encode())),
+            Some(Evidence::InvalidPrecommit(signed.encode())),
           ))?;
         }
         return Ok(true);
@@ -772,7 +772,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
           Err(TendermintError::Malicious(
             msg.sender,
-            Some(Evidence::InvalidVr(signed.clone().encode())),
+            Some(Evidence::InvalidVr(signed.encode())),
           ))?;
         }
 
