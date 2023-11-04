@@ -41,19 +41,22 @@ pub async fn test_key_gen<N: Network>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    if let ProcessorMessage::Commitments { id, commitments } = key_gen
+    if let ProcessorMessage::Commitments { id, mut commitments } = key_gen
       .handle(
         &mut txn,
         CoordinatorMessage::GenerateKey {
           id: ID,
           params: ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap())
             .unwrap(),
+          shares: 1,
         },
       )
       .await
     {
       assert_eq!(id, ID);
-      all_commitments.insert(Participant::new(u16::try_from(i).unwrap()).unwrap(), commitments);
+      assert_eq!(commitments.len(), 1);
+      all_commitments
+        .insert(Participant::new(u16::try_from(i).unwrap()).unwrap(), commitments.swap_remove(0));
     } else {
       panic!("didn't get commitments back");
     }
@@ -75,7 +78,7 @@ pub async fn test_key_gen<N: Network>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::Shares { id, shares } = key_gen
+    if let ProcessorMessage::Shares { id, mut shares } = key_gen
       .handle(
         &mut txn,
         CoordinatorMessage::Commitments {
@@ -86,7 +89,8 @@ pub async fn test_key_gen<N: Network>() {
       .await
     {
       assert_eq!(id, ID);
-      all_shares.insert(i, shares);
+      assert_eq!(shares.len(), 1);
+      all_shares.insert(i, shares.swap_remove(0));
     } else {
       panic!("didn't get shares back");
     }
@@ -107,10 +111,10 @@ pub async fn test_key_gen<N: Network>() {
         &mut txn,
         CoordinatorMessage::Shares {
           id: ID,
-          shares: all_shares
+          shares: vec![all_shares
             .iter()
             .filter_map(|(l, shares)| if i == *l { None } else { Some((*l, shares[&i].clone())) })
-            .collect(),
+            .collect()],
         },
       )
       .await
@@ -134,10 +138,15 @@ pub async fn test_key_gen<N: Network>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let KeyConfirmed { substrate_keys, network_keys } = key_gen
+    let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen
       .confirm(&mut txn, ID.set, (sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
       .await;
     txn.commit();
+
+    assert_eq!(substrate_keys.len(), 1);
+    let substrate_keys = substrate_keys.swap_remove(0);
+    assert_eq!(network_keys.len(), 1);
+    let network_keys = network_keys.swap_remove(0);
 
     let params =
       ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap()).unwrap();
