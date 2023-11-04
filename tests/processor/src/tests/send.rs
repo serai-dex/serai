@@ -30,7 +30,7 @@ pub(crate) async fn recv_sign_preprocesses(
     match msg {
       messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Preprocess {
         id: this_id,
-        preprocess,
+        preprocesses: mut these_preprocesses,
       }) => {
         if id.is_none() {
           assert_eq!(&this_id.key, &key);
@@ -39,7 +39,8 @@ pub(crate) async fn recv_sign_preprocesses(
         }
         assert_eq!(&this_id, id.as_ref().unwrap());
 
-        preprocesses.insert(i, preprocess);
+        assert_eq!(these_preprocesses.len(), 1);
+        preprocesses.insert(i, these_preprocesses.swap_remove(0));
       }
       _ => panic!("processor didn't send sign preprocess"),
     }
@@ -87,10 +88,11 @@ pub(crate) async fn sign_tx(
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Share {
           id: this_id,
-          share,
+          shares: mut these_shares,
         }) => {
           assert_eq!(&this_id, &id);
-          shares.insert(i, share);
+          assert_eq!(these_shares.len(), 1);
+          shares.insert(i, these_shares.swap_remove(0));
         }
         _ => panic!("processor didn't send TX shares"),
       }

@@ -46,14 +46,16 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
         participant,
       )
       .unwrap(),
+      shares: 1,
     },
     |participant, msg| match msg {
       messages::key_gen::ProcessorMessage::Commitments {
         id: this_id,
-        commitments: these_commitments,
+        commitments: mut these_commitments,
       } => {
         assert_eq!(this_id, id);
-        commitments.insert(participant, these_commitments);
+        assert_eq!(these_commitments.len(), 1);
+        commitments.insert(participant, these_commitments.swap_remove(0));
       }
       _ => panic!("processor didn't return Commitments in response to GenerateKey"),
     },
@@ -69,9 +71,10 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
       commitments: clone_without(&commitments, &participant),
     },
     |participant, msg| match msg {
-      messages::key_gen::ProcessorMessage::Shares { id: this_id, shares: these_shares } => {
+      messages::key_gen::ProcessorMessage::Shares { id: this_id, shares: mut these_shares } => {
         assert_eq!(this_id, id);
-        shares.insert(participant, these_shares);
+        assert_eq!(these_shares.len(), 1);
+        shares.insert(participant, these_shares.swap_remove(0));
       }
       _ => panic!("processor didn't return Shares in response to GenerateKey"),
     },
@@ -85,12 +88,12 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
     coordinators,
     |participant| messages::key_gen::CoordinatorMessage::Shares {
       id,
-      shares: shares
+      shares: vec![shares
         .iter()
         .filter_map(|(this_participant, shares)| {
           shares.get(&participant).cloned().map(|share| (*this_participant, share))
         })
-        .collect(),
+        .collect()],
     },
     |_, msg| match msg {
       messages::key_gen::ProcessorMessage::GeneratedKeyPair {
