@@ -51,7 +51,7 @@ async fn invalid_valid_round() {
     async move {
       let data = Data::Proposal(valid_round, TendermintBlock(vec![]));
       let signed = signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, data).await;
-      (signed.clone(), TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.encode())))
+      (signed.clone(), TendermintTx::SlashEvidence(Evidence::InvalidValidRound(signed.encode())))
     }
   };
 
@@ -69,7 +69,7 @@ async fn invalid_valid_round() {
   let mut random_sig = [0u8; 64];
   OsRng.fill_bytes(&mut random_sig);
   signed.sig = random_sig;
-  let tx = TendermintTx::SlashEvidence(Evidence::InvalidVr(signed.encode()));
+  let tx = TendermintTx::SlashEvidence(Evidence::InvalidValidRound(signed.encode()));
 
   // should fail
   assert!(verify_tendermint_tx::<N>(&tx, validators, commit).is_err());
@@ -141,7 +141,7 @@ async fn evidence_with_prevote() {
           .await
           .encode(),
       )));
-      txs.push(TendermintTx::SlashEvidence(Evidence::InvalidVr(
+      txs.push(TendermintTx::SlashEvidence(Evidence::InvalidValidRound(
         signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
           .await
           .encode(),

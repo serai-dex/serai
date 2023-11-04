@@ -84,7 +84,7 @@ async fn handle_block<
           Evidence::ConflictingMessages(first, second) => (first, Some(second)),
           Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
           Evidence::InvalidPrecommit(first) => (first, None),
-          Evidence::InvalidVr(first) => (first, None),
+          Evidence::InvalidValidRound(first) => (first, None),
         };
         let msgs = (
           decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),

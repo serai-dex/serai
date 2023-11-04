@@ -181,7 +181,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
             Err(TransactionError::InvalidContent)?
           }
         }
-        Evidence::InvalidVr(msg) => {
+        Evidence::InvalidValidRound(msg) => {
           let msg = decode_and_verify_signed_message::<N>(msg, &schema)?.msg;
 
           if let Data::Proposal(vr, _) = &msg.data {

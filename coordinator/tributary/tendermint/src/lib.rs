@@ -136,7 +136,7 @@ pub enum Evidence {
   ConflictingMessages(Vec<u8>, Vec<u8>),
   ConflictingPrecommit(Vec<u8>, Vec<u8>),
   InvalidPrecommit(Vec<u8>),
-  InvalidVr(Vec<u8>),
+  InvalidValidRound(Vec<u8>),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -772,7 +772,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
           Err(TendermintError::Malicious(
             msg.sender,
-            Some(Evidence::InvalidVr(signed.encode())),
+            Some(Evidence::InvalidValidRound(signed.encode())),
           ))?;
         }
 
