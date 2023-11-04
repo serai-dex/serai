@@ -424,7 +424,7 @@ async fn boot<N: Network, D: Db>(
 
   for (i, key) in current_keys.iter().enumerate() {
     let Some((substrate_keys, network_keys)) = key_gen.keys(key) else { continue };
-    let network_key = network_keys.group_key();
+    let network_key = network_keys[0].group_key();
 
     // If this is the oldest key, load the SubstrateSigner for it as the active SubstrateSigner
     // The new key only takes responsibility once the old key is fully deprecated

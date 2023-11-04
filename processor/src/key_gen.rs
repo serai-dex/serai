@@ -135,6 +135,7 @@ impl<N: Network, D: Db> KeyGenDb<N, D> {
     txn.put(Self::keys_key(&keys.1[0].group_key()), keys_vec);
     keys
   }
+  #[allow(clippy::type_complexity)]
   fn keys<G: Get>(
     getter: &G,
     key: &<N::Curve as Ciphersuite>::G,
@@ -155,6 +156,7 @@ pub struct KeyGen<N: Network, D: Db> {
   entropy: Zeroizing<[u8; 32]>,
 
   active_commit: HashMap<ValidatorSet, (SecretShareMachines<N>, Vec<Vec<u8>>)>,
+  #[allow(clippy::type_complexity)]
   active_share: HashMap<ValidatorSet, (KeyMachines<N>, Vec<HashMap<Participant, Vec<u8>>>)>,
 }
 
@@ -169,6 +171,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeyGenDb::<N, D>::params(&self.db, set).is_some()
   }
 
+  #[allow(clippy::type_complexity)]
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
@@ -223,8 +226,8 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let network = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
         machines.push((substrate.0, network.0));
         let mut serialized = vec![];
-        substrate.1.write(&mut serialized);
-        network.1.write(&mut serialized);
+        substrate.1.write(&mut serialized).unwrap();
+        network.1.write(&mut serialized).unwrap();
         commitments.push(serialized);
       }
       (machines, commitments)

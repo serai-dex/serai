@@ -78,6 +78,7 @@ impl<D: Db> SubstrateSignerDb<D> {
   }
 }
 
+type Preprocess = <AlgorithmMachine<Ristretto, Schnorrkel> as PreprocessMachine>::Preprocess;
 type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachine<
   <Schnorrkel as Algorithm<Ristretto>>::Signature,
 >>::SignatureShare;
@@ -90,13 +91,10 @@ pub struct SubstrateSigner<D: Db> {
 
   signable: HashMap<[u8; 32], Batch>,
   attempt: HashMap<[u8; 32], u32>,
-  preprocessing: HashMap<
-    [u8; 32],
-    (
-      Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>,
-      Vec<<AlgorithmMachine<Ristretto, Schnorrkel> as PreprocessMachine>::Preprocess>,
-    ),
-  >,
+  #[allow(clippy::type_complexity)]
+  preprocessing:
+    HashMap<[u8; 32], (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
+  #[allow(clippy::type_complexity)]
   signing:
     HashMap<[u8; 32], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 
@@ -115,6 +113,7 @@ impl<D: Db> fmt::Debug for SubstrateSigner<D> {
 
 impl<D: Db> SubstrateSigner<D> {
   pub fn new(network: NetworkId, keys: Vec<ThresholdKeys<Ristretto>>) -> SubstrateSigner<D> {
+    assert!(!keys.is_empty());
     SubstrateSigner {
       db: PhantomData,
 
