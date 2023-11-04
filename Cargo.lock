@@ -1487,7 +1487,6 @@ dependencies = [
  "group",
  "rand_core",
  "rustversion",
- "sha2",
  "subtle",
  "zeroize",
 ]
@@ -8248,7 +8247,6 @@ dependencies = [
  "serai-message-queue",
  "serai-message-queue-tests",
  "serai-processor-messages",
- "serde",
  "serde_json",
  "tokio",
  "zeroize",
@@ -8285,7 +8283,6 @@ dependencies = [
  "rand_core",
  "serai-client",
  "serai-coordinator-tests",
- "serai-docker-tests",
  "serai-message-queue-tests",
  "serai-processor",
  "serai-processor-tests",
