@@ -47,13 +47,13 @@ pub(crate) use crate::tendermint::*;
 pub mod tests;
 
 /// Size limit for an individual transaction.
-pub const TRANSACTION_SIZE_LIMIT: usize = 50_000;
+pub const TRANSACTION_SIZE_LIMIT: usize = 3_000_000;
 /// Amount of transactions a single account may have in the mempool.
 pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 /// Block size limit.
-// This targets a growth limit of roughly 5 GB a day, under load, in order to prevent a malicious
+// This targets a growth limit of roughly 45 GB a day, under load, in order to prevent a malicious
 // participant from flooding disks and causing out of space errors in order processes.
-pub const BLOCK_SIZE_LIMIT: usize = 350_000;
+pub const BLOCK_SIZE_LIMIT: usize = 3_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const BLOCK_MESSAGE: u8 = 1;

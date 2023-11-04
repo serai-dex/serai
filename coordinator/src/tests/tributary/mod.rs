@@ -36,7 +36,13 @@ fn random_sign_data<R: RngCore>(rng: &mut R) -> SignData {
     plan,
     attempt: random_u32(&mut OsRng),
 
-    data: random_vec(&mut OsRng, 512),
+    data: {
+      let mut res = vec![];
+      for _ in 0 .. ((rng.next_u64() % 255) + 1) {
+        res.push(random_vec(&mut OsRng, 512));
+      }
+      res
+    },
 
     signed: random_signed(&mut OsRng),
   }
@@ -47,29 +53,69 @@ fn test_read_write<RW: Eq + Debug + ReadWrite>(value: RW) {
 }
 
 #[test]
+fn tx_size_limit() {
+  use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, MAX_KEY_LEN};
+
+  use tributary::TRANSACTION_SIZE_LIMIT;
+
+  let max_dkg_coefficients = (MAX_KEY_SHARES_PER_SET * 2).div_ceil(3) + 1;
+  let max_key_shares_per_individual = MAX_KEY_SHARES_PER_SET - max_dkg_coefficients;
+  // Handwave the DKG Commitments size as the size of the commitments to the coefficients and
+  // 1024 bytes for all overhead
+  let handwaved_dkg_commitments_size = (max_dkg_coefficients * MAX_KEY_LEN) + 1024;
+  assert!(
+    u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() >=
+      (handwaved_dkg_commitments_size * max_key_shares_per_individual)
+  );
+
+  // Encryption key, PoP (2 elements), message
+  let elements_per_share = 4;
+  let handwaved_dkg_shares_size =
+    (elements_per_share * MAX_KEY_LEN * MAX_KEY_SHARES_PER_SET) + 1024;
+  assert!(
+    u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() >=
+      (handwaved_dkg_shares_size * max_key_shares_per_individual)
+  );
+}
+
+#[test]
 fn serialize_sign_data() {
   test_read_write(random_sign_data(&mut OsRng));
 }
 
 #[test]
 fn serialize_transaction() {
-  test_read_write(Transaction::DkgCommitments(
-    random_u32(&mut OsRng),
-    random_vec(&mut OsRng, 512),
-    random_signed(&mut OsRng),
-  ));
+  {
+    let mut commitments = vec![random_vec(&mut OsRng, 512)];
+    for _ in 0 .. (OsRng.next_u64() % 100) {
+      let mut temp = commitments[0].clone();
+      OsRng.fill_bytes(&mut temp);
+      commitments.push(temp);
+    }
+    test_read_write(Transaction::DkgCommitments(
+      random_u32(&mut OsRng),
+      commitments,
+      random_signed(&mut OsRng),
+    ));
+  }
 
   {
-    // This supports a variable share length, yet share length is expected to be constant among
-    // shares
-    let share_len = usize::try_from(OsRng.next_u64() % 512).unwrap();
+    // This supports a variable share length, and variable amount of sent shares, yet share length
+    // and sent shares is expected to be constant among recipients
+    let share_len = usize::try_from((OsRng.next_u64() % 512) + 1).unwrap();
+    let amount_of_shares = usize::try_from((OsRng.next_u64() % 3) + 1).unwrap();
     // Create a valid vec of shares
     let mut shares = vec![];
-    // Create up to 512 participants
-    for _ in 0 .. (OsRng.next_u64() % 512) {
-      let mut share = vec![0; share_len];
-      OsRng.fill_bytes(&mut share);
-      shares.push(share);
+    // Create up to 150 participants
+    for _ in 0 .. ((OsRng.next_u64() % 150) + 1) {
+      // Give each sender multiple shares
+      let mut sender_shares = vec![];
+      for _ in 0 .. amount_of_shares {
+        let mut share = vec![0; share_len];
+        OsRng.fill_bytes(&mut share);
+        sender_shares.push(share);
+      }
+      shares.push(sender_shares);
     }
 
     test_read_write(Transaction::DkgShares {

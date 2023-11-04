@@ -52,7 +52,7 @@ pub async fn sign<C: Ciphersuite>(
     processor
       .send_message(messages::sign::ProcessorMessage::Preprocess {
         id: id.clone(),
-        preprocess: [processor_is[i]; 64].to_vec(),
+        preprocesses: vec![[processor_is[i]; 64].to_vec()],
       })
       .await;
   }
@@ -65,7 +65,7 @@ pub async fn sign<C: Ciphersuite>(
   processors[excluded_signer]
     .send_message(messages::sign::ProcessorMessage::Preprocess {
       id: id.clone(),
-      preprocess: [processor_is[excluded_signer]; 64].to_vec(),
+      preprocesses: vec![[processor_is[excluded_signer]; 64].to_vec()],
     })
     .await;
 
@@ -120,7 +120,7 @@ pub async fn sign<C: Ciphersuite>(
     processor
       .send_message(messages::sign::ProcessorMessage::Share {
         id: id.clone(),
-        share: vec![u8::try_from(u16::from(i)).unwrap(); 32],
+        shares: vec![vec![u8::try_from(u16::from(i)).unwrap(); 32]],
       })
       .await;
   }

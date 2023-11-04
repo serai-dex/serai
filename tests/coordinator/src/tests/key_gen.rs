@@ -51,14 +51,15 @@ pub async fn key_gen<C: Ciphersuite>(
           u16::try_from(COORDINATORS).unwrap(),
           participant_is[i],
         )
-        .unwrap()
+        .unwrap(),
+        shares: 1,
       })
     );
 
     processor
       .send_message(messages::key_gen::ProcessorMessage::Commitments {
         id,
-        commitments: vec![u8::try_from(u16::from(participant_is[i])).unwrap()],
+        commitments: vec![vec![u8::try_from(u16::from(participant_is[i])).unwrap()]],
       })
       .await;
   }
@@ -96,7 +97,9 @@ pub async fn key_gen<C: Ciphersuite>(
       .collect::<HashMap<_, _>>();
 
     shares.remove(&participant_is[i]);
-    processor.send_message(messages::key_gen::ProcessorMessage::Shares { id, shares }).await;
+    processor
+      .send_message(messages::key_gen::ProcessorMessage::Shares { id, shares: vec![shares] })
+      .await;
   }
 
   let substrate_priv_key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
@@ -128,7 +131,7 @@ pub async fn key_gen<C: Ciphersuite>(
             })
             .collect::<HashMap<_, _>>();
           shares.remove(&i);
-          shares
+          vec![shares]
         },
       })
     );

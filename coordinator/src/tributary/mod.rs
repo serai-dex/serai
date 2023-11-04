@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
@@ -24,7 +24,8 @@ use serai_client::{
 #[rustfmt::skip]
 use tributary::{
   ReadWrite,
-  transaction::{Signed, TransactionError, TransactionKind, Transaction as TransactionTrait}
+  transaction::{Signed, TransactionError, TransactionKind, Transaction as TransactionTrait},
+  TRANSACTION_SIZE_LIMIT,
 };
 
 mod db;
@@ -45,7 +46,7 @@ pub struct TributarySpec {
   serai_block: [u8; 32],
   start_time: u64,
   set: ValidatorSet,
-  validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
+  validators: Vec<(<Ristretto as Ciphersuite>::G, u16)>,
 }
 
 impl TributarySpec {
@@ -53,12 +54,10 @@ impl TributarySpec {
     serai_block: [u8; 32],
     start_time: u64,
     set: ValidatorSet,
-    set_participants: Vec<(PublicKey, u64)>,
+    set_participants: Vec<(PublicKey, u16)>,
   ) -> TributarySpec {
     let mut validators = vec![];
     for (participant, shares) in set_participants {
-      // TODO: Ban invalid keys from being validators on the Serai side
-      // (make coordinator key a session key?)
       let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
         .expect("invalid key registered as participant");
       validators.push((participant, shares));
@@ -88,31 +87,29 @@ impl TributarySpec {
   }
 
   pub fn n(&self) -> u16 {
-    // TODO: Support multiple key shares
-    // self.validators.iter().map(|(_, weight)| u16::try_from(weight).unwrap()).sum()
-    self.validators().len().try_into().unwrap()
+    self.validators.iter().map(|(_, weight)| weight).sum()
   }
 
   pub fn t(&self) -> u16 {
     ((2 * self.n()) / 3) + 1
   }
 
-  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Participant> {
+  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Range<Participant>> {
     let mut i = 1;
-    // TODO: Support multiple key shares
-    for (validator, _weight) in &self.validators {
+    for (validator, weight) in &self.validators {
       if validator == &key {
-        // return (i .. (i + weight)).to_vec();
-        return Some(Participant::new(i).unwrap());
+        return Some(Range {
+          start: Participant::new(i).unwrap(),
+          end: Participant::new(i + weight).unwrap(),
+        });
       }
-      // i += weight;
-      i += 1;
+      i += weight;
     }
     None
   }
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
-    self.validators.clone()
+    self.validators.iter().map(|(validator, weight)| (*validator, u64::from(*weight))).collect()
   }
 
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -160,9 +157,9 @@ impl TributarySpec {
     let mut validators = Vec::with_capacity(validators_len);
     for _ in 0 .. validators_len {
       let key = Ristretto::read_G(reader)?;
-      let mut bond = [0; 8];
-      reader.read_exact(&mut bond)?;
-      validators.push((key, u64::from_le_bytes(bond)));
+      let mut weight = [0; 2];
+      reader.read_exact(&mut weight)?;
+      validators.push((key, u16::from_le_bytes(weight)));
     }
 
     Ok(Self { serai_block, start_time, set: ValidatorSet { session, network }, validators })
@@ -174,7 +171,7 @@ pub struct SignData {
   pub plan: [u8; 32],
   pub attempt: u32,
 
-  pub data: Vec<u8>,
+  pub data: Vec<Vec<u8>>,
 
   pub signed: Signed,
 }
@@ -189,11 +186,20 @@ impl ReadWrite for SignData {
     let attempt = u32::from_le_bytes(attempt);
 
     let data = {
-      let mut data_len = [0; 2];
-      reader.read_exact(&mut data_len)?;
-      let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
-      reader.read_exact(&mut data)?;
-      data
+      let mut data_pieces = [0];
+      reader.read_exact(&mut data_pieces)?;
+      if data_pieces[0] == 0 {
+        Err(io::Error::new(io::ErrorKind::Other, "zero pieces of data in SignData"))?;
+      }
+      let mut all_data = vec![];
+      for _ in 0 .. data_pieces[0] {
+        let mut data_len = [0; 2];
+        reader.read_exact(&mut data_len)?;
+        let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
+        reader.read_exact(&mut data)?;
+        all_data.push(data);
+      }
+      all_data
     };
 
     let signed = Signed::read(reader)?;
@@ -205,16 +211,21 @@ impl ReadWrite for SignData {
     writer.write_all(&self.plan)?;
     writer.write_all(&self.attempt.to_le_bytes())?;
 
-    if self.data.len() > u16::MAX.into() {
-      // Currently, the largest sign item would be a Monero transaction
-      // It provides 4 commitments per input (128 bytes), a 64-byte proof for them, along with a
-      // key image and proof (96 bytes)
-      // Even with all of that, we could support 227 inputs in a single TX
-      // Monero is limited to ~120 inputs per TX
-      Err(io::Error::new(io::ErrorKind::Other, "signing data exceeded 65535 bytes"))?;
+    writer.write_all(&[u8::try_from(self.data.len()).unwrap()])?;
+    for data in &self.data {
+      if data.len() > u16::MAX.into() {
+        // Currently, the largest individual preproces is a Monero transaction
+        // It provides 4 commitments per input (128 bytes), a 64-byte proof for them, along with a
+        // key image and proof (96 bytes)
+        // Even with all of that, we could support 227 inputs in a single TX
+        // Monero is limited to ~120 inputs per TX
+        //
+        // Bitcoin has a much higher input count of 520, yet it only uses 64 bytes per preprocess
+        Err(io::Error::new(io::ErrorKind::Other, "signing data exceeded 65535 bytes"))?;
+      }
+      writer.write_all(&u16::try_from(data.len()).unwrap().to_le_bytes())?;
+      writer.write_all(data)?;
     }
-    writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
-    writer.write_all(&self.data)?;
 
     self.signed.write(writer)
   }
@@ -223,10 +234,11 @@ impl ReadWrite for SignData {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction {
   // Once this completes successfully, no more instances should be created.
-  DkgCommitments(u32, Vec<u8>, Signed),
+  DkgCommitments(u32, Vec<Vec<u8>>, Signed),
   DkgShares {
     attempt: u32,
-    shares: Vec<Vec<u8>>,
+    // Receiving Participant, Sending Participant, Share
+    shares: Vec<Vec<Vec<u8>>>,
     confirmation_nonces: [u8; 64],
     signed: Signed,
   },
@@ -273,10 +285,27 @@ impl ReadWrite for Transaction {
         let attempt = u32::from_le_bytes(attempt);
 
         let commitments = {
-          let mut commitments_len = [0; 2];
+          let mut commitments_len = [0; 1];
           reader.read_exact(&mut commitments_len)?;
-          let mut commitments = vec![0; usize::from(u16::from_le_bytes(commitments_len))];
-          reader.read_exact(&mut commitments)?;
+          let commitments_len = usize::from(commitments_len[0]);
+          if commitments_len == 0 {
+            Err(io::Error::new(io::ErrorKind::Other, "zero commitments in DkgCommitments"))?;
+          }
+
+          let mut each_commitments_len = [0; 2];
+          reader.read_exact(&mut each_commitments_len)?;
+          let each_commitments_len = usize::from(u16::from_le_bytes(each_commitments_len));
+          if (commitments_len * each_commitments_len) > TRANSACTION_SIZE_LIMIT {
+            Err(io::Error::new(
+              io::ErrorKind::Other,
+              "commitments present in transaction exceeded transaction size limit",
+            ))?;
+          }
+          let mut commitments = vec![vec![]; commitments_len];
+          for commitments in &mut commitments {
+            *commitments = vec![0; each_commitments_len];
+            reader.read_exact(commitments)?;
+          }
           commitments
         };
 
@@ -291,20 +320,27 @@ impl ReadWrite for Transaction {
         let attempt = u32::from_le_bytes(attempt);
 
         let shares = {
-          let mut share_quantity = [0; 2];
+          let mut share_quantity = [0; 1];
           reader.read_exact(&mut share_quantity)?;
+
+          let mut key_share_quantity = [0; 1];
+          reader.read_exact(&mut key_share_quantity)?;
 
           let mut share_len = [0; 2];
           reader.read_exact(&mut share_len)?;
           let share_len = usize::from(u16::from_le_bytes(share_len));
 
-          let mut shares = vec![];
-          for _ in 0 .. u16::from_le_bytes(share_quantity) {
-            let mut share = vec![0; share_len];
-            reader.read_exact(&mut share)?;
-            shares.push(share);
+          let mut all_shares = vec![];
+          for _ in 0 .. share_quantity[0] {
+            let mut shares = vec![];
+            for _ in 0 .. key_share_quantity[0] {
+              let mut share = vec![0; share_len];
+              reader.read_exact(&mut share)?;
+              shares.push(share);
+            }
+            all_shares.push(shares);
           }
-          shares
+          all_shares
         };
 
         let mut confirmation_nonces = [0; 64];
@@ -372,12 +408,22 @@ impl ReadWrite for Transaction {
       Transaction::DkgCommitments(attempt, commitments, signed) => {
         writer.write_all(&[0])?;
         writer.write_all(&attempt.to_le_bytes())?;
-        if commitments.len() > u16::MAX.into() {
-          // t commitments and an encryption key mean a u16 is fine until a threshold > 2000 occurs
-          Err(io::Error::new(io::ErrorKind::Other, "dkg commitments exceeded 65535 bytes"))?;
+        if commitments.is_empty() {
+          Err(io::Error::new(io::ErrorKind::Other, "zero commitments in DkgCommitments"))?
         }
-        writer.write_all(&u16::try_from(commitments.len()).unwrap().to_le_bytes())?;
-        writer.write_all(commitments)?;
+        writer.write_all(&[u8::try_from(commitments.len()).unwrap()])?;
+        for commitments_i in commitments {
+          if commitments_i.len() != commitments[0].len() {
+            Err(io::Error::new(
+              io::ErrorKind::Other,
+              "commitments of differing sizes in DkgCommitments",
+            ))?
+          }
+        }
+        writer.write_all(&u16::try_from(commitments[0].len()).unwrap().to_le_bytes())?;
+        for commitments in commitments {
+          writer.write_all(commitments)?;
+        }
         signed.write(writer)
       }
 
@@ -385,14 +431,12 @@ impl ReadWrite for Transaction {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
-        // `shares` is a Vec which maps to a HashMap<Pariticpant, Vec<u8>> for any legitimate
-        // `DkgShares`. Since Participant has a range of 1 ..= u16::MAX, the length must be <
-        // u16::MAX. The only way for this to not be true if we were malicious, or if we read a
-        // `DkgShares` with a `shares.len() > u16::MAX`. The former is assumed untrue. The latter
-        // is impossible since we'll only read up to u16::MAX items.
-        writer.write_all(&u16::try_from(shares.len()).unwrap().to_le_bytes())?;
-
-        let share_len = shares.first().map(|share| share.len()).unwrap_or(0);
+        // `shares` is a Vec which is supposed to map to a HashMap<Pariticpant, Vec<u8>>. Since we
+        // bound participants to 150, this conversion is safe if a valid in-memory transaction.
+        writer.write_all(&[u8::try_from(shares.len()).unwrap()])?;
+        // This assumes at least one share is being sent to another party
+        writer.write_all(&[u8::try_from(shares[0].len()).unwrap()])?;
+        let share_len = shares[0][0].len();
         // For BLS12-381 G2, this would be:
         // - A 32-byte share
         // - A 96-byte ephemeral key
@@ -400,9 +444,12 @@ impl ReadWrite for Transaction {
         // Hence why this has to be u16
         writer.write_all(&u16::try_from(share_len).unwrap().to_le_bytes())?;
 
-        for share in shares {
-          assert_eq!(share.len(), share_len, "shares were of variable length");
-          writer.write_all(share)?;
+        for these_shares in shares {
+          assert_eq!(these_shares.len(), shares[0].len(), "amount of sent shares was variable");
+          for share in these_shares {
+            assert_eq!(share.len(), share_len, "sent shares were of variable length");
+            writer.write_all(share)?;
+          }
         }
 
         writer.write_all(confirmation_nonces)?;
@@ -487,8 +534,10 @@ impl TransactionTrait for Transaction {
 
   fn verify(&self) -> Result<(), TransactionError> {
     if let Transaction::BatchShare(data) = self {
-      if data.data.len() != 32 {
-        Err(TransactionError::InvalidContent)?;
+      for data in &data.data {
+        if data.len() != 32 {
+          Err(TransactionError::InvalidContent)?;
+        }
       }
     }
 

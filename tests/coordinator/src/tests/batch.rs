@@ -60,7 +60,7 @@ pub async fn batch(
       .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
         id: id.clone(),
         block: batch.block,
-        preprocess: [processor_is[i]; 64].to_vec(),
+        preprocesses: vec![[processor_is[i]; 64].to_vec()],
       })
       .await;
   }
@@ -74,7 +74,7 @@ pub async fn batch(
     .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
       id: id.clone(),
       block: batch.block,
-      preprocess: [processor_is[excluded_signer]; 64].to_vec(),
+      preprocesses: vec![[processor_is[excluded_signer]; 64].to_vec()],
     })
     .await;
 
@@ -131,7 +131,7 @@ pub async fn batch(
     processor
       .send_message(messages::coordinator::ProcessorMessage::BatchShare {
         id: id.clone(),
-        share: [u8::try_from(u16::from(i)).unwrap(); 32],
+        shares: vec![[u8::try_from(u16::from(i)).unwrap(); 32]],
       })
       .await;
   }

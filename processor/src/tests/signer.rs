@@ -45,7 +45,7 @@ pub async fn sign<N: Network>(
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), keys));
+    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), vec![keys]));
     dbs.insert(i, MemDb::new());
   }
   drop(keys);
@@ -74,12 +74,15 @@ pub async fn sign<N: Network>(
   let mut preprocesses = HashMap::new();
   for i in 1 ..= signers.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess { id, preprocess }) =
-      signers.get_mut(&i).unwrap().events.pop_front().unwrap()
+    if let SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess {
+      id,
+      preprocesses: mut these_preprocesses,
+    }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
+      assert_eq!(these_preprocesses.len(), 1);
       if signing_set.contains(&i) {
-        preprocesses.insert(i, preprocess);
+        preprocesses.insert(i, these_preprocesses.swap_remove(0));
       }
     } else {
       panic!("didn't get preprocess back");
@@ -102,11 +105,12 @@ pub async fn sign<N: Network>(
       .await;
     txn.commit();
 
-    if let SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, share }) =
+    if let SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, shares: mut these_shares }) =
       signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
-      shares.insert(*i, share);
+      assert_eq!(these_shares.len(), 1);
+      shares.insert(*i, these_shares.swap_remove(0));
     } else {
       panic!("didn't get share back");
     }

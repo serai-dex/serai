@@ -47,7 +47,8 @@ async fn dkg_test() {
     let mut commitments = vec![0; 256];
     OsRng.fill_bytes(&mut commitments);
 
-    let mut tx = Transaction::DkgCommitments(attempt, commitments, Transaction::empty_signed());
+    let mut tx =
+      Transaction::DkgCommitments(attempt, vec![commitments], Transaction::empty_signed());
     tx.sign(&mut OsRng, spec.genesis(), key, 0);
     txs.push(tx);
   }
@@ -69,7 +70,7 @@ async fn dkg_test() {
     .enumerate()
     .map(|(i, tx)| {
       if let Transaction::DkgCommitments(_, commitments, _) = tx {
-        (Participant::new((i + 1).try_into().unwrap()).unwrap(), commitments.clone())
+        (Participant::new((i + 1).try_into().unwrap()).unwrap(), commitments[0].clone())
       } else {
         panic!("txs had non-commitments");
       }
@@ -165,7 +166,7 @@ async fn dkg_test() {
       if i != k {
         let mut share = vec![0; 256];
         OsRng.fill_bytes(&mut share);
-        shares.push(share);
+        shares.push(vec![share]);
       }
     }
 
@@ -213,7 +214,7 @@ async fn dkg_test() {
   let shares_for = |i: usize| {
     CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
       id: KeyGenId { set: spec.set(), attempt: 0 },
-      shares: txs
+      shares: vec![txs
         .iter()
         .enumerate()
         .filter_map(|(l, tx)| {
@@ -224,14 +225,14 @@ async fn dkg_test() {
               let relative_i = i - (if i > l { 1 } else { 0 });
               Some((
                 Participant::new((l + 1).try_into().unwrap()).unwrap(),
-                shares[relative_i].clone(),
+                shares[relative_i][0].clone(),
               ))
             }
           } else {
             panic!("txs had non-shares");
           }
         })
-        .collect::<HashMap<_, _>>(),
+        .collect::<HashMap<_, _>>()],
     })
   };
 

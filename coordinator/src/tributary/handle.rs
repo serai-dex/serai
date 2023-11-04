@@ -1,10 +1,12 @@
 use core::{ops::Deref, future::Future};
+use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::Participant;
 
+use scale::{Encode, Decode};
 use serai_client::{
   Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair},
@@ -142,16 +144,53 @@ pub(crate) async fn handle_application_tx<
     TributaryState::<D>::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
   };
 
+  fn check_sign_data_len<D: Db>(
+    txn: &mut D::Transaction<'_>,
+    spec: &TributarySpec,
+    signer: <Ristretto as Ciphersuite>::G,
+    len: usize,
+  ) -> Result<(), ()> {
+    let signer_i = spec.i(signer).unwrap();
+    if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
+      fatal_slash::<D>(
+        txn,
+        spec.genesis(),
+        signer.to_bytes(),
+        "signer published a distinct amount of sign data than they had shares",
+      );
+      Err(())?;
+    }
+    Ok(())
+  }
+
+  fn unflatten(spec: &TributarySpec, data: &mut HashMap<Participant, Vec<u8>>) {
+    for (validator, _) in spec.validators() {
+      let range = spec.i(validator).unwrap();
+      let Some(all_segments) = data.remove(&range.start) else {
+        continue;
+      };
+      let mut data_vec = Vec::<_>::decode(&mut all_segments.as_slice()).unwrap();
+      for i in u16::from(range.start) .. u16::from(range.end) {
+        let i = Participant::new(i).unwrap();
+        data.insert(i, data_vec.remove(0));
+      }
+    }
+  }
+
   match tx {
-    Transaction::DkgCommitments(attempt, bytes, signed) => {
+    Transaction::DkgCommitments(attempt, commitments, signed) => {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, signed.signer, commitments.len()) else {
+        return;
+      };
       match handle(
         txn,
         &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
-        bytes,
+        commitments.encode(),
         &signed,
       ) {
-        Accumulation::Ready(DataSet::Participating(commitments)) => {
+        Accumulation::Ready(DataSet::Participating(mut commitments)) => {
           log::info!("got all DkgCommitments for {}", hex::encode(genesis));
+          unflatten(spec, &mut commitments);
           processors
             .send(
               spec.set().network,
@@ -170,29 +209,59 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
-      if shares.len() != (usize::from(spec.n()) - 1) {
-        fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
-        return;
-      }
-
       let sender_i = spec
         .i(signed.signer)
         .expect("transaction added to tributary by signer who isn't a participant");
+      let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
+
+      if shares.len() != (usize::from(spec.n() - sender_is_len)) {
+        fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
+        return;
+      }
+      for shares in &shares {
+        if shares.len() != usize::from(sender_is_len) {
+          fatal_slash::<D>(
+            txn,
+            genesis,
+            signed.signer.to_bytes(),
+            "invalid amount of DKG shares by key shares",
+          );
+          return;
+        }
+      }
 
       // Only save our share's bytes
       let our_i = spec
         .i(Ristretto::generator() * key.deref())
         .expect("in a tributary we're not a validator for");
 
-      let bytes = if sender_i == our_i {
+      let our_shares = if sender_i == our_i {
         vec![]
       } else {
-        // 1-indexed to 0-indexed, handling the omission of the sender's own data
-        let relative_i = usize::from(u16::from(our_i) - 1) -
-          (if u16::from(our_i) > u16::from(sender_i) { 1 } else { 0 });
-        // Safe since we length-checked shares
-        shares.swap_remove(relative_i)
+        // 1-indexed to 0-indexed
+        let mut our_i_pos = u16::from(our_i.start) - 1;
+        // Handle the omission of the sender's own data
+        if u16::from(our_i.start) > u16::from(sender_i.start) {
+          our_i_pos -= sender_is_len;
+        }
+        let our_i_pos = usize::from(our_i_pos);
+        let shares = shares
+          .drain(
+            our_i_pos .. (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
+          )
+          .collect::<Vec<_>>();
+
+        // Transpose from our shares -> sender shares -> shares to
+        // sender shares -> our shares -> shares
+        let mut transposed = vec![vec![]; shares[0].len()];
+        for shares in shares {
+          for (sender_index, share) in shares.into_iter().enumerate() {
+            transposed[sender_index].push(share);
+          }
+        }
+        transposed
       };
+      // Drop shares as it's been mutated into invalidity
       drop(shares);
 
       let confirmation_nonces = handle(
@@ -204,7 +273,7 @@ pub(crate) async fn handle_application_tx<
       match handle(
         txn,
         &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
-        bytes,
+        our_shares.encode(),
         &signed,
       ) {
         Accumulation::Ready(DataSet::Participating(shares)) => {
@@ -217,12 +286,36 @@ pub(crate) async fn handle_application_tx<
           };
           TributaryDb::<D>::save_confirmation_nonces(txn, genesis, attempt, confirmation_nonces);
 
+          // shares is a HashMap<Participant, Vec<Vec<Vec<u8>>>>, with the values representing:
+          // - Each of the sender's shares
+          // - Each of the our shares
+          // - Each share
+          // We need a Vec<HashMap<Participant, Vec<u8>>>, with the outer being each of ours
+          let mut expanded_shares = vec![];
+          for (sender_start_i, shares) in shares {
+            let shares: Vec<Vec<Vec<u8>>> = Vec::<_>::decode(&mut shares.as_slice()).unwrap();
+            for (sender_i_offset, our_shares) in shares.into_iter().enumerate() {
+              for (our_share_i, our_share) in our_shares.into_iter().enumerate() {
+                if expanded_shares.len() <= our_share_i {
+                  expanded_shares.push(HashMap::new());
+                }
+                expanded_shares[our_share_i].insert(
+                  Participant::new(
+                    u16::from(sender_start_i) + u16::try_from(sender_i_offset).unwrap(),
+                  )
+                  .unwrap(),
+                  our_share,
+                );
+              }
+            }
+          }
+
           processors
             .send(
               spec.set().network,
               key_gen::CoordinatorMessage::Shares {
                 id: KeyGenId { set: spec.set(), attempt },
-                shares,
+                shares: expanded_shares,
               },
             )
             .await;
@@ -294,6 +387,9 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::BatchPreprocess(data) => {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+        return;
+      };
       match handle(
         txn,
         &DataSpecification {
@@ -301,10 +397,11 @@ pub(crate) async fn handle_application_tx<
           label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
-        data.data,
+        data.data.encode(),
         &data.signed,
       ) {
-        Accumulation::Ready(DataSet::Participating(preprocesses)) => {
+        Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
+          unflatten(spec, &mut preprocesses);
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
@@ -322,6 +419,9 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::BatchShare(data) => {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+        return;
+      };
       match handle(
         txn,
         &DataSpecification {
@@ -329,10 +429,11 @@ pub(crate) async fn handle_application_tx<
           label: BATCH_SHARE,
           attempt: data.attempt,
         },
-        data.data,
+        data.data.encode(),
         &data.signed,
       ) {
-        Accumulation::Ready(DataSet::Participating(shares)) => {
+        Accumulation::Ready(DataSet::Participating(mut shares)) => {
+          unflatten(spec, &mut shares);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
           processors
             .send(
@@ -353,6 +454,9 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SignPreprocess(data) => {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+        return;
+      };
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
@@ -361,10 +465,11 @@ pub(crate) async fn handle_application_tx<
           label: SIGN_PREPROCESS,
           attempt: data.attempt,
         },
-        data.data,
+        data.data.encode(),
         &data.signed,
       ) {
-        Accumulation::Ready(DataSet::Participating(preprocesses)) => {
+        Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
+          unflatten(spec, &mut preprocesses);
           NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
@@ -388,6 +493,9 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::SignShare(data) => {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+        return;
+      };
       let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
       match handle(
         txn,
@@ -396,10 +504,11 @@ pub(crate) async fn handle_application_tx<
           label: SIGN_SHARE,
           attempt: data.attempt,
         },
-        data.data,
+        data.data.encode(),
         &data.signed,
       ) {
-        Accumulation::Ready(DataSet::Participating(shares)) => {
+        Accumulation::Ready(DataSet::Participating(mut shares)) => {
+          unflatten(spec, &mut shares);
           processors
             .send(
               spec.set().network,

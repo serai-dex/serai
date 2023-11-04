@@ -56,7 +56,7 @@ async fn test_substrate_signer() {
     let keys = keys.get(&i).unwrap().clone();
     t = keys.params().t();
 
-    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, keys);
+    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
     let mut db = MemDb::new();
     let mut txn = db.txn();
     signer.sign(&mut txn, batch.clone()).await;
@@ -85,7 +85,7 @@ async fn test_substrate_signer() {
     if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
       id,
       block: batch_block,
-      preprocess,
+      preprocesses: mut these_preprocesses,
     }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
       if actual_id.id == [0; 32] {
@@ -93,8 +93,9 @@ async fn test_substrate_signer() {
       }
       assert_eq!(id, actual_id);
       assert_eq!(batch_block, block);
+      assert_eq!(these_preprocesses.len(), 1);
       if signing_set.contains(&i) {
-        preprocesses.insert(i, preprocess);
+        preprocesses.insert(i, these_preprocesses.swap_remove(0));
       }
     } else {
       panic!("didn't get preprocess back");
@@ -117,11 +118,14 @@ async fn test_substrate_signer() {
       .await;
     txn.commit();
 
-    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare { id, share }) =
-      signers.get_mut(i).unwrap().events.pop_front().unwrap()
+    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare {
+      id,
+      shares: mut these_shares,
+    }) = signers.get_mut(i).unwrap().events.pop_front().unwrap()
     {
       assert_eq!(id, actual_id);
-      shares.insert(*i, share);
+      assert_eq!(these_shares.len(), 1);
+      shares.insert(*i, these_shares.swap_remove(0));
     } else {
       panic!("didn't get share back");
     }

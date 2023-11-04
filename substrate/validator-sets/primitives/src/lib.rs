@@ -18,7 +18,7 @@ use serai_primitives::NetworkId;
 /// The maximum amount of key shares per set.
 pub const MAX_KEY_SHARES_PER_SET: u32 = 150;
 // Support keys up to 96 bytes (BLS12-381 G2).
-const MAX_KEY_LEN: u32 = 96;
+pub const MAX_KEY_LEN: u32 = 96;
 
 /// The type used to identify a specific session of validators.
 #[derive(
@@ -97,10 +97,12 @@ pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
 /// maximum.
 ///
 /// Reduction occurs by reducing each validator in a reverse round-robin.
-pub fn amortize_excess_key_shares(validators: &mut [(Public, u64)]) {
-  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u64>();
-  for i in
-    0 .. usize::try_from(total_key_shares.saturating_sub(MAX_KEY_SHARES_PER_SET.into())).unwrap()
+pub fn amortize_excess_key_shares(validators: &mut [(Public, u16)]) {
+  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u16>();
+  for i in 0 .. usize::try_from(
+    total_key_shares.saturating_sub(u16::try_from(MAX_KEY_SHARES_PER_SET).unwrap()),
+  )
+  .unwrap()
   {
     validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
   }

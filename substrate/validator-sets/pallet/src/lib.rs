@@ -355,6 +355,8 @@ pub mod pallet {
     NotEnoughAllocated,
     /// Allocation would cause the validator set to no longer achieve fault tolerance.
     AllocationWouldRemoveFaultTolerance,
+    /// Allocation would cause the validator set to never be able to achieve fault tolerance.
+    AllocationWouldPreventFaultTolerance,
     /// Deallocation would remove the participant from the set, despite the validator not
     /// specifying so.
     DeallocationWouldRemoveParticipant,
@@ -410,6 +412,7 @@ pub mod pallet {
       system_address(b"validator-sets").into()
     }
 
+    // is_bft returns if the network is able to survive any single node becoming byzantine.
     fn is_bft(network: NetworkId) -> bool {
       let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
 
@@ -454,6 +457,7 @@ pub mod pallet {
       let increased_key_shares =
         (old_allocation / allocation_per_key_share) < (new_allocation / allocation_per_key_share);
 
+      // Check if the net exhibited the ability to handle any single node becoming byzantine
       let mut was_bft = None;
       if increased_key_shares {
         was_bft = Some(Self::is_bft(network));
@@ -463,10 +467,17 @@ pub mod pallet {
       Self::set_allocation(network, account, Amount(new_allocation));
       Self::deposit_event(Event::AllocationIncreased { validator: account, network, amount });
 
+      // Error if the net no longer can handle any single node becoming byzantine
       if let Some(was_bft) = was_bft {
         if was_bft && (!Self::is_bft(network)) {
           Err(Error::<T>::AllocationWouldRemoveFaultTolerance)?;
         }
+      }
+
+      // The above is_bft calls are only used to check a BFT net doesn't become non-BFT
+      // Check here if this call would prevent a non-BFT net from *ever* becoming BFT
+      if (new_allocation / allocation_per_key_share) >= (MAX_KEY_SHARES_PER_SET / 3).into() {
+        Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
       }
 
       if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
@@ -739,6 +750,7 @@ pub mod pallet {
         Err(Error::InsufficientAllocation) |
         Err(Error::NotEnoughAllocated) |
         Err(Error::AllocationWouldRemoveFaultTolerance) |
+        Err(Error::AllocationWouldPreventFaultTolerance) |
         Err(Error::DeallocationWouldRemoveParticipant) |
         Err(Error::DeallocationWouldRemoveFaultTolerance) |
         Err(Error::NonExistentDeallocation) |

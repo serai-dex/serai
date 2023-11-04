@@ -48,7 +48,7 @@ pub(crate) async fn recv_batch_preprocesses(
         messages::coordinator::ProcessorMessage::BatchPreprocess {
           id: this_id,
           block: this_block,
-          preprocess,
+          preprocesses: mut these_preprocesses,
         },
       ) => {
         if id.is_none() {
@@ -60,7 +60,8 @@ pub(crate) async fn recv_batch_preprocesses(
         assert_eq!(&this_id, id.as_ref().unwrap());
         assert_eq!(&this_block, block.as_ref().unwrap());
 
-        preprocesses.insert(i, preprocess);
+        assert_eq!(these_preprocesses.len(), 1);
+        preprocesses.insert(i, these_preprocesses.swap_remove(0));
       }
       _ => panic!("processor didn't send batch preprocess"),
     }
@@ -107,10 +108,14 @@ pub(crate) async fn sign_batch(
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::BatchShare { id: this_id, share },
+          messages::coordinator::ProcessorMessage::BatchShare {
+            id: this_id,
+            shares: mut these_shares,
+          },
         ) => {
           assert_eq!(&this_id, &id);
-          shares.insert(i, share);
+          assert_eq!(these_shares.len(), 1);
+          shares.insert(i, these_shares.swap_remove(0));
         }
         _ => panic!("processor didn't send batch share"),
       }

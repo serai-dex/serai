@@ -142,23 +142,26 @@ impl<N: Network, D: Db> SignerDb<N, D> {
   }
 }
 
+type PreprocessFor<N> = <<N as Network>::TransactionMachine as PreprocessMachine>::Preprocess;
+type SignMachineFor<N> = <<N as Network>::TransactionMachine as PreprocessMachine>::SignMachine;
+type SignatureShareFor<N> =
+  <SignMachineFor<N> as SignMachine<<N as Network>::Transaction>>::SignatureShare;
+type SignatureMachineFor<N> =
+  <SignMachineFor<N> as SignMachine<<N as Network>::Transaction>>::SignatureMachine;
+
 pub struct Signer<N: Network, D: Db> {
   db: PhantomData<D>,
 
   network: N,
 
-  keys: ThresholdKeys<N::Curve>,
+  keys: Vec<ThresholdKeys<N::Curve>>,
 
   signable: HashMap<[u8; 32], N::SignableTransaction>,
   attempt: HashMap<[u8; 32], u32>,
-  preprocessing: HashMap<[u8; 32], <N::TransactionMachine as PreprocessMachine>::SignMachine>,
   #[allow(clippy::type_complexity)]
-  signing: HashMap<
-    [u8; 32],
-    <
-      <N::TransactionMachine as PreprocessMachine>::SignMachine as SignMachine<N::Transaction>
-    >::SignatureMachine,
-  >,
+  preprocessing: HashMap<[u8; 32], (Vec<SignMachineFor<N>>, Vec<PreprocessFor<N>>)>,
+  #[allow(clippy::type_complexity)]
+  signing: HashMap<[u8; 32], (SignatureMachineFor<N>, Vec<SignatureShareFor<N>>)>,
 
   pub events: VecDeque<SignerEvent<N>>,
 }
@@ -194,7 +197,8 @@ impl<N: Network, D: Db> Signer<N, D> {
       tokio::time::sleep(core::time::Duration::from_secs(5 * 60)).await;
     }
   }
-  pub fn new(network: N, keys: ThresholdKeys<N::Curve>) -> Signer<N, D> {
+  pub fn new(network: N, keys: Vec<ThresholdKeys<N::Curve>>) -> Signer<N, D> {
+    assert!(!keys.is_empty());
     Signer {
       db: PhantomData,
 
@@ -329,7 +333,7 @@ impl<N: Network, D: Db> Signer<N, D> {
       assert!(!SignerDb::<N, D>::completions(txn, id).is_empty());
       info!(
         "signer {} informed of the eventuality completion for plan {}, {}",
-        hex::encode(self.keys.group_key().to_bytes()),
+        hex::encode(self.keys[0].group_key().to_bytes()),
         hex::encode(id),
         "which we already marked as completed",
       );
@@ -370,7 +374,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys.group_key().to_bytes().as_ref().to_vec(), id, attempt };
+    let id = SignId { key: self.keys[0].group_key().to_bytes().as_ref().to_vec(), id, attempt };
 
     info!("signing for {} #{}", hex::encode(id.id), id.attempt);
 
@@ -398,25 +402,34 @@ impl<N: Network, D: Db> Signer<N, D> {
     SignerDb::<N, D>::attempt(txn, &id);
 
     // Attempt to create the TX
-    let machine = match self.network.attempt_send(self.keys.clone(), tx).await {
-      Err(e) => {
-        error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
-        return;
-      }
-      Ok(machine) => machine,
-    };
+    let mut machines = vec![];
+    let mut preprocesses = vec![];
+    let mut serialized_preprocesses = vec![];
+    for keys in &self.keys {
+      let machine = match self.network.attempt_send(keys.clone(), tx.clone()).await {
+        Err(e) => {
+          error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
+          return;
+        }
+        Ok(machine) => machine,
+      };
 
-    // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
-    // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
-    // message, send distinct preprocess, and then attempt a signing session premised on the former
-    // with the latter
-    let (machine, preprocess) = machine.preprocess(&mut OsRng);
-    self.preprocessing.insert(id.id, machine);
+      // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
+      // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
+      // message, send distinct preprocess, and then attempt a signing session premised on the
+      // former with the latter
+      let (machine, preprocess) = machine.preprocess(&mut OsRng);
+      machines.push(machine);
+      serialized_preprocesses.push(preprocess.serialize());
+      preprocesses.push(preprocess);
+    }
+
+    self.preprocessing.insert(id.id, (machines, preprocesses));
 
     // Broadcast our preprocess
     self.events.push_back(SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess {
       id,
-      preprocess: preprocess.serialize(),
+      preprocesses: serialized_preprocesses,
     }));
   }
 
@@ -448,7 +461,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           return;
         }
 
-        let machine = match self.preprocessing.remove(&id.id) {
+        let (machines, our_preprocesses) = match self.preprocessing.remove(&id.id) {
           // Either rebooted or RPC error, or some invariant
           None => {
             warn!(
@@ -464,7 +477,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           .drain()
           .map(|(l, preprocess)| {
             let mut preprocess_ref = preprocess.as_ref();
-            let res = machine
+            let res = machines[0]
               .read_preprocess::<&[u8]>(&mut preprocess_ref)
               .map(|preprocess| (l, preprocess));
             if !preprocess_ref.is_empty() {
@@ -472,23 +485,41 @@ impl<N: Network, D: Db> Signer<N, D> {
             }
             res
           })
-          .collect::<Result<_, _>>()
+          .collect::<Result<HashMap<_, _>, _>>()
         {
           Ok(preprocesses) => preprocesses,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
 
-        // Use an empty message, as expected of TransactionMachines
-        let (machine, share) = match machine.sign(preprocesses, &[]) {
-          Ok(res) => res,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
-        self.signing.insert(id.id, machine);
+        // Only keep a single machine as we only need one to get the signature
+        let mut signature_machine = None;
+        let mut shares = vec![];
+        let mut serialized_shares = vec![];
+        for (m, machine) in machines.into_iter().enumerate() {
+          let mut preprocesses = preprocesses.clone();
+          for (i, our_preprocess) in our_preprocesses.clone().into_iter().enumerate() {
+            if i != m {
+              assert!(preprocesses.insert(self.keys[i].params().i(), our_preprocess).is_none());
+            }
+          }
 
-        // Broadcast our share
+          // Use an empty message, as expected of TransactionMachines
+          let (machine, share) = match machine.sign(preprocesses, &[]) {
+            Ok(res) => res,
+            Err(e) => todo!("malicious signer: {:?}", e),
+          };
+          if m == 0 {
+            signature_machine = Some(machine);
+          }
+          serialized_shares.push(share.serialize());
+          shares.push(share);
+        }
+        self.signing.insert(id.id, (signature_machine.unwrap(), shares));
+
+        // Broadcast our shares
         self.events.push_back(SignerEvent::ProcessorMessage(ProcessorMessage::Share {
           id,
-          share: share.serialize(),
+          shares: serialized_shares,
         }));
       }
 
@@ -497,7 +528,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           return;
         }
 
-        let machine = match self.signing.remove(&id.id) {
+        let (machine, our_shares) = match self.signing.remove(&id.id) {
           // Rebooted, RPC error, or some invariant
           None => {
             // If preprocessing has this ID, it means we were never sent the preprocess by the
@@ -515,7 +546,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           Some(machine) => machine,
         };
 
-        let shares = match shares
+        let mut shares = match shares
           .drain()
           .map(|(l, share)| {
             let mut share_ref = share.as_ref();
@@ -525,11 +556,15 @@ impl<N: Network, D: Db> Signer<N, D> {
             }
             res
           })
-          .collect::<Result<_, _>>()
+          .collect::<Result<HashMap<_, _>, _>>()
         {
           Ok(shares) => shares,
           Err(e) => todo!("malicious signer: {:?}", e),
         };
+
+        for (i, our_share) in our_shares.into_iter().enumerate().skip(1) {
+          assert!(shares.insert(self.keys[i].params().i(), our_share).is_none());
+        }
 
         let tx = match machine.complete(shares) {
           Ok(res) => res,

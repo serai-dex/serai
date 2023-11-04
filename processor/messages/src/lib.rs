@@ -33,11 +33,11 @@ pub mod key_gen {
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
-    GenerateKey { id: KeyGenId, params: ThresholdParams },
+    GenerateKey { id: KeyGenId, params: ThresholdParams, shares: u16 },
     // Received commitments for the specified key generation protocol.
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
+    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
   }
 
   impl CoordinatorMessage {
@@ -49,9 +49,9 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: Vec<u8> },
+    Commitments { id: KeyGenId, commitments: Vec<Vec<u8>> },
     // Created shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: HashMap<Participant, Vec<u8>> },
+    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
     // Resulting keys from the specified key generation protocol.
     GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
   }
@@ -97,9 +97,9 @@ pub mod sign {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created preprocess for the specified signing protocol.
-    Preprocess { id: SignId, preprocess: Vec<u8> },
+    Preprocess { id: SignId, preprocesses: Vec<Vec<u8>> },
     // Signed share for the specified signing protocol.
-    Share { id: SignId, share: Vec<u8> },
+    Share { id: SignId, shares: Vec<Vec<u8>> },
     // Completed a signing protocol already.
     Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
   }
@@ -148,8 +148,8 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
-    BatchPreprocess { id: SignId, block: BlockHash, preprocess: Vec<u8> },
-    BatchShare { id: SignId, share: [u8; 32] },
+    BatchPreprocess { id: SignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
+    BatchShare { id: SignId, shares: Vec<[u8; 32]> },
   }
 }
 

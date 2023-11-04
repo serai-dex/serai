@@ -40,7 +40,7 @@ async fn tx_test() {
   // Create the TX with a null signature so we can get its sig hash
   let block_before_tx = tributaries[sender].1.tip().await;
   let mut tx =
-    Transaction::DkgCommitments(attempt, commitments.clone(), Transaction::empty_signed());
+    Transaction::DkgCommitments(attempt, vec![commitments.clone()], Transaction::empty_signed());
   tx.sign(&mut OsRng, spec.genesis(), &key, 0);
 
   assert_eq!(tributaries[sender].1.add_transaction(tx.clone()).await, Ok(true));

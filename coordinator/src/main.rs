@@ -101,19 +101,16 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   // If we're rebooting, we'll re-fire this message
   // This is safe due to the message-queue deduplicating based off the intent system
   let set = spec.set();
+  let our_i = spec
+    .i(Ristretto::generator() * key.deref())
+    .expect("adding a tributary for a set we aren't in set for");
   processors
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
         id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
-        params: frost::ThresholdParams::new(
-          spec.t(),
-          spec.n(),
-          spec
-            .i(Ristretto::generator() * key.deref())
-            .expect("adding a tributary for a set we aren't in set for"),
-        )
-        .unwrap(),
+        params: frost::ThresholdParams::new(spec.t(), spec.n(), our_i.start).unwrap(),
+        shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
     )
     .await;
@@ -426,18 +423,29 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // Create a MuSig-based machine to inform Substrate of this key generation
           let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
 
+          let our_i = spec
+            .i(pub_key)
+            .expect("processor message to DKG for a session we aren't a validator in");
+
+          // `tx_shares` needs to be done here as while it can be serialized from the HashMap
+          // without further context, it can't be deserialized without context
           let mut tx_shares = Vec::with_capacity(shares.len());
           for i in 1 ..= spec.n() {
             let i = Participant::new(i).unwrap();
-            if i ==
-              spec
-                .i(pub_key)
-                .expect("processor message to DKG for a session we aren't a validator in")
-            {
+            if our_i.contains(&i) {
+              for shares in &shares {
+                if shares.contains_key(&i) {
+                  panic!("processor sent us our own shares");
+                }
+              }
               continue;
             }
-            tx_shares
-              .push(shares.remove(&i).expect("processor didn't send share for another validator"));
+            tx_shares.push(vec![]);
+            for shares in &mut shares {
+              tx_shares.last_mut().unwrap().push(
+                shares.remove(&i).expect("processor didn't send share for another validator"),
+              );
+            }
           }
 
           vec![Transaction::DkgShares {
@@ -474,14 +482,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
       },
       ProcessorMessage::Sign(msg) => match msg {
-        sign::ProcessorMessage::Preprocess { id, preprocess } => {
+        sign::ProcessorMessage::Preprocess { id, preprocesses } => {
           if id.attempt == 0 {
             MainDb::<D>::save_first_preprocess(
               &mut txn,
               network,
               RecognizedIdType::Plan,
               id.id,
-              preprocess,
+              preprocesses,
             );
 
             vec![]
@@ -489,17 +497,19 @@ async fn handle_processor_message<D: Db, P: P2p>(
             vec![Transaction::SignPreprocess(SignData {
               plan: id.id,
               attempt: id.attempt,
-              data: preprocess,
+              data: preprocesses,
               signed: Transaction::empty_signed(),
             })]
           }
         }
-        sign::ProcessorMessage::Share { id, share } => vec![Transaction::SignShare(SignData {
-          plan: id.id,
-          attempt: id.attempt,
-          data: share,
-          signed: Transaction::empty_signed(),
-        })],
+        sign::ProcessorMessage::Share { id, shares } => {
+          vec![Transaction::SignShare(SignData {
+            plan: id.id,
+            attempt: id.attempt,
+            data: shares,
+            signed: Transaction::empty_signed(),
+          })]
+        }
         sign::ProcessorMessage::Completed { key: _, id, tx } => {
           let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
           #[allow(non_snake_case)]
@@ -522,7 +532,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
         coordinator::ProcessorMessage::SubstrateBlockAck { .. } => unreachable!(),
-        coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocess } => {
+        coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocesses } => {
           log::info!(
             "informed of batch (sign ID {}, attempt {}) for block {}",
             hex::encode(id.id),
@@ -538,7 +548,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               spec.set().network,
               RecognizedIdType::Batch,
               id.id,
-              preprocess,
+              preprocesses,
             );
 
             // If this is the new key's first Batch, only create this TX once we verify all
@@ -550,6 +560,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
               if last_received != 0 {
                 // Decrease by 1, to get the ID of the Batch prior to this Batch
                 let prior_sets_last_batch = last_received - 1;
+                // TODO: If we're looping here, we're not handling the messages we need to in order
+                // to create the Batch we're looking for
+                // Don't have the processor yield the handover batch untill the batch before is
+                // acknowledged on-chain?
                 loop {
                   let successfully_verified = substrate::verify_published_batches::<D>(
                     &mut txn,
@@ -598,16 +612,16 @@ async fn handle_processor_message<D: Db, P: P2p>(
             vec![Transaction::BatchPreprocess(SignData {
               plan: id.id,
               attempt: id.attempt,
-              data: preprocess,
+              data: preprocesses,
               signed: Transaction::empty_signed(),
             })]
           }
         }
-        coordinator::ProcessorMessage::BatchShare { id, share } => {
+        coordinator::ProcessorMessage::BatchShare { id, shares } => {
           vec![Transaction::BatchShare(SignData {
             plan: id.id,
             attempt: id.attempt,
-            data: share.to_vec(),
+            data: shares.into_iter().map(|share| share.to_vec()).collect(),
             signed: Transaction::empty_signed(),
           })]
         }
