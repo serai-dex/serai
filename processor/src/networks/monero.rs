@@ -182,11 +182,10 @@ impl PartialEq for Monero {
 impl Eq for Monero {}
 
 fn map_rpc_err(err: RpcError) -> NetworkError {
-  if let RpcError::ConnectionError(e) = &err {
-    log::debug!("Monero ConnectionError: {e}");
-  }
   if let RpcError::InvalidNode(reason) = &err {
     log::error!("Monero RpcError::InvalidNode({reason})");
+  } else {
+    log::debug!("Monero RpcError {err:?}");
   }
   NetworkError::ConnectionError
 }
