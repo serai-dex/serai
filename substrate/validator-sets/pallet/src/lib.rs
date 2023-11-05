@@ -95,7 +95,7 @@ pub mod pallet {
   // before the spammable key.
   #[pallet::storage]
   pub type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
   impl<T: Config> Pallet<T> {
     fn in_set_key(
       network: NetworkId,
@@ -329,12 +329,13 @@ pub mod pallet {
       while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
-        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
+        let these_key_shares = amount.0 / allocation_per_key_share;
+        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
         participants.push(key);
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
-        key_shares += amount.0 / allocation_per_key_share;
+        key_shares += these_key_shares;
         total_stake += amount.0;
       }
       TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
@@ -791,16 +792,19 @@ pub mod pallet {
       if BabePallet::<C>::should_epoch_change(now) {
         let network = NetworkId::Serai;
 
+        // TODO: This is incorrect. Babe takes next, next next, not current, next
         // get the current authorities
         let authorities = BabePallet::<C>::authorities();
 
-        // get the next authorities
-        let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
+        // These weights may exceed MAX_KEY_SHARES_PER_SET which is fine as Babe doesn't use them
+        // for key shares
         let next_authorities = SessionsPallet::<T>::queued_keys()
           .iter()
           .map(|(id, _)| {
-            let allocation = Self::allocation((network, *id)).unwrap().0;
-            (AuthorityId::from(*id), allocation / allocation_per_key_share)
+            (
+              AuthorityId::from(*id),
+              InSet::<T>::get(Self::in_set_key(NetworkId::Serai, *id)).unwrap(),
+            )
           })
           .collect::<Vec<(AuthorityId, u64)>>();
         let next_authorities =
