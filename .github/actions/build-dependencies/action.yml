@@ -54,5 +54,9 @@ runs:
         components: ${{ inputs.rust-components }}
         targets: wasm32-unknown-unknown, riscv32imac-unknown-none-elf
 
+    - name: Install nextest
+      shell: bash
+      run: cargo install cargo-nextest --locked
+
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43

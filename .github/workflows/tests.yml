@@ -38,13 +38,14 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --all-features \
             -p serai-message-queue \
             -p serai-processor-messages \
             -p serai-processor \
             -p tendermint-machine \
             -p tributary-chain \
-            -p serai-coordinator
+            -p serai-coordinator \
+            -p serai-docker-tests
 
   test-substrate:
     runs-on: ubuntu-latest
@@ -58,7 +59,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --all-features \
             -p serai-primitives \
             -p serai-coins-primitives \
             -p serai-coins-pallet \
@@ -81,4 +82,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-client
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --all-features -p serai-client
