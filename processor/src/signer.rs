@@ -329,7 +329,6 @@ impl<N: Network, D: Db> Signer<N, D> {
       }
     } else {
       // If we don't have this in RAM, it should be because we already finished signing it
-      // TODO: Will the coordinator ever send us Completed for an unknown ID?
       assert!(!SignerDb::<N, D>::completions(txn, id).is_empty());
       info!(
         "signer {} informed of the eventuality completion for plan {}, {}",

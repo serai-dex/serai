@@ -530,15 +530,27 @@ pub(crate) async fn handle_application_tx<
         Accumulation::NotReady => {}
       }
     }
-    Transaction::SignCompleted { plan, tx_hash, .. } => {
+    Transaction::SignCompleted { plan, tx_hash, first_signer, signature: _ } => {
       log::info!(
         "on-chain SignCompleted claims {} completes {}",
         hex::encode(&tx_hash),
         hex::encode(plan)
       );
-      // TODO: Confirm this is a valid plan ID
+
+      if TributaryDb::<D>::attempt(txn, genesis, Topic::Sign(plan)).is_none() {
+        fatal_slash::<D>(
+          txn,
+          genesis,
+          first_signer.to_bytes(),
+          "claimed an unrecognized plan was completed",
+        );
+        return;
+      };
+
       // TODO: Confirm this signer hasn't prior published a completion
-      let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else { todo!() };
+      let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
+        panic!("SignCompleted for recognized plan ID despite not having a key pair for this set")
+      };
       processors
         .send(
           spec.set().network,
