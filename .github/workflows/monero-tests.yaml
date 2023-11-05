@@ -28,7 +28,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Unit Tests Without Features
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --package monero-serai --lib
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest run --package monero-serai --lib
 
       # Doesn't run unit tests with features as the tests workflow will
 
@@ -51,9 +51,9 @@ jobs:
       - name: Run Integration Tests Without Features
         # Runs with the binaries feature so the binaries build
         # https://github.com/rust-lang/cargo/issues/8396
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --package monero-serai --features binaries --test '*'
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest run --package monero-serai --features binaries --test '*'
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
         if: ${{ matrix.version != 'v0.18.2.0' }}
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --package monero-serai --all-features --test '*'
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest run --package monero-serai --all-features --test '*'

@@ -25,4 +25,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --all-features -p mini-serai
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest run --all-features -p mini-serai

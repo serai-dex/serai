@@ -26,7 +26,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest --all-features \
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo nextest run --all-features \
             -p std-shims \
             -p zalloc \
             -p serai-db \
