@@ -511,6 +511,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
             let slash = if let Some(ev) = evidence {
               // if the malicious message contains a block, only vote to slash
               // TODO: Should this decision be made at a higher level?
+              // A higher-level system may be able to verify if the contained block is fatally
+              // invalid
+              // A higher-level system may accept the bandwidth size of this, even if the issue is
+              // just the valid round field
               if let Data::Proposal(_, _) = &current_msg.msg.data {
                 SlashEvent::Id(
                   SlashReason::InvalidBlock,
