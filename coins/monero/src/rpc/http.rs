@@ -113,7 +113,6 @@ impl HttpRpc {
           .await
           .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         let connection_task = tokio::spawn(connection);
-        connection_task_handle = Some(connection_task.abort_handle());
 
         let mut response = requester
           .send_request(request("/".to_string() + route))
@@ -151,6 +150,9 @@ impl HttpRpc {
             .send_request(request)
             .await
             .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
+
+          // Also embed the requester so it's not dropped, causing the connection to close
+          connection_task_handle = Some((requester, connection_task.abort_handle()));
         }
 
         response
@@ -184,7 +186,7 @@ impl HttpRpc {
       .map_err(|e| RpcError::ConnectionError(e.to_string()))?
       .to_vec();
 
-    if let Some(connection_task) = connection_task_handle {
+    if let Some((_, connection_task)) = connection_task_handle {
       // Clean up the connection task
       connection_task.abort();
     }
