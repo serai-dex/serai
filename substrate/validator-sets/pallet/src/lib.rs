@@ -114,7 +114,7 @@ pub mod pallet {
   // before the spammable key.
   #[pallet::storage]
   pub type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
   impl<T: Config> Pallet<T> {
     fn in_set_key(
       network: NetworkId,
@@ -349,12 +349,13 @@ pub mod pallet {
       while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
-        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
+        let these_key_shares = amount.0 / allocation_per_key_share;
+        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
         participants.push(key);
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
-        key_shares += amount.0 / allocation_per_key_share;
+        key_shares += these_key_shares;
         total_stake += amount.0;
       }
       TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
