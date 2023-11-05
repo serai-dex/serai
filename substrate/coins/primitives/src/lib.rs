@@ -46,6 +46,6 @@ fn address() {
   use sp_runtime::traits::TrailingZeroInput;
   assert_eq!(
     FEE_ACCOUNT,
-    SeraiAddress::decode(&mut TrailingZeroInput::new(b"FeeAccount")).unwrap()
+    SeraiAddress::decode(&mut TrailingZeroInput::new(b"Coins-fees")).unwrap()
   );
 }
