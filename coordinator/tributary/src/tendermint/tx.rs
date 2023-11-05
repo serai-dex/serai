@@ -63,12 +63,17 @@ impl Transaction for TendermintTx {
   }
 }
 
-fn decode_and_verify_signed_message<N: Network>(
+pub fn decode_signed_message<N: Network>(
   mut data: &[u8],
+) -> Result<SignedMessageFor<N>, TransactionError> {
+  SignedMessageFor::<N>::decode(&mut data).map_err(|_| TransactionError::InvalidContent)
+}
+
+fn decode_and_verify_signed_message<N: Network>(
+  data: &[u8],
   schema: &N::SignatureScheme,
 ) -> Result<SignedMessageFor<N>, TransactionError> {
-  let msg =
-    SignedMessageFor::<N>::decode(&mut data).map_err(|_| TransactionError::InvalidContent)?;
+  let msg = decode_signed_message::<N>(data)?;
 
   // verify that evidence messages are signed correctly
   if !msg.verify_signature(schema) {
