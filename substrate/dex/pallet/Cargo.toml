@@ -1,0 +1,75 @@
+[package]
+name = "serai-dex-pallet"
+version = "0.1.0"
+description = "DEX pallet for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex/pallet"
+authors = ["Parity Technologies <admin@parity.io>, Akil Demir <aeg_asd@hotmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "3.6.1", default-features = false }
+scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
+
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-arithmetic = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
+
+dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
+
+[dev-dependencies]
+serai-primitives = { path = "../../primitives", default-features = false }
+
+coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+  "codec/std",
+  "scale-info/std",
+
+  "sp-std/std",
+  "sp-arithmetic/std",
+  "sp-io/std",
+  "sp-api/std",
+  "sp-runtime/std",
+  "sp-core/std",
+
+  "serai-primitives/std",
+
+  "dex-primitives/std",
+
+  "frame-system/std",
+  "frame-support/std",
+  "frame-benchmarking?/std",
+
+  "coins-pallet/std",
+  "liquidity-tokens-pallet/std",
+]
+runtime-benchmarks = [
+  "sp-runtime/runtime-benchmarks",
+
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+  "frame-benchmarking/runtime-benchmarks",
+
+  "dex-primitives/runtime-benchmarks",
+]
+try-runtime = [
+  "sp-runtime/try-runtime",
+
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+]

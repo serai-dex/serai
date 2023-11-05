@@ -409,7 +409,7 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn account() -> T::AccountId {
-      system_address(b"validator-sets").into()
+      system_address(b"ValidatorSets").into()
     }
 
     // is_bft returns if the network is able to survive any single node becoming byzantine.

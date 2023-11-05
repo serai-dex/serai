@@ -1,9 +1,9 @@
 [package]
-name = "serai-coins-pallet"
+name = "serai-liquidity-tokens-pallet"
 version = "0.1.0"
-description = "Coins pallet for Serai"
+description = "liquidity tokens pallet for Serai"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/coins/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/liquidity-tokens/pallet"
 authors = ["Akil Demir <aeg_asd@hotmail.com>"]
 edition = "2021"
 
@@ -20,14 +20,10 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
-pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 dex-primitives = { package = "serai-dex-primitives", path = "../../dex/primitives", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-coins-primitives = { package = "serai-coins-primitives", path = "../primitives", default-features = false }
 
 [features]
 std = [
@@ -36,14 +32,10 @@ std = [
 
   "sp-core/std",
   "sp-std/std",
-  "sp-runtime/std",
-
-  "pallet-transaction-payment/std",
 
   "dex-primitives/std",
 
   "serai-primitives/std",
-  "coins-primitives/std",
 ]
 
 runtime-benchmarks = [

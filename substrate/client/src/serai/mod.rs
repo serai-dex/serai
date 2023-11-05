@@ -35,6 +35,8 @@ use serai_runtime::{
 
 pub mod coins;
 pub use coins::SeraiCoins;
+pub mod dex;
+pub use dex::SeraiDex;
 pub mod in_instructions;
 pub use in_instructions::SeraiInInstructions;
 pub mod validator_sets;
@@ -345,6 +347,10 @@ impl<'a> TemporalSerai<'a> {
 
   pub fn coins(self) -> SeraiCoins<'a> {
     SeraiCoins(self)
+  }
+
+  pub fn dex(self) -> SeraiDex<'a> {
+    SeraiDex(self)
   }
 
   pub fn in_instructions(self) -> SeraiInInstructions<'a> {

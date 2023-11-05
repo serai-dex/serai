@@ -17,6 +17,8 @@ pub use pallet_timestamp as timestamp;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
+pub use liquidity_tokens_pallet as liquidity_tokens;
+pub use dex_pallet as dex;
 
 pub use validator_sets_pallet as validator_sets;
 pub use pallet_session as session;
@@ -45,7 +47,7 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
+use primitives::{PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -167,6 +169,7 @@ impl Contains<RuntimeCall> for CallFilter {
 
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
+      RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
@@ -241,6 +244,37 @@ impl transaction_payment::Config for Runtime {
 
 impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
+}
+
+impl liquidity_tokens::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
+impl dex::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type Currency = Coins;
+  type Balance = SubstrateAmount;
+  type CoinBalance = SubstrateAmount;
+  // TODO: Review if this should be u64/u128 or u64/u256 (and rounding in general).
+  type HigherPrecisionBalance = u128;
+
+  type CoinId = Coin;
+  type MultiCoinId = Coin;
+  type MultiCoinIdConverter = serai_dex_primitives::CoinConverter;
+  type PoolCoinId = u32;
+
+  type Coins = Coins;
+  type PoolCoins = LiquidityTokens;
+
+  type LPFee = ConstU32<3>; // 0.3%
+  type MintMinLiquidity = ConstU64<10000>;
+
+  type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
+
+  type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
+
+  #[cfg(feature = "runtime-benchmarks")]
+  type BenchmarkHelper = ();
 }
 
 impl validator_sets::Config for Runtime {
@@ -342,6 +376,8 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Coins: coins,
+    LiquidityTokens: liquidity_tokens,
+    Dex: dex,
 
     ValidatorSets: validator_sets,
     Session: session,

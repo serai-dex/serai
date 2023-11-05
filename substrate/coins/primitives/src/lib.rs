@@ -12,7 +12,7 @@ use scale_info::TypeInfo;
 
 use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, system_address};
 
-pub const FEE_ACCOUNT: SeraiAddress = system_address(b"FeeAccount");
+pub const FEE_ACCOUNT: SeraiAddress = system_address(b"Coins-fees");
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
@@ -46,6 +46,6 @@ fn address() {
   use sp_runtime::traits::TrailingZeroInput;
   assert_eq!(
     FEE_ACCOUNT,
-    SeraiAddress::decode(&mut TrailingZeroInput::new(b"FeeAccount")).unwrap()
+    SeraiAddress::decode(&mut TrailingZeroInput::new(b"Coins-fees")).unwrap()
   );
 }

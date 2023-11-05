@@ -16,12 +16,57 @@ use sp_application_crypto::sr25519::Signature;
 use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
-use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, Data};
+#[rustfmt::skip]
+use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;
 
 pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
+
+// This is the account which will be the origin for any dispatched `InInstruction`s.
+pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructions-executor");
+
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+pub enum OutAddress {
+  Serai(SeraiAddress),
+  External(ExternalAddress),
+}
+
+impl OutAddress {
+  pub fn is_native(&self) -> bool {
+    matches!(self, Self::Serai(_))
+  }
+
+  pub fn as_native(self) -> Option<SeraiAddress> {
+    match self {
+      Self::Serai(addr) => Some(addr),
+      _ => None,
+    }
+  }
+
+  pub fn as_external(self) -> Option<ExternalAddress> {
+    match self {
+      Self::External(addr) => Some(addr),
+      Self::Serai(_) => None,
+    }
+  }
+}
+
+#[derive(
+  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+pub enum DexCall {
+  // address to send the lp tokens to
+  // TODO: Update this per documentation/Shorthand
+  SwapAndAddLiquidity(SeraiAddress),
+  // minimum out balance and out address
+  Swap(Balance, OutAddress),
+}
 
 #[derive(
   Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
@@ -29,7 +74,7 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 #[cfg_attr(feature = "std", derive(Zeroize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
-  Dex(Data),
+  Dex(DexCall),
 }
 
 #[derive(
