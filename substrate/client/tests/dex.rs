@@ -19,7 +19,6 @@ use serai_client::{
 
 mod common;
 use common::{
-  serai,
   in_instructions::{provide_batch, mint_coin},
   dex::{add_liquidity as common_add_liquidity, swap as common_swap},
 };
@@ -270,7 +269,7 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(batch).await;
+    let block = provide_batch(&serai, batch).await;
     let mut events = serai.as_of(block).dex().all_events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
     assert_eq!(
@@ -287,11 +286,10 @@ serai_test!(
     );
   })
 
-  async fn swap_in_instructions() {
+  swap_in_instructions: (|serai: Serai| async move {
     let coin1 = Coin::Monero;
     let coin2 = Coin::Ether;
     let pair = insecure_pair_from_name("Ferdie");
-    let serai = serai().await;
     let mut coin1_batch_id = 0;
     let mut coin2_batch_id = 0;
 
@@ -356,7 +354,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(batch).await;
+      let block = provide_batch(&serai, batch).await;
       coin1_batch_id += 1;
       let mut events = serai.as_of(block).dex().all_events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
@@ -396,7 +394,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(batch).await;
+      let block = provide_batch(&serai, batch).await;
       let mut events = serai.as_of(block).dex().all_events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
@@ -434,7 +432,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(batch).await;
+      let block = provide_batch(&serai, batch).await;
       let mut events = serai.as_of(block).dex().all_events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 

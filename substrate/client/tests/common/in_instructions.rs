@@ -64,6 +64,7 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
 
 #[allow(dead_code)]
 pub async fn mint_coin(
+  serai: &Serai,
   balance: Balance,
   network: NetworkId,
   batch_id: u32,
@@ -82,5 +83,5 @@ pub async fn mint_coin(
     }],
   };
 
-  provide_batch(batch).await
+  provide_batch(serai, batch).await
 }
