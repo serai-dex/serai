@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # Macros
 async-trait = { version = "0.1", default-features = false }
-lazy_static = { version = "1", default-features = false }
+once_cell = { version = "1", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 thiserror = { version = "1", default-features = false }
 serde = { version = "1", default-features = false, features = ["std", "derive"] }

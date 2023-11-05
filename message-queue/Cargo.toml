@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Macros
-lazy_static = { version = "1", default-features = false }
+once_cell = { version = "1", default-features = false }
 serde = { version = "1", default-features = false, features = ["std", "derive"] }
 
 # Encoders
