@@ -1,4 +1,9 @@
-pub fn db_key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
+#[doc(hidden)]
+pub fn serai_db_key(
+  db_dst: &'static [u8],
+  item_dst: &'static [u8],
+  key: impl AsRef<[u8]>,
+) -> Vec<u8> {
   let db_len = u8::try_from(db_dst.len()).unwrap();
   let dst_len = u8::try_from(item_dst.len()).unwrap();
   [[db_len].as_ref(), db_dst, [dst_len].as_ref(), item_dst, key.as_ref()].concat()
@@ -32,22 +37,22 @@ pub fn db_key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u
 /// ```
 #[macro_export]
 macro_rules! create_db {
-  ($db_name: ident
-    { $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty),*}
-  ) => {
+  ($db_name: ident {
+    $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty),*
+  }) => {
     $(
       #[derive(Clone, Debug)]
       pub struct $field_name;
       impl $field_name {
         pub fn key($($arg: $arg_type),*) -> Vec<u8> {
-          $crate::db_key(
+          $crate::serai_db_key(
             stringify!($db_name).as_bytes(),
             stringify!($field_name).as_bytes(),
-            (vec![] as Vec<u8>, $($arg),*).encode()
+            ($($arg),*).encode()
           )
         }
         #[allow(dead_code)]
-        pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*,  data: &impl serde::Serialize) {
+        pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &impl serde::Serialize) {
           let key = $field_name::key($($arg),*);
           txn.put(&key, bincode::serialize(data).unwrap());
         }

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use serai_db::create_db;
 use zeroize::Zeroizing;
 
 use rand_core::SeedableRng;
@@ -19,7 +18,7 @@ use scale::Encode;
 use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 use messages::key_gen::*;
 
-use crate::{Get, DbTxn, Db, networks::Network};
+use crate::{Get, DbTxn, Db, create_db, networks::Network};
 
 #[derive(Debug)]
 pub struct KeyConfirmed<C: Ciphersuite> {
@@ -35,7 +34,7 @@ create_db!(
     // Overwriting its commitments would be accordingly poor
     CommitmentsDb: (key: &KeyGenId) -> HashMap<Participant, Vec<u8>>,
     GeneratedKeysDb: (set: &ValidatorSet, substrate_key: &[u8; 32], network_key: &[u8]) -> Vec<u8>,
-    KeysDb: (key: &Vec<u8>) -> Vec<u8>
+    KeysDb: (network_key: &[u8]) -> Vec<u8>
   }
 );
 
@@ -100,18 +99,18 @@ impl KeysDb {
       },
       keys.1[0].group_key().to_bytes().as_ref(),
     );
-    txn.put(KeysDb::key(&keys.1[0].group_key().to_bytes().as_ref().into()), keys_vec);
+    txn.put(KeysDb::key(keys.1[0].group_key().to_bytes().as_ref()), keys_vec);
     keys
   }
 
   #[allow(clippy::type_complexity)]
   fn keys<N: Network>(
     getter: &impl Get,
-    key: &<N::Curve as Ciphersuite>::G,
+    network_key: &<N::Curve as Ciphersuite>::G,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
     let res =
-      GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&key.to_bytes().as_ref().into()))?.1;
-    assert_eq!(&res.1[0].group_key(), key);
+      GeneratedKeysDb::read_keys::<N>(getter, &Self::key(network_key.to_bytes().as_ref()))?.1;
+    assert_eq!(&res.1[0].group_key(), network_key);
     Some(res)
   }
 }
