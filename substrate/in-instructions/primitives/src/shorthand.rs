@@ -26,7 +26,7 @@ pub enum Shorthand {
     minimum: Amount,
     out: OutInstruction,
   },
-  AddLiquidity {
+  SwapAndAddLiquidity {
     origin: Option<ExternalAddress>,
     minimum: Amount,
     gas: Amount,
@@ -47,7 +47,7 @@ impl TryFrom<Shorthand> for RefundableInInstruction {
     Ok(match shorthand {
       Shorthand::Raw(instruction) => instruction,
       Shorthand::Swap { .. } => todo!(),
-      Shorthand::AddLiquidity { .. } => todo!(),
+      Shorthand::SwapAndAddLiquidity { .. } => todo!(),
     })
   }
 }

@@ -20,8 +20,7 @@
 
 //! # Serai Dex pallet
 //!
-//! Serai Dex pallet based on the [Uniswap V2](https://github.com/Uniswap/v2-core)
-//! logic.
+//! Serai Dex pallet based on the [Uniswap V2](https://github.com/Uniswap/v2-core) logic.
 //!
 //! ## Overview
 //!
@@ -51,11 +50,14 @@
 //!
 //! ```text
 //! curl -sS -H "Content-Type: application/json" -d \
-//! '{"id":1, "jsonrpc":"2.0", "method": "state_call",
-//!   "params": [
-//!       "DexApi_quote_price_tokens_for_exact_tokens",
-//!       "0x0101000000000000000000000011000000000000000000"
-//!   ]
+//! '{
+//!    "id": 1,
+//!    "jsonrpc": "2.0",
+//!    "method": "state_call",
+//!    "params": [
+//!      "DexApi_quote_price_tokens_for_exact_tokens",
+//!      "0x0101000000000000000000000011000000000000000000"
+//!    ]
 //! }' \
 //! http://localhost:9933/
 //! ```
@@ -99,8 +101,7 @@ pub use weights::WeightInfo;
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
-  use frame_support::{pallet_prelude::*, BoundedBTreeSet, PalletId};
-  use sp_arithmetic::Permill;
+  use frame_support::{pallet_prelude::*, BoundedBTreeSet};
   use sp_runtime::{
     traits::{IntegerSquareRoot, One, Zero},
     Saturating,
@@ -143,14 +144,14 @@ pub mod pallet {
     /// Identifier for the class of non-native coin.
     /// Note: A `From<u32>` bound here would prevent `MultiLocation` from being used as an
     /// `CoinId`.
-    type CoinId: CoinId;
+    type CoinId: frame_support::Serialize + sp_runtime::DeserializeOwned + CoinId;
 
     /// Type that identifies either the native currency or a token class from `Coins`.
     /// `Ord` is added because of `get_pool_id`.
     ///
     /// The pool's `AccountId` is derived from this type. Any changes to the type may
     /// necessitate a migration.
-    type MultiCoinId: CoinId + Ord + From<Self::CoinId>;
+    type MultiCoinId: Ord + CoinId + From<Self::CoinId>;
 
     /// Type to convert an `CoinId` into `MultiCoinId`.
     type MultiCoinIdConverter: MultiCoinIdConverter<Self::MultiCoinId, Self::CoinId>;
@@ -173,17 +174,6 @@ pub mod pallet {
     #[pallet::constant]
     type LPFee: Get<u32>;
 
-    /// A one-time fee to setup the pool.
-    #[pallet::constant]
-    type PoolSetupFee: Get<Self::Balance>;
-
-    /// An account that receives the pool setup fee.
-    type PoolSetupFeeReceiver: Get<Self::AccountId>;
-
-    /// A fee to withdraw the liquidity.
-    #[pallet::constant]
-    type LiquidityWithdrawalFee: Get<Permill>;
-
     /// The minimum LP token amount that could be minted. Ameliorates rounding errors.
     #[pallet::constant]
     type MintMinLiquidity: Get<Self::CoinBalance>;
@@ -191,14 +181,6 @@ pub mod pallet {
     /// The max number of hops in a swap.
     #[pallet::constant]
     type MaxSwapPathLength: Get<u32>;
-
-    /// The pallet's id, used for deriving its sovereign account ID.
-    #[pallet::constant]
-    type PalletId: Get<PalletId>;
-
-    /// A setting to allow creating pools with both non-native coins.
-    #[pallet::constant]
-    type AllowMultiCoinPools: Get<bool>;
 
     /// Weight information for extrinsics in this pallet.
     type WeightInfo: WeightInfo;
@@ -225,8 +207,6 @@ pub mod pallet {
   pub enum Event<T: Config> {
     /// A successful call of the `CretaPool` extrinsic will create this event.
     PoolCreated {
-      /// The account that created the pool.
-      creator: T::AccountId,
       /// The pool id associated with the pool. Note that the order of the coins may not be
       /// the same as the order specified in the create pool extrinsic.
       pool_id: PoolIdOf<T>,
@@ -271,8 +251,6 @@ pub mod pallet {
       lp_token: T::PoolCoinId,
       /// The amount of lp tokens that were burned of that id.
       lp_token_burned: T::CoinBalance,
-      /// Liquidity withdrawal fee (%).
-      withdrawal_fee: Permill,
     },
     /// Coins have been converted from one to another. Both `SwapExactTokenForToken`
     /// and `SwapTokenForExactToken` will generate this event.
@@ -300,6 +278,28 @@ pub mod pallet {
       /// The amount of the coin that was transferred.
       amount: T::CoinBalance,
     },
+  }
+
+  #[pallet::genesis_config]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  pub struct GenesisConfig<T: Config> {
+    /// Pools to create at launch.
+    pub pools: Vec<T::CoinId>,
+  }
+
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      GenesisConfig { pools: Default::default() }
+    }
+  }
+
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      for coin in &self.pools {
+        Pallet::<T>::create_pool(coin.clone().into()).unwrap();
+      }
+    }
   }
 
   #[pallet::error]
@@ -372,38 +372,21 @@ pub mod pallet {
     }
   }
 
-  /// Pallet's callable functions.
-  #[pallet::call]
   impl<T: Config> Pallet<T> {
     /// Creates an empty liquidity pool and an associated new `lp_token` coin
     /// (the id of which is returned in the `Event::PoolCreated` event).
     ///
     /// Once a pool is created, someone may [`Pallet::add_liquidity`] to it.
-    #[pallet::call_index(0)]
-    #[pallet::weight(T::WeightInfo::create_pool())]
-    pub fn create_pool(
-      origin: OriginFor<T>,
-      coin1: T::MultiCoinId,
-      coin2: T::MultiCoinId,
-    ) -> DispatchResult {
-      let sender = ensure_signed(origin)?;
+    pub(crate) fn create_pool(coin2: T::MultiCoinId) -> DispatchResult {
+      let coin1 = T::MultiCoinIdConverter::get_native();
       ensure!(coin1 != coin2, Error::<T>::EqualCoins);
 
       // prepare pool_id
       let pool_id = Self::get_pool_id(coin1, coin2);
       ensure!(!Pools::<T>::contains_key(&pool_id), Error::<T>::PoolExists);
-      let (coin1, _) = &pool_id;
-      if !T::AllowMultiCoinPools::get() && !T::MultiCoinIdConverter::is_native(coin1) {
-        Err(Error::<T>::PoolMustContainNativeCurrency)?;
-      }
 
       let pool_account = Self::get_pool_account(&pool_id);
       frame_system::Pallet::<T>::inc_providers(&pool_account);
-
-      // pay the setup fee
-      // TODO: Since we don't have PoolSetupFee, remove this entirely?
-      // or we might need it in the future?
-      T::Currency::transfer(&sender, &T::PoolSetupFeeReceiver::get(), T::PoolSetupFee::get())?;
 
       let lp_token = NextPoolCoinId::<T>::get()
         .or(T::PoolCoinId::initial_value())
@@ -414,11 +397,16 @@ pub mod pallet {
       let pool_info = PoolInfo { lp_token: lp_token.clone() };
       Pools::<T>::insert(pool_id.clone(), pool_info);
 
-      Self::deposit_event(Event::PoolCreated { creator: sender, pool_id, pool_account, lp_token });
+      Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token });
 
       Ok(())
     }
+  }
 
+  /// Pallet's callable functions.
+  // TODO: For all of these calls, limit one of these to always be Coin::Serai
+  #[pallet::call]
+  impl<T: Config> Pallet<T> {
     /// Provide liquidity into the pool of `coin1` and `coin2`.
     /// NOTE: an optimal amount of coin1 and coin2 will be calculated and
     /// might be different than the provided `amount1_desired`/`amount2_desired`
@@ -428,7 +416,7 @@ pub mod pallet {
     ///
     /// Once liquidity is added, someone may successfully call
     /// [`Pallet::swap_exact_tokens_for_tokens`] successfully.
-    #[pallet::call_index(1)]
+    #[pallet::call_index(0)]
     #[pallet::weight(T::WeightInfo::add_liquidity())]
     #[allow(clippy::too_many_arguments)]
     pub fn add_liquidity(
@@ -527,7 +515,7 @@ pub mod pallet {
     /// Allows you to remove liquidity by providing the `lp_token_burn` tokens that will be
     /// burned in the process. With the usage of `amount1_min_receive`/`amount2_min_receive`
     /// it's possible to control the min amount of returned tokens you're happy with.
-    #[pallet::call_index(2)]
+    #[pallet::call_index(1)]
     #[pallet::weight(T::WeightInfo::remove_liquidity())]
     pub fn remove_liquidity(
       origin: OriginFor<T>,
@@ -559,8 +547,7 @@ pub mod pallet {
       let reserve2 = Self::get_balance(&pool_account, &coin2)?;
 
       let total_supply = T::PoolCoins::total_issuance(pool.lp_token.clone());
-      let withdrawal_fee_amount = T::LiquidityWithdrawalFee::get() * lp_token_burn;
-      let lp_redeem_amount = lp_token_burn.saturating_sub(withdrawal_fee_amount);
+      let lp_redeem_amount = lp_token_burn;
 
       let amount1 = Self::mul_div(&lp_redeem_amount, &reserve1, &total_supply)?;
       let amount2 = Self::mul_div(&lp_redeem_amount, &reserve2, &total_supply)?;
@@ -594,7 +581,6 @@ pub mod pallet {
         amount2,
         lp_token: pool.lp_token.clone(),
         lp_token_burned: lp_token_burn,
-        withdrawal_fee: T::LiquidityWithdrawalFee::get(),
       });
 
       Ok(())
@@ -606,7 +592,7 @@ pub mod pallet {
     ///
     /// [`DexApi::quote_price_exact_tokens_for_tokens`] runtime call can be called
     /// for a quote.
-    #[pallet::call_index(3)]
+    #[pallet::call_index(2)]
     #[pallet::weight(T::WeightInfo::swap_exact_tokens_for_tokens())]
     pub fn swap_exact_tokens_for_tokens(
       origin: OriginFor<T>,
@@ -632,7 +618,7 @@ pub mod pallet {
     ///
     /// [`DexApi::quote_price_tokens_for_exact_tokens`] runtime call can be called
     /// for a quote.
-    #[pallet::call_index(4)]
+    #[pallet::call_index(3)]
     #[pallet::weight(T::WeightInfo::swap_tokens_for_exact_tokens())]
     pub fn swap_tokens_for_exact_tokens(
       origin: OriginFor<T>,

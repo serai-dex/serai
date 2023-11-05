@@ -6,8 +6,8 @@ use sc_service::ChainType;
 
 use serai_runtime::{
   primitives::*, WASM_BINARY, opaque::SessionKeys, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig,
-  SystemConfig, ValidatorSetsConfig, SessionConfig, BabeConfig, GrandpaConfig,
-  AuthorityDiscoveryConfig, CoinsConfig,
+  SystemConfig, CoinsConfig, DexConfig, ValidatorSetsConfig, SessionConfig, BabeConfig,
+  GrandpaConfig, AuthorityDiscoveryConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -42,6 +42,8 @@ fn testnet_genesis(
         .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
     },
+
+    dex: DexConfig { pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero] },
 
     validator_sets: ValidatorSetsConfig {
       networks: serai_runtime::primitives::NETWORKS

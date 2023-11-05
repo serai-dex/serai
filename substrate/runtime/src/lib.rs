@@ -44,12 +44,10 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, Perbill, Permill,
+  ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{
-  PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount, system_address,
-};
+use primitives::{PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -57,7 +55,7 @@ use support::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
-  PalletId, ord_parameter_types, parameter_types, construct_runtime,
+  parameter_types, construct_runtime,
 };
 
 use babe::AuthorityId as BabeId;
@@ -146,14 +144,6 @@ parameter_types! {
     );
 
   pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
-
-  // PalletId has to be exactly 8 byte. Hence It is "DexPalet" instead of "DexPallet".
-  pub const DexPalletId: PalletId = PalletId(*b"DexPalet");
-  pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
-}
-
-ord_parameter_types! {
-  pub const CoinConversionOrigin: PublicKey = PublicKey::from(system_address(b"DexPalet"));
 }
 
 pub struct CallFilter;
@@ -179,6 +169,7 @@ impl Contains<RuntimeCall> for CallFilter {
 
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
+      RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
@@ -264,7 +255,7 @@ impl dex::Config for Runtime {
   type Currency = Coins;
   type Balance = SubstrateAmount;
   type CoinBalance = SubstrateAmount;
-  // TODO review if this should be u64/u128 or u64/u256 (and rounding in general).
+  // TODO: Review if this should be u64/u128 or u64/u256 (and rounding in general).
   type HigherPrecisionBalance = u128;
 
   type CoinId = Coin;
@@ -276,15 +267,9 @@ impl dex::Config for Runtime {
   type PoolCoins = LiquidityTokens;
 
   type LPFee = ConstU32<3>; // 0.3%
-  type PoolSetupFee = ConstU64<0>; // Coin class deposit fees are sufficient to prevent spam
-  type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
   type MintMinLiquidity = ConstU64<10000>;
 
   type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
-
-  type PalletId = DexPalletId;
-  type PoolSetupFeeReceiver = CoinConversionOrigin;
-  type AllowMultiCoinPools = ConstBool<false>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
 

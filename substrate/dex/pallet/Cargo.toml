@@ -1,7 +1,7 @@
 [package]
 name = "serai-dex-pallet"
 version = "0.1.0"
-description = "Dex pallet for Serai"
+description = "DEX pallet for Serai"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex/pallet"
 authors = ["Parity Technologies <admin@parity.io>, Akil Demir <aeg_asd@hotmail.com>"]
@@ -10,62 +10,66 @@ edition = "2021"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { package = "parity-scale-codec", version = "3.6.1", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
-sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-arithmetic = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
 
 [dev-dependencies]
-coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
-liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
-pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 serai-primitives = { path = "../../primitives", default-features = false }
 
+coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
+
 [features]
-default = [ "std" ]
+default = ["std"]
 std = [
   "codec/std",
-  "frame-benchmarking?/std",
-  "frame-support/std",
-  "frame-system/std",
   "scale-info/std",
+
+  "sp-std/std",
+  "sp-arithmetic/std",
+  "sp-io/std",
+  "sp-api/std",
+  "sp-runtime/std",
+  "sp-core/std",
+
+  "serai-primitives/std",
+
+  "dex-primitives/std",
+
+  "frame-system/std",
+  "frame-support/std",
+  "frame-benchmarking?/std",
 
   "coins-pallet/std",
   "liquidity-tokens-pallet/std",
-  "pallet-transaction-payment/std",
-
-  "dex-primitives/std",
-  "serai-primitives/std",
-
-  "sp-api/std",
-  "sp-arithmetic/std",
-  "sp-core/std",
-  "sp-io/std",
-  "sp-runtime/std",
-  "sp-std/std",
 ]
 runtime-benchmarks = [
-  "frame-benchmarking/runtime-benchmarks",
-  "frame-support/runtime-benchmarks",
-  "frame-system/runtime-benchmarks",
   "sp-runtime/runtime-benchmarks",
+
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+  "frame-benchmarking/runtime-benchmarks",
 
   "dex-primitives/runtime-benchmarks",
 ]
 try-runtime = [
-  "frame-support/try-runtime",
-  "frame-system/try-runtime",
   "sp-runtime/try-runtime",
+
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
 ]

@@ -24,13 +24,10 @@ use super::*;
 use crate as dex;
 
 use frame_support::{
-  construct_runtime, ord_parameter_types, parameter_types,
-  traits::{ConstU32, ConstU64, ConstU8},
-  weights::IdentityFee,
-  PalletId,
+  construct_runtime,
+  traits::{ConstU32, ConstU64},
 };
 
-use sp_arithmetic::Permill;
 use sp_core::{H256, sr25519::Public};
 use sp_runtime::{
   traits::{BlakeTwo256, IdentityLookup},
@@ -41,7 +38,6 @@ use serai_primitives::{Coin, Balance, Amount, system_address};
 
 pub use coins_pallet as coins;
 pub use liquidity_tokens_pallet as liquidity_tokens;
-pub use pallet_transaction_payment as transaction_payment;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -49,7 +45,6 @@ construct_runtime!(
   pub enum Test
   {
     System: frame_system,
-    TransactionPayment: transaction_payment,
     CoinsPallet: coins,
     LiquidityTokens: liquidity_tokens,
     Dex: dex,
@@ -82,32 +77,12 @@ impl frame_system::Config for Test {
   type MaxConsumers = ConstU32<16>;
 }
 
-impl transaction_payment::Config for Test {
-  type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = CoinsPallet;
-  type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<u64>;
-  type LengthToFee = IdentityFee<u64>;
-  type FeeMultiplierUpdate = ();
-}
-
 impl coins::Config for Test {
   type RuntimeEvent = RuntimeEvent;
 }
 
 impl liquidity_tokens::Config for Test {
   type RuntimeEvent = RuntimeEvent;
-}
-
-parameter_types! {
-  pub const CoinConversionPalletId: PalletId = PalletId(*b"py/ascon");
-  pub storage AllowMultiCoinPools: bool = true;
-  // should be non-zero if AllowMultiCoinPools is true, otherwise can be zero
-  pub storage LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
-}
-
-ord_parameter_types! {
-  pub const CoinConversionOrigin: Public = Public::from(system_address(b"py/ascon"));
 }
 
 pub struct CoinConverter;
@@ -140,13 +115,8 @@ impl Config for Test {
   type PoolCoinId = u32;
   type Coins = CoinsPallet;
   type PoolCoins = LiquidityTokens;
-  type PalletId = CoinConversionPalletId;
   type WeightInfo = ();
   type LPFee = ConstU32<3>; // means 0.3%
-  type PoolSetupFee = ConstU64<0>; // should be more or equal to the existential deposit
-  type PoolSetupFeeReceiver = CoinConversionOrigin;
-  type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
-  type AllowMultiCoinPools = AllowMultiCoinPools;
   type MaxSwapPathLength = ConstU32<4>;
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;

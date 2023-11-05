@@ -23,34 +23,34 @@ pub enum PalletError {
 
 #[frame_support::pallet]
 pub mod pallet {
+  use sp_std::vec;
   use sp_application_crypto::RuntimePublic;
   use sp_runtime::traits::Zero;
   use sp_core::sr25519::Public;
-  use sp_std::vec;
+
+  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance};
 
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
 
   use coins_pallet::{
     Config as CoinsConfig, Pallet as Coins,
-    primitives::{OutInstructionWithBalance, OutInstruction},
+    primitives::{OutInstruction, OutInstructionWithBalance},
   };
+  use dex_pallet::{Config as DexConfig, Pallet as Dex};
   use validator_sets_pallet::{
     primitives::{Session, ValidatorSet},
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
-  use dex_pallet::{Config as DexConfig, Pallet as Dex};
-
-  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance};
 
   use super::*;
 
   #[pallet::config]
   pub trait Config:
     frame_system::Config
-    + ValidatorSetsConfig
     + CoinsConfig
     + DexConfig<MultiCoinId = Coin, CoinBalance = SubstrateAmount>
+    + ValidatorSetsConfig
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -98,23 +98,11 @@ pub mod pallet {
           Coins::<T>::mint(address.into(), instruction.balance)?;
         }
         InInstruction::Dex(call) => {
-          // This will only be initiated by external chain txs. That is why we only need
-          // adding liquidity and swaps. Other functionalities(create_pool, remove_liq etc.)
-          // might be called directly from serai as a native operation.
-          //
-          // Hence, AddLiquidity call here actually swaps and adds liquidity.
-          // we will swap half of the given coin for SRI to be able to
-          // provide symmetric liquidity. So the pool has be be created before
-          // for this to be successful.
-          //
-          // And for swaps, they are done on an internal address like a temp account.
-          // we mint the deposited coin into that account, do swap on it and burn the
-          // received coin. This way account will be back on initial balance(since the minted coin
-          // will be moved to pool account.) and burned coin will be seen by processor and sent
-          // to given external address.
-
+          // This will only be initiated by external chain transactions. That is why we only need
+          // add liquidity and swaps. Other functionalities (such as remove_liq, etc) will be
+          // called directly from Serai with a native transaction.
           match call {
-            DexCall::AddLiquidity(address) => {
+            DexCall::SwapAndAddLiquidity(address) => {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
               let coin = instruction.balance.coin;
 
@@ -123,7 +111,7 @@ pub mod pallet {
 
               // swap half of it for SRI
               let half = instruction.balance.amount.0 / 2;
-              let path = BoundedVec::truncate_from(vec![coin, Coin::Serai]);
+              let path = BoundedVec::try_from(vec![coin, Coin::Serai]).unwrap();
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.clone().into(),
                 path,
@@ -198,7 +186,7 @@ pub mod pallet {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.into(),
-                BoundedVec::truncate_from(path),
+                BoundedVec::try_from(path).unwrap(),
                 instruction.balance.amount.0,
                 out_balance.amount.0,
                 send_to.into(),
@@ -210,10 +198,10 @@ pub mod pallet {
                 // see how much we got
                 let coin_balance =
                   Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), out_balance.coin);
-                // TODO: data shouldn't come here from processor just to go back to it.
                 let instruction = OutInstructionWithBalance {
                   instruction: OutInstruction {
                     address: out_address.as_external().unwrap(),
+                    // TODO: Properly pass data. Replace address with an OutInstruction entirely?
                     data: None,
                   },
                   balance: Balance { coin: out_balance.coin, amount: coin_balance },

@@ -24,7 +24,6 @@ use super::*;
 use frame_benchmarking::{benchmarks, whitelisted_caller};
 use frame_support::{assert_ok, storage::bounded_vec::BoundedVec};
 use frame_system::RawOrigin as SystemOrigin;
-use sp_core::Get;
 use sp_runtime::traits::{Bounded, StaticLookup};
 use sp_std::{ops::Div, prelude::*};
 
@@ -70,25 +69,14 @@ where
   T::Coins: Coins<T::AccountId>,
   T::PoolCoinId: Into<u32>,
 {
-  let (_, _) = create_coin::<T>(coin1);
+  assert_eq!(coin1, &T::MultiCoinIdConverter::get_native());
+
   let (caller, caller_lookup) = create_coin::<T>(coin2);
 
-  assert_ok!(Dex::<T>::create_pool(
-    SystemOrigin::Signed(caller.clone()).into(),
-    coin1.clone(),
-    coin2.clone()
-  ));
+  assert_ok!(Dex::<T>::create_pool(coin2.clone()));
   let lp_token = get_lp_token_id::<T>();
 
   (lp_token, caller, caller_lookup)
-}
-
-fn assert_last_event<T: Config>(generic_event: <T as Config>::RuntimeEvent) {
-  let events = frame_system::Pallet::<T>::events();
-  let system_event: <T as frame_system::Config>::RuntimeEvent = generic_event.into();
-  // compare to the last event record
-  let frame_system::EventRecord { event, .. } = &events[events.len() - 1];
-  assert_eq!(event, &system_event);
 }
 
 benchmarks! {
@@ -99,22 +87,6 @@ benchmarks! {
       T::Balance: From<u64> + Into<u64>,
       T::Coins: Coins<T::AccountId>,
       T::PoolCoinId: Into<u32>,
-  }
-
-  create_pool {
-    let coin1 = T::MultiCoinIdConverter::get_native();
-    let coin2: T::MultiCoinId = T::BenchmarkHelper::coin_id(0).into();
-    let (caller, _) = create_coin::<T>(&coin2);
-  }: _(SystemOrigin::Signed(caller.clone()), coin1.clone(), coin2.clone())
-  verify {
-    let lp_token = get_lp_token_id::<T>();
-    let pool_id = (coin1.clone(), coin2.clone());
-    assert_last_event::<T>(Event::PoolCreated {
-      creator: caller.clone(),
-      pool_account: Dex::<T>::get_pool_account(&pool_id),
-      pool_id,
-      lp_token,
-    }.into());
   }
 
   add_liquidity {
@@ -220,79 +192,31 @@ benchmarks! {
       caller.clone(),
     )?;
 
-    let path;
-    let swap_amount;
-    // if we only allow the native-coin pools, then the worst case scenario would be to swap
+    let swap_amount = 100.into();
+
+    // since we only allow the native-coin pools, then the worst case scenario would be to swap
     // coin1-native-coin2
-    if !T::AllowMultiCoinPools::get() {
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        native.clone(),
-        coin2.clone()
-      )?;
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        native.clone(),
-        coin2.clone(),
-        (500 * ed).into(),
-        1000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      path = vec![coin1.clone(), native.clone(), coin2.clone()];
-      swap_amount = 100.into();
-    } else {
-      let coin3: T::MultiCoinId = T::BenchmarkHelper::coin_id(3).into();
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin1.clone(),
-        coin2.clone()
-      )?;
-      let (_, _) = create_coin::<T>(&coin3);
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin2.clone(),
-        coin3.clone()
-      )?;
+    Dex::<T>::create_pool(coin2.clone())?;
+    Dex::<T>::add_liquidity(
+      SystemOrigin::Signed(caller.clone()).into(),
+      native.clone(),
+      coin2.clone(),
+      (500 * ed).into(),
+      1000.into(),
+      0.into(),
+      0.into(),
+      caller.clone(),
+    )?;
 
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin1.clone(),
-        coin2.clone(),
-        200.into(),
-        2000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin2.clone(),
-        coin3.clone(),
-        2000.into(),
-        2000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      path = vec![native.clone(), coin1.clone(), coin2.clone(), coin3.clone()];
-      swap_amount = (ed + ed_bump).into();
-    }
-
-    let path: BoundedVec<_, T::MaxSwapPathLength> = BoundedVec::try_from(path).unwrap();
+    let path = vec![coin1.clone(), native.clone(), coin2.clone()];
+    let path = BoundedVec::<_, T::MaxSwapPathLength>::try_from(path).unwrap();
     let native_balance = T::Currency::balance(&caller);
     let coin1_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(1), &caller);
   }: _(SystemOrigin::Signed(caller.clone()), path, swap_amount, 1.into(), caller.clone())
   verify {
     let ed_bump = 2u64;
-    if !T::AllowMultiCoinPools::get() {
-      let new_coin1_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(1), &caller);
-      assert_eq!(new_coin1_balance, coin1_balance - 100.into());
-    } else {
-      let new_native_balance = T::Currency::balance(&caller);
-      assert_eq!(new_native_balance, native_balance - (ed + ed_bump).into());
-    }
+    let new_coin1_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(1), &caller);
+    assert_eq!(new_coin1_balance, coin1_balance - 100.into());
   }
 
   swap_tokens_for_exact_tokens {
@@ -314,65 +238,23 @@ benchmarks! {
       caller.clone(),
     )?;
 
-    // if we only allow the native-coin pools, then the worst case scenario would be to swap
+    // since we only allow the native-coin pools, then the worst case scenario would be to swap
     // coin1-native-coin2
-    let path = if !T::AllowMultiCoinPools::get() {
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        native.clone(),
-        coin2.clone()
-      )?;
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        native.clone(),
-        coin2.clone(),
-        (500 * ed).into(),
-        1000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      vec![coin1.clone(), native.clone(), coin2.clone()]
-    } else {
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin1.clone(),
-        coin2.clone()
-      )?;
-      let coin3: T::MultiCoinId = T::BenchmarkHelper::coin_id(3).into();
-      let (_, _) = create_coin::<T>(&coin3);
-      Dex::<T>::create_pool(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin2.clone(),
-        coin3.clone()
-      )?;
-
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin1.clone(),
-        coin2.clone(),
-        2000.into(),
-        2000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      Dex::<T>::add_liquidity(
-        SystemOrigin::Signed(caller.clone()).into(),
-        coin2.clone(),
-        coin3.clone(),
-        2000.into(),
-        2000.into(),
-        0.into(),
-        0.into(),
-        caller.clone(),
-      )?;
-      vec![native.clone(), coin1.clone(), coin2.clone(), coin3.clone()]
-    };
+    Dex::<T>::create_pool(coin2.clone())?;
+    Dex::<T>::add_liquidity(
+      SystemOrigin::Signed(caller.clone()).into(),
+      native.clone(),
+      coin2.clone(),
+      (500 * ed).into(),
+      1000.into(),
+      0.into(),
+      0.into(),
+      caller.clone(),
+    )?;
+    let path = vec![coin1.clone(), native.clone(), coin2.clone()];
 
     let path: BoundedVec<_, T::MaxSwapPathLength> = BoundedVec::try_from(path).unwrap();
     let coin2_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(2), &caller);
-    let coin3_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(3), &caller);
   }: _(
     SystemOrigin::Signed(caller.clone()),
     path.clone(),
@@ -381,13 +263,8 @@ benchmarks! {
     caller.clone()
   )
   verify {
-    if !T::AllowMultiCoinPools::get() {
-      let new_coin2_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(2), &caller);
-      assert_eq!(new_coin2_balance, coin2_balance + 100.into());
-    } else {
-      let new_coin3_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(3), &caller);
-      assert_eq!(new_coin3_balance, coin3_balance + 100.into());
-    }
+    let new_coin2_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(2), &caller);
+    assert_eq!(new_coin2_balance, coin2_balance + 100.into());
   }
 
   impl_benchmark_test_suite!(Dex, crate::mock::new_test_ext(), crate::mock::Test);

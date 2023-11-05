@@ -1,12 +1,12 @@
+use sp_core::bounded_vec::BoundedVec;
 use serai_runtime::{
   primitives::{SeraiAddress, Amount, Coin},
   dex, Dex, Runtime,
 };
 
 use subxt::tx::Payload;
-use sp_core::bounded_vec::BoundedVec;
 
-use crate::{TemporalSerai, SeraiError, Composite, scale_composite};
+use crate::{SeraiError, Composite, TemporalSerai, scale_composite};
 
 const PALLET: &str = "Dex";
 
@@ -16,28 +16,9 @@ pub type DexEvent = dex::Event<Runtime>;
 pub struct SeraiDex<'a>(pub(crate) TemporalSerai<'a>);
 impl<'a> SeraiDex<'a> {
   pub async fn all_events(&self) -> Result<Vec<DexEvent>, SeraiError> {
-    self
-      .0
-      .events::<Dex, _>(|event| {
-        matches!(
-          event,
-          DexEvent::PoolCreated { .. } |
-            DexEvent::LiquidityAdded { .. } |
-            DexEvent::SwapExecuted { .. } |
-            DexEvent::LiquidityRemoved { .. } |
-            DexEvent::Transfer { .. }
-        )
-      })
-      .await
+    self.0.events::<Dex, _>(|_| true).await
   }
 
-  pub fn create_pool(coin: Coin) -> Payload<Composite<()>> {
-    Payload::new(
-      PALLET,
-      "create_pool",
-      scale_composite(dex::Call::<Runtime>::create_pool { coin1: coin, coin2: Coin::Serai }),
-    )
-  }
   pub fn add_liquidity(
     coin: Coin,
     coin_amount: Amount,
@@ -69,11 +50,11 @@ impl<'a> SeraiDex<'a> {
     address: SeraiAddress,
   ) -> Payload<Composite<()>> {
     let path = if to_coin.is_native() {
-      BoundedVec::truncate_from(vec![from_coin, Coin::Serai])
+      BoundedVec::try_from(vec![from_coin, Coin::Serai]).unwrap()
     } else if from_coin.is_native() {
-      BoundedVec::truncate_from(vec![Coin::Serai, to_coin])
+      BoundedVec::try_from(vec![Coin::Serai, to_coin]).unwrap()
     } else {
-      BoundedVec::truncate_from(vec![from_coin, Coin::Serai, to_coin])
+      BoundedVec::try_from(vec![from_coin, Coin::Serai, to_coin]).unwrap()
     };
 
     Payload::new(

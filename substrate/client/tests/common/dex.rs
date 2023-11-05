@@ -8,22 +8,6 @@ use subxt::config::extrinsic_params::BaseExtrinsicParamsBuilder;
 use crate::common::{serai, tx::publish_tx};
 
 #[allow(dead_code)]
-pub async fn create_pool(coin: Coin, nonce: u32, pair: Pair) -> [u8; 32] {
-  let serai = serai().await;
-
-  let tx = serai
-    .sign(
-      &PairSigner::new(pair),
-      &SeraiDex::create_pool(coin),
-      nonce,
-      BaseExtrinsicParamsBuilder::new(),
-    )
-    .unwrap();
-
-  publish_tx(&tx).await
-}
-
-#[allow(dead_code)]
 pub async fn add_liquidity(
   coin: Coin,
   coin_amount: Amount,

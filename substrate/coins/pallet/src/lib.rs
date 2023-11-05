@@ -21,7 +21,7 @@ pub mod pallet {
   use primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> + TpConfig {
+  pub trait Config: frame_system::Config<AccountId = Public> {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -74,12 +74,13 @@ pub mod pallet {
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
       // initialize the supply of the coins
-      for c in COINS.iter() {
+      // TODO: Don't use COINS yet GenesisConfig so we can safely expand COINS
+      for c in &COINS {
         Supply::<T>::set(c, 0);
       }
 
       // initialize the genesis accounts
-      for (account, balance) in self.accounts.iter() {
+      for (account, balance) in &self.accounts {
         Pallet::<T>::mint(*account, *balance).unwrap();
       }
     }
@@ -244,10 +245,12 @@ pub mod pallet {
     }
   }
 
+  // TODO: Have DEX implement for Coins, not Coins implement for Coins
   impl<T: Config> CoinsTrait<T::AccountId> for Pallet<T> {
     type Balance = SubstrateAmount;
     type CoinId = Coin;
 
+    // TODO: Swap the order of these arguments
     fn balance(coin: Self::CoinId, of: &Public) -> Self::Balance {
       Self::balance(*of, coin).0
     }
@@ -256,6 +259,7 @@ pub mod pallet {
       1
     }
 
+    // TODO: Move coin next to amount
     fn transfer(
       coin: Self::CoinId,
       from: &Public,
@@ -267,6 +271,7 @@ pub mod pallet {
       Ok(amount)
     }
 
+    // TODO: Move coin next to amount
     fn mint(
       coin: Self::CoinId,
       to: &Public,
@@ -277,7 +282,10 @@ pub mod pallet {
     }
   }
 
-  impl<T: Config> OnChargeTransaction<T> for Pallet<T> {
+  impl<T: Config> OnChargeTransaction<T> for Pallet<T>
+  where
+    T: TpConfig,
+  {
     type Balance = SubstrateAmount;
     type LiquidityInfo = Option<SubstrateAmount>;
 

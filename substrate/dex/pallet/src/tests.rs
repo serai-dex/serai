@@ -19,8 +19,7 @@
 // Please check the current distribution for up-to-date copyright and licensing information.
 
 use crate::{mock::*, *};
-use frame_support::{assert_noop, assert_ok, traits::Get};
-use sp_arithmetic::Permill;
+use frame_support::{assert_noop, assert_ok};
 
 pub use coins_pallet as coins;
 pub use dex_primitives as primitives;
@@ -104,18 +103,14 @@ fn can_create_pool() {
 
     let lp_token = Dex::get_next_pool_coin_id();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(1000) }));
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_1));
+    assert_ok!(Dex::create_pool(token_2));
 
-    let setup_fee = <<Test as Config>::PoolSetupFee as Get<<Test as Config>::Balance>>::get();
-    let pool_account = <<Test as Config>::PoolSetupFeeReceiver as Get<PublicKey>>::get();
-    assert_eq!(balance(user, Coin::native()), 1000 - (setup_fee + coin_account_deposit));
-    assert_eq!(balance(pool_account, Coin::native()), setup_fee);
+    assert_eq!(balance(user, Coin::native()), 1000 - coin_account_deposit);
     assert_eq!(lp_token + 1, Dex::get_next_pool_coin_id());
 
     assert_eq!(
       events(),
       [Event::<Test>::PoolCreated {
-        creator: user,
         pool_id,
         pool_account: Dex::get_pool_account(&pool_id),
         lp_token
@@ -123,52 +118,21 @@ fn can_create_pool() {
     );
     assert_eq!(pools(), vec![pool_id]);
 
-    assert_noop!(
-      Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_1),
-      Error::<Test>::EqualCoins
-    );
-    assert_noop!(
-      Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_2),
-      Error::<Test>::EqualCoins
-    );
-
-    // validate we can create Coin(1)/Coin(2) pool
-    let token_1 = Coin::Bitcoin;
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
-
-    // validate we can force the first coin to be the Native currency only
-    AllowMultiCoinPools::set(&false);
-    let token_1 = Coin::Ether;
-    assert_noop!(
-      Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2),
-      Error::<Test>::PoolMustContainNativeCurrency
-    );
+    assert_noop!(Dex::create_pool(token_1), Error::<Test>::EqualCoins);
   });
 }
 
 #[test]
 fn create_same_pool_twice_should_fail() {
   new_test_ext().execute_with(|| {
-    let user: PublicKey = system_address(b"user1").into();
-    let token_1 = Coin::native();
     let token_2 = Coin::Dai;
 
     let lp_token = Dex::get_next_pool_coin_id();
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_1));
+    assert_ok!(Dex::create_pool(token_2));
     let expected_free = lp_token + 1;
     assert_eq!(expected_free, Dex::get_next_pool_coin_id());
 
-    assert_noop!(
-      Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_1),
-      Error::<Test>::PoolExists
-    );
-    assert_eq!(expected_free, Dex::get_next_pool_coin_id());
-
-    // Try switching the same tokens around:
-    assert_noop!(
-      Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2),
-      Error::<Test>::PoolExists
-    );
+    assert_noop!(Dex::create_pool(token_2), Error::<Test>::PoolExists);
     assert_eq!(expected_free, Dex::get_next_pool_coin_id());
   });
 }
@@ -176,7 +140,6 @@ fn create_same_pool_twice_should_fail() {
 #[test]
 fn different_pools_should_have_different_lp_tokens() {
   new_test_ext().execute_with(|| {
-    let user: PublicKey = system_address(b"user1").into();
     let token_1 = Coin::native();
     let token_2 = Coin::Bitcoin;
     let token_3 = Coin::Ether;
@@ -184,24 +147,22 @@ fn different_pools_should_have_different_lp_tokens() {
     let pool_id_1_3 = (token_1, token_3);
 
     let lp_token2_1 = Dex::get_next_pool_coin_id();
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_1));
+    assert_ok!(Dex::create_pool(token_2));
     let lp_token3_1 = Dex::get_next_pool_coin_id();
 
     assert_eq!(
       events(),
       [Event::<Test>::PoolCreated {
-        creator: user,
         pool_id: pool_id_1_2,
         pool_account: Dex::get_pool_account(&pool_id_1_2),
         lp_token: lp_token2_1
       }]
     );
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_3, token_1));
+    assert_ok!(Dex::create_pool(token_3));
     assert_eq!(
       events(),
       [Event::<Test>::PoolCreated {
-        creator: user,
         pool_id: pool_id_1_3,
         pool_account: Dex::get_pool_account(&pool_id_1_3),
         lp_token: lp_token3_1,
@@ -221,9 +182,9 @@ fn can_add_liquidity() {
     let token_3 = Coin::Monero;
 
     let lp_token1 = Dex::get_next_pool_coin_id();
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
     let lp_token2 = Dex::get_next_pool_coin_id();
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_3));
+    assert_ok!(Dex::create_pool(token_3));
 
     let ed = get_ed();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(10000 * 2 + ed) }));
@@ -296,29 +257,10 @@ fn add_tiny_liquidity_leads_to_insufficient_liquidity_minted_error() {
     let token_1 = Coin::native();
     let token_2 = Coin::Bitcoin;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(1000) }));
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_2, amount: Amount(1000) }));
-
-    // TODO: Following test is stupid, hence it is commented out.
-    // it expects native coin existential deposit to be something more than atomic unit 1,
-    // Otherwise both cases are the same and they expect different outcomes.
-    // So first one fails,and second one passes. But if existential deposit is more than 1,
-    // both of them passes without a problem. Why would you force ED to be more than 1??
-    // assert_noop!(
-    // 	Dex::add_liquidity(
-    // 		RuntimeOrigin::signed(user),
-    // 		token_1,
-    // 		token_2,
-    // 		1,
-    // 		1,
-    // 		1,
-    // 		1,
-    // 		user
-    // 	),
-    // 	Error::<Test>::AmountOneLessThanMinimal
-    // );
 
     assert_noop!(
       Dex::add_liquidity(RuntimeOrigin::signed(user), token_1, token_2, get_ed(), 1, 1, 1, user),
@@ -335,8 +277,8 @@ fn add_tiny_liquidity_directly_to_pool_address() {
     let token_2 = Coin::Ether;
     let token_3 = Coin::Dai;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_3));
+    assert_ok!(Dex::create_pool(token_2));
+    assert_ok!(Dex::create_pool(token_3));
 
     let ed = get_ed();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(10000 * 2 + ed) }));
@@ -383,7 +325,7 @@ fn can_remove_liquidity() {
     let pool_id = (token_1, token_2);
 
     let lp_token = Dex::get_next_pool_coin_id();
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(10000000000) }));
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_2, amount: Amount(100000) }));
@@ -400,7 +342,6 @@ fn can_remove_liquidity() {
     ));
 
     let total_lp_received = pool_balance(user, lp_token);
-    LiquidityWithdrawalFee::set(&Permill::from_percent(10));
 
     assert_ok!(Dex::remove_liquidity(
       RuntimeOrigin::signed(user),
@@ -416,20 +357,19 @@ fn can_remove_liquidity() {
       who: user,
       withdraw_to: user,
       pool_id,
-      amount1: 899991000,
-      amount2: 89999,
+      amount1: 999990000,
+      amount2: 99999,
       lp_token,
       lp_token_burned: total_lp_received,
-      withdrawal_fee: <Test as Config>::LiquidityWithdrawalFee::get()
     }));
 
     let pool_account = Dex::get_pool_account(&pool_id);
-    assert_eq!(balance(pool_account, token_1), 100009000);
-    assert_eq!(balance(pool_account, token_2), 10001);
+    assert_eq!(balance(pool_account, token_1), 10000);
+    assert_eq!(balance(pool_account, token_2), 1);
     assert_eq!(pool_balance(pool_account, lp_token), 100);
 
-    assert_eq!(balance(user, token_1), 10000000000 - 1000000000 + 899991000);
-    assert_eq!(balance(user, token_2), 89999);
+    assert_eq!(balance(user, token_1), 10000000000 - 1000000000 + 999990000);
+    assert_eq!(balance(user, token_2), 99999);
     assert_eq!(pool_balance(user, lp_token), 0);
   });
 }
@@ -442,7 +382,7 @@ fn can_not_redeem_more_lp_tokens_than_were_minted() {
     let token_2 = Coin::Dai;
     let lp_token = Dex::get_next_pool_coin_id();
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(
       user,
@@ -486,7 +426,7 @@ fn can_quote_price() {
     let token_1 = Coin::native();
     let token_2 = Coin::Ether;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(100000) }));
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_2, amount: Amount(1000) }));
@@ -626,7 +566,7 @@ fn quote_price_exact_tokens_for_tokens_matches_execution() {
     let token_1 = Coin::native();
     let token_2 = Coin::Bitcoin;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(100000) }));
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_2, amount: Amount(1000) }));
@@ -672,7 +612,7 @@ fn quote_price_tokens_for_exact_tokens_matches_execution() {
     let token_1 = Coin::native();
     let token_2 = Coin::Monero;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(100000) }));
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_2, amount: Amount(1000) }));
@@ -721,7 +661,7 @@ fn can_swap_with_native() {
     let token_2 = Coin::Ether;
     let pool_id = (token_1, token_2);
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     let ed = get_ed();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(10000 + ed) }));
@@ -765,32 +705,32 @@ fn can_swap_with_realistic_values() {
   new_test_ext().execute_with(|| {
     let user = system_address(b"user1").into();
     let sri = Coin::native();
-    let usd = Coin::Dai;
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), sri, usd));
+    let dai = Coin::Dai;
+    assert_ok!(Dex::create_pool(dai));
 
     const UNIT: u64 = 1_000_000_000;
 
     assert_ok!(CoinsPallet::mint(user, Balance { coin: sri, amount: Amount(300_000 * UNIT) }));
-    assert_ok!(CoinsPallet::mint(user, Balance { coin: usd, amount: Amount(1_100_000 * UNIT) }));
+    assert_ok!(CoinsPallet::mint(user, Balance { coin: dai, amount: Amount(1_100_000 * UNIT) }));
 
     let liquidity_dot = 200_000 * UNIT; // ratio for a 5$ price
-    let liquidity_usd = 1_000_000 * UNIT;
+    let liquidity_dai = 1_000_000 * UNIT;
     assert_ok!(Dex::add_liquidity(
       RuntimeOrigin::signed(user),
       sri,
-      usd,
+      dai,
       liquidity_dot,
-      liquidity_usd,
+      liquidity_dai,
       1,
       1,
       user,
     ));
 
-    let input_amount = 10 * UNIT; // usd
+    let input_amount = 10 * UNIT; // dai
 
     assert_ok!(Dex::swap_exact_tokens_for_tokens(
       RuntimeOrigin::signed(user),
-      bvec![usd, sri],
+      bvec![dai, sri],
       input_amount,
       1,
       user,
@@ -799,7 +739,7 @@ fn can_swap_with_realistic_values() {
     assert!(events().contains(&Event::<Test>::SwapExecuted {
       who: user,
       send_to: user,
-      path: bvec![usd, sri],
+      path: bvec![dai, sri],
       amount_in: 10 * UNIT,      // usd
       amount_out: 1_993_980_120, // About 2 dot after div by UNIT.
     }));
@@ -813,7 +753,7 @@ fn can_not_swap_in_pool_with_no_liquidity_added_yet() {
     let token_1 = Coin::native();
     let token_2 = Coin::Monero;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     // Check can't swap an empty pool
     assert_noop!(
@@ -838,7 +778,7 @@ fn check_no_panic_when_try_swap_close_to_empty_pool() {
     let pool_id = (token_1, token_2);
     let lp_token = Dex::get_next_pool_coin_id();
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     let ed = get_ed();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(10000 + ed) }));
@@ -951,7 +891,7 @@ fn swap_should_not_work_if_too_much_slippage() {
     let token_1 = Coin::native();
     let token_2 = Coin::Ether;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(
       user,
@@ -996,7 +936,7 @@ fn can_swap_tokens_for_exact_tokens() {
     let token_2 = Coin::Dai;
     let pool_id = (token_1, token_2);
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     let ed = get_ed();
     assert_ok!(CoinsPallet::mint(user, Balance { coin: token_1, amount: Amount(20000 + ed) }));
@@ -1054,7 +994,7 @@ fn can_swap_tokens_for_exact_tokens_when_not_liquidity_provider() {
     let pool_id = (token_1, token_2);
     let lp_token = Dex::get_next_pool_coin_id();
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user2), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     let ed = get_ed();
     let base1 = 10000;
@@ -1136,7 +1076,7 @@ fn swap_tokens_for_exact_tokens_should_not_work_if_too_much_slippage() {
     let token_1 = Coin::native();
     let token_2 = Coin::Ether;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     assert_ok!(CoinsPallet::mint(
       user,
@@ -1181,8 +1121,8 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     let token_2 = Coin::Dai;
     let token_3 = Coin::Monero;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_3));
+    assert_ok!(Dex::create_pool(token_2));
+    assert_ok!(Dex::create_pool(token_3));
 
     let ed = get_ed();
     let base1 = 10000;
@@ -1207,9 +1147,9 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     ));
     assert_ok!(Dex::add_liquidity(
       RuntimeOrigin::signed(user),
-      token_2,
+      token_1,
       token_3,
-      liquidity2,
+      liquidity1,
       liquidity3,
       1,
       1,
@@ -1217,8 +1157,8 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     ));
 
     let input_amount = 500;
-    let expect_out2 = Dex::get_amount_out(&input_amount, &liquidity1, &liquidity2).ok().unwrap();
-    let expect_out3 = Dex::get_amount_out(&expect_out2, &liquidity2, &liquidity3).ok().unwrap();
+    let expect_out2 = Dex::get_amount_out(&input_amount, &liquidity2, &liquidity1).ok().unwrap();
+    let expect_out3 = Dex::get_amount_out(&expect_out2, &liquidity1, &liquidity3).ok().unwrap();
 
     assert_noop!(
       Dex::swap_exact_tokens_for_tokens(
@@ -1234,7 +1174,7 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     assert_noop!(
       Dex::swap_exact_tokens_for_tokens(
         RuntimeOrigin::signed(user),
-        bvec![token_1, token_2, token_3, token_2],
+        bvec![token_2, token_1, token_2],
         input_amount,
         80,
         user,
@@ -1244,21 +1184,21 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
 
     assert_ok!(Dex::swap_exact_tokens_for_tokens(
       RuntimeOrigin::signed(user),
-      bvec![token_1, token_2, token_3],
+      bvec![token_2, token_1, token_3],
       input_amount, // amount_in
       80,           // amount_out_min
       user,
     ));
 
     let pool_id1 = (token_1, token_2);
-    let pool_id2 = (token_2, token_3);
+    let pool_id2 = (token_1, token_3);
     let pallet_account1 = Dex::get_pool_account(&pool_id1);
     let pallet_account2 = Dex::get_pool_account(&pool_id2);
 
-    assert_eq!(balance(user, token_1), base1 + ed - input_amount);
-    assert_eq!(balance(pallet_account1, token_1), liquidity1 + input_amount);
-    assert_eq!(balance(pallet_account1, token_2), liquidity2 - expect_out2);
-    assert_eq!(balance(pallet_account2, token_2), liquidity2 + expect_out2);
+    assert_eq!(balance(user, token_2), base2 - liquidity2 - input_amount);
+    assert_eq!(balance(pallet_account1, token_2), liquidity2 + input_amount);
+    assert_eq!(balance(pallet_account1, token_1), liquidity1 - expect_out2);
+    assert_eq!(balance(pallet_account2, token_1), liquidity1 + expect_out2);
     assert_eq!(balance(pallet_account2, token_3), liquidity3 - expect_out3);
     assert_eq!(balance(user, token_3), 10000 - liquidity3 + expect_out3);
   });
@@ -1272,8 +1212,8 @@ fn swap_tokens_for_exact_tokens_in_multi_hops() {
     let token_2 = Coin::Bitcoin;
     let token_3 = Coin::Ether;
 
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_2, token_3));
+    assert_ok!(Dex::create_pool(token_2));
+    assert_ok!(Dex::create_pool(token_3));
 
     let ed = get_ed();
     let base1 = 10000;
@@ -1298,9 +1238,9 @@ fn swap_tokens_for_exact_tokens_in_multi_hops() {
     ));
     assert_ok!(Dex::add_liquidity(
       RuntimeOrigin::signed(user),
-      token_2,
+      token_1,
       token_3,
-      liquidity2,
+      liquidity1,
       liquidity3,
       1,
       1,
@@ -1308,26 +1248,26 @@ fn swap_tokens_for_exact_tokens_in_multi_hops() {
     ));
 
     let exchange_out3 = 100;
-    let expect_in2 = Dex::get_amount_in(&exchange_out3, &liquidity2, &liquidity3).ok().unwrap();
-    let expect_in1 = Dex::get_amount_in(&expect_in2, &liquidity1, &liquidity2).ok().unwrap();
+    let expect_in2 = Dex::get_amount_in(&exchange_out3, &liquidity1, &liquidity3).ok().unwrap();
+    let expect_in1 = Dex::get_amount_in(&expect_in2, &liquidity2, &liquidity1).ok().unwrap();
 
     assert_ok!(Dex::swap_tokens_for_exact_tokens(
       RuntimeOrigin::signed(user),
-      bvec![token_1, token_2, token_3],
+      bvec![token_2, token_1, token_3],
       exchange_out3, // amount_out
       1000,          // amount_in_max
       user,
     ));
 
     let pool_id1 = (token_1, token_2);
-    let pool_id2 = (token_2, token_3);
+    let pool_id2 = (token_1, token_3);
     let pallet_account1 = Dex::get_pool_account(&pool_id1);
     let pallet_account2 = Dex::get_pool_account(&pool_id2);
 
-    assert_eq!(balance(user, token_1), base1 + ed - expect_in1);
-    assert_eq!(balance(pallet_account1, token_1), liquidity1 + expect_in1);
-    assert_eq!(balance(pallet_account1, token_2), liquidity2 - expect_in2);
-    assert_eq!(balance(pallet_account2, token_2), liquidity2 + expect_in2);
+    assert_eq!(balance(user, token_2), base2 - liquidity2 - expect_in1);
+    assert_eq!(balance(pallet_account1, token_1), liquidity1 - expect_in2);
+    assert_eq!(balance(pallet_account1, token_2), liquidity2 + expect_in1);
+    assert_eq!(balance(pallet_account2, token_1), liquidity1 + expect_in2);
     assert_eq!(balance(pallet_account2, token_3), liquidity3 - exchange_out3);
     assert_eq!(balance(user, token_3), 10000 - liquidity3 + exchange_out3);
   });
@@ -1439,7 +1379,7 @@ fn cannot_block_pool_creation() {
     }
 
     // User can still create the pool
-    assert_ok!(Dex::create_pool(RuntimeOrigin::signed(user), token_1, token_2));
+    assert_ok!(Dex::create_pool(token_2));
 
     // User has to transfer one Coin(2) token to the pool account (otherwise add_liquidity will
     // fail with `CoinTwoDepositDidNotMeetMinimum`), also transfer native token for the same error.
