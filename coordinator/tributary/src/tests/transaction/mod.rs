@@ -16,7 +16,7 @@ use scale::Encode;
 
 use ::tendermint::{
   ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber},
-  SignedMessageFor, DataFor, Message, SignedMessage, Data,
+  SignedMessageFor, DataFor, Message, SignedMessage, Data, Evidence,
 };
 
 use crate::{
@@ -212,5 +212,5 @@ pub async fn random_evidence_tx<N: Network>(
   let data = Data::Proposal(Some(RoundNumber(0)), b);
   let signer_id = signer.validator_id().await.unwrap();
   let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
-  TendermintTx::SlashEvidence((signed, None::<SignedMessageFor<N>>).encode())
+  TendermintTx::SlashEvidence(Evidence::InvalidValidRound(signed.encode()))
 }

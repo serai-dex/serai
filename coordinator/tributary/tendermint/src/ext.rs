@@ -282,7 +282,7 @@ pub trait Network: Sized + Send + Sync {
   /// Trigger a slash for the validator in question who was definitively malicious.
   ///
   /// The exact process of triggering a slash is undefined and left to the network as a whole.
-  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent<Self>);
+  async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent);
 
   /// Validate a block.
   async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;

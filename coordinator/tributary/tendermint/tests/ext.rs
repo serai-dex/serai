@@ -137,7 +137,7 @@ impl Network for TestNetwork {
     }
   }
 
-  async fn slash(&mut self, _: TestValidatorId, _: SlashEvent<Self>) {
+  async fn slash(&mut self, _: TestValidatorId, _: SlashEvent) {
     dbg!("Slash");
     todo!()
   }

@@ -1,8 +1,9 @@
 use std::{sync::Arc, collections::HashMap};
 
 use log::debug;
+use parity_scale_codec::Encode;
 
-use crate::{ext::*, RoundNumber, Step, Data, DataFor, TendermintError, SignedMessageFor};
+use crate::{ext::*, RoundNumber, Step, Data, DataFor, TendermintError, SignedMessageFor, Evidence};
 
 type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, SignedMessageFor<N>>>;
 pub(crate) struct MessageLog<N: Network> {
@@ -33,7 +34,10 @@ impl<N: Network> MessageLog<N> {
           target: "tendermint",
           "Validator sent multiple messages for the same block + round + step"
         );
-        Err(TendermintError::Malicious(msg.sender, Some(existing.clone())))?;
+        Err(TendermintError::Malicious(
+          msg.sender,
+          Some(Evidence::ConflictingMessages(existing.encode(), signed.encode())),
+        ))?;
       }
       return Ok(false);
     }
@@ -44,7 +48,10 @@ impl<N: Network> MessageLog<N> {
         if let Data::Precommit(Some((prev_hash, _))) = prev.msg.data {
           if hash != prev_hash {
             debug!(target: "tendermint", "Validator precommitted to multiple blocks");
-            Err(TendermintError::Malicious(msg.sender, Some(prev.clone())))?;
+            Err(TendermintError::Malicious(
+              msg.sender,
+              Some(Evidence::ConflictingPrecommit(prev.encode(), signed.encode())),
+            ))?;
           }
         } else {
           panic!("message in precommitted wasn't Precommit");

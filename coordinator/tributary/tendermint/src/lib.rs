@@ -104,7 +104,7 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum TendermintError<N: Network> {
-  Malicious(N::ValidatorId, Option<SignedMessageFor<N>>),
+  Malicious(N::ValidatorId, Option<Evidence>),
   Temporal,
   AlreadyHandled,
 }
@@ -131,13 +131,18 @@ pub enum SlashReason {
   InvalidMessage,
 }
 
-// TODO: Move WithEvidence to a proper Evidence enum, denoting the explicit reason its faulty
-// This greatly simplifies the checking process and prevents new-reasons added here not being
-// handled elsewhere
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+pub enum Evidence {
+  ConflictingMessages(Vec<u8>, Vec<u8>),
+  ConflictingPrecommit(Vec<u8>, Vec<u8>),
+  InvalidPrecommit(Vec<u8>),
+  InvalidValidRound(Vec<u8>),
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum SlashEvent<N: Network> {
+pub enum SlashEvent {
   Id(SlashReason, u64, u32),
-  WithEvidence(SignedMessageFor<N>, Option<SignedMessageFor<N>>),
+  WithEvidence(Evidence),
 }
 
 /// A machine executing the Tendermint protocol.
@@ -266,7 +271,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     self.reset(round, proposal).await;
   }
 
-  async fn slash(&mut self, validator: N::ValidatorId, slash_event: SlashEvent<N>) {
+  async fn slash(&mut self, validator: N::ValidatorId, slash_event: SlashEvent) {
     // TODO: If the new slash event has evidence, emit to prevent a low-importance slash from
     // cancelling emission of high-importance slashes
     if !self.block.slashes.contains(&validator) {
@@ -500,12 +505,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
             log::trace!("added block {} (produced by machine)", hex::encode(id.as_ref()));
             self.reset(msg.round, proposal).await;
           }
-          Err(TendermintError::Malicious(sender, evidence_msg)) => {
+          Err(TendermintError::Malicious(sender, evidence)) => {
             let current_msg = SignedMessage { msg: msg.clone(), sig: sig.clone() };
 
-            let slash = if let Some(old_msg) = evidence_msg {
+            let slash = if let Some(ev) = evidence {
               // if the malicious message contains a block, only vote to slash
               // TODO: Should this decision be made at a higher level?
+              // A higher-level system may be able to verify if the contained block is fatally
+              // invalid
+              // A higher-level system may accept the bandwidth size of this, even if the issue is
+              // just the valid round field
               if let Data::Proposal(_, _) = &current_msg.msg.data {
                 SlashEvent::Id(
                   SlashReason::InvalidBlock,
@@ -513,11 +522,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
                   self.block.round().number.0,
                 )
               } else {
-                // if old msg and new msg is not the same, use both as evidence.
-                SlashEvent::WithEvidence(
-                  old_msg.clone(),
-                  if old_msg != current_msg { Some(current_msg.clone()) } else { None },
-                )
+                // slash with evidence otherwise
+                SlashEvent::WithEvidence(ev)
               }
             } else {
               // we don't have evidence. Slash with vote.
@@ -563,7 +569,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
         if !self.validators.verify(msg.sender, &commit_msg(end_time.canonical(), id.as_ref()), sig)
         {
           log::warn!(target: "tendermint", "Validator produced an invalid commit signature");
-          Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
+          Err(TendermintError::Malicious(
+            msg.sender,
+            Some(Evidence::InvalidPrecommit(signed.encode())),
+          ))?;
         }
         return Ok(true);
       }
@@ -676,7 +685,12 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 .unwrap();
 
               // Slash the validator for publishing an invalid commit signature
-              self.slash(*validator, SlashEvent::WithEvidence(msg, None)).await;
+              self
+                .slash(
+                  *validator,
+                  SlashEvent::WithEvidence(Evidence::InvalidPrecommit(msg.encode())),
+                )
+                .await;
             }
           }
         }
@@ -760,7 +774,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // Malformed message
         if vr.0 >= self.block.round().number.0 {
           log::warn!(target: "tendermint", "Validator claimed a round from the future was valid");
-          Err(TendermintError::Malicious(msg.sender, Some(signed.clone())))?;
+          Err(TendermintError::Malicious(
+            msg.sender,
+            Some(Evidence::InvalidValidRound(signed.encode())),
+          ))?;
         }
 
         if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {
