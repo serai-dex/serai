@@ -146,6 +146,8 @@ async fn evidence_with_prevote() {
           .await
           .encode(),
       )));
+      // Since these require a second message, provide this one again
+      // ConflictingMessages can be fired for actually conflicting Prevotes however
       txs.push(TendermintTx::SlashEvidence(Evidence::ConflictingMessages(
         signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
           .await
@@ -166,7 +168,7 @@ async fn evidence_with_prevote() {
     }
   };
 
-  // No prevote message should be valid as slash evidence at this time
+  // No prevote message alone should be valid as slash evidence at this time
   for prevote in prevote(None).await {
     assert!(verify_tendermint_tx::<N>(&prevote, validators.clone(), commit).is_err());
   }
