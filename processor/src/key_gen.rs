@@ -39,7 +39,7 @@ create_db!(
   }
 );
 
-impl KeysDb {
+impl GeneratedKeysDb {
   #[allow(clippy::type_complexity)]
   fn read_keys<N: Network>(
     getter: &impl Get,
@@ -59,14 +59,39 @@ impl KeysDb {
     Some((keys_vec, (substrate_keys, network_keys)))
   }
 
+  fn save_keys<N: Network>(
+    txn: &mut impl DbTxn,
+    id: &KeyGenId,
+    substrate_keys: &[ThresholdCore<Ristretto>],
+    network_keys: &[ThresholdKeys<N::Curve>],
+  ) {
+    let mut keys = Zeroizing::new(vec![]);
+    for (substrate_keys, network_keys) in substrate_keys.iter().zip(network_keys) {
+      keys.extend(substrate_keys.serialize().as_slice());
+      keys.extend(network_keys.serialize().as_slice());
+    }
+    txn.put(
+      Self::key(
+        &id.set,
+        &substrate_keys[0].group_key().to_bytes(),
+        network_keys[0].group_key().to_bytes().as_ref(),
+      ),
+      keys,
+    );
+  }
+}
+
+impl KeysDb {
   fn confirm_keys<N: Network>(
     txn: &mut impl DbTxn,
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>) {
-    let (keys_vec, keys) =
-      Self::read_keys(txn, &Self::generated_keys_key(set, (&key_pair.0 .0, key_pair.1.as_ref())))
-        .unwrap();
+    let (keys_vec, keys) = GeneratedKeysDb::read_keys::<N>(
+      txn,
+      &GeneratedKeysDb::key(&set, &key_pair.0 .0, key_pair.1.as_ref()),
+    )
+    .unwrap();
     assert_eq!(key_pair.0 .0, keys.0[0].group_key().to_bytes());
     assert_eq!(
       {
@@ -84,40 +109,10 @@ impl KeysDb {
     getter: &impl Get,
     key: &<N::Curve as Ciphersuite>::G,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
-    let res = Self::read_keys::<N>(getter, &KeysDb::key(&key.to_bytes().as_ref().into()))?.1;
+    let res =
+      GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&key.to_bytes().as_ref().into()))?.1;
     assert_eq!(&res.1[0].group_key(), key);
     Some(res)
-  }
-}
-impl GeneratedKeysDb {
-  fn save_keys<N: Network>(
-    txn: &mut impl DbTxn,
-    id: &KeyGenId,
-    substrate_keys: &ThresholdCore<Ristretto>,
-    network_keys: &ThresholdKeys<N::Curve>,
-  ) {
-    let mut keys = substrate_keys.serialize();
-    keys.extend(network_keys.serialize().iter());
-    txn.put(
-      Self::key(
-        &id.set,
-        &substrate_keys.group_key().to_bytes(),
-        network_keys.group_key().to_bytes().as_ref(),
-      ),
-      keys,
-    );
-  }
-}
-impl GeneratedKeysDb {
-  fn save_keys<N: Network>(
-    txn: &mut impl DbTxn,
-    id: &KeyGenId,
-    substrate_keys: &ThresholdCore<Ristretto>,
-    network_keys: &ThresholdKeys<N::Curve>,
-  ) {
-    let mut keys = substrate_keys.serialize();
-    keys.extend(network_keys.serialize().iter());
-    txn.put(Self::key(&id.set, &substrate_keys.group_key().to_bytes(), network_keys.group_key().to_bytes().as_ref()), keys);
   }
 }
 
@@ -152,14 +147,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     key: &<N::Curve as Ciphersuite>::G,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
     // This is safe, despite not having a txn, since it's a static value
-    // The only concern is it may not be set when expected, or it may be set unexpectedly
-    //
-    // They're only expected to be set on boot, if confirmed. If they were confirmed yet the
-    // transaction wasn't committed, their confirmation will be re-handled
-    //
-    // The only other concern is if it's set when it's not safe to use
-    // The keys are only written on confirmation, and the transaction writing them is atomic to
-    // every associated operation
+    // It doesn't change over time/in relation to other operations
     KeysDb::keys::<N>(&self.db, key)
   }
 
@@ -288,7 +276,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           self.active_share.remove(&id.set).is_none()
         {
           // If we haven't handled this set before, save the params
-          ParamsDb::set(txn, &id.set, &params, shares);
+          ParamsDb::set(txn, &id.set, &(params, shares));
         }
 
         let (machines, commitments) = key_gen_machines(id, params, shares);
@@ -335,7 +323,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         // Same commentary on inconsistency as above exists
         let (machines, our_shares) = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let prior = key_gen_machines(id, params, share_quantity);
-          secret_share_machines(id, params, prior, CommitmentsDb::get::<N>(txn, &id))
+          secret_share_machines(id, params, prior, CommitmentsDb::get(txn, &id).unwrap())
         });
 
         let mut rng = share_rng(id);
@@ -429,14 +417,14 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     set: ValidatorSet,
     key_pair: KeyPair,
   ) -> KeyConfirmed<N::Curve> {
-    let (substrate_keys, network_keys) = KeysDb::confirm_keys::<N>(txn, set, key_pair);
-
     info!(
       "Confirmed key pair {} {} for set {:?}",
       hex::encode(key_pair.0),
-      hex::encode(key_pair.1),
+      hex::encode(&key_pair.1),
       set,
     );
+
+    let (substrate_keys, network_keys) = KeysDb::confirm_keys::<N>(txn, set, key_pair);
 
     KeyConfirmed { substrate_keys, network_keys }
   }
