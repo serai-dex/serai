@@ -8,7 +8,6 @@ notice = "warn"
 unmaintained = "warn"
 
 ignore = [
-  "RUSTSEC-2020-0071", # https://github.com/chronotope/chrono/issues/602
   "RUSTSEC-2021-0139", # https://github.com/serai-dex/serai/228
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
 ]

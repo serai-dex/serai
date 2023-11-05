@@ -44,7 +44,8 @@ jobs:
             -p serai-processor \
             -p tendermint-machine \
             -p tributary-chain \
-            -p serai-coordinator
+            -p serai-coordinator \
+            -p serai-docker-tests
 
   test-substrate:
     runs-on: ubuntu-latest
