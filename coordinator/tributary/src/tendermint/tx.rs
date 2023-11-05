@@ -1,6 +1,6 @@
 use std::io;
 
-use scale::{Decode, Encode};
+use scale::{Encode, Decode, IoReader};
 
 use blake2::{Digest, Blake2s256};
 
@@ -29,18 +29,14 @@ pub enum TendermintTx {
 
 impl ReadWrite for TendermintTx {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    // TODO: Since reader itself is a slice, there should be a better way of passing it to
-    // decode directly.
-    let mut input = Vec::new();
-    reader.read_to_end(&mut input)?;
-    let ev = Evidence::decode(&mut input.as_slice())
-      .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid evidence format"))?;
-    Ok(TendermintTx::SlashEvidence(ev))
+    Evidence::decode(&mut IoReader(reader))
+      .map(TendermintTx::SlashEvidence)
+      .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid evidence format"))
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      TendermintTx::SlashEvidence(ev) => writer.write_all(ev.encode().as_slice()),
+      TendermintTx::SlashEvidence(ev) => writer.write_all(&ev.encode()),
     }
   }
 }
@@ -67,21 +63,12 @@ impl Transaction for TendermintTx {
   }
 }
 
-pub fn decode_signed_message<N: Network>(
-  mut data: &[u8],
-) -> Result<SignedMessageFor<N>, TransactionError> {
-  SignedMessageFor::<N>::decode(&mut data).map_err(|_| {
-    dbg!("failed to decode");
-    TransactionError::InvalidContent
-  })
-}
-
 fn decode_and_verify_signed_message<N: Network>(
-  data: &[u8],
+  mut data: &[u8],
   schema: &N::SignatureScheme,
 ) -> Result<SignedMessageFor<N>, TransactionError> {
-  // decode
-  let msg = decode_signed_message::<N>(data)?;
+  let msg =
+    SignedMessageFor::<N>::decode(&mut data).map_err(|_| TransactionError::InvalidContent)?;
 
   // verify that evidence messages are signed correctly
   if !msg.verify_signature(schema) {
@@ -146,49 +133,47 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
         Evidence::InvalidPrecommit(msg) => {
           let msg = decode_and_verify_signed_message::<N>(msg, &schema)?.msg;
 
-          if let Data::Precommit(Some((id, sig))) = &msg.data {
-            // TODO: We need to be passed in the genesis time to handle this edge case
-            if msg.block.0 == 0 {
-              todo!("invalid precommit signature on first block")
-            }
+          let Data::Precommit(Some((id, sig))) = &msg.data else {
+            Err(TransactionError::InvalidContent)?
+          };
+          // TODO: We need to be passed in the genesis time to handle this edge case
+          if msg.block.0 == 0 {
+            todo!("invalid precommit signature on first block")
+          }
 
-            // get the last commit
-            // TODO: Why do we use u32 when Tendermint uses u64?
-            let prior_commit = match u32::try_from(msg.block.0 - 1) {
-              Ok(n) => match commit(n) {
-                Some(c) => c,
-                // If we have yet to sync the block in question, we will return InvalidContent based
-                // on our own temporal ambiguity
-                // This will also cause an InvalidContent for anything using a non-existent block,
-                // yet that's valid behavior
-                // TODO: Double check the ramifications of this
-                _ => Err(TransactionError::InvalidContent)?,
-              },
+          // get the last commit
+          // TODO: Why do we use u32 when Tendermint uses u64?
+          let prior_commit = match u32::try_from(msg.block.0 - 1) {
+            Ok(n) => match commit(n) {
+              Some(c) => c,
+              // If we have yet to sync the block in question, we will return InvalidContent based
+              // on our own temporal ambiguity
+              // This will also cause an InvalidContent for anything using a non-existent block,
+              // yet that's valid behavior
+              // TODO: Double check the ramifications of this
               _ => Err(TransactionError::InvalidContent)?,
-            };
+            },
+            _ => Err(TransactionError::InvalidContent)?,
+          };
 
-            // calculate the end time till the msg round
-            let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
-            for r in 0 ..= msg.round.0 {
-              last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
-            }
+          // calculate the end time till the msg round
+          let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
+          for r in 0 ..= msg.round.0 {
+            last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
+          }
 
-            // verify that the commit was actually invalid
-            if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
-              Err(TransactionError::InvalidContent)?
-            }
-          } else {
+          // verify that the commit was actually invalid
+          if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
             Err(TransactionError::InvalidContent)?
           }
         }
         Evidence::InvalidValidRound(msg) => {
           let msg = decode_and_verify_signed_message::<N>(msg, &schema)?.msg;
 
-          if let Data::Proposal(vr, _) = &msg.data {
-            if vr.is_none() || vr.unwrap().0 < msg.round.0 {
-              Err(TransactionError::InvalidContent)?
-            }
-          } else {
+          let Data::Proposal(Some(vr), _) = &msg.data else {
+            Err(TransactionError::InvalidContent)?
+          };
+          if vr.0 < msg.round.0 {
             Err(TransactionError::InvalidContent)?
           }
         }
