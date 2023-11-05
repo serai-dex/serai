@@ -28,12 +28,11 @@ mod binaries {
   #[allow(clippy::type_complexity)]
   mod clippy {
     use super::*;
-    lazy_static::lazy_static! {
-      pub(crate) static ref KEYS: Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-      pub(crate) static ref QUEUES: Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-    }
+    use once_cell::sync::Lazy;
+    pub(crate) static KEYS: Lazy<Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>>> =
+      Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+    pub(crate) static QUEUES: Lazy<Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>>> =
+      Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
   }
   pub(crate) use self::clippy::*;
 

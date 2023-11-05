@@ -53,6 +53,8 @@ use crate::{
   Payment,
 };
 
+use once_cell::sync::Lazy;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OutputId(pub [u8; 36]);
 impl Default for OutputId {
@@ -259,10 +261,8 @@ impl BlockTrait<Bitcoin> for Block {
 }
 
 const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
-lazy_static::lazy_static! {
-  static ref BRANCH_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"branch");
-  static ref CHANGE_OFFSET: Scalar = Secp256k1::hash_to_F(KEY_DST, b"change");
-}
+static BRANCH_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"branch"));
+static CHANGE_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"change"));
 
 // Always construct the full scanner in order to ensure there's no collisions
 fn scanner(

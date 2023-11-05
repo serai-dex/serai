@@ -16,9 +16,7 @@ mod addresses;
 pub(crate) use addresses::test_addresses;
 
 // Effective Once
-lazy_static::lazy_static! {
-  static ref INIT_LOGGER: () = env_logger::init();
-}
+static INIT_LOGGER: once_cell::sync::Lazy<()> = once_cell::sync::Lazy::new(env_logger::init);
 
 #[macro_export]
 macro_rules! test_network {
