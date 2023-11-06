@@ -150,18 +150,6 @@ pub struct CallFilter;
 impl Contains<RuntimeCall> for CallFilter {
   fn contains(call: &RuntimeCall) -> bool {
     match call {
-      RuntimeCall::System(call) => match call {
-        system::Call::remark { .. } => false,
-        system::Call::set_heap_pages { .. } => false,
-        system::Call::set_code { .. } => false,
-        system::Call::set_code_without_checks { .. } => false,
-        system::Call::set_storage { .. } => false,
-        system::Call::kill_storage { .. } => false,
-        system::Call::kill_prefix { .. } => false,
-        system::Call::remark_with_event { .. } => false,
-        system::Call::__Ignore(_, _) => false,
-      },
-
       RuntimeCall::Timestamp(call) => match call {
         timestamp::Call::set { .. } => true,
         timestamp::Call::__Ignore(_, _) => false,
@@ -369,7 +357,7 @@ pub type Executive = frame_executive::Executive<
 
 construct_runtime!(
   pub enum Runtime {
-    System: system,
+    System: system exclude_parts { Call },
 
     Timestamp: timestamp,
 
