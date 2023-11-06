@@ -33,15 +33,15 @@ pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
 #[cfg(feature = "std")]
 mod frost_crypto {
   use core::fmt::Debug;
-  use std_shims::{sync::OnceLock, vec::Vec, io};
+  use std_shims::{vec::Vec, io};
 
   use zeroize::Zeroizing;
   use rand_core::{RngCore, CryptoRng};
 
-  use sha2::{Digest, Sha256};
+  use bitcoin::hashes::{HashEngine, Hash, sha256::Hash as Sha256};
+
   use transcript::Transcript;
 
-  use secp256k1::schnorr::Signature;
   use k256::{elliptic_curve::ops::Reduce, U256, Scalar};
 
   use frost::{
@@ -59,27 +59,22 @@ mod frost_crypto {
   /// If the key is odd, this will panic.
   #[derive(Clone, Copy, Debug)]
   pub struct Hram;
-
-  static TAG_HASH_CELL: OnceLock<[u8; 32]> = OnceLock::new();
-  #[allow(non_snake_case)]
-  fn TAG_HASH() -> [u8; 32] {
-    *TAG_HASH_CELL.get_or_init(|| Sha256::digest(b"BIP0340/challenge").into())
-  }
-
   #[allow(non_snake_case)]
   impl HramTrait<Secp256k1> for Hram {
     fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
       // Convert the nonce to be even
       let (R, _) = make_even(*R);
 
-      let mut data = Sha256::new();
-      data.update(TAG_HASH());
-      data.update(TAG_HASH());
-      data.update(x(&R));
-      data.update(x(A));
-      data.update(m);
+      const TAG_HASH: Sha256 = Sha256::const_hash(b"BIP0340/challenge");
 
-      Scalar::reduce(U256::from_be_slice(&data.finalize()))
+      let mut data = Sha256::engine();
+      data.input(TAG_HASH.as_ref());
+      data.input(TAG_HASH.as_ref());
+      data.input(&x(&R));
+      data.input(&x(A));
+      data.input(m);
+
+      Scalar::reduce(U256::from_be_slice(Sha256::from_engine(data).as_ref()))
     }
   }
 
@@ -98,7 +93,7 @@ mod frost_crypto {
   impl<T: Sync + Clone + Debug + Transcript> Algorithm<Secp256k1> for Schnorr<T> {
     type Transcript = T;
     type Addendum = ();
-    type Signature = Signature;
+    type Signature = [u8; 64];
 
     fn transcript(&mut self) -> &mut Self::Transcript {
       self.0.transcript()
@@ -152,9 +147,8 @@ mod frost_crypto {
         (sig.R, offset) = make_even(sig.R);
         // s = r + cx. Since we added to the r, add to s
         sig.s += Scalar::from(offset);
-        // Convert to a secp256k1 signature
-        Signature::from_slice(&sig.serialize()[1 ..])
-          .expect("couldn't convert SchnorrSignature to Signature")
+        // Convert to a Bitcoin signature by dropping the byte for the point's sign bit
+        sig.serialize()[1 ..].try_into().unwrap()
       })
     }
 

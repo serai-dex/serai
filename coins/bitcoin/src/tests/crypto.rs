@@ -1,8 +1,6 @@
 use rand_core::OsRng;
 
-use sha2::{Digest, Sha256};
-
-use secp256k1::{Secp256k1 as BContext, Message};
+use secp256k1::{Secp256k1 as BContext, Message, schnorr::Signature};
 
 use k256::Scalar;
 use transcript::{Transcript, RecommendedTranscript};
@@ -34,12 +32,13 @@ fn test_algorithm() {
     algo.clone(),
     keys.clone(),
     algorithm_machines(&mut OsRng, algo, &keys),
-    &Sha256::digest(MESSAGE),
+    Hash::hash(MESSAGE).as_ref(),
   );
 
   BContext::new()
     .verify_schnorr(
-      &sig,
+      &Signature::from_slice(&sig)
+        .expect("couldn't convert produced signature to secp256k1::Signature"),
       &Message::from(Hash::hash(MESSAGE)),
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )

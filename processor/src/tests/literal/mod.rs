@@ -50,9 +50,14 @@ mod bitcoin {
 
   async fn bitcoin(ops: &DockerOperations) -> Bitcoin {
     let handle = ops.handle("serai-dev-bitcoin").host_port(8332).unwrap();
-    // TODO: Replace with a check if the node has booted
-    tokio::time::sleep(core::time::Duration::from_secs(20)).await;
-    let bitcoin = Bitcoin::new(format!("http://serai:seraidex@{}:{}", handle.0, handle.1)).await;
+    let url = format!("http://serai:seraidex@{}:{}", handle.0, handle.1);
+    for _ in 0 .. 20 {
+      if bitcoin_serai::rpc::Rpc::new(url.clone()).await.is_ok() {
+        break;
+      }
+      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+    }
+    let bitcoin = Bitcoin::new(url).await;
     bitcoin.fresh_chain().await;
     bitcoin
   }
