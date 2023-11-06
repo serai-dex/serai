@@ -2,7 +2,7 @@ FROM rust:1.73-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Upgrade and add dev dependencies
-RUN apt update && apt upgrade -y && apt install -y pkg-config clang libssl-dev && apt autoremove -y && apt clean
+RUN apt update && apt upgrade -y && apt install -y pkg-config clang && apt autoremove -y && apt clean
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
@@ -51,8 +51,8 @@ FROM debian:bookworm-slim as image
 COPY --from=mimalloc libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
-# Upgrade packages and install openssl
-RUN apt update && apt upgrade -y && apt install -y libssl-dev && apt autoremove && apt clean
+# Upgrade packages and install ca-certificates
+RUN apt update && apt upgrade -y && apt install -y ca-certificates && apt autoremove && apt clean
 
 # Switch to a non-root user
 RUN useradd --system --create-home --shell /sbin/nologin coordinator

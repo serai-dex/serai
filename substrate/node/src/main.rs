@@ -1,7 +1,6 @@
 mod chain_spec;
 mod service;
 
-mod command_helper;
 mod command;
 
 mod rpc;

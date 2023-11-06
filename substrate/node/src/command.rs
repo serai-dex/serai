@@ -5,12 +5,11 @@ use serai_runtime::Block;
 use sc_service::{PruningMode, PartialComponents};
 
 use sc_cli::SubstrateCli;
-use frame_benchmarking_cli::{ExtrinsicFactory, BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
+use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 
 use crate::{
   chain_spec,
   cli::{Cli, Subcommand},
-  command_helper::{RemarkBuilder, inherent_benchmark_data},
   service::{self, FullClient},
 };
 
@@ -110,26 +109,9 @@ pub fn run() -> sc_cli::Result<()> {
         cmd.run(config, client, backend.expose_db(), backend.expose_storage())
       }
 
-      BenchmarkCmd::Overhead(cmd) => {
-        let client = service::new_partial(&config)?.client;
-        cmd.run(
-          config,
-          client.clone(),
-          inherent_benchmark_data()?,
-          vec![],
-          &RemarkBuilder::new(client),
-        )
-      }
+      BenchmarkCmd::Overhead(_) => Err("Overhead benchmarking isn't supported.".into()),
 
-      BenchmarkCmd::Extrinsic(cmd) => {
-        let client = service::new_partial(&config)?.client;
-        cmd.run(
-          client.clone(),
-          inherent_benchmark_data()?,
-          vec![],
-          &ExtrinsicFactory(vec![Box::new(RemarkBuilder::new(client))]),
-        )
-      }
+      BenchmarkCmd::Extrinsic(_) => Err("Extrinsic benchmarking isn't supported.".into()),
 
       BenchmarkCmd::Machine(cmd) => cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
     }),
