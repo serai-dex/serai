@@ -1,25 +1,25 @@
-use core::str::FromStr;
+use std::io::Read;
 
 use async_trait::async_trait;
 
 use digest_auth::AuthContext;
-use hyper::{
-  Uri, header::HeaderValue, Request, service::Service, client::connect::HttpConnector, Client,
+use simple_request::{
+  hyper::{header::HeaderValue, Request},
+  Client,
 };
-use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 
 use crate::rpc::{RpcError, RpcConnection, Rpc};
 
 #[derive(Clone, Debug)]
 enum Authentication {
   // If unauthenticated, reuse a single client
-  Unauthenticated(Client<HttpsConnector<HttpConnector>>),
+  Unauthenticated(Client),
   // If authenticated, don't reuse clients so that each connection makes its own connection
   // This ensures that if a nonce is requested, another caller doesn't make a request invalidating
   // it
   // We could acquire a mutex over the client, yet creating a new client is preferred for the
   // possibility of parallelism
-  Authenticated(HttpsConnector<HttpConnector>, String, String),
+  Authenticated { username: String, password: String },
 }
 
 /// An HTTP(S) transport for the RPC.
@@ -37,9 +37,6 @@ impl HttpRpc {
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
   pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
-    let https_builder =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
-
     let authentication = if url.contains('@') {
       // Parse out the username and password
       let url_clone = url;
@@ -64,13 +61,12 @@ impl HttpRpc {
       if split_userpass.len() > 2 {
         Err(RpcError::ConnectionError("invalid amount of passwords".to_string()))?;
       }
-      Authentication::Authenticated(
-        https_builder,
-        split_userpass[0].to_string(),
-        split_userpass.get(1).unwrap_or(&"").to_string(),
-      )
+      Authentication::Authenticated {
+        username: split_userpass[0].to_string(),
+        password: split_userpass.get(1).unwrap_or(&"").to_string(),
+      }
     } else {
-      Authentication::Unauthenticated(Client::builder().build(https_builder))
+      Authentication::Unauthenticated(Client::with_connection_pool())
     };
 
     Ok(Rpc(HttpRpc { authentication, url }))
@@ -79,45 +75,26 @@ impl HttpRpc {
 
 impl HttpRpc {
   async fn inner_post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    let request = |uri| {
-      Request::post(uri)
-        .header(hyper::header::HOST, {
-          let mut host = self.url.clone();
-          if let Some(protocol_pos) = host.find("://") {
-            host.drain(0 .. (protocol_pos + 3));
-          }
-          host
-        })
-        .body(body.clone().into())
-        .unwrap()
-    };
+    let request = |uri| Request::post(uri).body(body.clone().into()).unwrap();
 
-    let mut connection_task_handle = None;
+    let mut connection = None;
     let response = match &self.authentication {
       Authentication::Unauthenticated(client) => client
         .request(request(self.url.clone() + "/" + route))
         .await
-        .map_err(|e| RpcError::ConnectionError(e.to_string()))?,
-      Authentication::Authenticated(https_builder, user, pass) => {
-        let connection = https_builder
-          .clone()
-          .call(
-            self
-              .url
-              .parse()
-              .map_err(|e: <Uri as FromStr>::Err| RpcError::ConnectionError(e.to_string()))?,
-          )
+        .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+      Authentication::Authenticated { username, password } => {
+        // This Client will drop and replace its connection on error, when monero-serai requires
+        // a single socket for the lifetime of this function
+        // Since dropping the connection will raise an error, and this function aborts on any
+        // error, this is fine
+        let client = Client::without_connection_pool(self.url.clone())
+          .map_err(|_| RpcError::ConnectionError("invalid URL".to_string()))?;
+        let mut response = client
+          .request(request("/".to_string() + route))
           .await
-          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
-        let (mut requester, connection) = hyper::client::conn::http1::handshake(connection)
-          .await
-          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
-        let connection_task = tokio::spawn(connection);
+          .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
 
-        let mut response = requester
-          .send_request(request("/".to_string() + route))
-          .await
-          .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
         // Only provide authentication if this daemon actually expects it
         if let Some(header) = response.headers().get("www-authenticate") {
           let mut request = request("/".to_string() + route);
@@ -131,8 +108,8 @@ impl HttpRpc {
               )
               .map_err(|_| RpcError::InvalidNode("invalid digest-auth response"))?
               .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
-                user,
-                pass,
+                username,
+                password,
                 "/".to_string() + route,
                 None,
               ))
@@ -142,18 +119,15 @@ impl HttpRpc {
             .unwrap(),
           );
 
-          // Wait for the connection to be ready again
-          requester.ready().await.map_err(|e| RpcError::ConnectionError(e.to_string()))?;
-
           // Make the request with the response challenge
-          response = requester
-            .send_request(request)
+          response = client
+            .request(request)
             .await
-            .map_err(|e| RpcError::ConnectionError(e.to_string()))?;
-
-          // Also embed the requester so it's not dropped, causing the connection to close
-          connection_task_handle = Some((requester, connection_task.abort_handle()));
+            .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
         }
+
+        // Store the client so it's not dropped yet
+        connection = Some(client);
 
         response
       }
@@ -177,19 +151,19 @@ impl HttpRpc {
     let mut body = response.into_body();
     while res.len() < length {
       let Some(data) = body.data().await else { break };
-      res.extend(data.map_err(|e| RpcError::ConnectionError(e.to_string()))?.as_ref());
+      res.extend(data.map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?.as_ref());
     }
     */
 
-    let res = hyper::body::to_bytes(response.into_body())
+    let mut res = Vec::with_capacity(128);
+    response
+      .body()
       .await
-      .map_err(|e| RpcError::ConnectionError(e.to_string()))?
-      .to_vec();
+      .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
+      .read_to_end(&mut res)
+      .unwrap();
 
-    if let Some((_, connection_task)) = connection_task_handle {
-      // Clean up the connection task
-      connection_task.abort();
-    }
+    drop(connection);
 
     Ok(res)
   }
@@ -201,6 +175,6 @@ impl RpcConnection for HttpRpc {
     // TODO: Make this timeout configurable
     tokio::time::timeout(core::time::Duration::from_secs(30), self.inner_post(route, body))
       .await
-      .map_err(|e| RpcError::ConnectionError(e.to_string()))?
+      .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
   }
 }

@@ -55,9 +55,7 @@ base58-monero = { version = "2", default-features = false, features = ["check"] 
 
 # Used for the provided HTTP RPC
 digest_auth = { version = "0.3", default-features = false, optional = true }
-# Deprecated here means to enable deprecated warnings, not to restore deprecated APIs
-hyper = { version = "0.14", default-features = false, features = ["http1", "tcp", "client", "backports", "deprecated"], optional = true }
-hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "native-tokio"], optional = true }
+simple-request = { path = "../../common/request", version = "0.1", default-features = false, optional = true }
 tokio = { version = "1", default-features = false, optional = true }
 
 [build-dependencies]
@@ -102,7 +100,7 @@ std = [
   "base58-monero/std",
 ]
 
-http-rpc = ["digest_auth", "hyper", "hyper-rustls", "tokio/time", "tokio/rt"]
+http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "dleq", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
 experimental = []
