@@ -46,7 +46,7 @@ serai-env = { path = "../common/env" }
 serai-primitives = { path = "../substrate/primitives" }
 
 jsonrpsee = { version = "0.16", default-features = false, features = ["server"], optional = true }
-reqwest = { version = "0.11", default-features = false, features = ["json"] }
+simple-request = { path = "../common/request", default-features = false }
 
 [features]
 binaries = ["serai-db", "serai-db/rocksdb", "jsonrpsee"]

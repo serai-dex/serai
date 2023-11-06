@@ -1,0 +1,25 @@
+[package]
+name = "simple-request"
+version = "0.1.0"
+description = "A simple HTTP(S) request library"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/simple-request"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["http", "https", "async", "request", "ssl"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# Deprecated here means to enable deprecated warnings, not to restore deprecated APIs
+hyper = { version = "0.14", default-features = false, features = ["http1", "tcp", "client", "backports", "deprecated"] }
+hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "native-tokio"] }
+tokio = { version = "1", default-features = false }
+
+zeroize = { version = "1", optional = true }
+base64ct = { version = "1", features = ["alloc"], optional = true }
+
+[features]
+basic-auth = ["zeroize", "base64ct"]

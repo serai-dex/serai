@@ -11,7 +11,7 @@ use schnorr_signatures::SchnorrSignature;
 
 use serde::{Serialize, Deserialize};
 
-use reqwest::Client;
+use simple_request::{Request, Client};
 
 use serai_env as env;
 
@@ -45,7 +45,7 @@ impl MessageQueue {
       service,
       pub_key: Ristretto::generator() * priv_key.deref(),
       priv_key,
-      client: Client::new(),
+      client: Client::with_connection_pool(),
       url,
     }
   }
@@ -81,18 +81,30 @@ impl MessageQueue {
       id: u64,
     }
 
-    let res = loop {
+    let mut res = loop {
       // Make the request
       match self
         .client
-        .post(&self.url)
-        .json(&JsonRpcRequest { jsonrpc: "2.0", method, params: params.clone(), id: 0 })
-        .send()
+        .request(
+          Request::post(&self.url)
+            .header("Content-Type", "application/json")
+            .body(
+              serde_json::to_vec(&JsonRpcRequest {
+                jsonrpc: "2.0",
+                method,
+                params: params.clone(),
+                id: 0,
+              })
+              .unwrap()
+              .into(),
+            )
+            .unwrap(),
+        )
         .await
       {
         Ok(req) => {
           // Get the response
-          match req.text().await {
+          match req.body().await {
             Ok(res) => break res,
             Err(e) => {
               dbg!(e);
@@ -108,8 +120,8 @@ impl MessageQueue {
       tokio::time::sleep(core::time::Duration::from_secs(1)).await;
     };
 
-    let json =
-      serde_json::from_str::<serde_json::Value>(&res).expect("message-queue returned invalid JSON");
+    let json: serde_json::Value =
+      serde_json::from_reader(&mut res).expect("message-queue returned invalid JSON");
     if json.get("result").is_none() {
       panic!("call failed: {json}");
     }

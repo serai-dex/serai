@@ -5,6 +5,7 @@ members = [
   "common/zalloc",
   "common/db",
   "common/env",
+  "common/request",
 
   "crypto/transcript",
 

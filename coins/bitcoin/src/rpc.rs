@@ -6,7 +6,7 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
-use reqwest::Client;
+use simple_request::{Request, Client};
 
 use bitcoin::{
   hashes::{Hash, hex::FromHex},
@@ -62,7 +62,7 @@ impl Rpc {
   /// provided to this library, if the RPC has an incompatible argument layout. That is not checked
   /// at time of RPC creation.
   pub async fn new(url: String) -> Result<Rpc, RpcError> {
-    let rpc = Rpc { client: Client::new(), url };
+    let rpc = Rpc { client: Client::with_connection_pool(), url };
 
     // Make an RPC request to verify the node is reachable and sane
     let res: String = rpc.rpc_call("help", json!([])).await?;
@@ -107,19 +107,26 @@ impl Rpc {
     method: &str,
     params: serde_json::Value,
   ) -> Result<Response, RpcError> {
-    let res = self
+    let mut res = self
       .client
-      .post(&self.url)
-      .json(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
-      .send()
+      .request(
+        Request::post(&self.url)
+          .header("Content-Type", "application/json")
+          .body(
+            serde_json::to_vec(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+              .unwrap()
+              .into(),
+          )
+          .unwrap(),
+      )
       .await
       .map_err(|_| RpcError::ConnectionError)?
-      .text()
+      .body()
       .await
       .map_err(|_| RpcError::ConnectionError)?;
 
     let res: RpcResponse<Response> =
-      serde_json::from_str(&res).map_err(|e| RpcError::InvalidJson(e.classify()))?;
+      serde_json::from_reader(&mut res).map_err(|e| RpcError::InvalidJson(e.classify()))?;
     match res {
       RpcResponse::Ok { result } => Ok(result),
       RpcResponse::Err { error } => Err(RpcError::RequestError(error)),

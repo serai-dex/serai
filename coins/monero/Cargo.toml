@@ -55,6 +55,7 @@ base58-monero = { version = "2", default-features = false, features = ["check"] 
 
 # Used for the provided HTTP RPC
 digest_auth = { version = "0.3", default-features = false, optional = true }
+# Deprecated here means to enable deprecated warnings, not to restore deprecated APIs
 hyper = { version = "0.14", default-features = false, features = ["http1", "tcp", "client", "backports", "deprecated"], optional = true }
 hyper-rustls = { version = "0.24", default-features = false, features = ["http1", "native-tokio"], optional = true }
 tokio = { version = "1", default-features = false, optional = true }
