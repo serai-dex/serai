@@ -1,9 +1,15 @@
-use crate::crypto::ProcessedSignature;
-use ethers::{contract::ContractFactory, prelude::*, solc::artifacts::contract::ContractBytecode};
-use eyre::{eyre, Result};
-use std::fs::File;
-use std::sync::Arc;
+use std::{sync::Arc, fs::File};
+
 use thiserror::Error;
+use eyre::{eyre, Result};
+
+use ethers_signers::LocalWallet;
+use ethers_middleware::SignerMiddleware;
+use ethers_providers::{Provider, Http};
+use ethers_contract::{abigen, ContractFactory};
+use ethers_solc::artifacts::contract::ContractBytecode;
+
+use crate::crypto::ProcessedSignature;
 
 #[derive(Error, Debug)]
 pub enum EthereumError {
@@ -11,11 +17,7 @@ pub enum EthereumError {
   VerificationError,
 }
 
-abigen!(
-  Schnorr,
-  "./artifacts/Schnorr.sol/Schnorr.json",
-  event_derives(serde::Deserialize, serde::Serialize),
-);
+abigen!(Schnorr, "./artifacts/Schnorr.sol/Schnorr.json",);
 
 pub async fn deploy_schnorr_verifier_contract(
   client: Arc<SignerMiddleware<Provider<Http>, LocalWallet>>,

@@ -4,10 +4,10 @@ use rand_core::OsRng;
 
 use ::k256::{elliptic_curve::bigint::ArrayEncoding, U256};
 
-use ethers::{
-  prelude::*,
-  utils::{keccak256, Anvil, AnvilInstance},
-};
+use ethers_core::utils::{keccak256, Anvil, AnvilInstance};
+use ethers_middleware::{Middleware, SignerMiddleware};
+use ethers_providers::{Provider, Http};
+use ethers_signers::LocalWallet;
 
 use frost::{
   curve::Secp256k1,

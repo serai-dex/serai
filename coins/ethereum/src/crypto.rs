@@ -11,7 +11,7 @@ use k256::{
 use frost::{algorithm::Hram, curve::Secp256k1};
 
 pub fn keccak256(data: &[u8]) -> [u8; 32] {
-  Keccak256::digest(data).try_into().unwrap()
+  Keccak256::digest(data).into()
 }
 
 pub fn hash_to_scalar(data: &[u8]) -> Scalar {

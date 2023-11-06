@@ -13,25 +13,28 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-thiserror = "1"
-rand_core = "0.6"
+thiserror = { version = "1", default-features = false }
+eyre = { version = "0.6", default-features = false }
 
-serde_json = "1"
-serde = "1"
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
-sha2 = "0.10"
-sha3 = "0.10"
+sha3 = { version = "0.10", default-features = false, features = ["std"] }
 
-group = "0.13"
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits", "ecdsa"] }
+group = { version = "0.13", default-features = false }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1", "tests"] }
 
-eyre = "0.6"
-
-ethers = { version = "2", default-features = false, features = ["abigen", "ethers-solc"] }
+ethers-core = { version = "2", default-features = false }
+ethers-signers = { version = "2", default-features = false }
+ethers-middleware = { version = "2", default-features = false }
+ethers-providers = { version = "2", default-features = false }
+ethers-contract = { version = "2", default-features = false, features = ["abigen", "providers"] }
+ethers-solc = { version = "2", default-features = false }
 
 [build-dependencies]
 ethers-solc = { version = "2", default-features = false }
 
 [dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+sha2 = { version = "0.10", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["macros"] }
