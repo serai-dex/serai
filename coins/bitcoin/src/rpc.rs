@@ -6,7 +6,7 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
-use simple_request::{Request, Client};
+use simple_request::{hyper, Request, Client};
 
 use bitcoin::{
   hashes::{Hash, hex::FromHex},
@@ -107,18 +107,20 @@ impl Rpc {
     method: &str,
     params: serde_json::Value,
   ) -> Result<Response, RpcError> {
+    let mut request = Request::from(
+      hyper::Request::post(&self.url)
+        .header("Content-Type", "application/json")
+        .body(
+          serde_json::to_vec(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+            .unwrap()
+            .into(),
+        )
+        .unwrap(),
+    );
+    request.with_basic_auth();
     let mut res = self
       .client
-      .request(
-        Request::post(&self.url)
-          .header("Content-Type", "application/json")
-          .body(
-            serde_json::to_vec(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
-              .unwrap()
-              .into(),
-          )
-          .unwrap(),
-      )
+      .request(request)
       .await
       .map_err(|_| RpcError::ConnectionError)?
       .body()

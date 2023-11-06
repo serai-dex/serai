@@ -11,7 +11,7 @@ use schnorr_signatures::SchnorrSignature;
 
 use serde::{Serialize, Deserialize};
 
-use simple_request::{Request, Client};
+use simple_request::{hyper::Request, Client};
 
 use serai_env as env;
 
