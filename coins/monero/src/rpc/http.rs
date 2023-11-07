@@ -1,25 +1,30 @@
-use std::io::Read;
+use std::{sync::Arc, io::Read};
 
 use async_trait::async_trait;
 
-use digest_auth::AuthContext;
+use tokio::sync::Mutex;
+
+use digest_auth::{WwwAuthenticateHeader, AuthContext};
 use simple_request::{
-  hyper::{header::HeaderValue, Request},
-  Client,
+  hyper::{StatusCode, header::HeaderValue, Request},
+  Response, Client,
 };
 
 use crate::rpc::{RpcError, RpcConnection, Rpc};
 
 #[derive(Clone, Debug)]
 enum Authentication {
-  // If unauthenticated, reuse a single client
+  // If unauthenticated, use a single client
   Unauthenticated(Client),
-  // If authenticated, don't reuse clients so that each connection makes its own connection
+  // If authenticated, use a single client which supports being locked and tracks its nonce
   // This ensures that if a nonce is requested, another caller doesn't make a request invalidating
   // it
-  // We could acquire a mutex over the client, yet creating a new client is preferred for the
-  // possibility of parallelism
-  Authenticated { username: String, password: String },
+  Authenticated {
+    username: String,
+    password: String,
+    #[allow(clippy::type_complexity)]
+    connection: Arc<Mutex<(Option<(WwwAuthenticateHeader, u64)>, Client)>>,
+  },
 }
 
 /// An HTTP(S) transport for the RPC.
@@ -32,11 +37,29 @@ pub struct HttpRpc {
 }
 
 impl HttpRpc {
+  fn digest_auth_challenge(
+    response: &Response,
+  ) -> Result<Option<(WwwAuthenticateHeader, u64)>, RpcError> {
+    Ok(if let Some(header) = response.headers().get("www-authenticate") {
+      Some((
+        digest_auth::parse(
+          header
+            .to_str()
+            .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?,
+        )
+        .map_err(|_| RpcError::InvalidNode("invalid digest-auth response"))?,
+        0,
+      ))
+    } else {
+      None
+    })
+  }
+
   /// Create a new HTTP(S) RPC connection.
   ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
+  pub async fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
     let authentication = if url.contains('@') {
       // Parse out the username and password
       let url_clone = url;
@@ -61,9 +84,24 @@ impl HttpRpc {
       if split_userpass.len() > 2 {
         Err(RpcError::ConnectionError("invalid amount of passwords".to_string()))?;
       }
+
+      let client = Client::without_connection_pool(url.clone())
+        .map_err(|_| RpcError::ConnectionError("invalid URL".to_string()))?;
+      // Obtain the initial challenge, which also somewhat validates this connection
+      let challenge = Self::digest_auth_challenge(
+        &client
+          .request(
+            Request::post(url.clone())
+              .body(vec![].into())
+              .map_err(|e| RpcError::ConnectionError(format!("couldn't make request: {e:?}")))?,
+          )
+          .await
+          .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+      )?;
       Authentication::Authenticated {
         username: split_userpass[0].to_string(),
         password: split_userpass.get(1).unwrap_or(&"").to_string(),
+        connection: Arc::new(Mutex::new((challenge, client))),
       }
     } else {
       Authentication::Unauthenticated(Client::with_connection_pool())
@@ -74,60 +112,96 @@ impl HttpRpc {
 }
 
 impl HttpRpc {
-  async fn inner_post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    let request = |uri| Request::post(uri).body(body.clone().into()).unwrap();
+  #[async_recursion::async_recursion]
+  async fn inner_post(
+    &self,
+    route: &str,
+    body: Vec<u8>,
+    recursing: bool,
+  ) -> Result<Vec<u8>, RpcError> {
+    let request_fn = |uri| {
+      Request::post(uri)
+        .body(body.clone().into())
+        .map_err(|e| RpcError::ConnectionError(format!("couldn't make request: {e:?}")))
+    };
 
-    let mut connection = None;
     let response = match &self.authentication {
       Authentication::Unauthenticated(client) => client
-        .request(request(self.url.clone() + "/" + route))
+        .request(request_fn(self.url.clone() + "/" + route)?)
         .await
         .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
-      Authentication::Authenticated { username, password } => {
-        // This Client will drop and replace its connection on error, when monero-serai requires
-        // a single socket for the lifetime of this function
-        // Since dropping the connection will raise an error, and this function aborts on any
-        // error, this is fine
-        let client = Client::without_connection_pool(self.url.clone())
-          .map_err(|_| RpcError::ConnectionError("invalid URL".to_string()))?;
-        let mut response = client
-          .request(request("/".to_string() + route))
-          .await
-          .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
+      Authentication::Authenticated { username, password, connection } => {
+        let mut connection_lock = connection.lock().await;
 
-        // Only provide authentication if this daemon actually expects it
-        if let Some(header) = response.headers().get("www-authenticate") {
-          let mut request = request("/".to_string() + route);
+        let mut request = request_fn("/".to_string() + route)?;
+
+        // If we don't have an auth challenge, obtain one
+        if connection_lock.0.is_none() {
+          connection_lock.0 = Self::digest_auth_challenge(
+            &connection_lock
+              .1
+              .request(request)
+              .await
+              .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+          )?;
+          request = request_fn("/".to_string() + route)?;
+        }
+
+        // Insert the challenge response, if we have a challenge
+        if let Some((challenge, cnonce)) = connection_lock.0.as_mut() {
+          // Update the cnonce
+          // Overflow isn't a concern as this is a u64
+          *cnonce += 1;
+
+          let mut context = AuthContext::new_post::<_, _, _, &[u8]>(
+            username,
+            password,
+            "/".to_string() + route,
+            None,
+          );
+          context.set_custom_cnonce(hex::encode(cnonce.to_le_bytes()));
+
           request.headers_mut().insert(
             "Authorization",
             HeaderValue::from_str(
-              &digest_auth::parse(
-                header
-                  .to_str()
-                  .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?,
-              )
-              .map_err(|_| RpcError::InvalidNode("invalid digest-auth response"))?
-              .respond(&AuthContext::new_post::<_, _, _, &[u8]>(
-                username,
-                password,
-                "/".to_string() + route,
-                None,
-              ))
-              .map_err(|_| RpcError::InvalidNode("couldn't respond to digest-auth challenge"))?
-              .to_header_string(),
+              &challenge
+                .respond(&context)
+                .map_err(|_| RpcError::InvalidNode("couldn't respond to digest-auth challenge"))?
+                .to_header_string(),
             )
             .unwrap(),
           );
-
-          // Make the request with the response challenge
-          response = client
-            .request(request)
-            .await
-            .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
         }
 
-        // Store the client so it's not dropped yet
-        connection = Some(client);
+        let response_result = connection_lock
+          .1
+          .request(request)
+          .await
+          .map_err(|e| RpcError::ConnectionError(format!("{e:?}")));
+
+        // If the connection entered an error state, drop the cached challenge as challenges are
+        // per-connection
+        // We don't need to create a new connection as simple-request will for us
+        if response_result.is_err() {
+          connection_lock.0 = None;
+        }
+        let response = response_result?;
+
+        // If we need to re-auth due to this token being stale, recursively re-call this function,
+        // unless we're already recursing
+        if (!recursing) && (response.status() == StatusCode::UNAUTHORIZED) {
+          if let Some(header) = response.headers().get("www-authenticate") {
+            if header
+              .to_str()
+              .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?
+              .contains("stale")
+            {
+              connection_lock.0 = None;
+              drop(connection_lock);
+              return self.inner_post(route, body, true).await;
+            }
+          }
+        }
 
         response
       }
@@ -163,8 +237,6 @@ impl HttpRpc {
       .read_to_end(&mut res)
       .unwrap();
 
-    drop(connection);
-
     Ok(res)
   }
 }
@@ -173,7 +245,7 @@ impl HttpRpc {
 impl RpcConnection for HttpRpc {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
     // TODO: Make this timeout configurable
-    tokio::time::timeout(core::time::Duration::from_secs(30), self.inner_post(route, body))
+    tokio::time::timeout(core::time::Duration::from_secs(30), self.inner_post(route, body, false))
       .await
       .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
   }

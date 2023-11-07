@@ -650,7 +650,7 @@ async fn main() {
     #[cfg(feature = "bitcoin")]
     NetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
     #[cfg(feature = "monero")]
-    NetworkId::Monero => run(db, Monero::new(url), coordinator).await,
+    NetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
     _ => panic!("spawning a processor for an unsupported network"),
   }
 }

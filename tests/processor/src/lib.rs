@@ -188,7 +188,8 @@ impl Coordinator {
               use monero_serai::rpc::HttpRpc;
 
               // Monero's won't, so call get_height
-              if HttpRpc::new(rpc_url.clone())
+              if handle
+                .block_on(HttpRpc::new(rpc_url.clone()))
                 .ok()
                 .and_then(|rpc| handle.block_on(rpc.get_height()).ok())
                 .is_some()
@@ -283,7 +284,7 @@ impl Coordinator {
           rpc::HttpRpc,
         };
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
         let _: EmptyResponse = rpc
           .json_rpc_call(
             "generateblocks",
@@ -322,7 +323,8 @@ impl Coordinator {
       NetworkId::Monero => {
         use monero_serai::rpc::HttpRpc;
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        let rpc =
+          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
         let res: serde_json::Value = rpc
           .json_rpc_call("submit_block", Some(serde_json::json!([hex::encode(block)])))
           .await
@@ -368,10 +370,11 @@ impl Coordinator {
       NetworkId::Monero => {
         use monero_serai::rpc::HttpRpc;
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
         let to = rpc.get_height().await.unwrap();
         for coordinator in others {
           let from = HttpRpc::new(network_rpc(self.network, ops, &coordinator.network_handle))
+            .await
             .expect("couldn't connect to the Monero RPC")
             .get_height()
             .await
@@ -407,7 +410,8 @@ impl Coordinator {
       NetworkId::Monero => {
         use monero_serai::{transaction::Transaction, rpc::HttpRpc};
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        let rpc =
+          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
         rpc.publish_transaction(&Transaction::read(&mut &*tx).unwrap()).await.unwrap();
       }
       NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
@@ -436,7 +440,8 @@ impl Coordinator {
       NetworkId::Monero => {
         use monero_serai::rpc::HttpRpc;
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the coordinator's Monero RPC");
+        let rpc =
+          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
         let mut hash = [0; 32];
         hash.copy_from_slice(tx);
         if let Ok(tx) = rpc.get_transaction(hash).await {

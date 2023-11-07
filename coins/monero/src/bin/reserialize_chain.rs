@@ -271,14 +271,15 @@ async fn main() {
   }
   let nodes = if specified_nodes.is_empty() { default_nodes } else { specified_nodes };
 
-  let rpc = |url: String| {
+  let rpc = |url: String| async move {
     HttpRpc::new(url.clone())
+      .await
       .unwrap_or_else(|_| panic!("couldn't create HttpRpc connected to {url}"))
   };
-  let main_rpc = rpc(nodes[0].clone());
+  let main_rpc = rpc(nodes[0].clone()).await;
   let mut rpcs = vec![];
   for i in 0 .. async_parallelism {
-    rpcs.push(Arc::new(rpc(nodes[i % nodes.len()].clone())));
+    rpcs.push(Arc::new(rpc(nodes[i % nodes.len()].clone()).await));
   }
 
   let mut rpc_i = 0;

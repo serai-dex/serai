@@ -26,7 +26,7 @@ pub enum Error {
   InvalidUri,
   MissingHost,
   InconsistentHost,
-  SslError,
+  SslError(Box<dyn Send + Sync + std::error::Error>),
   Hyper(hyper::Error),
 }
 
@@ -116,7 +116,7 @@ impl Client {
         // If there's not a connection...
         if connection_lock.is_none() {
           let (requester, connection) = hyper::client::conn::http1::handshake(
-            https_builder.clone().call(host.clone()).await.map_err(|_| Error::SslError)?,
+            https_builder.clone().call(host.clone()).await.map_err(Error::SslError)?,
           )
           .await
           .map_err(Error::Hyper)?;

@@ -171,7 +171,7 @@ impl Handles {
     // If the RPC server has yet to start, sleep for up to 60s until it does
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = HttpRpc::new(rpc.clone()) else { continue };
+      let Ok(client) = HttpRpc::new(rpc.clone()).await else { continue };
       if client.get_height().await.is_err() {
         continue;
       }

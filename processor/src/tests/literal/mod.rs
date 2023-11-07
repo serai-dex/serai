@@ -114,13 +114,15 @@ mod monero {
 
   async fn monero(ops: &DockerOperations) -> Monero {
     let handle = ops.handle("serai-dev-monero").host_port(18081).unwrap();
-    let monero = Monero::new(format!("http://serai:seraidex@{}:{}", handle.0, handle.1));
+    let url = format!("http://serai:seraidex@{}:{}", handle.0, handle.1);
     for _ in 0 .. 60 {
-      if monero.get_latest_block_number().await.is_ok() {
+      if monero_serai::rpc::HttpRpc::new(url.clone()).await.is_ok() {
         break;
       }
       tokio::time::sleep(core::time::Duration::from_secs(1)).await;
     }
+
+    let monero = Monero::new(url).await;
     while monero.get_latest_block_number().await.unwrap() < 150 {
       monero.mine_block().await;
     }

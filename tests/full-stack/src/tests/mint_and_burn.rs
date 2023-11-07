@@ -523,7 +523,7 @@ async fn mint_and_burn_test() {
           Coin::Monero,
           1_000_000_000_000,
           ExternalAddress::new(
-            serai_client::networks::monero::Address::new(monero_addr).unwrap().try_into().unwrap(),
+            serai_client::networks::monero::Address::new(monero_addr).unwrap().into(),
           )
           .unwrap(),
         )

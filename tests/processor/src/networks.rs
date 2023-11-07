@@ -180,7 +180,7 @@ impl Wallet {
         let view_pair =
           ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key));
 
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         let height = rpc.get_height().await.unwrap();
         // Mines 200 blocks so sufficient decoys exist, as only 60 is needed for maturity
@@ -316,7 +316,7 @@ impl Wallet {
         use processor::{additional_key, networks::Monero};
 
         let rpc_url = network_rpc(NetworkId::Monero, ops, handle);
-        let rpc = HttpRpc::new(rpc_url).expect("couldn't connect to the Monero RPC");
+        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         // Prepare inputs
         let outputs = std::mem::take(inputs);

@@ -191,8 +191,8 @@ fn map_rpc_err(err: RpcError) -> NetworkError {
 }
 
 impl Monero {
-  pub fn new(url: String) -> Monero {
-    Monero { rpc: HttpRpc::new(url).unwrap() }
+  pub async fn new(url: String) -> Monero {
+    Monero { rpc: HttpRpc::new(url).await.unwrap() }
   }
 
   fn view_pair(spend: EdwardsPoint) -> ViewPair {
