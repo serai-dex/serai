@@ -33,7 +33,7 @@ runs:
 
     - name: Install apt dependencies
       shell: bash
-      run: sudo apt install -y ca-certificates
+      run: sudo apt install -y ca-certificates lld
 
     - name: Install Protobuf
       uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
