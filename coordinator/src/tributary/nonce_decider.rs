@@ -27,31 +27,25 @@ impl<D: Db> NonceDecider<D> {
     next
   }
 
-  fn item_nonce_key(genesis: [u8; 32], code: u8, id: [u8; 32]) -> Vec<u8> {
+  fn item_nonce_key(genesis: [u8; 32], code: u8, id: &[u8]) -> Vec<u8> {
     D::key(
       b"coordinator_tributary_nonce",
       b"item",
-      [genesis.as_slice(), [code].as_ref(), id.as_ref()].concat(),
+      [genesis.as_slice(), [code].as_ref(), id].concat(),
     )
   }
-  fn set_nonce(
-    txn: &mut D::Transaction<'_>,
-    genesis: [u8; 32],
-    code: u8,
-    id: [u8; 32],
-    nonce: u32,
-  ) {
+  fn set_nonce(txn: &mut D::Transaction<'_>, genesis: [u8; 32], code: u8, id: &[u8], nonce: u32) {
     txn.put(Self::item_nonce_key(genesis, code, id), nonce.to_le_bytes())
   }
-  fn db_nonce<G: Get>(getter: &G, genesis: [u8; 32], code: u8, id: [u8; 32]) -> Option<u32> {
+  fn db_nonce<G: Get>(getter: &G, genesis: [u8; 32], code: u8, id: &[u8]) -> Option<u32> {
     getter
       .get(Self::item_nonce_key(genesis, code, id))
       .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
   }
 
-  pub fn handle_batch(txn: &mut D::Transaction<'_>, genesis: [u8; 32], batch: [u8; 32]) -> u32 {
+  pub fn handle_batch(txn: &mut D::Transaction<'_>, genesis: [u8; 32], batch: [u8; 5]) -> u32 {
     let nonce_for = Self::allocate_nonce(txn, genesis);
-    Self::set_nonce(txn, genesis, BATCH_CODE, batch, nonce_for);
+    Self::set_nonce(txn, genesis, BATCH_CODE, &batch, nonce_for);
     nonce_for
   }
   // TODO: The processor won't yield shares for this if the signing protocol aborts. We need to
@@ -60,10 +54,10 @@ impl<D: Db> NonceDecider<D> {
   pub fn selected_for_signing_batch(
     txn: &mut D::Transaction<'_>,
     genesis: [u8; 32],
-    batch: [u8; 32],
+    batch: [u8; 5],
   ) {
     let nonce_for = Self::allocate_nonce(txn, genesis);
-    Self::set_nonce(txn, genesis, BATCH_SIGNING_CODE, batch, nonce_for);
+    Self::set_nonce(txn, genesis, BATCH_SIGNING_CODE, &batch, nonce_for);
   }
 
   pub fn handle_substrate_block(
@@ -74,7 +68,7 @@ impl<D: Db> NonceDecider<D> {
     let mut res = Vec::with_capacity(plans.len());
     for plan in plans {
       let nonce_for = Self::allocate_nonce(txn, genesis);
-      Self::set_nonce(txn, genesis, PLAN_CODE, *plan, nonce_for);
+      Self::set_nonce(txn, genesis, PLAN_CODE, plan, nonce_for);
       res.push(nonce_for);
     }
     res
@@ -86,7 +80,7 @@ impl<D: Db> NonceDecider<D> {
     plan: [u8; 32],
   ) {
     let nonce_for = Self::allocate_nonce(txn, genesis);
-    Self::set_nonce(txn, genesis, PLAN_SIGNING_CODE, plan, nonce_for);
+    Self::set_nonce(txn, genesis, PLAN_SIGNING_CODE, &plan, nonce_for);
   }
 
   pub fn nonce<G: Get>(getter: &G, genesis: [u8; 32], tx: &Transaction) -> Option<Option<u32>> {
@@ -109,20 +103,20 @@ impl<D: Db> NonceDecider<D> {
 
       Transaction::BatchPreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::db_nonce(getter, genesis, BATCH_CODE, data.plan))
+        Some(Self::db_nonce(getter, genesis, BATCH_CODE, &data.plan))
       }
       Transaction::BatchShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::db_nonce(getter, genesis, BATCH_SIGNING_CODE, data.plan))
+        Some(Self::db_nonce(getter, genesis, BATCH_SIGNING_CODE, &data.plan))
       }
 
       Transaction::SignPreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::db_nonce(getter, genesis, PLAN_CODE, data.plan))
+        Some(Self::db_nonce(getter, genesis, PLAN_CODE, &data.plan))
       }
       Transaction::SignShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::db_nonce(getter, genesis, PLAN_SIGNING_CODE, data.plan))
+        Some(Self::db_nonce(getter, genesis, PLAN_SIGNING_CODE, &data.plan))
       }
 
       Transaction::SignCompleted { .. } => None,

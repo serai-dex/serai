@@ -167,8 +167,8 @@ impl TributarySpec {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SignData {
-  pub plan: [u8; 32],
+pub struct SignData<const N: usize> {
+  pub plan: [u8; N],
   pub attempt: u32,
 
   pub data: Vec<Vec<u8>>,
@@ -176,9 +176,9 @@ pub struct SignData {
   pub signed: Signed,
 }
 
-impl ReadWrite for SignData {
+impl<const N: usize> ReadWrite for SignData<N> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut plan = [0; 32];
+    let mut plan = [0; N];
     reader.read_exact(&mut plan)?;
 
     let mut attempt = [0; 4];
@@ -249,16 +249,16 @@ pub enum Transaction {
   // which would be binding over the block hash and automatically achieve synchrony on all
   // relevant batches. ExternalBlock was removed for this due to complexity around the pipeline
   // with the current processor, yet it would still be an improvement.
-  Batch([u8; 32], [u8; 32]),
+  Batch([u8; 32], [u8; 5]),
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SubstrateBlock(u64),
 
-  BatchPreprocess(SignData),
-  BatchShare(SignData),
+  BatchPreprocess(SignData<5>),
+  BatchShare(SignData<5>),
 
-  SignPreprocess(SignData),
-  SignShare(SignData),
+  SignPreprocess(SignData<32>),
+  SignShare(SignData<32>),
   // This is defined as an Unsigned transaction in order to de-duplicate SignCompleted amongst
   // reporters (who should all report the same thing)
   // We do still track the signer in order to prevent a single signer from publishing arbitrarily
@@ -367,7 +367,7 @@ impl ReadWrite for Transaction {
       3 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
-        let mut batch = [0; 32];
+        let mut batch = [0; 5];
         reader.read_exact(&mut batch)?;
         Ok(Transaction::Batch(block, batch))
       }

@@ -226,7 +226,7 @@ impl Monero {
       // This isn't entirely accurate as Bulletproof TXs will have a higher weight than their
       // serialization length
       // It's likely 'good enough'
-      // TODO: Improve
+      // TODO2: Improve
       fees.push(tx.rct_signatures.base.fee / u64::try_from(tx.serialize().len()).unwrap());
     }
     fees.sort();

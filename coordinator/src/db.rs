@@ -106,14 +106,14 @@ impl<D: Db> MainDb<D> {
     res
   }
 
-  fn first_preprocess_key(network: NetworkId, id_type: RecognizedIdType, id: [u8; 32]) -> Vec<u8> {
+  fn first_preprocess_key(network: NetworkId, id_type: RecognizedIdType, id: &[u8]) -> Vec<u8> {
     Self::main_key(b"first_preprocess", (network, id_type, id).encode())
   }
   pub fn save_first_preprocess(
     txn: &mut D::Transaction<'_>,
     network: NetworkId,
     id_type: RecognizedIdType,
-    id: [u8; 32],
+    id: &[u8],
     preprocess: Vec<Vec<u8>>,
   ) {
     let preprocess = preprocess.encode();
@@ -128,7 +128,7 @@ impl<D: Db> MainDb<D> {
     getter: &G,
     network: NetworkId,
     id_type: RecognizedIdType,
-    id: [u8; 32],
+    id: &[u8],
   ) -> Option<Vec<Vec<u8>>> {
     getter
       .get(Self::first_preprocess_key(network, id_type, id))

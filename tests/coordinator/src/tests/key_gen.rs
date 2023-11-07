@@ -89,7 +89,7 @@ pub async fn key_gen<C: Ciphersuite>(
         (
           participant_is[usize::from(l)],
           vec![
-            u8::try_from(u16::try_from(participant_is[i]).unwrap()).unwrap(),
+            u8::try_from(u16::from(participant_is[i])).unwrap(),
             u8::try_from(u16::from(participant_is[usize::from(l)])).unwrap(),
           ],
         )

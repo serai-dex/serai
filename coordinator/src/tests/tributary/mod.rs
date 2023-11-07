@@ -28,8 +28,8 @@ fn random_vec<R: RngCore>(rng: &mut R, limit: usize) -> Vec<u8> {
   res
 }
 
-fn random_sign_data<R: RngCore>(rng: &mut R) -> SignData {
-  let mut plan = [0; 32];
+fn random_sign_data<R: RngCore, const N: usize>(rng: &mut R) -> SignData<N> {
+  let mut plan = [0; N];
   rng.fill_bytes(&mut plan);
 
   SignData {
@@ -80,7 +80,10 @@ fn tx_size_limit() {
 
 #[test]
 fn serialize_sign_data() {
-  test_read_write(random_sign_data(&mut OsRng));
+  test_read_write(random_sign_data::<_, 3>(&mut OsRng));
+  test_read_write(random_sign_data::<_, 8>(&mut OsRng));
+  test_read_write(random_sign_data::<_, 16>(&mut OsRng));
+  test_read_write(random_sign_data::<_, 24>(&mut OsRng));
 }
 
 #[test]
@@ -143,7 +146,7 @@ fn serialize_transaction() {
   {
     let mut block = [0; 32];
     OsRng.fill_bytes(&mut block);
-    let mut batch = [0; 32];
+    let mut batch = [0; 5];
     OsRng.fill_bytes(&mut batch);
     test_read_write(Transaction::Batch(block, batch));
   }

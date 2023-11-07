@@ -13,9 +13,10 @@ use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
 use serai_db::{DbTxn, Db, MemDb};
 
+use scale::Encode;
 use serai_client::{primitives::*, in_instructions::primitives::*};
 
-use messages::{sign::SignId, coordinator::*};
+use messages::coordinator::*;
 use crate::substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
 
 #[tokio::test]
@@ -26,11 +27,6 @@ async fn test_substrate_signer() {
 
   let id: u32 = 5;
   let block = BlockHash([0xaa; 32]);
-  let mut actual_id = SignId {
-    key: keys.values().next().unwrap().group_key().to_bytes().to_vec(),
-    id: [0; 32],
-    attempt: 0,
-  };
 
   let batch = Batch {
     network: NetworkId::Monero,
@@ -46,6 +42,12 @@ async fn test_substrate_signer() {
         balance: Balance { coin: Coin::Monero, amount: Amount(9999999999999999) },
       },
     ],
+  };
+
+  let actual_id = BatchSignId {
+    key: keys.values().next().unwrap().group_key().to_bytes(),
+    id: (batch.network, batch.id).encode().try_into().unwrap(),
+    attempt: 0,
   };
 
   let mut signers = HashMap::new();
@@ -88,9 +90,6 @@ async fn test_substrate_signer() {
       preprocesses: mut these_preprocesses,
     }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
     {
-      if actual_id.id == [0; 32] {
-        actual_id.id = id.id;
-      }
       assert_eq!(id, actual_id);
       assert_eq!(batch_block, block);
       assert_eq!(these_preprocesses.len(), 1);

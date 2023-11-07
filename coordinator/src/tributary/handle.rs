@@ -18,7 +18,7 @@ use tributary::Signed;
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
-  coordinator,
+  coordinator::{self, BatchSignId},
   sign::{self, SignId},
 };
 
@@ -370,7 +370,7 @@ pub(crate) async fn handle_application_tx<
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
       let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
-      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch, nonce).await;
+      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec(), nonce).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -382,7 +382,7 @@ pub(crate) async fn handle_application_tx<
       let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
       for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id, nonce).await;
+        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id.to_vec(), nonce).await;
       }
     }
 
@@ -403,12 +403,12 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
-          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: SignId { key, id: data.plan, attempt: data.attempt },
+                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
             )
@@ -434,12 +434,12 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
-          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0.to_vec();
+          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::BatchShares {
-                id: SignId { key, id: data.plan, attempt: data.attempt },
+                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))

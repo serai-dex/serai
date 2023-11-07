@@ -5,8 +5,9 @@ use std::{
 
 use dkg::{Participant, tests::clone_without};
 
-use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext};
+use messages::{coordinator::*, SubstrateContext};
 
+use scale::Encode;
 use serai_client::{
   primitives::{
     BlockHash, Amount, Balance, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId,
@@ -25,8 +26,13 @@ pub(crate) async fn recv_batch_preprocesses(
   substrate_key: &[u8; 32],
   batch: &Batch,
   attempt: u32,
-) -> (SignId, HashMap<Participant, Vec<u8>>) {
-  let mut id = None;
+) -> (BatchSignId, HashMap<Participant, Vec<u8>>) {
+  let id = BatchSignId {
+    key: *substrate_key,
+    id: (batch.network, batch.id).encode().try_into().unwrap(),
+    attempt,
+  };
+
   let mut block = None;
   let mut preprocesses = HashMap::new();
   for (i, coordinator) in coordinators.iter_mut().enumerate() {
@@ -51,13 +57,10 @@ pub(crate) async fn recv_batch_preprocesses(
           preprocesses: mut these_preprocesses,
         },
       ) => {
-        if id.is_none() {
-          assert_eq!(&this_id.key, substrate_key);
-          assert_eq!(this_id.attempt, attempt);
-          id = Some(this_id.clone());
+        assert_eq!(this_id, id);
+        if block.is_none() {
           block = Some(this_block);
         }
-        assert_eq!(&this_id, id.as_ref().unwrap());
         assert_eq!(&this_block, block.as_ref().unwrap());
 
         assert_eq!(these_preprocesses.len(), 1);
@@ -77,13 +80,13 @@ pub(crate) async fn recv_batch_preprocesses(
     );
   }
 
-  (id.unwrap(), preprocesses)
+  (id, preprocesses)
 }
 
 pub(crate) async fn sign_batch(
   coordinators: &mut [Coordinator],
   key: [u8; 32],
-  id: SignId,
+  id: BatchSignId,
   preprocesses: HashMap<Participant, Vec<u8>>,
 ) -> SignedBatch {
   assert_eq!(preprocesses.len(), THRESHOLD);

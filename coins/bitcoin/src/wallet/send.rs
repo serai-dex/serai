@@ -94,7 +94,7 @@ impl SignableTransaction {
       // the value is fixed size (so any value could be used here)
       tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.script_pubkey() });
     }
-    u64::try_from(tx.weight()).unwrap()
+    u64::from(tx.weight())
   }
 
   /// Returns the fee necessary for this transaction to achieve the fee rate specified at

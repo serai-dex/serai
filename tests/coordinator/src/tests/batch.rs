@@ -23,7 +23,7 @@ use serai_client::{
     InInstructionsEvent,
   },
 };
-use messages::{sign::SignId, SubstrateContext, CoordinatorMessage};
+use messages::{coordinator::BatchSignId, SubstrateContext, CoordinatorMessage};
 
 use crate::{*, tests::*};
 
@@ -33,10 +33,10 @@ pub async fn batch(
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
-  let mut id = [0; 32];
+  let mut id = [0; 5];
   OsRng.fill_bytes(&mut id);
-  let id = SignId {
-    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes().to_vec(),
+  let id = BatchSignId {
+    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes(),
     id,
     attempt: 0,
   };

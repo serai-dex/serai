@@ -16,7 +16,7 @@ use crate::tributary::TributarySpec;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Topic {
   Dkg,
-  Batch([u8; 32]),
+  Batch([u8; 5]),
   Sign([u8; 32]),
 }
 

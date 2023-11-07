@@ -488,7 +488,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               &mut txn,
               network,
               RecognizedIdType::Plan,
-              id.id,
+              &id.id,
               preprocesses,
             );
 
@@ -547,7 +547,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               &mut txn,
               spec.set().network,
               RecognizedIdType::Batch,
-              id.id,
+              &id.id,
               preprocesses,
             );
 
@@ -877,7 +877,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       }
     });
 
-    move |set: ValidatorSet, genesis, id_type, id, nonce| {
+    move |set: ValidatorSet, genesis, id_type, id: Vec<u8>, nonce| {
       let mut raw_db = raw_db.clone();
       let key = key.clone();
       let tributaries = tributaries.clone();
@@ -899,16 +899,16 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
 
         let mut tx = match id_type {
           RecognizedIdType::Batch => Transaction::BatchPreprocess(SignData {
-            plan: id,
+            data: get_preprocess(&raw_db, id_type, &id).await,
+            plan: id.try_into().unwrap(),
             attempt: 0,
-            data: get_preprocess(&raw_db, id_type, id).await,
             signed: Transaction::empty_signed(),
           }),
 
           RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
-            plan: id,
+            data: get_preprocess(&raw_db, id_type, &id).await,
+            plan: id.try_into().unwrap(),
             attempt: 0,
-            data: get_preprocess(&raw_db, id_type, id).await,
             signed: Transaction::empty_signed(),
           }),
         };

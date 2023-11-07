@@ -3,7 +3,6 @@ use std::collections::{VecDeque, HashMap};
 
 use rand_core::OsRng;
 
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
@@ -24,20 +23,12 @@ use serai_client::{
   in_instructions::primitives::{Batch, SignedBatch, batch_message},
 };
 
-use messages::{sign::SignId, coordinator::*};
+use messages::coordinator::*;
 use crate::{Get, DbTxn, Db};
 
 // Generate an ID unique to a Batch
-// TODO: Fork SignId to BatchSignId in order to just use the 5-byte encoding, not the hash of the
-// 5-byte encoding
-fn sign_id(network: NetworkId, id: u32) -> [u8; 32] {
-  let mut transcript = RecommendedTranscript::new(b"Serai Processor Batch Sign ID");
-  transcript.append_message(b"network", network.encode());
-  transcript.append_message(b"id", id.to_le_bytes());
-
-  let mut res = [0; 32];
-  res.copy_from_slice(&transcript.challenge(b"id")[.. 32]);
-  res
+fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
+  (network, id).encode().try_into().unwrap()
 }
 
 #[derive(Debug)]
@@ -53,23 +44,23 @@ impl<D: Db> SubstrateSignerDb<D> {
     D::key(b"SUBSTRATE_SIGNER", dst, key)
   }
 
-  fn completed_key(id: [u8; 32]) -> Vec<u8> {
+  fn completed_key(id: [u8; 5]) -> Vec<u8> {
     Self::sign_key(b"completed", id)
   }
-  fn complete(txn: &mut D::Transaction<'_>, id: [u8; 32]) {
+  fn complete(txn: &mut D::Transaction<'_>, id: [u8; 5]) {
     txn.put(Self::completed_key(id), []);
   }
-  fn completed<G: Get>(getter: &G, id: [u8; 32]) -> bool {
+  fn completed<G: Get>(getter: &G, id: [u8; 5]) -> bool {
     getter.get(Self::completed_key(id)).is_some()
   }
 
-  fn attempt_key(id: &SignId) -> Vec<u8> {
+  fn attempt_key(id: &BatchSignId) -> Vec<u8> {
     Self::sign_key(b"attempt", id.encode())
   }
-  fn attempt(txn: &mut D::Transaction<'_>, id: &SignId) {
+  fn attempt(txn: &mut D::Transaction<'_>, id: &BatchSignId) {
     txn.put(Self::attempt_key(id), []);
   }
-  fn has_attempt<G: Get>(getter: &G, id: &SignId) -> bool {
+  fn has_attempt<G: Get>(getter: &G, id: &BatchSignId) -> bool {
     getter.get(Self::attempt_key(id)).is_some()
   }
 
@@ -89,14 +80,14 @@ pub struct SubstrateSigner<D: Db> {
   network: NetworkId,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
-  signable: HashMap<[u8; 32], Batch>,
-  attempt: HashMap<[u8; 32], u32>,
+  signable: HashMap<[u8; 5], Batch>,
+  attempt: HashMap<[u8; 5], u32>,
   #[allow(clippy::type_complexity)]
   preprocessing:
-    HashMap<[u8; 32], (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
+    HashMap<[u8; 5], (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
   #[allow(clippy::type_complexity)]
   signing:
-    HashMap<[u8; 32], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
+    HashMap<[u8; 5], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 
   pub events: VecDeque<SubstrateSignerEvent>,
 }
@@ -129,7 +120,7 @@ impl<D: Db> SubstrateSigner<D> {
     }
   }
 
-  fn verify_id(&self, id: &SignId) -> Result<(), ()> {
+  fn verify_id(&self, id: &BatchSignId) -> Result<(), ()> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
@@ -155,7 +146,7 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 32], attempt: u32) {
+  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 5], attempt: u32) {
     // See above commentary for why this doesn't emit SignedBatch
     if SubstrateSignerDb::<D>::completed(txn, id) {
       return;
@@ -189,7 +180,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys[0].group_key().to_bytes().to_vec(), id, attempt };
+    let id = BatchSignId { key: self.keys[0].group_key().to_bytes(), id, attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
@@ -241,7 +232,7 @@ impl<D: Db> SubstrateSigner<D> {
 
   pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
     debug_assert_eq!(self.network, batch.network);
-    let id = sign_id(batch.network, batch.id);
+    let id = batch_sign_id(batch.network, batch.id);
     if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
@@ -400,7 +391,7 @@ impl<D: Db> SubstrateSigner<D> {
     // block behind it, which will trigger starting the Batch
     // TODO: There is a race condition between the Scanner recognizing the block and the Batch
     // having signing started
-    let sign_id = sign_id(self.network, id);
+    let sign_id = batch_sign_id(self.network, id);
 
     // Stop trying to sign for this batch
     SubstrateSignerDb::<D>::complete(txn, sign_id);

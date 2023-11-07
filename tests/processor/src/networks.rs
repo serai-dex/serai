@@ -402,8 +402,7 @@ impl Wallet {
             view_pair.address(Network::Mainnet, AddressSpec::Standard),
           )
           .unwrap()
-          .try_into()
-          .unwrap(),
+          .into(),
         )
         .unwrap()
       }
