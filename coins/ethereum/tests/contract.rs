@@ -1,13 +1,16 @@
-use std::{convert::TryFrom, sync::Arc, time::Duration};
+use std::{convert::TryFrom, sync::Arc, time::Duration, fs::File};
 
 use rand_core::OsRng;
 
 use ::k256::{elliptic_curve::bigint::ArrayEncoding, U256};
 
-use ethers_core::utils::{keccak256, Anvil, AnvilInstance};
-use ethers_middleware::{Middleware, SignerMiddleware};
-use ethers_providers::{Provider, Http};
-use ethers_signers::LocalWallet;
+use ethers_core::{
+  abi::Abi,
+  utils::{keccak256, Anvil, AnvilInstance},
+};
+use ethers_contract::ContractFactory;
+use ethers_providers::{Middleware, Provider, Http};
+use ethers_signers::{Signer, LocalWallet};
 
 use frost::{
   curve::Secp256k1,
@@ -18,20 +21,71 @@ use frost::{
 
 use ethereum_serai::{
   crypto,
-  contract::{Schnorr, call_verify, deploy_schnorr_verifier_contract},
+  contract::{Schnorr, call_verify},
 };
 
-async fn deploy_test_contract(
-) -> (u32, AnvilInstance, Schnorr<SignerMiddleware<Provider<Http>, LocalWallet>>) {
+#[derive(serde::Deserialize)]
+struct Bytecode {
+  object: String,
+}
+
+#[derive(serde::Deserialize)]
+struct Artifact {
+  abi: Option<Abi>,
+  bytecode: Bytecode,
+}
+
+// TODO: Replace with a contract deployment from an unknown account, so the environment solely has
+// to fund the deployer, not create/pass a wallet
+pub async fn deploy_schnorr_verifier_contract(
+  chain_id: u32,
+  client: Arc<Provider<Http>>,
+  wallet: &LocalWallet,
+) -> eyre::Result<Schnorr<Provider<Http>>> {
+  let path = "./artifacts/Schnorr.sol/Schnorr.json";
+  let artifact: Artifact = serde_json::from_reader(File::open(path).unwrap()).unwrap();
+  let abi = artifact.abi.unwrap();
+  let hex_bin_buf = artifact.bytecode.object;
+  let hex_bin =
+    if let Some(stripped) = hex_bin_buf.strip_prefix("0x") { stripped } else { &hex_bin_buf };
+  let bin = hex::decode(hex_bin).unwrap();
+  let factory = ContractFactory::new(abi, bin.into(), client.clone());
+
+  let mut deployment_tx = factory.deploy(())?.tx;
+  deployment_tx.set_chain_id(chain_id);
+  deployment_tx.set_gas(500_000);
+  let (max_fee_per_gas, max_priority_fee_per_gas) = client.estimate_eip1559_fees(None).await?;
+  deployment_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
+  deployment_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
+  let signature = wallet.sign_transaction_sync(&deployment_tx)?;
+  let deployment_tx = deployment_tx.rlp_signed(&signature);
+  let pending_tx = client.send_raw_transaction(deployment_tx).await?;
+
+  let mut receipt;
+  while {
+    receipt = client.get_transaction_receipt(pending_tx.tx_hash()).await?;
+    receipt.is_none()
+  } {
+    tokio::time::sleep(Duration::from_secs(6)).await;
+  }
+  let receipt = receipt.unwrap();
+  assert!(receipt.status == Some(1.into()));
+
+  let contract = Schnorr::new(receipt.contract_address.unwrap(), client.clone());
+  Ok(contract)
+}
+
+async fn deploy_test_contract() -> (u32, AnvilInstance, Schnorr<Provider<Http>>) {
   let anvil = Anvil::new().spawn();
 
-  let wallet: LocalWallet = anvil.keys()[0].clone().into();
   let provider =
     Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(Duration::from_millis(10u64));
   let chain_id = provider.get_chainid().await.unwrap().as_u32();
-  let client = Arc::new(SignerMiddleware::new_with_provider_chain(provider, wallet).await.unwrap());
+  let wallet: LocalWallet = anvil.keys()[0].clone().into();
+  let wallet = wallet.with_chain_id(chain_id);
+  let client = Arc::new(provider);
 
-  (chain_id, anvil, deploy_schnorr_verifier_contract(client).await.unwrap())
+  (chain_id, anvil, deploy_schnorr_verifier_contract(chain_id, client, &wallet).await.unwrap())
 }
 
 #[tokio::test]
