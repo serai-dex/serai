@@ -37,10 +37,6 @@ pub enum Subcommand {
   // Revert the chain to a previous state
   Revert(sc_cli::RevertCmd),
 
-  // Sub-commands concerned with benchmarking
-  #[clap(subcommand)]
-  Benchmark(frame_benchmarking_cli::BenchmarkCmd),
-
   // DB meta columns information
   ChainInfo(sc_cli::ChainInfoCmd),
 }

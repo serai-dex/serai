@@ -5,7 +5,6 @@ use serai_runtime::Block;
 use sc_service::{PruningMode, PartialComponents};
 
 use sc_cli::SubstrateCli;
-use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 
 use crate::{
   chain_spec,
@@ -91,29 +90,6 @@ pub fn run() -> sc_cli::Result<()> {
         Ok(())
       });
       Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
-    }),
-
-    Some(Subcommand::Benchmark(cmd)) => cli.create_runner(cmd)?.sync_run(|config| match cmd {
-      BenchmarkCmd::Pallet(cmd) => cmd.run::<Block, ()>(config),
-
-      BenchmarkCmd::Block(cmd) => cmd.run(service::new_partial(&config)?.client),
-
-      #[cfg(not(feature = "runtime-benchmarks"))]
-      BenchmarkCmd::Storage(_) => {
-        Err("Storage benchmarking can be enabled with `--features runtime-benchmarks`.".into())
-      }
-
-      #[cfg(feature = "runtime-benchmarks")]
-      BenchmarkCmd::Storage(cmd) => {
-        let PartialComponents { client, backend, .. } = service::new_partial(&config)?;
-        cmd.run(config, client, backend.expose_db(), backend.expose_storage())
-      }
-
-      BenchmarkCmd::Overhead(_) => Err("Overhead benchmarking isn't supported.".into()),
-
-      BenchmarkCmd::Extrinsic(_) => Err("Extrinsic benchmarking isn't supported.".into()),
-
-      BenchmarkCmd::Machine(cmd) => cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
     }),
 
     Some(Subcommand::ChainInfo(cmd)) => {
