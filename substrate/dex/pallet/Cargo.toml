@@ -31,9 +31,6 @@ coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", de
 dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
 serai-primitives = { path = "../../primitives", default-features = false }
 
-[dev-dependencies]
-liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
-
 [features]
 default = ["std"]
 std = [
@@ -56,7 +53,6 @@ std = [
   "frame-benchmarking?/std",
 
   "coins-pallet/std",
-  "liquidity-tokens-pallet/std",
 ]
 runtime-benchmarks = [
   "sp-runtime/runtime-benchmarks",

@@ -41,6 +41,7 @@ fn testnet_genesis(
         .into_iter()
         .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
+      ignore: Default::default(),
     },
 
     dex: DexConfig {

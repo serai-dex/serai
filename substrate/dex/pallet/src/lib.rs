@@ -64,7 +64,7 @@
 //! (This can be run against the kitchen sync node in the `node` folder of this repo.)
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
-use frame_support::traits::{DefensiveOption, Incrementable};
+use frame_support::traits::DefensiveOption;
 
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
@@ -77,7 +77,7 @@ pub mod weights;
 // #[cfg(test)]
 // mod mock;
 
-use frame_support::{ensure, traits::tokens::AssetId as CoinId};
+use frame_support::ensure;
 use frame_system::{
   ensure_signed,
   pallet_prelude::{BlockNumberFor, OriginFor},
@@ -94,7 +94,7 @@ use sp_runtime::{
 use serai_primitives::{Coin, SubstrateAmount};
 
 use sp_std::prelude::*;
-use dex_primitives::*; // TODO: we might not need this after all.
+use dex_primitives::*;
 pub use weights::WeightInfo;
 
 #[frame_support::pallet]
@@ -118,11 +118,21 @@ pub mod pallet {
   /// migration.
   pub type PoolId = Coin;
 
+  /// Liquidity token id is the same as pool id.
+  pub type PoolCoinId = Coin;
+
+  /// LiquidityTokens Pallet as an instance of coins pallet.
+  pub type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
+
   #[pallet::pallet]
   pub struct Pallet<T>(_);
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> + CoinsConfig {
+  pub trait Config:
+    frame_system::Config<AccountId = Public>
+    + CoinsConfig
+    + coins_pallet::Config<coins_pallet::Instance1>
+  {
     /// Overarching event type.
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -134,22 +144,6 @@ pub mod pallet {
       + From<u32>
       + From<SubstrateAmount>
       + TryInto<SubstrateAmount>;
-
-    /// Identifier for the class of non-native coin.
-    /// Note: A `From<u32>` bound here would prevent `MultiLocation` from being used as an
-    /// `CoinId`.
-    type CoinId: frame_support::Serialize + sp_runtime::DeserializeOwned + CoinId;
-
-    /// `CoinId` to address the lp tokens by.
-    type PoolCoinId: CoinId + PartialOrd + Incrementable + From<u32>;
-
-    /// Registry for the lp tokens. Ideally only this pallet should have create permissions on
-    /// the coins.
-    type PoolCoins: LiquidityTokens<
-      Self::AccountId,
-      CoinId = Self::PoolCoinId,
-      Balance = SubstrateAmount,
-    >;
 
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
     #[pallet::constant]
@@ -168,19 +162,13 @@ pub mod pallet {
 
     /// The benchmarks need a way to create coin ids from u32s.
     #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper: BenchmarkHelper<Self::CoinId, Self::CoinId>;
+    type BenchmarkHelper: BenchmarkHelper<PoolCoinId, PoolCoinId>;
   }
 
   /// Map from `PoolCoinId` to `PoolInfo`. This establishes whether a pool has been officially
   /// created rather than people sending tokens directly to a pool's public account.
   #[pallet::storage]
-  pub type Pools<T: Config> =
-    StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<T::PoolCoinId>, OptionQuery>;
-
-  /// Stores the `PoolCoinId` that is going to be used for the next lp token.
-  /// This gets incremented whenever a new lp pool is created.
-  #[pallet::storage]
-  pub type NextPoolCoinId<T: Config> = StorageValue<_, T::PoolCoinId, OptionQuery>;
+  pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<Coin>, OptionQuery>;
 
   // Pallet's events.
   #[pallet::event]
@@ -195,7 +183,7 @@ pub mod pallet {
       pool_account: T::AccountId,
       /// The id of the liquidity tokens that will be minted when coins are added to this
       /// pool.
-      lp_token: T::PoolCoinId,
+      lp_token: PoolCoinId,
     },
 
     /// A successful call of the `AddLiquidity` extrinsic will create this event.
@@ -211,7 +199,7 @@ pub mod pallet {
       /// The amount of the SRI that was added to the pool.
       sri_amount: SubstrateAmount,
       /// The id of the lp token that was minted.
-      lp_token: T::PoolCoinId,
+      lp_token: PoolCoinId,
       /// The amount of lp tokens that were minted of that id.
       lp_token_minted: SubstrateAmount,
     },
@@ -229,7 +217,7 @@ pub mod pallet {
       /// The amount of the second coin that was removed from the pool.
       sri_amount: SubstrateAmount,
       /// The id of the lp token that was burned.
-      lp_token: T::PoolCoinId,
+      lp_token: PoolCoinId,
       /// The amount of lp tokens that were burned of that id.
       lp_token_burned: SubstrateAmount,
     },
@@ -368,23 +356,16 @@ pub mod pallet {
       let pool_account = Self::get_pool_account(pool_id);
       frame_system::Pallet::<T>::inc_providers(&pool_account);
 
-      let lp_token = NextPoolCoinId::<T>::get()
-        .or(T::PoolCoinId::initial_value())
-        .ok_or(Error::<T>::IncorrectPoolCoinId)?;
-      let next_lp_token_id = lp_token.increment().ok_or(Error::<T>::IncorrectPoolCoinId)?;
-      NextPoolCoinId::<T>::set(Some(next_lp_token_id));
-
-      let pool_info = PoolInfo { lp_token: lp_token.clone() };
+      let pool_info = PoolInfo { lp_token: coin };
       Pools::<T>::insert(pool_id, pool_info);
 
-      Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token });
+      Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token: coin });
 
       Ok(())
     }
   }
 
   /// Pallet's callable functions.
-  // TODO: For all of these calls, limit one of these to always be Coin::Serai
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     /// Provide liquidity into the pool of `coin1` and `coin2`.
@@ -457,12 +438,15 @@ pub mod pallet {
       )?;
       Self::transfer(&sender, &pool_account, Balance { coin, amount: Amount(coin_amount) })?;
 
-      let total_supply = T::PoolCoins::total_issuance(pool.lp_token.clone());
+      let total_supply = LiquidityTokens::<T>::supply(coin);
 
       let lp_token_amount: SubstrateAmount;
       if total_supply.is_zero() {
         lp_token_amount = Self::calc_lp_amount_for_zero_supply(sri_amount, coin_amount)?;
-        T::PoolCoins::mint_into(pool.lp_token.clone(), &pool_account, T::MintMinLiquidity::get())?;
+        LiquidityTokens::<T>::mint(
+          pool_account,
+          Balance { coin, amount: Amount(T::MintMinLiquidity::get()) },
+        )?;
       } else {
         let side1 = Self::mul_div(sri_amount, total_supply, sri_reserve)?;
         let side2 = Self::mul_div(coin_amount, total_supply, coin_reserve)?;
@@ -474,7 +458,7 @@ pub mod pallet {
         Error::<T>::InsufficientLiquidityMinted
       );
 
-      T::PoolCoins::mint_into(pool.lp_token.clone(), &mint_to, lp_token_amount)?;
+      LiquidityTokens::<T>::mint(mint_to, Balance { coin, amount: Amount(lp_token_amount) })?;
 
       Self::deposit_event(Event::LiquidityAdded {
         who: sender,
@@ -482,7 +466,7 @@ pub mod pallet {
         pool_id,
         coin_amount,
         sri_amount,
-        lp_token: pool.lp_token.clone(),
+        lp_token: pool.lp_token,
         lp_token_minted: lp_token_amount,
       });
 
@@ -515,7 +499,7 @@ pub mod pallet {
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
       let coin_reserve = Self::get_balance(&pool_account, coin);
 
-      let total_supply = T::PoolCoins::total_issuance(pool.lp_token.clone());
+      let total_supply = LiquidityTokens::<T>::supply(coin);
       let lp_redeem_amount = lp_token_burn;
 
       let sri_amount = Self::mul_div(lp_redeem_amount, sri_reserve, total_supply)?;
@@ -537,7 +521,8 @@ pub mod pallet {
         .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
 
       // burn the provided lp token amount that includes the fee
-      T::PoolCoins::burn_from(pool.lp_token.clone(), &sender, lp_token_burn)?;
+      // TODO: burn lp_token? uhh another burn function?
+      LiquidityTokens::<T>::burn_internal(sender, Balance { coin, amount: Amount(lp_token_burn) })?;
 
       Self::transfer(
         &pool_account,
@@ -552,7 +537,7 @@ pub mod pallet {
         pool_id,
         coin_amount,
         sri_amount,
-        lp_token: pool.lp_token.clone(),
+        lp_token: pool.lp_token,
         lp_token_burned: lp_token_burn,
       });
 
@@ -1040,14 +1025,6 @@ pub mod pallet {
         }
       }
       Ok(())
-    }
-
-    /// Returns the next pool coin id for benchmark purposes only.
-    #[cfg(any(test, feature = "runtime-benchmarks"))]
-    pub fn get_next_pool_coin_id() -> T::PoolCoinId {
-      NextPoolCoinId::<T>::get()
-        .or(T::PoolCoinId::initial_value())
-        .expect("Next pool coin ID can not be None")
     }
   }
 }

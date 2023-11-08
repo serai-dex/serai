@@ -38,22 +38,22 @@ serai_test!(
         DexEvent::PoolCreated {
           pool_id: Coin::Bitcoin,
           pool_account: PublicKey::from_raw(blake2_256(&Coin::Bitcoin.encode())),
-          lp_token: 0,
+          lp_token: Coin::Bitcoin,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Ether,
           pool_account: PublicKey::from_raw(blake2_256(&Coin::Ether.encode())),
-          lp_token: 1,
+          lp_token: Coin::Ether,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Dai,
           pool_account: PublicKey::from_raw(blake2_256(&Coin::Dai.encode())),
-          lp_token: 2,
+          lp_token: Coin::Dai,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Monero,
           pool_account: PublicKey::from_raw(blake2_256(&Coin::Monero.encode())),
-          lp_token: 3,
+          lp_token: Coin::Monero,
         },
       ]
     );
@@ -96,7 +96,7 @@ serai_test!(
         pool_id: Coin::Monero,
         coin_amount: coin_amount.0,
         sri_amount: sri_amount.0,
-        lp_token: 3,
+        lp_token: Coin::Monero,
         lp_token_minted: 49_999999990000
       }]
     );
@@ -280,7 +280,7 @@ serai_test!(
         pool_id: Coin::Bitcoin,
         coin_amount: 10_000_000_000_000, // half of sent amount
         sri_amount: 6_947_918_403_646,
-        lp_token: 0,
+        lp_token: Coin::Bitcoin,
         lp_token_minted: 8333333333332
       }]
     );

@@ -17,7 +17,6 @@ pub use pallet_timestamp as timestamp;
 pub use pallet_transaction_payment as transaction_payment;
 
 pub use coins_pallet as coins;
-pub use liquidity_tokens_pallet as liquidity_tokens;
 pub use dex_pallet as dex;
 
 pub use validator_sets_pallet as validator_sets;
@@ -47,7 +46,7 @@ use sp_runtime::{
   ApplyExtrinsicResult, Perbill,
 };
 
-use primitives::{PublicKey, SeraiAddress, Coin, AccountLookup, Signature, SubstrateAmount};
+use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -169,6 +168,7 @@ impl Contains<RuntimeCall> for CallFilter {
 
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
+      RuntimeCall::LiquidityTokens(call) => !matches!(call, coins::Call::__Ignore(_, _)),
       RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
@@ -246,19 +246,15 @@ impl coins::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl liquidity_tokens::Config for Runtime {
+impl coins::Config<coins::Instance1> for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
 impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   // TODO: Review if this should be u64/u128 or u64/u256 (and rounding in general).
+  // TODO: do we still need this type?
   type HigherPrecisionBalance = u128;
-
-  type CoinId = Coin;
-  type PoolCoinId = u32;
-
-  type PoolCoins = LiquidityTokens;
 
   type LPFee = ConstU32<3>; // 0.3%
   type MintMinLiquidity = ConstU64<10000>;
@@ -370,7 +366,7 @@ construct_runtime!(
     TransactionPayment: transaction_payment,
 
     Coins: coins,
-    LiquidityTokens: liquidity_tokens,
+    LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
 
     ValidatorSets: validator_sets,
