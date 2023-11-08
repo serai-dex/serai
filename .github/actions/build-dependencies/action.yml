@@ -54,5 +54,11 @@ runs:
         components: ${{ inputs.rust-components }}
         targets: wasm32-unknown-unknown, riscv32imac-unknown-none-elf
 
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@cb603ca0abb544f301eaed59ac0baf579aa6aecf
+      with:
+        version: nightly
+        cache: false
+
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43

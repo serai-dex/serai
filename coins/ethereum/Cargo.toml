@@ -29,10 +29,6 @@ ethers-signers = { version = "2", default-features = false }
 ethers-middleware = { version = "2", default-features = false }
 ethers-providers = { version = "2", default-features = false }
 ethers-contract = { version = "2", default-features = false, features = ["abigen", "providers"] }
-ethers-solc = { version = "2", default-features = false }
-
-[build-dependencies]
-ethers-solc = { version = "2", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
