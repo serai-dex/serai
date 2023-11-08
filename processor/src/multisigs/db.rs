@@ -5,7 +5,11 @@ use ciphersuite::Ciphersuite;
 pub use serai_db::*;
 
 use scale::{Encode, Decode};
-use serai_client::in_instructions::primitives::InInstructionWithBalance;
+#[rustfmt::skip]
+use serai_client::{
+  primitives::ExternalAddress,
+  in_instructions::primitives::InInstructionWithBalance
+};
 
 use crate::{
   Get, Db, Plan,
@@ -151,6 +155,21 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     txn.put(Self::signing_key(key), signing);
 
     txn.put(Self::resolved_key(resolution.as_ref()), plan);
+  }
+
+  fn refund_key(id: &[u8]) -> Vec<u8> {
+    Self::multisigs_key(b"refund", id)
+  }
+  pub fn set_refund(txn: &mut D::Transaction<'_>, id: &[u8], address: ExternalAddress) {
+    txn.put(Self::refund_key(id), address.encode());
+  }
+  pub fn take_refund(txn: &mut D::Transaction<'_>, id: &[u8]) -> Option<ExternalAddress> {
+    let key = Self::refund_key(id);
+    let res = txn.get(&key).map(|address| ExternalAddress::decode(&mut address.as_ref()).unwrap());
+    if res.is_some() {
+      txn.del(key);
+    }
+    res
   }
 
   fn forwarded_output_key(amount: u64) -> Vec<u8> {

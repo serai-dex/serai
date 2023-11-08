@@ -12,6 +12,7 @@ use bitcoin::{
 
 type BAddress = BAddressGeneric<NetworkChecked>;
 
+// TODO: Add a new so you can't create an address which can't be encoded
 #[derive(Clone, Eq, Debug)]
 pub struct Address(pub BAddress);
 

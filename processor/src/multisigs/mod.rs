@@ -7,7 +7,7 @@ use scale::{Encode, Decode};
 use messages::SubstrateContext;
 
 use serai_client::{
-  primitives::{BlockHash, MAX_DATA_LEN},
+  primitives::{MAX_DATA_LEN, ExternalAddress, BlockHash},
   in_instructions::primitives::{
     InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
   },
@@ -40,8 +40,20 @@ use crate::{
 };
 
 // InInstructionWithBalance from an external output
-fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructionWithBalance> {
+fn instruction_from_output<N: Network>(
+  output: &N::Output,
+) -> (Option<ExternalAddress>, Option<InInstructionWithBalance>) {
   assert_eq!(output.kind(), OutputType::External);
+
+  let presumed_origin = output.presumed_origin().map(|address| {
+    ExternalAddress::new(
+      address
+        .try_into()
+        .map_err(|_| ())
+        .expect("presumed origin couldn't be converted to a Vec<u8>"),
+    )
+    .expect("presumed origin exceeded address limits")
+  });
 
   let mut data = output.data();
   let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
@@ -51,19 +63,23 @@ fn instruction_from_output<N: Network>(output: &N::Output) -> Option<InInstructi
       hex::encode(output.id()),
       data.len(),
     );
-    None?;
+    return (presumed_origin, None);
   }
 
-  let Ok(shorthand) = Shorthand::decode(&mut data) else { None? };
-  let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else { None? };
+  let Ok(shorthand) = Shorthand::decode(&mut data) else { return (presumed_origin, None) };
+  let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else {
+    return (presumed_origin, None);
+  };
 
   let mut balance = output.balance();
   // Deduct twice the cost to aggregate to prevent economic attacks by malicious miners against
   // other users
   balance.amount.0 -= 2 * N::COST_TO_AGGREGATE;
 
-  // TODO2: Set instruction.origin if not set (and handle refunds in general)
-  Some(InInstructionWithBalance { instruction: instruction.instruction, balance })
+  (
+    instruction.origin.or(presumed_origin),
+    Some(InInstructionWithBalance { instruction: instruction.instruction, balance }),
+  )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -320,6 +336,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (existing_outputs, new_outputs)
   }
 
+  fn refund_plan(output: &N::Output, refund_to: N::Address) -> Plan<N> {
+    Plan {
+      key: output.key(),
+      inputs: vec![output.clone()],
+      // Uses a payment as this will still be successfully sent due to fee amortization,
+      // and because change is currently always a Serai key
+      payments: vec![Payment { address: refund_to, data: None, amount: output.balance().amount.0 }],
+      change: None,
+    }
+  }
+
   // Manually creates Plans for all External outputs needing forwarding/refunding.
   //
   // Returns created Plans and a map of forwarded output IDs to their associated InInstructions.
@@ -351,8 +378,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut plans = vec![];
     let mut forwarding = HashMap::new();
     existing_outputs.retain(|output| {
+      let plans_at_start = plans.len();
       if output.kind() == OutputType::External {
-        if let Some(instruction) = instruction_from_output::<N>(output) {
+        let (refund_to, instruction) = instruction_from_output::<N>(output);
+        if let Some(instruction) = instruction {
           // Build a dedicated Plan forwarding this
           plans.push(Plan {
             key: self.existing.as_ref().unwrap().key,
@@ -363,13 +392,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
           // Set the instruction for this output to be returned
           forwarding.insert(output.id().as_ref().to_vec(), instruction);
+        } else if let Some(refund_to) = refund_to {
+          if let Ok(refund_to) = refund_to.consume().try_into() {
+            // Build a dedicated Plan refunding this
+            plans.push(Self::refund_plan(output, refund_to));
+          }
         }
-
-        // TODO: Refund here
-        false
-      } else {
-        true
       }
+      // Only keep if we didn't make a Plan consuming it
+      plans_at_start == plans.len()
     });
     (plans, forwarding)
   }
@@ -571,7 +602,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
     // We now have to acknowledge the acknowledged block, if it's new
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
-    let (acquired_lock, (mut existing_outputs, new_outputs)) = {
+    let (acquired_lock, (mut existing_outputs, mut new_outputs)) = {
       let (acquired_lock, outputs) = if ScannerHandle::<N, D>::db_scanned(txn)
         .expect("published a Batch despite never scanning a block") <
         block_number
@@ -602,6 +633,21 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         (self.filter_outputs_due_to_closing(txn, &mut existing_outputs), HashMap::new())
       }
     };
+
+    let handle_refund_outputs = |txn: &mut _, plans: &mut Vec<_>, outputs: &mut Vec<N::Output>| {
+      outputs.retain(|output| {
+        if let Some(refund_to) = MultisigsDb::<N, D>::take_refund(txn, output.id().as_ref()) {
+          // If this isn't a valid refund address, accumulate this output
+          let Ok(refund_to) = refund_to.consume().try_into() else {
+            return true;
+          };
+          plans.push(Self::refund_plan(output, refund_to));
+          return false;
+        }
+        true
+      });
+    };
+    handle_refund_outputs(txn, &mut plans, &mut existing_outputs);
 
     plans.extend({
       let existing = self.existing.as_mut().unwrap();
@@ -636,6 +682,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       }
     }
 
+    handle_refund_outputs(txn, &mut plans, &mut new_outputs);
     if let Some(new) = self.new.as_mut() {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
@@ -780,11 +827,20 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             continue;
           }
 
-          let instruction = if let Some(instruction) = instruction_from_output::<N>(&output) {
+          let (refund_to, instruction) = instruction_from_output::<N>(&output);
+          let refund = |txn| {
+            if let Some(refund_to) = refund_to {
+              MultisigsDb::<N, D>::set_refund(txn, output.id().as_ref(), refund_to);
+            }
+          };
+          let instruction = if let Some(instruction) = instruction {
             instruction
           } else {
+            // If the output data is empty, this may be a forwarded transaction from a prior
+            // multisig
+            // If it's not empty, it's corrupt in some way and should be refunded
             if !output.data().is_empty() {
-              // TODO2: Refund
+              refund(txn);
               continue;
             }
 
@@ -793,7 +849,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             {
               instruction
             } else {
-              // TODO2: Refund
+              // If it's not a forwarded output, refund
+              refund(txn);
               continue;
             }
           };

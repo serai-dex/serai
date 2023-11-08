@@ -1,6 +1,9 @@
 use std::{time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
+
+use scale::{Encode, Decode};
 
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::ff::PrimeField;
@@ -19,7 +22,7 @@ use bitcoin_serai::{
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
-    OutPoint, TxOut, Transaction, Block, Network as BitcoinNetwork,
+    OutPoint, TxOut, Transaction, Block, Network as BNetwork,
   },
   wallet::{
     tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
@@ -53,8 +56,6 @@ use crate::{
   Payment,
 };
 
-use once_cell::sync::Lazy;
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OutputId(pub [u8; 36]);
 impl Default for OutputId {
@@ -76,6 +77,7 @@ impl AsMut<[u8]> for OutputId {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   kind: OutputType,
+  presumed_origin: Option<Address>,
   output: ReceivedOutput,
   data: Vec<u8>,
 }
@@ -119,6 +121,10 @@ impl OutputTrait<Bitcoin> for Output {
       (ProjectivePoint::GENERATOR * self.output.offset())
   }
 
+  fn presumed_origin(&self) -> Option<Address> {
+    self.presumed_origin.clone()
+  }
+
   fn balance(&self) -> Balance {
     Balance { coin: SeraiCoin::Bitcoin, amount: Amount(self.output.value()) }
   }
@@ -129,14 +135,25 @@ impl OutputTrait<Bitcoin> for Output {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.kind.write(writer)?;
+    let presumed_origin: Option<Vec<u8>> =
+      self.presumed_origin.clone().map(|presumed_origin| presumed_origin.try_into().unwrap());
+    writer.write_all(&presumed_origin.encode())?;
     self.output.write(writer)?;
     writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.data)
   }
 
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read<R: io::Read>(mut reader: &mut R) -> io::Result<Self> {
     Ok(Output {
       kind: OutputType::read(reader)?,
+      presumed_origin: {
+        let mut io_reader = scale::IoReader(reader);
+        let res = Option::<Vec<u8>>::decode(&mut io_reader)
+          .unwrap()
+          .map(|address| Address::try_from(address).unwrap());
+        reader = io_reader.0;
+        res
+      },
       output: ReceivedOutput::read(reader)?,
       data: {
         let mut data_len = [0; 2];
@@ -494,7 +511,7 @@ impl Network for Bitcoin {
   }
 
   fn address(key: ProjectivePoint) -> Address {
-    Address(BAddress::<NetworkChecked>::new(BitcoinNetwork::Bitcoin, address_payload(key).unwrap()))
+    Address(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
   }
 
   fn branch_address(key: ProjectivePoint) -> Address {
@@ -545,7 +562,35 @@ impl Network for Bitcoin {
         };
         data.truncate(MAX_DATA_LEN.try_into().unwrap());
 
-        let output = Output { kind, output, data };
+        let presumed_origin = {
+          let spent_output = tx.input[0].previous_output;
+          let mut spent_tx = spent_output.txid.as_raw_hash().to_byte_array();
+          spent_tx.reverse();
+          let spent_output = {
+            let mut tx;
+            while {
+              tx = self.get_transaction(&spent_tx).await;
+              tx.is_err()
+            } {
+              log::error!("couldn't get transaction from bitcoin node: {tx:?}");
+              sleep(Duration::from_secs(5)).await;
+            }
+            tx.unwrap().output.swap_remove(usize::try_from(spent_output.vout).unwrap())
+          };
+          BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin).ok().and_then(
+            |address| {
+              let address = Address(address);
+              let encoded: Result<Vec<u8>, _> = address.clone().try_into();
+              if encoded.is_ok() {
+                Some(address)
+              } else {
+                None
+              }
+            },
+          )
+        };
+
+        let output = Output { kind, presumed_origin, output, data };
         assert_eq!(output.tx_id(), tx.id());
         outputs.push(output);
       }
@@ -717,7 +762,7 @@ impl Network for Bitcoin {
       .rpc
       .rpc_call::<Vec<String>>(
         "generatetoaddress",
-        serde_json::json!([1, BAddress::p2sh(Script::new(), BitcoinNetwork::Regtest).unwrap()]),
+        serde_json::json!([1, BAddress::p2sh(Script::new(), BNetwork::Regtest).unwrap()]),
       )
       .await
       .unwrap();
@@ -726,9 +771,9 @@ impl Network for Bitcoin {
   #[cfg(test)]
   async fn test_send(&self, address: Address) -> Block {
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
-    let private_key = PrivateKey::new(secret_key, BitcoinNetwork::Regtest);
+    let private_key = PrivateKey::new(secret_key, BNetwork::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-    let main_addr = BAddress::p2pkh(&public_key, BitcoinNetwork::Regtest);
+    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self

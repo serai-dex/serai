@@ -103,6 +103,8 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
   fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id;
   fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
+  fn presumed_origin(&self) -> Option<N::Address>;
+
   fn balance(&self) -> Balance;
   // TODO: Remove this?
   fn amount(&self) -> u64 {

@@ -10,6 +10,7 @@ use crate::networks::{Output, Network};
 pub struct Payment<N: Network> {
   pub address: N::Address,
   pub data: Option<Vec<u8>>,
+  // TODO: Balance
   pub amount: u64,
 }
 

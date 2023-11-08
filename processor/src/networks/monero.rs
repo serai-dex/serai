@@ -77,6 +77,10 @@ impl OutputTrait<Monero> for Output {
     EdwardsPoint(self.0.output.data.key - (EdwardsPoint::generator().0 * self.0.key_offset()))
   }
 
+  fn presumed_origin(&self) -> Option<Address> {
+    None
+  }
+
   fn balance(&self) -> Balance {
     Balance { coin: SeraiCoin::Monero, amount: Amount(self.0.commitment().amount) }
   }
