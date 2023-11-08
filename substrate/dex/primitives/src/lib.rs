@@ -26,8 +26,6 @@ use scale_info::TypeInfo;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
 
-use frame_support::traits::tokens::{Balance, AssetId as CoinId};
-
 /// Stores the lp_token coin id a particular pool has been assigned.
 #[derive(Decode, Encode, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo)]
 pub struct PoolInfo<PoolCoinId> {
@@ -66,36 +64,4 @@ pub trait Swap<AccountId, Balance, MultiCoinId> {
     amount_in_max: Option<Balance>,
     send_to: AccountId,
   ) -> Result<Balance, DispatchError>;
-}
-
-/// Liquidity tokens trait for Dex pallet.
-pub trait LiquidityTokens<AccountId>: Sized {
-  /// Amount type.
-  type Balance: Balance;
-
-  /// Coin identifier.
-  type CoinId: CoinId;
-
-  /// Returns the `token` balance of and account.
-  fn balance(token: Self::CoinId, of: &AccountId) -> Self::Balance;
-
-  /// Mints `amount` to `to`.
-  fn mint_into(
-    token: Self::CoinId,
-    to: &AccountId,
-    amount: Self::Balance,
-  ) -> Result<Self::Balance, DispatchError>;
-
-  /// Burns `amount` from `from`.
-  fn burn_from(
-    token: Self::CoinId,
-    from: &AccountId,
-    amount: Self::Balance,
-  ) -> Result<Self::Balance, DispatchError>;
-
-  /// Returns total supply for `token`.
-  fn total_issuance(token: Self::CoinId) -> Self::Balance;
-
-  /// Returns an iterator of the collections in existence.
-  fn coin_ids() -> Vec<Self::CoinId>;
 }

@@ -8284,7 +8284,6 @@ name = "serai-dex-primitives"
 version = "0.1.0"
 dependencies = [
  "frame-benchmarking",
- "frame-support",
  "parity-scale-codec",
  "scale-info",
  "sp-runtime",
