@@ -63,7 +63,6 @@ jobs:
             -p serai-primitives \
             -p serai-coins-primitives \
             -p serai-coins-pallet \
-            -p serai-liquidity-tokens-pallet \
             -p serai-dex-primitives \
             -p serai-dex-pallet \
             -p serai-validator-sets-primitives \
