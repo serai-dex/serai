@@ -8287,7 +8287,6 @@ dependencies = [
  "frame-support",
  "parity-scale-codec",
  "scale-info",
- "serai-primitives",
  "sp-runtime",
  "sp-std",
 ]

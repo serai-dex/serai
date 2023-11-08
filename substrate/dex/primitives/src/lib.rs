@@ -28,32 +28,11 @@ use sp_std::vec::Vec;
 
 use frame_support::traits::tokens::{Balance, AssetId as CoinId};
 
-use serai_primitives::Coin;
-
 /// Stores the lp_token coin id a particular pool has been assigned.
 #[derive(Decode, Encode, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo)]
 pub struct PoolInfo<PoolCoinId> {
   /// Liquidity pool coin
   pub lp_token: PoolCoinId,
-}
-
-/// Benchmark Helper
-#[cfg(feature = "runtime-benchmarks")]
-pub trait BenchmarkHelper<CoinId, MultiCoinId> {
-  /// Returns an `CoinId` from a given integer.
-  fn coin_id(coin_id: u32) -> CoinId;
-}
-
-#[cfg(feature = "runtime-benchmarks")]
-mod runtime_benchmarks {
-  use super::*;
-  use serai_primitives::COINS;
-  impl BenchmarkHelper<Coin, Coin> for () {
-    fn coin_id(coin_id: u32) -> Coin {
-      // we shift id 1 unit to the left, since id 0 is the native coin.
-      COINS[(usize::try_from(coin_id).unwrap() % COINS.len()) + 1]
-    }
-  }
 }
 
 /// Trait for providing methods to swap between the various coin classes.

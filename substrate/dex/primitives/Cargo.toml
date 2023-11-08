@@ -22,8 +22,6 @@ frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-f
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
-
 [features]
 default = [ "std" ]
 std = [
@@ -32,8 +30,6 @@ std = [
 
   "frame-support/std",
   "frame-benchmarking?/std",
-
-  "serai-primitives/std",
 
   "sp-runtime/std",
   "sp-std/std",

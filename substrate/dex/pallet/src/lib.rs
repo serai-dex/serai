@@ -66,16 +66,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use frame_support::traits::DefensiveOption;
 
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 pub mod weights;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
-// #[cfg(test)]
-// mod mock;
+#[cfg(test)]
+mod mock;
 
 use frame_support::ensure;
 use frame_system::{
@@ -159,10 +159,6 @@ pub mod pallet {
 
     /// Weight information for extrinsics in this pallet.
     type WeightInfo: WeightInfo;
-
-    /// The benchmarks need a way to create coin ids from u32s.
-    #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper: BenchmarkHelper<PoolCoinId, PoolCoinId>;
   }
 
   /// Map from `PoolCoinId` to `PoolInfo`. This establishes whether a pool has been officially
@@ -768,7 +764,7 @@ pub mod pallet {
     /// result. Coins have to be different and one of them should be Coin::Serai.
     pub fn get_pool_id(coin1: Coin, coin2: Coin) -> Result<PoolId, Error<T>> {
       ensure!((coin1 == Coin::Serai) || (coin2 == Coin::Serai), Error::<T>::PoolNotFound);
-      ensure!(coin1 != coin2, Error::<T>::PoolNotFound);
+      ensure!(coin1 != coin2, Error::<T>::EqualCoins);
       if coin1 == Coin::Serai {
         Ok(coin2)
       } else {

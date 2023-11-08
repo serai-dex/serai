@@ -262,9 +262,6 @@ impl dex::Config for Runtime {
   type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
-
-  #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = ();
 }
 
 impl validator_sets::Config for Runtime {
