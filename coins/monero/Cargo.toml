@@ -54,7 +54,6 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 base58-monero = { version = "2", default-features = false, features = ["check"] }
 
 # Used for the provided HTTP RPC
-async-recursion = { version = "1", optional = true }
 digest_auth = { version = "0.3", default-features = false, optional = true }
 simple-request = { path = "../../common/request", version = "0.1", default-features = false, optional = true }
 tokio = { version = "1", default-features = false, optional = true }
@@ -101,7 +100,7 @@ std = [
   "base58-monero/std",
 ]
 
-http-rpc = ["async-recursion", "digest_auth", "simple-request", "tokio"]
+http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "dleq", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
 experimental = []
