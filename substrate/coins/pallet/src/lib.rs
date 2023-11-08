@@ -14,8 +14,6 @@ pub mod pallet {
 
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
-  use dex_primitives::{Currency, Coins as CoinsTrait};
-
   use serai_primitives::*;
   pub use coins_primitives as primitives;
   use primitives::*;
@@ -196,6 +194,11 @@ pub mod pallet {
       Self::deposit_event(Event::Transfer { from, to, balance });
       Ok(())
     }
+
+    pub fn minimum_balance(_coin: Coin) -> Amount {
+      // TODO: use precision here to determine the min amount?
+      Amount(1)
+    }
   }
 
   #[pallet::call]
@@ -214,71 +217,6 @@ pub mod pallet {
       let from = ensure_signed(origin)?;
       Self::burn_non_sri(from, instruction)?;
       Ok(())
-    }
-  }
-
-  impl<T: Config> Currency<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
-
-    fn balance(of: &Public) -> Self::Balance {
-      Self::balance(*of, Coin::Serai).0
-    }
-
-    /// TODO: make sure of coin precision here.
-    fn minimum_balance() -> Self::Balance {
-      1
-    }
-
-    fn transfer(
-      from: &Public,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
-      Self::transfer_internal(*from, *to, balance)?;
-      Ok(amount)
-    }
-
-    fn mint(to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
-      Self::mint(*to, Balance { coin: Coin::native(), amount: Amount(amount) })?;
-      Ok(amount)
-    }
-  }
-
-  // TODO: Have DEX implement for Coins, not Coins implement for Coins
-  impl<T: Config> CoinsTrait<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
-    type CoinId = Coin;
-
-    // TODO: Swap the order of these arguments
-    fn balance(coin: Self::CoinId, of: &Public) -> Self::Balance {
-      Self::balance(*of, coin).0
-    }
-
-    fn minimum_balance(_: Self::CoinId) -> Self::Balance {
-      1
-    }
-
-    // TODO: Move coin next to amount
-    fn transfer(
-      coin: Self::CoinId,
-      from: &Public,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      let balance = Balance { coin, amount: Amount(amount) };
-      Self::transfer_internal(*from, *to, balance)?;
-      Ok(amount)
-    }
-
-    // TODO: Move coin next to amount
-    fn mint(
-      coin: Self::CoinId,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      Self::mint(*to, Balance { coin, amount: Amount(amount) })?;
-      Ok(amount)
     }
   }
 

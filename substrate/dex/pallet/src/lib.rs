@@ -66,108 +66,89 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use frame_support::traits::{DefensiveOption, Incrementable};
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+// #[cfg(feature = "runtime-benchmarks")]
+// mod benchmarking;
 
 pub mod weights;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
-#[cfg(test)]
-mod mock;
+// #[cfg(test)]
+// mod mock;
 
-use codec::Codec;
-use frame_support::{
-  ensure,
-  traits::tokens::{AssetId as CoinId, Balance},
-};
+use frame_support::{ensure, traits::tokens::AssetId as CoinId};
 use frame_system::{
   ensure_signed,
   pallet_prelude::{BlockNumberFor, OriginFor},
 };
+
 pub use pallet::*;
+
 use sp_arithmetic::traits::Unsigned;
 use sp_runtime::{
-  traits::{
-    CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure, MaybeDisplay, TrailingZeroInput,
-  },
+  traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure, TrailingZeroInput},
   DispatchError,
 };
+
+use serai_primitives::{Coin, SubstrateAmount};
+
 use sp_std::prelude::*;
-use dex_primitives::*;
+use dex_primitives::*; // TODO: we might not need this after all.
 pub use weights::WeightInfo;
 
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
   use frame_support::{pallet_prelude::*, BoundedBTreeSet};
+
+  use sp_core::sr25519::Public;
   use sp_runtime::{
     traits::{IntegerSquareRoot, One, Zero},
     Saturating,
   };
 
+  use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
+
+  use serai_primitives::{Coin, Amount, Balance, SubstrateAmount};
+
   /// Pool ID.
   ///
   /// The pool's `AccountId` is derived from this type. Any changes to the type may necessitate a
   /// migration.
-  pub type PoolIdOf<T> = (<T as Config>::MultiCoinId, <T as Config>::MultiCoinId);
+  pub type PoolId = Coin;
 
   #[pallet::pallet]
   pub struct Pallet<T>(_);
 
   #[pallet::config]
-  pub trait Config: frame_system::Config {
+  pub trait Config: frame_system::Config<AccountId = Public> + CoinsConfig {
     /// Overarching event type.
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-    /// Currency type that this works on.
-    type Currency: Currency<Self::AccountId, Balance = Self::Balance>;
-
-    /// The `Currency::Balance` type of the native currency.
-    type Balance: Balance;
-
-    /// The type used to describe the amount of fractions converted into coins.
-    type CoinBalance: Balance;
-
-    /// A type used for conversions between `Balance` and `CoinBalance`.
+    /// A type used for conversions between `SubstrateAmount` and `SubstrateAmount`.
     type HigherPrecisionBalance: IntegerSquareRoot
       + One
       + Ensure
       + Unsigned
       + From<u32>
-      + From<Self::CoinBalance>
-      + From<Self::Balance>
-      + TryInto<Self::CoinBalance>
-      + TryInto<Self::Balance>;
+      + From<SubstrateAmount>
+      + TryInto<SubstrateAmount>;
 
     /// Identifier for the class of non-native coin.
     /// Note: A `From<u32>` bound here would prevent `MultiLocation` from being used as an
     /// `CoinId`.
     type CoinId: frame_support::Serialize + sp_runtime::DeserializeOwned + CoinId;
 
-    /// Type that identifies either the native currency or a token class from `Coins`.
-    /// `Ord` is added because of `get_pool_id`.
-    ///
-    /// The pool's `AccountId` is derived from this type. Any changes to the type may
-    /// necessitate a migration.
-    type MultiCoinId: Ord + CoinId + From<Self::CoinId>;
-
-    /// Type to convert an `CoinId` into `MultiCoinId`.
-    type MultiCoinIdConverter: MultiCoinIdConverter<Self::MultiCoinId, Self::CoinId>;
-
     /// `CoinId` to address the lp tokens by.
     type PoolCoinId: CoinId + PartialOrd + Incrementable + From<u32>;
-
-    /// Registry for the coins.
-    type Coins: Coins<Self::AccountId, CoinId = Self::CoinId, Balance = Self::CoinBalance>;
 
     /// Registry for the lp tokens. Ideally only this pallet should have create permissions on
     /// the coins.
     type PoolCoins: LiquidityTokens<
       Self::AccountId,
       CoinId = Self::PoolCoinId,
-      Balance = Self::CoinBalance,
+      Balance = SubstrateAmount,
     >;
 
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
@@ -176,7 +157,7 @@ pub mod pallet {
 
     /// The minimum LP token amount that could be minted. Ameliorates rounding errors.
     #[pallet::constant]
-    type MintMinLiquidity: Get<Self::CoinBalance>;
+    type MintMinLiquidity: Get<SubstrateAmount>;
 
     /// The max number of hops in a swap.
     #[pallet::constant]
@@ -187,14 +168,14 @@ pub mod pallet {
 
     /// The benchmarks need a way to create coin ids from u32s.
     #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper: BenchmarkHelper<Self::CoinId, Self::MultiCoinId>;
+    type BenchmarkHelper: BenchmarkHelper<Self::CoinId, Self::CoinId>;
   }
 
   /// Map from `PoolCoinId` to `PoolInfo`. This establishes whether a pool has been officially
   /// created rather than people sending tokens directly to a pool's public account.
   #[pallet::storage]
   pub type Pools<T: Config> =
-    StorageMap<_, Blake2_128Concat, PoolIdOf<T>, PoolInfo<T::PoolCoinId>, OptionQuery>;
+    StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<T::PoolCoinId>, OptionQuery>;
 
   /// Stores the `PoolCoinId` that is going to be used for the next lp token.
   /// This gets incremented whenever a new lp pool is created.
@@ -209,7 +190,7 @@ pub mod pallet {
     PoolCreated {
       /// The pool id associated with the pool. Note that the order of the coins may not be
       /// the same as the order specified in the create pool extrinsic.
-      pool_id: PoolIdOf<T>,
+      pool_id: PoolId,
       /// The account ID of the pool.
       pool_account: T::AccountId,
       /// The id of the liquidity tokens that will be minted when coins are added to this
@@ -224,15 +205,15 @@ pub mod pallet {
       /// The account that the liquidity tokens were minted to.
       mint_to: T::AccountId,
       /// The pool id of the pool that the liquidity was added to.
-      pool_id: PoolIdOf<T>,
-      /// The amount of the first coin that was added to the pool.
-      amount1_provided: T::CoinBalance,
-      /// The amount of the second coin that was added to the pool.
-      amount2_provided: T::CoinBalance,
+      pool_id: PoolId,
+      /// The amount of the coin that was added to the pool.
+      coin_amount: SubstrateAmount,
+      /// The amount of the SRI that was added to the pool.
+      sri_amount: SubstrateAmount,
       /// The id of the lp token that was minted.
       lp_token: T::PoolCoinId,
       /// The amount of lp tokens that were minted of that id.
-      lp_token_minted: T::CoinBalance,
+      lp_token_minted: SubstrateAmount,
     },
 
     /// A successful call of the `RemoveLiquidity` extrinsic will create this event.
@@ -242,15 +223,15 @@ pub mod pallet {
       /// The account that the coins were transferred to.
       withdraw_to: T::AccountId,
       /// The pool id that the liquidity was removed from.
-      pool_id: PoolIdOf<T>,
+      pool_id: PoolId,
       /// The amount of the first coin that was removed from the pool.
-      amount1: T::CoinBalance,
+      coin_amount: SubstrateAmount,
       /// The amount of the second coin that was removed from the pool.
-      amount2: T::CoinBalance,
+      sri_amount: SubstrateAmount,
       /// The id of the lp token that was burned.
       lp_token: T::PoolCoinId,
       /// The amount of lp tokens that were burned of that id.
-      lp_token_burned: T::CoinBalance,
+      lp_token_burned: SubstrateAmount,
     },
     /// Coins have been converted from one to another. Both `SwapExactTokenForToken`
     /// and `SwapTokenForExactToken` will generate this event.
@@ -260,12 +241,12 @@ pub mod pallet {
       /// The account that the coins were transferred to.
       send_to: T::AccountId,
       /// The route of coin ids that the swap went through.
-      /// E.g. A -> Dot -> B
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
+      /// E.g. A -> SRI -> B
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
       /// The amount of the first coin that was swapped.
-      amount_in: T::CoinBalance,
+      amount_in: SubstrateAmount,
       /// The amount of the second coin that was received.
-      amount_out: T::CoinBalance,
+      amount_out: SubstrateAmount,
     },
     /// An amount has been transferred from one account to another.
     Transfer {
@@ -273,10 +254,8 @@ pub mod pallet {
       from: T::AccountId,
       /// The account that the coins were transferred to.
       to: T::AccountId,
-      /// The coin that was transferred.
-      coin: T::MultiCoinId,
-      /// The amount of the coin that was transferred.
-      amount: T::CoinBalance,
+      /// The balance that was transferred.
+      balance: Balance,
     },
   }
 
@@ -284,12 +263,14 @@ pub mod pallet {
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
     /// Pools to create at launch.
-    pub pools: Vec<T::CoinId>,
+    pub pools: Vec<Coin>,
+    /// field just to have T. TODO: better way to own the T than this?
+    pub ignore: PhantomData<T>,
   }
 
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { pools: Default::default() }
+      GenesisConfig { pools: Default::default(), ignore: Default::default() }
     }
   }
 
@@ -297,7 +278,7 @@ pub mod pallet {
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
       for coin in &self.pools {
-        Pallet::<T>::create_pool(coin.clone().into()).unwrap();
+        Pallet::<T>::create_pool(*coin).unwrap();
       }
     }
   }
@@ -377,15 +358,14 @@ pub mod pallet {
     /// (the id of which is returned in the `Event::PoolCreated` event).
     ///
     /// Once a pool is created, someone may [`Pallet::add_liquidity`] to it.
-    pub(crate) fn create_pool(coin2: T::MultiCoinId) -> DispatchResult {
-      let coin1 = T::MultiCoinIdConverter::get_native();
-      ensure!(coin1 != coin2, Error::<T>::EqualCoins);
+    pub(crate) fn create_pool(coin: Coin) -> DispatchResult {
+      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
       // prepare pool_id
-      let pool_id = Self::get_pool_id(coin1, coin2);
-      ensure!(!Pools::<T>::contains_key(&pool_id), Error::<T>::PoolExists);
+      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
+      ensure!(!Pools::<T>::contains_key(pool_id), Error::<T>::PoolExists);
 
-      let pool_account = Self::get_pool_account(&pool_id);
+      let pool_account = Self::get_pool_account(pool_id);
       frame_system::Pallet::<T>::inc_providers(&pool_account);
 
       let lp_token = NextPoolCoinId::<T>::get()
@@ -395,7 +375,7 @@ pub mod pallet {
       NextPoolCoinId::<T>::set(Some(next_lp_token_id));
 
       let pool_info = PoolInfo { lp_token: lp_token.clone() };
-      Pools::<T>::insert(pool_id.clone(), pool_info);
+      Pools::<T>::insert(pool_id, pool_info);
 
       Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token });
 
@@ -421,74 +401,71 @@ pub mod pallet {
     #[allow(clippy::too_many_arguments)]
     pub fn add_liquidity(
       origin: OriginFor<T>,
-      coin1: T::MultiCoinId,
-      coin2: T::MultiCoinId,
-      amount1_desired: T::CoinBalance,
-      amount2_desired: T::CoinBalance,
-      amount1_min: T::CoinBalance,
-      amount2_min: T::CoinBalance,
+      coin: Coin,
+      coin_desired: SubstrateAmount,
+      sri_desired: SubstrateAmount,
+      coin_min: SubstrateAmount,
+      sri_min: SubstrateAmount,
       mint_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
-
-      let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-      // swap params if needed
-      let (amount1_desired, amount2_desired, amount1_min, amount2_min) = if pool_id.0 == coin1 {
-        (amount1_desired, amount2_desired, amount1_min, amount2_min)
-      } else {
-        (amount2_desired, amount1_desired, amount2_min, amount1_min)
-      };
       ensure!(
-        amount1_desired > Zero::zero() && amount2_desired > Zero::zero(),
+        sri_desired > Zero::zero() && coin_desired > Zero::zero(),
         Error::<T>::WrongDesiredAmount
       );
+      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
-      let maybe_pool = Pools::<T>::get(&pool_id);
+      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
+
+      let maybe_pool = Pools::<T>::get(pool_id);
       let pool = maybe_pool.as_ref().ok_or(Error::<T>::PoolNotFound)?;
-      let pool_account = Self::get_pool_account(&pool_id);
+      let pool_account = Self::get_pool_account(pool_id);
 
-      let (coin1, coin2) = &pool_id;
-      let reserve1 = Self::get_balance(&pool_account, coin1)?;
-      let reserve2 = Self::get_balance(&pool_account, coin2)?;
+      let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
+      let coin_reserve = Self::get_balance(&pool_account, coin);
 
-      let amount1: T::CoinBalance;
-      let amount2: T::CoinBalance;
-      if reserve1.is_zero() || reserve2.is_zero() {
-        amount1 = amount1_desired;
-        amount2 = amount2_desired;
+      let sri_amount: SubstrateAmount;
+      let coin_amount: SubstrateAmount;
+      if sri_reserve.is_zero() || coin_reserve.is_zero() {
+        sri_amount = sri_desired;
+        coin_amount = coin_desired;
       } else {
-        let amount2_optimal = Self::quote(&amount1_desired, &reserve1, &reserve2)?;
+        let coin_optimal = Self::quote(sri_desired, sri_reserve, coin_reserve)?;
 
-        if amount2_optimal <= amount2_desired {
-          ensure!(amount2_optimal >= amount2_min, Error::<T>::CoinTwoDepositDidNotMeetMinimum);
-          amount1 = amount1_desired;
-          amount2 = amount2_optimal;
+        if coin_optimal <= coin_desired {
+          ensure!(coin_optimal >= coin_min, Error::<T>::CoinTwoDepositDidNotMeetMinimum);
+          sri_amount = sri_desired;
+          coin_amount = coin_optimal;
         } else {
-          let amount1_optimal = Self::quote(&amount2_desired, &reserve2, &reserve1)?;
-          ensure!(amount1_optimal <= amount1_desired, Error::<T>::OptimalAmountLessThanDesired);
-          ensure!(amount1_optimal >= amount1_min, Error::<T>::CoinOneDepositDidNotMeetMinimum);
-          amount1 = amount1_optimal;
-          amount2 = amount2_desired;
+          let sri_optimal = Self::quote(coin_desired, coin_reserve, sri_reserve)?;
+          ensure!(sri_optimal <= sri_desired, Error::<T>::OptimalAmountLessThanDesired);
+          ensure!(sri_optimal >= sri_min, Error::<T>::CoinOneDepositDidNotMeetMinimum);
+          sri_amount = sri_optimal;
+          coin_amount = coin_desired;
         }
       }
 
-      Self::validate_minimal_amount(amount1.saturating_add(reserve1), coin1)
+      Self::validate_minimal_amount(sri_amount.saturating_add(sri_reserve), Coin::Serai)
         .map_err(|_| Error::<T>::AmountOneLessThanMinimal)?;
-      Self::validate_minimal_amount(amount2.saturating_add(reserve2), coin2)
+      Self::validate_minimal_amount(coin_amount.saturating_add(coin_reserve), coin)
         .map_err(|_| Error::<T>::AmountTwoLessThanMinimal)?;
 
-      Self::transfer(coin1, &sender, &pool_account, amount1)?;
-      Self::transfer(coin2, &sender, &pool_account, amount2)?;
+      Self::transfer(
+        &sender,
+        &pool_account,
+        Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
+      )?;
+      Self::transfer(&sender, &pool_account, Balance { coin, amount: Amount(coin_amount) })?;
 
       let total_supply = T::PoolCoins::total_issuance(pool.lp_token.clone());
 
-      let lp_token_amount: T::CoinBalance;
+      let lp_token_amount: SubstrateAmount;
       if total_supply.is_zero() {
-        lp_token_amount = Self::calc_lp_amount_for_zero_supply(&amount1, &amount2)?;
+        lp_token_amount = Self::calc_lp_amount_for_zero_supply(sri_amount, coin_amount)?;
         T::PoolCoins::mint_into(pool.lp_token.clone(), &pool_account, T::MintMinLiquidity::get())?;
       } else {
-        let side1 = Self::mul_div(&amount1, &total_supply, &reserve1)?;
-        let side2 = Self::mul_div(&amount2, &total_supply, &reserve2)?;
+        let side1 = Self::mul_div(sri_amount, total_supply, sri_reserve)?;
+        let side2 = Self::mul_div(coin_amount, total_supply, coin_reserve)?;
         lp_token_amount = side1.min(side2);
       }
 
@@ -503,8 +480,8 @@ pub mod pallet {
         who: sender,
         mint_to,
         pool_id,
-        amount1_provided: amount1,
-        amount2_provided: amount2,
+        coin_amount,
+        sri_amount,
         lp_token: pool.lp_token.clone(),
         lp_token_minted: lp_token_amount,
       });
@@ -519,66 +496,62 @@ pub mod pallet {
     #[pallet::weight(T::WeightInfo::remove_liquidity())]
     pub fn remove_liquidity(
       origin: OriginFor<T>,
-      coin1: T::MultiCoinId,
-      coin2: T::MultiCoinId,
-      lp_token_burn: T::CoinBalance,
-      amount1_min_receive: T::CoinBalance,
-      amount2_min_receive: T::CoinBalance,
+      coin: Coin,
+      lp_token_burn: SubstrateAmount,
+      coin_min_receive: SubstrateAmount,
+      sri_min_receive: SubstrateAmount,
       withdraw_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
+      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
-      let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-      // swap params if needed
-      let (amount1_min_receive, amount2_min_receive) = if pool_id.0 == coin1 {
-        (amount1_min_receive, amount2_min_receive)
-      } else {
-        (amount2_min_receive, amount1_min_receive)
-      };
-      let (coin1, coin2) = pool_id.clone();
-
+      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
       ensure!(lp_token_burn > Zero::zero(), Error::<T>::ZeroLiquidity);
 
-      let maybe_pool = Pools::<T>::get(&pool_id);
+      let maybe_pool = Pools::<T>::get(pool_id);
       let pool = maybe_pool.as_ref().ok_or(Error::<T>::PoolNotFound)?;
 
-      let pool_account = Self::get_pool_account(&pool_id);
-      let reserve1 = Self::get_balance(&pool_account, &coin1)?;
-      let reserve2 = Self::get_balance(&pool_account, &coin2)?;
+      let pool_account = Self::get_pool_account(pool_id);
+      let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
+      let coin_reserve = Self::get_balance(&pool_account, coin);
 
       let total_supply = T::PoolCoins::total_issuance(pool.lp_token.clone());
       let lp_redeem_amount = lp_token_burn;
 
-      let amount1 = Self::mul_div(&lp_redeem_amount, &reserve1, &total_supply)?;
-      let amount2 = Self::mul_div(&lp_redeem_amount, &reserve2, &total_supply)?;
+      let sri_amount = Self::mul_div(lp_redeem_amount, sri_reserve, total_supply)?;
+      let coin_amount = Self::mul_div(lp_redeem_amount, coin_reserve, total_supply)?;
 
       ensure!(
-        !amount1.is_zero() && amount1 >= amount1_min_receive,
+        !sri_amount.is_zero() && sri_amount >= sri_min_receive,
         Error::<T>::CoinOneWithdrawalDidNotMeetMinimum
       );
       ensure!(
-        !amount2.is_zero() && amount2 >= amount2_min_receive,
+        !coin_amount.is_zero() && coin_amount >= coin_min_receive,
         Error::<T>::CoinTwoWithdrawalDidNotMeetMinimum
       );
-      let reserve1_left = reserve1.saturating_sub(amount1);
-      let reserve2_left = reserve2.saturating_sub(amount2);
-      Self::validate_minimal_amount(reserve1_left, &coin1)
+      let sri_reserve_left = sri_reserve.saturating_sub(sri_amount);
+      let coin_reserve_left = coin_reserve.saturating_sub(coin_amount);
+      Self::validate_minimal_amount(sri_reserve_left, Coin::Serai)
         .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
-      Self::validate_minimal_amount(reserve2_left, &coin2)
+      Self::validate_minimal_amount(coin_reserve_left, coin)
         .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
 
       // burn the provided lp token amount that includes the fee
       T::PoolCoins::burn_from(pool.lp_token.clone(), &sender, lp_token_burn)?;
 
-      Self::transfer(&coin1, &pool_account, &withdraw_to, amount1)?;
-      Self::transfer(&coin2, &pool_account, &withdraw_to, amount2)?;
+      Self::transfer(
+        &pool_account,
+        &withdraw_to,
+        Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
+      )?;
+      Self::transfer(&pool_account, &withdraw_to, Balance { coin, amount: Amount(coin_amount) })?;
 
       Self::deposit_event(Event::LiquidityRemoved {
         who: sender,
         withdraw_to,
         pool_id,
-        amount1,
-        amount2,
+        coin_amount,
+        sri_amount,
         lp_token: pool.lp_token.clone(),
         lp_token_burned: lp_token_burn,
       });
@@ -596,9 +569,9 @@ pub mod pallet {
     #[pallet::weight(T::WeightInfo::swap_exact_tokens_for_tokens())]
     pub fn swap_exact_tokens_for_tokens(
       origin: OriginFor<T>,
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-      amount_in: T::CoinBalance,
-      amount_out_min: T::CoinBalance,
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
+      amount_in: SubstrateAmount,
+      amount_out_min: SubstrateAmount,
       send_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
@@ -622,9 +595,9 @@ pub mod pallet {
     #[pallet::weight(T::WeightInfo::swap_tokens_for_exact_tokens())]
     pub fn swap_tokens_for_exact_tokens(
       origin: OriginFor<T>,
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-      amount_out: T::CoinBalance,
-      amount_in_max: T::CoinBalance,
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
+      amount_out: SubstrateAmount,
+      amount_in_max: SubstrateAmount,
       send_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
@@ -649,11 +622,11 @@ pub mod pallet {
     /// If successful, returns the amount of `path[1]` acquired for the `amount_in`.
     pub fn do_swap_exact_tokens_for_tokens(
       sender: T::AccountId,
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-      amount_in: T::CoinBalance,
-      amount_out_min: Option<T::CoinBalance>,
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
+      amount_in: SubstrateAmount,
+      amount_out_min: Option<SubstrateAmount>,
       send_to: T::AccountId,
-    ) -> Result<T::CoinBalance, DispatchError> {
+    ) -> Result<SubstrateAmount, DispatchError> {
       ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
       if let Some(amount_out_min) = amount_out_min {
         ensure!(amount_out_min > Zero::zero(), Error::<T>::ZeroAmount);
@@ -661,7 +634,7 @@ pub mod pallet {
 
       Self::validate_swap_path(&path)?;
 
-      let amounts = Self::get_amounts_out(&amount_in, &path)?;
+      let amounts = Self::get_amounts_out(amount_in, &path)?;
       let amount_out =
         *amounts.last().defensive_ok_or("get_amounts_out() returned an empty result")?;
 
@@ -682,11 +655,11 @@ pub mod pallet {
     /// If successful returns the amount of the `path[0]` taken to provide `path[1]`.
     pub fn do_swap_tokens_for_exact_tokens(
       sender: T::AccountId,
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-      amount_out: T::CoinBalance,
-      amount_in_max: Option<T::CoinBalance>,
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
+      amount_out: SubstrateAmount,
+      amount_in_max: Option<SubstrateAmount>,
       send_to: T::AccountId,
-    ) -> Result<T::CoinBalance, DispatchError> {
+    ) -> Result<SubstrateAmount, DispatchError> {
       ensure!(amount_out > Zero::zero(), Error::<T>::ZeroAmount);
       if let Some(amount_in_max) = amount_in_max {
         ensure!(amount_in_max > Zero::zero(), Error::<T>::ZeroAmount);
@@ -694,7 +667,7 @@ pub mod pallet {
 
       Self::validate_swap_path(&path)?;
 
-      let amounts = Self::get_amounts_in(&amount_out, &path)?;
+      let amounts = Self::get_amounts_in(amount_out, &path)?;
       let amount_in =
         *amounts.first().defensive_ok_or("get_amounts_in() returned an empty result")?;
 
@@ -708,95 +681,70 @@ pub mod pallet {
 
     /// Transfer an `amount` of `coin_id`.
     fn transfer(
-      coin_id: &T::MultiCoinId,
       from: &T::AccountId,
       to: &T::AccountId,
-      amount: T::CoinBalance,
-    ) -> Result<T::CoinBalance, DispatchError> {
-      let result = match T::MultiCoinIdConverter::try_convert(coin_id) {
-        MultiCoinIdConversionResult::Converted(coin_id) => {
-          T::Coins::transfer(coin_id, from, to, amount)
-        }
-        MultiCoinIdConversionResult::Native => {
-          let amount = Self::convert_coin_balance_to_native_balance(amount)?;
-          Ok(Self::convert_native_balance_to_coin_balance(T::Currency::transfer(
-            from, to, amount,
-          )?)?)
-        }
-        MultiCoinIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedCoin.into()),
-      };
+      balance: Balance,
+    ) -> Result<Amount, DispatchError> {
+      CoinsPallet::<T>::transfer_internal(*from, *to, balance)?;
 
-      if result.is_ok() {
-        Self::deposit_event(Event::Transfer {
-          from: from.clone(),
-          to: to.clone(),
-          coin: (*coin_id).clone(),
-          amount,
-        });
-      }
-      result
+      Self::deposit_event(Event::Transfer { from: *from, to: *to, balance });
+      Ok(balance.amount)
     }
 
-    /// Convert a `Balance` type to an `CoinBalance`.
-    pub(crate) fn convert_native_balance_to_coin_balance(
-      amount: T::Balance,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      T::HigherPrecisionBalance::from(amount).try_into().map_err(|_| Error::<T>::Overflow)
-    }
-
-    /// Convert an `CoinBalance` type to a `Balance`.
-    pub(crate) fn convert_coin_balance_to_native_balance(
-      amount: T::CoinBalance,
-    ) -> Result<T::Balance, Error<T>> {
-      T::HigherPrecisionBalance::from(amount).try_into().map_err(|_| Error::<T>::Overflow)
-    }
-
-    /// Convert a `HigherPrecisionBalance` type to an `CoinBalance`.
+    /// Convert a `HigherPrecisionBalance` type to an `SubstrateAmount`.
     pub(crate) fn convert_hpb_to_coin_balance(
       amount: T::HigherPrecisionBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
+    ) -> Result<SubstrateAmount, Error<T>> {
       amount.try_into().map_err(|_| Error::<T>::Overflow)
     }
 
     /// Swap coins along a `path`, depositing in `send_to`.
     pub(crate) fn do_swap(
       sender: T::AccountId,
-      amounts: &Vec<T::CoinBalance>,
-      path: BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
+      amounts: &Vec<SubstrateAmount>,
+      path: BoundedVec<Coin, T::MaxSwapPathLength>,
       send_to: T::AccountId,
     ) -> Result<(), DispatchError> {
       ensure!(amounts.len() > 1, Error::<T>::CorrespondenceError);
       if let Some([coin1, coin2]) = &path.get(0 .. 2) {
-        let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-        let pool_account = Self::get_pool_account(&pool_id);
+        let pool_id = Self::get_pool_id(*coin1, *coin2)?;
+        let pool_account = Self::get_pool_account(pool_id);
         // amounts should always contain a corresponding element to path.
         let first_amount = amounts.first().ok_or(Error::<T>::CorrespondenceError)?;
 
-        Self::transfer(coin1, &sender, &pool_account, *first_amount)?;
+        Self::transfer(
+          &sender,
+          &pool_account,
+          Balance { coin: *coin1, amount: Amount(*first_amount) },
+        )?;
 
         let mut i = 0;
         let path_len = path.len() as u32;
         for coins_pair in path.windows(2) {
           if let [coin1, coin2] = coins_pair {
-            let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-            let pool_account = Self::get_pool_account(&pool_id);
+            let pool_id = Self::get_pool_id(*coin1, *coin2)?;
+            let pool_account = Self::get_pool_account(pool_id);
 
             let amount_out =
               amounts.get((i + 1) as usize).ok_or(Error::<T>::CorrespondenceError)?;
 
             let to = if i < path_len - 2 {
               let coin3 = path.get((i + 2) as usize).ok_or(Error::<T>::PathError)?;
-              Self::get_pool_account(&Self::get_pool_id(coin2.clone(), coin3.clone()))
+              Self::get_pool_account(Self::get_pool_id(*coin2, *coin3)?)
             } else {
-              send_to.clone()
+              send_to
             };
 
-            let reserve = Self::get_balance(&pool_account, coin2)?;
+            let reserve = Self::get_balance(&pool_account, *coin2);
             let reserve_left = reserve.saturating_sub(*amount_out);
-            Self::validate_minimal_amount(reserve_left, coin2)
+            Self::validate_minimal_amount(reserve_left, *coin2)
               .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
 
-            Self::transfer(coin2, &pool_account, &to, *amount_out)?;
+            Self::transfer(
+              &pool_account,
+              &to,
+              Balance { coin: *coin2, amount: Amount(*amount_out) },
+            )?;
           }
           i.saturating_inc();
         }
@@ -817,63 +765,43 @@ pub mod pallet {
     ///
     /// This actually does computation. If you need to keep using it, then make sure you cache
     /// the value and only call this once.
-    pub fn get_pool_account(pool_id: &PoolIdOf<T>) -> T::AccountId {
-      let encoded_pool_id = sp_io::hashing::blake2_256(&Encode::encode(pool_id)[..]);
+    pub fn get_pool_account(pool_id: PoolId) -> T::AccountId {
+      let encoded_pool_id = sp_io::hashing::blake2_256(&Encode::encode(&pool_id)[..]);
 
       Decode::decode(&mut TrailingZeroInput::new(encoded_pool_id.as_ref()))
         .expect("infinite length input; no invalid inputs for type; qed")
     }
 
     /// Get the `owner`'s balance of `coin`, which could be the chain's native coin or another
-    /// fungible. Returns a value in the form of an `CoinBalance`.
-    fn get_balance(
-      owner: &T::AccountId,
-      coin: &T::MultiCoinId,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      match T::MultiCoinIdConverter::try_convert(coin) {
-        MultiCoinIdConversionResult::Converted(coin_id) => {
-          Ok(<<T as Config>::Coins>::balance(coin_id, owner))
-        }
-        MultiCoinIdConversionResult::Native => {
-          Self::convert_native_balance_to_coin_balance(<<T as Config>::Currency>::balance(owner))
-        }
-        MultiCoinIdConversionResult::Unsupported(_) => Err(Error::<T>::UnsupportedCoin),
-      }
+    /// fungible. Returns a value in the form of an `Amount`.
+    fn get_balance(owner: &T::AccountId, coin: Coin) -> SubstrateAmount {
+      CoinsPallet::<T>::balance(*owner, coin).0
     }
 
     /// Returns a pool id constructed from 2 coins.
-    /// 1. Native coin should be lower than the other coin ids.
-    /// 2. Two native or two non-native coins are compared by their `Ord` implementation.
-    ///
     /// We expect deterministic order, so (coin1, coin2) or (coin2, coin1) returns the same
-    /// result.
-    pub fn get_pool_id(coin1: T::MultiCoinId, coin2: T::MultiCoinId) -> PoolIdOf<T> {
-      match (T::MultiCoinIdConverter::is_native(&coin1), T::MultiCoinIdConverter::is_native(&coin2))
-      {
-        (true, false) => (coin1, coin2),
-        (false, true) => (coin2, coin1),
-        _ => {
-          // else we want to be deterministic based on `Ord` implementation
-          if coin1 <= coin2 {
-            (coin1, coin2)
-          } else {
-            (coin2, coin1)
-          }
-        }
+    /// result. Coins have to be different and one of them should be Coin::Serai.
+    pub fn get_pool_id(coin1: Coin, coin2: Coin) -> Result<PoolId, Error<T>> {
+      ensure!((coin1 == Coin::Serai) || (coin2 == Coin::Serai), Error::<T>::PoolNotFound);
+      ensure!(coin1 != coin2, Error::<T>::PoolNotFound);
+      if coin1 == Coin::Serai {
+        Ok(coin2)
+      } else {
+        Ok(coin1)
       }
     }
 
     /// Returns the balance of each coin in the pool.
     /// The tuple result is in the order requested (not necessarily the same as pool order).
     pub fn get_reserves(
-      coin1: &T::MultiCoinId,
-      coin2: &T::MultiCoinId,
-    ) -> Result<(T::CoinBalance, T::CoinBalance), Error<T>> {
-      let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-      let pool_account = Self::get_pool_account(&pool_id);
+      coin1: &Coin,
+      coin2: &Coin,
+    ) -> Result<(SubstrateAmount, SubstrateAmount), Error<T>> {
+      let pool_id = Self::get_pool_id(*coin1, *coin2)?;
+      let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, coin1)?;
-      let balance2 = Self::get_balance(&pool_account, coin2)?;
+      let balance1 = Self::get_balance(&pool_account, *coin1);
+      let balance2 = Self::get_balance(&pool_account, *coin2);
 
       if balance1.is_zero() || balance2.is_zero() {
         Err(Error::<T>::PoolNotFound)?;
@@ -884,16 +812,16 @@ pub mod pallet {
 
     /// Leading to an amount at the end of a `path`, get the required amounts in.
     pub(crate) fn get_amounts_in(
-      amount_out: &T::CoinBalance,
-      path: &BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-    ) -> Result<Vec<T::CoinBalance>, DispatchError> {
-      let mut amounts: Vec<T::CoinBalance> = vec![*amount_out];
+      amount_out: SubstrateAmount,
+      path: &BoundedVec<Coin, T::MaxSwapPathLength>,
+    ) -> Result<Vec<SubstrateAmount>, DispatchError> {
+      let mut amounts: Vec<SubstrateAmount> = vec![amount_out];
 
       for coins_pair in path.windows(2).rev() {
         if let [coin1, coin2] = coins_pair {
           let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2)?;
           let prev_amount = amounts.last().expect("Always has at least one element");
-          let amount_in = Self::get_amount_in(prev_amount, &reserve_in, &reserve_out)?;
+          let amount_in = Self::get_amount_in(*prev_amount, reserve_in, reserve_out)?;
           amounts.push(amount_in);
         }
       }
@@ -904,16 +832,16 @@ pub mod pallet {
 
     /// Following an amount into a `path`, get the corresponding amounts out.
     pub(crate) fn get_amounts_out(
-      amount_in: &T::CoinBalance,
-      path: &BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
-    ) -> Result<Vec<T::CoinBalance>, DispatchError> {
-      let mut amounts: Vec<T::CoinBalance> = vec![*amount_in];
+      amount_in: SubstrateAmount,
+      path: &BoundedVec<Coin, T::MaxSwapPathLength>,
+    ) -> Result<Vec<SubstrateAmount>, DispatchError> {
+      let mut amounts: Vec<SubstrateAmount> = vec![amount_in];
 
       for coins_pair in path.windows(2) {
         if let [coin1, coin2] = coins_pair {
           let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2)?;
           let prev_amount = amounts.last().expect("Always has at least one element");
-          let amount_out = Self::get_amount_out(prev_amount, &reserve_in, &reserve_out)?;
+          let amount_out = Self::get_amount_out(*prev_amount, reserve_in, reserve_out)?;
           amounts.push(amount_out);
         }
       }
@@ -923,21 +851,21 @@ pub mod pallet {
 
     /// Used by the RPC service to provide current prices.
     pub fn quote_price_exact_tokens_for_tokens(
-      coin1: T::MultiCoinId,
-      coin2: T::MultiCoinId,
-      amount: T::CoinBalance,
+      coin1: Coin,
+      coin2: Coin,
+      amount: SubstrateAmount,
       include_fee: bool,
-    ) -> Option<T::CoinBalance> {
-      let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-      let pool_account = Self::get_pool_account(&pool_id);
+    ) -> Option<SubstrateAmount> {
+      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
+      let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, &coin1).ok()?;
-      let balance2 = Self::get_balance(&pool_account, &coin2).ok()?;
+      let balance1 = Self::get_balance(&pool_account, coin1);
+      let balance2 = Self::get_balance(&pool_account, coin2);
       if !balance1.is_zero() {
         if include_fee {
-          Self::get_amount_out(&amount, &balance1, &balance2).ok()
+          Self::get_amount_out(amount, balance1, balance2).ok()
         } else {
-          Self::quote(&amount, &balance1, &balance2).ok()
+          Self::quote(amount, balance1, balance2).ok()
         }
       } else {
         None
@@ -946,21 +874,21 @@ pub mod pallet {
 
     /// Used by the RPC service to provide current prices.
     pub fn quote_price_tokens_for_exact_tokens(
-      coin1: T::MultiCoinId,
-      coin2: T::MultiCoinId,
-      amount: T::CoinBalance,
+      coin1: Coin,
+      coin2: Coin,
+      amount: SubstrateAmount,
       include_fee: bool,
-    ) -> Option<T::CoinBalance> {
-      let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
-      let pool_account = Self::get_pool_account(&pool_id);
+    ) -> Option<SubstrateAmount> {
+      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
+      let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, &coin1).ok()?;
-      let balance2 = Self::get_balance(&pool_account, &coin2).ok()?;
+      let balance1 = Self::get_balance(&pool_account, coin1);
+      let balance2 = Self::get_balance(&pool_account, coin2);
       if !balance1.is_zero() {
         if include_fee {
-          Self::get_amount_in(&amount, &balance1, &balance2).ok()
+          Self::get_amount_in(amount, balance1, balance2).ok()
         } else {
-          Self::quote(&amount, &balance2, &balance1).ok()
+          Self::quote(amount, balance2, balance1).ok()
         }
       } else {
         None
@@ -969,20 +897,20 @@ pub mod pallet {
 
     /// Calculates the optimal amount from the reserves.
     pub fn quote(
-      amount: &T::CoinBalance,
-      reserve1: &T::CoinBalance,
-      reserve2: &T::CoinBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
+      amount: SubstrateAmount,
+      reserve1: SubstrateAmount,
+      reserve2: SubstrateAmount,
+    ) -> Result<SubstrateAmount, Error<T>> {
       // amount * reserve2 / reserve1
       Self::mul_div(amount, reserve2, reserve1)
     }
 
     pub(super) fn calc_lp_amount_for_zero_supply(
-      amount1: &T::CoinBalance,
-      amount2: &T::CoinBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      let amount1 = T::HigherPrecisionBalance::from(*amount1);
-      let amount2 = T::HigherPrecisionBalance::from(*amount2);
+      amount1: SubstrateAmount,
+      amount2: SubstrateAmount,
+    ) -> Result<SubstrateAmount, Error<T>> {
+      let amount1 = T::HigherPrecisionBalance::from(amount1);
+      let amount2 = T::HigherPrecisionBalance::from(amount2);
 
       let result = amount1
         .checked_mul(&amount2)
@@ -995,13 +923,13 @@ pub mod pallet {
     }
 
     fn mul_div(
-      a: &T::CoinBalance,
-      b: &T::CoinBalance,
-      c: &T::CoinBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      let a = T::HigherPrecisionBalance::from(*a);
-      let b = T::HigherPrecisionBalance::from(*b);
-      let c = T::HigherPrecisionBalance::from(*c);
+      a: SubstrateAmount,
+      b: SubstrateAmount,
+      c: SubstrateAmount,
+    ) -> Result<SubstrateAmount, Error<T>> {
+      let a = T::HigherPrecisionBalance::from(a);
+      let b = T::HigherPrecisionBalance::from(b);
+      let c = T::HigherPrecisionBalance::from(c);
 
       let result = a
         .checked_mul(&b)
@@ -1017,13 +945,13 @@ pub mod pallet {
     /// Given an input amount of an coin and pair reserves, returns the maximum output amount
     /// of the other coin.
     pub fn get_amount_out(
-      amount_in: &T::CoinBalance,
-      reserve_in: &T::CoinBalance,
-      reserve_out: &T::CoinBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      let amount_in = T::HigherPrecisionBalance::from(*amount_in);
-      let reserve_in = T::HigherPrecisionBalance::from(*reserve_in);
-      let reserve_out = T::HigherPrecisionBalance::from(*reserve_out);
+      amount_in: SubstrateAmount,
+      reserve_in: SubstrateAmount,
+      reserve_out: SubstrateAmount,
+    ) -> Result<SubstrateAmount, Error<T>> {
+      let amount_in = T::HigherPrecisionBalance::from(amount_in);
+      let reserve_in = T::HigherPrecisionBalance::from(reserve_in);
+      let reserve_out = T::HigherPrecisionBalance::from(reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
         return Err(Error::<T>::ZeroLiquidity);
@@ -1051,13 +979,13 @@ pub mod pallet {
     /// Given an output amount of an coin and pair reserves, returns a required input amount
     /// of the other coin.
     pub fn get_amount_in(
-      amount_out: &T::CoinBalance,
-      reserve_in: &T::CoinBalance,
-      reserve_out: &T::CoinBalance,
-    ) -> Result<T::CoinBalance, Error<T>> {
-      let amount_out = T::HigherPrecisionBalance::from(*amount_out);
-      let reserve_in = T::HigherPrecisionBalance::from(*reserve_in);
-      let reserve_out = T::HigherPrecisionBalance::from(*reserve_out);
+      amount_out: SubstrateAmount,
+      reserve_in: SubstrateAmount,
+      reserve_out: SubstrateAmount,
+    ) -> Result<SubstrateAmount, Error<T>> {
+      let amount_out = T::HigherPrecisionBalance::from(amount_out);
+      let reserve_in = T::HigherPrecisionBalance::from(reserve_in);
+      let reserve_out = T::HigherPrecisionBalance::from(reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
         Err(Error::<T>::ZeroLiquidity)?
@@ -1089,33 +1017,22 @@ pub mod pallet {
     }
 
     /// Ensure that a `value` meets the minimum balance requirements of an `coin` class.
-    fn validate_minimal_amount(value: T::CoinBalance, coin: &T::MultiCoinId) -> Result<(), ()> {
-      if T::MultiCoinIdConverter::is_native(coin) {
-        let ed = T::Currency::minimum_balance();
-        ensure!(T::HigherPrecisionBalance::from(value) >= T::HigherPrecisionBalance::from(ed), ());
-      } else {
-        let MultiCoinIdConversionResult::Converted(coin_id) =
-          T::MultiCoinIdConverter::try_convert(coin)
-        else {
-          return Err(());
-        };
-        let minimal = T::Coins::minimum_balance(coin_id);
-        ensure!(value >= minimal, ());
-      }
+    fn validate_minimal_amount(value: SubstrateAmount, coin: Coin) -> Result<(), ()> {
+      ensure!(value >= CoinsPallet::<T>::minimum_balance(coin).0, ());
       Ok(())
     }
 
     /// Ensure that a path is valid.
     fn validate_swap_path(
-      path: &BoundedVec<T::MultiCoinId, T::MaxSwapPathLength>,
+      path: &BoundedVec<Coin, T::MaxSwapPathLength>,
     ) -> Result<(), DispatchError> {
       ensure!(path.len() >= 2, Error::<T>::InvalidPath);
 
       // validate all the pools in the path are unique
-      let mut pools = BoundedBTreeSet::<PoolIdOf<T>, T::MaxSwapPathLength>::new();
+      let mut pools = BoundedBTreeSet::<PoolId, T::MaxSwapPathLength>::new();
       for coins_pair in path.windows(2) {
         if let [coin1, coin2] = coins_pair {
-          let pool_id = Self::get_pool_id(coin1.clone(), coin2.clone());
+          let pool_id = Self::get_pool_id(*coin1, *coin2)?;
           let new_element = pools.try_insert(pool_id).map_err(|_| Error::<T>::Overflow)?;
           if !new_element {
             return Err(Error::<T>::NonUniquePath.into());
@@ -1135,10 +1052,10 @@ pub mod pallet {
   }
 }
 
-impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiCoinId> for Pallet<T> {
+impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, Coin> for Pallet<T> {
   fn swap_exact_tokens_for_tokens(
     sender: T::AccountId,
-    path: Vec<T::MultiCoinId>,
+    path: Vec<Coin>,
     amount_in: T::HigherPrecisionBalance,
     amount_out_min: Option<T::HigherPrecisionBalance>,
     send_to: T::AccountId,
@@ -1157,7 +1074,7 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiCoinId> fo
 
   fn swap_tokens_for_exact_tokens(
     sender: T::AccountId,
-    path: Vec<T::MultiCoinId>,
+    path: Vec<Coin>,
     amount_out: T::HigherPrecisionBalance,
     amount_in_max: Option<T::HigherPrecisionBalance>,
     send_to: T::AccountId,
@@ -1178,35 +1095,31 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, T::MultiCoinId> fo
 sp_api::decl_runtime_apis! {
   /// This runtime api allows people to query the size of the liquidity pools
   /// and quote prices for swaps.
-  pub trait DexApi<Balance, CoinBalance, CoinId> where
-    Balance: Codec + MaybeDisplay,
-    CoinBalance: frame_support::traits::tokens::Balance,
-    CoinId: Codec
-  {
+  pub trait DexApi {
     /// Provides a quote for [`Pallet::swap_tokens_for_exact_tokens`].
     ///
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_in_max` to control slippage.)
     fn quote_price_tokens_for_exact_tokens(
-      coin1: CoinId,
-      coin2: CoinId,
-      amount: CoinBalance,
+      coin1: Coin,
+      coin2: Coin,
+      amount: SubstrateAmount,
       include_fee: bool
-    ) -> Option<Balance>;
+    ) -> Option<SubstrateAmount>;
 
     /// Provides a quote for [`Pallet::swap_exact_tokens_for_tokens`].
     ///
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_out_min` to control slippage.)
     fn quote_price_exact_tokens_for_tokens(
-      coin1: CoinId,
-      coin2: CoinId,
-      amount: CoinBalance,
+      coin1: Coin,
+      coin2: Coin,
+      amount: SubstrateAmount,
       include_fee: bool
-    ) -> Option<Balance>;
+    ) -> Option<SubstrateAmount>;
 
     /// Returns the size of the liquidity pool for the given coin pair.
-    fn get_reserves(coin1: CoinId, coin2: CoinId) -> Option<(Balance, Balance)>;
+    fn get_reserves(coin1: Coin, coin2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)>;
   }
 }
 

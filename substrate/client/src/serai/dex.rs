@@ -31,12 +31,11 @@ impl<'a> SeraiDex<'a> {
       PALLET,
       "add_liquidity",
       scale_composite(dex::Call::<Runtime>::add_liquidity {
-        coin1: coin,
-        coin2: Coin::Serai,
-        amount1_desired: coin_amount.0,
-        amount2_desired: sri_amount.0,
-        amount1_min: min_coin_amount.0,
-        amount2_min: min_sri_amount.0,
+        coin,
+        coin_desired: coin_amount.0,
+        sri_desired: sri_amount.0,
+        coin_min: min_coin_amount.0,
+        sri_min: min_sri_amount.0,
         mint_to: address.into(),
       }),
     )

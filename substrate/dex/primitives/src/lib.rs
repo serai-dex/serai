@@ -37,30 +37,6 @@ pub struct PoolInfo<PoolCoinId> {
   pub lp_token: PoolCoinId,
 }
 
-/// A trait that converts between a MultiCoinId and either the native currency or an CoinId.
-pub trait MultiCoinIdConverter<MultiCoinId, CoinId> {
-  /// Returns the MultiCoinId representing the native currency of the chain.
-  fn get_native() -> MultiCoinId;
-
-  /// Returns true if the given MultiCoinId is the native currency.
-  fn is_native(coin: &MultiCoinId) -> bool;
-
-  /// If it's not native, returns the CoinId for the given MultiCoinId.
-  fn try_convert(coin: &MultiCoinId) -> MultiCoinIdConversionResult<MultiCoinId, CoinId>;
-}
-
-/// Result of `MultiCoinIdConverter::try_convert`.
-#[cfg_attr(feature = "std", derive(PartialEq, Debug))]
-pub enum MultiCoinIdConversionResult<MultiCoinId, CoinId> {
-  /// Input coin is successfully converted. Means that converted coin is supported.
-  Converted(CoinId),
-  /// Means that input coin is the chain's native coin, if it has one, so no conversion (see
-  /// `MultiCoinIdConverter::get_native`).
-  Native,
-  /// Means input coin is not supported for pool.
-  Unsupported(MultiCoinId),
-}
-
 /// Benchmark Helper
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper<CoinId, MultiCoinId> {
@@ -113,59 +89,6 @@ pub trait Swap<AccountId, Balance, MultiCoinId> {
   ) -> Result<Balance, DispatchError>;
 }
 
-// TODO: Sized should be there?
-/// Native coin trait for Dex pallet.
-pub trait Currency<AccountId>: Sized {
-  /// Balance of an Account.
-  type Balance: Balance;
-
-  /// Returns the balance of an account.
-  fn balance(of: &AccountId) -> Self::Balance;
-
-  /// Returns the minimum allowed balance of an account
-  fn minimum_balance() -> Self::Balance;
-
-  /// Transfers the given `amount` from `from` to `to`.
-  fn transfer(
-    from: &AccountId,
-    to: &AccountId,
-    amount: Self::Balance,
-  ) -> Result<Self::Balance, DispatchError>;
-
-  /// mints the given `amount` into `to`.
-  fn mint(to: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError>;
-}
-
-/// External coin trait for Dex pallet.
-pub trait Coins<AccountId>: Sized {
-  /// Balance of an Account.
-  type Balance: Balance;
-
-  /// Coin identifier.
-  type CoinId: CoinId;
-
-  /// Returns the balance of an account.
-  fn balance(coin: Self::CoinId, of: &AccountId) -> Self::Balance;
-
-  /// Returns the minimum allowed balance of an account
-  fn minimum_balance(coin: Self::CoinId) -> Self::Balance;
-
-  /// Transfers the given `amount` from `from` to `to`.
-  fn transfer(
-    coin: Self::CoinId,
-    from: &AccountId,
-    to: &AccountId,
-    amount: Self::Balance,
-  ) -> Result<Self::Balance, DispatchError>;
-
-  /// mints the given `amount` of `coin` into `to`.
-  fn mint(
-    coin: Self::CoinId,
-    to: &AccountId,
-    amount: Self::Balance,
-  ) -> Result<Self::Balance, DispatchError>;
-}
-
 /// Liquidity tokens trait for Dex pallet.
 pub trait LiquidityTokens<AccountId>: Sized {
   /// Amount type.
@@ -196,26 +119,4 @@ pub trait LiquidityTokens<AccountId>: Sized {
 
   /// Returns an iterator of the collections in existence.
   fn coin_ids() -> Vec<Self::CoinId>;
-}
-
-pub struct CoinConverter;
-impl MultiCoinIdConverter<Coin, Coin> for CoinConverter {
-  /// Returns the MultiCoinId representing the native currency of the chain.
-  fn get_native() -> Coin {
-    Coin::native()
-  }
-
-  /// Returns true if the given MultiCoinId is the native currency.
-  fn is_native(coin: &Coin) -> bool {
-    coin.is_native()
-  }
-
-  /// If it's not native, returns the CoinId for the given MultiCoinId.
-  fn try_convert(coin: &Coin) -> MultiCoinIdConversionResult<Coin, Coin> {
-    if coin.is_native() {
-      MultiCoinIdConversionResult::Native
-    } else {
-      MultiCoinIdConversionResult::Converted(*coin)
-    }
-  }
 }

@@ -24,8 +24,6 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features 
 
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-dex-primitives = { package = "serai-dex-primitives", path = "../../dex/primitives", default-features = false }
-
 serai-primitives = { path = "../../primitives", default-features = false }
 coins-primitives = { package = "serai-coins-primitives", path = "../primitives", default-features = false }
 
@@ -39,8 +37,6 @@ std = [
   "sp-runtime/std",
 
   "pallet-transaction-payment/std",
-
-  "dex-primitives/std",
 
   "serai-primitives/std",
   "coins-primitives/std",

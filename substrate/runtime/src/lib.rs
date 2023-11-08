@@ -252,18 +252,12 @@ impl liquidity_tokens::Config for Runtime {
 
 impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type Currency = Coins;
-  type Balance = SubstrateAmount;
-  type CoinBalance = SubstrateAmount;
   // TODO: Review if this should be u64/u128 or u64/u256 (and rounding in general).
   type HigherPrecisionBalance = u128;
 
   type CoinId = Coin;
-  type MultiCoinId = Coin;
-  type MultiCoinIdConverter = serai_dex_primitives::CoinConverter;
   type PoolCoinId = u32;
 
-  type Coins = Coins;
   type PoolCoins = LiquidityTokens;
 
   type LPFee = ConstU32<3>; // 0.3%

@@ -43,7 +43,10 @@ fn testnet_genesis(
         .collect(),
     },
 
-    dex: DexConfig { pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero] },
+    dex: DexConfig {
+      pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero],
+      ignore: Default::default(),
+    },
 
     validator_sets: ValidatorSetsConfig {
       networks: serai_runtime::primitives::NETWORKS
