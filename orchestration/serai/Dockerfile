@@ -2,7 +2,7 @@ FROM rust:1.73-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Upgrade and add dev dependencies
-RUN apt update && apt upgrade -y && apt install -y git pkg-config make clang libssl-dev protobuf-compiler && apt autoremove -y && apt clean
+RUN apt update && apt upgrade -y && apt install -y git pkg-config make lld clang libssl-dev protobuf-compiler && apt autoremove -y && apt clean
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown

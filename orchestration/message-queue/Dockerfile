@@ -2,7 +2,7 @@ FROM rust:1.73-slim-bookworm as builder
 LABEL description="STAGE 1: Build"
 
 # Upgrade and add dev dependencies
-RUN apt update && apt upgrade -y && apt install -y pkg-config clang libssl-dev && apt autoremove -y && apt clean
+RUN apt update && apt upgrade -y && apt install -y pkg-config lld clang libssl-dev && apt autoremove -y && apt clean
 
 # Add files for build
 ADD common /serai/common
