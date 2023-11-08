@@ -305,7 +305,13 @@ impl Eq for Bitcoin {}
 
 impl Bitcoin {
   pub async fn new(url: String) -> Bitcoin {
-    Bitcoin { rpc: Rpc::new(url).await.expect("couldn't create a Bitcoin RPC") }
+    let mut res = Rpc::new(url.clone()).await;
+    while let Err(e) = res {
+      log::error!("couldn't connect to Bitcoin node: {e:?}");
+      tokio::time::sleep(Duration::from_secs(5)).await;
+      res = Rpc::new(url.clone()).await;
+    }
+    Bitcoin { rpc: res.unwrap() }
   }
 
   #[cfg(test)]

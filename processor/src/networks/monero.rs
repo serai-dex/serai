@@ -192,7 +192,13 @@ fn map_rpc_err(err: RpcError) -> NetworkError {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    Monero { rpc: HttpRpc::new(url).await.unwrap() }
+    let mut res = HttpRpc::new(url.clone()).await;
+    while let Err(e) = res {
+      log::error!("couldn't connect to Monero node: {e:?}");
+      tokio::time::sleep(Duration::from_secs(5)).await;
+      res = HttpRpc::new(url.clone()).await;
+    }
+    Monero { rpc: res.unwrap() }
   }
 
   fn view_pair(spend: EdwardsPoint) -> ViewPair {
