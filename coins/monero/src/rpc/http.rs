@@ -185,25 +185,34 @@ impl HttpRpc {
         if response_result.is_err() {
           connection_lock.0 = None;
         }
-        let response = response_result?;
 
-        // If we need to re-auth due to this token being stale, recursively re-call this function,
-        // unless we're already recursing
-        if (!recursing) && (response.status() == StatusCode::UNAUTHORIZED) {
-          if let Some(header) = response.headers().get("www-authenticate") {
-            if header
-              .to_str()
-              .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?
-              .contains("stale")
-            {
-              connection_lock.0 = None;
-              drop(connection_lock);
-              return self.inner_post(route, body, true).await;
+        // If we're not already recursing and:
+        // 1) We had a connection error
+        // 2) We need to re-auth due to this token being stale
+        // recursively re-call this function
+        if (!recursing) &&
+          (response_result.is_err() || {
+            let response = response_result.as_ref().unwrap();
+            if response.status() == StatusCode::UNAUTHORIZED {
+              if let Some(header) = response.headers().get("www-authenticate") {
+                header
+                  .to_str()
+                  .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?
+                  .contains("stale")
+              } else {
+                false
+              }
+            } else {
+              false
             }
-          }
+          })
+        {
+          connection_lock.0 = None;
+          drop(connection_lock);
+          return self.inner_post(route, body, true).await;
         }
 
-        response
+        response_result?
       }
     };
 
