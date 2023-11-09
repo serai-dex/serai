@@ -728,6 +728,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             running_operating_costs,
           );
 
+          // This will false positive on a transaction being refunded which meets these conditions
+          // That doesn't impact any of the following code at this time yet shows consideration
+          // is needed here in the future
           let to_be_forwarded = {
             let output = &plan.inputs[0];
             (step == RotationStep::ForwardFromExisting) &&
@@ -749,7 +752,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
           // Restore running_operating_costs to operating_costs
           if to_be_forwarded {
-            // If we're forwarding this output, operating_costs should still be 0
+            // If we're forwarding (or refunding) this output, operating_costs should still be 0
             // Either this TX wasn't created, causing no operating costs, or it was yet it'd be
             // amortized
             assert_eq!(operating_costs, 0);
