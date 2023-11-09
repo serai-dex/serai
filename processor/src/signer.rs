@@ -428,10 +428,6 @@ impl<N: Network, D: Db> Signer<N, D> {
         Ok(machine) => machine,
       };
 
-      // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
-      // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
-      // message, send distinct preprocess, and then attempt a signing session premised on the
-      // former with the latter
       let (machine, preprocess) = machine.preprocess(&mut OsRng);
       machines.push(machine);
       serialized_preprocesses.push(preprocess.serialize());

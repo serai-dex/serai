@@ -209,10 +209,6 @@ impl<D: Db> SubstrateSigner<D> {
       // b"substrate" is a literal from sp-core
       let machine = AlgorithmMachine::new(Schnorrkel::new(b"substrate"), keys.clone());
 
-      // TODO: Use a seeded RNG here so we don't produce distinct messages with the same intent
-      // This is also needed so we don't preprocess, send preprocess, reboot before ack'ing the
-      // message, send distinct preprocess, and then attempt a signing session premised on the
-      // former with the latter
       let (machine, preprocess) = machine.preprocess(&mut OsRng);
       machines.push(machine);
       serialized_preprocesses.push(preprocess.serialize());
@@ -389,10 +385,6 @@ impl<D: Db> SubstrateSigner<D> {
   }
 
   pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, id: u32) {
-    // Safe since SubstrateSigner won't be told of the completion until the Scanner recognizes the
-    // block behind it, which will trigger starting the Batch
-    // TODO: There is a race condition between the Scanner recognizing the block and the Batch
-    // having signing started
     let sign_id = batch_sign_id(self.network, id);
 
     // Stop trying to sign for this batch
