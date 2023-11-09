@@ -23,7 +23,6 @@ k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecds
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1", "tests"] }
 
 ethers-core = { version = "2", default-features = false }
-ethers-signers = { version = "2", default-features = false }
 ethers-providers = { version = "2", default-features = false }
 ethers-contract = { version = "2", default-features = false, features = ["abigen", "providers"] }
 

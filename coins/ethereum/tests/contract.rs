@@ -2,15 +2,18 @@ use std::{convert::TryFrom, sync::Arc, time::Duration, fs::File};
 
 use rand_core::OsRng;
 
-use ::k256::{elliptic_curve::bigint::ArrayEncoding, U256};
+use ::k256::{
+  elliptic_curve::{bigint::ArrayEncoding, PrimeField},
+  U256,
+};
 
 use ethers_core::{
+  types::Signature,
   abi::Abi,
   utils::{keccak256, Anvil, AnvilInstance},
 };
 use ethers_contract::ContractFactory;
 use ethers_providers::{Middleware, Provider, Http};
-use ethers_signers::{Signer, LocalWallet};
 
 use frost::{
   curve::Secp256k1,
@@ -40,7 +43,7 @@ struct Artifact {
 pub async fn deploy_schnorr_verifier_contract(
   chain_id: u32,
   client: Arc<Provider<Http>>,
-  wallet: &LocalWallet,
+  wallet: &k256::ecdsa::SigningKey,
 ) -> eyre::Result<Schnorr<Provider<Http>>> {
   let path = "./artifacts/Schnorr.sol/Schnorr.json";
   let artifact: Artifact = serde_json::from_reader(File::open(path).unwrap()).unwrap();
@@ -57,8 +60,21 @@ pub async fn deploy_schnorr_verifier_contract(
   let (max_fee_per_gas, max_priority_fee_per_gas) = client.estimate_eip1559_fees(None).await?;
   deployment_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
   deployment_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
-  let signature = wallet.sign_transaction_sync(&deployment_tx)?;
-  let deployment_tx = deployment_tx.rlp_signed(&signature);
+
+  let sig_hash = deployment_tx.sighash();
+  let (sig, rid) = wallet.sign_prehash_recoverable(sig_hash.as_ref()).unwrap();
+
+  // EIP-155 v
+  let mut v = u64::from(rid.to_byte());
+  assert!((v == 0) || (v == 1));
+  v += u64::from((chain_id * 2) + 35);
+
+  let r = sig.r().to_repr();
+  let r_ref: &[u8] = r.as_ref();
+  let s = sig.s().to_repr();
+  let s_ref: &[u8] = s.as_ref();
+  let deployment_tx = deployment_tx.rlp_signed(&Signature { r: r_ref.into(), s: s_ref.into(), v });
+
   let pending_tx = client.send_raw_transaction(deployment_tx).await?;
 
   let mut receipt;
@@ -81,8 +97,7 @@ async fn deploy_test_contract() -> (u32, AnvilInstance, Schnorr<Provider<Http>>)
   let provider =
     Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(Duration::from_millis(10u64));
   let chain_id = provider.get_chainid().await.unwrap().as_u32();
-  let wallet: LocalWallet = anvil.keys()[0].clone().into();
-  let wallet = wallet.with_chain_id(chain_id);
+  let wallet = anvil.keys()[0].clone().into();
   let client = Arc::new(provider);
 
   (chain_id, anvil, deploy_schnorr_verifier_contract(chain_id, client, &wallet).await.unwrap())
