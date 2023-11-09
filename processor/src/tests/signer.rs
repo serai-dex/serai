@@ -16,7 +16,7 @@ use messages::sign::*;
 use crate::{
   Payment, Plan,
   networks::{Output, Transaction, Network},
-  signer::{SignerEvent, Signer},
+  signer::Signer,
 };
 
 #[allow(clippy::type_complexity)]
@@ -33,9 +33,11 @@ pub async fn sign<N: Network>(
     attempt: 0,
   };
 
+  let mut group_key = None;
   let mut keys = HashMap::new();
   let mut txs = HashMap::new();
   for (i, (these_keys, this_tx)) in keys_txs.drain() {
+    group_key = Some(these_keys.group_key());
     keys.insert(i, these_keys);
     txs.insert(i, this_tx);
   }
@@ -52,14 +54,6 @@ pub async fn sign<N: Network>(
   }
   drop(keys);
 
-  for i in 1 ..= signers.len() {
-    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    let (tx, eventuality) = txs.remove(&i).unwrap();
-    let mut txn = dbs.get_mut(&i).unwrap().txn();
-    signers.get_mut(&i).unwrap().sign_transaction(&mut txn, actual_id.id, tx, eventuality).await;
-    txn.commit();
-  }
-
   let mut signing_set = vec![];
   while signing_set.len() < usize::from(t) {
     let candidate = Participant::new(
@@ -72,29 +66,35 @@ pub async fn sign<N: Network>(
     signing_set.push(candidate);
   }
 
-  // All participants should emit a preprocess
   let mut preprocesses = HashMap::new();
+
   for i in 1 ..= signers.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let SignerEvent::ProcessorMessage(ProcessorMessage::Preprocess {
-      id,
-      preprocesses: mut these_preprocesses,
-    }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
+    let (tx, eventuality) = txs.remove(&i).unwrap();
+    let mut txn = dbs.get_mut(&i).unwrap().txn();
+    match signers
+      .get_mut(&i)
+      .unwrap()
+      .sign_transaction(&mut txn, actual_id.id, tx, eventuality)
+      .await
     {
-      assert_eq!(id, actual_id);
-      assert_eq!(these_preprocesses.len(), 1);
-      if signing_set.contains(&i) {
-        preprocesses.insert(i, these_preprocesses.swap_remove(0));
+      // All participants should emit a preprocess
+      Some(ProcessorMessage::Preprocess { id, preprocesses: mut these_preprocesses }) => {
+        assert_eq!(id, actual_id);
+        assert_eq!(these_preprocesses.len(), 1);
+        if signing_set.contains(&i) {
+          preprocesses.insert(i, these_preprocesses.swap_remove(0));
+        }
       }
-    } else {
-      panic!("didn't get preprocess back");
+      _ => panic!("didn't get preprocess back"),
     }
+    txn.commit();
   }
 
   let mut shares = HashMap::new();
   for i in &signing_set {
     let mut txn = dbs.get_mut(i).unwrap().txn();
-    signers
+    match signers
       .get_mut(i)
       .unwrap()
       .handle(
@@ -104,52 +104,48 @@ pub async fn sign<N: Network>(
           preprocesses: clone_without(&preprocesses, i),
         },
       )
-      .await;
-    txn.commit();
-
-    if let SignerEvent::ProcessorMessage(ProcessorMessage::Share { id, shares: mut these_shares }) =
-      signers.get_mut(i).unwrap().events.pop_front().unwrap()
+      .await
+      .unwrap()
     {
-      assert_eq!(id, actual_id);
-      assert_eq!(these_shares.len(), 1);
-      shares.insert(*i, these_shares.swap_remove(0));
-    } else {
-      panic!("didn't get share back");
+      ProcessorMessage::Share { id, shares: mut these_shares } => {
+        assert_eq!(id, actual_id);
+        assert_eq!(these_shares.len(), 1);
+        shares.insert(*i, these_shares.swap_remove(0));
+      }
+      _ => panic!("didn't get share back"),
     }
+    txn.commit();
   }
 
   let mut tx_id = None;
   for i in &signing_set {
     let mut txn = dbs.get_mut(i).unwrap().txn();
-    signers
+    match signers
       .get_mut(i)
       .unwrap()
       .handle(
         &mut txn,
         CoordinatorMessage::Shares { id: actual_id.clone(), shares: clone_without(&shares, i) },
       )
-      .await;
-    txn.commit();
-
-    if let SignerEvent::SignedTransaction { id, tx } =
-      signers.get_mut(i).unwrap().events.pop_front().unwrap()
+      .await
+      .unwrap()
     {
-      assert_eq!(id, actual_id.id);
-      if tx_id.is_none() {
-        tx_id = Some(tx.clone());
+      ProcessorMessage::Completed { key, id, tx } => {
+        assert_eq!(&key, group_key.unwrap().to_bytes().as_ref());
+        assert_eq!(id, actual_id.id);
+        if tx_id.is_none() {
+          tx_id = Some(tx.clone());
+        }
+        assert_eq!(tx_id, Some(tx));
       }
-      assert_eq!(tx_id, Some(tx));
-    } else {
-      panic!("didn't get TX back");
+      _ => panic!("didn't get TX back"),
     }
+    txn.commit();
   }
 
-  // Make sure there's no events left
-  for (_, mut signer) in signers.drain() {
-    assert!(signer.events.pop_front().is_none());
-  }
-
-  tx_id.unwrap()
+  let mut typed_tx_id = <N::Transaction as Transaction<N>>::Id::default();
+  typed_tx_id.as_mut().copy_from_slice(tx_id.unwrap().as_ref());
+  typed_tx_id
 }
 
 pub async fn test_signer<N: Network>(network: N) {

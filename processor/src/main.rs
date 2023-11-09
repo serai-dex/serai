@@ -42,7 +42,7 @@ mod key_gen;
 use key_gen::{KeyConfirmed, KeyGen};
 
 mod signer;
-use signer::{SignerEvent, Signer};
+use signer::Signer;
 
 mod substrate_signer;
 use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
@@ -206,12 +206,15 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
 
     CoordinatorMessage::Sign(msg) => {
-      tributary_mutable
+      if let Some(msg) = tributary_mutable
         .signers
         .get_mut(msg.key())
         .expect("coordinator told us to sign with a signer we don't have")
         .handle(txn, msg)
-        .await;
+        .await
+      {
+        coordinator.send(msg).await;
+      }
     }
 
     CoordinatorMessage::Coordinator(msg) => {
@@ -359,7 +362,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           let signers = &mut tributary_mutable.signers;
           for (key, id, tx, eventuality) in to_sign {
             if let Some(signer) = signers.get_mut(key.to_bytes().as_ref()) {
-              signer.sign_transaction(txn, id, tx, eventuality).await;
+              if let Some(msg) = signer.sign_transaction(txn, id, tx, eventuality).await {
+                coordinator.send(msg).await;
+              }
             }
           }
 
@@ -374,9 +379,10 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   }
 }
 
-async fn boot<N: Network, D: Db>(
+async fn boot<N: Network, D: Db, Co: Coordinator>(
   raw_db: &mut D,
   network: &N,
+  coordinator: &mut Co,
 ) -> (MainDb<N, D>, TributaryMutable<N, D>, SubstrateMutable<N, D>) {
   let mut entropy_transcript = {
     let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
@@ -450,7 +456,11 @@ async fn boot<N: Network, D: Db>(
     for (plan, tx, eventuality) in &actively_signing {
       if plan.key == network_key {
         let mut txn = raw_db.txn();
-        signer.sign_transaction(&mut txn, plan.id(), tx.clone(), eventuality.clone()).await;
+        if let Some(msg) =
+          signer.sign_transaction(&mut txn, plan.id(), tx.clone(), eventuality.clone()).await
+        {
+          coordinator.send(msg).await;
+        }
         // This should only have re-writes of existing data
         drop(txn);
       }
@@ -474,7 +484,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   // This check ensures no network which doesn't have a bidirectional mapping is defined
   assert_eq!(<N::Block as Block<N>>::Id::default().as_ref().len(), BlockHash([0u8; 32]).0.len());
 
-  let (main_db, mut tributary_mutable, mut substrate_mutable) = boot(&mut raw_db, &network).await;
+  let (main_db, mut tributary_mutable, mut substrate_mutable) =
+    boot(&mut raw_db, &network, &mut coordinator).await;
 
   // We can't load this from the DB as we can't guarantee atomic increments with the ack function
   // TODO: Load with a slight tolerance
@@ -557,7 +568,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           },
           MultisigEvent::Completed(key, id, tx) => {
             if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
-              signer.completed(txn, id, tx);
+              if let Some(msg) = signer.completed(txn, id, tx) {
+                coordinator.send(msg).await;
+              }
             }
           }
         }
@@ -568,28 +581,6 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
     // The signers will only have events after the above select executes, so having no timeout on
     // the above is fine
     // TODO: Have the Signers return these events, allowing removing these channels?
-    for (key, signer) in tributary_mutable.signers.iter_mut() {
-      while let Some(msg) = signer.events.pop_front() {
-        match msg {
-          SignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(msg).await;
-          }
-
-          SignerEvent::SignedTransaction { id, tx } => {
-            // It is important ProcessorMessage::Completed is only emitted if a Signer we had
-            // created the TX completed (which having it only emitted after a SignerEvent ensures)
-            coordinator
-              .send(messages::sign::ProcessorMessage::Completed {
-                key: key.clone(),
-                id,
-                tx: tx.as_ref().to_vec(),
-              })
-              .await;
-          }
-        }
-      }
-    }
-
     if let Some(signer) = tributary_mutable.substrate_signer.as_mut() {
       while let Some(msg) = signer.events.pop_front() {
         match msg {
