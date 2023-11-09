@@ -22,7 +22,7 @@ async fn spend<N: Network, D: Db>(
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
   outputs: Vec<N::Output>,
-) -> Vec<N::Output> {
+) {
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut keys_txs = HashMap::new();
@@ -62,11 +62,11 @@ async fn spend<N: Network, D: Db>(
       assert_eq!(outputs.len(), 1);
       // Make sure this is actually a change output
       assert_eq!(outputs[0].kind(), OutputType::Change);
+      assert_eq!(outputs[0].key(), key);
       let mut txn = db.txn();
       assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
       scanner.release_lock().await;
       txn.commit();
-      outputs
     }
     ScannerEvent::Completed(_, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
@@ -96,31 +96,37 @@ pub async fn test_addresses<N: Network>(network: N) {
     network.mine_block().await;
   }
 
-  // Receive funds to the branch address and make sure it's properly identified
-  let block_id = network.test_send(N::branch_address(key)).await.id();
+  // Receive funds to the various addresses and make sure they're properly identified
+  let mut received_outputs = vec![];
+  for (kind, address) in [
+    (OutputType::External, N::address(key)),
+    (OutputType::Branch, N::branch_address(key)),
+    (OutputType::Change, N::change_address(key)),
+    (OutputType::Forwarded, N::forward_address(key)),
+  ] {
+    let block_id = network.test_send(address).await.id();
 
-  // Verify the Scanner picked them up
-  let outputs =
+    // Verify the Scanner picked them up
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Block { is_retirement_block, block, outputs } => {
         scanner.multisig_completed.send(false).unwrap();
         assert!(!is_retirement_block);
         assert_eq!(block, block_id);
         assert_eq!(outputs.len(), 1);
-        assert_eq!(outputs[0].kind(), OutputType::Branch);
+        assert_eq!(outputs[0].kind(), kind);
+        assert_eq!(outputs[0].key(), key);
         let mut txn = db.txn();
         assert_eq!(scanner.ack_block(&mut txn, block).await.1, outputs);
         scanner.release_lock().await;
         txn.commit();
-        outputs
+        received_outputs.extend(outputs);
       }
       ScannerEvent::Completed(_, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };
+  }
 
   // Spend the branch output, creating a change output and ensuring we actually get change
-  let outputs = spend(&mut db, &network, &keys, &mut scanner, outputs).await;
-  // Also test spending the change output
-  spend(&mut db, &network, &keys, &mut scanner, outputs).await;
+  spend(&mut db, &network, &keys, &mut scanner, received_outputs).await;
 }

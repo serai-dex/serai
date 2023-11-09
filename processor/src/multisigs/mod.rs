@@ -381,19 +381,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       costs of embedding arbitrary data.
 
       Since we can't rely on the Eventuality system to detect if it's a forwarded transaction,
-      due to the asynchonicity of the Eventuality system, we instead interpret an External
-      output with no InInstruction, which has an amount associated with an InInstruction
-      being forwarded, as having been forwarded. This does create a specific edge case where
-      a user who doesn't include an InInstruction may not be refunded however, if they share
-      an exact amount with an expected-to-be-forwarded transaction. This is deemed acceptable.
-
-      TODO: Add a fourth address, forwarded_address, to prevent this.
+      due to the asynchonicity of the Eventuality system, we instead interpret an Forwarded
+      output which has an amount associated with an InInstruction which was forwarded as having
+      been forwarded.
     */
 
     Plan {
       key: self.existing.as_ref().unwrap().key,
       payments: vec![Payment {
-        address: N::address(self.new.as_ref().unwrap().key),
+        address: N::forward_address(self.new.as_ref().unwrap().key),
         data: None,
         balance: output.balance(),
       }],
@@ -582,6 +578,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
           false
         }
+        OutputType::Forwarded => false,
       }
     });
     plans
@@ -728,18 +725,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             running_operating_costs,
           );
 
-          // This will false positive on a transaction being refunded which meets these conditions
-          // That doesn't impact any of the following code at this time yet shows consideration
-          // is needed here in the future
-          let to_be_forwarded = {
-            let output = &plan.inputs[0];
-            (step == RotationStep::ForwardFromExisting) &&
-              (output.kind() == OutputType::External) &&
-              (output.key() == self.existing.as_ref().unwrap().key)
-          };
-          if to_be_forwarded {
-            assert_eq!(plan.inputs.len(), 1);
-          }
+          // TODO: Don't do an error-prone post-detection for if this is being forwarded
+          // Be told this is being forwarded
+          let to_be_forwarded = (step == RotationStep::ForwardFromExisting) &&
+            plan
+              .payments
+              .first()
+              .map(|payment| payment.address == N::forward_address(self.new.as_ref().unwrap().key))
+              .unwrap_or(false) &&
+            plan.change.is_none();
 
           // If we're forwarding this output, don't take the opportunity to amortze operating costs
           // The scanner handler below, in order to properly save forwarded outputs' instructions,
@@ -823,26 +817,36 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           .expect("didn't have the block number for a block we just scanned");
         let step = self.current_rotation_step(block_number);
 
-        // If these aren't externally received funds, don't handle it as an instruction
+        // Instructions created from this block
+        let mut instructions = vec![];
+
+        // If any of these outputs were forwarded, create their instruction now
+        for output in &outputs {
+          if output.kind() != OutputType::Forwarded {
+            continue;
+          }
+
+          if let Some(instruction) =
+            MultisigsDb::<N, D>::take_forwarded_output(txn, output.balance())
+          {
+            instructions.push(instruction);
+          }
+        }
+
+        // If the remaining outputs aren't externally received funds, don't handle them as
+        // instructions
         outputs.retain(|output| output.kind() == OutputType::External);
 
         // These plans are of limited context. They're only allowed the outputs newly received
         // within this block and are intended to handle forwarding transactions/refunds
-        // Those all end up as plans with a single input, leading to a later check:
-        /*
-        if to_be_forwarded {
-          assert_eq!(plan.inputs.len(), 1);
-        }
-        Hence the name, which places that assumed precondition into verbiage here.
-        */
-        let mut single_input_plans = vec![];
+        let mut plans = vec![];
 
         // If the old multisig is explicitly only supposed to forward, create all such plans now
         if step == RotationStep::ForwardFromExisting {
           let mut i = 0;
           while i < outputs.len() {
             let output = &outputs[i];
-            let single_input_plans = &mut single_input_plans;
+            let plans = &mut plans;
             let txn = &mut *txn;
 
             #[allow(clippy::redundant_closure_call)]
@@ -852,12 +856,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
                 return true;
               }
 
-              let plans_at_start = single_input_plans.len();
+              let plans_at_start = plans.len();
               let (refund_to, instruction) = instruction_from_output::<N>(output);
               if let Some(mut instruction) = instruction {
                 // Build a dedicated Plan forwarding this
                 let forward_plan = self.forward_plan(output.clone());
-                single_input_plans.push(forward_plan.clone());
+                plans.push(forward_plan.clone());
 
                 // Set the instruction for this output to be returned
                 // We need to set it under the amount it's forwarded with, so prepare its forwarding
@@ -879,12 +883,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
               } else if let Some(refund_to) = refund_to {
                 if let Ok(refund_to) = refund_to.consume().try_into() {
                   // Build a dedicated Plan refunding this
-                  single_input_plans.push(Self::refund_plan(output.clone(), refund_to));
+                  plans.push(Self::refund_plan(output.clone(), refund_to));
                 }
               }
 
               // Only keep if we didn't make a Plan consuming it
-              plans_at_start == single_input_plans.len()
+              plans_at_start == plans.len()
             })()
             .await;
             if should_retain {
@@ -895,7 +899,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
         }
 
-        let mut instructions = vec![];
         for output in outputs {
           // If this is an External transaction to the existing multisig, and we're either solely
           // forwarding or closing the existing multisig, drop it
@@ -909,33 +912,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
 
           let (refund_to, instruction) = instruction_from_output::<N>(&output);
-          let refund = || {
-            if let Some(refund_to) = refund_to {
-              if let Ok(refund_to) = refund_to.consume().try_into() {
-                single_input_plans.push(Self::refund_plan(output.clone(), refund_to))
-              }
-            }
-          };
           let instruction = if let Some(instruction) = instruction {
             instruction
           } else {
-            // If the output data is empty, this may be a forwarded transaction from a prior
-            // multisig
-            // If it's not empty, it's corrupt in some way and should be refunded
-            if !output.data().is_empty() {
-              refund();
-              continue;
+            if let Some(refund_to) = refund_to {
+              if let Ok(refund_to) = refund_to.consume().try_into() {
+                plans.push(Self::refund_plan(output.clone(), refund_to));
+              }
             }
-
-            if let Some(instruction) =
-              MultisigsDb::<N, D>::take_forwarded_output(txn, output.balance())
-            {
-              instruction
-            } else {
-              // If it's not a forwarded output, refund
-              refund();
-              continue;
-            }
+            continue;
           };
 
           // Delay External outputs received to new multisig earlier than expected
@@ -956,7 +941,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
 
         // Save the plans created while scanning
         // TODO: Should we combine all of these plans?
-        MultisigsDb::<N, D>::set_plans_from_scanning(txn, block_number, single_input_plans);
+        MultisigsDb::<N, D>::set_plans_from_scanning(txn, block_number, plans);
 
         // If any outputs were delayed, append them into this block
         match step {

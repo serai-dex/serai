@@ -49,6 +49,7 @@ pub struct Output(SpendableOutput, Vec<u8>);
 const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
 const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
 const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
+const FORWARD_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(3, 0);
 
 impl OutputTrait<Monero> for Output {
   // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
@@ -61,6 +62,7 @@ impl OutputTrait<Monero> for Output {
       EXTERNAL_SUBADDRESS => OutputType::External,
       BRANCH_SUBADDRESS => OutputType::Branch,
       CHANGE_SUBADDRESS => OutputType::Change,
+      FORWARD_SUBADDRESS => OutputType::Forwarded,
       _ => panic!("unrecognized address was scanned for"),
     }
   }
@@ -262,6 +264,7 @@ impl Monero {
     debug_assert!(EXTERNAL_SUBADDRESS.is_none());
     scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
     scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
+    scanner.register_subaddress(FORWARD_SUBADDRESS.unwrap());
     scanner
   }
 
@@ -484,6 +487,10 @@ impl Network for Monero {
     Self::address_internal(key, CHANGE_SUBADDRESS)
   }
 
+  fn forward_address(key: EdwardsPoint) -> Address {
+    Self::address_internal(key, FORWARD_SUBADDRESS)
+  }
+
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     // Monero defines height as chain length, so subtract 1 for block number
     Ok(self.rpc.get_height().await.map_err(map_rpc_err)? - 1)
@@ -520,7 +527,7 @@ impl Network for Monero {
     // This just ensures nothing invalid makes it through
     for tx_outputs in &txs {
       for output in tx_outputs {
-        assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS]
+        assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARD_SUBADDRESS]
           .contains(&output.output.metadata.subaddress));
       }
     }

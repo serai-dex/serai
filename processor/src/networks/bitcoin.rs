@@ -302,6 +302,7 @@ impl BlockTrait<Bitcoin> for Block {
 const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
 static BRANCH_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"branch"));
 static CHANGE_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"change"));
+static FORWARD_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"forward"));
 
 // Always construct the full scanner in order to ensure there's no collisions
 fn scanner(
@@ -325,6 +326,7 @@ fn scanner(
 
   register(OutputType::Branch, *BRANCH_OFFSET);
   register(OutputType::Change, *CHANGE_OFFSET);
+  register(OutputType::Forwarded, *FORWARD_OFFSET);
 
   (scanner, offsets, kinds)
 }
@@ -548,6 +550,11 @@ impl Network for Bitcoin {
   fn change_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
     Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
+  }
+
+  fn forward_address(key: ProjectivePoint) -> Address {
+    let (_, offsets, _) = scanner(key);
+    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded]))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {

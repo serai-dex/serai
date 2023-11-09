@@ -71,6 +71,9 @@ pub enum OutputType {
 
   // Should be added to the available UTXO pool with no further action
   Change,
+
+  // Forwarded output from the prior multisig
+  Forwarded,
 }
 
 impl OutputType {
@@ -79,6 +82,7 @@ impl OutputType {
       OutputType::External => 0,
       OutputType::Branch => 1,
       OutputType::Change => 2,
+      OutputType::Forwarded => 3,
     }])
   }
 
@@ -89,6 +93,7 @@ impl OutputType {
       0 => OutputType::External,
       1 => OutputType::Branch,
       2 => OutputType::Change,
+      3 => OutputType::Forwarded,
       _ => Err(io::Error::new(io::ErrorKind::Other, "invalid OutputType"))?,
     })
   }
@@ -293,6 +298,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for change.
   fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  /// Address for forwarded outputs from prior multisigs.
+  fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
 
   /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
