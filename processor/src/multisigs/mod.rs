@@ -869,6 +869,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
               continue;
             }
 
+            // TODO: Both save_forwarded_output and take_forwarded_output have to happen on the
+            // same clock. Right now, one occurs on Substrate block ack, one occurs on scan.
+            // TODO: To resolve this, this function has to create the plans for
+            // forwarding/refunding outputs.
             if let Some(instruction) =
               MultisigsDb::<N, D>::take_forwarded_output(txn, output.balance())
             {
