@@ -44,7 +44,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       network.mine_block().await;
     }
 
-    let block = network.test_send(N::address(key)).await;
+    let block = network.test_send(N::external_address(key)).await;
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
@@ -81,7 +81,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     &mut txn,
     outputs.clone(),
     vec![Payment {
-      address: N::address(key),
+      address: N::external_address(key),
       data: None,
       balance: Balance {
         coin: match N::NETWORK {
@@ -103,7 +103,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       key,
       inputs: outputs.clone(),
       payments: vec![Payment {
-        address: N::address(key),
+        address: N::external_address(key),
         data: None,
         balance: Balance {
           coin: match N::NETWORK {

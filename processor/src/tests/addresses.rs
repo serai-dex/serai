@@ -99,7 +99,7 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Receive funds to the various addresses and make sure they're properly identified
   let mut received_outputs = vec![];
   for (kind, address) in [
-    (OutputType::External, N::address(key)),
+    (OutputType::External, N::external_address(key)),
     (OutputType::Branch, N::branch_address(key)),
     (OutputType::Change, N::change_address(key)),
     (OutputType::Forwarded, N::forward_address(key)),

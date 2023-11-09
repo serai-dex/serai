@@ -538,23 +538,23 @@ impl Network for Bitcoin {
     scanner(keys.group_key());
   }
 
-  fn address(key: ProjectivePoint) -> Address {
+  fn external_address(key: ProjectivePoint) -> Address {
     Address(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
   }
 
   fn branch_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
-    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
+    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
   }
 
   fn change_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
-    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
+    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
   }
 
   fn forward_address(key: ProjectivePoint) -> Address {
     let (_, offsets, _) = scanner(key);
-    Self::address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded]))
+    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded]))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {

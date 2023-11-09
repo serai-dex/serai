@@ -475,7 +475,7 @@ impl Network for Monero {
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
-  fn address(key: EdwardsPoint) -> Address {
+  fn external_address(key: EdwardsPoint) -> Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
