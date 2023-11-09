@@ -45,7 +45,7 @@ mod signer;
 use signer::Signer;
 
 mod substrate_signer;
-use substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
+use substrate_signer::SubstrateSigner;
 
 mod multisigs;
 use multisigs::{MultisigEvent, MultisigManager};
@@ -218,14 +218,17 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
 
     CoordinatorMessage::Coordinator(msg) => {
-      tributary_mutable
+      if let Some(msg) = tributary_mutable
         .substrate_signer
         .as_mut()
         .expect(
           "coordinator told us to sign a batch when we don't have a Substrate signer at this time",
         )
         .handle(txn, msg)
-        .await;
+        .await
+      {
+        coordinator.send(msg).await;
+      }
     }
 
     CoordinatorMessage::Substrate(msg) => {
@@ -552,7 +555,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               ).await;
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-                substrate_signer.sign(txn, batch).await;
+                if let Some(msg) = substrate_signer.sign(txn, batch).await {
+                  coordinator.send(msg).await;
+                }
               }
             }
 
@@ -575,23 +580,6 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           }
         }
       },
-    }
-
-    // Check if the signers have events
-    // The signers will only have events after the above select executes, so having no timeout on
-    // the above is fine
-    // TODO: Have the Signers return these events, allowing removing these channels?
-    if let Some(signer) = tributary_mutable.substrate_signer.as_mut() {
-      while let Some(msg) = signer.events.pop_front() {
-        match msg {
-          SubstrateSignerEvent::ProcessorMessage(msg) => {
-            coordinator.send(msg).await;
-          }
-          SubstrateSignerEvent::SignedBatch(batch) => {
-            coordinator.send(messages::substrate::ProcessorMessage::SignedBatch { batch }).await;
-          }
-        }
-      }
     }
 
     txn.into_inner().unwrap().commit();

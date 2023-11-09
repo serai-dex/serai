@@ -16,8 +16,12 @@ use serai_db::{DbTxn, Db, MemDb};
 use scale::Encode;
 use serai_client::{primitives::*, in_instructions::primitives::*};
 
-use messages::coordinator::*;
-use crate::substrate_signer::{SubstrateSignerEvent, SubstrateSigner};
+use messages::{
+  substrate,
+  coordinator::{self, BatchSignId, CoordinatorMessage},
+  ProcessorMessage,
+};
+use crate::substrate_signer::SubstrateSigner;
 
 #[tokio::test]
 async fn test_substrate_signer() {
@@ -50,28 +54,10 @@ async fn test_substrate_signer() {
     attempt: 0,
   };
 
-  let mut signers = HashMap::new();
-  let mut dbs = HashMap::new();
-  let mut t = 0;
-  for i in 1 ..= keys.len() {
-    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    let keys = keys.get(&i).unwrap().clone();
-    t = keys.params().t();
-
-    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
-    let mut db = MemDb::new();
-    let mut txn = db.txn();
-    signer.sign(&mut txn, batch.clone()).await;
-    txn.commit();
-
-    signers.insert(i, signer);
-    dbs.insert(i, db);
-  }
-
   let mut signing_set = vec![];
-  while signing_set.len() < usize::from(t) {
+  while signing_set.len() < usize::from(keys.values().next().unwrap().params().t()) {
     let candidate = Participant::new(
-      u16::try_from((OsRng.next_u64() % u64::try_from(signers.len()).unwrap()) + 1).unwrap(),
+      u16::try_from((OsRng.next_u64() % u64::try_from(keys.len()).unwrap()) + 1).unwrap(),
     )
     .unwrap();
     if signing_set.contains(&candidate) {
@@ -80,31 +66,43 @@ async fn test_substrate_signer() {
     signing_set.push(candidate);
   }
 
-  // All participants should emit a preprocess
+  let mut signers = HashMap::new();
+  let mut dbs = HashMap::new();
   let mut preprocesses = HashMap::new();
-  for i in 1 ..= signers.len() {
+  for i in 1 ..= keys.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchPreprocess {
-      id,
-      block: batch_block,
-      preprocesses: mut these_preprocesses,
-    }) = signers.get_mut(&i).unwrap().events.pop_front().unwrap()
-    {
-      assert_eq!(id, actual_id);
-      assert_eq!(batch_block, block);
-      assert_eq!(these_preprocesses.len(), 1);
-      if signing_set.contains(&i) {
-        preprocesses.insert(i, these_preprocesses.swap_remove(0));
+    let keys = keys.get(&i).unwrap().clone();
+
+    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
+    let mut db = MemDb::new();
+
+    let mut txn = db.txn();
+    match signer.sign(&mut txn, batch.clone()).await.unwrap() {
+      // All participants should emit a preprocess
+      coordinator::ProcessorMessage::BatchPreprocess {
+        id,
+        block: batch_block,
+        preprocesses: mut these_preprocesses,
+      } => {
+        assert_eq!(id, actual_id);
+        assert_eq!(batch_block, block);
+        assert_eq!(these_preprocesses.len(), 1);
+        if signing_set.contains(&i) {
+          preprocesses.insert(i, these_preprocesses.swap_remove(0));
+        }
       }
-    } else {
-      panic!("didn't get preprocess back");
+      _ => panic!("didn't get preprocess back"),
     }
+    txn.commit();
+
+    signers.insert(i, signer);
+    dbs.insert(i, db);
   }
 
   let mut shares = HashMap::new();
   for i in &signing_set {
     let mut txn = dbs.get_mut(i).unwrap().txn();
-    signers
+    match signers
       .get_mut(i)
       .unwrap()
       .handle(
@@ -114,25 +112,25 @@ async fn test_substrate_signer() {
           preprocesses: clone_without(&preprocesses, i),
         },
       )
-      .await;
-    txn.commit();
-
-    if let SubstrateSignerEvent::ProcessorMessage(ProcessorMessage::BatchShare {
-      id,
-      shares: mut these_shares,
-    }) = signers.get_mut(i).unwrap().events.pop_front().unwrap()
+      .await
+      .unwrap()
     {
-      assert_eq!(id, actual_id);
-      assert_eq!(these_shares.len(), 1);
-      shares.insert(*i, these_shares.swap_remove(0));
-    } else {
-      panic!("didn't get share back");
+      ProcessorMessage::Coordinator(coordinator::ProcessorMessage::BatchShare {
+        id,
+        shares: mut these_shares,
+      }) => {
+        assert_eq!(id, actual_id);
+        assert_eq!(these_shares.len(), 1);
+        shares.insert(*i, these_shares.swap_remove(0));
+      }
+      _ => panic!("didn't get share back"),
     }
+    txn.commit();
   }
 
   for i in &signing_set {
     let mut txn = dbs.get_mut(i).unwrap().txn();
-    signers
+    match signers
       .get_mut(i)
       .unwrap()
       .handle(
@@ -142,22 +140,18 @@ async fn test_substrate_signer() {
           shares: clone_without(&shares, i),
         },
       )
-      .await;
-    txn.commit();
-
-    if let SubstrateSignerEvent::SignedBatch(signed_batch) =
-      signers.get_mut(i).unwrap().events.pop_front().unwrap()
+      .await
+      .unwrap()
     {
-      assert_eq!(signed_batch.batch, batch);
-      assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
-        .verify(&batch_message(&batch), &signed_batch.signature));
-    } else {
-      panic!("didn't get signed batch back");
+      ProcessorMessage::Substrate(substrate::ProcessorMessage::SignedBatch {
+        batch: signed_batch,
+      }) => {
+        assert_eq!(signed_batch.batch, batch);
+        assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
+          .verify(&batch_message(&batch), &signed_batch.signature));
+      }
+      _ => panic!("didn't get signed batch back"),
     }
-  }
-
-  // Make sure there's no events left
-  for (_, mut signer) in signers.drain() {
-    assert!(signer.events.pop_front().is_none());
+    txn.commit();
   }
 }

@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, fmt};
-use std::collections::{VecDeque, HashMap};
+use std::collections::HashMap;
 
 use rand_core::OsRng;
 
@@ -29,12 +29,6 @@ use crate::{Get, DbTxn, Db};
 // Generate an ID unique to a Batch
 fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
   (network, id).encode().try_into().unwrap()
-}
-
-#[derive(Debug)]
-pub enum SubstrateSignerEvent {
-  ProcessorMessage(ProcessorMessage),
-  SignedBatch(SignedBatch),
 }
 
 #[derive(Debug)]
@@ -88,8 +82,6 @@ pub struct SubstrateSigner<D: Db> {
   #[allow(clippy::type_complexity)]
   signing:
     HashMap<[u8; 5], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
-
-  pub events: VecDeque<SubstrateSignerEvent>,
 }
 
 impl<D: Db> fmt::Debug for SubstrateSigner<D> {
@@ -115,8 +107,6 @@ impl<D: Db> SubstrateSigner<D> {
       attempt: HashMap::new(),
       preprocessing: HashMap::new(),
       signing: HashMap::new(),
-
-      events: VecDeque::new(),
     }
   }
 
@@ -146,10 +136,16 @@ impl<D: Db> SubstrateSigner<D> {
     Ok(())
   }
 
-  async fn attempt(&mut self, txn: &mut D::Transaction<'_>, id: [u8; 5], attempt: u32) {
+  #[must_use]
+  async fn attempt(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    id: [u8; 5],
+    attempt: u32,
+  ) -> Option<ProcessorMessage> {
     // See above commentary for why this doesn't emit SignedBatch
     if SubstrateSignerDb::<D>::completed(txn, id) {
-      return;
+      return None;
     }
 
     // Check if we're already working on this attempt
@@ -161,7 +157,7 @@ impl<D: Db> SubstrateSigner<D> {
           attempt,
           curr_attempt
         );
-        return;
+        return None;
       }
     }
 
@@ -170,7 +166,7 @@ impl<D: Db> SubstrateSigner<D> {
       batch.block
     } else {
       warn!("told to attempt signing a batch we aren't currently signing for");
-      return;
+      return None;
     };
 
     // Delete any existing machines
@@ -201,7 +197,7 @@ impl<D: Db> SubstrateSigner<D> {
         hex::encode(id.id),
         id.attempt
       );
-      return;
+      return None;
     }
 
     SubstrateSignerDb::<D>::attempt(txn, &id);
@@ -225,29 +221,37 @@ impl<D: Db> SubstrateSigner<D> {
     self.preprocessing.insert(id.id, (machines, preprocesses));
 
     // Broadcast our preprocesses
-    self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
-      ProcessorMessage::BatchPreprocess { id, block, preprocesses: serialized_preprocesses },
-    ));
+    Some(ProcessorMessage::BatchPreprocess { id, block, preprocesses: serialized_preprocesses })
   }
 
-  pub async fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) {
+  #[must_use]
+  pub async fn sign(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    batch: Batch,
+  ) -> Option<ProcessorMessage> {
     debug_assert_eq!(self.network, batch.network);
     let id = batch_sign_id(batch.network, batch.id);
     if SubstrateSignerDb::<D>::completed(txn, id) {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
-      return;
+      return None;
     }
 
     self.signable.insert(id, batch);
-    self.attempt(txn, id, 0).await;
+    self.attempt(txn, id, 0).await
   }
 
-  pub async fn handle(&mut self, txn: &mut D::Transaction<'_>, msg: CoordinatorMessage) {
+  #[must_use]
+  pub async fn handle(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    msg: CoordinatorMessage,
+  ) -> Option<messages::ProcessorMessage> {
     match msg {
       CoordinatorMessage::BatchPreprocesses { id, mut preprocesses } => {
         if self.verify_id(&id).is_err() {
-          return;
+          return None;
         }
 
         let (machines, our_preprocesses) = match self.preprocessing.remove(&id.id) {
@@ -257,7 +261,7 @@ impl<D: Db> SubstrateSigner<D> {
               "not preprocessing for {}. this is an error if we didn't reboot",
               hex::encode(id.id),
             );
-            return;
+            return None;
           }
           Some(preprocess) => preprocess,
         };
@@ -310,14 +314,12 @@ impl<D: Db> SubstrateSigner<D> {
         self.signing.insert(id.id, (signature_machine.unwrap(), shares));
 
         // Broadcast our shares
-        self.events.push_back(SubstrateSignerEvent::ProcessorMessage(
-          ProcessorMessage::BatchShare { id, shares: serialized_shares },
-        ));
+        Some((ProcessorMessage::BatchShare { id, shares: serialized_shares }).into())
       }
 
       CoordinatorMessage::BatchShares { id, mut shares } => {
         if self.verify_id(&id).is_err() {
-          return;
+          return None;
         }
 
         let (machine, our_shares) = match self.signing.remove(&id.id) {
@@ -333,7 +335,7 @@ impl<D: Db> SubstrateSigner<D> {
               "not preprocessing for {}. this is an error if we didn't reboot",
               hex::encode(id.id)
             );
-            return;
+            return None;
           }
           Some(signing) => signing,
         };
@@ -377,11 +379,11 @@ impl<D: Db> SubstrateSigner<D> {
         assert!(self.preprocessing.remove(&id.id).is_none());
         assert!(self.signing.remove(&id.id).is_none());
 
-        self.events.push_back(SubstrateSignerEvent::SignedBatch(batch));
+        Some((messages::substrate::ProcessorMessage::SignedBatch { batch }).into())
       }
 
       CoordinatorMessage::BatchReattempt { id } => {
-        self.attempt(txn, id.id, id.attempt).await;
+        self.attempt(txn, id.id, id.attempt).await.map(Into::into)
       }
     }
   }
@@ -407,8 +409,8 @@ impl<D: Db> SubstrateSigner<D> {
     // While a successive batch's signing would also cause this block to be acknowledged, Substrate
     // guarantees a batch's ordered inclusion
 
-    // This also doesn't emit any further events since all mutation from the Batch being signed
-    // happens on the substrate::CoordinatorMessage::SubstrateBlock message (which SignedBatch is
-    // meant to end up triggering)
+    // This also doesn't return any messages since all mutation from the Batch being signed happens
+    // on the substrate::CoordinatorMessage::SubstrateBlock message (which SignedBatch is meant to
+    // end up triggering)
   }
 }
