@@ -231,7 +231,7 @@ fn batch_test() {
         let mut serai_address = [0; 32];
         OsRng.fill_bytes(&mut serai_address);
         let instruction =
-          if i == 1 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
+          if i == 0 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
 
         // Send into the processor's wallet
         let (tx, balance_sent) =
@@ -258,9 +258,9 @@ fn batch_test() {
           network,
           id: i,
           block: BlockHash(block_with_tx.unwrap()),
-          instructions: if let Some(instruction) = instruction {
+          instructions: if let Some(instruction) = &instruction {
             vec![InInstructionWithBalance {
-              instruction,
+              instruction: instruction.clone(),
               balance: Balance {
                 coin: balance_sent.coin,
                 amount: Amount(
@@ -311,7 +311,7 @@ fn batch_test() {
         let serai_time =
           SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
         for coordinator in &mut coordinators {
-          assert!(substrate_block(
+          let plans = substrate_block(
             coordinator,
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
@@ -324,8 +324,35 @@ fn batch_test() {
               batches: vec![batch.batch.id],
             },
           )
-          .await
-          .is_empty());
+          .await;
+          if instruction.is_some() || (instruction.is_none() && (network == NetworkId::Monero)) {
+            assert!(plans.is_empty());
+          } else {
+            // If no instruction was used, and the processor csn presume the origin, it'd have
+            // created a refund Plan
+            assert_eq!(plans.len(), 1);
+          }
+        }
+      }
+
+      // With the latter InInstruction not existing, we should've triggered a refund if the origin
+      // was detectable
+      // Check this is trying to sign a Plan
+      if network != NetworkId::Monero {
+        let mut refund_id = None;
+        for coordinator in &mut coordinators {
+          match coordinator.recv_message().await {
+            messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Preprocess {
+              id,
+              ..
+            }) => {
+              if refund_id.is_none() {
+                refund_id = Some(id.clone());
+              }
+              assert_eq!(refund_id.as_ref().unwrap(), &id);
+            }
+            _ => panic!("processor didn't send preprocess for expected refund transaction"),
+          }
         }
       }
     });

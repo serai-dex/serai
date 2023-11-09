@@ -337,6 +337,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
   }
 
   fn refund_plan(output: &N::Output, refund_to: N::Address) -> Plan<N> {
+    log::info!("creating refund plan for {}", hex::encode(output.id()));
+    assert_eq!(output.kind(), OutputType::External);
     Plan {
       key: output.key(),
       inputs: vec![output.clone()],
@@ -639,6 +641,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         if let Some(refund_to) = MultisigsDb::<N, D>::take_refund(txn, output.id().as_ref()) {
           // If this isn't a valid refund address, accumulate this output
           let Ok(refund_to) = refund_to.consume().try_into() else {
+            log::info!(
+              "set refund for {} didn't have a valid address to refund to",
+              hex::encode(output.id())
+            );
             return true;
           };
           plans.push(Self::refund_plan(output, refund_to));
@@ -830,6 +836,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           let (refund_to, instruction) = instruction_from_output::<N>(&output);
           let refund = |txn| {
             if let Some(refund_to) = refund_to {
+              log::info!("setting refund for output {}", hex::encode(output.id()));
               MultisigsDb::<N, D>::set_refund(txn, output.id().as_ref(), refund_to);
             }
           };
