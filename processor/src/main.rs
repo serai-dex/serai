@@ -1,4 +1,4 @@
-use std::{sync::RwLock, time::Duration, collections::HashMap};
+use std::{time::Duration, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
@@ -499,9 +499,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   let mut last_coordinator_msg = None;
 
   loop {
-    // The following select uses this txn in both branches, hence why needing a RwLock to pass it
-    // around is needed
-    let txn = RwLock::new(raw_db.txn());
+    let mut txn = raw_db.txn();
 
     let mut outer_msg = None;
 
@@ -512,15 +510,12 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       // the other messages in the queue, it may be beneficial to parallelize these
       // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
-        let mut txn = txn.write().unwrap();
-        let txn = &mut txn;
-
         assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
         last_coordinator_msg = Some(msg.id);
 
         // Only handle this if we haven't already
         if !main_db.handled_message(msg.id) {
-          MainDb::<N, D>::handle_message(txn, msg.id);
+          MainDb::<N, D>::handle_message(&mut txn, msg.id);
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered
@@ -533,7 +528,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           // This is safe so long as Tributary and Substrate messages don't both expect mutable
           // references over the same data
           handle_coordinator_msg(
-            &mut **txn,
+            &mut txn,
             &network,
             &mut coordinator,
             &mut tributary_mutable,
@@ -545,9 +540,13 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         outer_msg = Some(msg);
       },
 
-      msg = substrate_mutable.next_event(&txn) => {
-        let mut txn = txn.write().unwrap();
-        let txn = &mut txn;
+      scanner_event = substrate_mutable.next_scanner_event() => {
+        let msg = substrate_mutable.scanner_event_to_multisig_event(
+          &mut txn,
+          &network,
+          scanner_event
+        ).await;
+
         match msg {
           MultisigEvent::Batches(retired_key_new_key, batches) => {
             // Start signing this batch
@@ -559,7 +558,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               ).await;
 
               if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
-                if let Some(msg) = substrate_signer.sign(txn, batch).await {
+                if let Some(msg) = substrate_signer.sign(&mut txn, batch).await {
                   coordinator.send(msg).await;
                 }
               }
@@ -577,7 +576,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           },
           MultisigEvent::Completed(key, id, tx) => {
             if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
-              if let Some(msg) = signer.completed(txn, id, tx) {
+              if let Some(msg) = signer.completed(&mut txn, id, tx) {
                 coordinator.send(msg).await;
               }
             }
@@ -586,7 +585,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       },
     }
 
-    txn.into_inner().unwrap().commit();
+    txn.commit();
     if let Some(msg) = outer_msg {
       coordinator.ack(msg).await;
     }

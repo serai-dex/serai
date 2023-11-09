@@ -404,6 +404,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     // branch again for something we've already attempted
     //
     // Only run if this hasn't already been attempted
+    // TODO: This isn't complete as this txn may not be committed with the expected timing
     if SignerDb::<N, D>::has_attempt(txn, &id) {
       warn!(
         "already attempted {} #{}. this is an error if we didn't reboot",

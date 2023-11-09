@@ -191,6 +191,7 @@ impl<D: Db> SubstrateSigner<D> {
     // branch again for something we've already attempted
     //
     // Only run if this hasn't already been attempted
+    // TODO: This isn't complete as this txn may not be committed with the expected timing
     if SubstrateSignerDb::<D>::has_attempt(txn, &id) {
       warn!(
         "already attempted batch {}, attempt #{}. this is an error if we didn't reboot",

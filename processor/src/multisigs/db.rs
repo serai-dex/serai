@@ -5,10 +5,7 @@ use ciphersuite::Ciphersuite;
 pub use serai_db::*;
 
 use scale::{Encode, Decode};
-use serai_client::{
-  primitives::{Balance, ExternalAddress},
-  in_instructions::primitives::InInstructionWithBalance,
-};
+use serai_client::{primitives::Balance, in_instructions::primitives::InInstructionWithBalance};
 
 use crate::{
   Get, Db, Plan,
@@ -156,15 +153,33 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     txn.put(Self::resolved_key(resolution.as_ref()), plan);
   }
 
-  fn refund_key(id: &[u8]) -> Vec<u8> {
-    Self::multisigs_key(b"refund", id)
+  fn plans_from_scanning_key(block_number: usize) -> Vec<u8> {
+    Self::multisigs_key(b"plans_from_scanning", u32::try_from(block_number).unwrap().to_le_bytes())
   }
-  pub fn set_refund(txn: &mut D::Transaction<'_>, id: &[u8], address: ExternalAddress) {
-    txn.put(Self::refund_key(id), address.encode());
+  pub fn set_plans_from_scanning(
+    txn: &mut D::Transaction<'_>,
+    block_number: usize,
+    plans: Vec<Plan<N>>,
+  ) {
+    let mut buf = vec![];
+    for plan in plans {
+      plan.write(&mut buf).unwrap();
+    }
+    txn.put(Self::plans_from_scanning_key(block_number), buf);
   }
-  pub fn take_refund(txn: &mut D::Transaction<'_>, id: &[u8]) -> Option<ExternalAddress> {
-    let key = Self::refund_key(id);
-    let res = txn.get(&key).map(|address| ExternalAddress::decode(&mut address.as_ref()).unwrap());
+  pub fn take_plans_from_scanning(
+    txn: &mut D::Transaction<'_>,
+    block_number: usize,
+  ) -> Option<Vec<Plan<N>>> {
+    let key = Self::plans_from_scanning_key(block_number);
+    let res = txn.get(&key).map(|plans| {
+      let mut plans_ref = plans.as_slice();
+      let mut res = vec![];
+      while !plans_ref.is_empty() {
+        res.push(Plan::<N>::read(&mut plans_ref).unwrap());
+      }
+      res
+    });
     if res.is_some() {
       txn.del(key);
     }
