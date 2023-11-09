@@ -594,10 +594,11 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     block_id: <N::Block as Block<N>>::Id,
     step: &mut RotationStep,
     burns: Vec<OutInstructionWithBalance>,
-  ) -> (bool, Vec<Plan<N>>) {
+  ) -> (bool, Vec<Plan<N>>, HashSet<[u8; 32]>) {
     let (mut existing_payments, mut new_payments) = self.burns_to_payments(txn, *step, burns);
 
     let mut plans = vec![];
+    let mut plans_from_scanning = HashSet::new();
 
     // We now have to acknowledge the acknowledged block, if it's new
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
@@ -608,6 +609,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       {
         // Load plans crated when we scanned the block
         plans = MultisigsDb::<N, D>::take_plans_from_scanning(txn, block_number).unwrap();
+        for plan in &plans {
+          plans_from_scanning.insert(plan.id());
+        }
 
         let (is_retirement_block, outputs) = self.scanner.ack_block(txn, block_id.clone()).await;
         if is_retirement_block {
@@ -680,7 +684,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       plans.extend(new.scheduler.schedule::<D>(txn, new_outputs, new_payments, new.key, false));
     }
 
-    (acquired_lock, plans)
+    (acquired_lock, plans, plans_from_scanning)
   }
 
   /// Handle a SubstrateBlock event, building the relevant Plans.
@@ -701,7 +705,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut step = self.current_rotation_step(block_number);
 
     // Get the Plans from this block
-    let (acquired_lock, plans) =
+    let (acquired_lock, plans, plans_from_scanning) =
       self.plans_from_block(txn, block_number, block_id, &mut step, burns).await;
 
     let res = {
@@ -725,27 +729,21 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             running_operating_costs,
           );
 
-          // TODO: Don't do an error-prone post-detection for if this is being forwarded
-          // Be told this is being forwarded
-          let to_be_forwarded = (step == RotationStep::ForwardFromExisting) &&
-            plan
-              .payments
-              .first()
-              .map(|payment| payment.address == N::forward_address(self.new.as_ref().unwrap().key))
-              .unwrap_or(false) &&
-            plan.change.is_none();
-
-          // If we're forwarding this output, don't take the opportunity to amortze operating costs
-          // The scanner handler below, in order to properly save forwarded outputs' instructions,
-          // needs to know the actual value the forwarded output will be created with
+          // If this Plan is from the scanner handler below, don't take the opportunity to amortze
+          // operating costs
+          // It operates with limited context, and on a different clock, making it nable to react
+          // to operating costs
+          // Despite this, in order to properly save forwarded outputs' instructions, it needs to
+          // know the actual value forwarded outputs will be created with
           // Including operating costs prevents that
-          let to_use_operating_costs = if to_be_forwarded { 0 } else { running_operating_costs };
+          let from_scanning = plans_from_scanning.contains(&plan.id());
+          let to_use_operating_costs = if from_scanning { 0 } else { running_operating_costs };
 
           let PreparedSend { tx, post_fee_branches, mut operating_costs } =
             prepare_send(network, block_number, plan, to_use_operating_costs).await;
 
           // Restore running_operating_costs to operating_costs
-          if to_be_forwarded {
+          if from_scanning {
             // If we're forwarding (or refunding) this output, operating_costs should still be 0
             // Either this TX wasn't created, causing no operating costs, or it was yet it'd be
             // amortized
