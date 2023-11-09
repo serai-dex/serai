@@ -30,7 +30,7 @@ use monero_serai::{
 use tokio::time::sleep;
 
 pub use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
   networks::monero::Address,
 };
 
@@ -82,7 +82,7 @@ impl OutputTrait<Monero> for Output {
   }
 
   fn balance(&self) -> Balance {
-    Balance { coin: SeraiCoin::Monero, amount: Amount(self.0.commitment().amount) }
+    Balance { coin: Coin::Monero, amount: Amount(self.0.commitment().amount) }
   }
 
   fn data(&self) -> &[u8] {
@@ -255,6 +255,10 @@ impl Monero {
     change: &Option<Address>,
     calculating_fee: bool,
   ) -> Result<Option<(RecommendedTranscript, MSignableTransaction)>, NetworkError> {
+    for payment in payments {
+      assert_eq!(payment.balance.coin, Coin::Monero);
+    }
+
     // TODO2: Use an fee representative of several blocks, cached inside Self
     let block_for_fee = self.get_block(block_number).await?;
     let fee_rate = self.median_fee(&block_for_fee).await?;
@@ -313,7 +317,7 @@ impl Monero {
             .address(MoneroNetwork::Mainnet, AddressSpec::Standard),
         )
         .unwrap(),
-        amount: 0,
+        balance: Balance { coin: Coin::Monero, amount: Amount(0) },
         data: None,
       });
     }
@@ -322,7 +326,9 @@ impl Monero {
       .into_iter()
       // If we're solely estimating the fee, don't actually specify an amount
       // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
-      .map(|payment| (payment.address.into(), if calculating_fee { 0 } else { payment.amount }))
+      .map(|payment| {
+        (payment.address.into(), if calculating_fee { 0 } else { payment.balance.amount.0 })
+      })
       .collect::<Vec<_>>();
 
     match MSignableTransaction::new(

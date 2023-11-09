@@ -7,7 +7,7 @@ use scale::{Encode, Decode};
 use messages::SubstrateContext;
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, ExternalAddress, BlockHash},
+  primitives::{MAX_DATA_LEN, NetworkId, Coin, ExternalAddress, BlockHash},
   in_instructions::primitives::{
     InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
   },
@@ -157,7 +157,20 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
     for (_, key) in &current_keys {
-      schedulers.push(Scheduler::from_db(raw_db, *key).unwrap());
+      schedulers.push(
+        Scheduler::from_db(
+          raw_db,
+          *key,
+          match N::NETWORK {
+            NetworkId::Serai => panic!("adding a key for Serai"),
+            NetworkId::Bitcoin => Coin::Bitcoin,
+            // TODO: This is incomplete to DAI
+            NetworkId::Ethereum => Coin::Ether,
+            NetworkId::Monero => Coin::Monero,
+          },
+        )
+        .unwrap(),
+      );
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
@@ -234,7 +247,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let viewer = Some(MultisigViewer {
       activation_block,
       key: external_key,
-      scheduler: Scheduler::<N>::new::<D>(txn, external_key),
+      scheduler: Scheduler::<N>::new::<D>(
+        txn,
+        external_key,
+        match N::NETWORK {
+          NetworkId::Serai => panic!("adding a key for Serai"),
+          NetworkId::Bitcoin => Coin::Bitcoin,
+          // TODO: This is incomplete to DAI
+          NetworkId::Ethereum => Coin::Ether,
+          NetworkId::Monero => Coin::Monero,
+        },
+      ),
     });
 
     if self.existing.is_none() {
@@ -295,12 +318,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       assert_eq!(balance.coin.network(), N::NETWORK);
 
       if let Ok(address) = N::Address::try_from(address.consume()) {
-        // TODO: Add coin to payment
-        payments.push(Payment {
-          address,
-          data: data.map(|data| data.consume()),
-          amount: balance.amount.0,
-        });
+        payments.push(Payment { address, data: data.map(|data| data.consume()), balance });
       }
     }
 
@@ -344,7 +362,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       inputs: vec![output.clone()],
       // Uses a payment as this will still be successfully sent due to fee amortization,
       // and because change is currently always a Serai key
-      payments: vec![Payment { address: refund_to, data: None, amount: output.balance().amount.0 }],
+      payments: vec![Payment { address: refund_to, data: None, balance: output.balance() }],
       change: None,
     }
   }
@@ -542,7 +560,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           //
           // This is unnecessary, due to the current flow around Eventuality resolutions and the
           // current bounds naturally found being sufficiently amenable, yet notable for the future
-          if scheduler.can_use_branch(output.amount()) {
+          if scheduler.can_use_branch(output.balance()) {
             // We could simply call can_use_branch, yet it'd have an edge case where if we receive
             // two outputs for 100, and we could use one such output, we'd handle both.
             //
@@ -852,7 +870,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
             }
 
             if let Some(instruction) =
-              MultisigsDb::<N, D>::take_forwarded_output(txn, output.amount())
+              MultisigsDb::<N, D>::take_forwarded_output(txn, output.balance())
             {
               instruction
             } else {

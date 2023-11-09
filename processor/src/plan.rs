@@ -1,8 +1,12 @@
 use std::io;
 
+use scale::{Encode, Decode};
+
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
 use frost::curve::Ciphersuite;
+
+use serai_client::primitives::Balance;
 
 use crate::networks::{Output, Network};
 
@@ -10,8 +14,7 @@ use crate::networks::{Output, Network};
 pub struct Payment<N: Network> {
   pub address: N::Address,
   pub data: Option<Vec<u8>>,
-  // TODO: Balance
-  pub amount: u64,
+  pub balance: Balance,
 }
 
 impl<N: Network> Payment<N> {
@@ -21,7 +24,8 @@ impl<N: Network> Payment<N> {
     if let Some(data) = self.data.as_ref() {
       transcript.append_message(b"data", data);
     }
-    transcript.append_message(b"amount", self.amount.to_le_bytes());
+    transcript.append_message(b"coin", self.balance.coin.encode());
+    transcript.append_message(b"amount", self.balance.amount.0.to_le_bytes());
   }
 
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -40,7 +44,7 @@ impl<N: Network> Payment<N> {
       writer.write_all(data)?;
     }
 
-    writer.write_all(&self.amount.to_le_bytes())
+    writer.write_all(&self.balance.encode())
   }
 
   pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
@@ -63,11 +67,10 @@ impl<N: Network> Payment<N> {
       None
     };
 
-    let mut buf = [0; 8];
-    reader.read_exact(&mut buf)?;
-    let amount = u64::from_le_bytes(buf);
+    let balance = Balance::decode(&mut scale::IoReader(reader))
+      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid balance"))?;
 
-    Ok(Payment { address, data, amount })
+    Ok(Payment { address, data, balance })
   }
 }
 

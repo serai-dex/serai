@@ -106,10 +106,6 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
   fn presumed_origin(&self) -> Option<N::Address>;
 
   fn balance(&self) -> Balance;
-  // TODO: Remove this?
-  fn amount(&self) -> u64 {
-    self.balance().amount.0
-  }
   fn data(&self) -> &[u8];
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
@@ -208,7 +204,7 @@ fn drop_branches<N: Network>(
   let mut branch_outputs = vec![];
   for payment in payments {
     if payment.address == N::branch_address(key) {
-      branch_outputs.push(PostFeeBranch { expected: payment.amount, actual: None });
+      branch_outputs.push(PostFeeBranch { expected: payment.balance.amount.0, actual: None });
     }
   }
   branch_outputs
@@ -279,6 +275,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// For any received output, there's the cost to spend the output. This value MUST exceed the
   /// cost to spend said output, and should by a notable margin (not just 2x, yet an order of
   /// magnitude).
+  // TODO: Dust needs to be diversified per Coin
   const DUST: u64;
 
   /// The cost to perform input aggregation with a 2-input 1-output TX.
@@ -356,8 +353,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
 
     let plan_id = plan.id();
     let Plan { key, inputs, mut payments, change } = plan;
-    let theoretical_change_amount = inputs.iter().map(|input| input.amount()).sum::<u64>() -
-      payments.iter().map(|payment| payment.amount).sum::<u64>();
+    let theoretical_change_amount =
+      inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
+        payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
 
     let Some(tx_fee) = self.needed_fee(block_number, &plan_id, &inputs, &payments, &change).await?
     else {
@@ -381,7 +379,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       // as well
       let total_fee = tx_fee + if change.is_some() { operating_costs } else { 0 };
 
-      let original_outputs = payments.iter().map(|payment| payment.amount).sum::<u64>();
+      let original_outputs = payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
       // If this isn't enough for the total fee, drop and move on
       if original_outputs < total_fee {
         let mut remaining_operating_costs = operating_costs;
@@ -395,7 +393,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       }
 
       let initial_payment_amounts =
-        payments.iter().map(|payment| payment.amount).collect::<Vec<_>>();
+        payments.iter().map(|payment| payment.balance.amount.0).collect::<Vec<_>>();
 
       // Amortize the transaction fee across outputs
       let mut remaining_fee = total_fee;
@@ -409,16 +407,16 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
           // Only subtract the overage once
           overage = 0;
 
-          let subtractable = payment.amount.min(this_payment_fee);
+          let subtractable = payment.balance.amount.0.min(this_payment_fee);
           remaining_fee -= subtractable;
-          payment.amount -= subtractable;
+          payment.balance.amount.0 -= subtractable;
         }
       }
 
       // If any payment is now below the dust threshold, set its value to 0 so it'll be dropped
       for payment in &mut payments {
-        if payment.amount < Self::DUST {
-          payment.amount = 0;
+        if payment.balance.amount.0 < Self::DUST {
+          payment.balance.amount.0 = 0;
         }
       }
 
@@ -428,7 +426,11 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
         if payment.address == Self::branch_address(key) {
           branch_outputs.push(PostFeeBranch {
             expected: initial_amount,
-            actual: if payment.amount == 0 { None } else { Some(payment.amount) },
+            actual: if payment.balance.amount.0 == 0 {
+              None
+            } else {
+              Some(payment.balance.amount.0)
+            },
           });
         }
       }
@@ -437,7 +439,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       payments = payments
         .drain(..)
         .filter(|payment| {
-          if payment.amount != 0 {
+          if payment.balance.amount.0 != 0 {
             true
           } else {
             log::debug!("dropping dust payment from plan {}", hex::encode(plan_id));
@@ -447,7 +449,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
         .collect();
 
       // Sanity check the fee was successfully amortized
-      let new_outputs = payments.iter().map(|payment| payment.amount).sum::<u64>();
+      let new_outputs = payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
       assert!((new_outputs + total_fee) <= original_outputs);
 
       (
@@ -483,9 +485,10 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     };
 
     if change.is_some() {
-      let on_chain_expected_change = inputs.iter().map(|input| input.amount()).sum::<u64>() -
-        payments.iter().map(|payment| payment.amount).sum::<u64>() -
-        tx_fee;
+      let on_chain_expected_change =
+        inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
+          payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>() -
+          tx_fee;
       // If the change value is less than the dust threshold, it becomes an operating cost
       // This may be slightly inaccurate as dropping payments may reduce the fee, raising the
       // change above dust

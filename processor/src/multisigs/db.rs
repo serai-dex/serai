@@ -5,10 +5,9 @@ use ciphersuite::Ciphersuite;
 pub use serai_db::*;
 
 use scale::{Encode, Decode};
-#[rustfmt::skip]
 use serai_client::{
-  primitives::ExternalAddress,
-  in_instructions::primitives::InInstructionWithBalance
+  primitives::{Balance, ExternalAddress},
+  in_instructions::primitives::InInstructionWithBalance,
 };
 
 use crate::{
@@ -172,23 +171,23 @@ impl<N: Network, D: Db> MultisigsDb<N, D> {
     res
   }
 
-  fn forwarded_output_key(amount: u64) -> Vec<u8> {
-    Self::multisigs_key(b"forwarded_output", amount.to_le_bytes())
+  fn forwarded_output_key(balance: Balance) -> Vec<u8> {
+    Self::multisigs_key(b"forwarded_output", balance.encode())
   }
   pub fn save_forwarded_output(
     txn: &mut D::Transaction<'_>,
     instruction: InInstructionWithBalance,
   ) {
-    let key = Self::forwarded_output_key(instruction.balance.amount.0);
+    let key = Self::forwarded_output_key(instruction.balance);
     let mut existing = txn.get(&key).unwrap_or(vec![]);
     existing.extend(instruction.encode());
     txn.put(key, existing);
   }
   pub fn take_forwarded_output(
     txn: &mut D::Transaction<'_>,
-    amount: u64,
+    balance: Balance,
   ) -> Option<InInstructionWithBalance> {
-    let key = Self::forwarded_output_key(amount);
+    let key = Self::forwarded_output_key(balance);
 
     let outputs = txn.get(&key)?;
     let mut outputs_ref = outputs.as_slice();

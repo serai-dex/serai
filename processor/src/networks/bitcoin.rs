@@ -43,7 +43,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin as SeraiCoin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
   networks::bitcoin::Address,
 };
 
@@ -126,7 +126,7 @@ impl OutputTrait<Bitcoin> for Output {
   }
 
   fn balance(&self) -> Balance {
-    Balance { coin: SeraiCoin::Bitcoin, amount: Amount(self.output.value()) }
+    Balance { coin: Coin::Bitcoin, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {
@@ -384,6 +384,10 @@ impl Bitcoin {
     change: &Option<Address>,
     calculating_fee: bool,
   ) -> Result<Option<BSignableTransaction>, NetworkError> {
+    for payment in payments {
+      assert_eq!(payment.balance.coin, Coin::Bitcoin);
+    }
+
     // TODO2: Use an fee representative of several blocks, cached inside Self
     let block_for_fee = self.get_block(block_number).await?;
     let fee = self.median_fee(&block_for_fee).await?;
@@ -396,7 +400,7 @@ impl Bitcoin {
           // If we're solely estimating the fee, don't specify the actual amount
           // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
           // error
-          if calculating_fee { Self::DUST } else { payment.amount },
+          if calculating_fee { Self::DUST } else { payment.balance.amount.0 },
         )
       })
       .collect::<Vec<_>>();

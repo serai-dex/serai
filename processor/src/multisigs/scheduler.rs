@@ -5,6 +5,8 @@ use std::{
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
+use serai_client::primitives::{Coin, Amount, Balance};
+
 use crate::{
   networks::{OutputType, Output, Network},
   DbTxn, Db, Payment, Plan,
@@ -14,6 +16,7 @@ use crate::{
 #[derive(PartialEq, Eq, Debug)]
 pub struct Scheduler<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
+  coin: Coin,
 
   // Serai, when it has more outputs expected than it can handle in a single tranaction, will
   // schedule the outputs to be handled later. Immediately, it just creates additional outputs
@@ -51,7 +54,11 @@ impl<N: Network> Scheduler<N> {
       self.payments.is_empty()
   }
 
-  fn read<R: Read>(key: <N::Curve as Ciphersuite>::G, reader: &mut R) -> io::Result<Self> {
+  fn read<R: Read>(
+    key: <N::Curve as Ciphersuite>::G,
+    coin: Coin,
+    reader: &mut R,
+  ) -> io::Result<Self> {
     let mut read_plans = || -> io::Result<_> {
       let mut all_plans = HashMap::new();
       let mut all_plans_len = [0; 4];
@@ -95,7 +102,7 @@ impl<N: Network> Scheduler<N> {
       payments.push_back(Payment::read(reader)?);
     }
 
-    Ok(Scheduler { key, queued_plans, plans, utxos, payments })
+    Ok(Scheduler { key, coin, queued_plans, plans, utxos, payments })
   }
 
   // TODO2: Get rid of this
@@ -130,13 +137,18 @@ impl<N: Network> Scheduler<N> {
       payment.write(&mut res).unwrap();
     }
 
-    debug_assert_eq!(&Self::read(self.key, &mut res.as_slice()).unwrap(), self);
+    debug_assert_eq!(&Self::read(self.key, self.coin, &mut res.as_slice()).unwrap(), self);
     res
   }
 
-  pub fn new<D: Db>(txn: &mut D::Transaction<'_>, key: <N::Curve as Ciphersuite>::G) -> Self {
+  pub fn new<D: Db>(
+    txn: &mut D::Transaction<'_>,
+    key: <N::Curve as Ciphersuite>::G,
+    coin: Coin,
+  ) -> Self {
     let res = Scheduler {
       key,
+      coin,
       queued_plans: HashMap::new(),
       plans: HashMap::new(),
       utxos: vec![],
@@ -147,18 +159,19 @@ impl<N: Network> Scheduler<N> {
     res
   }
 
-  pub fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G) -> io::Result<Self> {
+  pub fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G, coin: Coin) -> io::Result<Self> {
     let scheduler = db.get(scheduler_key::<D, _>(&key)).unwrap_or_else(|| {
       panic!("loading scheduler from DB without scheduler for {}", hex::encode(key.to_bytes()))
     });
     let mut reader_slice = scheduler.as_slice();
     let reader = &mut reader_slice;
 
-    Self::read(key, reader)
+    Self::read(key, coin, reader)
   }
 
-  pub fn can_use_branch(&self, amount: u64) -> bool {
-    self.plans.contains_key(&amount)
+  pub fn can_use_branch(&self, balance: Balance) -> bool {
+    assert_eq!(balance.coin, self.coin);
+    self.plans.contains_key(&balance.amount.0)
   }
 
   fn execute(
@@ -170,11 +183,14 @@ impl<N: Network> Scheduler<N> {
     let mut change = false;
     let mut max = N::MAX_OUTPUTS;
 
-    let payment_amounts =
-      |payments: &Vec<Payment<N>>| payments.iter().map(|payment| payment.amount).sum::<u64>();
+    let payment_amounts = |payments: &Vec<Payment<N>>| {
+      payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>()
+    };
 
     // Requires a change output
-    if inputs.iter().map(Output::amount).sum::<u64>() != payment_amounts(&payments) {
+    if inputs.iter().map(|output| output.balance().amount.0).sum::<u64>() !=
+      payment_amounts(&payments)
+    {
       change = true;
       max -= 1;
     }
@@ -208,7 +224,14 @@ impl<N: Network> Scheduler<N> {
 
       // Create the payment for the plan
       // Push it to the front so it's not moved into a branch until all lower-depth items are
-      payments.insert(0, Payment { address: branch_address.clone(), data: None, amount });
+      payments.insert(
+        0,
+        Payment {
+          address: branch_address.clone(),
+          data: None,
+          balance: Balance { coin: self.coin, amount: Amount(amount) },
+        },
+      );
     }
 
     Plan {
@@ -230,12 +253,12 @@ impl<N: Network> Scheduler<N> {
 
     for utxo in utxos.drain(..) {
       if utxo.kind() == OutputType::Branch {
-        let amount = utxo.amount();
+        let amount = utxo.balance().amount.0;
         if let Some(plans) = self.plans.get_mut(&amount) {
           // Execute the first set of payments possible with an output of this amount
           let payments = plans.pop_front().unwrap();
           // They won't be equal if we dropped payments due to being dust
-          assert!(amount >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+          assert!(amount >= payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>());
 
           // If we've grabbed the last plan for this output amount, remove it from the map
           if plans.is_empty() {
@@ -264,6 +287,13 @@ impl<N: Network> Scheduler<N> {
     key_for_any_change: <N::Curve as Ciphersuite>::G,
     force_spend: bool,
   ) -> Vec<Plan<N>> {
+    for utxo in &utxos {
+      assert_eq!(utxo.balance().coin, self.coin);
+    }
+    for payment in &payments {
+      assert_eq!(payment.balance.coin, self.coin);
+    }
+
     // Drop payments to our own branch address
     /*
       created_output will be called any time we send to a branch address. If it's called, and it
@@ -297,7 +327,7 @@ impl<N: Network> Scheduler<N> {
     }
 
     // Sort UTXOs so the highest valued ones are first
-    self.utxos.sort_by(|a, b| a.amount().cmp(&b.amount()).reverse());
+    self.utxos.sort_by(|a, b| a.balance().amount.0.cmp(&b.balance().amount.0).reverse());
 
     // We always want to aggregate our UTXOs into a single UTXO in the name of simplicity
     // We may have more UTXOs than will fit into a TX though
@@ -333,7 +363,7 @@ impl<N: Network> Scheduler<N> {
     }
 
     // We want to use all possible UTXOs for all possible payments
-    let mut balance = utxos.iter().map(Output::amount).sum::<u64>();
+    let mut balance = utxos.iter().map(|output| output.balance().amount.0).sum::<u64>();
 
     // If we can't fulfill the next payment, we have encountered an instance of the UTXO
     // availability problem
@@ -345,7 +375,7 @@ impl<N: Network> Scheduler<N> {
     // granting us access to our full balance
     let mut executing = vec![];
     while !self.payments.is_empty() {
-      let amount = self.payments[0].amount;
+      let amount = self.payments[0].balance.amount.0;
       if balance.checked_sub(amount).is_some() {
         balance -= amount;
         executing.push(self.payments.pop_front().unwrap());
@@ -420,7 +450,7 @@ impl<N: Network> Scheduler<N> {
     // Get the payments this output is expected to handle
     let queued = self.queued_plans.get_mut(&expected).unwrap();
     let mut payments = queued.pop_front().unwrap();
-    assert_eq!(expected, payments.iter().map(|payment| payment.amount).sum::<u64>());
+    assert_eq!(expected, payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>());
     // If this was the last set of payments at this amount, remove it
     if queued.is_empty() {
       self.queued_plans.remove(&expected);
@@ -436,7 +466,7 @@ impl<N: Network> Scheduler<N> {
     {
       let mut to_amortize = actual - expected;
       // If the payments are worth less than this fee we need to amortize, return, dropping them
-      if payments.iter().map(|payment| payment.amount).sum::<u64>() < to_amortize {
+      if payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>() < to_amortize {
         return;
       }
       while to_amortize != 0 {
@@ -449,18 +479,20 @@ impl<N: Network> Scheduler<N> {
           // Only subtract the overage once
           overage = 0;
 
-          let subtractable = payment.amount.min(to_subtract);
+          let subtractable = payment.balance.amount.0.min(to_subtract);
           to_amortize -= subtractable;
-          payment.amount -= subtractable;
+          payment.balance.amount.0 -= subtractable;
         }
       }
     }
 
     // Drop payments now below the dust threshold
-    let payments =
-      payments.into_iter().filter(|payment| payment.amount >= N::DUST).collect::<Vec<_>>();
+    let payments = payments
+      .into_iter()
+      .filter(|payment| payment.balance.amount.0 >= N::DUST)
+      .collect::<Vec<_>>();
     // Sanity check this was done properly
-    assert!(actual >= payments.iter().map(|payment| payment.amount).sum::<u64>());
+    assert!(actual >= payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>());
 
     // If there's no payments left, return
     if payments.is_empty() {

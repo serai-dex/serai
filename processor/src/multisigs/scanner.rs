@@ -553,7 +553,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
           // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
           for output in network.get_outputs(&block, key).await {
             assert_eq!(output.key(), key);
-            if output.amount() >= N::DUST {
+            if output.balance().amount.0 >= N::DUST {
               outputs.push(output);
             }
           }
@@ -580,10 +580,10 @@ impl<N: Network, D: Db> Scanner<N, D> {
         for output in &outputs {
           let id = output.id();
           info!(
-            "block {} had output {} worth {}",
+            "block {} had output {} worth {:?}",
             hex::encode(&block_id),
             hex::encode(&id),
-            output.amount(),
+            output.balance(),
           );
 
           // On Bitcoin, the output ID should be unique for a given chain

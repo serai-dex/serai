@@ -8,6 +8,8 @@ use tokio::time::timeout;
 
 use serai_db::{DbTxn, Db, MemDb};
 
+use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
+
 use crate::{
   Payment, Plan,
   networks::{Output, Transaction, Block, Network},
@@ -64,12 +66,33 @@ pub async fn test_wallet<N: Network>(network: N) {
   txn.commit();
 
   let mut txn = db.txn();
-  let mut scheduler = Scheduler::new::<MemDb>(&mut txn, key);
+  let mut scheduler = Scheduler::new::<MemDb>(
+    &mut txn,
+    key,
+    match N::NETWORK {
+      NetworkId::Serai => panic!("test_wallet called with Serai"),
+      NetworkId::Bitcoin => Coin::Bitcoin,
+      NetworkId::Ethereum => Coin::Ether,
+      NetworkId::Monero => Coin::Monero,
+    },
+  );
   let amount = 2 * N::DUST;
   let plans = scheduler.schedule::<MemDb>(
     &mut txn,
     outputs.clone(),
-    vec![Payment { address: N::address(key), data: None, amount }],
+    vec![Payment {
+      address: N::address(key),
+      data: None,
+      balance: Balance {
+        coin: match N::NETWORK {
+          NetworkId::Serai => panic!("test_wallet called with Serai"),
+          NetworkId::Bitcoin => Coin::Bitcoin,
+          NetworkId::Ethereum => Coin::Ether,
+          NetworkId::Monero => Coin::Monero,
+        },
+        amount: Amount(amount),
+      },
+    }],
     key,
     false,
   );
@@ -79,7 +102,19 @@ pub async fn test_wallet<N: Network>(network: N) {
     vec![Plan {
       key,
       inputs: outputs.clone(),
-      payments: vec![Payment { address: N::address(key), data: None, amount }],
+      payments: vec![Payment {
+        address: N::address(key),
+        data: None,
+        balance: Balance {
+          coin: match N::NETWORK {
+            NetworkId::Serai => panic!("test_wallet called with Serai"),
+            NetworkId::Bitcoin => Coin::Bitcoin,
+            NetworkId::Ethereum => Coin::Ether,
+            NetworkId::Monero => Coin::Monero,
+          },
+          amount: Amount(amount),
+        }
+      }],
       change: Some(N::change_address(key)),
     }]
   );
@@ -113,7 +148,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   let outputs = network.get_outputs(&block, key).await;
   assert_eq!(outputs.len(), 2);
   let amount = amount - tx.fee(&network).await;
-  assert!((outputs[0].amount() == amount) || (outputs[1].amount() == amount));
+  assert!((outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount));
 
   for eventuality in eventualities {
     assert!(network.confirm_completion(&eventuality, &tx));
