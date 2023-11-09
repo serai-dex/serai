@@ -181,13 +181,16 @@ impl<E: Eventuality> Default for EventualitiesTracker<E> {
   }
 }
 
+#[async_trait]
 pub trait Block<N: Network>: Send + Sync + Sized + Clone + Debug {
   // This is currently bounded to being 32 bytes.
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn parent(&self) -> Self::Id;
-  // The monotonic network time at this block.
-  fn time(&self) -> u64;
+  /// The monotonic network time at this block.
+  ///
+  /// This call is presumed to be expensive and should only be called sparingly.
+  async fn time(&self, rpc: &N) -> u64;
 }
 
 // The post-fee value of an expected branch.

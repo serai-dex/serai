@@ -244,6 +244,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // assert!(substrate_mutable.existing.as_ref().is_none());
 
             // Wait until a network's block's time exceeds Serai's time
+            // These time calls are extremely expensive for what they do, yet they only run when
+            // confirming the first key pair, before any network activity has occurred, so they
+            // should be fine
 
             // If the latest block number is 10, then the block indexed by 1 has 10 confirms
             // 10 + 1 - 10 = 1
@@ -251,7 +254,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             while {
               block_i =
                 (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS);
-              get_block(network, block_i).await.time() < context.serai_time
+              get_block(network, block_i).await.time(network).await < context.serai_time
             } {
               info!(
                 "serai confirmed the first key pair for a set. {} {}",
@@ -267,7 +270,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // which... should be impossible
             // Yet a prevented panic is a prevented panic
             while (earliest > 0) &&
-              (get_block(network, earliest - 1).await.time() >= context.serai_time)
+              (get_block(network, earliest - 1).await.time(network).await >= context.serai_time)
             {
               earliest -= 1;
             }

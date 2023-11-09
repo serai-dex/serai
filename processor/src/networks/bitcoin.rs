@@ -256,6 +256,7 @@ impl SignableTransactionTrait for SignableTransaction {
   }
 }
 
+#[async_trait]
 impl BlockTrait<Bitcoin> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -270,10 +271,31 @@ impl BlockTrait<Bitcoin> for Block {
     hash
   }
 
-  // TODO: Don't use this block's time, use the network time at this block
-  // TODO: Confirm network time is monotonic, enabling its usage here
-  fn time(&self) -> u64 {
-    self.header.time.into()
+  async fn time(&self, rpc: &Bitcoin) -> u64 {
+    // Use the network median time defined in BIP-0113 since the in-block time isn't guaranteed to
+    // be monotonic
+    let mut timestamps = vec![u64::from(self.header.time)];
+    let mut parent = self.parent();
+    // BIP-0113 uses a median of the prior 11 blocks
+    while timestamps.len() < 11 {
+      let mut parent_block;
+      while {
+        parent_block = rpc.rpc.get_block(&parent).await;
+        parent_block.is_err()
+      } {
+        log::error!("couldn't get parent block when trying to get block time: {parent_block:?}");
+        sleep(Duration::from_secs(5)).await;
+      }
+      let parent_block = parent_block.unwrap();
+      timestamps.push(u64::from(parent_block.header.time));
+      parent = parent_block.parent();
+
+      if parent == [0; 32] {
+        break;
+      }
+    }
+    timestamps.sort();
+    timestamps[timestamps.len() / 2]
   }
 }
 
@@ -325,7 +347,7 @@ impl Bitcoin {
     let mut res = Rpc::new(url.clone()).await;
     while let Err(e) = res {
       log::error!("couldn't connect to Bitcoin node: {e:?}");
-      tokio::time::sleep(Duration::from_secs(5)).await;
+      sleep(Duration::from_secs(5)).await;
       res = Rpc::new(url.clone()).await;
     }
     Bitcoin { rpc: res.unwrap() }

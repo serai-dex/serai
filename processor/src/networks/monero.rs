@@ -156,6 +156,7 @@ impl SignableTransactionTrait for SignableTransaction {
   }
 }
 
+#[async_trait]
 impl BlockTrait<Monero> for Block {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
@@ -166,9 +167,48 @@ impl BlockTrait<Monero> for Block {
     self.header.previous
   }
 
-  // TODO: Check Monero enforces this to be monotonic and sane
-  fn time(&self) -> u64 {
-    self.header.timestamp
+  async fn time(&self, rpc: &Monero) -> u64 {
+    // Constant from Monero
+    const BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW: u64 = 60;
+
+    // If Monero doesn't have enough blocks to build a window, it doesn't define a network time
+    if (u64::try_from(self.number()).unwrap() + 1) < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
+      // Use the block number as the time
+      return self.number().try_into().unwrap();
+    }
+
+    let mut timestamps = vec![self.header.timestamp];
+    let mut parent = self.parent();
+    while u64::try_from(timestamps.len()).unwrap() < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
+      let mut parent_block;
+      while {
+        parent_block = rpc.rpc.get_block(parent).await;
+        parent_block.is_err()
+      } {
+        log::error!("couldn't get parent block when trying to get block time: {parent_block:?}");
+        sleep(Duration::from_secs(5)).await;
+      }
+      let parent_block = parent_block.unwrap();
+      timestamps.push(parent_block.header.timestamp);
+      parent = parent_block.parent();
+
+      if parent_block.number() == 0 {
+        break;
+      }
+    }
+    timestamps.sort();
+
+    // Because 60 has two medians, Monero's epee picks the in-between value, calculated by the
+    // following formula (from the "get_mid" function)
+    let n = timestamps.len() / 2;
+    let a = timestamps[n - 1];
+    let b = timestamps[n];
+    #[rustfmt::skip] // Enables Ctrl+F'ing for everything after the `= `
+    let res = (a/2) + (b/2) + ((a - 2*(a/2)) + (b - 2*(b/2)))/2;
+    // Techniaslly, res may be 1 if all prior blocks had a timestamp by 0, which would break
+    // monotonicity with our above definition of height as time
+    // Ensure monotonicity by increasing this value by the window size
+    res + BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW
   }
 }
 

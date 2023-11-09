@@ -1,5 +1,5 @@
 use std::{
-  sync::{Arc, Mutex},
+  sync::{OnceLock, Arc, Mutex},
   time::{Duration, Instant},
   collections::HashSet,
 };
@@ -40,6 +40,11 @@ async fn mint_and_burn_test() {
         producer: &mut usize,
         count: usize,
       ) {
+        static MINE_BLOCKS_CALL: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+        // Only let one instance of this function run at a time
+        let _lock = MINE_BLOCKS_CALL.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;
+
         // Pick a block producer via a round robin
         let producer_handles = &handles[*producer];
         *producer += 1;
@@ -177,8 +182,8 @@ async fn mint_and_burn_test() {
             // Bound execution to 60m
             keep_mining && (Instant::now().duration_since(start) < Duration::from_secs(60 * 60))
           } {
-            // Mine a block every 5s
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            // Mine a block every 3s
+            tokio::time::sleep(Duration::from_secs(3)).await;
             mine_blocks(&handles, &ops, &mut producer, 1).await;
           }
         })
@@ -227,6 +232,11 @@ async fn mint_and_burn_test() {
 
         (key_pair(false, NetworkId::Bitcoin).await, key_pair(true, NetworkId::Monero).await)
       };
+
+      // Because the initial keys only become active when the network's time matches the Serai
+      // time, the Serai time is real yet the network time may be significantly delayed due to
+      // potentially being a median, mine a bunch of blocks now
+      mine_blocks(&handles, &ops, &mut 0, 100).await;
 
       // Create a Serai address to receive the sriBTC/sriXMR to
       let (serai_pair, serai_addr) = {
