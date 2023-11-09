@@ -23,7 +23,7 @@ mod plan;
 pub use plan::*;
 
 mod networks;
-use networks::{Block, Network, get_latest_block_number, get_block};
+use networks::{Block, Network};
 #[cfg(feature = "bitcoin")]
 use networks::Bitcoin;
 #[cfg(feature = "monero")]
@@ -252,9 +252,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // 10 + 1 - 10 = 1
             let mut block_i;
             while {
-              block_i =
-                (get_latest_block_number(network).await + 1).saturating_sub(N::CONFIRMATIONS);
-              get_block(network, block_i).await.time(network).await < context.serai_time
+              block_i = (network.get_latest_block_number_with_retries().await + 1)
+                .saturating_sub(N::CONFIRMATIONS);
+              network.get_block_with_retries(block_i).await.time(network).await < context.serai_time
             } {
               info!(
                 "serai confirmed the first key pair for a set. {} {}",
@@ -270,7 +270,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // which... should be impossible
             // Yet a prevented panic is a prevented panic
             while (earliest > 0) &&
-              (get_block(network, earliest - 1).await.time(network).await >= context.serai_time)
+              (network.get_block_with_retries(earliest - 1).await.time(network).await >=
+                context.serai_time)
             {
               earliest -= 1;
             }

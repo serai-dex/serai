@@ -298,6 +298,39 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
   /// Get a block by its number.
   async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError>;
+
+  /// Get the latest block's number, retrying until success.
+  async fn get_latest_block_number_with_retries(&self) -> usize {
+    loop {
+      match self.get_latest_block_number().await {
+        Ok(number) => {
+          return number;
+        }
+        Err(e) => {
+          error!(
+            "couldn't get the latest block number in the with retry get_latest_block_number: {e:?}",
+          );
+          sleep(Duration::from_secs(10)).await;
+        }
+      }
+    }
+  }
+
+  /// Get a block, retrying until success.
+  async fn get_block_with_retries(&self, block_number: usize) -> Self::Block {
+    loop {
+      match self.get_block(block_number).await {
+        Ok(block) => {
+          return block;
+        }
+        Err(e) => {
+          error!("couldn't get block {block_number} in the with retry get_block: {:?}", e);
+          sleep(Duration::from_secs(10)).await;
+        }
+      }
+    }
+  }
+
   /// Get the outputs within a block for a specific key.
   async fn get_outputs(
     &self,
@@ -538,36 +571,4 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address) -> Self::Block;
-}
-
-// TODO: Move into above trait
-pub async fn get_latest_block_number<N: Network>(network: &N) -> usize {
-  loop {
-    match network.get_latest_block_number().await {
-      Ok(number) => {
-        return number;
-      }
-      Err(e) => {
-        error!(
-          "couldn't get the latest block number in main's error-free get_block. {} {}",
-          "this should only happen if the node is offline. error: ", e
-        );
-        sleep(Duration::from_secs(10)).await;
-      }
-    }
-  }
-}
-
-pub async fn get_block<N: Network>(network: &N, block_number: usize) -> N::Block {
-  loop {
-    match network.get_block(block_number).await {
-      Ok(block) => {
-        return block;
-      }
-      Err(e) => {
-        error!("couldn't get block {block_number} in main's error-free get_block. error: {}", e);
-        sleep(Duration::from_secs(10)).await;
-      }
-    }
-  }
 }
