@@ -823,7 +823,17 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // If these aren't externally received funds, don't handle it as an instruction
         outputs.retain(|output| output.kind() == OutputType::External);
 
+        // These plans are of limited context. They're only allowed the outputs newly received
+        // within this block and are intended to handle forwarding transactions/refunds
+        // Those all end up as plans with a single input, leading to a later check:
+        /*
+        if to_be_forwarded {
+          assert_eq!(plan.inputs.len(), 1);
+        }
+        Hence the name, which places that assumed precondition into verbiage here.
+        */
         let mut single_input_plans = vec![];
+
         // If the old multisig is explicitly only supposed to forward, create all such plans now
         if step == RotationStep::ForwardFromExisting {
           let mut i = 0;
