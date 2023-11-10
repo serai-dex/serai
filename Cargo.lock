@@ -7578,6 +7578,7 @@ dependencies = [
  "serai-env",
  "serai-message-queue",
  "serai-processor-messages",
+ "serde",
  "serde_json",
  "sp-application-crypto",
  "sp-runtime",

@@ -41,6 +41,7 @@ serai-client = { path = "../substrate/client", default-features = false, feature
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
 bincode = { version = "1", default-features = false }
+serde = "1"
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }

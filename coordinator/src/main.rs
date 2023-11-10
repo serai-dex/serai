@@ -37,7 +37,7 @@ use ::tributary::{
 
 mod tributary;
 use crate::tributary::{
-  TributarySpec, SignData, Transaction, TributaryDb, NonceDecider, scanner::RecognizedIdType,
+  TributarySpec, SignData, Transaction, TributaryDb, ItemNonceDb, scanner::RecognizedIdType,
 };
 
 mod db;
@@ -740,7 +740,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
           let nonce = loop {
             let Some(nonce) =
-              NonceDecider::<D>::nonce(&txn, genesis, &tx).expect("signed TX didn't have nonce")
+              ItemNonceDb::nonce(&txn, genesis, &tx).expect("signed TX didn't have nonce")
             else {
               // This can be None if the following events occur, in order:
               // 1) We scanned the relevant transaction(s) in a Tributary block
