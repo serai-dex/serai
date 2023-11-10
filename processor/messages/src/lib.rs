@@ -50,8 +50,12 @@ pub mod key_gen {
   pub enum ProcessorMessage {
     // Created commitments for the specified key generation protocol.
     Commitments { id: KeyGenId, commitments: Vec<Vec<u8>> },
+    // Participant published invalid commitments.
+    InvalidCommitments { id: KeyGenId, faulty: Participant },
     // Created shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    // Participant published an invalid share.
+    InvalidShare { id: KeyGenId, faulty: Participant, blame: Option<Vec<u8>> },
     // Resulting keys from the specified key generation protocol.
     GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
   }
@@ -340,8 +344,10 @@ impl ProcessorMessage {
         let (sub, id) = match msg {
           // Unique since KeyGenId
           key_gen::ProcessorMessage::Commitments { id, .. } => (0, id),
-          key_gen::ProcessorMessage::Shares { id, .. } => (1, id),
-          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (2, id),
+          key_gen::ProcessorMessage::InvalidCommitments { id, .. } => (1, id),
+          key_gen::ProcessorMessage::Shares { id, .. } => (2, id),
+          key_gen::ProcessorMessage::InvalidShare { id, .. } => (3, id),
+          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (4, id),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];

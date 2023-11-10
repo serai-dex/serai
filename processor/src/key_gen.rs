@@ -9,7 +9,9 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::{Ciphersuite, Ristretto},
-  dkg::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*},
+  dkg::{
+    DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*,
+  },
 };
 
 use log::info;
@@ -199,32 +201,50 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       |id,
        params: ThresholdParams,
        (machines, our_commitments): (SecretShareMachines<N>, Vec<Vec<u8>>),
-       commitments: HashMap<Participant, Vec<u8>>| {
+       commitments: HashMap<Participant, Vec<u8>>|
+       -> Result<_, ProcessorMessage> {
         let mut rng = secret_shares_rng(id);
 
         #[allow(clippy::type_complexity)]
         fn handle_machine<C: Ciphersuite>(
           rng: &mut ChaCha20Rng,
+          id: KeyGenId,
           params: ThresholdParams,
           machine: SecretShareMachine<C>,
           commitments_ref: &mut HashMap<Participant, &[u8]>,
-        ) -> (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>) {
+        ) -> Result<
+          (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>),
+          ProcessorMessage,
+        > {
           // Parse the commitments
-          let parsed = match commitments_ref
-            .iter_mut()
-            .map(|(i, commitments)| {
+          let mut parsed = HashMap::new();
+          for i in 1 ..= params.n() {
+            let i = Participant::new(i).unwrap();
+            let Some(commitments) = commitments_ref.get_mut(&i) else { continue };
+            parsed.insert(
+              i,
               EncryptionKeyMessage::<C, Commitments<C>>::read(commitments, params)
-                .map(|commitments| (*i, commitments))
-            })
-            .collect()
-          {
-            Ok(commitments) => commitments,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
+                .map_err(|_| ProcessorMessage::InvalidCommitments { id, faulty: i })?,
+            );
+          }
 
           match machine.generate_secret_shares(rng, parsed) {
-            Ok(res) => res,
-            Err(e) => todo!("malicious signer: {:?}", e),
+            Ok(res) => Ok(res),
+            Err(e) => match e {
+              DkgError::ZeroParameter(_, _) |
+              DkgError::InvalidThreshold(_, _) |
+              DkgError::InvalidParticipant(_, _) |
+              DkgError::InvalidSigningSet |
+              DkgError::InvalidShare { .. } => unreachable!("{e:?}"),
+              DkgError::InvalidParticipantQuantity(_, _) |
+              DkgError::DuplicatedParticipant(_) |
+              DkgError::MissingParticipant(_) => {
+                panic!("coordinator sent invalid DKG commitments: {e:?}")
+              }
+              DkgError::InvalidProofOfKnowledge(i) => {
+                Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?
+              }
+            },
           }
         }
 
@@ -244,15 +264,24 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             }
           }
 
-          let (substrate_machine, mut substrate_shares) =
-            handle_machine::<Ristretto>(&mut rng, params, substrate_machine, &mut commitments_ref);
+          let (substrate_machine, mut substrate_shares) = handle_machine::<Ristretto>(
+            &mut rng,
+            id,
+            params,
+            substrate_machine,
+            &mut commitments_ref,
+          )?;
           let (network_machine, network_shares) =
-            handle_machine(&mut rng, params, network_machine, &mut commitments_ref);
+            handle_machine(&mut rng, id, params, network_machine, &mut commitments_ref)?;
           key_machines.push((substrate_machine, network_machine));
 
-          for (_, commitments) in commitments_ref {
+          for i in 1 ..= params.n() {
+            let i = Participant::new(i).unwrap();
+            let commitments = &commitments_ref[&i];
             if !commitments.is_empty() {
-              todo!("malicious signer: extra bytes");
+              // Malicious Participant included extra bytes in their commitments
+              // (a potential DoS attack)
+              Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?;
             }
           }
 
@@ -263,7 +292,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           }
           shares.push(these_shares);
         }
-        (key_machines, shares)
+        Ok((key_machines, shares))
       };
 
     match msg {
@@ -307,11 +336,13 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           .unwrap_or_else(|| key_gen_machines(id, params, share_quantity));
 
         CommitmentsDb::set(txn, &id, &commitments);
-        let (machines, shares) = secret_share_machines(id, params, prior, commitments);
-
-        self.active_share.insert(id.set, (machines, shares.clone()));
-
-        ProcessorMessage::Shares { id, shares }
+        match secret_share_machines(id, params, prior, commitments) {
+          Ok((machines, shares)) => {
+            self.active_share.insert(id.set, (machines, shares.clone()));
+            ProcessorMessage::Shares { id, shares }
+          }
+          Err(e) => e,
+        }
       }
 
       CoordinatorMessage::Shares { id, shares } => {
@@ -323,34 +354,56 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let (machines, our_shares) = self.active_share.remove(&id.set).unwrap_or_else(|| {
           let prior = key_gen_machines(id, params, share_quantity);
           secret_share_machines(id, params, prior, CommitmentsDb::get(txn, &id).unwrap())
+            .expect("got Shares for a key gen which faulted")
         });
 
         let mut rng = share_rng(id);
 
         fn handle_machine<C: Ciphersuite>(
           rng: &mut ChaCha20Rng,
+          id: KeyGenId,
           params: ThresholdParams,
           machine: KeyMachine<C>,
           shares_ref: &mut HashMap<Participant, &[u8]>,
-        ) -> ThresholdCore<C> {
+        ) -> Result<ThresholdCore<C>, ProcessorMessage> {
           // Parse the shares
-          let shares = match shares_ref
-            .iter_mut()
-            .map(|(i, share)| {
-              EncryptedMessage::<C, SecretShare<C::F>>::read(share, params).map(|share| (*i, share))
-            })
-            .collect()
-          {
-            Ok(shares) => shares,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          };
+          let mut shares = HashMap::new();
+          for i in 1 ..= params.n() {
+            let i = Participant::new(i).unwrap();
+            let Some(share) = shares_ref.get_mut(&i) else { continue };
+            shares.insert(
+              i,
+              EncryptedMessage::<C, SecretShare<C::F>>::read(share, params)
+                .map_err(|_| ProcessorMessage::InvalidShare { id, faulty: i, blame: None })?,
+            );
+          }
 
-          // TODO2: Handle the blame machine properly
-          (match machine.calculate_share(rng, shares) {
-            Ok(res) => res,
-            Err(e) => todo!("malicious signer: {:?}", e),
-          })
-          .complete()
+          // TODO(now): Handle the blame machine properly
+          Ok(
+            (match machine.calculate_share(rng, shares) {
+              Ok(res) => res,
+              Err(e) => match e {
+                DkgError::ZeroParameter(_, _) |
+                DkgError::InvalidThreshold(_, _) |
+                DkgError::InvalidParticipant(_, _) |
+                DkgError::InvalidSigningSet |
+                DkgError::InvalidProofOfKnowledge(_) => unreachable!("{e:?}"),
+                DkgError::InvalidParticipantQuantity(_, _) |
+                DkgError::DuplicatedParticipant(_) |
+                DkgError::MissingParticipant(_) => {
+                  panic!("coordinator sent invalid DKG shares: {e:?}")
+                }
+                DkgError::InvalidShare { participant, blame } => {
+                  Err(ProcessorMessage::InvalidShare {
+                    id,
+                    faulty: participant,
+                    blame: Some(blame.map(|blame| blame.serialize())).flatten(),
+                  })?
+                }
+              },
+            })
+            .complete(),
+          )
         }
 
         let mut substrate_keys = vec![];
@@ -371,12 +424,22 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             }
           }
 
-          let these_substrate_keys = handle_machine(&mut rng, params, machines.0, &mut shares_ref);
-          let these_network_keys = handle_machine(&mut rng, params, machines.1, &mut shares_ref);
+          let these_substrate_keys =
+            match handle_machine(&mut rng, id, params, machines.0, &mut shares_ref) {
+              Ok(keys) => keys,
+              Err(msg) => return msg,
+            };
+          let these_network_keys =
+            match handle_machine(&mut rng, id, params, machines.1, &mut shares_ref) {
+              Ok(keys) => keys,
+              Err(msg) => return msg,
+            };
 
-          for (_, shares) in shares_ref {
+          for i in 1 ..= params.n() {
+            let i = Participant::new(i).unwrap();
+            let shares = &shares_ref[&i];
             if !shares.is_empty() {
-              todo!("malicious signer: extra bytes");
+              return ProcessorMessage::InvalidShare { id, faulty: i, blame: None };
             }
           }
 
