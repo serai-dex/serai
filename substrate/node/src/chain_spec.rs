@@ -41,12 +41,12 @@ fn testnet_genesis(
         .into_iter()
         .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
-      ignore: Default::default(),
+      _ignore: Default::default(),
     },
 
     dex: DexConfig {
       pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero],
-      ignore: Default::default(),
+      _ignore: Default::default(),
     },
 
     validator_sets: ValidatorSetsConfig {

@@ -252,9 +252,6 @@ impl coins::Config<coins::Instance1> for Runtime {
 
 impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  // TODO: Review if this should be u64/u128 or u64/u256 (and rounding in general).
-  // TODO: do we still need this type?
-  type HigherPrecisionBalance = u128;
 
   type LPFee = ConstU32<3>; // 0.3%
   type MintMinLiquidity = ConstU64<10000>;

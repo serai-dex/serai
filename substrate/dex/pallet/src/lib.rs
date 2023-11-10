@@ -69,6 +69,7 @@ use frame_support::traits::DefensiveOption;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+mod types;
 pub mod weights;
 
 #[cfg(test)]
@@ -79,22 +80,18 @@ mod mock;
 
 use frame_support::ensure;
 use frame_system::{
-  ensure_signed,
   pallet_prelude::{BlockNumberFor, OriginFor},
+  ensure_signed,
 };
 
 pub use pallet::*;
 
-use sp_arithmetic::traits::Unsigned;
-use sp_runtime::{
-  traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure, TrailingZeroInput},
-  DispatchError,
-};
+use sp_runtime::{traits::TrailingZeroInput, DispatchError};
 
 use serai_primitives::{Coin, SubstrateAmount};
 
 use sp_std::prelude::*;
-use dex_primitives::*;
+pub use types::*;
 pub use weights::WeightInfo;
 
 #[frame_support::pallet]
@@ -124,6 +121,9 @@ pub mod pallet {
   /// LiquidityTokens Pallet as an instance of coins pallet.
   pub type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
 
+  /// A type used for amount conversions.
+  pub type HigherPrecisionBalance = u128;
+
   #[pallet::pallet]
   pub struct Pallet<T>(_);
 
@@ -135,15 +135,6 @@ pub mod pallet {
   {
     /// Overarching event type.
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
-    /// A type used for conversions between `SubstrateAmount` and `SubstrateAmount`.
-    type HigherPrecisionBalance: IntegerSquareRoot
-      + One
-      + Ensure
-      + Unsigned
-      + From<u32>
-      + From<SubstrateAmount>
-      + TryInto<SubstrateAmount>;
 
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
     #[pallet::constant]
@@ -232,15 +223,6 @@ pub mod pallet {
       /// The amount of the second coin that was received.
       amount_out: SubstrateAmount,
     },
-    /// An amount has been transferred from one account to another.
-    Transfer {
-      /// The account that the coins were transferred from.
-      from: T::AccountId,
-      /// The account that the coins were transferred to.
-      to: T::AccountId,
-      /// The balance that was transferred.
-      balance: Balance,
-    },
   }
 
   #[pallet::genesis_config]
@@ -248,13 +230,13 @@ pub mod pallet {
   pub struct GenesisConfig<T: Config> {
     /// Pools to create at launch.
     pub pools: Vec<Coin>,
-    /// field just to have T. TODO: better way to own the T than this?
-    pub ignore: PhantomData<T>,
+    /// field just to have T.
+    pub _ignore: PhantomData<T>,
   }
 
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { pools: Default::default(), ignore: Default::default() }
+      GenesisConfig { pools: Default::default(), _ignore: Default::default() }
     }
   }
 
@@ -279,10 +261,10 @@ pub mod pallet {
     WrongDesiredAmount,
     /// Provided amount should be greater than or equal to the existential deposit/coin's
     /// minimal amount.
-    AmountOneLessThanMinimal,
+    AmountCoinLessThanMinimal,
     /// Provided amount should be greater than or equal to the existential deposit/coin's
     /// minimal amount.
-    AmountTwoLessThanMinimal,
+    AmountSriLessThanMinimal,
     /// Reserve needs to always be greater than or equal to the existential deposit/coin's
     /// minimal amount.
     ReserveLeftLessThanMinimal,
@@ -422,10 +404,8 @@ pub mod pallet {
         }
       }
 
-      Self::validate_minimal_amount(sri_amount.saturating_add(sri_reserve), Coin::Serai)
-        .map_err(|_| Error::<T>::AmountOneLessThanMinimal)?;
-      Self::validate_minimal_amount(coin_amount.saturating_add(coin_reserve), coin)
-        .map_err(|_| Error::<T>::AmountTwoLessThanMinimal)?;
+      ensure!(sri_amount.saturating_add(sri_reserve) >= 1, Error::<T>::AmountSriLessThanMinimal);
+      ensure!(coin_amount.saturating_add(coin_reserve) >= 1, Error::<T>::AmountCoinLessThanMinimal);
 
       Self::transfer(
         &sender,
@@ -482,7 +462,7 @@ pub mod pallet {
       sri_min_receive: SubstrateAmount,
       withdraw_to: T::AccountId,
     ) -> DispatchResult {
-      let sender = ensure_signed(origin)?;
+      let sender = ensure_signed(origin.clone())?;
       ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
       let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
@@ -511,14 +491,12 @@ pub mod pallet {
       );
       let sri_reserve_left = sri_reserve.saturating_sub(sri_amount);
       let coin_reserve_left = coin_reserve.saturating_sub(coin_amount);
-      Self::validate_minimal_amount(sri_reserve_left, Coin::Serai)
-        .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
-      Self::validate_minimal_amount(coin_reserve_left, coin)
-        .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
+
+      ensure!(sri_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
+      ensure!(coin_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
 
       // burn the provided lp token amount that includes the fee
-      // TODO: burn lp_token? uhh another burn function?
-      LiquidityTokens::<T>::burn_internal(sender, Balance { coin, amount: Amount(lp_token_burn) })?;
+      LiquidityTokens::<T>::burn(origin, Balance { coin, amount: Amount(lp_token_burn) })?;
 
       Self::transfer(
         &pool_account,
@@ -667,14 +645,12 @@ pub mod pallet {
       balance: Balance,
     ) -> Result<Amount, DispatchError> {
       CoinsPallet::<T>::transfer_internal(*from, *to, balance)?;
-
-      Self::deposit_event(Event::Transfer { from: *from, to: *to, balance });
       Ok(balance.amount)
     }
 
     /// Convert a `HigherPrecisionBalance` type to an `SubstrateAmount`.
     pub(crate) fn convert_hpb_to_coin_balance(
-      amount: T::HigherPrecisionBalance,
+      amount: HigherPrecisionBalance,
     ) -> Result<SubstrateAmount, Error<T>> {
       amount.try_into().map_err(|_| Error::<T>::Overflow)
     }
@@ -718,8 +694,7 @@ pub mod pallet {
 
             let reserve = Self::get_balance(&pool_account, *coin2);
             let reserve_left = reserve.saturating_sub(*amount_out);
-            Self::validate_minimal_amount(reserve_left, *coin2)
-              .map_err(|_| Error::<T>::ReserveLeftLessThanMinimal)?;
+            ensure!(reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
 
             Self::transfer(
               &pool_account,
@@ -890,14 +865,14 @@ pub mod pallet {
       amount1: SubstrateAmount,
       amount2: SubstrateAmount,
     ) -> Result<SubstrateAmount, Error<T>> {
-      let amount1 = T::HigherPrecisionBalance::from(amount1);
-      let amount2 = T::HigherPrecisionBalance::from(amount2);
+      let amount1 = HigherPrecisionBalance::from(amount1);
+      let amount2 = HigherPrecisionBalance::from(amount2);
 
       let result = amount1
-        .checked_mul(&amount2)
+        .checked_mul(amount2)
         .ok_or(Error::<T>::Overflow)?
         .integer_sqrt()
-        .checked_sub(&T::MintMinLiquidity::get().into())
+        .checked_sub(T::MintMinLiquidity::get().into())
         .ok_or(Error::<T>::InsufficientLiquidityMinted)?;
 
       result.try_into().map_err(|_| Error::<T>::Overflow)
@@ -908,15 +883,12 @@ pub mod pallet {
       b: SubstrateAmount,
       c: SubstrateAmount,
     ) -> Result<SubstrateAmount, Error<T>> {
-      let a = T::HigherPrecisionBalance::from(a);
-      let b = T::HigherPrecisionBalance::from(b);
-      let c = T::HigherPrecisionBalance::from(c);
+      let a = HigherPrecisionBalance::from(a);
+      let b = HigherPrecisionBalance::from(b);
+      let c = HigherPrecisionBalance::from(c);
 
-      let result = a
-        .checked_mul(&b)
-        .ok_or(Error::<T>::Overflow)?
-        .checked_div(&c)
-        .ok_or(Error::<T>::Overflow)?;
+      let result =
+        a.checked_mul(b).ok_or(Error::<T>::Overflow)?.checked_div(c).ok_or(Error::<T>::Overflow)?;
 
       result.try_into().map_err(|_| Error::<T>::Overflow)
     }
@@ -930,27 +902,29 @@ pub mod pallet {
       reserve_in: SubstrateAmount,
       reserve_out: SubstrateAmount,
     ) -> Result<SubstrateAmount, Error<T>> {
-      let amount_in = T::HigherPrecisionBalance::from(amount_in);
-      let reserve_in = T::HigherPrecisionBalance::from(reserve_in);
-      let reserve_out = T::HigherPrecisionBalance::from(reserve_out);
+      let amount_in = HigherPrecisionBalance::from(amount_in);
+      let reserve_in = HigherPrecisionBalance::from(reserve_in);
+      let reserve_out = HigherPrecisionBalance::from(reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
         return Err(Error::<T>::ZeroLiquidity);
       }
 
       let amount_in_with_fee = amount_in
-        .checked_mul(&(T::HigherPrecisionBalance::from(1000u32) - (T::LPFee::get().into())))
+        .checked_mul(
+          HigherPrecisionBalance::from(1000u32) - HigherPrecisionBalance::from(T::LPFee::get()),
+        )
         .ok_or(Error::<T>::Overflow)?;
 
-      let numerator = amount_in_with_fee.checked_mul(&reserve_out).ok_or(Error::<T>::Overflow)?;
+      let numerator = amount_in_with_fee.checked_mul(reserve_out).ok_or(Error::<T>::Overflow)?;
 
       let denominator = reserve_in
-        .checked_mul(&1000u32.into())
+        .checked_mul(1000u32.into())
         .ok_or(Error::<T>::Overflow)?
-        .checked_add(&amount_in_with_fee)
+        .checked_add(amount_in_with_fee)
         .ok_or(Error::<T>::Overflow)?;
 
-      let result = numerator.checked_div(&denominator).ok_or(Error::<T>::Overflow)?;
+      let result = numerator.checked_div(denominator).ok_or(Error::<T>::Overflow)?;
 
       result.try_into().map_err(|_| Error::<T>::Overflow)
     }
@@ -964,9 +938,9 @@ pub mod pallet {
       reserve_in: SubstrateAmount,
       reserve_out: SubstrateAmount,
     ) -> Result<SubstrateAmount, Error<T>> {
-      let amount_out = T::HigherPrecisionBalance::from(amount_out);
-      let reserve_in = T::HigherPrecisionBalance::from(reserve_in);
-      let reserve_out = T::HigherPrecisionBalance::from(reserve_out);
+      let amount_out = HigherPrecisionBalance::from(amount_out);
+      let reserve_in = HigherPrecisionBalance::from(reserve_in);
+      let reserve_out = HigherPrecisionBalance::from(reserve_out);
 
       if reserve_in.is_zero() || reserve_out.is_zero() {
         Err(Error::<T>::ZeroLiquidity)?
@@ -977,30 +951,26 @@ pub mod pallet {
       }
 
       let numerator = reserve_in
-        .checked_mul(&amount_out)
+        .checked_mul(amount_out)
         .ok_or(Error::<T>::Overflow)?
-        .checked_mul(&1000u32.into())
+        .checked_mul(1000u32.into())
         .ok_or(Error::<T>::Overflow)?;
 
       let denominator = reserve_out
-        .checked_sub(&amount_out)
+        .checked_sub(amount_out)
         .ok_or(Error::<T>::Overflow)?
-        .checked_mul(&(T::HigherPrecisionBalance::from(1000u32) - T::LPFee::get().into()))
+        .checked_mul(
+          HigherPrecisionBalance::from(1000u32) - HigherPrecisionBalance::from(T::LPFee::get()),
+        )
         .ok_or(Error::<T>::Overflow)?;
 
       let result = numerator
-        .checked_div(&denominator)
+        .checked_div(denominator)
         .ok_or(Error::<T>::Overflow)?
-        .checked_add(&One::one())
+        .checked_add(One::one())
         .ok_or(Error::<T>::Overflow)?;
 
       result.try_into().map_err(|_| Error::<T>::Overflow)
-    }
-
-    /// Ensure that a `value` meets the minimum balance requirements of an `coin` class.
-    fn validate_minimal_amount(value: SubstrateAmount, coin: Coin) -> Result<(), ()> {
-      ensure!(value >= CoinsPallet::<T>::minimum_balance(coin).0, ());
-      Ok(())
     }
 
     /// Ensure that a path is valid.
@@ -1025,14 +995,14 @@ pub mod pallet {
   }
 }
 
-impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, Coin> for Pallet<T> {
+impl<T: Config> Swap<T::AccountId, HigherPrecisionBalance, Coin> for Pallet<T> {
   fn swap_exact_tokens_for_tokens(
     sender: T::AccountId,
     path: Vec<Coin>,
-    amount_in: T::HigherPrecisionBalance,
-    amount_out_min: Option<T::HigherPrecisionBalance>,
+    amount_in: HigherPrecisionBalance,
+    amount_out_min: Option<HigherPrecisionBalance>,
     send_to: T::AccountId,
-  ) -> Result<T::HigherPrecisionBalance, DispatchError> {
+  ) -> Result<HigherPrecisionBalance, DispatchError> {
     let path = path.try_into().map_err(|_| Error::<T>::PathError)?;
     let amount_out_min = amount_out_min.map(Self::convert_hpb_to_coin_balance).transpose()?;
     let amount_out = Self::do_swap_exact_tokens_for_tokens(
@@ -1048,10 +1018,10 @@ impl<T: Config> Swap<T::AccountId, T::HigherPrecisionBalance, Coin> for Pallet<T
   fn swap_tokens_for_exact_tokens(
     sender: T::AccountId,
     path: Vec<Coin>,
-    amount_out: T::HigherPrecisionBalance,
-    amount_in_max: Option<T::HigherPrecisionBalance>,
+    amount_out: HigherPrecisionBalance,
+    amount_in_max: Option<HigherPrecisionBalance>,
     send_to: T::AccountId,
-  ) -> Result<T::HigherPrecisionBalance, DispatchError> {
+  ) -> Result<HigherPrecisionBalance, DispatchError> {
     let path = path.try_into().map_err(|_| Error::<T>::PathError)?;
     let amount_in_max = amount_in_max.map(Self::convert_hpb_to_coin_balance).transpose()?;
     let amount_in = Self::do_swap_tokens_for_exact_tokens(

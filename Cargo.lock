@@ -8269,23 +8269,11 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
- "serai-dex-primitives",
  "serai-primitives",
  "sp-api",
  "sp-arithmetic",
  "sp-core",
  "sp-io",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "serai-dex-primitives"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "parity-scale-codec",
- "scale-info",
  "sp-runtime",
  "sp-std",
 ]
@@ -8577,7 +8565,6 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
- "serai-dex-primitives",
  "serai-in-instructions-pallet",
  "serai-primitives",
  "serai-signals-pallet",

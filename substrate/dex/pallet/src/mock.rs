@@ -92,8 +92,6 @@ impl Config for Test {
   type MaxSwapPathLength = ConstU32<4>;
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;
-
-  type HigherPrecisionBalance = u128;
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
@@ -110,7 +108,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       .into_iter()
       .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
       .collect(),
-    ignore: Default::default(),
+    _ignore: Default::default(),
   }
   .assimilate_storage(&mut t)
   .unwrap();

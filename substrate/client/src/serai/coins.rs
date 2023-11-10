@@ -24,8 +24,8 @@ impl<'a> SeraiCoins<'a> {
     self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::Mint { .. })).await
   }
 
-  pub async fn burn_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
-    self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::Burn { .. })).await
+  pub async fn burn_with_instruction_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
+    self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::BurnWithInstruction { .. })).await
   }
 
   pub async fn coin_supply(&self, coin: Coin) -> Result<Amount, SeraiError> {
@@ -64,7 +64,15 @@ impl<'a> SeraiCoins<'a> {
     )
   }
 
-  pub fn burn(instruction: OutInstructionWithBalance) -> Payload<Composite<()>> {
-    Payload::new(PALLET, "burn", scale_composite(coins::Call::<Runtime>::burn { instruction }))
+  pub fn burn(balance: Balance) -> Payload<Composite<()>> {
+    Payload::new(PALLET, "burn", scale_composite(coins::Call::<Runtime>::burn { balance }))
+  }
+
+  pub fn burn_with_instruction(instruction: OutInstructionWithBalance) -> Payload<Composite<()>> {
+    Payload::new(
+      PALLET,
+      "burn_with_instruction",
+      scale_composite(coins::Call::<Runtime>::burn_with_instruction { instruction }),
+    )
   }
 }

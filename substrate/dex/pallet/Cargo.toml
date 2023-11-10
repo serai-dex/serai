@@ -28,7 +28,6 @@ frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-f
 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 
-dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
 serai-primitives = { path = "../../primitives", default-features = false }
 
 [features]
@@ -46,8 +45,6 @@ std = [
 
   "serai-primitives/std",
 
-  "dex-primitives/std",
-
   "frame-system/std",
   "frame-support/std",
   "frame-benchmarking?/std",
@@ -60,8 +57,6 @@ runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
   "frame-benchmarking/runtime-benchmarks",
-
-  "dex-primitives/runtime-benchmarks",
 ]
 try-runtime = [
   "sp-runtime/try-runtime",

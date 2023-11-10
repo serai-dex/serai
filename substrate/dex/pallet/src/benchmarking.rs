@@ -53,24 +53,20 @@ fn create_coin<T: Config>(coin: &Coin) -> (T::AccountId, AccountIdLookupOf<T>) {
 }
 
 fn create_coin_and_pool<T: Config>(
-  coin1: &Coin,
-  coin2: &Coin,
+  coin: &Coin,
 ) -> (PoolCoinId, T::AccountId, AccountIdLookupOf<T>) {
-  assert_eq!(*coin1, Coin::native());
+  let (caller, caller_lookup) = create_coin::<T>(coin);
+  assert_ok!(Dex::<T>::create_pool(*coin));
 
-  let (caller, caller_lookup) = create_coin::<T>(coin2);
-  assert_ok!(Dex::<T>::create_pool(*coin2));
-
-  (*coin2, caller, caller_lookup)
+  (*coin, caller, caller_lookup)
 }
 
 benchmarks! {
   add_liquidity {
     let coin1 = Coin::native();
     let coin2 = Coin::Bitcoin;
-    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin1, &coin2);
-    let ed: u64 = Coins::<T>::minimum_balance(coin1).0;
-    let add_amount: u64 = 1000 + ed;
+    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin2);
+    let add_amount: u64 = 1000;
   }: _(
     SystemOrigin::Signed(caller),
     coin2,
@@ -106,9 +102,8 @@ benchmarks! {
   remove_liquidity {
     let coin1 = Coin::native();
     let coin2 = Coin::Monero;
-    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin1, &coin2);
-    let ed: u64 = Coins::<T>::minimum_balance(coin1).0;
-    let add_amount: u64 = 100 * ed;
+    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin2);
+    let add_amount: u64 = 100;
     let lp_minted = Dex::<T>::calc_lp_amount_for_zero_supply(
       add_amount,
       1000u64
@@ -145,18 +140,16 @@ benchmarks! {
     let native = Coin::native();
     let coin1 = Coin::Bitcoin;
     let coin2 = Coin::Ether;
-    let (_, caller, _) = create_coin_and_pool::<T>(&native, &coin1);
+    let (_, caller, _) = create_coin_and_pool::<T>(&coin1);
     let (_, _) = create_coin::<T>(&coin2);
-    let ed: u64 = Coins::<T>::minimum_balance(native).0;
-    let ed_bump = 2u64;
 
     Dex::<T>::add_liquidity(
       SystemOrigin::Signed(caller).into(),
       coin1,
       200u64,
-      // TODO: this call otherwise fails with `InsufficientLiquidityMinted`.
-      // might be again related to their expectance on ed being > 1.
-      100 * (ed + ed_bump),
+      // TODO: this call otherwise fails with `InsufficientLiquidityMinted` if we don't multiply
+      // with 3. Might be again related to their expectance on ed being > 1.
+      100 * 3,
       0u64,
       0u64,
       caller,
@@ -171,7 +164,7 @@ benchmarks! {
       SystemOrigin::Signed(caller).into(),
       coin2,
       1000u64,
-      500 * ed,
+      500,
       0u64,
       0u64,
       caller,
@@ -192,15 +185,14 @@ benchmarks! {
     let native = Coin::native();
     let coin1 = Coin::Bitcoin;
     let coin2 = Coin::Ether;
-    let (_, caller, _) = create_coin_and_pool::<T>(&native, &coin1);
+    let (_, caller, _) = create_coin_and_pool::<T>(&coin1);
     let (_, _) = create_coin::<T>(&coin2);
-    let ed: u64 = Coins::<T>::minimum_balance(native).0;
 
     Dex::<T>::add_liquidity(
       SystemOrigin::Signed(caller).into(),
       coin1,
       500u64,
-      1000 * ed,
+      1000,
       0u64,
       0u64,
       caller,
@@ -213,7 +205,7 @@ benchmarks! {
       SystemOrigin::Signed(caller).into(),
       coin2,
       1000u64,
-      500 * ed,
+      500,
       0u64,
       0u64,
       caller,
@@ -226,7 +218,7 @@ benchmarks! {
     SystemOrigin::Signed(caller),
     path.clone(),
     100u64,
-    1000 * ed,
+    1000,
     caller
   )
   verify {

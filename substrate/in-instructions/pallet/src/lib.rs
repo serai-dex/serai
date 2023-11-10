@@ -179,7 +179,7 @@ pub mod pallet {
               // do the swap
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
               Dex::<T>::swap_exact_tokens_for_tokens(
-                origin.into(),
+                origin.clone().into(),
                 BoundedVec::try_from(path).unwrap(),
                 instruction.balance.amount.0,
                 out_balance.amount.0,
@@ -200,7 +200,7 @@ pub mod pallet {
                   },
                   balance: Balance { coin: out_balance.coin, amount: coin_balance },
                 };
-                Coins::<T>::burn_non_sri(IN_INSTRUCTION_EXECUTOR.into(), instruction)?;
+                Coins::<T>::burn_with_instruction(origin.into(), instruction)?;
               }
             }
           }

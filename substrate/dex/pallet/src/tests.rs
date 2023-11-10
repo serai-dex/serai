@@ -60,10 +60,6 @@ fn pool_balance(owner: PublicKey, token_id: Coin) -> u64 {
   LiquidityTokens::<Test>::balance(owner, token_id).0
 }
 
-fn get_ed() -> u64 {
-  CoinsPallet::<Test>::minimum_balance(Coin::native()).0
-}
-
 macro_rules! bvec {
 	($( $x:tt )*) => {
 		vec![$( $x )*].try_into().unwrap()
@@ -183,10 +179,9 @@ fn can_add_liquidity() {
     let lp_token2 = coin3;
     assert_ok!(Dex::create_pool(coin3));
 
-    let ed = get_ed();
     assert_ok!(CoinsPallet::<Test>::mint(
       user,
-      Balance { coin: coin1, amount: Amount(10000 * 2 + ed) }
+      Balance { coin: coin1, amount: Amount(10000 * 2 + 1) }
     ));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin3, amount: Amount(1000) }));
@@ -206,7 +201,7 @@ fn can_add_liquidity() {
     let pallet_account = Dex::get_pool_account(pool_id);
     assert_eq!(balance(pallet_account, coin1), 10000);
     assert_eq!(balance(pallet_account, coin2), 10);
-    assert_eq!(balance(user, coin1), 10000 + ed);
+    assert_eq!(balance(user, coin1), 10000 + 1);
     assert_eq!(balance(user, coin2), 1000 - 10);
     assert_eq!(pool_balance(user, lp_token1), 216);
 
@@ -226,7 +221,7 @@ fn can_add_liquidity() {
     let pallet_account = Dex::get_pool_account(pool_id);
     assert_eq!(balance(pallet_account, coin1), 10000);
     assert_eq!(balance(pallet_account, coin3), 10);
-    assert_eq!(balance(user, coin1), ed);
+    assert_eq!(balance(user, coin1), 1);
     assert_eq!(balance(user, coin3), 1000 - 10);
     assert_eq!(pool_balance(user, lp_token2), 216);
   });
@@ -245,7 +240,7 @@ fn add_tiny_liquidity_leads_to_insufficient_liquidity_minted_error() {
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     assert_noop!(
-      Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 1, get_ed(), 1, 1, user),
+      Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 1, 1, 1, 1, user),
       Error::<Test>::InsufficientLiquidityMinted
     );
   });
@@ -262,11 +257,7 @@ fn add_tiny_liquidity_directly_to_pool_address() {
     assert_ok!(Dex::create_pool(coin2));
     assert_ok!(Dex::create_pool(coin3));
 
-    let ed = get_ed();
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 * 2 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000 * 2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin3, amount: Amount(10000) }));
 
@@ -358,10 +349,7 @@ fn can_not_redeem_more_lp_tokens_than_were_minted() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 + get_ed()) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     assert_ok!(Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 10, 10000, 10, 10000, user,));
@@ -520,8 +508,8 @@ fn quote_price_exact_tokens_for_tokens_matches_execution() {
     );
 
     assert_ok!(CoinsPallet::<Test>::mint(user2, Balance { coin: coin2, amount: Amount(amount) }));
-    let prior_dot_balance = 0;
-    assert_eq!(prior_dot_balance, balance(user2, coin1));
+    let prior_sri_balance = 0;
+    assert_eq!(prior_sri_balance, balance(user2, coin1));
     assert_ok!(Dex::swap_exact_tokens_for_tokens(
       RuntimeOrigin::signed(user2),
       bvec![coin2, coin1],
@@ -530,7 +518,7 @@ fn quote_price_exact_tokens_for_tokens_matches_execution() {
       user2,
     ));
 
-    assert_eq!(prior_dot_balance + quoted_price, balance(user2, coin1));
+    assert_eq!(prior_sri_balance + quoted_price, balance(user2, coin1));
   });
 }
 
@@ -557,8 +545,8 @@ fn quote_price_tokens_for_exact_tokens_matches_execution() {
     );
 
     assert_ok!(CoinsPallet::<Test>::mint(user2, Balance { coin: coin2, amount: Amount(amount) }));
-    let prior_dot_balance = 0;
-    assert_eq!(prior_dot_balance, balance(user2, coin1));
+    let prior_sri_balance = 0;
+    assert_eq!(prior_sri_balance, balance(user2, coin1));
     let prior_coin_balance = 49;
     assert_eq!(prior_coin_balance, balance(user2, coin2));
     assert_ok!(Dex::swap_tokens_for_exact_tokens(
@@ -569,7 +557,7 @@ fn quote_price_tokens_for_exact_tokens_matches_execution() {
       user2,
     ));
 
-    assert_eq!(prior_dot_balance + amount, balance(user2, coin1));
+    assert_eq!(prior_sri_balance + amount, balance(user2, coin1));
     assert_eq!(prior_coin_balance - quoted_price, balance(user2, coin2));
   });
 }
@@ -584,11 +572,7 @@ fn can_swap_with_native() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    let ed = get_ed();
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     let liquidity1 = 10000;
@@ -616,7 +600,7 @@ fn can_swap_with_native() {
     ));
 
     let pallet_account = Dex::get_pool_account(pool_id);
-    assert_eq!(balance(user, coin1), expect_receive + ed);
+    assert_eq!(balance(user, coin1), expect_receive);
     assert_eq!(balance(user, coin2), 1000 - liquidity2 - input_amount);
     assert_eq!(balance(pallet_account, coin1), liquidity1 - expect_receive);
     assert_eq!(balance(pallet_account, coin2), liquidity2 + input_amount);
@@ -708,11 +692,7 @@ fn check_no_panic_when_try_swap_close_to_empty_pool() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    let ed = get_ed();
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     let liquidity1 = 10000;
@@ -822,10 +802,7 @@ fn swap_should_not_work_if_too_much_slippage() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 + get_ed()) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     let liquidity1 = 10000;
@@ -866,11 +843,7 @@ fn can_swap_tokens_for_exact_tokens() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    let ed = get_ed();
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(20000 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(20000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     let pallet_account = Dex::get_pool_account(pool_id);
@@ -901,7 +874,7 @@ fn can_swap_tokens_for_exact_tokens() {
       user,
     ));
 
-    assert_eq!(balance(user, coin1), 10000 + ed - expect_in);
+    assert_eq!(balance(user, coin1), 10000 - expect_in);
     assert_eq!(balance(user, coin2), 1000 - liquidity2 + exchange_out);
     assert_eq!(balance(pallet_account, coin1), liquidity1 + expect_in);
     assert_eq!(balance(pallet_account, coin2), liquidity2 - exchange_out);
@@ -926,17 +899,10 @@ fn can_swap_tokens_for_exact_tokens_when_not_liquidity_provider() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    let ed = get_ed();
     let base1 = 10000;
     let base2 = 1000;
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(base1 + ed) }
-    ));
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user2,
-      Balance { coin: coin1, amount: Amount(base1 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(base1) }));
+    assert_ok!(CoinsPallet::<Test>::mint(user2, Balance { coin: coin1, amount: Amount(base1) }));
     assert_ok!(CoinsPallet::<Test>::mint(user2, Balance { coin: coin2, amount: Amount(base2) }));
 
     let pallet_account = Dex::get_pool_account(pool_id);
@@ -956,7 +922,7 @@ fn can_swap_tokens_for_exact_tokens_when_not_liquidity_provider() {
       user2,
     ));
 
-    assert_eq!(balance(user, coin1), base1 + ed);
+    assert_eq!(balance(user, coin1), base1);
     assert_eq!(balance(user, coin2), 0);
 
     let exchange_out = 50;
@@ -970,7 +936,7 @@ fn can_swap_tokens_for_exact_tokens_when_not_liquidity_provider() {
       user,
     ));
 
-    assert_eq!(balance(user, coin1), base1 + ed - expect_in);
+    assert_eq!(balance(user, coin1), base1 - expect_in);
     assert_eq!(balance(pallet_account, coin1), liquidity1 + expect_in);
     assert_eq!(balance(user, coin2), exchange_out);
     assert_eq!(balance(pallet_account, coin2), liquidity2 - exchange_out);
@@ -1010,10 +976,7 @@ fn swap_tokens_for_exact_tokens_should_not_work_if_too_much_slippage() {
 
     assert_ok!(Dex::create_pool(coin2));
 
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(20000 + get_ed()) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(20000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     let liquidity1 = 10000;
@@ -1055,13 +1018,9 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     assert_ok!(Dex::create_pool(coin2));
     assert_ok!(Dex::create_pool(coin3));
 
-    let ed = get_ed();
     let base1 = 10000;
     let base2 = 10000;
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(base1 * 2 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(base1 * 2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(base2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin3, amount: Amount(base2) }));
 
@@ -1147,13 +1106,9 @@ fn swap_tokens_for_exact_tokens_in_multi_hops() {
     assert_ok!(Dex::create_pool(coin2));
     assert_ok!(Dex::create_pool(coin3));
 
-    let ed = get_ed();
     let base1 = 10000;
     let base2 = 10000;
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(base1 * 2 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(base1 * 2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(base2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin3, amount: Amount(base2) }));
 
@@ -1273,10 +1228,9 @@ fn cannot_block_pool_creation() {
     // User 2 is the attacker
     let attacker = system_address(b"attacker").into();
 
-    let ed = get_ed();
     assert_ok!(CoinsPallet::<Test>::mint(
       attacker,
-      Balance { coin: Coin::native(), amount: Amount(10000 + ed) }
+      Balance { coin: Coin::native(), amount: Amount(10000) }
     ));
 
     // The target pool the user wants to create is Native <=> Coin(2)
@@ -1285,11 +1239,11 @@ fn cannot_block_pool_creation() {
 
     // Attacker computes the still non-existing pool account for the target pair
     let pool_account = Dex::get_pool_account(Dex::get_pool_id(coin2, coin1).unwrap());
-    // And transfers the ED to that pool account
+    // And transfers 1 to that pool account
     assert_ok!(CoinsPallet::<Test>::transfer_internal(
       attacker,
       pool_account,
-      Balance { coin: Coin::native(), amount: Amount(ed) }
+      Balance { coin: Coin::native(), amount: Amount(1) }
     ));
     // Then, the attacker creates 14 tokens and sends one of each to the pool account
     // skip the coin1 and coin2 coins.
@@ -1307,10 +1261,7 @@ fn cannot_block_pool_creation() {
 
     // User has to transfer one Coin(2) token to the pool account (otherwise add_liquidity will
     // fail with `CoinTwoDepositDidNotMeetMinimum`), also transfer native token for the same error.
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin1, amount: Amount(10000 + ed) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(10000) }));
     assert_ok!(CoinsPallet::<Test>::transfer_internal(
       user,

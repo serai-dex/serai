@@ -275,7 +275,12 @@ async fn sign_test() {
       serai
         .publish(
           &serai
-            .sign(&serai_pair, &SeraiCoins::burn(out_instruction.clone()), 0, Default::default())
+            .sign(
+              &serai_pair,
+              &SeraiCoins::burn_with_instruction(out_instruction.clone()),
+              0,
+              Default::default(),
+            )
             .unwrap(),
         )
         .await
@@ -293,7 +298,7 @@ async fn sign_test() {
           let burn_events = serai
             .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
             .coins()
-            .burn_events()
+            .burn_with_instruction_events()
             .await
             .unwrap();
 
@@ -301,7 +306,10 @@ async fn sign_test() {
             assert_eq!(burn_events.len(), 1);
             assert_eq!(
               burn_events[0],
-              CoinsEvent::Burn { from: serai_addr.into(), instruction: out_instruction.clone() }
+              CoinsEvent::BurnWithInstruction {
+                from: serai_addr.into(),
+                instruction: out_instruction.clone()
+              }
             );
             break 'outer;
           }

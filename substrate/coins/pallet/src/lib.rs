@@ -2,7 +2,7 @@
 
 #[frame_support::pallet]
 pub mod pallet {
-  use sp_std::vec::Vec;
+  use sp_std::{vec::Vec, any::TypeId};
   use sp_core::sr25519::Public;
   use sp_runtime::{
     traits::{DispatchInfoOf, PostDispatchInfoOf},
@@ -18,6 +18,8 @@ pub mod pallet {
   pub use coins_primitives as primitives;
   use primitives::*;
 
+  type LiquidityTokensInstance = crate::Instance1;
+
   #[pallet::config]
   pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
     type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -27,12 +29,12 @@ pub mod pallet {
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
     pub accounts: Vec<(T::AccountId, Balance)>,
-    pub ignore: PhantomData<I>, // TODO: just to own I.
+    pub _ignore: PhantomData<I>,
   }
 
   impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
     fn default() -> Self {
-      GenesisConfig { accounts: Default::default(), ignore: Default::default() }
+      GenesisConfig { accounts: Default::default(), _ignore: Default::default() }
     }
   }
 
@@ -47,8 +49,8 @@ pub mod pallet {
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config<I>, I: 'static = ()> {
     Mint { to: Public, balance: Balance },
-    Burn { from: Public, instruction: OutInstructionWithBalance },
-    SriBurn { from: Public, amount: Amount },
+    Burn { from: Public, balance: Balance },
+    BurnWithInstruction { from: Public, instruction: OutInstructionWithBalance },
     Transfer { from: Public, to: Public, balance: Balance },
   }
 
@@ -95,7 +97,7 @@ pub mod pallet {
       // we can unwrap, we are not burning more then what we have
       // If this errors, it'll halt the runtime however (due to being called at the start of every
       // block), requiring extra care when reviewing
-      Self::burn_sri(FEE_ACCOUNT.into(), amount).unwrap();
+      Self::burn_internal(FEE_ACCOUNT.into(), Balance { coin, amount }).unwrap();
       Weight::zero() // TODO
     }
   }
@@ -153,8 +155,8 @@ pub mod pallet {
       Ok(())
     }
 
-    // Burn `balance` from the specified account.
-    pub fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    /// Burn `balance` from the specified account.
+    fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // don't waste time if amount == 0
       if balance.amount.0 == 0 {
         return Ok(());
@@ -170,24 +172,6 @@ pub mod pallet {
       Ok(())
     }
 
-    pub fn burn_sri(from: Public, amount: Amount) -> Result<(), Error<T, I>> {
-      Self::burn_internal(from, Balance { coin: Coin::Serai, amount })?;
-      Self::deposit_event(Event::SriBurn { from, amount });
-      Ok(())
-    }
-
-    pub fn burn_non_sri(
-      from: Public,
-      instruction: OutInstructionWithBalance,
-    ) -> Result<(), Error<T, I>> {
-      if instruction.balance.coin == Coin::Serai {
-        Err(Error::<T, I>::SriBurnNotAllowed)?;
-      }
-      Self::burn_internal(from, instruction.balance)?;
-      Self::deposit_event(Event::Burn { from, instruction });
-      Ok(())
-    }
-
     /// Transfer `balance` from `from` to `to`.
     pub fn transfer_internal(
       from: Public,
@@ -199,12 +183,6 @@ pub mod pallet {
       Self::increase_balance_internal(to, balance)?;
       Self::deposit_event(Event::Transfer { from, to, balance });
       Ok(())
-    }
-
-    pub fn minimum_balance(_coin: Coin) -> Amount {
-      // TODO: use precision here to determine the min amount?
-      // TODO: this should also match with dex Config MintMinLiquidity type.
-      Amount(1)
     }
   }
 
@@ -218,11 +196,34 @@ pub mod pallet {
       Ok(())
     }
 
+    /// Burn `balance` from the caller.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn burn(origin: OriginFor<T>, instruction: OutInstructionWithBalance) -> DispatchResult {
+    pub fn burn(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::burn_non_sri(from, instruction)?;
+      Self::burn_internal(from, balance)?;
+      Self::deposit_event(Event::Burn { from, balance });
+      Ok(())
+    }
+
+    /// Burn `balance` with `OutInstructionWithBalance` from the caller.
+    /// Errors if called for SRI or Instance1 instance of this pallet.
+    #[pallet::call_index(2)]
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    pub fn burn_with_instruction(
+      origin: OriginFor<T>,
+      instruction: OutInstructionWithBalance,
+    ) -> DispatchResult {
+      if instruction.balance.coin == Coin::Serai {
+        Err(Error::<T, I>::SriBurnNotAllowed)?;
+      }
+      if TypeId::of::<I>() == TypeId::of::<LiquidityTokensInstance>() {
+        Err(Error::<T, I>::SriBurnNotAllowed)?;
+      }
+
+      let from = ensure_signed(origin)?;
+      Self::burn_internal(from, instruction.balance)?;
+      Self::deposit_event(Event::BurnWithInstruction { from, instruction });
       Ok(())
     }
   }
