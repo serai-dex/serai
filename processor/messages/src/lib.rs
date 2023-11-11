@@ -38,6 +38,8 @@ pub mod key_gen {
     Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
     // Received shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    /// Instruction to verify a blame accusation.
+    VerifyBlame { id: KeyGenId, accuser: Participant, accused: Participant, blame: Option<Vec<u8>> },
   }
 
   impl CoordinatorMessage {
@@ -55,9 +57,11 @@ pub mod key_gen {
     // Created shares for the specified key generation protocol.
     Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
     // Participant published an invalid share.
-    InvalidShare { id: KeyGenId, faulty: Participant, blame: Option<Vec<u8>> },
+    InvalidShare { id: KeyGenId, accuser: Participant, faulty: Participant, blame: Option<Vec<u8>> },
     // Resulting keys from the specified key generation protocol.
     GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
+    // Blame this participant.
+    Blame { id: KeyGenId, participant: Participant },
   }
 }
 
@@ -279,6 +283,7 @@ impl CoordinatorMessage {
           key_gen::CoordinatorMessage::GenerateKey { id, .. } => (0, id),
           key_gen::CoordinatorMessage::Commitments { id, .. } => (1, id),
           key_gen::CoordinatorMessage::Shares { id, .. } => (2, id),
+          key_gen::CoordinatorMessage::VerifyBlame { id, .. } => (3, id),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_KEY_GEN_UID, sub];
@@ -348,6 +353,7 @@ impl ProcessorMessage {
           key_gen::ProcessorMessage::Shares { id, .. } => (2, id),
           key_gen::ProcessorMessage::InvalidShare { id, .. } => (3, id),
           key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (4, id),
+          key_gen::ProcessorMessage::Blame { id, .. } => (5, id),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];

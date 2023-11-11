@@ -246,6 +246,7 @@ pub enum Transaction {
   },
   InvalidDkgShare {
     attempt: u32,
+    accuser: Participant,
     faulty: Participant,
     blame: Option<Vec<u8>>,
     signed: Signed,
@@ -372,6 +373,12 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
+        let mut accuser = [0; 2];
+        reader.read_exact(&mut accuser)?;
+        let accuser = Participant::new(u16::from_le_bytes(accuser)).ok_or_else(|| {
+          io::Error::new(io::ErrorKind::Other, "invalid participant in InvalidDkgShare")
+        })?;
+
         let mut faulty = [0; 2];
         reader.read_exact(&mut faulty)?;
         let faulty = Participant::new(u16::from_le_bytes(faulty)).ok_or_else(|| {
@@ -387,6 +394,7 @@ impl ReadWrite for Transaction {
 
         Ok(Transaction::InvalidDkgShare {
           attempt,
+          accuser,
           faulty,
           blame: Some(blame).filter(|blame| !blame.is_empty()),
           signed,
@@ -503,9 +511,10 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::InvalidDkgShare { attempt, faulty, blame, signed } => {
+      Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
         writer.write_all(&[3])?;
         writer.write_all(&attempt.to_le_bytes())?;
+        writer.write_all(&u16::from(*accuser).to_le_bytes())?;
         writer.write_all(&u16::from(*faulty).to_le_bytes())?;
         // Flattens Some(vec![]) to None on the expectation no actual blame will be 0-length
         assert!(blame.as_ref().map(|blame| blame.len()).unwrap_or(1) != 0);

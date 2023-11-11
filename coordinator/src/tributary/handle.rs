@@ -14,7 +14,7 @@ use serai_client::{
   SeraiValidatorSets,
 };
 
-use tributary::Signed;
+use tributary::{Signed, TransactionKind, TransactionTrait};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
@@ -69,7 +69,7 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
-pub(crate) fn fatal_slash<D: Db>(
+pub(super) fn fatal_slash<D: Db>(
   txn: &mut D::Transaction<'_>,
   genesis: [u8; 32],
   account: [u8; 32],
@@ -78,6 +78,33 @@ pub(crate) fn fatal_slash<D: Db>(
   log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
   TributaryDb::<D>::set_fatally_slashed(txn, genesis, account);
   // TODO: disconnect the node from network/ban from further participation in all Tributaries
+
+  // TODO: If during DKG, trigger a re-attempt
+}
+
+// TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
+// Tributary post-DKG
+// https://github.com/serai-dex/serai/issues/426
+
+fn fatal_slash_with_participant_index<D: Db>(
+  spec: &TributarySpec,
+  txn: &mut <D as Db>::Transaction<'_>,
+  i: Participant,
+  reason: &str,
+) {
+  // Resolve from Participant to <Ristretto as Ciphersuite>::G
+  let i = u16::from(i);
+  let mut validator = None;
+  for (potential, _) in spec.validators() {
+    let v_i = spec.i(potential).unwrap();
+    if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
+      validator = Some(potential);
+      break;
+    }
+  }
+  let validator = validator.unwrap();
+
+  fatal_slash::<D>(txn, spec.genesis(), validator.to_bytes(), reason);
 }
 
 pub(crate) async fn handle_application_tx<
@@ -97,6 +124,15 @@ pub(crate) async fn handle_application_tx<
   txn: &mut <D as Db>::Transaction<'_>,
 ) {
   let genesis = spec.genesis();
+
+  // Don't handle transactions from fatally slashed participants
+  // TODO: Because fatally slashed participants can still publish onto the blockchain, they have
+  // a notable DoS ability
+  if let TransactionKind::Signed(signed) = tx.kind() {
+    if TributaryDb::<D>::is_fatally_slashed(txn, genesis, signed.signer.to_bytes()) {
+      return;
+    }
+  }
 
   let handle = |txn: &mut <D as Db>::Transaction<'_>,
                 data_spec: &DataSpecification,
@@ -178,8 +214,9 @@ pub(crate) async fn handle_application_tx<
   }
 
   match tx {
-    // TODO: Either remove the validator from Tendermint OR form a second Tributary post-DKG
-    Transaction::RemoveParticipant(i) => todo!("TODO(now)"),
+    Transaction::RemoveParticipant(i) => {
+      fatal_slash_with_participant_index::<D>(spec, txn, i, "RemoveParticipant Provided TX")
+    }
     Transaction::DkgCommitments(attempt, commitments, signed) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, signed.signer, commitments.len()) else {
         return;
@@ -329,7 +366,32 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
-    Transaction::InvalidDkgShare { attempt, faulty, blame, signed } => todo!("TODO(now)"),
+    Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
+      let range = spec.i(signed.signer).unwrap();
+      if (u16::from(accuser) < u16::from(range.start)) ||
+        (u16::from(range.end) <= u16::from(accuser))
+      {
+        fatal_slash_with_participant_index::<D>(
+          spec,
+          txn,
+          accuser,
+          "accused with a Participant index which wasn't theirs",
+        );
+        return;
+      }
+
+      processors
+        .send(
+          spec.set().network,
+          key_gen::CoordinatorMessage::VerifyBlame {
+            id: KeyGenId { set: spec.set(), attempt },
+            accuser,
+            accused: faulty,
+            blame,
+          },
+        )
+        .await;
+    }
 
     Transaction::DkgConfirmed(attempt, shares, signed) => {
       // TODO: Error if this participant published InvalidDkgShare
@@ -353,11 +415,14 @@ pub(crate) async fn handle_application_tx<
                 "(including us) fires DkgConfirmed, yet no confirming key pair"
               )
             });
-          let Ok(sig) = DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares)
-          else {
-            // TODO: Full slash
-            todo!();
-          };
+          let sig =
+            match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
+              Ok(sig) => sig,
+              Err(p) => {
+                fatal_slash_with_participant_index::<D>(spec, txn, p, "invalid DkgConfirmer share");
+                return;
+              }
+            };
 
           publish_serai_tx(
             spec.set(),

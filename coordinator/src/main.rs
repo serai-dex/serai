@@ -185,6 +185,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
       key_gen::ProcessorMessage::Shares { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.set.session),
     },
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
@@ -466,9 +467,15 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           }]
         }
-        key_gen::ProcessorMessage::InvalidShare { id, faulty, blame } => {
+        key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
+          assert_eq!(
+            id.set.network, msg.network,
+            "processor claimed to be a different network than it was for in InvalidShare",
+          );
+
           vec![Transaction::InvalidDkgShare {
             attempt: id.attempt,
+            accuser,
             faulty,
             blame,
             signed: Transaction::empty_signed(),
@@ -477,7 +484,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
             id.set.network, msg.network,
-            "processor claimed to be a different network than it was for GeneratedKeyPair",
+            "processor claimed to be a different network than it was for in GeneratedKeyPair",
           );
           // TODO2: Also check the other KeyGenId fields
 
@@ -495,9 +502,16 @@ async fn handle_processor_message<D: Db, P: P2p>(
               vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
             }
             Err(p) => {
-              todo!("participant {p:?} sent invalid DKG confirmation preprocesses")
+              vec![Transaction::RemoveParticipant(p)]
             }
           }
+        }
+        key_gen::ProcessorMessage::Blame { id, participant } => {
+          assert_eq!(
+            id.set.network, msg.network,
+            "processor claimed to be a different network than it was for in Blame",
+          );
+          vec![Transaction::RemoveParticipant(participant)]
         }
       },
       ProcessorMessage::Sign(msg) => match msg {

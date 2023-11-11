@@ -87,11 +87,14 @@ impl<D: Db> TributaryDb<D> {
   fn fatal_slashes_key(genesis: [u8; 32]) -> Vec<u8> {
     Self::tributary_key(b"fatal_slashes", genesis)
   }
-  fn fatally_slashed_key(account: [u8; 32]) -> Vec<u8> {
-    Self::tributary_key(b"fatally_slashed", account)
+  fn fatally_slashed_key(genesis: [u8; 32], account: [u8; 32]) -> Vec<u8> {
+    Self::tributary_key(b"fatally_slashed", (genesis, account).encode())
+  }
+  pub fn is_fatally_slashed<G: Get>(getter: &G, genesis: [u8; 32], account: [u8; 32]) -> bool {
+    getter.get(Self::fatally_slashed_key(genesis, account)).is_some()
   }
   pub fn set_fatally_slashed(txn: &mut D::Transaction<'_>, genesis: [u8; 32], account: [u8; 32]) {
-    txn.put(Self::fatally_slashed_key(account), []);
+    txn.put(Self::fatally_slashed_key(genesis, account), []);
 
     let key = Self::fatal_slashes_key(genesis);
     let mut existing = txn.get(&key).unwrap_or(vec![]);

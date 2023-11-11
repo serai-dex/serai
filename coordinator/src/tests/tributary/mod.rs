@@ -141,6 +141,10 @@ fn serialize_transaction() {
   for i in 0 .. 2 {
     test_read_write(Transaction::InvalidDkgShare {
       attempt: random_u32(&mut OsRng),
+      accuser: frost::Participant::new(
+        u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
+      )
+      .unwrap(),
       faulty: frost::Participant::new(
         u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
       )
