@@ -341,7 +341,7 @@ pub(crate) enum DecryptionError {
 #[derive(Clone)]
 pub(crate) struct Encryption<C: Ciphersuite> {
   context: String,
-  i: Participant,
+  i: Option<Participant>,
   enc_key: Zeroizing<C::F>,
   enc_pub_key: C::G,
   enc_keys: HashMap<Participant, C::G>,
@@ -370,7 +370,11 @@ impl<C: Ciphersuite> Zeroize for Encryption<C> {
 }
 
 impl<C: Ciphersuite> Encryption<C> {
-  pub(crate) fn new<R: RngCore + CryptoRng>(context: String, i: Participant, rng: &mut R) -> Self {
+  pub(crate) fn new<R: RngCore + CryptoRng>(
+    context: String,
+    i: Option<Participant>,
+    rng: &mut R,
+  ) -> Self {
     let enc_key = Zeroizing::new(C::random_nonzero_F(rng));
     Self {
       context,
@@ -404,7 +408,7 @@ impl<C: Ciphersuite> Encryption<C> {
     participant: Participant,
     msg: Zeroizing<E>,
   ) -> EncryptedMessage<C, E> {
-    encrypt(rng, &self.context, self.i, self.enc_keys[&participant], msg)
+    encrypt(rng, &self.context, self.i.unwrap(), self.enc_keys[&participant], msg)
   }
 
   pub(crate) fn decrypt<R: RngCore + CryptoRng, I: Copy + Zeroize, E: Encryptable>(
