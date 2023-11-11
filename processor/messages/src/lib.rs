@@ -33,13 +33,29 @@ pub mod key_gen {
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
-    GenerateKey { id: KeyGenId, params: ThresholdParams, shares: u16 },
+    GenerateKey {
+      id: KeyGenId,
+      params: ThresholdParams,
+      shares: u16,
+    },
     // Received commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
+    Commitments {
+      id: KeyGenId,
+      commitments: HashMap<Participant, Vec<u8>>,
+    },
     // Received shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    Shares {
+      id: KeyGenId,
+      shares: Vec<HashMap<Participant, Vec<u8>>>,
+    },
     /// Instruction to verify a blame accusation.
-    VerifyBlame { id: KeyGenId, accuser: Participant, accused: Participant, blame: Option<Vec<u8>> },
+    VerifyBlame {
+      id: KeyGenId,
+      accuser: Participant,
+      accused: Participant,
+      share: Vec<u8>,
+      blame: Option<Vec<u8>>,
+    },
   }
 
   impl CoordinatorMessage {
@@ -51,17 +67,39 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: Vec<Vec<u8>> },
+    Commitments {
+      id: KeyGenId,
+      commitments: Vec<Vec<u8>>,
+    },
     // Participant published invalid commitments.
-    InvalidCommitments { id: KeyGenId, faulty: Participant },
+    InvalidCommitments {
+      id: KeyGenId,
+      faulty: Participant,
+    },
     // Created shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    Shares {
+      id: KeyGenId,
+      shares: Vec<HashMap<Participant, Vec<u8>>>,
+    },
     // Participant published an invalid share.
-    InvalidShare { id: KeyGenId, accuser: Participant, faulty: Participant, blame: Option<Vec<u8>> },
+    #[rustfmt::skip]
+    InvalidShare {
+      id: KeyGenId,
+      accuser: Participant,
+      faulty: Participant,
+      blame: Option<Vec<u8>>,
+    },
     // Resulting keys from the specified key generation protocol.
-    GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
+    GeneratedKeyPair {
+      id: KeyGenId,
+      substrate_key: [u8; 32],
+      network_key: Vec<u8>,
+    },
     // Blame this participant.
-    Blame { id: KeyGenId, participant: Participant },
+    Blame {
+      id: KeyGenId,
+      participant: Participant,
+    },
   }
 }
 

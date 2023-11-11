@@ -30,7 +30,7 @@ pub struct KeyConfirmed<C: Ciphersuite> {
 
 create_db!(
   KeyGenDb {
-    ParamsDb: (key: &ValidatorSet) -> (ThresholdParams, u16),
+    ParamsDb: (set: &ValidatorSet) -> (ThresholdParams, u16),
     // Not scoped to the set since that'd have latter attempts overwrite former
     // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
     // Overwriting its commitments would be accordingly poor
@@ -157,18 +157,20 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     txn: &mut D::Transaction<'_>,
     msg: CoordinatorMessage,
   ) -> ProcessorMessage {
-    let context = |id: &KeyGenId| {
+    const SUBSTRATE_KEY_CONTEXT: &str = "substrate";
+    const NETWORK_KEY_CONTEXT: &str = "network";
+    let context = |id: &KeyGenId, key| {
       // TODO2: Also embed the chain ID/genesis block
       format!(
-        "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}",
-        id.set.session, id.set.network, id.attempt
+        "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}, Key: {}",
+        id.set.session, id.set.network, id.attempt, key,
       )
     };
 
     let rng = |label, id: KeyGenId| {
       let mut transcript = RecommendedTranscript::new(label);
       transcript.append_message(b"entropy", &self.entropy);
-      transcript.append_message(b"context", context(&id));
+      transcript.append_message(b"context", context(&id, "rng"));
       ChaCha20Rng::from_seed(transcript.rng_seed(b"rng"))
     };
     let coefficients_rng = |id| rng(b"Key Gen Coefficients", id);
@@ -186,8 +188,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           Participant::new(u16::from(params.i()) + s).unwrap(),
         )
         .unwrap();
-        let substrate = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
-        let network = KeyGenMachine::new(params, context(&id)).generate_coefficients(&mut rng);
+        let substrate = KeyGenMachine::new(params, context(&id, SUBSTRATE_KEY_CONTEXT))
+          .generate_coefficients(&mut rng);
+        let network = KeyGenMachine::new(params, context(&id, NETWORK_KEY_CONTEXT))
+          .generate_coefficients(&mut rng);
         machines.push((substrate.0, network.0));
         let mut serialized = vec![];
         substrate.1.write(&mut serialized).unwrap();
@@ -197,103 +201,91 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       (machines, commitments)
     };
 
-    let secret_share_machines =
-      |id,
-       params: ThresholdParams,
-       (machines, our_commitments): (SecretShareMachines<N>, Vec<Vec<u8>>),
-       commitments: HashMap<Participant, Vec<u8>>|
-       -> Result<_, ProcessorMessage> {
-        let mut rng = secret_shares_rng(id);
+    let secret_share_machines = |id,
+                                 params: ThresholdParams,
+                                 machines: SecretShareMachines<N>,
+                                 commitments: HashMap<Participant, Vec<u8>>|
+     -> Result<_, ProcessorMessage> {
+      let mut rng = secret_shares_rng(id);
 
-        #[allow(clippy::type_complexity)]
-        fn handle_machine<C: Ciphersuite>(
-          rng: &mut ChaCha20Rng,
-          id: KeyGenId,
-          params: ThresholdParams,
-          machine: SecretShareMachine<C>,
-          commitments_ref: &mut HashMap<Participant, &[u8]>,
-        ) -> Result<
-          (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>),
-          ProcessorMessage,
-        > {
-          // Parse the commitments
-          let mut parsed = HashMap::new();
-          for i in 1 ..= params.n() {
-            let i = Participant::new(i).unwrap();
-            let Some(commitments) = commitments_ref.get_mut(&i) else { continue };
-            parsed.insert(
-              i,
-              EncryptionKeyMessage::<C, Commitments<C>>::read(commitments, params)
-                .map_err(|_| ProcessorMessage::InvalidCommitments { id, faulty: i })?,
-            );
-          }
-
-          match machine.generate_secret_shares(rng, parsed) {
-            Ok(res) => Ok(res),
-            Err(e) => match e {
-              DkgError::ZeroParameter(_, _) |
-              DkgError::InvalidThreshold(_, _) |
-              DkgError::InvalidParticipant(_, _) |
-              DkgError::InvalidSigningSet |
-              DkgError::InvalidShare { .. } => unreachable!("{e:?}"),
-              DkgError::InvalidParticipantQuantity(_, _) |
-              DkgError::DuplicatedParticipant(_) |
-              DkgError::MissingParticipant(_) => {
-                panic!("coordinator sent invalid DKG commitments: {e:?}")
-              }
-              DkgError::InvalidProofOfKnowledge(i) => {
-                Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?
-              }
-            },
-          }
-        }
-
-        let mut key_machines = vec![];
-        let mut shares = vec![];
-        for (m, (substrate_machine, network_machine)) in machines.into_iter().enumerate() {
-          let mut commitments_ref: HashMap<Participant, &[u8]> =
-            commitments.iter().map(|(i, commitments)| (*i, commitments.as_ref())).collect();
-          for (i, our_commitments) in our_commitments.iter().enumerate() {
-            if m != i {
-              assert!(commitments_ref
-                .insert(
-                  Participant::new(u16::from(params.i()) + u16::try_from(i).unwrap()).unwrap(),
-                  our_commitments.as_ref(),
-                )
-                .is_none());
+      #[allow(clippy::type_complexity)]
+      fn handle_machine<C: Ciphersuite>(
+        rng: &mut ChaCha20Rng,
+        id: KeyGenId,
+        machine: SecretShareMachine<C>,
+        commitments: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
+      ) -> Result<
+        (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>),
+        ProcessorMessage,
+      > {
+        match machine.generate_secret_shares(rng, commitments) {
+          Ok(res) => Ok(res),
+          Err(e) => match e {
+            DkgError::ZeroParameter(_, _) |
+            DkgError::InvalidThreshold(_, _) |
+            DkgError::InvalidParticipant(_, _) |
+            DkgError::InvalidSigningSet |
+            DkgError::InvalidShare { .. } => unreachable!("{e:?}"),
+            DkgError::InvalidParticipantQuantity(_, _) |
+            DkgError::DuplicatedParticipant(_) |
+            DkgError::MissingParticipant(_) => {
+              panic!("coordinator sent invalid DKG commitments: {e:?}")
             }
-          }
-
-          let (substrate_machine, mut substrate_shares) = handle_machine::<Ristretto>(
-            &mut rng,
-            id,
-            params,
-            substrate_machine,
-            &mut commitments_ref,
-          )?;
-          let (network_machine, network_shares) =
-            handle_machine(&mut rng, id, params, network_machine, &mut commitments_ref)?;
-          key_machines.push((substrate_machine, network_machine));
-
-          for i in 1 ..= params.n() {
-            let i = Participant::new(i).unwrap();
-            let commitments = &commitments_ref[&i];
-            if !commitments.is_empty() {
-              // Malicious Participant included extra bytes in their commitments
-              // (a potential DoS attack)
-              Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?;
+            DkgError::InvalidCommitments(i) => {
+              Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?
             }
-          }
-
-          let mut these_shares: HashMap<_, _> =
-            substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
-          for (i, share) in these_shares.iter_mut() {
-            share.extend(network_shares[i].serialize());
-          }
-          shares.push(these_shares);
+          },
         }
-        Ok((key_machines, shares))
-      };
+      }
+
+      let mut substrate_commitments = HashMap::new();
+      let mut network_commitments = HashMap::new();
+      for i in 1 ..= params.n() {
+        let i = Participant::new(i).unwrap();
+        let mut commitments = commitments[&i].as_slice();
+        substrate_commitments.insert(
+          i,
+          EncryptionKeyMessage::<Ristretto, Commitments<Ristretto>>::read(&mut commitments, params)
+            .map_err(|_| ProcessorMessage::InvalidCommitments { id, faulty: i })?,
+        );
+        network_commitments.insert(
+          i,
+          EncryptionKeyMessage::<N::Curve, Commitments<N::Curve>>::read(&mut commitments, params)
+            .map_err(|_| ProcessorMessage::InvalidCommitments { id, faulty: i })?,
+        );
+        if !commitments.is_empty() {
+          // Malicious Participant included extra bytes in their commitments
+          // (a potential DoS attack)
+          Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?;
+        }
+      }
+
+      let mut key_machines = vec![];
+      let mut shares = vec![];
+      for (m, (substrate_machine, network_machine)) in machines.into_iter().enumerate() {
+        let actual_i = Participant::new(u16::from(params.i()) + u16::try_from(m).unwrap()).unwrap();
+
+        let mut substrate_commitments = substrate_commitments.clone();
+        substrate_commitments.remove(&actual_i);
+        let (substrate_machine, mut substrate_shares) =
+          handle_machine::<Ristretto>(&mut rng, id, substrate_machine, substrate_commitments)?;
+
+        let mut network_commitments = network_commitments.clone();
+        network_commitments.remove(&actual_i);
+        let (network_machine, network_shares) =
+          handle_machine(&mut rng, id, network_machine, network_commitments.clone())?;
+
+        key_machines.push((substrate_machine, network_machine));
+
+        let mut these_shares: HashMap<_, _> =
+          substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
+        for (i, share) in these_shares.iter_mut() {
+          share.extend(network_shares[i].serialize());
+        }
+        shares.push(these_shares);
+      }
+      Ok((key_machines, shares))
+    };
 
     match msg {
       CoordinatorMessage::GenerateKey { id, params, shares } => {
@@ -313,7 +305,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         ProcessorMessage::Commitments { id, commitments }
       }
 
-      CoordinatorMessage::Commitments { id, commitments } => {
+      CoordinatorMessage::Commitments { id, mut commitments } => {
         info!("Received commitments for {:?}", id);
 
         if self.active_share.contains_key(&id.set) {
@@ -330,12 +322,22 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         // This *may* be inconsistent if we receive a KeyGen for attempt x, then commitments for
         // attempt y
         // The coordinator is trusted to be proper in this regard
-        let prior = self
+        let (prior, our_commitments) = self
           .active_commit
           .remove(&id.set)
           .unwrap_or_else(|| key_gen_machines(id, params, share_quantity));
 
+        for (i, our_commitments) in our_commitments.into_iter().enumerate() {
+          assert!(commitments
+            .insert(
+              Participant::new(u16::from(params.i()) + u16::try_from(i).unwrap()).unwrap(),
+              our_commitments,
+            )
+            .is_none());
+        }
+
         CommitmentsDb::set(txn, &id, &commitments);
+
         match secret_share_machines(id, params, prior, commitments) {
           Ok((machines, shares)) => {
             self.active_share.insert(id.set, (machines, shares.clone()));
@@ -352,9 +354,11 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
         // Same commentary on inconsistency as above exists
         let (machines, our_shares) = self.active_share.remove(&id.set).unwrap_or_else(|| {
-          let prior = key_gen_machines(id, params, share_quantity);
-          secret_share_machines(id, params, prior, CommitmentsDb::get(txn, &id).unwrap())
-            .expect("got Shares for a key gen which faulted")
+          let prior = key_gen_machines(id, params, share_quantity).0;
+          let (machines, shares) =
+            secret_share_machines(id, params, prior, CommitmentsDb::get(txn, &id).unwrap())
+              .expect("got Shares for a key gen which faulted");
+          (machines, shares)
         });
 
         let mut rng = share_rng(id);
@@ -362,10 +366,19 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         fn handle_machine<C: Ciphersuite>(
           rng: &mut ChaCha20Rng,
           id: KeyGenId,
+          // These are the params of our first share, not this machine's shares
           params: ThresholdParams,
+          m: usize,
           machine: KeyMachine<C>,
           shares_ref: &mut HashMap<Participant, &[u8]>,
         ) -> Result<ThresholdCore<C>, ProcessorMessage> {
+          let params = ThresholdParams::new(
+            params.t(),
+            params.n(),
+            Participant::new(u16::from(params.i()) + u16::try_from(m).unwrap()).unwrap(),
+          )
+          .unwrap();
+
           // Parse the shares
           let mut shares = HashMap::new();
           for i in 1 ..= params.n() {
@@ -373,12 +386,12 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             let Some(share) = shares_ref.get_mut(&i) else { continue };
             shares.insert(
               i,
-              EncryptedMessage::<C, SecretShare<C::F>>::read(share, params)
-                .map_err(|_| ProcessorMessage::InvalidShare { id, faulty: i, blame: None })?,
+              EncryptedMessage::<C, SecretShare<C::F>>::read(share, params).map_err(|_| {
+                ProcessorMessage::InvalidShare { id, accuser: params.i(), faulty: i, blame: None }
+              })?,
             );
           }
 
-          // TODO(now): Handle the blame machine properly
           Ok(
             (match machine.calculate_share(rng, shares) {
               Ok(res) => res,
@@ -387,7 +400,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
                 DkgError::InvalidThreshold(_, _) |
                 DkgError::InvalidParticipant(_, _) |
                 DkgError::InvalidSigningSet |
-                DkgError::InvalidProofOfKnowledge(_) => unreachable!("{e:?}"),
+                DkgError::InvalidCommitments(_) => unreachable!("{e:?}"),
                 DkgError::InvalidParticipantQuantity(_, _) |
                 DkgError::DuplicatedParticipant(_) |
                 DkgError::MissingParticipant(_) => {
@@ -396,6 +409,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
                 DkgError::InvalidShare { participant, blame } => {
                   Err(ProcessorMessage::InvalidShare {
                     id,
+                    accuser: params.i(),
                     faulty: participant,
                     blame: Some(blame.map(|blame| blame.serialize())).flatten(),
                   })?
@@ -425,21 +439,26 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           }
 
           let these_substrate_keys =
-            match handle_machine(&mut rng, id, params, machines.0, &mut shares_ref) {
+            match handle_machine(&mut rng, id, params, m, machines.0, &mut shares_ref) {
               Ok(keys) => keys,
               Err(msg) => return msg,
             };
           let these_network_keys =
-            match handle_machine(&mut rng, id, params, machines.1, &mut shares_ref) {
+            match handle_machine(&mut rng, id, params, m, machines.1, &mut shares_ref) {
               Ok(keys) => keys,
               Err(msg) => return msg,
             };
 
           for i in 1 ..= params.n() {
             let i = Participant::new(i).unwrap();
-            let shares = &shares_ref[&i];
+            let Some(shares) = shares_ref.get(&i) else { continue };
             if !shares.is_empty() {
-              return ProcessorMessage::InvalidShare { id, faulty: i, blame: None };
+              return ProcessorMessage::InvalidShare {
+                id,
+                accuser: these_substrate_keys.params().i(),
+                faulty: i,
+                blame: None,
+              };
             }
           }
 
@@ -469,6 +488,70 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           substrate_key: generated_substrate_key.unwrap().to_bytes(),
           network_key: generated_network_key.unwrap().to_bytes().as_ref().to_vec(),
         }
+      }
+
+      CoordinatorMessage::VerifyBlame { id, accuser, accused, share, blame } => {
+        let params = ParamsDb::get(txn, &id.set).unwrap().0;
+
+        let mut share_ref = share.as_slice();
+        let Ok(substrate_share) = EncryptedMessage::<
+          Ristretto,
+          SecretShare<<Ristretto as Ciphersuite>::F>,
+        >::read(&mut share_ref, params) else {
+          return ProcessorMessage::Blame { id, participant: accused };
+        };
+        let Ok(network_share) = EncryptedMessage::<
+          N::Curve,
+          SecretShare<<N::Curve as Ciphersuite>::F>,
+        >::read(&mut share_ref, params) else {
+          return ProcessorMessage::Blame { id, participant: accused };
+        };
+        if !share_ref.is_empty() {
+          return ProcessorMessage::Blame { id, participant: accused };
+        }
+
+        let mut substrate_commitment_msgs = HashMap::new();
+        let mut network_commitment_msgs = HashMap::new();
+        let commitments = CommitmentsDb::get(txn, &id).unwrap();
+        for (i, commitments) in commitments {
+          let mut commitments = commitments.as_slice();
+          substrate_commitment_msgs
+            .insert(i, EncryptionKeyMessage::<_, _>::read(&mut commitments, params).unwrap());
+          network_commitment_msgs
+            .insert(i, EncryptionKeyMessage::<_, _>::read(&mut commitments, params).unwrap());
+        }
+
+        // There is a mild DoS here where someone with a valid blame bloats it to the maximum size
+        // Given the ambiguity, and limited potential to DoS (this being called means *someone* is
+        // getting fatally slashed) voids the need to ensure blame is minimal
+        let substrate_blame =
+          blame.clone().and_then(|blame| EncryptionKeyProof::read(&mut blame.as_slice()).ok());
+        let network_blame =
+          blame.clone().and_then(|blame| EncryptionKeyProof::read(&mut blame.as_slice()).ok());
+
+        let substrate_blame = AdditionalBlameMachine::new(
+          &mut rand_core::OsRng,
+          context(&id, SUBSTRATE_KEY_CONTEXT),
+          params.n(),
+          substrate_commitment_msgs,
+        )
+        .unwrap()
+        .blame(accuser, accused, substrate_share, substrate_blame);
+        let network_blame = AdditionalBlameMachine::new(
+          &mut rand_core::OsRng,
+          context(&id, NETWORK_KEY_CONTEXT),
+          params.n(),
+          network_commitment_msgs,
+        )
+        .unwrap()
+        .blame(accuser, accused, network_share, network_blame);
+
+        // If thw accused was blamed for either, mark them as at fault
+        if (substrate_blame == accused) || (network_blame == accused) {
+          return ProcessorMessage::Blame { id, participant: accused };
+        }
+
+        ProcessorMessage::Blame { id, participant: accuser }
       }
     }
   }
