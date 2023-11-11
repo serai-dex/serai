@@ -181,7 +181,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
       key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::Shares { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.set.session),
     },
     // TODO: Review replacing key with Session in messages?
@@ -419,6 +421,15 @@ async fn handle_processor_message<D: Db, P: P2p>(
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           vec![Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed())]
         }
+        key_gen::ProcessorMessage::InvalidCommitments { id: _, faulty } => {
+          // This doesn't need the ID since it's a Provided transaction which everyone will provide
+          // With this provision comes explicit ordering (with regards to other RemoveParticipant
+          // transactions) and group consensus
+          // Accordingly, this can't be replayed
+          // It could be included on-chain early/late with regards to the chain's active attempt,
+          // which attempt scheduling is written to avoid
+          vec![Transaction::RemoveParticipant(faulty)]
+        }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
           let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
@@ -452,6 +463,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
             attempt: id.attempt,
             shares: tx_shares,
             confirmation_nonces: nonces,
+            signed: Transaction::empty_signed(),
+          }]
+        }
+        key_gen::ProcessorMessage::InvalidShare { id, faulty, blame } => {
+          vec![Transaction::InvalidDkgShare {
+            attempt: id.attempt,
+            faulty,
+            blame,
             signed: Transaction::empty_signed(),
           }]
         }

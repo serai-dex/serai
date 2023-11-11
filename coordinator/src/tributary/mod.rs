@@ -233,6 +233,8 @@ impl<const N: usize> ReadWrite for SignData<N> {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction {
+  RemoveParticipant(Participant),
+
   // Once this completes successfully, no more instances should be created.
   DkgCommitments(u32, Vec<Vec<u8>>, Signed),
   DkgShares {
@@ -240,6 +242,12 @@ pub enum Transaction {
     // Receiving Participant, Sending Participant, Share
     shares: Vec<Vec<Vec<u8>>>,
     confirmation_nonces: [u8; 64],
+    signed: Signed,
+  },
+  InvalidDkgShare {
+    attempt: u32,
+    faulty: Participant,
+    blame: Option<Vec<u8>>,
     signed: Signed,
   },
   DkgConfirmed(u32, [u8; 32], Signed),
@@ -279,7 +287,15 @@ impl ReadWrite for Transaction {
     reader.read_exact(&mut kind)?;
 
     match kind[0] {
-      0 => {
+      0 => Ok(Transaction::RemoveParticipant({
+        let mut participant = [0; 2];
+        reader.read_exact(&mut participant)?;
+        Participant::new(u16::from_le_bytes(participant)).ok_or_else(|| {
+          io::Error::new(io::ErrorKind::Other, "invalid participant in RemoveParticipant")
+        })?
+      })),
+
+      1 => {
         let mut attempt = [0; 4];
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
@@ -314,7 +330,7 @@ impl ReadWrite for Transaction {
         Ok(Transaction::DkgCommitments(attempt, commitments, signed))
       }
 
-      1 => {
+      2 => {
         let mut attempt = [0; 4];
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
@@ -351,7 +367,33 @@ impl ReadWrite for Transaction {
         Ok(Transaction::DkgShares { attempt, shares, confirmation_nonces, signed })
       }
 
-      2 => {
+      3 => {
+        let mut attempt = [0; 4];
+        reader.read_exact(&mut attempt)?;
+        let attempt = u32::from_le_bytes(attempt);
+
+        let mut faulty = [0; 2];
+        reader.read_exact(&mut faulty)?;
+        let faulty = Participant::new(u16::from_le_bytes(faulty)).ok_or_else(|| {
+          io::Error::new(io::ErrorKind::Other, "invalid participant in InvalidDkgShare")
+        })?;
+
+        let mut blame_len = [0; 2];
+        reader.read_exact(&mut blame_len)?;
+        let mut blame = vec![0; u16::from_le_bytes(blame_len).into()];
+        reader.read_exact(&mut blame)?;
+
+        let signed = Signed::read(reader)?;
+
+        Ok(Transaction::InvalidDkgShare {
+          attempt,
+          faulty,
+          blame: Some(blame).filter(|blame| !blame.is_empty()),
+          signed,
+        })
+      }
+
+      4 => {
         let mut attempt = [0; 4];
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
@@ -364,7 +406,7 @@ impl ReadWrite for Transaction {
         Ok(Transaction::DkgConfirmed(attempt, confirmation_share, signed))
       }
 
-      3 => {
+      5 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         let mut batch = [0; 5];
@@ -372,19 +414,19 @@ impl ReadWrite for Transaction {
         Ok(Transaction::Batch(block, batch))
       }
 
-      4 => {
+      6 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      5 => SignData::read(reader).map(Transaction::BatchPreprocess),
-      6 => SignData::read(reader).map(Transaction::BatchShare),
+      7 => SignData::read(reader).map(Transaction::BatchPreprocess),
+      8 => SignData::read(reader).map(Transaction::BatchShare),
 
-      7 => SignData::read(reader).map(Transaction::SignPreprocess),
-      8 => SignData::read(reader).map(Transaction::SignShare),
+      9 => SignData::read(reader).map(Transaction::SignPreprocess),
+      10 => SignData::read(reader).map(Transaction::SignShare),
 
-      9 => {
+      11 => {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
@@ -405,8 +447,13 @@ impl ReadWrite for Transaction {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Transaction::DkgCommitments(attempt, commitments, signed) => {
+      Transaction::RemoveParticipant(i) => {
         writer.write_all(&[0])?;
+        writer.write_all(&u16::from(*i).to_le_bytes())
+      }
+
+      Transaction::DkgCommitments(attempt, commitments, signed) => {
+        writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
         if commitments.is_empty() {
           Err(io::Error::new(io::ErrorKind::Other, "zero commitments in DkgCommitments"))?
@@ -428,7 +475,7 @@ impl ReadWrite for Transaction {
       }
 
       Transaction::DkgShares { attempt, shares, confirmation_nonces, signed } => {
-        writer.write_all(&[1])?;
+        writer.write_all(&[2])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
         // `shares` is a Vec which is supposed to map to a HashMap<Pariticpant, Vec<u8>>. Since we
@@ -456,43 +503,53 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
+      Transaction::InvalidDkgShare { attempt, faulty, blame, signed } => {
+        writer.write_all(&[3])?;
+        writer.write_all(&attempt.to_le_bytes())?;
+        writer.write_all(&u16::from(*faulty).to_le_bytes())?;
+        // Flattens Some(vec![]) to None on the expectation no actual blame will be 0-length
+        assert!(blame.as_ref().map(|blame| blame.len()).unwrap_or(1) != 0);
+        writer.write_all(blame.as_ref().unwrap_or(&vec![]))?;
+        signed.write(writer)
+      }
+
       Transaction::DkgConfirmed(attempt, share, signed) => {
-        writer.write_all(&[2])?;
+        writer.write_all(&[4])?;
         writer.write_all(&attempt.to_le_bytes())?;
         writer.write_all(share)?;
         signed.write(writer)
       }
 
       Transaction::Batch(block, batch) => {
-        writer.write_all(&[3])?;
+        writer.write_all(&[5])?;
         writer.write_all(block)?;
         writer.write_all(batch)
       }
 
       Transaction::SubstrateBlock(block) => {
-        writer.write_all(&[4])?;
+        writer.write_all(&[6])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::BatchPreprocess(data) => {
-        writer.write_all(&[5])?;
+        writer.write_all(&[7])?;
         data.write(writer)
       }
       Transaction::BatchShare(data) => {
-        writer.write_all(&[6])?;
+        writer.write_all(&[8])?;
         data.write(writer)
       }
 
       Transaction::SignPreprocess(data) => {
-        writer.write_all(&[7])?;
+        writer.write_all(&[9])?;
         data.write(writer)
       }
       Transaction::SignShare(data) => {
-        writer.write_all(&[8])?;
+        writer.write_all(&[10])?;
         data.write(writer)
       }
       Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
-        writer.write_all(&[9])?;
+        writer.write_all(&[11])?;
         writer.write_all(plan)?;
         writer
           .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
@@ -507,8 +564,11 @@ impl ReadWrite for Transaction {
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
+      Transaction::RemoveParticipant(_) => TransactionKind::Provided("remove"),
+
       Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
       Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
+      Transaction::InvalidDkgShare { signed, .. } => TransactionKind::Signed(signed),
       Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
 
       Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
@@ -574,8 +634,11 @@ impl Transaction {
   ) {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       match tx {
+        Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
+
         Transaction::DkgCommitments(_, _, ref mut signed) => signed,
         Transaction::DkgShares { ref mut signed, .. } => signed,
+        Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
         Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
 
         Transaction::Batch(_, _) => panic!("signing Batch"),

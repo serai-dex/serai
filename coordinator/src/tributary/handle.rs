@@ -178,6 +178,8 @@ pub(crate) async fn handle_application_tx<
   }
 
   match tx {
+    // TODO: Either remove the validator from Tendermint OR form a second Tributary post-DKG
+    Transaction::RemoveParticipant(i) => todo!("TODO(now)"),
     Transaction::DkgCommitments(attempt, commitments, signed) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, signed.signer, commitments.len()) else {
         return;
@@ -327,7 +329,11 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
+    Transaction::InvalidDkgShare { attempt, faulty, blame, signed } => todo!("TODO(now)"),
+
     Transaction::DkgConfirmed(attempt, shares, signed) => {
+      // TODO: Error if this participant published InvalidDkgShare
+
       match handle(
         txn,
         &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_SHARES, attempt },

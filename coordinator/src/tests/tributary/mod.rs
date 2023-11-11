@@ -88,6 +88,11 @@ fn serialize_sign_data() {
 
 #[test]
 fn serialize_transaction() {
+  test_read_write(Transaction::RemoveParticipant(
+    frost::Participant::new(u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1))
+      .unwrap(),
+  ));
+
   {
     let mut commitments = vec![random_vec(&mut OsRng, 512)];
     for _ in 0 .. (OsRng.next_u64() % 100) {
@@ -128,6 +133,22 @@ fn serialize_transaction() {
         let mut nonces = [0; 64];
         OsRng.fill_bytes(&mut nonces);
         nonces
+      },
+      signed: random_signed(&mut OsRng),
+    });
+  }
+
+  for i in 0 .. 2 {
+    test_read_write(Transaction::InvalidDkgShare {
+      attempt: random_u32(&mut OsRng),
+      faulty: frost::Participant::new(
+        u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
+      )
+      .unwrap(),
+      blame: if i == 0 {
+        None
+      } else {
+        Some(random_vec(&mut OsRng, 500)).filter(|blame| !blame.is_empty())
       },
       signed: random_signed(&mut OsRng),
     });

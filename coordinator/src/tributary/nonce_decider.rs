@@ -85,6 +85,8 @@ impl<D: Db> NonceDecider<D> {
 
   pub fn nonce<G: Get>(getter: &G, genesis: [u8; 32], tx: &Transaction) -> Option<Option<u32>> {
     match tx {
+      Transaction::RemoveParticipant(_) => None,
+
       Transaction::DkgCommitments(attempt, _, _) => {
         assert_eq!(*attempt, 0);
         Some(Some(0))
@@ -92,6 +94,12 @@ impl<D: Db> NonceDecider<D> {
       Transaction::DkgShares { attempt, .. } => {
         assert_eq!(*attempt, 0);
         Some(Some(1))
+      }
+      // InvalidDkgShare and DkgConfirmed share a nonce due to the expected existence of only one
+      // on-chain
+      Transaction::InvalidDkgShare { attempt, .. } => {
+        assert_eq!(*attempt, 0);
+        Some(Some(2))
       }
       Transaction::DkgConfirmed(attempt, _, _) => {
         assert_eq!(*attempt, 0);
