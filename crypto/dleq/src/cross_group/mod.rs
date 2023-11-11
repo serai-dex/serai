@@ -95,9 +95,6 @@ impl<G: PrimeGroup> Generators<G> {
 /// Error for cross-group DLEq proofs.
 #[derive(Error, PartialEq, Eq, Debug)]
 pub enum DLEqError {
-  /// Invalid proof of knowledge.
-  #[error("invalid proof of knowledge")]
-  InvalidProofOfKnowledge,
   /// Invalid proof length.
   #[error("invalid proof length")]
   InvalidProofLength,
