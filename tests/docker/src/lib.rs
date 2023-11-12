@@ -54,7 +54,14 @@ pub fn build(name: String) {
       if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
         dockerfile_path = dockerfile_path.join("coins");
       }
-      dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+      if name.contains("-processor") {
+        dockerfile_path = dockerfile_path
+          .join("processor")
+          .join(name.split('-').next().unwrap())
+          .join("Dockerfile");
+      } else {
+        dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+      }
 
       // For all services, if the Dockerfile was edited after the image was built we should rebuild
       let mut last_modified =
@@ -71,7 +78,7 @@ pub fn build(name: String) {
           meta(repo_path.join("substrate").join("primitives")),
           meta(repo_path.join("message-queue")),
         ],
-        "processor" => vec![
+        "bitcoin-processor" | "ethereum-processor" | "monero-processor" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
           meta(repo_path.join("coins")),

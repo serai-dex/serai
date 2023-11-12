@@ -67,12 +67,23 @@ services:
     expose:
       - "2287"
 
-  processor:
+  bitcoin-processor:
     profiles:
-      - processor
+      - bitcoin-processor
     build:
       context: ../
-      dockerfile: ./orchestration/processor/Dockerfile
+      dockerfile: ./orchestration/processor/bitcoin/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - "./processor/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+
+  monero-processor:
+    profiles:
+      - monero-processor
+    build:
+      context: ../
+      dockerfile: ./orchestration/processor/monero/Dockerfile
     restart: unless-stopped
     volumes:
       - "./processor/scripts:/scripts"

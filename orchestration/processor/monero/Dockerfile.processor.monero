@@ -1,0 +1,2 @@
+  cargo build --release --features monero -p serai-processor && \
+  mv /serai/target/release/serai-processor /serai/bin

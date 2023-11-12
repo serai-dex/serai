@@ -29,28 +29,26 @@ pub fn processor_instance(
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
 ) -> TestBodySpecification {
-  serai_docker_tests::build("processor".to_string());
-
   let mut entropy = [0; 32];
   OsRng.fill_bytes(&mut entropy);
 
+  let network_str = match network {
+    NetworkId::Serai => panic!("starting a processor for Serai"),
+    NetworkId::Bitcoin => "bitcoin",
+    NetworkId::Ethereum => "ethereum",
+    NetworkId::Monero => "monero",
+  };
+  let image = format!("{network_str}-processor");
+  serai_docker_tests::build("processor".to_string());
+
   TestBodySpecification::with_image(
-    Image::with_repository("serai-dev-processor").pull_policy(PullPolicy::Never),
+    Image::with_repository(format!("serai-dev-{image}")).pull_policy(PullPolicy::Never),
   )
   .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
       ("ENTROPY".to_string(), hex::encode(entropy)),
-      (
-        "NETWORK".to_string(),
-        (match network {
-          NetworkId::Serai => panic!("starting a processor for Serai"),
-          NetworkId::Bitcoin => "bitcoin",
-          NetworkId::Ethereum => "ethereum",
-          NetworkId::Monero => "monero",
-        })
-        .to_string(),
-      ),
+      ("NETWORK".to_string(), network_str.to_string()),
       ("NETWORK_RPC_LOGIN".to_string(), format!("{RPC_USER}:{RPC_PASS}")),
       ("NETWORK_RPC_PORT".to_string(), port.to_string()),
       ("DB_PATH".to_string(), "./processor-db".to_string()),

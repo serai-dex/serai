@@ -23,14 +23,23 @@ cat \
   ./Dockerfile.parts/Dockerfile.debian.start \
   ./message-queue/Dockerfile.message-queue.end >> ./message-queue/Dockerfile
 
-# Processor
-rm ./processor/Dockerfile
+# Bitcoin Processor
+rm ./processor/bitcoin/Dockerfile
 cat \
   ./Dockerfile.parts/mimalloc/Dockerfile.debian \
   ./Dockerfile.parts/Dockerfile.serai.build \
-  ./processor/Dockerfile.processor \
+  ./processor/bitcoin/Dockerfile.processor.bitcoin \
   ./Dockerfile.parts/Dockerfile.debian.start \
-  ./processor/Dockerfile.processor.end >> ./processor/Dockerfile
+  ./processor/Dockerfile.processor.end >> ./processor/bitcoin/Dockerfile
+
+# Monero Processor
+rm ./processor/monero/Dockerfile
+cat \
+  ./Dockerfile.parts/mimalloc/Dockerfile.debian \
+  ./Dockerfile.parts/Dockerfile.serai.build \
+  ./processor/monero/Dockerfile.processor.monero \
+  ./Dockerfile.parts/Dockerfile.debian.start \
+  ./processor/Dockerfile.processor.end >> ./processor/monero/Dockerfile
 
 # Coordinator
 rm ./coordinator/Dockerfile

@@ -20,6 +20,7 @@ All commands are assumed to be ran from `/deploy`, not the root folder.
 
 * `message-queue` - The message queue service.
 * `processor`     - Serai processor for one external network.
+* `coordinator`   - Serai coordinator for the entire Serai stack.
 
 * `serai`      - Serai node
 * `cluster-sm` - "Alice", "Bob", "Charlie", and "Dave" Serai nodes, all as
