@@ -24,247 +24,206 @@ use super::*;
 use frame_benchmarking::{benchmarks, whitelisted_caller};
 use frame_support::{assert_ok, storage::bounded_vec::BoundedVec};
 use frame_system::RawOrigin as SystemOrigin;
-use sp_runtime::traits::{Bounded, StaticLookup};
+
+use sp_runtime::traits::StaticLookup;
 use sp_std::{ops::Div, prelude::*};
 
+use serai_primitives::{Amount, Balance};
+
 use crate::Pallet as Dex;
+use coins_pallet::Pallet as Coins;
 
 const INITIAL_COIN_BALANCE: u64 = 1_000_000_000;
 type AccountIdLookupOf<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
-type BalanceOf<T> =
-  <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
-fn get_lp_token_id<T: Config>() -> T::PoolCoinId
-where
-  T::PoolCoinId: Into<u32>,
-{
-  let next_id: u32 = Dex::<T>::get_next_pool_coin_id().into();
-  (next_id - 1).into()
-}
+type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
 
-fn create_coin<T: Config>(coin: &T::MultiCoinId) -> (T::AccountId, AccountIdLookupOf<T>)
-where
-  T::CoinBalance: From<u64>,
-  T::Currency: Currency<T::AccountId>,
-  T::Coins: Coins<T::AccountId>,
-{
+fn create_coin<T: Config>(coin: &Coin) -> (T::AccountId, AccountIdLookupOf<T>) {
   let caller: T::AccountId = whitelisted_caller();
-  let caller_lookup = T::Lookup::unlookup(caller.clone());
-  if let MultiCoinIdConversionResult::Converted(coin_id) =
-    T::MultiCoinIdConverter::try_convert(coin)
-  {
-    assert_ok!(T::Currency::mint(&caller, BalanceOf::<T>::max_value().div(1000u32.into())));
-    assert_ok!(T::Coins::mint(coin_id, &caller, INITIAL_COIN_BALANCE.into()));
-  }
+  let caller_lookup = T::Lookup::unlookup(caller);
+  assert_ok!(Coins::<T>::mint(
+    caller,
+    Balance { coin: Coin::native(), amount: Amount(SubstrateAmount::max_value().div(1000u64)) }
+  ));
+  assert_ok!(Coins::<T>::mint(
+    caller,
+    Balance { coin: *coin, amount: Amount(INITIAL_COIN_BALANCE) }
+  ));
   (caller, caller_lookup)
 }
 
 fn create_coin_and_pool<T: Config>(
-  coin1: &T::MultiCoinId,
-  coin2: &T::MultiCoinId,
-) -> (T::PoolCoinId, T::AccountId, AccountIdLookupOf<T>)
-where
-  T::CoinBalance: From<u64>,
-  T::Currency: Currency<T::AccountId>,
-  T::Coins: Coins<T::AccountId>,
-  T::PoolCoinId: Into<u32>,
-{
-  assert_eq!(coin1, &T::MultiCoinIdConverter::get_native());
+  coin: &Coin,
+) -> (PoolCoinId, T::AccountId, AccountIdLookupOf<T>) {
+  let (caller, caller_lookup) = create_coin::<T>(coin);
+  assert_ok!(Dex::<T>::create_pool(*coin));
 
-  let (caller, caller_lookup) = create_coin::<T>(coin2);
-
-  assert_ok!(Dex::<T>::create_pool(coin2.clone()));
-  let lp_token = get_lp_token_id::<T>();
-
-  (lp_token, caller, caller_lookup)
+  (*coin, caller, caller_lookup)
 }
 
 benchmarks! {
-  where_clause {
-    where
-      T::CoinBalance: From<u64> + Into<u64>,
-      T::Currency: Currency<T::AccountId>,
-      T::Balance: From<u64> + Into<u64>,
-      T::Coins: Coins<T::AccountId>,
-      T::PoolCoinId: Into<u32>,
-  }
-
   add_liquidity {
-    let coin1 = T::MultiCoinIdConverter::get_native();
-    let coin2: T::MultiCoinId = T::BenchmarkHelper::coin_id(0).into();
-    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin1, &coin2);
-    let ed: u64 = T::Currency::minimum_balance().into();
-    let add_amount = 1000 + ed;
+    let coin1 = Coin::native();
+    let coin2 = Coin::Bitcoin;
+    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin2);
+    let add_amount: u64 = 1000;
   }: _(
-    SystemOrigin::Signed(caller.clone()),
-    coin1.clone(),
-    coin2.clone(),
-    add_amount.into(),
-    1000.into(),
-    0.into(),
-    0.into(),
-    caller.clone()
+    SystemOrigin::Signed(caller),
+    coin2,
+    1000u64,
+    add_amount,
+    0u64,
+    0u64,
+    caller
   )
   verify {
-    let pool_id = (coin1.clone(), coin2.clone());
+    let pool_id = Dex::<T>::get_pool_id(coin1, coin2).unwrap();
     let lp_minted = Dex::<T>::calc_lp_amount_for_zero_supply(
-      &add_amount.into(),
-      &1000.into()
-    ).unwrap().into();
+      add_amount,
+      1000u64,
+    ).unwrap();
     assert_eq!(
-      T::PoolCoins::balance(lp_token, &caller),
-      lp_minted.into()
+      LiquidityTokens::<T>::balance(caller, lp_token).0,
+      lp_minted
     );
     assert_eq!(
-      T::Currency::balance(&Dex::<T>::get_pool_account(&pool_id)),
-      add_amount.into()
+      Coins::<T>::balance(Dex::<T>::get_pool_account(pool_id), Coin::native()).0,
+      add_amount
     );
     assert_eq!(
-      T::Coins::balance(
-        T::BenchmarkHelper::coin_id(0),
-        &Dex::<T>::get_pool_account(&pool_id)
-      ),
-      1000.into()
+      Coins::<T>::balance(
+        Dex::<T>::get_pool_account(pool_id),
+        Coin::Bitcoin,
+      ).0,
+      1000
     );
   }
 
   remove_liquidity {
-    let coin1 = T::MultiCoinIdConverter::get_native();
-    let coin2: T::MultiCoinId = T::BenchmarkHelper::coin_id(0).into();
-    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin1, &coin2);
-    let ed: u64 = T::Currency::minimum_balance().into();
-    let add_amount = 100 * ed;
+    let coin1 = Coin::native();
+    let coin2 = Coin::Monero;
+    let (lp_token, caller, _) = create_coin_and_pool::<T>(&coin2);
+    let add_amount: u64 = 100;
     let lp_minted = Dex::<T>::calc_lp_amount_for_zero_supply(
-      &add_amount.into(),
-      &1000.into()
-    ).unwrap().into();
-    let remove_lp_amount = lp_minted.checked_div(10).unwrap();
+      add_amount,
+      1000u64
+    ).unwrap();
+    let remove_lp_amount: u64 = lp_minted.checked_div(10).unwrap();
 
     Dex::<T>::add_liquidity(
-      SystemOrigin::Signed(caller.clone()).into(),
-      coin1.clone(),
-      coin2.clone(),
-      add_amount.into(),
-      1000.into(),
-      0.into(),
-      0.into(),
-      caller.clone(),
+      SystemOrigin::Signed(caller).into(),
+      coin2,
+      1000u64,
+      add_amount,
+      0u64,
+      0u64,
+      caller,
     )?;
-    let total_supply =
-      <T::PoolCoins as LiquidityTokens<T::AccountId>>::total_issuance(lp_token.clone());
+    let total_supply = LiquidityTokens::<T>::supply(lp_token);
   }: _(
-    SystemOrigin::Signed(caller.clone()),
-    coin1,
+    SystemOrigin::Signed(caller),
     coin2,
-    remove_lp_amount.into(),
-    0.into(),
-    0.into(),
-    caller.clone()
+    remove_lp_amount,
+    0u64,
+    0u64,
+    caller
   )
   verify {
-    let new_total_supply =
-      <T::PoolCoins as LiquidityTokens<T::AccountId>>::total_issuance(lp_token.clone());
+    let new_total_supply =  LiquidityTokens::<T>::supply(lp_token);
     assert_eq!(
       new_total_supply,
-      total_supply - remove_lp_amount.into()
+      total_supply - remove_lp_amount
     );
   }
 
   swap_exact_tokens_for_tokens {
-    let native = T::MultiCoinIdConverter::get_native();
-    let coin1: T::MultiCoinId = T::BenchmarkHelper::coin_id(1).into();
-    let coin2: T::MultiCoinId = T::BenchmarkHelper::coin_id(2).into();
-    let (_, caller, _) = create_coin_and_pool::<T>(&native, &coin1);
+    let native = Coin::native();
+    let coin1 = Coin::Bitcoin;
+    let coin2 = Coin::Ether;
+    let (_, caller, _) = create_coin_and_pool::<T>(&coin1);
     let (_, _) = create_coin::<T>(&coin2);
-    let ed: u64 = T::Currency::minimum_balance().into();
-    let ed_bump = 2u64;
 
     Dex::<T>::add_liquidity(
-      SystemOrigin::Signed(caller.clone()).into(),
-      native.clone(),
-      coin1.clone(),
-      // TODO: this call otherwise fails with `InsufficientLiquidityMinted`.
-      // might be again related to their expectance on ed being > 1.
-      (100 * (ed + ed_bump)).into(),
-      200.into(),
-      0.into(),
-      0.into(),
-      caller.clone(),
+      SystemOrigin::Signed(caller).into(),
+      coin1,
+      200u64,
+      // TODO: this call otherwise fails with `InsufficientLiquidityMinted` if we don't multiply
+      // with 3. Might be again related to their expectance on ed being > 1.
+      100 * 3,
+      0u64,
+      0u64,
+      caller,
     )?;
 
-    let swap_amount = 100.into();
+    let swap_amount = 100u64;
 
     // since we only allow the native-coin pools, then the worst case scenario would be to swap
     // coin1-native-coin2
-    Dex::<T>::create_pool(coin2.clone())?;
+    Dex::<T>::create_pool(coin2)?;
     Dex::<T>::add_liquidity(
-      SystemOrigin::Signed(caller.clone()).into(),
-      native.clone(),
-      coin2.clone(),
-      (500 * ed).into(),
-      1000.into(),
-      0.into(),
-      0.into(),
-      caller.clone(),
+      SystemOrigin::Signed(caller).into(),
+      coin2,
+      1000u64,
+      500,
+      0u64,
+      0u64,
+      caller,
     )?;
 
-    let path = vec![coin1.clone(), native.clone(), coin2.clone()];
+    let path = vec![coin1, native, coin2];
     let path = BoundedVec::<_, T::MaxSwapPathLength>::try_from(path).unwrap();
-    let native_balance = T::Currency::balance(&caller);
-    let coin1_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(1), &caller);
-  }: _(SystemOrigin::Signed(caller.clone()), path, swap_amount, 1.into(), caller.clone())
+    let native_balance = Coins::<T>::balance(caller, native).0;
+    let coin1_balance = Coins::<T>::balance(caller, Coin::Bitcoin).0;
+  }: _(SystemOrigin::Signed(caller), path, swap_amount, 1u64, caller)
   verify {
     let ed_bump = 2u64;
-    let new_coin1_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(1), &caller);
-    assert_eq!(new_coin1_balance, coin1_balance - 100.into());
+    let new_coin1_balance = Coins::<T>::balance(caller, Coin::Bitcoin).0;
+    assert_eq!(new_coin1_balance, coin1_balance - 100u64);
   }
 
   swap_tokens_for_exact_tokens {
-    let native = T::MultiCoinIdConverter::get_native();
-    let coin1: T::MultiCoinId = T::BenchmarkHelper::coin_id(1).into();
-    let coin2: T::MultiCoinId = T::BenchmarkHelper::coin_id(2).into();
-    let (_, caller, _) = create_coin_and_pool::<T>(&native, &coin1);
+    let native = Coin::native();
+    let coin1 = Coin::Bitcoin;
+    let coin2 = Coin::Ether;
+    let (_, caller, _) = create_coin_and_pool::<T>(&coin1);
     let (_, _) = create_coin::<T>(&coin2);
-    let ed: u64 = T::Currency::minimum_balance().into();
 
     Dex::<T>::add_liquidity(
-      SystemOrigin::Signed(caller.clone()).into(),
-      native.clone(),
-      coin1.clone(),
-      (1000 * ed).into(),
-      500.into(),
-      0.into(),
-      0.into(),
-      caller.clone(),
+      SystemOrigin::Signed(caller).into(),
+      coin1,
+      500u64,
+      1000,
+      0u64,
+      0u64,
+      caller,
     )?;
 
     // since we only allow the native-coin pools, then the worst case scenario would be to swap
     // coin1-native-coin2
-    Dex::<T>::create_pool(coin2.clone())?;
+    Dex::<T>::create_pool(coin2)?;
     Dex::<T>::add_liquidity(
-      SystemOrigin::Signed(caller.clone()).into(),
-      native.clone(),
-      coin2.clone(),
-      (500 * ed).into(),
-      1000.into(),
-      0.into(),
-      0.into(),
-      caller.clone(),
+      SystemOrigin::Signed(caller).into(),
+      coin2,
+      1000u64,
+      500,
+      0u64,
+      0u64,
+      caller,
     )?;
-    let path = vec![coin1.clone(), native.clone(), coin2.clone()];
+    let path = vec![coin1, native, coin2];
 
     let path: BoundedVec<_, T::MaxSwapPathLength> = BoundedVec::try_from(path).unwrap();
-    let coin2_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(2), &caller);
+    let coin2_balance = Coins::<T>::balance(caller, Coin::Ether).0;
   }: _(
-    SystemOrigin::Signed(caller.clone()),
+    SystemOrigin::Signed(caller),
     path.clone(),
-    100.into(),
-    (1000 * ed).into(),
-    caller.clone()
+    100u64,
+    1000,
+    caller
   )
   verify {
-    let new_coin2_balance = T::Coins::balance(T::BenchmarkHelper::coin_id(2), &caller);
-    assert_eq!(new_coin2_balance, coin2_balance + 100.into());
+    let new_coin2_balance = Coins::<T>::balance(caller, Coin::Ether).0;
+    assert_eq!(new_coin2_balance, coin2_balance + 100u64);
   }
 
   impl_benchmark_test_suite!(Dex, crate::mock::new_test_ext(), crate::mock::Test);

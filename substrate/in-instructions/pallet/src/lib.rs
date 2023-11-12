@@ -28,7 +28,7 @@ pub mod pallet {
   use sp_runtime::traits::Zero;
   use sp_core::sr25519::Public;
 
-  use serai_primitives::{Coin, SubstrateAmount, Amount, Balance};
+  use serai_primitives::{Coin, Amount, Balance};
 
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
@@ -46,12 +46,7 @@ pub mod pallet {
   use super::*;
 
   #[pallet::config]
-  pub trait Config:
-    frame_system::Config
-    + CoinsConfig
-    + DexConfig<MultiCoinId = Coin, CoinBalance = SubstrateAmount>
-    + ValidatorSetsConfig
-  {
+  pub trait Config: frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -127,7 +122,6 @@ pub mod pallet {
               Dex::<T>::add_liquidity(
                 origin.clone().into(),
                 coin,
-                Coin::Serai,
                 half,
                 sri_amount,
                 1,
@@ -185,7 +179,7 @@ pub mod pallet {
               // do the swap
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
               Dex::<T>::swap_exact_tokens_for_tokens(
-                origin.into(),
+                origin.clone().into(),
                 BoundedVec::try_from(path).unwrap(),
                 instruction.balance.amount.0,
                 out_balance.amount.0,
@@ -206,7 +200,7 @@ pub mod pallet {
                   },
                   balance: Balance { coin: out_balance.coin, amount: coin_balance },
                 };
-                Coins::<T>::burn_non_sri(IN_INSTRUCTION_EXECUTOR.into(), instruction)?;
+                Coins::<T>::burn_with_instruction(origin.into(), instruction)?;
               }
             }
           }

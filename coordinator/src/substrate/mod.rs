@@ -208,8 +208,8 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
     }
   }
 
-  for burn in serai.coins().burn_events().await? {
-    if let CoinsEvent::Burn { from: _, instruction } = burn {
+  for burn in serai.coins().burn_with_instruction_events().await? {
+    if let CoinsEvent::BurnWithInstruction { from: _, instruction } = burn {
       let network = instruction.balance.coin.network();
       network_had_event(&mut burns, &mut batches, network);
 

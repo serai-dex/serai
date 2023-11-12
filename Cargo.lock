@@ -7535,7 +7535,6 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
- "serai-dex-primitives",
  "serai-primitives",
  "sp-core",
  "sp-runtime",
@@ -7626,26 +7625,11 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
- "serai-dex-primitives",
- "serai-liquidity-tokens-pallet",
  "serai-primitives",
  "sp-api",
  "sp-arithmetic",
  "sp-core",
  "sp-io",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "serai-dex-primitives"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "parity-scale-codec",
- "scale-info",
- "serai-primitives",
  "sp-runtime",
  "sp-std",
 ]
@@ -7717,20 +7701,6 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "zeroize",
-]
-
-[[package]]
-name = "serai-liquidity-tokens-pallet"
-version = "0.1.0"
-dependencies = [
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "serai-dex-primitives",
- "serai-primitives",
- "sp-core",
- "sp-std",
 ]
 
 [[package]]
@@ -7947,9 +7917,7 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
- "serai-dex-primitives",
  "serai-in-instructions-pallet",
- "serai-liquidity-tokens-pallet",
  "serai-primitives",
  "serai-signals-pallet",
  "serai-validator-sets-pallet",

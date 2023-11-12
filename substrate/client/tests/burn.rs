@@ -93,7 +93,7 @@ serai_test!(
       &serai
         .sign(
           &PairSigner::new(pair),
-          &SeraiCoins::burn(instruction.clone()),
+          &SeraiCoins::burn_with_instruction(instruction.clone()),
           0,
           BaseExtrinsicParamsBuilder::new(),
         )
@@ -102,8 +102,8 @@ serai_test!(
     .await;
 
     let serai = serai.as_of(block).coins();
-    let events = serai.burn_events().await.unwrap();
-    assert_eq!(events, vec![CoinsEvent::Burn { from: address.into(), instruction }]);
+    let events = serai.burn_with_instruction_events().await.unwrap();
+    assert_eq!(events, vec![CoinsEvent::BurnWithInstruction { from: address.into(), instruction }]);
     assert_eq!(serai.coin_supply(coin).await.unwrap(), Amount(0));
     assert_eq!(serai.coin_balance(coin, address).await.unwrap(), Amount(0));
   })

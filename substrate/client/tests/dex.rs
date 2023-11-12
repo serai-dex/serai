@@ -36,24 +36,24 @@ serai_test!(
       events,
       vec![
         DexEvent::PoolCreated {
-          pool_id: (Coin::Serai, Coin::Bitcoin),
-          pool_account: PublicKey::from_raw(blake2_256(&(Coin::Serai, Coin::Bitcoin).encode())),
-          lp_token: 0,
+          pool_id: Coin::Bitcoin,
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Bitcoin.encode())),
+          lp_token: Coin::Bitcoin,
         },
         DexEvent::PoolCreated {
-          pool_id: (Coin::Serai, Coin::Ether),
-          pool_account: PublicKey::from_raw(blake2_256(&(Coin::Serai, Coin::Ether).encode())),
-          lp_token: 1,
+          pool_id: Coin::Ether,
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Ether.encode())),
+          lp_token: Coin::Ether,
         },
         DexEvent::PoolCreated {
-          pool_id: (Coin::Serai, Coin::Dai),
-          pool_account: PublicKey::from_raw(blake2_256(&(Coin::Serai, Coin::Dai).encode())),
-          lp_token: 2,
+          pool_id: Coin::Dai,
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Dai.encode())),
+          lp_token: Coin::Dai,
         },
         DexEvent::PoolCreated {
-          pool_id: (Coin::Serai, Coin::Monero),
-          pool_account: PublicKey::from_raw(blake2_256(&(Coin::Serai, Coin::Monero).encode())),
-          lp_token: 3,
+          pool_id: Coin::Monero,
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Monero.encode())),
+          lp_token: Coin::Monero,
         },
       ]
     );
@@ -93,10 +93,10 @@ serai_test!(
       vec![DexEvent::LiquidityAdded {
         who: pair.public(),
         mint_to: pair.public(),
-        pool_id: (Coin::Serai, Coin::Monero),
-        amount1_provided: coin_amount.0,
-        amount2_provided: sri_amount.0,
-        lp_token: 3,
+        pool_id: Coin::Monero,
+        coin_amount: coin_amount.0,
+        sri_amount: sri_amount.0,
+        lp_token: Coin::Monero,
         lp_token_minted: 49_999999990000
       }]
     );
@@ -277,10 +277,10 @@ serai_test!(
       vec![DexEvent::LiquidityAdded {
         who: IN_INSTRUCTION_EXECUTOR.into(),
         mint_to: pair.public(),
-        pool_id: (Coin::Serai, Coin::Bitcoin),
-        amount1_provided: 6_947_918_403_646,
-        amount2_provided: 10_000_000_000_000, // half of sent amount
-        lp_token: 0,
+        pool_id: Coin::Bitcoin,
+        coin_amount: 10_000_000_000_000, // half of sent amount
+        sri_amount: 6_947_918_403_646,
+        lp_token: Coin::Bitcoin,
         lp_token_minted: 8333333333332
       }]
     );

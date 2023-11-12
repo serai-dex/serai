@@ -508,7 +508,12 @@ async fn mint_and_burn_test() {
             serai
               .publish(
                 &serai
-                  .sign(serai_pair, &SeraiCoins::burn(out_instruction), nonce, Default::default())
+                  .sign(
+                    serai_pair,
+                    &SeraiCoins::burn_with_instruction(out_instruction),
+                    nonce,
+                    Default::default(),
+                  )
                   .unwrap(),
               )
               .await

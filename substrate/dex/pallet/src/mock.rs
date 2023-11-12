@@ -37,7 +37,6 @@ use sp_runtime::{
 use serai_primitives::{Coin, Balance, Amount, system_address};
 
 pub use coins_pallet as coins;
-pub use liquidity_tokens_pallet as liquidity_tokens;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -46,7 +45,7 @@ construct_runtime!(
   {
     System: frame_system,
     CoinsPallet: coins,
-    LiquidityTokens: liquidity_tokens,
+    LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
   }
 );
@@ -81,54 +80,18 @@ impl coins::Config for Test {
   type RuntimeEvent = RuntimeEvent;
 }
 
-impl liquidity_tokens::Config for Test {
+impl coins::Config<coins::Instance1> for Test {
   type RuntimeEvent = RuntimeEvent;
-}
-
-pub struct CoinConverter;
-impl MultiCoinIdConverter<Coin, Coin> for CoinConverter {
-  /// Returns the MultiCoinId representing the native currency of the chain.
-  fn get_native() -> Coin {
-    Coin::Serai
-  }
-
-  /// Returns true if the given MultiCoinId is the native currency.
-  fn is_native(coin: &Coin) -> bool {
-    coin.is_native()
-  }
-
-  /// If it's not native, returns the CoinId for the given MultiCoinId.
-  fn try_convert(coin: &Coin) -> MultiCoinIdConversionResult<Coin, Coin> {
-    if coin.is_native() {
-      MultiCoinIdConversionResult::Native
-    } else {
-      MultiCoinIdConversionResult::Converted(*coin)
-    }
-  }
 }
 
 impl Config for Test {
   type RuntimeEvent = RuntimeEvent;
-  type Currency = CoinsPallet;
-  type CoinBalance = u64;
-  type CoinId = Coin;
-  type PoolCoinId = u32;
-  type Coins = CoinsPallet;
-  type PoolCoins = LiquidityTokens;
+
   type WeightInfo = ();
   type LPFee = ConstU32<3>; // means 0.3%
   type MaxSwapPathLength = ConstU32<4>;
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;
-
-  type Balance = u64;
-  type HigherPrecisionBalance = u128;
-
-  type MultiCoinId = Coin;
-  type MultiCoinIdConverter = CoinConverter;
-
-  #[cfg(feature = "runtime-benchmarks")]
-  type BenchmarkHelper = ();
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
@@ -145,6 +108,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       .into_iter()
       .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
       .collect(),
+    _ignore: Default::default(),
   }
   .assimilate_storage(&mut t)
   .unwrap();

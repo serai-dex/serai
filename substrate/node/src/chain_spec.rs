@@ -41,9 +41,13 @@ fn testnet_genesis(
         .into_iter()
         .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
+      _ignore: Default::default(),
     },
 
-    dex: DexConfig { pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero] },
+    dex: DexConfig {
+      pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero],
+      _ignore: Default::default(),
+    },
 
     validator_sets: ValidatorSetsConfig {
       networks: serai_runtime::primitives::NETWORKS

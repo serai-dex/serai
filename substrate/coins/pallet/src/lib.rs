@@ -2,7 +2,7 @@
 
 #[frame_support::pallet]
 pub mod pallet {
-  use sp_std::vec::Vec;
+  use sp_std::{vec::Vec, any::TypeId};
   use sp_core::sr25519::Public;
   use sp_runtime::{
     traits::{DispatchInfoOf, PostDispatchInfoOf},
@@ -14,80 +14,82 @@ pub mod pallet {
 
   use pallet_transaction_payment::{Config as TpConfig, OnChargeTransaction};
 
-  use dex_primitives::{Currency, Coins as CoinsTrait};
-
   use serai_primitives::*;
   pub use coins_primitives as primitives;
   use primitives::*;
 
+  type LiquidityTokensInstance = crate::Instance1;
+
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+  pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
+    type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-  pub struct GenesisConfig<T: Config> {
+  pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
     pub accounts: Vec<(T::AccountId, Balance)>,
+    pub _ignore: PhantomData<I>,
   }
 
-  impl<T: Config> Default for GenesisConfig<T> {
+  impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
     fn default() -> Self {
-      GenesisConfig { accounts: Default::default() }
+      GenesisConfig { accounts: Default::default(), _ignore: Default::default() }
     }
   }
 
   #[pallet::error]
-  pub enum Error<T> {
+  pub enum Error<T, I = ()> {
     AmountOverflowed,
     NotEnoughCoins,
-    SriBurnNotAllowed,
+    BurnWithInstructionNotAllowed,
   }
 
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
-  pub enum Event<T: Config> {
+  pub enum Event<T: Config<I>, I: 'static = ()> {
     Mint { to: Public, balance: Balance },
-    Burn { from: Public, instruction: OutInstructionWithBalance },
-    SriBurn { from: Public, amount: Amount },
+    Burn { from: Public, balance: Balance },
+    BurnWithInstruction { from: Public, instruction: OutInstructionWithBalance },
     Transfer { from: Public, to: Public, balance: Balance },
   }
 
   #[pallet::pallet]
-  pub struct Pallet<T>(PhantomData<T>);
+  pub struct Pallet<T, I = ()>(_);
 
   /// The amount of coins each account has.
   // Identity is used as the second key's hasher due to it being a non-manipulatable fixed-space
   // ID.
   #[pallet::storage]
   #[pallet::getter(fn balances)]
-  pub type Balances<T: Config> =
+  pub type Balances<T: Config<I>, I: 'static = ()> =
     StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Coin, SubstrateAmount, ValueQuery>;
 
   /// The total supply of each coin.
   // We use Identity type here again due to reasons stated in the Balances Storage.
   #[pallet::storage]
   #[pallet::getter(fn supply)]
-  pub type Supply<T: Config> = StorageMap<_, Identity, Coin, SubstrateAmount, ValueQuery>;
+  pub type Supply<T: Config<I>, I: 'static = ()> =
+    StorageMap<_, Identity, Coin, SubstrateAmount, ValueQuery>;
 
   #[pallet::genesis_build]
-  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+  impl<T: Config<I>, I: 'static> BuildGenesisConfig for GenesisConfig<T, I> {
     fn build(&self) {
       // initialize the supply of the coins
       // TODO: Don't use COINS yet GenesisConfig so we can safely expand COINS
       for c in &COINS {
-        Supply::<T>::set(c, 0);
+        Supply::<T, I>::set(c, 0);
       }
 
       // initialize the genesis accounts
       for (account, balance) in &self.accounts {
-        Pallet::<T>::mint(*account, *balance).unwrap();
+        Pallet::<T, I>::mint(*account, *balance).unwrap();
       }
     }
   }
 
   #[pallet::hooks]
-  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+  impl<T: Config<I>, I: 'static> Hooks<BlockNumberFor<T>> for Pallet<T, I> {
     fn on_initialize(_: BlockNumberFor<T>) -> Weight {
       // burn the fees collected previous block
       let coin = Coin::Serai;
@@ -95,66 +97,66 @@ pub mod pallet {
       // we can unwrap, we are not burning more then what we have
       // If this errors, it'll halt the runtime however (due to being called at the start of every
       // block), requiring extra care when reviewing
-      Self::burn_sri(FEE_ACCOUNT.into(), amount).unwrap();
+      Self::burn_internal(FEE_ACCOUNT.into(), Balance { coin, amount }).unwrap();
       Weight::zero() // TODO
     }
   }
 
-  impl<T: Config> Pallet<T> {
+  impl<T: Config<I>, I: 'static> Pallet<T, I> {
     /// Returns the balance of a given account for `coin`.
     pub fn balance(of: Public, coin: Coin) -> Amount {
       Amount(Self::balances(of, coin))
     }
 
-    fn decrease_balance_internal(from: Public, balance: Balance) -> Result<(), Error<T>> {
+    fn decrease_balance_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
       let coin = &balance.coin;
 
       // sub amount from account
       let new_amount = Self::balances(from, coin)
         .checked_sub(balance.amount.0)
-        .ok_or(Error::<T>::NotEnoughCoins)?;
+        .ok_or(Error::<T, I>::NotEnoughCoins)?;
 
       // save
       if new_amount == 0 {
-        Balances::<T>::remove(from, coin);
+        Balances::<T, I>::remove(from, coin);
       } else {
-        Balances::<T>::set(from, coin, new_amount);
+        Balances::<T, I>::set(from, coin, new_amount);
       }
       Ok(())
     }
 
-    fn increase_balance_internal(to: Public, balance: Balance) -> Result<(), Error<T>> {
+    fn increase_balance_internal(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       let coin = &balance.coin;
 
       // sub amount from account
       let new_amount = Self::balances(to, coin)
         .checked_add(balance.amount.0)
-        .ok_or(Error::<T>::AmountOverflowed)?;
+        .ok_or(Error::<T, I>::AmountOverflowed)?;
 
       // save
-      Balances::<T>::set(to, coin, new_amount);
+      Balances::<T, I>::set(to, coin, new_amount);
       Ok(())
     }
 
     /// Mint `balance` to the given account.
     ///
     /// Errors if any amount overflows.
-    pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T>> {
+    pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // update the balance
       Self::increase_balance_internal(to, balance)?;
 
       // update the supply
       let new_supply = Self::supply(balance.coin)
         .checked_add(balance.amount.0)
-        .ok_or(Error::<T>::AmountOverflowed)?;
-      Supply::<T>::set(balance.coin, new_supply);
+        .ok_or(Error::<T, I>::AmountOverflowed)?;
+      Supply::<T, I>::set(balance.coin, new_supply);
 
       Self::deposit_event(Event::Mint { to, balance });
       Ok(())
     }
 
-    // Burn `balance` from the specified account.
-    fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T>> {
+    /// Burn `balance` from the specified account.
+    fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // don't waste time if amount == 0
       if balance.amount.0 == 0 {
         return Ok(());
@@ -165,31 +167,17 @@ pub mod pallet {
 
       // update the supply
       let new_supply = Self::supply(balance.coin).checked_sub(balance.amount.0).unwrap();
-      Supply::<T>::set(balance.coin, new_supply);
+      Supply::<T, I>::set(balance.coin, new_supply);
 
-      Ok(())
-    }
-
-    pub fn burn_sri(from: Public, amount: Amount) -> Result<(), Error<T>> {
-      Self::burn_internal(from, Balance { coin: Coin::Serai, amount })?;
-      Self::deposit_event(Event::SriBurn { from, amount });
-      Ok(())
-    }
-
-    pub fn burn_non_sri(
-      from: Public,
-      instruction: OutInstructionWithBalance,
-    ) -> Result<(), Error<T>> {
-      if instruction.balance.coin == Coin::Serai {
-        Err(Error::<T>::SriBurnNotAllowed)?;
-      }
-      Self::burn_internal(from, instruction.balance)?;
-      Self::deposit_event(Event::Burn { from, instruction });
       Ok(())
     }
 
     /// Transfer `balance` from `from` to `to`.
-    pub fn transfer_internal(from: Public, to: Public, balance: Balance) -> Result<(), Error<T>> {
+    pub fn transfer_internal(
+      from: Public,
+      to: Public,
+      balance: Balance,
+    ) -> Result<(), Error<T, I>> {
       // update balances of accounts
       Self::decrease_balance_internal(from, balance)?;
       Self::increase_balance_internal(to, balance)?;
@@ -199,7 +187,7 @@ pub mod pallet {
   }
 
   #[pallet::call]
-  impl<T: Config> Pallet<T> {
+  impl<T: Config<I>, I: 'static> Pallet<T, I> {
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn transfer(origin: OriginFor<T>, to: Public, balance: Balance) -> DispatchResult {
@@ -208,77 +196,35 @@ pub mod pallet {
       Ok(())
     }
 
+    /// Burn `balance` from the caller.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn burn(origin: OriginFor<T>, instruction: OutInstructionWithBalance) -> DispatchResult {
+    pub fn burn(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::burn_non_sri(from, instruction)?;
+      Self::burn_internal(from, balance)?;
+      Self::deposit_event(Event::Burn { from, balance });
       Ok(())
     }
-  }
 
-  impl<T: Config> Currency<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
+    /// Burn `balance` with `OutInstructionWithBalance` from the caller.
+    /// Errors if called for SRI or Instance1 instance of this pallet.
+    #[pallet::call_index(2)]
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    pub fn burn_with_instruction(
+      origin: OriginFor<T>,
+      instruction: OutInstructionWithBalance,
+    ) -> DispatchResult {
+      if instruction.balance.coin == Coin::Serai {
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
+      }
+      if TypeId::of::<I>() == TypeId::of::<LiquidityTokensInstance>() {
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
+      }
 
-    fn balance(of: &Public) -> Self::Balance {
-      Self::balance(*of, Coin::Serai).0
-    }
-
-    /// TODO: make sure of coin precision here.
-    fn minimum_balance() -> Self::Balance {
-      1
-    }
-
-    fn transfer(
-      from: &Public,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      let balance = Balance { coin: Coin::Serai, amount: Amount(amount) };
-      Self::transfer_internal(*from, *to, balance)?;
-      Ok(amount)
-    }
-
-    fn mint(to: &Public, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
-      Self::mint(*to, Balance { coin: Coin::native(), amount: Amount(amount) })?;
-      Ok(amount)
-    }
-  }
-
-  // TODO: Have DEX implement for Coins, not Coins implement for Coins
-  impl<T: Config> CoinsTrait<T::AccountId> for Pallet<T> {
-    type Balance = SubstrateAmount;
-    type CoinId = Coin;
-
-    // TODO: Swap the order of these arguments
-    fn balance(coin: Self::CoinId, of: &Public) -> Self::Balance {
-      Self::balance(*of, coin).0
-    }
-
-    fn minimum_balance(_: Self::CoinId) -> Self::Balance {
-      1
-    }
-
-    // TODO: Move coin next to amount
-    fn transfer(
-      coin: Self::CoinId,
-      from: &Public,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      let balance = Balance { coin, amount: Amount(amount) };
-      Self::transfer_internal(*from, *to, balance)?;
-      Ok(amount)
-    }
-
-    // TODO: Move coin next to amount
-    fn mint(
-      coin: Self::CoinId,
-      to: &Public,
-      amount: Self::Balance,
-    ) -> Result<Self::Balance, DispatchError> {
-      Self::mint(*to, Balance { coin, amount: Amount(amount) })?;
-      Ok(amount)
+      let from = ensure_signed(origin)?;
+      Self::burn_internal(from, instruction.balance)?;
+      Self::deposit_event(Event::BurnWithInstruction { from, instruction });
+      Ok(())
     }
   }
 

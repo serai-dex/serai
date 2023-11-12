@@ -26,13 +26,9 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
-dex-primitives = { package = "serai-dex-primitives", path = "../primitives", default-features = false }
-
-[dev-dependencies]
-serai-primitives = { path = "../../primitives", default-features = false }
-
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
-liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../../liquidity-tokens/pallet", default-features = false }
+
+serai-primitives = { path = "../../primitives", default-features = false }
 
 [features]
 default = ["std"]
@@ -49,14 +45,11 @@ std = [
 
   "serai-primitives/std",
 
-  "dex-primitives/std",
-
   "frame-system/std",
   "frame-support/std",
   "frame-benchmarking?/std",
 
   "coins-pallet/std",
-  "liquidity-tokens-pallet/std",
 ]
 runtime-benchmarks = [
   "sp-runtime/runtime-benchmarks",
@@ -64,8 +57,6 @@ runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
   "frame-benchmarking/runtime-benchmarks",
-
-  "dex-primitives/runtime-benchmarks",
 ]
 try-runtime = [
   "sp-runtime/try-runtime",

@@ -40,14 +40,12 @@ frame-executive = { git = "https://github.com/serai-dex/substrate", default-feat
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", default-features = false }
-serai-dex-primitives = { path = "../dex/primitives", default-features = false }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../coins/pallet", default-features = false }
-liquidity-tokens-pallet = { package = "serai-liquidity-tokens-pallet", path = "../liquidity-tokens/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../dex/pallet", default-features = false }
 
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets/pallet", default-features = false }
@@ -97,14 +95,12 @@ std = [
   "frame-executive/std",
 
   "serai-primitives/std",
-  "serai-dex-primitives/std",
 
   "pallet-timestamp/std",
 
   "pallet-transaction-payment/std",
 
   "coins-pallet/std",
-  "liquidity-tokens-pallet/std",
   "dex-pallet/std",
 
   "validator-sets-pallet/std",
@@ -131,8 +127,6 @@ runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
 
   "pallet-timestamp/runtime-benchmarks",
-
-  "dex-pallet/runtime-benchmarks",
 
   "pallet-babe/runtime-benchmarks",
   "pallet-grandpa/runtime-benchmarks",
