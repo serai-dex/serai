@@ -108,6 +108,27 @@ impl<D: Db> TributaryDb<D> {
     txn.put(key, existing);
   }
 
+  fn share_for_blame_key(genesis: &[u8], from: Participant, to: Participant) -> Vec<u8> {
+    Self::tributary_key(b"share_for_blame", (genesis, u16::from(from), u16::from(to)).encode())
+  }
+  pub fn save_share_for_blame(
+    txn: &mut D::Transaction<'_>,
+    genesis: &[u8],
+    from: Participant,
+    to: Participant,
+    share: &[u8],
+  ) {
+    txn.put(Self::share_for_blame_key(genesis, from, to), share);
+  }
+  pub fn share_for_blame<G: Get>(
+    getter: &G,
+    genesis: &[u8],
+    from: Participant,
+    to: Participant,
+  ) -> Option<Vec<u8>> {
+    getter.get(Self::share_for_blame_key(genesis, from, to))
+  }
+
   // The plan IDs associated with a Substrate block
   fn plan_ids_key(genesis: &[u8], block: u64) -> Vec<u8> {
     Self::tributary_key(b"plan_ids", [genesis, block.to_le_bytes().as_ref()].concat())

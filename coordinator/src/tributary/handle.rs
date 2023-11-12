@@ -269,7 +269,28 @@ pub(crate) async fn handle_application_tx<
         }
       }
 
-      // Only save our share's bytes
+      // Save each share as needed for blame
+      {
+        let from = spec.i(signed.signer).unwrap();
+        for (to, shares) in shares.iter().enumerate() {
+          // 0-indexed (the enumeration) to 1-indexed (Participant)
+          let mut to = u16::try_from(to).unwrap() + 1;
+          // Adjust for the omission of the sender's own shares
+          if to >= u16::from(from.start) {
+            to += u16::from(from.end) - u16::from(from.start);
+          }
+          let to = Participant::new(to).unwrap();
+
+          for (sender_share, share) in shares.iter().enumerate() {
+            let from =
+              Participant::new(u16::from(from.start) + u16::try_from(sender_share).unwrap())
+                .unwrap();
+            TributaryDb::<D>::save_share_for_blame(txn, &genesis, from, to, share);
+          }
+        }
+      }
+
+      // Filter down to only our share's bytes for handle
       let our_i = spec
         .i(Ristretto::generator() * key.deref())
         .expect("in a tributary we're not a validator for");
@@ -366,16 +387,30 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
+    // TODO: Only accept one of either InvalidDkgShare/DkgConfirmed per signer
+    // TODO: Ban self-accusals
     Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
       let range = spec.i(signed.signer).unwrap();
       if (u16::from(accuser) < u16::from(range.start)) ||
         (u16::from(range.end) <= u16::from(accuser))
       {
-        fatal_slash_with_participant_index::<D>(
-          spec,
+        fatal_slash::<D>(
           txn,
-          accuser,
+          genesis,
+          signed.signer.to_bytes(),
           "accused with a Participant index which wasn't theirs",
+        );
+        return;
+      }
+
+      if !((u16::from(range.start) <= u16::from(faulty)) &&
+        (u16::from(faulty) < u16::from(range.end)))
+      {
+        fatal_slash::<D>(
+          txn,
+          genesis,
+          signed.signer.to_bytes(),
+          "accused self of having an InvalidDkgShare",
         );
         return;
       }
@@ -387,6 +422,7 @@ pub(crate) async fn handle_application_tx<
             id: KeyGenId { set: spec.set(), attempt },
             accuser,
             accused: faulty,
+            share: TributaryDb::<D>::share_for_blame(txn, &genesis, accuser, faulty).unwrap(),
             blame,
           },
         )
@@ -394,8 +430,6 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::DkgConfirmed(attempt, shares, signed) => {
-      // TODO: Error if this participant published InvalidDkgShare
-
       match handle(
         txn,
         &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_SHARES, attempt },
