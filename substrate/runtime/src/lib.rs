@@ -168,7 +168,12 @@ impl Contains<RuntimeCall> for CallFilter {
 
       // All of these pallets are our own, and all of their written calls are intended to be called
       RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
-      RuntimeCall::LiquidityTokens(call) => !matches!(call, coins::Call::__Ignore(_, _)),
+      RuntimeCall::LiquidityTokens(call) => match call {
+        coins::Call::transfer { .. } => true,
+        coins::Call::burn { .. } => true,
+        coins::Call::burn_with_instruction { .. } => false,
+        coins::Call::__Ignore(_, _) => false,
+      },
       RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
