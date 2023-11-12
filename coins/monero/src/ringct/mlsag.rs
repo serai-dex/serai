@@ -3,7 +3,9 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
-use curve25519_dalek::{Scalar, EdwardsPoint};
+use zeroize::Zeroize;
+
+use curve25519_dalek::{traits::IsIdentity, Scalar, EdwardsPoint};
 
 use monero_generators::H;
 
@@ -16,11 +18,65 @@ pub enum MlsagError {
   InvalidRing,
   #[cfg_attr(feature = "std", error("invalid amount of key images"))]
   InvalidAmountOfKeyImages,
+  #[cfg_attr(feature = "std", error("invalid ss"))]
+  InvalidSs,
+  #[cfg_attr(feature = "std", error("key image was identity"))]
+  IdentityKeyImage,
   #[cfg_attr(feature = "std", error("invalid ci"))]
   InvalidCi,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct RingMatrix {
+  matrix: Vec<Vec<EdwardsPoint>>,
+}
+
+impl RingMatrix {
+  pub fn new(matrix: Vec<Vec<EdwardsPoint>>) -> Result<Self, MlsagError> {
+    if matrix.is_empty() {
+      Err(MlsagError::InvalidRing)?;
+    }
+    for member in &matrix {
+      if member.is_empty() || (member.len() != matrix[0].len()) {
+        Err(MlsagError::InvalidRing)?;
+      }
+    }
+
+    Ok(RingMatrix { matrix })
+  }
+
+  /// Construct a ring matrix for an individual output.
+  pub fn individual(
+    ring: &[[EdwardsPoint; 2]],
+    pseudo_out: EdwardsPoint,
+  ) -> Result<Self, MlsagError> {
+    let mut matrix = Vec::with_capacity(ring.len());
+    for ring_member in ring {
+      matrix.push(vec![ring_member[0], ring_member[1] - pseudo_out]);
+    }
+    RingMatrix::new(matrix)
+  }
+
+  pub fn iter(&self) -> impl Iterator<Item = &[EdwardsPoint]> {
+    self.matrix.iter().map(AsRef::as_ref)
+  }
+
+  /// Return the amount of members in the ring.
+  pub fn members(&self) -> usize {
+    self.matrix.len()
+  }
+
+  /// Returns the length of a ring member.
+  ///
+  /// A ring member is a vector of points for which the signer knows all of the discrete logarithms
+  /// of.
+  pub fn member_len(&self) -> usize {
+    // this is safe to do as the constructors don't allow empty rings
+    self.matrix[0].len()
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Mlsag {
   pub ss: Vec<Vec<Scalar>>,
   pub cc: Scalar,
@@ -47,12 +103,12 @@ impl Mlsag {
     &self,
     msg: &[u8; 32],
     ring: &RingMatrix,
-    key_images: &[&EdwardsPoint],
+    key_images: &[EdwardsPoint],
   ) -> Result<(), MlsagError> {
-    // Mlsag allows for layers to not need link-ability hence they don't need key images
+    // Mlsag allows for layers to not need linkability, hence they don't need key images
     // Monero requires that there is always only 1 non-linkable layer - the amount commitments.
-    if ring.member_len() != key_images.len() + 1 {
-      return Err(MlsagError::InvalidAmountOfKeyImages);
+    if ring.member_len() != (key_images.len() + 1) {
+      Err(MlsagError::InvalidAmountOfKeyImages)?;
     }
 
     let mut buf = Vec::with_capacity(6 * 32);
@@ -62,9 +118,17 @@ impl Mlsag {
 
     // This is an iterator over the key images as options with an added entry of `None` at the
     // end for the non-linkable layer
-    let key_images_iter = key_images.iter().map(|ki| Some(*ki)).chain(Some(None));
+    let key_images_iter = key_images.iter().map(|ki| Some(*ki)).chain(core::iter::once(None));
+
+    if ring.matrix.len() != self.ss.len() {
+      Err(MlsagError::InvalidSs)?;
+    }
 
     for (ring_member, ss) in ring.iter().zip(&self.ss) {
+      if ring_member.len() != ss.len() {
+        Err(MlsagError::InvalidSs)?;
+      }
+
       for ((ring_member_entry, s), ki) in ring_member.iter().zip(ss).zip(key_images_iter.clone()) {
         #[allow(non_snake_case)]
         let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, ring_member_entry, s);
@@ -75,6 +139,10 @@ impl Mlsag {
         // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need
         // to have key images.
         if let Some(ki) = ki {
+          if ki.is_identity() {
+            Err(MlsagError::IdentityKeyImage)?;
+          }
+
           #[allow(non_snake_case)]
           let R = (s * hash_to_point(ring_member_entry)) + (ci * ki);
           buf.extend_from_slice(R.compress().as_bytes());
@@ -84,113 +152,62 @@ impl Mlsag {
       ci = hash_to_scalar(&buf);
       // keep the msg in the buffer.
       buf.drain(msg.len() ..);
-
-      if ci == Scalar::ZERO {
-        return Err(MlsagError::InvalidCi);
-      }
     }
 
-    if ci == self.cc {
-      Ok(())
-    } else {
-      Err(MlsagError::InvalidCi)
+    if ci != self.cc {
+      Err(MlsagError::InvalidCi)?
     }
+    Ok(())
   }
 }
 
-pub struct RingMatrix {
-  matrix: Vec<Vec<EdwardsPoint>>,
-}
-
-impl RingMatrix {
-  /// Construct a simple ring matrix.
-  pub fn simple(ring: &[[EdwardsPoint; 2]], pseudo_out: EdwardsPoint) -> Result<Self, MlsagError> {
-    if ring.is_empty() {
-      return Err(MlsagError::InvalidRing);
-    }
-
-    let mut matrix = Vec::with_capacity(ring.len());
-
-    for ring_member in ring {
-      matrix.push(vec![ring_member[0], ring_member[1] - pseudo_out])
-    }
-
-    Ok(RingMatrix { matrix })
-  }
-
-  /// Returns a builder that can be used to construct an aggregate ring matrix
-  pub fn aggregate_builder(commitments: &[EdwardsPoint], fee: u64) -> AggregateRingMatrix {
-    AggregateRingMatrix::new(commitments, fee)
-  }
-
-  pub fn iter(&self) -> impl Iterator<Item = &[EdwardsPoint]> {
-    self.matrix.iter().map(|ring_member| ring_member.as_slice())
-  }
-
-  /// Returns the length of one ring member, a ring member is a set of keys
-  /// that are linked, one of which are the real spends.
-  pub fn member_len(&self) -> usize {
-    // this is safe to do as the constructors don't allow empty rings
-    self.matrix[0].len()
-  }
-}
-
-/// An aggregate ring matrix builder, used to set up the ring matrix to prove/
-/// verify an aggregate signature.
-pub struct AggregateRingMatrix {
+/// An aggregate ring matrix builder, usable to set up the ring matrix to prove/verify an aggregate
+/// MLSAG signature.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub struct AggregateRingMatrixBuilder {
   key_ring: Vec<Vec<EdwardsPoint>>,
   amounts_ring: Vec<EdwardsPoint>,
-  sum_out_commitments: EdwardsPoint,
-  fee: EdwardsPoint,
+  sum_out: EdwardsPoint,
 }
 
-impl AggregateRingMatrix {
+impl AggregateRingMatrixBuilder {
+  /// Create a new AggregateRingMatrixBuilder.
+  ///
+  /// Takes in the transaction's outputs; commitments and fee.
   pub fn new(commitments: &[EdwardsPoint], fee: u64) -> Self {
-    AggregateRingMatrix {
+    AggregateRingMatrixBuilder {
       key_ring: vec![],
       amounts_ring: vec![],
-      sum_out_commitments: commitments.iter().sum::<EdwardsPoint>(),
-      fee: H() * Scalar::from(fee),
+      sum_out: commitments.iter().sum::<EdwardsPoint>() + (H() * Scalar::from(fee)),
     }
   }
 
-  /// push a ring, aka input, to this aggregate ring matrix.
+  /// Push a ring of [output key, commitment] to the matrix.
   pub fn push_ring(&mut self, ring: &[[EdwardsPoint; 2]]) -> Result<(), MlsagError> {
-    if self.amounts_ring.is_empty() {
-      // This is our fist ring, now we know the length of the decoys fill the
-      // `amounts_ring` table, so we don't have to loop back over and take
-      // these values off at the end.
-      self.amounts_ring = vec![-self.sum_out_commitments - self.fee; ring.len()];
+    if self.key_ring.is_empty() {
+      self.key_ring = vec![vec![]; ring.len()];
+      // Now that we know the length of the ring, fill the `amounts_ring`.
+      self.amounts_ring = vec![-self.sum_out; ring.len()];
     }
 
-    if self.amounts_ring.len() != ring.len() || ring.is_empty() {
+    if (self.amounts_ring.len() != ring.len()) || ring.is_empty() {
       // All the rings in an aggregate matrix must be the same length.
       return Err(MlsagError::InvalidRing);
     }
 
     for (i, ring_member) in ring.iter().enumerate() {
-      if let Some(entry) = self.key_ring.get_mut(i) {
-        entry.push(ring_member[0]);
-      } else {
-        self.key_ring.push(vec![ring_member[0]])
-      }
-
+      self.key_ring[i].push(ring_member[0]);
       self.amounts_ring[i] += ring_member[1]
     }
 
     Ok(())
   }
 
-  /// Finalize and return the [`RingMatrix`]
-  ///
-  /// This will panic if no rings have been added.
-  pub fn finish(mut self) -> RingMatrix {
-    assert!(!self.key_ring.is_empty(), "No ring members entered, can't build empty ring");
-
+  /// Build and return the [`RingMatrix`]
+  pub fn build(mut self) -> Result<RingMatrix, MlsagError> {
     for (i, amount_commitment) in self.amounts_ring.drain(..).enumerate() {
-      self.key_ring[i].push(amount_commitment)
+      self.key_ring[i].push(amount_commitment);
     }
-
-    RingMatrix { matrix: self.key_ring }
+    RingMatrix::new(self.key_ring)
   }
 }

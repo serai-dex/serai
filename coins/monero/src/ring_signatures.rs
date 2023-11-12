@@ -3,13 +3,15 @@ use std_shims::{
   vec::Vec,
 };
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::{EdwardsPoint, Scalar};
 
 use monero_generators::hash_to_point;
 
 use crate::{serialize::*, hash_to_scalar};
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Signature {
   c: Scalar,
   r: Scalar,
@@ -27,7 +29,7 @@ impl Signature {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct RingSignature {
   sigs: Vec<Signature>,
 }
@@ -44,17 +46,12 @@ impl RingSignature {
     Ok(RingSignature { sigs: read_raw_vec(Signature::read, members, r)? })
   }
 
-  pub fn verify_ring_signature(
-    &self,
-    msg: &[u8; 32],
-    ring: &[EdwardsPoint],
-    key_image: &EdwardsPoint,
-  ) -> bool {
+  pub fn verify(&self, msg: &[u8; 32], ring: &[EdwardsPoint], key_image: &EdwardsPoint) -> bool {
     if ring.len() != self.sigs.len() {
       return false;
     }
 
-    let mut buf = Vec::with_capacity(32 + 32 * 2 * ring.len());
+    let mut buf = Vec::with_capacity(32 + (32 * 2 * ring.len()));
     buf.extend_from_slice(msg);
 
     let mut sum = Scalar::ZERO;
@@ -64,7 +61,7 @@ impl RingSignature {
       let Li = EdwardsPoint::vartime_double_scalar_mul_basepoint(&sig.c, ring_member, &sig.r);
       buf.extend_from_slice(Li.compress().as_bytes());
       #[allow(non_snake_case)]
-      let Ri = sig.r * hash_to_point(ring_member.compress().to_bytes()) + sig.c * key_image;
+      let Ri = (sig.r * hash_to_point(ring_member.compress().to_bytes())) + (sig.c * key_image);
       buf.extend_from_slice(Ri.compress().as_bytes());
 
       sum += sig.c;

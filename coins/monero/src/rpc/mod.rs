@@ -317,7 +317,7 @@ impl<R: RpcConnection> Rpc<R> {
       .map_err(|_| RpcError::InvalidNode("invalid block"))?;
 
     // Make sure this is actually the block for this number
-    match block.miner_tx.prefix.inputs.first(0) {
+    match block.miner_tx.prefix.inputs.first() {
       Some(Input::Gen(actual)) => {
         if usize::try_from(*actual).unwrap() == number {
           Ok(block)
@@ -325,7 +325,7 @@ impl<R: RpcConnection> Rpc<R> {
           Err(RpcError::InvalidNode("different block than requested (number)"))
         }
       }
-      Err(RpcError::InvalidNode("block's miner_tx didn't have an input of kind Input::Gen")),
+      _ => Err(RpcError::InvalidNode("block's miner_tx didn't have an input of kind Input::Gen")),
     }
   }
 

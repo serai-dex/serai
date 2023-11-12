@@ -11,8 +11,8 @@ use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 use crate::{
   Protocol, hash,
   serialize::*,
-  ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
   ring_signatures::RingSignature,
+  ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]

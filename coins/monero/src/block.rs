@@ -79,8 +79,10 @@ impl Block {
     merkle_root(self.miner_tx.hash(), &self.txs)
   }
 
-  /// Serializes the block into the format required to get the proof of work hash, this is different
-  /// to the format for the block hash, to get the block hash use the [`Block::hash`] function.
+  /// Serialize the block as required for the proof of work hash.
+  ///
+  /// This is distinct from the serialization required for the block hash. To get the block hash,
+  /// use the [`Block::hash`] function.
   pub fn serialize_hashable(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
     blob.extend_from_slice(&self.tx_merkle_root());

@@ -26,12 +26,12 @@ use serialize::{read_byte, read_u16};
 /// UnreducedScalar struct with functionality for recovering incorrectly reduced scalars.
 mod unreduced_scalar;
 
+/// Ring Signature structs and functionality.
+pub mod ring_signatures;
+
 /// RingCT structs and functionality.
 pub mod ringct;
 use ringct::RctType;
-
-/// Ring Signature structs with verifying functions.
-pub mod ring_signatures;
 
 /// Transaction structs.
 pub mod transaction;

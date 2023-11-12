@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use std_shims::io::{self, Read, Write};
 
-use curve25519_dalek::{EdwardsPoint, Scalar, traits::Identity};
+use curve25519_dalek::{traits::Identity, Scalar, EdwardsPoint};
 
 use monero_generators::H_pow_2;
 
@@ -9,11 +9,9 @@ use crate::{hash_to_scalar, unreduced_scalar::UnreducedScalar, serialize::*};
 
 /// 64 Borromean ring signatures.
 ///
-/// This type keeps the data as raw bytes as Monero has some transactions with unreduced scalars in
-/// this field. While we could use `from_bytes_mod_order`, we'd then not be able to encode this
-/// back into it's original form.
-///
-/// Those scalars also have a custom reduction algorithm...
+/// s0 and s1 are stored as `UnreducedScalar`s due to Monero not requiring they were reduced.
+/// `UnreducedScalar` preserves their original byte encoding and implements a custom reduction
+/// algorithm which was in use.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BorromeanSignatures {
   pub s0: [UnreducedScalar; 64],
@@ -56,7 +54,7 @@ impl BorromeanSignatures {
         &keys_b[i],
         &self.s1[i].recover_monero_slide_scalar(),
       );
-      transcript[i * 32 .. ((i + 1) * 32)].copy_from_slice(LV.compress().as_bytes());
+      transcript[(i * 32) .. ((i + 1) * 32)].copy_from_slice(LV.compress().as_bytes());
     }
 
     hash_to_scalar(&transcript) == self.ee
