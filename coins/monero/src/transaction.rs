@@ -6,14 +6,12 @@ use std_shims::{
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::{
-  scalar::Scalar,
-  edwards::{EdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use crate::{
   Protocol, hash,
   serialize::*,
+  ring_signatures::RingSignature,
   ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
 };
 
@@ -208,7 +206,7 @@ impl TransactionPrefix {
     self.timelock.write(w)?;
     write_vec(Input::write, &self.inputs, w)?;
     write_vec(Output::write, &self.outputs, w)?;
-    write_varint(&self.extra.len().try_into().unwrap(), w)?;
+    write_varint(&self.extra.len(), w)?;
     w.write_all(&self.extra)
   }
 
@@ -253,7 +251,7 @@ impl TransactionPrefix {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
   pub prefix: TransactionPrefix,
-  pub signatures: Vec<Vec<(Scalar, Scalar)>>,
+  pub signatures: Vec<RingSignature>,
   pub rct_signatures: RctSignatures,
 }
 
@@ -272,11 +270,8 @@ impl Transaction {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.prefix.write(w)?;
     if self.prefix.version == 1 {
-      for sigs in &self.signatures {
-        for sig in sigs {
-          write_scalar(&sig.0, w)?;
-          write_scalar(&sig.1, w)?;
-        }
+      for ring_sig in &self.signatures {
+        ring_sig.write(w)?;
       }
       Ok(())
     } else if self.prefix.version == 2 {
@@ -305,12 +300,7 @@ impl Transaction {
         .inputs
         .iter()
         .filter_map(|input| match input {
-          Input::ToKey { key_offsets, .. } => Some(
-            key_offsets
-              .iter()
-              .map(|_| Ok((read_scalar(r)?, read_scalar(r)?)))
-              .collect::<Result<_, io::Error>>(),
-          ),
+          Input::ToKey { key_offsets, .. } => Some(RingSignature::read(key_offsets.len(), r)),
           _ => None,
         })
         .collect::<Result<_, _>>()?;
@@ -397,6 +387,10 @@ impl Transaction {
 
   /// Calculate the hash of this transaction as needed for signing it.
   pub fn signature_hash(&self) -> [u8; 32] {
+    if self.prefix.version == 1 {
+      return self.prefix.hash();
+    }
+
     let mut buf = Vec::with_capacity(2048);
     let mut sig_hash = Vec::with_capacity(96);
 

@@ -74,7 +74,7 @@ pub(crate) fn shared_key(
     .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
 
   // || o
-  write_varint(&o.try_into().unwrap(), &mut output_derivation).unwrap();
+  write_varint(&o, &mut output_derivation).unwrap();
 
   let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
 

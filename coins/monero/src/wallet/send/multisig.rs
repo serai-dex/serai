@@ -406,7 +406,9 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      RctPrunable::MlsagBorromean { .. } | RctPrunable::MlsagBulletproofs { .. } => {
+      RctPrunable::AggregateMlsagBorromean { .. } |
+      RctPrunable::MlsagBorromean { .. } |
+      RctPrunable::MlsagBulletproofs { .. } => {
         unreachable!("attempted to sign a multisig TX which wasn't CLSAG")
       }
     }

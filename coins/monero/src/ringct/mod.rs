@@ -28,7 +28,7 @@ use crate::{
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
 pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
-  hash_to_point(ED25519_BASEPOINT_TABLE * secret.deref()) * secret.deref()
+  hash_to_point(&(ED25519_BASEPOINT_TABLE * secret.deref())) * secret.deref()
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -61,7 +61,7 @@ impl EncryptedAmount {
 pub enum RctType {
   /// No RCT proofs.
   Null,
-  /// One MLSAG for a single input and a Borromean range proof (RCTTypeFull).
+  /// One MLSAG for multiple inputs and Borromean range proofs (RCTTypeFull).
   MlsagAggregate,
   // One MLSAG for each input and a Borromean range proof (RCTTypeSimple).
   MlsagIndividual,
@@ -194,6 +194,10 @@ impl RctBase {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
   Null,
+  AggregateMlsagBorromean {
+    borromean: Vec<BorromeanRange>,
+    mlsag: Mlsag,
+  },
   MlsagBorromean {
     borromean: Vec<BorromeanRange>,
     mlsags: Vec<Mlsag>,
@@ -220,6 +224,10 @@ impl RctPrunable {
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
+      RctPrunable::AggregateMlsagBorromean { borromean, mlsag } => {
+        write_raw_vec(BorromeanRange::write, borromean, w)?;
+        mlsag.write(w)
+      }
       RctPrunable::MlsagBorromean { borromean, mlsags } => {
         write_raw_vec(BorromeanRange::write, borromean, w)?;
         write_raw_vec(Mlsag::write, mlsags, w)
@@ -270,9 +278,13 @@ impl RctPrunable {
 
     Ok(match rct_type {
       RctType::Null => RctPrunable::Null,
-      RctType::MlsagAggregate | RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
+      RctType::MlsagAggregate => RctPrunable::AggregateMlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
+        mlsag: Mlsag::read(decoys[0], decoys.len() + 1, r)?,
+      },
+      RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
+        borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
+        mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
       },
       RctType::Bulletproofs | RctType::BulletproofsCompactAmount => {
         RctPrunable::MlsagBulletproofs {
@@ -287,13 +299,13 @@ impl RctPrunable {
             }
             Bulletproofs::read(r)?
           },
-          mlsags: decoys.iter().map(|d| Mlsag::read(*d, r)).collect::<Result<_, _>>()?,
+          mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
           pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
         }
       }
       RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
         bulletproofs: {
-          if read_varint(r)? != 1 {
+          if read_varint::<_, u64>(r)? != 1 {
             Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
           }
           (if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus })(
@@ -309,6 +321,7 @@ impl RctPrunable {
   pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
+      RctPrunable::AggregateMlsagBorromean { borromean, .. } |
       RctPrunable::MlsagBorromean { borromean, .. } => {
         borromean.iter().try_for_each(|rs| rs.write(w))
       }
@@ -329,30 +342,8 @@ impl RctSignatures {
   pub fn rct_type(&self) -> RctType {
     match &self.prunable {
       RctPrunable::Null => RctType::Null,
-      RctPrunable::MlsagBorromean { .. } => {
-        /*
-          This type of RctPrunable may have no outputs, yet pseudo_outs are per input
-          This will only be a valid RctSignatures if it's for a TX with inputs
-          That makes this valid for any valid RctSignatures
-
-          While it will be invalid for any invalid RctSignatures, potentially letting an invalid
-          MlsagAggregate be interpreted as a valid MlsagIndividual (or vice versa), they have
-          incompatible deserializations
-
-          This means it's impossible to receive a MlsagAggregate over the wire and interpret it
-          as a MlsagIndividual (or vice versa)
-
-          That only makes manual manipulation unsafe, which will always be true since these fields
-          are all pub
-
-          TODO: Consider making them private with read-only accessors?
-        */
-        if self.base.pseudo_outs.is_empty() {
-          RctType::MlsagAggregate
-        } else {
-          RctType::MlsagIndividual
-        }
-      }
+      RctPrunable::AggregateMlsagBorromean { .. } => RctType::MlsagAggregate,
+      RctPrunable::MlsagBorromean { .. } => RctType::MlsagIndividual,
       // RctBase ensures there's at least one output, making the following
       // inferences guaranteed/expects impossible on any valid RctSignatures
       RctPrunable::MlsagBulletproofs { .. } => {

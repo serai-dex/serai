@@ -129,7 +129,9 @@ mod binaries {
         // Accordingly, making sure our signature_hash algorithm is correct is great, and further
         // making sure the verification functions are valid is appreciated
         match tx.rct_signatures.prunable {
-          RctPrunable::Null | RctPrunable::MlsagBorromean { .. } => {}
+          RctPrunable::Null |
+          RctPrunable::AggregateMlsagBorromean { .. } |
+          RctPrunable::MlsagBorromean { .. } => {}
           RctPrunable::MlsagBulletproofs { bulletproofs, .. } => {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
