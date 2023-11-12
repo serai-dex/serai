@@ -9,13 +9,10 @@ const BATCH_SIGNING_CODE: u8 = 1;
 const PLAN_CODE: u8 = 2;
 const PLAN_SIGNING_CODE: u8 = 3;
 
-// Decides the nonce which should be used for a transaction on a Tributary.
-// Deterministically builds a list of nonces to use based on the on-chain events and expected
-// transactions in response. Enables rebooting/rebuilding validators with full safety.
 create_db!(
   NonceDeciderDb {
     NextNonceDb: (genesis: [u8; 32]) -> u32,
-    ItemNonceDb: (genesis: [u8; 32], code: u8, id: &[u8]) -> u32
+    ItemNonceDb: (genesis: [u8; 32], code: u8, id: &[u8]) -> u32,
   }
 );
 
@@ -27,10 +24,15 @@ impl NextNonceDb {
   }
 }
 
-impl ItemNonceDb {
+/// Decides the nonce which should be used for a transaction on a Tributary.
+///
+/// Deterministically builds a list of nonces to use based on the on-chain events and expected
+/// transactions in response. Enables rebooting/rebuilding validators with full safety.
+pub struct NonceDecider;
+impl NonceDecider {
   pub fn handle_batch(txn: &mut impl DbTxn, genesis: [u8; 32], batch: [u8; 5]) -> u32 {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-    Self::set(txn, genesis, BATCH_CODE, &batch, &nonce_for);
+    ItemNonceDb::set(txn, genesis, BATCH_CODE, &batch, &nonce_for);
     nonce_for
   }
 
@@ -42,7 +44,7 @@ impl ItemNonceDb {
     let mut res = Vec::with_capacity(plans.len());
     for plan in plans {
       let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-      Self::set(txn, genesis, PLAN_CODE, plan, &nonce_for);
+      ItemNonceDb::set(txn, genesis, PLAN_CODE, plan, &nonce_for);
       res.push(nonce_for);
     }
     res
@@ -53,13 +55,13 @@ impl ItemNonceDb {
   // there.
   pub fn selected_for_signing_batch(txn: &mut impl DbTxn, genesis: [u8; 32], batch: [u8; 5]) {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-    Self::set(txn, genesis, BATCH_SIGNING_CODE, &batch, &nonce_for);
+    ItemNonceDb::set(txn, genesis, BATCH_SIGNING_CODE, &batch, &nonce_for);
   }
 
   // TODO: Same TODO as selected_for_signing_batch
   pub fn selected_for_signing_plan(txn: &mut impl DbTxn, genesis: [u8; 32], plan: [u8; 32]) {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-    Self::set(txn, genesis, PLAN_SIGNING_CODE, &plan, &nonce_for);
+    ItemNonceDb::set(txn, genesis, PLAN_SIGNING_CODE, &plan, &nonce_for);
   }
 
   pub fn nonce(getter: &impl Get, genesis: [u8; 32], tx: &Transaction) -> Option<Option<u32>> {
@@ -88,19 +90,19 @@ impl ItemNonceDb {
       Transaction::SubstrateBlock(_) => None,
       Transaction::BatchPreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::get(getter, genesis, BATCH_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, BATCH_CODE, &data.plan))
       }
       Transaction::BatchShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::get(getter, genesis, BATCH_SIGNING_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, BATCH_SIGNING_CODE, &data.plan))
       }
       Transaction::SignPreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::get(getter, genesis, PLAN_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, PLAN_CODE, &data.plan))
       }
       Transaction::SignShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(Self::get(getter, genesis, PLAN_SIGNING_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, PLAN_SIGNING_CODE, &data.plan))
       }
       Transaction::SignCompleted { .. } => None,
     }
