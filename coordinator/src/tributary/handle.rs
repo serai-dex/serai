@@ -1,14 +1,14 @@
 use core::{ops::Deref, future::Future};
 use std::collections::HashMap;
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
 use serai_client::{
-  Signature,
+  Public, Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair},
   subxt::utils::Encoded,
   SeraiValidatorSets,
@@ -22,7 +22,7 @@ use processor_messages::{
   sign::{self, SignId},
 };
 
-use serai_db::Db;
+use serai_db::{Get, Db};
 
 use crate::{
   processors::Processors,
@@ -56,7 +56,33 @@ pub fn dkg_confirmation_nonces(
   DkgConfirmer::preprocess(spec, key, attempt)
 }
 
-#[allow(clippy::needless_pass_by_ref_mut)]
+// If there's an error generating a key pair, return any errors which would've occured when
+// executing the DkgConfirmer in order to stay in sync with those who did.
+//
+// The caller must ensure only error_generating_key_pair or generated_key_pair is called for a
+// given attempt.
+pub fn error_generating_key_pair<D: Db, G: Get>(
+  getter: &G,
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  spec: &TributarySpec,
+  attempt: u32,
+) -> Option<Participant> {
+  let preprocesses =
+    TributaryDb::<D>::confirmation_nonces(getter, spec.genesis(), attempt).unwrap();
+
+  // Sign a key pair which can't be valid
+  // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
+  let key_pair = (Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
+  match DkgConfirmer::share(spec, key, attempt, preprocesses, &key_pair) {
+    Ok(mut share) => {
+      // Zeroize the share to ensure it's not accessed
+      share.zeroize();
+      None
+    }
+    Err(p) => Some(p),
+  }
+}
+
 pub fn generated_key_pair<D: Db>(
   txn: &mut D::Transaction<'_>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,

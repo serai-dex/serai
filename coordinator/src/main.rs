@@ -476,13 +476,27 @@ async fn handle_processor_message<D: Db, P: P2p>(
             "processor claimed to be a different network than it was for in InvalidShare",
           );
 
-          vec![Transaction::InvalidDkgShare {
+          // Check if the MuSig signature had any errors as if so, we need to provide
+          // RemoveParticipant
+          // As for the safety of calling error_generating_key_pair, the processor is presumed
+          // to only send InvalidShare or GeneratedKeyPair for a given attempt
+          let mut txs = if let Some(faulty) =
+            crate::tributary::error_generating_key_pair::<D, _>(&txn, key, spec, id.attempt)
+          {
+            vec![Transaction::RemoveParticipant(faulty)]
+          } else {
+            vec![]
+          };
+
+          txs.push(Transaction::InvalidDkgShare {
             attempt: id.attempt,
             accuser,
             faulty,
             blame,
             signed: Transaction::empty_signed(),
-          }]
+          });
+
+          txs
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
@@ -500,7 +514,6 @@ async fn handle_processor_message<D: Db, P: P2p>(
             id.attempt,
           );
 
-          // TODO: If a processor fails to generate a key pair, it'll desync here
           match share {
             Ok(share) => {
               vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
