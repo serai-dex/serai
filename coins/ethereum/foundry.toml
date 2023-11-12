@@ -1,6 +1,0 @@
-[profile.default]
-src = "contracts"
-out = "artifacts"
-
-optimizer = true
-optimizer_runs = 20_000

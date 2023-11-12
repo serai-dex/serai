@@ -48,7 +48,7 @@ svm install 0.8.16
 svm use 0.8.16
 ```
 
-### Install foundry and anvil
+### Install foundry (for tests)
 
 ```
 cargo install --git https://github.com/foundry-rs/foundry --profile local --locked forge cast chisel anvil

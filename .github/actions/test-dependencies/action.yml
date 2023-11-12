@@ -29,6 +29,7 @@ runs:
       uses: foundry-rs/foundry-toolchain@cb603ca0abb544f301eaed59ac0baf579aa6aecf
       with:
         version: nightly
+        cache: false
 
     - name: Run a Monero Regtest Node
       uses: ./.github/actions/monero

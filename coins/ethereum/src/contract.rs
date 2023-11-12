@@ -12,7 +12,7 @@ pub enum EthereumError {
   VerificationError,
 }
 
-abigen!(Schnorr, "./artifacts/Schnorr.sol/Schnorr.json");
+abigen!(Schnorr, "./artifacts/Schnorr.abi");
 
 pub async fn call_verify(
   contract: &Schnorr<Provider<Http>>,

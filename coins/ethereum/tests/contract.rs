@@ -27,17 +27,6 @@ use ethereum_serai::{
   contract::{Schnorr, call_verify},
 };
 
-#[derive(serde::Deserialize)]
-struct Bytecode {
-  object: String,
-}
-
-#[derive(serde::Deserialize)]
-struct Artifact {
-  abi: Option<Abi>,
-  bytecode: Bytecode,
-}
-
 // TODO: Replace with a contract deployment from an unknown account, so the environment solely has
 // to fund the deployer, not create/pass a wallet
 pub async fn deploy_schnorr_verifier_contract(
@@ -45,10 +34,9 @@ pub async fn deploy_schnorr_verifier_contract(
   client: Arc<Provider<Http>>,
   wallet: &k256::ecdsa::SigningKey,
 ) -> eyre::Result<Schnorr<Provider<Http>>> {
-  let path = "./artifacts/Schnorr.sol/Schnorr.json";
-  let artifact: Artifact = serde_json::from_reader(File::open(path).unwrap()).unwrap();
-  let abi = artifact.abi.unwrap();
-  let hex_bin_buf = artifact.bytecode.object;
+  let abi: Abi = serde_json::from_reader(File::open("./artifacts/Schnorr.abi").unwrap()).unwrap();
+
+  let hex_bin_buf = std::fs::read_to_string("./artifacts/Schnorr.bin").unwrap();
   let hex_bin =
     if let Some(stripped) = hex_bin_buf.strip_prefix("0x") { stripped } else { &hex_bin_buf };
   let bin = hex::decode(hex_bin).unwrap();
