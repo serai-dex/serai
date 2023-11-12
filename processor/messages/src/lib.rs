@@ -140,8 +140,10 @@ pub mod sign {
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
+    // Participant sent an invalid message during the sign protocol.
+    InvalidParticipant { id: SignId, participant: Participant },
     // Created preprocess for the specified signing protocol.
     Preprocess { id: SignId, preprocesses: Vec<Vec<u8>> },
     // Signed share for the specified signing protocol.
@@ -198,9 +200,10 @@ pub mod coordinator {
     pub id: [u8; 32],
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
+    InvalidParticipant { id: BatchSignId, participant: Participant },
     BatchPreprocess { id: BatchSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
     BatchShare { id: BatchSignId, shares: Vec<[u8; 32]> },
   }
@@ -401,10 +404,11 @@ impl ProcessorMessage {
       ProcessorMessage::Sign(msg) => {
         let (sub, id) = match msg {
           // Unique since SignId
-          sign::ProcessorMessage::Preprocess { id, .. } => (0, id.encode()),
-          sign::ProcessorMessage::Share { id, .. } => (1, id.encode()),
+          sign::ProcessorMessage::InvalidParticipant { id, .. } => (0, id.encode()),
+          sign::ProcessorMessage::Preprocess { id, .. } => (1, id.encode()),
+          sign::ProcessorMessage::Share { id, .. } => (2, id.encode()),
           // Unique since a processor will only sign a TX once
-          sign::ProcessorMessage::Completed { id, .. } => (2, id.to_vec()),
+          sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_SIGN_UID, sub];
@@ -417,8 +421,9 @@ impl ProcessorMessage {
             (0, (network, block).encode())
           }
           // Unique since BatchSignId
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (1, id.encode()),
-          coordinator::ProcessorMessage::BatchShare { id, .. } => (2, id.encode()),
+          coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (2, id.encode()),
+          coordinator::ProcessorMessage::BatchShare { id, .. } => (3, id.encode()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];

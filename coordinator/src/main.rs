@@ -189,7 +189,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
     },
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
-      // We'll only receive Preprocess and Share if we're actively signing
+      // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
+      sign::ProcessorMessage::InvalidParticipant { id, .. } => {
+        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
       sign::ProcessorMessage::Preprocess { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
@@ -264,6 +267,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
         None
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
+      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
+        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
@@ -532,6 +538,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
       },
       ProcessorMessage::Sign(msg) => match msg {
+        sign::ProcessorMessage::InvalidParticipant { .. } => {
+          // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+          // slash) and censor transactions (yet don't explicitly ban)
+          vec![]
+        }
         sign::ProcessorMessage::Preprocess { id, preprocesses } => {
           if id.attempt == 0 {
             MainDb::<D>::save_first_preprocess(
@@ -582,6 +593,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
         coordinator::ProcessorMessage::SubstrateBlockAck { .. } => unreachable!(),
+        coordinator::ProcessorMessage::InvalidParticipant { .. } => {
+          // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+          // slash) and censor transactions (yet don't explicitly ban)
+          vec![]
+        }
         coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocesses } => {
           log::info!(
             "informed of batch (sign ID {}, attempt {}) for block {}",

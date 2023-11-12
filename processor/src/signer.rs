@@ -5,7 +5,7 @@ use rand_core::OsRng;
 
 use ciphersuite::group::GroupEncoding;
 use frost::{
-  ThresholdKeys,
+  ThresholdKeys, FrostError,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
@@ -470,7 +470,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     msg: CoordinatorMessage,
   ) -> Option<ProcessorMessage> {
     match msg {
-      CoordinatorMessage::Preprocesses { id, mut preprocesses } => {
+      CoordinatorMessage::Preprocesses { id, preprocesses } => {
         if self.verify_id(&id).is_err() {
           return None;
         }
@@ -487,23 +487,22 @@ impl<N: Network, D: Db> Signer<N, D> {
           Some(machine) => machine,
         };
 
-        let preprocesses = match preprocesses
-          .drain()
-          .map(|(l, preprocess)| {
-            let mut preprocess_ref = preprocess.as_ref();
-            let res = machines[0]
-              .read_preprocess::<&[u8]>(&mut preprocess_ref)
-              .map(|preprocess| (l, preprocess));
-            if !preprocess_ref.is_empty() {
-              todo!("malicious signer: extra bytes");
-            }
-            res
-          })
-          .collect::<Result<HashMap<_, _>, _>>()
-        {
-          Ok(preprocesses) => preprocesses,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
+        let mut parsed = HashMap::new();
+        for l in {
+          let mut keys = preprocesses.keys().cloned().collect::<Vec<_>>();
+          keys.sort();
+          keys
+        } {
+          let mut preprocess_ref = preprocesses.get(&l).unwrap().as_slice();
+          let Ok(res) = machines[0].read_preprocess(&mut preprocess_ref) else {
+            return Some(ProcessorMessage::InvalidParticipant { id, participant: l });
+          };
+          if !preprocess_ref.is_empty() {
+            return Some(ProcessorMessage::InvalidParticipant { id, participant: l });
+          }
+          parsed.insert(l, res);
+        }
+        let preprocesses = parsed;
 
         // Only keep a single machine as we only need one to get the signature
         let mut signature_machine = None;
@@ -520,7 +519,18 @@ impl<N: Network, D: Db> Signer<N, D> {
           // Use an empty message, as expected of TransactionMachines
           let (machine, share) = match machine.sign(preprocesses, &[]) {
             Ok(res) => res,
-            Err(e) => todo!("malicious signer: {:?}", e),
+            Err(e) => match e {
+              FrostError::InternalError(_) |
+              FrostError::InvalidParticipant(_, _) |
+              FrostError::InvalidSigningSet(_) |
+              FrostError::InvalidParticipantQuantity(_, _) |
+              FrostError::DuplicatedParticipant(_) |
+              FrostError::MissingParticipant(_) => unreachable!(),
+
+              FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
+                return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
+              }
+            },
           };
           if m == 0 {
             signature_machine = Some(machine);
@@ -534,7 +544,7 @@ impl<N: Network, D: Db> Signer<N, D> {
         Some(ProcessorMessage::Share { id, shares: serialized_shares })
       }
 
-      CoordinatorMessage::Shares { id, mut shares } => {
+      CoordinatorMessage::Shares { id, shares } => {
         if self.verify_id(&id).is_err() {
           return None;
         }
@@ -557,21 +567,22 @@ impl<N: Network, D: Db> Signer<N, D> {
           Some(machine) => machine,
         };
 
-        let mut shares = match shares
-          .drain()
-          .map(|(l, share)| {
-            let mut share_ref = share.as_ref();
-            let res = machine.read_share::<&[u8]>(&mut share_ref).map(|share| (l, share));
-            if !share_ref.is_empty() {
-              todo!("malicious signer: extra bytes");
-            }
-            res
-          })
-          .collect::<Result<HashMap<_, _>, _>>()
-        {
-          Ok(shares) => shares,
-          Err(e) => todo!("malicious signer: {:?}", e),
-        };
+        let mut parsed = HashMap::new();
+        for l in {
+          let mut keys = shares.keys().cloned().collect::<Vec<_>>();
+          keys.sort();
+          keys
+        } {
+          let mut share_ref = shares.get(&l).unwrap().as_slice();
+          let Ok(res) = machine.read_share(&mut share_ref) else {
+            return Some(ProcessorMessage::InvalidParticipant { id, participant: l });
+          };
+          if !share_ref.is_empty() {
+            return Some(ProcessorMessage::InvalidParticipant { id, participant: l });
+          }
+          parsed.insert(l, res);
+        }
+        let mut shares = parsed;
 
         for (i, our_share) in our_shares.into_iter().enumerate().skip(1) {
           assert!(shares.insert(self.keys[i].params().i(), our_share).is_none());
@@ -579,7 +590,18 @@ impl<N: Network, D: Db> Signer<N, D> {
 
         let tx = match machine.complete(shares) {
           Ok(res) => res,
-          Err(e) => todo!("malicious signer: {:?}", e),
+          Err(e) => match e {
+            FrostError::InternalError(_) |
+            FrostError::InvalidParticipant(_, _) |
+            FrostError::InvalidSigningSet(_) |
+            FrostError::InvalidParticipantQuantity(_, _) |
+            FrostError::DuplicatedParticipant(_) |
+            FrostError::MissingParticipant(_) => unreachable!(),
+
+            FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
+              return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
+            }
+          },
         };
 
         // Save the transaction in case it's needed for recovery
