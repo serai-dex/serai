@@ -100,10 +100,7 @@ pub mod pallet {
   use frame_support::{pallet_prelude::*, BoundedBTreeSet};
 
   use sp_core::sr25519::Public;
-  use sp_runtime::{
-    traits::{IntegerSquareRoot, One, Zero},
-    Saturating,
-  };
+  use sp_runtime::traits::IntegerSquareRoot;
 
   use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
 
@@ -368,10 +365,7 @@ pub mod pallet {
       mint_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
-      ensure!(
-        sri_desired > Zero::zero() && coin_desired > Zero::zero(),
-        Error::<T>::WrongDesiredAmount
-      );
+      ensure!((sri_desired > 0) && (coin_desired > 0), Error::<T>::WrongDesiredAmount);
       ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
       let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
@@ -385,7 +379,7 @@ pub mod pallet {
 
       let sri_amount: SubstrateAmount;
       let coin_amount: SubstrateAmount;
-      if sri_reserve.is_zero() || coin_reserve.is_zero() {
+      if (sri_reserve == 0) || (coin_reserve == 0) {
         sri_amount = sri_desired;
         coin_amount = coin_desired;
       } else {
@@ -417,7 +411,7 @@ pub mod pallet {
       let total_supply = LiquidityTokens::<T>::supply(coin);
 
       let lp_token_amount: SubstrateAmount;
-      if total_supply.is_zero() {
+      if total_supply == 0 {
         lp_token_amount = Self::calc_lp_amount_for_zero_supply(sri_amount, coin_amount)?;
         LiquidityTokens::<T>::mint(
           pool_account,
@@ -466,7 +460,7 @@ pub mod pallet {
       ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
       let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
-      ensure!(lp_token_burn > Zero::zero(), Error::<T>::ZeroLiquidity);
+      ensure!(lp_token_burn > 0, Error::<T>::ZeroLiquidity);
 
       let maybe_pool = Pools::<T>::get(pool_id);
       let pool = maybe_pool.as_ref().ok_or(Error::<T>::PoolNotFound)?;
@@ -482,11 +476,11 @@ pub mod pallet {
       let coin_amount = Self::mul_div(lp_redeem_amount, coin_reserve, total_supply)?;
 
       ensure!(
-        !sri_amount.is_zero() && sri_amount >= sri_min_receive,
+        (sri_amount != 0) && (sri_amount >= sri_min_receive),
         Error::<T>::CoinOneWithdrawalDidNotMeetMinimum
       );
       ensure!(
-        !coin_amount.is_zero() && coin_amount >= coin_min_receive,
+        (coin_amount != 0) && (coin_amount >= coin_min_receive),
         Error::<T>::CoinTwoWithdrawalDidNotMeetMinimum
       );
       let sri_reserve_left = sri_reserve.saturating_sub(sri_amount);
@@ -586,9 +580,9 @@ pub mod pallet {
       amount_out_min: Option<SubstrateAmount>,
       send_to: T::AccountId,
     ) -> Result<SubstrateAmount, DispatchError> {
-      ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
+      ensure!(amount_in > 0, Error::<T>::ZeroAmount);
       if let Some(amount_out_min) = amount_out_min {
-        ensure!(amount_out_min > Zero::zero(), Error::<T>::ZeroAmount);
+        ensure!(amount_out_min > 0, Error::<T>::ZeroAmount);
       }
 
       Self::validate_swap_path(&path)?;
@@ -619,9 +613,9 @@ pub mod pallet {
       amount_in_max: Option<SubstrateAmount>,
       send_to: T::AccountId,
     ) -> Result<SubstrateAmount, DispatchError> {
-      ensure!(amount_out > Zero::zero(), Error::<T>::ZeroAmount);
+      ensure!(amount_out > 0, Error::<T>::ZeroAmount);
       if let Some(amount_in_max) = amount_in_max {
-        ensure!(amount_in_max > Zero::zero(), Error::<T>::ZeroAmount);
+        ensure!(amount_in_max > 0, Error::<T>::ZeroAmount);
       }
 
       Self::validate_swap_path(&path)?;
@@ -677,6 +671,7 @@ pub mod pallet {
 
         let mut i = 0;
         let path_len = path.len() as u32;
+        #[allow(clippy::explicit_counter_loop)]
         for coins_pair in path.windows(2) {
           if let [coin1, coin2] = coins_pair {
             let pool_id = Self::get_pool_id(*coin1, *coin2)?;
@@ -702,7 +697,7 @@ pub mod pallet {
               Balance { coin: *coin2, amount: Amount(*amount_out) },
             )?;
           }
-          i.saturating_inc();
+          i += 1;
         }
         Self::deposit_event(Event::SwapExecuted {
           who: sender,
@@ -759,7 +754,7 @@ pub mod pallet {
       let balance1 = Self::get_balance(&pool_account, *coin1);
       let balance2 = Self::get_balance(&pool_account, *coin2);
 
-      if balance1.is_zero() || balance2.is_zero() {
+      if (balance1 == 0) || (balance2 == 0) {
         Err(Error::<T>::PoolNotFound)?;
       }
 
@@ -817,7 +812,7 @@ pub mod pallet {
 
       let balance1 = Self::get_balance(&pool_account, coin1);
       let balance2 = Self::get_balance(&pool_account, coin2);
-      if !balance1.is_zero() {
+      if balance1 != 0 {
         if include_fee {
           Self::get_amount_out(amount, balance1, balance2).ok()
         } else {
@@ -840,7 +835,7 @@ pub mod pallet {
 
       let balance1 = Self::get_balance(&pool_account, coin1);
       let balance2 = Self::get_balance(&pool_account, coin2);
-      if !balance1.is_zero() {
+      if balance1 != 0 {
         if include_fee {
           Self::get_amount_in(amount, balance1, balance2).ok()
         } else {
@@ -906,7 +901,7 @@ pub mod pallet {
       let reserve_in = HigherPrecisionBalance::from(reserve_in);
       let reserve_out = HigherPrecisionBalance::from(reserve_out);
 
-      if reserve_in.is_zero() || reserve_out.is_zero() {
+      if (reserve_in == 0) || (reserve_out == 0) {
         return Err(Error::<T>::ZeroLiquidity);
       }
 
@@ -942,7 +937,7 @@ pub mod pallet {
       let reserve_in = HigherPrecisionBalance::from(reserve_in);
       let reserve_out = HigherPrecisionBalance::from(reserve_out);
 
-      if reserve_in.is_zero() || reserve_out.is_zero() {
+      if (reserve_in == 0) || (reserve_out == 0) {
         Err(Error::<T>::ZeroLiquidity)?
       }
 
@@ -967,7 +962,7 @@ pub mod pallet {
       let result = numerator
         .checked_div(denominator)
         .ok_or(Error::<T>::Overflow)?
-        .checked_add(One::one())
+        .checked_add(1)
         .ok_or(Error::<T>::Overflow)?;
 
       result.try_into().map_err(|_| Error::<T>::Overflow)
