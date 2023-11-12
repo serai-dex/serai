@@ -1,0 +1,2 @@
+  cargo build --release --all-features -p serai-message-queue && \
+  mv /serai/target/release/serai-message-queue /serai/bin

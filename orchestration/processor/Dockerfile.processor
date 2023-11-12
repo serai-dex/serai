@@ -1,0 +1,2 @@
+  cargo build --release --all-features -p serai-processor && \
+  mv /serai/target/release/serai-processor /serai/bin

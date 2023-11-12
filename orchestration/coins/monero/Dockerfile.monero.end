@@ -1,0 +1,13 @@
+RUN apk --no-cache add gcompat
+
+# Switch to a non-root user
+# System user (not a human), shell of nologin, no password assigned
+RUN adduser -S -s /sbin/nologin -D monero
+USER monero
+
+WORKDIR /home/monero
+COPY --from=monero --chown=monero monerod /bin
+ADD scripts /scripts
+
+EXPOSE 18080 18081
+# VOLUME /home/monero/.bitmonero

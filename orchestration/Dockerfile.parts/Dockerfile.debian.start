@@ -1,0 +1,6 @@
+FROM debian:bookworm-slim as image
+
+COPY --from=mimalloc libmimalloc.so /usr/lib
+RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
+
+RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
