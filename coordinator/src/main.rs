@@ -181,12 +181,18 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
       key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::Shares { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.set.session),
       key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.set.session),
     },
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
-      // We'll only receive Preprocess and Share if we're actively signing
+      // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
+      sign::ProcessorMessage::InvalidParticipant { id, .. } => {
+        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
       sign::ProcessorMessage::Preprocess { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
@@ -261,6 +267,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
         None
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
+      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
+        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
@@ -419,6 +428,15 @@ async fn handle_processor_message<D: Db, P: P2p>(
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
           vec![Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed())]
         }
+        key_gen::ProcessorMessage::InvalidCommitments { id: _, faulty } => {
+          // This doesn't need the ID since it's a Provided transaction which everyone will provide
+          // With this provision comes explicit ordering (with regards to other RemoveParticipant
+          // transactions) and group consensus
+          // Accordingly, this can't be replayed
+          // It could be included on-chain early/late with regards to the chain's active attempt,
+          // which attempt scheduling is written to avoid
+          vec![Transaction::RemoveParticipant(faulty)]
+        }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
           let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
@@ -427,6 +445,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
             .i(pub_key)
             .expect("processor message to DKG for a session we aren't a validator in");
 
+          // TODO: This is [receiver_share][sender_share] and is later transposed to
+          // [sender_share][receiver_share]. Make this [sender_share][receiver_share] from the
+          // start?
           // `tx_shares` needs to be done here as while it can be serialized from the HashMap
           // without further context, it can't be deserialized without context
           let mut tx_shares = Vec::with_capacity(shares.len());
@@ -455,10 +476,38 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           }]
         }
+        key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
+          assert_eq!(
+            id.set.network, msg.network,
+            "processor claimed to be a different network than it was for in InvalidShare",
+          );
+
+          // Check if the MuSig signature had any errors as if so, we need to provide
+          // RemoveParticipant
+          // As for the safety of calling error_generating_key_pair, the processor is presumed
+          // to only send InvalidShare or GeneratedKeyPair for a given attempt
+          let mut txs = if let Some(faulty) =
+            crate::tributary::error_generating_key_pair::<D, _>(&txn, key, spec, id.attempt)
+          {
+            vec![Transaction::RemoveParticipant(faulty)]
+          } else {
+            vec![]
+          };
+
+          txs.push(Transaction::InvalidDkgShare {
+            attempt: id.attempt,
+            accuser,
+            faulty,
+            blame,
+            signed: Transaction::empty_signed(),
+          });
+
+          txs
+        }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           assert_eq!(
             id.set.network, msg.network,
-            "processor claimed to be a different network than it was for GeneratedKeyPair",
+            "processor claimed to be a different network than it was for in GeneratedKeyPair",
           );
           // TODO2: Also check the other KeyGenId fields
 
@@ -476,12 +525,24 @@ async fn handle_processor_message<D: Db, P: P2p>(
               vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
             }
             Err(p) => {
-              todo!("participant {p:?} sent invalid DKG confirmation preprocesses")
+              vec![Transaction::RemoveParticipant(p)]
             }
           }
         }
+        key_gen::ProcessorMessage::Blame { id, participant } => {
+          assert_eq!(
+            id.set.network, msg.network,
+            "processor claimed to be a different network than it was for in Blame",
+          );
+          vec![Transaction::RemoveParticipant(participant)]
+        }
       },
       ProcessorMessage::Sign(msg) => match msg {
+        sign::ProcessorMessage::InvalidParticipant { .. } => {
+          // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+          // slash) and censor transactions (yet don't explicitly ban)
+          vec![]
+        }
         sign::ProcessorMessage::Preprocess { id, preprocesses } => {
           if id.attempt == 0 {
             MainDb::<D>::save_first_preprocess(
@@ -532,6 +593,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
       },
       ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
         coordinator::ProcessorMessage::SubstrateBlockAck { .. } => unreachable!(),
+        coordinator::ProcessorMessage::InvalidParticipant { .. } => {
+          // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+          // slash) and censor transactions (yet don't explicitly ban)
+          vec![]
+        }
         coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocesses } => {
           log::info!(
             "informed of batch (sign ID {}, attempt {}) for block {}",

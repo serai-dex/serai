@@ -1,20 +1,20 @@
 use core::{ops::Deref, future::Future};
 use std::collections::HashMap;
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
 use serai_client::{
-  Signature,
+  Public, Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair},
   subxt::utils::Encoded,
   SeraiValidatorSets,
 };
 
-use tributary::Signed;
+use tributary::{Signed, TransactionKind, TransactionTrait};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
@@ -22,7 +22,7 @@ use processor_messages::{
   sign::{self, SignId},
 };
 
-use serai_db::Db;
+use serai_db::{Get, Db};
 
 use crate::{
   processors::Processors,
@@ -56,7 +56,33 @@ pub fn dkg_confirmation_nonces(
   DkgConfirmer::preprocess(spec, key, attempt)
 }
 
-#[allow(clippy::needless_pass_by_ref_mut)]
+// If there's an error generating a key pair, return any errors which would've occured when
+// executing the DkgConfirmer in order to stay in sync with those who did.
+//
+// The caller must ensure only error_generating_key_pair or generated_key_pair is called for a
+// given attempt.
+pub fn error_generating_key_pair<D: Db, G: Get>(
+  getter: &G,
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  spec: &TributarySpec,
+  attempt: u32,
+) -> Option<Participant> {
+  let preprocesses =
+    TributaryDb::<D>::confirmation_nonces(getter, spec.genesis(), attempt).unwrap();
+
+  // Sign a key pair which can't be valid
+  // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
+  let key_pair = (Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
+  match DkgConfirmer::share(spec, key, attempt, preprocesses, &key_pair) {
+    Ok(mut share) => {
+      // Zeroize the share to ensure it's not accessed
+      share.zeroize();
+      None
+    }
+    Err(p) => Some(p),
+  }
+}
+
 pub fn generated_key_pair<D: Db>(
   txn: &mut D::Transaction<'_>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -69,7 +95,7 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
-pub(crate) fn fatal_slash<D: Db>(
+pub(super) fn fatal_slash<D: Db>(
   txn: &mut D::Transaction<'_>,
   genesis: [u8; 32],
   account: [u8; 32],
@@ -78,6 +104,33 @@ pub(crate) fn fatal_slash<D: Db>(
   log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
   TributaryDb::<D>::set_fatally_slashed(txn, genesis, account);
   // TODO: disconnect the node from network/ban from further participation in all Tributaries
+
+  // TODO: If during DKG, trigger a re-attempt
+}
+
+// TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
+// Tributary post-DKG
+// https://github.com/serai-dex/serai/issues/426
+
+fn fatal_slash_with_participant_index<D: Db>(
+  spec: &TributarySpec,
+  txn: &mut <D as Db>::Transaction<'_>,
+  i: Participant,
+  reason: &str,
+) {
+  // Resolve from Participant to <Ristretto as Ciphersuite>::G
+  let i = u16::from(i);
+  let mut validator = None;
+  for (potential, _) in spec.validators() {
+    let v_i = spec.i(potential).unwrap();
+    if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
+      validator = Some(potential);
+      break;
+    }
+  }
+  let validator = validator.unwrap();
+
+  fatal_slash::<D>(txn, spec.genesis(), validator.to_bytes(), reason);
 }
 
 pub(crate) async fn handle_application_tx<
@@ -97,6 +150,15 @@ pub(crate) async fn handle_application_tx<
   txn: &mut <D as Db>::Transaction<'_>,
 ) {
   let genesis = spec.genesis();
+
+  // Don't handle transactions from fatally slashed participants
+  // TODO: Because fatally slashed participants can still publish onto the blockchain, they have
+  // a notable DoS ability
+  if let TransactionKind::Signed(signed) = tx.kind() {
+    if TributaryDb::<D>::is_fatally_slashed(txn, genesis, signed.signer.to_bytes()) {
+      return;
+    }
+  }
 
   let handle = |txn: &mut <D as Db>::Transaction<'_>,
                 data_spec: &DataSpecification,
@@ -178,6 +240,9 @@ pub(crate) async fn handle_application_tx<
   }
 
   match tx {
+    Transaction::RemoveParticipant(i) => {
+      fatal_slash_with_participant_index::<D>(spec, txn, i, "RemoveParticipant Provided TX")
+    }
     Transaction::DkgCommitments(attempt, commitments, signed) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, signed.signer, commitments.len()) else {
         return;
@@ -230,7 +295,28 @@ pub(crate) async fn handle_application_tx<
         }
       }
 
-      // Only save our share's bytes
+      // Save each share as needed for blame
+      {
+        let from = spec.i(signed.signer).unwrap();
+        for (to, shares) in shares.iter().enumerate() {
+          // 0-indexed (the enumeration) to 1-indexed (Participant)
+          let mut to = u16::try_from(to).unwrap() + 1;
+          // Adjust for the omission of the sender's own shares
+          if to >= u16::from(from.start) {
+            to += u16::from(from.end) - u16::from(from.start);
+          }
+          let to = Participant::new(to).unwrap();
+
+          for (sender_share, share) in shares.iter().enumerate() {
+            let from =
+              Participant::new(u16::from(from.start) + u16::try_from(sender_share).unwrap())
+                .unwrap();
+            TributaryDb::<D>::save_share_for_blame(txn, &genesis, from, to, share);
+          }
+        }
+      }
+
+      // Filter down to only our share's bytes for handle
       let our_i = spec
         .i(Ristretto::generator() * key.deref())
         .expect("in a tributary we're not a validator for");
@@ -327,6 +413,49 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
+    // TODO: Only accept one of either InvalidDkgShare/DkgConfirmed per signer
+    // TODO: Ban self-accusals
+    Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
+      let range = spec.i(signed.signer).unwrap();
+      if (u16::from(accuser) < u16::from(range.start)) ||
+        (u16::from(range.end) <= u16::from(accuser))
+      {
+        fatal_slash::<D>(
+          txn,
+          genesis,
+          signed.signer.to_bytes(),
+          "accused with a Participant index which wasn't theirs",
+        );
+        return;
+      }
+
+      if !((u16::from(range.start) <= u16::from(faulty)) &&
+        (u16::from(faulty) < u16::from(range.end)))
+      {
+        fatal_slash::<D>(
+          txn,
+          genesis,
+          signed.signer.to_bytes(),
+          "accused self of having an InvalidDkgShare",
+        );
+        return;
+      }
+
+      let share = TributaryDb::<D>::share_for_blame(txn, &genesis, accuser, faulty).unwrap();
+      processors
+        .send(
+          spec.set().network,
+          key_gen::CoordinatorMessage::VerifyBlame {
+            id: KeyGenId { set: spec.set(), attempt },
+            accuser,
+            accused: faulty,
+            share,
+            blame,
+          },
+        )
+        .await;
+    }
+
     Transaction::DkgConfirmed(attempt, shares, signed) => {
       match handle(
         txn,
@@ -347,11 +476,14 @@ pub(crate) async fn handle_application_tx<
                 "(including us) fires DkgConfirmed, yet no confirming key pair"
               )
             });
-          let Ok(sig) = DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares)
-          else {
-            // TODO: Full slash
-            todo!();
-          };
+          let sig =
+            match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
+              Ok(sig) => sig,
+              Err(p) => {
+                fatal_slash_with_participant_index::<D>(spec, txn, p, "invalid DkgConfirmer share");
+                return;
+              }
+            };
 
           publish_serai_tx(
             spec.set(),

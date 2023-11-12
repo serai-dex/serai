@@ -94,7 +94,7 @@ pub enum DkgError<B: Clone + PartialEq + Eq + Debug> {
 
   /// An invalid proof of knowledge was provided.
   #[cfg_attr(feature = "std", error("invalid proof of knowledge (participant {0})"))]
-  InvalidProofOfKnowledge(Participant),
+  InvalidCommitments(Participant),
   /// An invalid DKG share was provided.
   #[cfg_attr(feature = "std", error("invalid share (participant {participant}, blame {blame})"))]
   InvalidShare { participant: Participant, blame: Option<B> },

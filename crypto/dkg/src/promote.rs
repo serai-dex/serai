@@ -109,7 +109,7 @@ where
           &[C1::generator(), C2::generator()],
           &[original_shares[&i], proof.share],
         )
-        .map_err(|_| DkgError::InvalidProofOfKnowledge(i))?;
+        .map_err(|_| DkgError::InvalidCommitments(i))?;
       verification_shares.insert(i, proof.share);
     }
 

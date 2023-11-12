@@ -938,7 +938,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         }
 
         // Save the plans created while scanning
-        // TODO: Should we combine all of these plans?
+        // TODO: Should we combine all of these plans to reduce the fees incurred from their
+        // execution? They're refunds and forwards. Neither should need isolate Plan/Eventualities.
         MultisigsDb::<N, D>::set_plans_from_scanning(txn, block_number, plans);
 
         // If any outputs were delayed, append them into this block

@@ -6,7 +6,7 @@ use ciphersuite::Ciphersuite;
 
 use crate::{
   Participant, ThresholdParams, ThresholdCore,
-  frost::{KeyGenMachine, SecretShare, KeyMachine},
+  frost::{Commitments, KeyGenMachine, SecretShare, KeyMachine},
   encryption::{EncryptionKeyMessage, EncryptedMessage},
   tests::{THRESHOLD, PARTICIPANTS, clone_without},
 };
@@ -17,12 +17,13 @@ type FrostSecretShares<C> = HashMap<Participant, FrostEncryptedMessage<C>>;
 
 const CONTEXT: &str = "DKG Test Key Generation";
 
-// Commit, then return enc key and shares
+// Commit, then return commitment messages, enc keys, and shares
 #[allow(clippy::type_complexity)]
 fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> (
   HashMap<Participant, KeyMachine<C>>,
+  HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
   HashMap<Participant, C::G>,
   HashMap<Participant, FrostSecretShares<C>>,
 ) {
@@ -68,7 +69,7 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
     })
     .collect::<HashMap<_, _>>();
 
-  (machines, enc_keys, secret_shares)
+  (machines, commitments, enc_keys, secret_shares)
 }
 
 fn generate_secret_shares<C: Ciphersuite>(
@@ -89,7 +90,7 @@ fn generate_secret_shares<C: Ciphersuite>(
 pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdCore<C>> {
-  let (mut machines, _, secret_shares) = commit_enc_keys_and_shares::<_, C>(rng);
+  let (mut machines, _, _, secret_shares) = commit_enc_keys_and_shares::<_, C>(rng);
 
   let mut verification_shares = None;
   let mut group_key = None;
@@ -122,7 +123,11 @@ mod literal {
 
   use ciphersuite::Ristretto;
 
-  use crate::{DkgError, encryption::EncryptionKeyProof, frost::BlameMachine};
+  use crate::{
+    DkgError,
+    encryption::EncryptionKeyProof,
+    frost::{BlameMachine, AdditionalBlameMachine},
+  };
 
   use super::*;
 
@@ -130,6 +135,7 @@ mod literal {
   const TWO: Participant = Participant(2);
 
   fn test_blame(
+    commitment_msgs: HashMap<Participant, EncryptionKeyMessage<Ristretto, Commitments<Ristretto>>>,
     machines: Vec<BlameMachine<Ristretto>>,
     msg: FrostEncryptedMessage<Ristretto>,
     blame: Option<EncryptionKeyProof<Ristretto>>,
@@ -139,13 +145,26 @@ mod literal {
       assert_eq!(blamed, ONE);
       // Verify additional blame also works
       assert_eq!(additional.blame(ONE, TWO, msg.clone(), blame.clone()), ONE);
+
+      // Verify machines constructed with AdditionalBlameMachine::new work
+      assert_eq!(
+        AdditionalBlameMachine::new(
+          &mut OsRng,
+          CONTEXT.to_string(),
+          PARTICIPANTS,
+          commitment_msgs.clone()
+        )
+        .unwrap()
+        .blame(ONE, TWO, msg.clone(), blame.clone()),
+        ONE,
+      );
     }
   }
 
   // TODO: Write a macro which expands to the following
   #[test]
   fn invalid_encryption_pop_blame() {
-    let (mut machines, _, mut secret_shares) =
+    let (mut machines, commitment_msgs, _, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     // Mutate the PoP of the encrypted message from 1 to 2
@@ -169,12 +188,12 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 
   #[test]
   fn invalid_ecdh_blame() {
-    let (mut machines, _, mut secret_shares) =
+    let (mut machines, commitment_msgs, _, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     // Mutate the share to trigger a blame event
@@ -209,13 +228,13 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_key();
-    test_blame(machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
+    test_blame(commitment_msgs, machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
   }
 
   // This should be largely equivalent to the prior test
   #[test]
   fn invalid_dleq_blame() {
-    let (mut machines, _, mut secret_shares) =
+    let (mut machines, commitment_msgs, _, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     secret_shares
@@ -244,12 +263,12 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_dleq();
-    test_blame(machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
+    test_blame(commitment_msgs, machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
   }
 
   #[test]
   fn invalid_share_serialization_blame() {
-    let (mut machines, enc_keys, mut secret_shares) =
+    let (mut machines, commitment_msgs, enc_keys, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_serialization(
@@ -277,12 +296,12 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 
   #[test]
   fn invalid_share_value_blame() {
-    let (mut machines, enc_keys, mut secret_shares) =
+    let (mut machines, commitment_msgs, enc_keys, mut secret_shares) =
       commit_enc_keys_and_shares::<_, Ristretto>(&mut OsRng);
 
     secret_shares.get_mut(&ONE).unwrap().get_mut(&TWO).unwrap().invalidate_share_value(
@@ -310,6 +329,6 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
   }
 }

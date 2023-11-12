@@ -33,11 +33,29 @@ pub mod key_gen {
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
-    GenerateKey { id: KeyGenId, params: ThresholdParams, shares: u16 },
+    GenerateKey {
+      id: KeyGenId,
+      params: ThresholdParams,
+      shares: u16,
+    },
     // Received commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: HashMap<Participant, Vec<u8>> },
+    Commitments {
+      id: KeyGenId,
+      commitments: HashMap<Participant, Vec<u8>>,
+    },
     // Received shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    Shares {
+      id: KeyGenId,
+      shares: Vec<HashMap<Participant, Vec<u8>>>,
+    },
+    /// Instruction to verify a blame accusation.
+    VerifyBlame {
+      id: KeyGenId,
+      accuser: Participant,
+      accused: Participant,
+      share: Vec<u8>,
+      blame: Option<Vec<u8>>,
+    },
   }
 
   impl CoordinatorMessage {
@@ -49,11 +67,39 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     // Created commitments for the specified key generation protocol.
-    Commitments { id: KeyGenId, commitments: Vec<Vec<u8>> },
+    Commitments {
+      id: KeyGenId,
+      commitments: Vec<Vec<u8>>,
+    },
+    // Participant published invalid commitments.
+    InvalidCommitments {
+      id: KeyGenId,
+      faulty: Participant,
+    },
     // Created shares for the specified key generation protocol.
-    Shares { id: KeyGenId, shares: Vec<HashMap<Participant, Vec<u8>>> },
+    Shares {
+      id: KeyGenId,
+      shares: Vec<HashMap<Participant, Vec<u8>>>,
+    },
+    // Participant published an invalid share.
+    #[rustfmt::skip]
+    InvalidShare {
+      id: KeyGenId,
+      accuser: Participant,
+      faulty: Participant,
+      blame: Option<Vec<u8>>,
+    },
     // Resulting keys from the specified key generation protocol.
-    GeneratedKeyPair { id: KeyGenId, substrate_key: [u8; 32], network_key: Vec<u8> },
+    GeneratedKeyPair {
+      id: KeyGenId,
+      substrate_key: [u8; 32],
+      network_key: Vec<u8>,
+    },
+    // Blame this participant.
+    Blame {
+      id: KeyGenId,
+      participant: Participant,
+    },
   }
 }
 
@@ -94,8 +140,10 @@ pub mod sign {
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
+    // Participant sent an invalid message during the sign protocol.
+    InvalidParticipant { id: SignId, participant: Participant },
     // Created preprocess for the specified signing protocol.
     Preprocess { id: SignId, preprocesses: Vec<Vec<u8>> },
     // Signed share for the specified signing protocol.
@@ -152,9 +200,10 @@ pub mod coordinator {
     pub id: [u8; 32],
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
+    InvalidParticipant { id: BatchSignId, participant: Participant },
     BatchPreprocess { id: BatchSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
     BatchShare { id: BatchSignId, shares: Vec<[u8; 32]> },
   }
@@ -275,6 +324,7 @@ impl CoordinatorMessage {
           key_gen::CoordinatorMessage::GenerateKey { id, .. } => (0, id),
           key_gen::CoordinatorMessage::Commitments { id, .. } => (1, id),
           key_gen::CoordinatorMessage::Shares { id, .. } => (2, id),
+          key_gen::CoordinatorMessage::VerifyBlame { id, .. } => (3, id),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_KEY_GEN_UID, sub];
@@ -340,8 +390,11 @@ impl ProcessorMessage {
         let (sub, id) = match msg {
           // Unique since KeyGenId
           key_gen::ProcessorMessage::Commitments { id, .. } => (0, id),
-          key_gen::ProcessorMessage::Shares { id, .. } => (1, id),
-          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (2, id),
+          key_gen::ProcessorMessage::InvalidCommitments { id, .. } => (1, id),
+          key_gen::ProcessorMessage::Shares { id, .. } => (2, id),
+          key_gen::ProcessorMessage::InvalidShare { id, .. } => (3, id),
+          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (4, id),
+          key_gen::ProcessorMessage::Blame { id, .. } => (5, id),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];
@@ -351,10 +404,11 @@ impl ProcessorMessage {
       ProcessorMessage::Sign(msg) => {
         let (sub, id) = match msg {
           // Unique since SignId
-          sign::ProcessorMessage::Preprocess { id, .. } => (0, id.encode()),
-          sign::ProcessorMessage::Share { id, .. } => (1, id.encode()),
+          sign::ProcessorMessage::InvalidParticipant { id, .. } => (0, id.encode()),
+          sign::ProcessorMessage::Preprocess { id, .. } => (1, id.encode()),
+          sign::ProcessorMessage::Share { id, .. } => (2, id.encode()),
           // Unique since a processor will only sign a TX once
-          sign::ProcessorMessage::Completed { id, .. } => (2, id.to_vec()),
+          sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_SIGN_UID, sub];
@@ -367,8 +421,9 @@ impl ProcessorMessage {
             (0, (network, block).encode())
           }
           // Unique since BatchSignId
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (1, id.encode()),
-          coordinator::ProcessorMessage::BatchShare { id, .. } => (2, id.encode()),
+          coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (2, id.encode()),
+          coordinator::ProcessorMessage::BatchShare { id, .. } => (3, id.encode()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];

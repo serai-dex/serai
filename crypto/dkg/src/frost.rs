@@ -133,7 +133,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption = Encryption::new(self.context.clone(), self.params.i, rng);
+    let encryption = Encryption::new(self.context.clone(), Some(self.params.i), rng);
 
     // Step 4: Broadcast
     let msg =
@@ -249,35 +249,38 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
   fn verify_r1<R: RngCore + CryptoRng>(
     &mut self,
     rng: &mut R,
-    mut commitments: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
+    mut commitment_msgs: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
   ) -> Result<HashMap<Participant, Vec<C::G>>, FrostError<C>> {
     validate_map(
-      &commitments,
+      &commitment_msgs,
       &(1 ..= self.params.n()).map(Participant).collect::<Vec<_>>(),
       self.params.i(),
     )?;
 
-    let mut batch = BatchVerifier::<Participant, C::G>::new(commitments.len());
-    let mut commitments = commitments
-      .drain()
-      .map(|(l, msg)| {
-        let mut msg = self.encryption.register(l, msg);
+    let mut batch = BatchVerifier::<Participant, C::G>::new(commitment_msgs.len());
+    let mut commitments = HashMap::new();
+    for l in (1 ..= self.params.n()).map(Participant) {
+      let Some(msg) = commitment_msgs.remove(&l) else { continue };
+      let mut msg = self.encryption.register(l, msg);
 
-        // Step 5: Validate each proof of knowledge
-        // This is solely the prep step for the latter batch verification
-        msg.sig.batch_verify(
-          rng,
-          &mut batch,
-          l,
-          msg.commitments[0],
-          challenge::<C>(&self.context, l, msg.sig.R.to_bytes().as_ref(), &msg.cached_msg),
-        );
+      if msg.commitments.len() != self.params.t().into() {
+        Err(FrostError::InvalidCommitments(l))?;
+      }
 
-        (l, msg.commitments.drain(..).collect::<Vec<_>>())
-      })
-      .collect::<HashMap<_, _>>();
+      // Step 5: Validate each proof of knowledge
+      // This is solely the prep step for the latter batch verification
+      msg.sig.batch_verify(
+        rng,
+        &mut batch,
+        l,
+        msg.commitments[0],
+        challenge::<C>(&self.context, l, msg.sig.R.to_bytes().as_ref(), &msg.cached_msg),
+      );
 
-    batch.verify_vartime_with_vartime_blame().map_err(FrostError::InvalidProofOfKnowledge)?;
+      commitments.insert(l, msg.commitments.drain(..).collect::<Vec<_>>());
+    }
+
+    batch.verify_vartime_with_vartime_blame().map_err(FrostError::InvalidCommitments)?;
 
     commitments.insert(self.params.i, self.our_commitments.drain(..).collect());
     Ok(commitments)
@@ -470,12 +473,12 @@ impl<C: Ciphersuite> KeyMachine<C> {
     Ok(BlameMachine {
       commitments,
       encryption,
-      result: ThresholdCore {
+      result: Some(ThresholdCore {
         params,
         secret_share: secret,
         group_key: stripes[0],
         verification_shares,
-      },
+      }),
     })
   }
 }
@@ -484,7 +487,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 pub struct BlameMachine<C: Ciphersuite> {
   commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Encryption<C>,
-  result: ThresholdCore<C>,
+  result: Option<ThresholdCore<C>>,
 }
 
 impl<C: Ciphersuite> fmt::Debug for BlameMachine<C> {
@@ -518,7 +521,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
   /// tooling to do so. This function is solely intended to force users to acknowledge they're
   /// completing the protocol, not processing any blame.
   pub fn complete(self) -> ThresholdCore<C> {
-    self.result
+    self.result.unwrap()
   }
 
   fn blame_internal(
@@ -585,6 +588,32 @@ impl<C: Ciphersuite> BlameMachine<C> {
 #[derive(Debug, Zeroize)]
 pub struct AdditionalBlameMachine<C: Ciphersuite>(BlameMachine<C>);
 impl<C: Ciphersuite> AdditionalBlameMachine<C> {
+  /// Create an AdditionalBlameMachine capable of evaluating Blame regardless of if the caller was
+  /// a member in the DKG protocol.
+  ///
+  /// Takes in the parameters for the DKG protocol and all of the participant's commitment
+  /// messages.
+  ///
+  /// This constructor assumes the full validity of the commitment messages. They must be fully
+  /// authenticated as having come from the supposed party and verified as valid. Usage of invalid
+  /// commitments is considered undefined behavior, and may cause everything from inaccurate blame
+  /// to panics.
+  pub fn new<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    context: String,
+    n: u16,
+    mut commitment_msgs: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
+  ) -> Result<Self, FrostError<C>> {
+    let mut commitments = HashMap::new();
+    let mut encryption = Encryption::new(context, None, rng);
+    for i in 1 ..= n {
+      let i = Participant::new(i).unwrap();
+      let Some(msg) = commitment_msgs.remove(&i) else { Err(DkgError::MissingParticipant(i))? };
+      commitments.insert(i, encryption.register(i, msg).commitments);
+    }
+    Ok(AdditionalBlameMachine(BlameMachine { commitments, encryption, result: None }))
+  }
+
   /// Given an accusation of fault, determine the faulty party (either the sender, who sent an
   /// invalid secret share, or the receiver, who claimed a valid secret share was invalid).
   ///
@@ -596,7 +625,7 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
   /// the caller's job to ensure they're unique in order to prevent multiple instances of blame
   /// over a single incident.
   pub fn blame(
-    self,
+    &self,
     sender: Participant,
     recipient: Participant,
     msg: EncryptedMessage<C, SecretShare<C::F>>,
