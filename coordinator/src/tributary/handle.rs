@@ -501,7 +501,7 @@ pub(crate) async fn handle_application_tx<
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
-      let nonce = NonceDecider::<D>::handle_batch(txn, genesis, batch);
+      let nonce = NonceDecider::handle_batch(txn, genesis, batch);
       recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec(), nonce).await;
     }
 
@@ -511,7 +511,7 @@ pub(crate) async fn handle_application_tx<
           despite us not providing that transaction",
       );
 
-      let nonces = NonceDecider::<D>::handle_substrate_block(txn, genesis, &plan_ids);
+      let nonces = NonceDecider::handle_substrate_block(txn, genesis, &plan_ids);
       for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
         TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
         recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id.to_vec(), nonce).await;
@@ -534,7 +534,7 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::<D>::selected_for_signing_batch(txn, genesis, data.plan);
+          NonceDecider::selected_for_signing_batch(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
@@ -602,7 +602,7 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::<D>::selected_for_signing_plan(txn, genesis, data.plan);
+          NonceDecider::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,
