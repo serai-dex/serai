@@ -260,27 +260,27 @@ pub mod pallet {
     /// Desired amount can't be zero.
     WrongDesiredAmount,
     /// Provided amount should be greater than or equal to the existential deposit/coin's
-    /// minimal amount.
-    AmountCoinLessThanMinimal,
+    /// minimum amount.
+    CoinAmountLessThanMinimum,
     /// Provided amount should be greater than or equal to the existential deposit/coin's
-    /// minimal amount.
-    AmountSriLessThanMinimal,
+    /// minimum amount.
+    SriAmountLessThanMinimum,
     /// Reserve needs to always be greater than or equal to the existential deposit/coin's
-    /// minimal amount.
-    ReserveLeftLessThanMinimal,
+    /// minimum amount.
+    ReserveLeftLessThanMinimum,
     /// Desired amount can't be equal to the pool reserve.
     AmountOutTooHigh,
     /// The pool doesn't exist.
     PoolNotFound,
     /// An overflow happened.
     Overflow,
-    /// The minimal amount requirement for the first token in the pair wasn't met.
+    /// The minimum amount requirement for the first token in the pair wasn't met.
     CoinOneDepositDidNotMeetMinimum,
-    /// The minimal amount requirement for the second token in the pair wasn't met.
+    /// The minimum amount requirement for the second token in the pair wasn't met.
     CoinTwoDepositDidNotMeetMinimum,
-    /// The minimal amount requirement for the first token in the pair wasn't met.
+    /// The minimum amount requirement for the first token in the pair wasn't met.
     CoinOneWithdrawalDidNotMeetMinimum,
-    /// The minimal amount requirement for the second token in the pair wasn't met.
+    /// The minimum amount requirement for the second token in the pair wasn't met.
     CoinTwoWithdrawalDidNotMeetMinimum,
     /// Optimal calculated amount is less than desired.
     OptimalAmountLessThanDesired,
@@ -404,8 +404,8 @@ pub mod pallet {
         }
       }
 
-      ensure!(sri_amount.saturating_add(sri_reserve) >= 1, Error::<T>::AmountSriLessThanMinimal);
-      ensure!(coin_amount.saturating_add(coin_reserve) >= 1, Error::<T>::AmountCoinLessThanMinimal);
+      ensure!(sri_amount.saturating_add(sri_reserve) >= 1, Error::<T>::SriAmountLessThanMinimum);
+      ensure!(coin_amount.saturating_add(coin_reserve) >= 1, Error::<T>::CoinAmountLessThanMinimum);
 
       Self::transfer(
         &sender,
@@ -492,8 +492,8 @@ pub mod pallet {
       let sri_reserve_left = sri_reserve.saturating_sub(sri_amount);
       let coin_reserve_left = coin_reserve.saturating_sub(coin_amount);
 
-      ensure!(sri_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
-      ensure!(coin_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
+      ensure!(sri_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimum);
+      ensure!(coin_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimum);
 
       // burn the provided lp token amount that includes the fee
       LiquidityTokens::<T>::burn(origin, Balance { coin, amount: Amount(lp_token_burn) })?;
@@ -694,7 +694,7 @@ pub mod pallet {
 
             let reserve = Self::get_balance(&pool_account, *coin2);
             let reserve_left = reserve.saturating_sub(*amount_out);
-            ensure!(reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimal);
+            ensure!(reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimum);
 
             Self::transfer(
               &pool_account,

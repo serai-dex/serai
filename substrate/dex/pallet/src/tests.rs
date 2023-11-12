@@ -747,7 +747,7 @@ fn check_no_panic_when_try_swap_close_to_empty_pool() {
     // 		500,          // amount_in_max
     // 		user,
     // 	),
-    // 	Error::<Test>::ReserveLeftLessThanMinimal
+    // 	Error::<Test>::ReserveLeftLessThanMinimum
     // );
 
     assert_ok!(Dex::swap_tokens_for_exact_tokens(

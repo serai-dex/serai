@@ -42,7 +42,7 @@ pub mod pallet {
   pub enum Error<T, I = ()> {
     AmountOverflowed,
     NotEnoughCoins,
-    SriBurnNotAllowed,
+    BurnWithInstructionNotAllowed,
   }
 
   #[pallet::event]
@@ -215,10 +215,10 @@ pub mod pallet {
       instruction: OutInstructionWithBalance,
     ) -> DispatchResult {
       if instruction.balance.coin == Coin::Serai {
-        Err(Error::<T, I>::SriBurnNotAllowed)?;
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
       }
       if TypeId::of::<I>() == TypeId::of::<LiquidityTokensInstance>() {
-        Err(Error::<T, I>::SriBurnNotAllowed)?;
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
       }
 
       let from = ensure_signed(origin)?;
