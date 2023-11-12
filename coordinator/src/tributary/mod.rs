@@ -516,9 +516,14 @@ impl ReadWrite for Transaction {
         writer.write_all(&attempt.to_le_bytes())?;
         writer.write_all(&u16::from(*accuser).to_le_bytes())?;
         writer.write_all(&u16::from(*faulty).to_le_bytes())?;
+
         // Flattens Some(vec![]) to None on the expectation no actual blame will be 0-length
         assert!(blame.as_ref().map(|blame| blame.len()).unwrap_or(1) != 0);
+        let blame_len =
+          u16::try_from(blame.as_ref().unwrap_or(&vec![]).len()).expect("blame exceeded 64 KB");
+        writer.write_all(&blame_len.to_le_bytes())?;
         writer.write_all(blame.as_ref().unwrap_or(&vec![]))?;
+
         signed.write(writer)
       }
 
