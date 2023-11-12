@@ -39,7 +39,7 @@ pub fn processor_instance(
     NetworkId::Monero => "monero",
   };
   let image = format!("{network_str}-processor");
-  serai_docker_tests::build("processor".to_string());
+  serai_docker_tests::build(image.clone());
 
   TestBodySpecification::with_image(
     Image::with_repository(format!("serai-dev-{image}")).pull_policy(PullPolicy::Never),
