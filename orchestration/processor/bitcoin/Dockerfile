@@ -18,6 +18,9 @@ RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 # Add dev dependencies
 RUN apt install -y pkg-config clang
 
+# Dependencies for the Serai node
+RUN apt install -y make protobuf-compiler
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto

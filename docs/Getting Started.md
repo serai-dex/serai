@@ -5,7 +5,7 @@
 ##### Ubuntu
 
 ```
-sudo apt-get install -y build-essential cmake clang-11 git curl python3-pip protobuf-compiler libssl-dev pkg-config
+sudo apt-get install -y build-essential clang-11 pkg-config cmake git curl protobuf-compiler
 ```
 
 ### Install rustup
