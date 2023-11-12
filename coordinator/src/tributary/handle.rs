@@ -441,6 +441,7 @@ pub(crate) async fn handle_application_tx<
         return;
       }
 
+      let share = TributaryDb::<D>::share_for_blame(txn, &genesis, accuser, faulty).unwrap();
       processors
         .send(
           spec.set().network,
@@ -448,7 +449,7 @@ pub(crate) async fn handle_application_tx<
             id: KeyGenId { set: spec.set(), attempt },
             accuser,
             accused: faulty,
-            share: TributaryDb::<D>::share_for_blame(txn, &genesis, accuser, faulty).unwrap(),
+            share,
             blame,
           },
         )
