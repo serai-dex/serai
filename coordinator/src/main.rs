@@ -52,7 +52,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::SubstrateDb;
+use substrate::{CosignTransactions, SubstrateDb};
 
 #[cfg(test)]
 pub mod tests;
@@ -793,8 +793,42 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
       }
     }
 
+    // Handle pending cosigns
+    // This isn't a processor message in the slightest, it's just cleanest to put it here
+    // TODO: Find a better place for this?
+    // TODO(now): Queue this per network
+    while let Some((set, block, hash)) = CosignTransactions::peek_cosign(&db) {
+      if set.network != network {
+        break;
+      }
+
+      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&set.session) else { break };
+      log::info!("{set:?} co-signing block #{block} (hash {}...)", hex::encode(&hash[.. 8]));
+      let tx = Transaction::CosignSubstrateBlock(hash);
+      let res = tributary.provide_transaction(tx.clone()).await;
+      if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+        if res == Err(ProvidedError::LocalMismatchesOnChain) {
+          // Spin, since this is a crit for this Tributary
+          loop {
+            log::error!(
+              "{}. tributary: {}, provided: {:?}",
+              "tributary added distinct CosignSubstrateBlock",
+              hex::encode(spec.genesis()),
+              &tx,
+            );
+            sleep(Duration::from_secs(60)).await;
+          }
+        }
+        panic!("provided an invalid CosignSubstrateBlock: {res:?}");
+      }
+      CosignTransactions::take_cosign(db.txn());
+    }
+
     // TODO: Check this ID is sane (last handled ID or expected next ID)
-    let msg = processors.recv(network).await;
+    let Ok(msg) = tokio::time::timeout(Duration::from_secs(1), processors.recv(network)).await
+    else {
+      continue;
+    };
     if handle_processor_message(&mut db, &key, &serai, &tributaries, network, &msg).await {
       processors.ack(msg).await;
     }

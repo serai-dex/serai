@@ -498,6 +498,8 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
+    Transaction::CosignSubstrateBlock(hash) => todo!("TODO(now)"),
+
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
       TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));

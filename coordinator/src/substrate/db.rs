@@ -1,16 +1,19 @@
+use std::sync::{OnceLock, MutexGuard, Mutex};
+
 use scale::{Encode, Decode};
 
 pub use serai_db::*;
 
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, KeyPair},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 
 create_db! {
   NewSubstrateDb {
     IntendedCosign: () -> (u64, Option<u64>),
-    BlockHasEvents: (block: u64) -> bool
+    BlockHasEvents: (block: u64) -> u8,
+    CosignTransactions: () -> Vec<(ValidatorSet, u64, [u8; 32])>
   }
 }
 
@@ -22,6 +25,47 @@ impl IntendedCosign {
     let (intended, prior_skipped) = Self::get(txn).unwrap();
     assert!(prior_skipped.is_none());
     Self::set(txn, &(intended, Some(skipped)));
+  }
+}
+
+// This guarantees:
+// 1) Appended transactions are appended
+// 2) Taking cosigns does not clear any TXs which weren't taken
+// 3) Taking does actually clear the set
+static COSIGN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+pub struct CosignTxn<T: DbTxn>(T, MutexGuard<'static, ()>);
+impl<T: DbTxn> CosignTxn<T> {
+  pub fn new(txn: T) -> Self {
+    Self(txn, COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap())
+  }
+  pub fn commit(self) {
+    self.0.commit();
+  }
+}
+impl CosignTransactions {
+  // Append a co-sign transaction.
+  pub fn append_cosign<T: DbTxn>(
+    txn: &mut CosignTxn<T>,
+    set: ValidatorSet,
+    number: u64,
+    hash: [u8; 32],
+  ) {
+    #[allow(clippy::unwrap_or_default)]
+    let mut txs = CosignTransactions::get(&txn.0).unwrap_or(vec![]);
+    txs.push((set, number, hash));
+    CosignTransactions::set(&mut txn.0, &txs);
+  }
+  // Peek at the next cosign transaction.
+  pub fn peek_cosign(getter: &impl Get) -> Option<(ValidatorSet, u64, [u8; 32])> {
+    Some(CosignTransactions::get(getter)?.swap_remove(0))
+  }
+  // Take the next transaction, panicking if it doesn't exist.
+  pub fn take_cosign(mut txn: impl DbTxn) {
+    let _lock = COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+    let mut txs = CosignTransactions::get(&txn).unwrap();
+    txs.remove(0);
+    CosignTransactions::set(&mut txn, &txs);
+    txn.commit();
   }
 }
 

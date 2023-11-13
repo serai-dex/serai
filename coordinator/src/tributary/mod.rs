@@ -253,6 +253,9 @@ pub enum Transaction {
   },
   DkgConfirmed(u32, [u8; 32], Signed),
 
+  // Co-sign a Substrate block.
+  CosignSubstrateBlock([u8; 32]),
+
   // When we have synchrony on a batch, we can allow signing it
   // TODO (never?): This is less efficient compared to an ExternalBlock provided transaction,
   // which would be binding over the block hash and automatically achieve synchrony on all
@@ -417,24 +420,30 @@ impl ReadWrite for Transaction {
       5 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
+        Ok(Transaction::CosignSubstrateBlock(block))
+      }
+
+      6 => {
+        let mut block = [0; 32];
+        reader.read_exact(&mut block)?;
         let mut batch = [0; 5];
         reader.read_exact(&mut batch)?;
         Ok(Transaction::Batch(block, batch))
       }
 
-      6 => {
+      7 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      7 => SignData::read(reader).map(Transaction::BatchPreprocess),
-      8 => SignData::read(reader).map(Transaction::BatchShare),
+      8 => SignData::read(reader).map(Transaction::BatchPreprocess),
+      9 => SignData::read(reader).map(Transaction::BatchShare),
 
-      9 => SignData::read(reader).map(Transaction::SignPreprocess),
-      10 => SignData::read(reader).map(Transaction::SignShare),
+      10 => SignData::read(reader).map(Transaction::SignPreprocess),
+      11 => SignData::read(reader).map(Transaction::SignShare),
 
-      11 => {
+      12 => {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
@@ -534,36 +543,41 @@ impl ReadWrite for Transaction {
         signed.write(writer)
       }
 
-      Transaction::Batch(block, batch) => {
+      Transaction::CosignSubstrateBlock(block) => {
         writer.write_all(&[5])?;
+        writer.write_all(block)
+      }
+
+      Transaction::Batch(block, batch) => {
+        writer.write_all(&[6])?;
         writer.write_all(block)?;
         writer.write_all(batch)
       }
 
       Transaction::SubstrateBlock(block) => {
-        writer.write_all(&[6])?;
+        writer.write_all(&[7])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::BatchPreprocess(data) => {
-        writer.write_all(&[7])?;
+        writer.write_all(&[8])?;
         data.write(writer)
       }
       Transaction::BatchShare(data) => {
-        writer.write_all(&[8])?;
+        writer.write_all(&[9])?;
         data.write(writer)
       }
 
       Transaction::SignPreprocess(data) => {
-        writer.write_all(&[9])?;
-        data.write(writer)
-      }
-      Transaction::SignShare(data) => {
         writer.write_all(&[10])?;
         data.write(writer)
       }
-      Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
+      Transaction::SignShare(data) => {
         writer.write_all(&[11])?;
+        data.write(writer)
+      }
+      Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
+        writer.write_all(&[12])?;
         writer.write_all(plan)?;
         writer
           .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
@@ -584,6 +598,8 @@ impl TransactionTrait for Transaction {
       Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
       Transaction::InvalidDkgShare { signed, .. } => TransactionKind::Signed(signed),
       Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
+
+      Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
 
       Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
@@ -654,6 +670,8 @@ impl Transaction {
         Transaction::DkgShares { ref mut signed, .. } => signed,
         Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
         Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
+
+        Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
         Transaction::Batch(_, _) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),

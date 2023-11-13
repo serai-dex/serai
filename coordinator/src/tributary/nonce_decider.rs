@@ -86,6 +86,9 @@ impl NonceDecider {
         assert_eq!(*attempt, 0);
         Some(Some(2))
       }
+
+      Transaction::CosignSubstrateBlock(_) => None,
+
       Transaction::Batch(_, _) => None,
       Transaction::SubstrateBlock(_) => None,
       Transaction::BatchPreprocess(data) => {
