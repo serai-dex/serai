@@ -46,24 +46,26 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --release -p serai-node && \
-  mv /serai/target/release/serai-node /serai/bin
+  cargo build --release --features monero -p serai-processor && \
+  mv /serai/target/release/serai-processor /serai/bin
 FROM debian:bookworm-slim as image
 
 COPY --from=mimalloc libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+# Install ca-certificates
+RUN apt install -y ca-certificates
+
 # Switch to a non-root user
-RUN useradd --system --home /home/serai --shell /sbin/nologin serai
-USER serai
+RUN useradd --system --create-home --shell /sbin/nologin processor
+USER processor
 
-WORKDIR /home/serai
+WORKDIR /home/processor
 
-# Copy the Serai binary and relevant license
-COPY --from=builder --chown=serai /serai/bin/serai-node /bin/
-COPY --from=builder --chown=serai /serai/AGPL-3.0 .
+# Copy the Processor binary and relevant license
+COPY --from=builder --chown=processsor /serai/bin/serai-processor /bin/
+COPY --from=builder --chown=processsor /serai/AGPL-3.0 .
 
-# Run node
-EXPOSE 30333 9615 9933 9944
-CMD ["serai-node"]
+# Run processor
+CMD ["serai-processor"]

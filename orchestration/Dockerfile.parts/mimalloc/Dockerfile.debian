@@ -1,0 +1,10 @@
+FROM debian:bookworm-slim as mimalloc
+
+RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
+RUN git clone https://github.com/microsoft/mimalloc && \
+  cd mimalloc && \
+  mkdir -p out/secure && \
+  cd out/secure && \
+  cmake -DMI_SECURE=ON ../.. && \
+  make && \
+  cp ./libmimalloc-secure.so ../../../libmimalloc.so
