@@ -2,6 +2,9 @@ use core::fmt::Debug;
 
 use rand_core::{RngCore, OsRng};
 
+use scale::{Encode, Decode};
+use processor_messages::coordinator::SubstrateSignableId;
+
 use tributary::{ReadWrite, tests::random_signed};
 
 use crate::tributary::{SignData, Transaction};
@@ -28,10 +31,10 @@ fn random_vec<R: RngCore>(rng: &mut R, limit: usize) -> Vec<u8> {
   res
 }
 
-fn random_sign_data<R: RngCore, const N: usize>(rng: &mut R) -> SignData<N> {
-  let mut plan = [0; N];
-  rng.fill_bytes(&mut plan);
-
+fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + Decode>(
+  rng: &mut R,
+  plan: Id,
+) -> SignData<Id> {
   SignData {
     plan,
     attempt: random_u32(&mut OsRng),
@@ -80,10 +83,18 @@ fn tx_size_limit() {
 
 #[test]
 fn serialize_sign_data() {
-  test_read_write(random_sign_data::<_, 3>(&mut OsRng));
-  test_read_write(random_sign_data::<_, 8>(&mut OsRng));
-  test_read_write(random_sign_data::<_, 16>(&mut OsRng));
-  test_read_write(random_sign_data::<_, 24>(&mut OsRng));
+  let mut plan = [0; 3];
+  OsRng.fill_bytes(&mut plan);
+  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  let mut plan = [0; 5];
+  OsRng.fill_bytes(&mut plan);
+  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  let mut plan = [0; 8];
+  OsRng.fill_bytes(&mut plan);
+  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  let mut plan = [0; 24];
+  OsRng.fill_bytes(&mut plan);
+  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
 }
 
 #[test]
@@ -183,11 +194,33 @@ fn serialize_transaction() {
   }
   test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 
-  test_read_write(Transaction::BatchPreprocess(random_sign_data(&mut OsRng)));
-  test_read_write(Transaction::BatchShare(random_sign_data(&mut OsRng)));
+  {
+    let mut plan = [0; 5];
+    OsRng.fill_bytes(&mut plan);
+    test_read_write(Transaction::SubstratePreprocess(random_sign_data(
+      &mut OsRng,
+      SubstrateSignableId::Batch(plan),
+    )));
+  }
+  {
+    let mut plan = [0; 5];
+    OsRng.fill_bytes(&mut plan);
+    test_read_write(Transaction::SubstrateShare(random_sign_data(
+      &mut OsRng,
+      SubstrateSignableId::Batch(plan),
+    )));
+  }
 
-  test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng)));
-  test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng)));
+  {
+    let mut plan = [0; 32];
+    OsRng.fill_bytes(&mut plan);
+    test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng, plan)));
+  }
+  {
+    let mut plan = [0; 32];
+    OsRng.fill_bytes(&mut plan);
+    test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng, plan)));
+  }
 
   {
     let mut plan = [0; 32];

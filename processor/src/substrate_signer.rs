@@ -27,8 +27,8 @@ use messages::coordinator::*;
 use crate::{Get, DbTxn, Db};
 
 // Generate an ID unique to a Batch
-fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
-  (network, id).encode().try_into().unwrap()
+fn batch_sign_id(network: NetworkId, id: u32) -> SubstrateSignableId {
+  SubstrateSignableId::Batch((network, id).encode().try_into().unwrap())
 }
 
 #[derive(Debug)]
@@ -38,13 +38,13 @@ impl<D: Db> SubstrateSignerDb<D> {
     D::key(b"SUBSTRATE_SIGNER", dst, key)
   }
 
-  fn completed_key(id: [u8; 5]) -> Vec<u8> {
-    Self::sign_key(b"completed", id)
+  fn completed_key(id: SubstrateSignableId) -> Vec<u8> {
+    Self::sign_key(b"completed", id.encode())
   }
-  fn complete(txn: &mut D::Transaction<'_>, id: [u8; 5]) {
+  fn complete(txn: &mut D::Transaction<'_>, id: SubstrateSignableId) {
     txn.put(Self::completed_key(id), []);
   }
-  fn completed<G: Get>(getter: &G, id: [u8; 5]) -> bool {
+  fn completed<G: Get>(getter: &G, id: SubstrateSignableId) -> bool {
     getter.get(Self::completed_key(id)).is_some()
   }
 
@@ -74,14 +74,18 @@ pub struct SubstrateSigner<D: Db> {
   network: NetworkId,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
-  signable: HashMap<[u8; 5], Batch>,
-  attempt: HashMap<[u8; 5], u32>,
+  signable: HashMap<SubstrateSignableId, Batch>,
+  attempt: HashMap<SubstrateSignableId, u32>,
   #[allow(clippy::type_complexity)]
-  preprocessing:
-    HashMap<[u8; 5], (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
+  preprocessing: HashMap<
+    SubstrateSignableId,
+    (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>),
+  >,
   #[allow(clippy::type_complexity)]
-  signing:
-    HashMap<[u8; 5], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
+  signing: HashMap<
+    SubstrateSignableId,
+    (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>),
+  >,
 }
 
 impl<D: Db> fmt::Debug for SubstrateSigner<D> {
@@ -117,14 +121,14 @@ impl<D: Db> SubstrateSigner<D> {
       // rebooted OR we detected the signed batch on chain
       // The latter is the expected flow for batches not actively being participated in
       None => {
-        warn!("not attempting batch {} #{}", hex::encode(id.id), id.attempt);
+        warn!("not attempting {} #{}", hex::encode(id.id.encode()), id.attempt);
         Err(())?;
       }
       Some(attempt) => {
         if attempt != &id.attempt {
           warn!(
-            "sent signing data for batch {} #{} yet we have attempt #{}",
-            hex::encode(id.id),
+            "sent signing data for {} #{} yet we have attempt #{}",
+            hex::encode(id.id.encode()),
             id.attempt,
             attempt
           );
@@ -140,7 +144,7 @@ impl<D: Db> SubstrateSigner<D> {
   async fn attempt(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    id: [u8; 5],
+    id: SubstrateSignableId,
     attempt: u32,
   ) -> Option<ProcessorMessage> {
     // See above commentary for why this doesn't emit SignedBatch
@@ -153,7 +157,7 @@ impl<D: Db> SubstrateSigner<D> {
       if curr_attempt >= &attempt {
         warn!(
           "told to attempt {} #{} yet we're already working on {}",
-          hex::encode(id),
+          hex::encode(id.encode()),
           attempt,
           curr_attempt
         );
@@ -177,7 +181,7 @@ impl<D: Db> SubstrateSigner<D> {
     self.attempt.insert(id, attempt);
 
     let id = SubstrateSignId { key: self.keys[0].group_key().to_bytes(), id, attempt };
-    info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
+    info!("substrate signing {} #{}", hex::encode(id.id.encode()), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -195,7 +199,7 @@ impl<D: Db> SubstrateSigner<D> {
     if SubstrateSignerDb::<D>::has_attempt(txn, &id) {
       warn!(
         "already attempted batch {}, attempt #{}. this is an error if we didn't reboot",
-        hex::encode(id.id),
+        hex::encode(id.id.encode()),
         id.attempt
       );
       return None;
@@ -256,7 +260,7 @@ impl<D: Db> SubstrateSigner<D> {
           None => {
             warn!(
               "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id.id),
+              hex::encode(id.id.encode()),
             );
             return None;
           }
@@ -340,7 +344,7 @@ impl<D: Db> SubstrateSigner<D> {
 
             warn!(
               "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id.id)
+              hex::encode(id.id.encode())
             );
             return None;
           }
@@ -384,7 +388,7 @@ impl<D: Db> SubstrateSigner<D> {
           },
         };
 
-        info!("signed batch {} with attempt #{}", hex::encode(id.id), id.attempt);
+        info!("signed {} with attempt #{}", hex::encode(id.id.encode()), id.attempt);
 
         let batch =
           SignedBatch { batch: self.signable.remove(&id.id).unwrap(), signature: sig.into() };

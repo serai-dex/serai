@@ -23,7 +23,10 @@ use serai_client::{
     InInstructionsEvent,
   },
 };
-use messages::{coordinator::SubstrateSignId, SubstrateContext, CoordinatorMessage};
+use messages::{
+  coordinator::{SubstrateSignableId, SubstrateSignId},
+  SubstrateContext, CoordinatorMessage,
+};
 
 use crate::{*, tests::*};
 
@@ -37,7 +40,7 @@ pub async fn batch(
   OsRng.fill_bytes(&mut id);
   let id = SubstrateSignId {
     key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes(),
-    id,
+    id: SubstrateSignableId::Batch(id),
     attempt: 0,
   };
 

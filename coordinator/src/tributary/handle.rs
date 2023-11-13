@@ -18,7 +18,7 @@ use tributary::{Signed, TransactionKind, TransactionTrait};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
-  coordinator::{self, SubstrateSignId},
+  coordinator::{self, SubstrateSignableId, SubstrateSignId},
   sign::{self, SignId},
 };
 
@@ -502,8 +502,13 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
-      TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
-      let nonce = NonceDecider::handle_batch(txn, genesis, batch);
+      TributaryDb::<D>::recognize_topic(
+        txn,
+        genesis,
+        Topic::SubstrateSign(SubstrateSignableId::Batch(batch)),
+      );
+      let nonce =
+        NonceDecider::handle_substrate_signable(txn, genesis, SubstrateSignableId::Batch(batch));
       recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec(), nonce).await;
     }
 
@@ -520,14 +525,14 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
-    Transaction::BatchPreprocess(data) => {
+    Transaction::SubstratePreprocess(data) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
       match handle(
         txn,
         &DataSpecification {
-          topic: Topic::Batch(data.plan),
+          topic: Topic::SubstrateSign(data.plan),
           label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
@@ -536,7 +541,7 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::selected_for_signing_batch(txn, genesis, data.plan);
+          NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
@@ -552,14 +557,14 @@ pub(crate) async fn handle_application_tx<
         Accumulation::NotReady => {}
       }
     }
-    Transaction::BatchShare(data) => {
+    Transaction::SubstrateShare(data) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
       match handle(
         txn,
         &DataSpecification {
-          topic: Topic::Batch(data.plan),
+          topic: Topic::SubstrateSign(data.plan),
           label: BATCH_SHARE,
           attempt: data.attempt,
         },

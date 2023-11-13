@@ -1,4 +1,7 @@
-use core::ops::{Deref, Range};
+use core::{
+  ops::{Deref, Range},
+  fmt::Debug,
+};
 use std::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
@@ -15,6 +18,7 @@ use schnorr::SchnorrSignature;
 use frost::Participant;
 
 use scale::{Encode, Decode};
+use processor_messages::coordinator::SubstrateSignableId;
 
 use serai_client::{
   primitives::{NetworkId, PublicKey},
@@ -167,8 +171,8 @@ impl TributarySpec {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SignData<const N: usize> {
-  pub plan: [u8; N],
+pub struct SignData<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> {
+  pub plan: Id,
   pub attempt: u32,
 
   pub data: Vec<Vec<u8>>,
@@ -176,10 +180,10 @@ pub struct SignData<const N: usize> {
   pub signed: Signed,
 }
 
-impl<const N: usize> ReadWrite for SignData<N> {
+impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignData<Id> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut plan = [0; N];
-    reader.read_exact(&mut plan)?;
+    let plan = Id::decode(&mut scale::IoReader(&mut *reader))
+      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid plan in SignData"))?;
 
     let mut attempt = [0; 4];
     reader.read_exact(&mut attempt)?;
@@ -208,7 +212,7 @@ impl<const N: usize> ReadWrite for SignData<N> {
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&self.plan)?;
+    writer.write_all(&self.plan.encode())?;
     writer.write_all(&self.attempt.to_le_bytes())?;
 
     writer.write_all(&[u8::try_from(self.data.len()).unwrap()])?;
@@ -266,11 +270,11 @@ pub enum Transaction {
   // IDs
   SubstrateBlock(u64),
 
-  BatchPreprocess(SignData<5>),
-  BatchShare(SignData<5>),
+  SubstratePreprocess(SignData<SubstrateSignableId>),
+  SubstrateShare(SignData<SubstrateSignableId>),
 
-  SignPreprocess(SignData<32>),
-  SignShare(SignData<32>),
+  SignPreprocess(SignData<[u8; 32]>),
+  SignShare(SignData<[u8; 32]>),
   // This is defined as an Unsigned transaction in order to de-duplicate SignCompleted amongst
   // reporters (who should all report the same thing)
   // We do still track the signer in order to prevent a single signer from publishing arbitrarily
@@ -437,8 +441,8 @@ impl ReadWrite for Transaction {
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      8 => SignData::read(reader).map(Transaction::BatchPreprocess),
-      9 => SignData::read(reader).map(Transaction::BatchShare),
+      8 => SignData::read(reader).map(Transaction::SubstratePreprocess),
+      9 => SignData::read(reader).map(Transaction::SubstrateShare),
 
       10 => SignData::read(reader).map(Transaction::SignPreprocess),
       11 => SignData::read(reader).map(Transaction::SignShare),
@@ -559,11 +563,11 @@ impl ReadWrite for Transaction {
         writer.write_all(&block.to_le_bytes())
       }
 
-      Transaction::BatchPreprocess(data) => {
+      Transaction::SubstratePreprocess(data) => {
         writer.write_all(&[8])?;
         data.write(writer)
       }
-      Transaction::BatchShare(data) => {
+      Transaction::SubstrateShare(data) => {
         writer.write_all(&[9])?;
         data.write(writer)
       }
@@ -604,8 +608,8 @@ impl TransactionTrait for Transaction {
       Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
-      Transaction::BatchPreprocess(data) => TransactionKind::Signed(&data.signed),
-      Transaction::BatchShare(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SubstratePreprocess(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SubstrateShare(data) => TransactionKind::Signed(&data.signed),
 
       Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
       Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
@@ -623,7 +627,7 @@ impl TransactionTrait for Transaction {
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
-    if let Transaction::BatchShare(data) = self {
+    if let Transaction::SubstrateShare(data) = self {
       for data in &data.data {
         if data.len() != 32 {
           Err(TransactionError::InvalidContent)?;
@@ -676,8 +680,8 @@ impl Transaction {
         Transaction::Batch(_, _) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
-        Transaction::BatchPreprocess(ref mut data) => &mut data.signed,
-        Transaction::BatchShare(ref mut data) => &mut data.signed,
+        Transaction::SubstratePreprocess(ref mut data) => &mut data.signed,
+        Transaction::SubstrateShare(ref mut data) => &mut data.signed,
 
         Transaction::SignPreprocess(ref mut data) => &mut data.signed,
         Transaction::SignShare(ref mut data) => &mut data.signed,

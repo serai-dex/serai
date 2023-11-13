@@ -18,6 +18,7 @@ use frost::Participant;
 use serai_db::{DbTxn, Db};
 use serai_env as env;
 
+use scale::{Encode, Decode};
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
@@ -46,7 +47,11 @@ use db::MainDb;
 mod p2p;
 pub use p2p::*;
 
-use processor_messages::{key_gen, sign, coordinator, ProcessorMessage};
+use processor_messages::{
+  key_gen, sign,
+  coordinator::{self, SubstrateSignableId},
+  ProcessorMessage,
+};
 
 pub mod processors;
 use processors::Processors;
@@ -601,7 +606,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocesses } => {
           log::info!(
             "informed of batch (sign ID {}, attempt {}) for block {}",
-            hex::encode(id.id),
+            hex::encode(id.id.encode()),
             id.attempt,
             hex::encode(block),
           );
@@ -613,7 +618,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               &mut txn,
               spec.set().network,
               RecognizedIdType::Batch,
-              &id.id,
+              &id.id.encode(),
               preprocesses,
             );
 
@@ -657,7 +662,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
             // To fix this, if this is after the handover `Batch` and we have yet to verify
             // publication of the handover `Batch`, don't yet yield the provided.
             let handover_batch = MainDb::<D>::handover_batch(&txn, spec.set()).unwrap();
-            let intended = Transaction::Batch(block.0, id.id);
+            let intended = Transaction::Batch(
+              block.0,
+              match id.id {
+                SubstrateSignableId::Batch(id) => id,
+                _ => panic!("BatchPreprocess did not contain Batch ID"),
+              },
+            );
             let mut res = vec![intended.clone()];
             if last_received > handover_batch {
               if let Some(last_verified) = MainDb::<D>::last_verified_batch(&txn, msg.network) {
@@ -675,7 +686,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
             res
           } else {
-            vec![Transaction::BatchPreprocess(SignData {
+            vec![Transaction::SubstratePreprocess(SignData {
               plan: id.id,
               attempt: id.attempt,
               data: preprocesses,
@@ -684,7 +695,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }
         }
         coordinator::ProcessorMessage::BatchShare { id, shares } => {
-          vec![Transaction::BatchShare(SignData {
+          vec![Transaction::SubstrateShare(SignData {
             plan: id.id,
             attempt: id.attempt,
             data: shares.into_iter().map(|share| share.to_vec()).collect(),
@@ -996,9 +1007,9 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         };
 
         let mut tx = match id_type {
-          RecognizedIdType::Batch => Transaction::BatchPreprocess(SignData {
+          RecognizedIdType::Batch => Transaction::SubstratePreprocess(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
-            plan: id.try_into().unwrap(),
+            plan: SubstrateSignableId::decode(&mut scale::IoReader(&mut id.as_slice())).unwrap(),
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),

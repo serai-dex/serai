@@ -156,10 +156,18 @@ pub mod sign {
 pub mod coordinator {
   use super::*;
 
+  #[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize,
+  )]
+  pub enum SubstrateSignableId {
+    Batch([u8; 5]),
+    Block([u8; 32]),
+  }
+
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
   pub struct SubstrateSignId {
     pub key: [u8; 32],
-    pub id: [u8; 5],
+    pub id: SubstrateSignableId,
     pub attempt: u32,
   }
 

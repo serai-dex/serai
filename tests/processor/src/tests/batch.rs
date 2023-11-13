@@ -29,7 +29,7 @@ pub(crate) async fn recv_batch_preprocesses(
 ) -> (SubstrateSignId, HashMap<Participant, Vec<u8>>) {
   let id = SubstrateSignId {
     key: *substrate_key,
-    id: (batch.network, batch.id).encode().try_into().unwrap(),
+    id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
     attempt,
   };
 
