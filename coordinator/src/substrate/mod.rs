@@ -478,7 +478,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
           .block_by_number(block - 1)
           .await?
           .expect("couldn't get block which should've been finalized");
-        let serai = serai.as_of(actual_block.parent());
+        let serai = serai.as_of(actual_block.header().parent_hash.into());
 
         for network in serai_client::primitives::NETWORKS {
           // Get the latest session to have set keys

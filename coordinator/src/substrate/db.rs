@@ -13,7 +13,7 @@ create_db! {
   NewSubstrateDb {
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
-    CosignTransactions: () -> Vec<(ValidatorSet, u64, [u8; 32])>
+    CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>
   }
 }
 
@@ -51,20 +51,20 @@ impl CosignTransactions {
     hash: [u8; 32],
   ) {
     #[allow(clippy::unwrap_or_default)]
-    let mut txs = CosignTransactions::get(&txn.0).unwrap_or(vec![]);
-    txs.push((set, number, hash));
-    CosignTransactions::set(&mut txn.0, &txs);
+    let mut txs = CosignTransactions::get(&txn.0, set.network).unwrap_or(vec![]);
+    txs.push((set.session, number, hash));
+    CosignTransactions::set(&mut txn.0, set.network, &txs);
   }
   // Peek at the next cosign transaction.
-  pub fn peek_cosign(getter: &impl Get) -> Option<(ValidatorSet, u64, [u8; 32])> {
-    Some(CosignTransactions::get(getter)?.swap_remove(0))
+  pub fn peek_cosign(getter: &impl Get, network: NetworkId) -> Option<(Session, u64, [u8; 32])> {
+    Some(CosignTransactions::get(getter, network)?.swap_remove(0))
   }
   // Take the next transaction, panicking if it doesn't exist.
-  pub fn take_cosign(mut txn: impl DbTxn) {
+  pub fn take_cosign(mut txn: impl DbTxn, network: NetworkId) {
     let _lock = COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
-    let mut txs = CosignTransactions::get(&txn).unwrap();
+    let mut txs = CosignTransactions::get(&txn, network).unwrap();
     txs.remove(0);
-    CosignTransactions::set(&mut txn, &txs);
+    CosignTransactions::set(&mut txn, network, &txs);
     txn.commit();
   }
 }

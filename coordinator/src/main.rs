@@ -796,14 +796,12 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     // Handle pending cosigns
     // This isn't a processor message in the slightest, it's just cleanest to put it here
     // TODO: Find a better place for this?
-    // TODO(now): Queue this per network
-    while let Some((set, block, hash)) = CosignTransactions::peek_cosign(&db) {
-      if set.network != network {
-        break;
-      }
-
-      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&set.session) else { break };
-      log::info!("{set:?} co-signing block #{block} (hash {}...)", hex::encode(&hash[.. 8]));
+    while let Some((session, block, hash)) = CosignTransactions::peek_cosign(&db, network) {
+      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else { break };
+      log::info!(
+        "{network:?} {session:?} co-signing block #{block} (hash {}...)",
+        hex::encode(&hash[.. 8])
+      );
       let tx = Transaction::CosignSubstrateBlock(hash);
       let res = tributary.provide_transaction(tx.clone()).await;
       if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
@@ -821,7 +819,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
         }
         panic!("provided an invalid CosignSubstrateBlock: {res:?}");
       }
-      CosignTransactions::take_cosign(db.txn());
+      CosignTransactions::take_cosign(db.txn(), network);
     }
 
     // TODO: Check this ID is sane (last handled ID or expected next ID)
