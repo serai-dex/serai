@@ -48,13 +48,13 @@ impl<D: Db> SubstrateSignerDb<D> {
     getter.get(Self::completed_key(id)).is_some()
   }
 
-  fn attempt_key(id: &BatchSignId) -> Vec<u8> {
+  fn attempt_key(id: &SubstrateSignId) -> Vec<u8> {
     Self::sign_key(b"attempt", id.encode())
   }
-  fn attempt(txn: &mut D::Transaction<'_>, id: &BatchSignId) {
+  fn attempt(txn: &mut D::Transaction<'_>, id: &SubstrateSignId) {
     txn.put(Self::attempt_key(id), []);
   }
-  fn has_attempt<G: Get>(getter: &G, id: &BatchSignId) -> bool {
+  fn has_attempt<G: Get>(getter: &G, id: &SubstrateSignId) -> bool {
     getter.get(Self::attempt_key(id)).is_some()
   }
 
@@ -110,7 +110,7 @@ impl<D: Db> SubstrateSigner<D> {
     }
   }
 
-  fn verify_id(&self, id: &BatchSignId) -> Result<(), ()> {
+  fn verify_id(&self, id: &SubstrateSignId) -> Result<(), ()> {
     // Check the attempt lines up
     match self.attempt.get(&id.id) {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
@@ -176,7 +176,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = BatchSignId { key: self.keys[0].group_key().to_bytes(), id, attempt };
+    let id = SubstrateSignId { key: self.keys[0].group_key().to_bytes(), id, attempt };
     info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter

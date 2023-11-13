@@ -157,7 +157,7 @@ pub mod coordinator {
   use super::*;
 
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
-  pub struct BatchSignId {
+  pub struct SubstrateSignId {
     pub key: [u8; 32],
     pub id: [u8; 5],
     pub attempt: u32,
@@ -166,10 +166,10 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
     // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
-    BatchPreprocesses { id: BatchSignId, preprocesses: HashMap<Participant, Vec<u8>> },
-    BatchShares { id: BatchSignId, shares: HashMap<Participant, [u8; 32]> },
+    BatchPreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, Vec<u8>> },
+    BatchShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
     // Re-attempt a batch signing protocol.
-    BatchReattempt { id: BatchSignId },
+    BatchReattempt { id: SubstrateSignId },
   }
 
   impl CoordinatorMessage {
@@ -203,9 +203,9 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
-    InvalidParticipant { id: BatchSignId, participant: Participant },
-    BatchPreprocess { id: BatchSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
-    BatchShare { id: BatchSignId, shares: Vec<[u8; 32]> },
+    InvalidParticipant { id: SubstrateSignId, participant: Participant },
+    BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
+    BatchShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
   }
 }
 
@@ -420,7 +420,7 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::SubstrateBlockAck { network, block, .. } => {
             (0, (network, block).encode())
           }
-          // Unique since BatchSignId
+          // Unique since SubstrateSignId
           coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
           coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (2, id.encode()),
           coordinator::ProcessorMessage::BatchShare { id, .. } => (3, id.encode()),

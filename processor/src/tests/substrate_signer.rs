@@ -18,7 +18,7 @@ use serai_client::{primitives::*, in_instructions::primitives::*};
 
 use messages::{
   substrate,
-  coordinator::{self, BatchSignId, CoordinatorMessage},
+  coordinator::{self, SubstrateSignId, CoordinatorMessage},
   ProcessorMessage,
 };
 use crate::substrate_signer::SubstrateSigner;
@@ -48,7 +48,7 @@ async fn test_substrate_signer() {
     ],
   };
 
-  let actual_id = BatchSignId {
+  let actual_id = SubstrateSignId {
     key: keys.values().next().unwrap().group_key().to_bytes(),
     id: (batch.network, batch.id).encode().try_into().unwrap(),
     attempt: 0,

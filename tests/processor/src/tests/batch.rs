@@ -26,8 +26,8 @@ pub(crate) async fn recv_batch_preprocesses(
   substrate_key: &[u8; 32],
   batch: &Batch,
   attempt: u32,
-) -> (BatchSignId, HashMap<Participant, Vec<u8>>) {
-  let id = BatchSignId {
+) -> (SubstrateSignId, HashMap<Participant, Vec<u8>>) {
+  let id = SubstrateSignId {
     key: *substrate_key,
     id: (batch.network, batch.id).encode().try_into().unwrap(),
     attempt,
@@ -86,7 +86,7 @@ pub(crate) async fn recv_batch_preprocesses(
 pub(crate) async fn sign_batch(
   coordinators: &mut [Coordinator],
   key: [u8; 32],
-  id: BatchSignId,
+  id: SubstrateSignId,
   preprocesses: HashMap<Participant, Vec<u8>>,
 ) -> SignedBatch {
   assert_eq!(preprocesses.len(), THRESHOLD);

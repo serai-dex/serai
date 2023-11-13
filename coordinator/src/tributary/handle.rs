@@ -18,7 +18,7 @@ use tributary::{Signed, TransactionKind, TransactionTrait};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
-  coordinator::{self, BatchSignId},
+  coordinator::{self, SubstrateSignId},
   sign::{self, SignId},
 };
 
@@ -542,7 +542,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
             )
@@ -573,7 +573,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::BatchShares {
-                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
