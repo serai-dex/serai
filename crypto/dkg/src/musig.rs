@@ -7,8 +7,6 @@ use std_shims::collections::HashMap;
 #[cfg(feature = "std")]
 use zeroize::Zeroizing;
 
-use transcript::{Transcript, RecommendedTranscript};
-
 #[cfg(feature = "std")]
 use ciphersuite::group::ff::Field;
 use ciphersuite::{
@@ -37,31 +35,36 @@ fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, DkgError<()>> {
   Ok(keys_len)
 }
 
+// This function panics if called with keys whose length exceed 2**16.
+// This is fine since it's internal and all calls occur after calling check_keys, which does check
+// the keys' length.
 fn binding_factor_transcript<C: Ciphersuite>(
   context: &[u8],
   keys: &[C::G],
-) -> RecommendedTranscript {
-  let mut transcript = RecommendedTranscript::new(b"DKG MuSig v0.5");
-  transcript.append_message(b"context", context);
-  transcript.domain_separate(b"keys");
+) -> Result<Vec<u8>, DkgError<()>> {
+  let mut transcript = vec![];
+  transcript.push(u8::try_from(context.len()).map_err(|_| DkgError::InvalidSigningSet)?);
+  transcript.extend(context);
+  transcript.extend(u16::try_from(keys.len()).unwrap().to_le_bytes());
   for key in keys {
-    transcript.append_message(b"key", key.to_bytes());
+    transcript.extend(key.to_bytes().as_ref());
   }
-  transcript
+  Ok(transcript)
 }
 
-fn binding_factor<C: Ciphersuite>(mut transcript: RecommendedTranscript, i: u16) -> C::F {
-  transcript.domain_separate(b"participant");
-  transcript.append_message(b"participant", i.to_le_bytes());
-  C::hash_to_F(b"DKG-MuSig-binding_factor", &transcript.challenge(b"binding_factor"))
+fn binding_factor<C: Ciphersuite>(mut transcript: Vec<u8>, i: u16) -> C::F {
+  transcript.extend(i.to_le_bytes());
+  C::hash_to_F(b"musig", &transcript)
 }
 
 /// The group key resulting from using this library's MuSig key gen.
 ///
-/// Creating an aggregate key with a list containing duplicated public keys returns an error.
+/// This function will return an error if the context is longer than 255 bytes.
+///
+/// Creating an aggregate key with a list containing duplicated public keys will return an error.
 pub fn musig_key<C: Ciphersuite>(context: &[u8], keys: &[C::G]) -> Result<C::G, DkgError<()>> {
   let keys_len = check_keys::<C>(keys)?;
-  let transcript = binding_factor_transcript::<C>(context, keys);
+  let transcript = binding_factor_transcript::<C>(context, keys)?;
   let mut res = C::G::identity();
   for i in 1 ..= keys_len {
     res += keys[usize::from(i - 1)] * binding_factor::<C>(transcript.clone(), i);
@@ -95,7 +98,7 @@ pub fn musig<C: Ciphersuite>(
   )?;
 
   // Calculate the binding factor per-key
-  let transcript = binding_factor_transcript::<C>(context, keys);
+  let transcript = binding_factor_transcript::<C>(context, keys)?;
   let mut binding = Vec::with_capacity(keys.len());
   for i in 1 ..= keys_len {
     binding.push(binding_factor::<C>(transcript.clone(), i));
