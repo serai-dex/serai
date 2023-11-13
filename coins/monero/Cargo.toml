@@ -91,7 +91,7 @@ std = [
 
   "monero-generators/std",
 
-  "futures/std",
+  "futures?/std",
 
   "hex/std",
   "serde/std",
@@ -100,6 +100,7 @@ std = [
   "base58-monero/std",
 ]
 
+cache-distribution = ["futures"]
 http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "dleq", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]

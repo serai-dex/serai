@@ -1,8 +1,11 @@
-use std_shims::{sync::OnceLock, vec::Vec, collections::HashSet};
+use std_shims::{vec::Vec, collections::HashSet};
 
-#[cfg(not(feature = "std"))]
+#[cfg(feature = "cache-distribution")]
+use std_shims::sync::OnceLock;
+
+#[cfg(all(feature = "cache-distribution", not(feature = "std")))]
 use std_shims::sync::Mutex;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "cache-distribution", feature = "std"))]
 use futures::lock::Mutex;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -27,9 +30,11 @@ const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
-// TODO: Expose an API to reset this in case a reorg occurs/the RPC fails/returns garbage
+// TODO: Resolve safety of this in case a reorg occurs/the network changes
 // TODO: Update this when scanning a block, as possible
+#[cfg(feature = "cache-distribution")]
 static DISTRIBUTION_CELL: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
+#[cfg(feature = "cache-distribution")]
 #[allow(non_snake_case)]
 fn DISTRIBUTION() -> &'static Mutex<Vec<u64>> {
   DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3000000)))
@@ -159,10 +164,15 @@ impl Decoys {
     height: usize,
     inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
+    #[cfg(feature = "cache-distribution")]
     #[cfg(not(feature = "std"))]
     let mut distribution = DISTRIBUTION().lock();
+    #[cfg(feature = "cache-distribution")]
     #[cfg(feature = "std")]
     let mut distribution = DISTRIBUTION().lock().await;
+
+    #[cfg(not(feature = "cache-distribution"))]
+    let mut distribution = vec![];
 
     let decoy_count = ring_len - 1;
 
