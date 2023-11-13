@@ -1,6 +1,6 @@
 #[cfg(feature = "std")]
 use core::ops::Deref;
-use std_shims::collections::HashSet;
+use std_shims::{vec, vec::Vec, collections::HashSet};
 #[cfg(feature = "std")]
 use std_shims::collections::HashMap;
 
