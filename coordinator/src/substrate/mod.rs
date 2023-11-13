@@ -373,7 +373,6 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     // co-sign this block.
     const COSIGN_DISTANCE: u64 = 5 * 60 / 6; // 5 minutes, expressed in blocks
 
-    // TODO: Cache block_has_events results
     async fn block_has_events(
       txn: &mut impl DbTxn,
       serai: &Serai,
@@ -433,6 +432,24 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     for b in (last_intended_to_cosign_block + COSIGN_DISTANCE) ..= latest_number {
       if (Some(b) == maximally_latent_cosign_block) || block_has_events(&mut txn, serai, b).await? {
         IntendedCosign::set_intended_cosign(&mut txn, b);
+
+        // Get all Tributaries active at this block which we're in
+        let serai = serai.as_of(
+          serai
+            .block_by_number(b)
+            .await?
+            .expect("couldn't get block which should've been finalized")
+            .hash(),
+        );
+        for network in serai_client::primitives::NETWORKS {
+          let Some(session) = serai.validator_sets().session(network).await? else { continue };
+
+          if in_set(key, &serai, ValidatorSet { network, session }).await?.unwrap() {
+            // Provide a CosignSubstrateBlock transaction
+            // TODO
+          }
+        }
+
         break;
       }
     }
