@@ -81,7 +81,7 @@ impl Weights for TestWeights {
     4
   }
   fn weight(&self, id: TestValidatorId) -> u64 {
-    [1; 4][usize::try_from(id).unwrap()]
+    [1; 4][usize::from(id)]
   }
 
   fn proposer(&self, number: BlockNumber, round: RoundNumber) -> TestValidatorId {
@@ -137,9 +137,8 @@ impl Network for TestNetwork {
     }
   }
 
-  async fn slash(&mut self, _: TestValidatorId, _: SlashEvent) {
-    dbg!("Slash");
-    todo!()
+  async fn slash(&mut self, id: TestValidatorId, event: SlashEvent) {
+    println!("Slash for {id} due to {event:?}");
   }
 
   async fn validate(&mut self, block: &TestBlock) -> Result<(), BlockError> {
@@ -151,7 +150,7 @@ impl Network for TestNetwork {
     block: TestBlock,
     commit: Commit<TestSignatureScheme>,
   ) -> Option<TestBlock> {
-    dbg!("Adding ", &block);
+    println!("Adding {:?}", &block);
     assert!(block.valid.is_ok());
     assert!(self.verify_commit(block.id(), &commit));
     Some(TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) })
@@ -161,6 +160,7 @@ impl Network for TestNetwork {
 impl TestNetwork {
   async fn new(
     validators: usize,
+    start_time: u64,
   ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>
   {
     let arc = Arc::new(RwLock::new(vec![]));
@@ -172,7 +172,7 @@ impl TestNetwork {
           TendermintMachine::new(
             TestNetwork(i, arc.clone()),
             BlockNumber(1),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            start_time,
             TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
           )
           .await;
@@ -185,7 +185,13 @@ impl TestNetwork {
 }
 
 #[tokio::test]
-async fn test() {
-  TestNetwork::new(4).await;
+async fn test_machine() {
+  TestNetwork::new(4, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()).await;
+  sleep(Duration::from_secs(30)).await;
+}
+
+#[tokio::test]
+async fn test_machine_with_historic_start_time() {
+  TestNetwork::new(4, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - 60).await;
   sleep(Duration::from_secs(30)).await;
 }
