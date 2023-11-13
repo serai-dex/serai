@@ -7,6 +7,24 @@ use serai_client::{
   validator_sets::primitives::{Session, KeyPair},
 };
 
+create_db! {
+  NewSubstrateDb {
+    IntendedCosign: () -> (u64, Option<u64>),
+    BlockHasEvents: (block: u64) -> bool
+  }
+}
+
+impl IntendedCosign {
+  pub fn set_intended_cosign(txn: &mut impl DbTxn, intended: u64) {
+    Self::set(txn, &(intended, None::<u64>));
+  }
+  pub fn set_skipped_cosign(txn: &mut impl DbTxn, skipped: u64) {
+    let (intended, prior_skipped) = Self::get(txn).unwrap();
+    assert!(prior_skipped.is_none());
+    Self::set(txn, &(intended, Some(skipped)));
+  }
+}
+
 #[derive(Debug)]
 pub struct SubstrateDb<D: Db>(pub D);
 impl<D: Db> SubstrateDb<D> {
@@ -18,16 +36,28 @@ impl<D: Db> SubstrateDb<D> {
     D::key(b"coordinator_substrate", dst, key)
   }
 
-  fn block_key() -> Vec<u8> {
-    Self::substrate_key(b"block", [])
+  fn next_block_key() -> Vec<u8> {
+    Self::substrate_key(b"next_block", [])
   }
   pub fn set_next_block(&mut self, block: u64) {
     let mut txn = self.0.txn();
-    txn.put(Self::block_key(), block.to_le_bytes());
+    txn.put(Self::next_block_key(), block.to_le_bytes());
     txn.commit();
   }
   pub fn next_block(&self) -> u64 {
-    u64::from_le_bytes(self.0.get(Self::block_key()).unwrap_or(vec![0; 8]).try_into().unwrap())
+    u64::from_le_bytes(self.0.get(Self::next_block_key()).unwrap_or(vec![0; 8]).try_into().unwrap())
+  }
+
+  fn latest_cosigned_block_key() -> Vec<u8> {
+    Self::substrate_key(b"latest_cosigned_block", [])
+  }
+  pub fn set_latest_cosigned_block(txn: &mut D::Transaction<'_>, latest_cosigned_block: u64) {
+    txn.put(Self::latest_cosigned_block_key(), latest_cosigned_block.to_le_bytes());
+  }
+  pub fn latest_cosigned_block<G: Get>(getter: &G) -> u64 {
+    u64::from_le_bytes(
+      getter.get(Self::latest_cosigned_block_key()).unwrap_or(vec![0; 8]).try_into().unwrap(),
+    )
   }
 
   fn event_key(id: &[u8], index: u32) -> Vec<u8> {

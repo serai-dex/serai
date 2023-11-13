@@ -363,12 +363,88 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   next_block: &mut u64,
 ) -> Result<(), SeraiError> {
   // Check if there's been a new Substrate block
-  let latest = serai.latest_block().await?;
-  let latest_number = latest.number();
+  let latest_number = serai.latest_block().await?.number();
+
+  {
+    // If:
+    //   A) This block has events and it's been at least X blocks since the last co-sign or
+    //   B) This block doesn't have events but it's been X blocks since a skipped block which did
+    //      have events
+    // co-sign this block.
+    const COSIGN_DISTANCE: u64 = 5 * 60 / 6; // 5 minutes, expressed in blocks
+
+    // TODO: Cache block_has_events results
+    async fn block_has_events(
+      txn: &mut impl DbTxn,
+      serai: &Serai,
+      block: u64,
+    ) -> Result<bool, SeraiError> {
+      match BlockHasEvents::get(txn, block) {
+        None => {
+          let serai = serai.as_of(
+            serai
+              .block_by_number(block)
+              .await?
+              .expect("couldn't get block which should've been finalized")
+              .hash(),
+          );
+
+          let has_no_events = serai.coins().burn_with_instruction_events().await?.is_empty() &&
+            serai.in_instructions().batch_events().await?.is_empty() &&
+            serai.coins().burn_with_instruction_events().await?.is_empty() &&
+            serai.validator_sets().new_set_events().await?.is_empty() &&
+            serai.validator_sets().key_gen_events().await?.is_empty() &&
+            serai.validator_sets().set_retired_events().await?.is_empty();
+          let has_events = !has_no_events;
+
+          BlockHasEvents::set(txn, block, &has_events);
+          Ok(has_events)
+        }
+        Some(res) => Ok(res),
+      }
+    }
+
+    let mut txn = db.0.txn();
+    let Some((last_intended_to_cosign_block, mut skipped_block)) = IntendedCosign::get(&txn) else {
+      IntendedCosign::set_intended_cosign(&mut txn, 0);
+      txn.commit();
+      return Ok(());
+    };
+
+    // If we haven't flagged skipped, and a block within the distance had events, flag skipped
+    if skipped_block.is_none() {
+      for b in
+        (last_intended_to_cosign_block + 1) .. (last_intended_to_cosign_block + COSIGN_DISTANCE)
+      {
+        if b > latest_number {
+          break;
+        }
+
+        if block_has_events(&mut txn, serai, b).await? {
+          skipped_block = Some(b);
+          IntendedCosign::set_skipped_cosign(&mut txn, b);
+          break;
+        }
+      }
+    }
+
+    let maximally_latent_cosign_block =
+      skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
+    for b in (last_intended_to_cosign_block + COSIGN_DISTANCE) ..= latest_number {
+      if (Some(b) == maximally_latent_cosign_block) || block_has_events(&mut txn, serai, b).await? {
+        IntendedCosign::set_intended_cosign(&mut txn, b);
+        break;
+      }
+    }
+    txn.commit();
+  }
+
+  // Reduce to the latest cosigned block
+  let latest_number = latest_number.min(SubstrateDb::<D>::latest_cosigned_block(&db.0));
+
   if latest_number < *next_block {
     return Ok(());
   }
-  let mut latest = Some(latest);
 
   for b in *next_block ..= latest_number {
     log::info!("found substrate block {b}");
@@ -379,14 +455,10 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       tributary_retired,
       processors,
       serai,
-      if b == latest_number {
-        latest.take().unwrap()
-      } else {
-        serai
-          .block_by_number(b)
-          .await?
-          .expect("couldn't get block before the latest finalized block")
-      },
+      serai
+        .block_by_number(b)
+        .await?
+        .expect("couldn't get block before the latest finalized block"),
     )
     .await?;
     *next_block += 1;
