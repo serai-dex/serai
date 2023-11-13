@@ -16,32 +16,32 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 thiserror = "1"
 
-rand_core = "0.6"
-rand_chacha = "0.3"
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-zeroize = { version = "^1.5", features = ["zeroize_derive"] }
-subtle = "^2.4"
+zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false, features = ["std"] }
 
-hex = { version = "0.4", optional = true }
+hex = { version = "0.4", default-features = false, features = ["std"], optional = true }
 
-digest = "0.10"
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", features = ["recommended"] }
+digest = { version = "0.10", default-features = false, features = ["std"] }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["std", "recommended"] }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", optional = true }
-minimal-ed448 = { path = "../ed448", version = "0.4", optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false, features = ["std"], optional = true }
+minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
 
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", features = ["std"] }
+ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }
 
-multiexp = { path = "../multiexp", version = "0.4", features = ["batch"] }
+multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1" }
-dleq = { path = "../dleq", version = "^0.4.1", features = ["serialize"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
+dleq = { path = "../dleq", version = "^0.4.1", default-features = false, features = ["std", "serialize"] }
 
-dkg = { path = "../dkg", version = "^0.5.1" }
+dkg = { path = "../dkg", version = "^0.5.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 hex = "0.4"
-serde_json = "1"
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
 dkg = { path = "../dkg", features = ["tests"] }
 
