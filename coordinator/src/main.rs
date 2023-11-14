@@ -59,6 +59,9 @@ use processors::Processors;
 mod substrate;
 use substrate::{CosignTransactions, SubstrateDb};
 
+mod cosign_evaluator;
+use cosign_evaluator::CosignEvaluator;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -167,10 +170,13 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_processor_message<D: Db, P: P2p>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
+  p2p: &P,
+  cosign_channel: &mpsc::UnboundedSender<CosignedBlock>,
   tributaries: &HashMap<Session, ActiveTributary<D, P>>,
   network: NetworkId,
   msg: &processors::Message,
@@ -275,11 +281,28 @@ async fn handle_processor_message<D: Db, P: P2p>(
       coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
+      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => {
+        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
-      coordinator::ProcessorMessage::BatchShare { id, .. } => {
+      coordinator::ProcessorMessage::SubstrateShare { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+      }
+      coordinator::ProcessorMessage::CosignedBlock { block, signature } => {
+        let cosigned_block = CosignedBlock {
+          network,
+          block: *block,
+          signature: {
+            let mut arr = [0; 64];
+            arr.copy_from_slice(signature);
+            arr
+          },
+        };
+        cosign_channel.send(cosigned_block).unwrap();
+        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, cosigned_block.encode()).await;
+        None
       }
     },
     // These don't return a relevant Tributary as there's no Tributary with action expected
@@ -603,6 +626,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // slash) and censor transactions (yet don't explicitly ban)
           vec![]
         }
+        coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } => {
+          vec![Transaction::SubstratePreprocess(SignData {
+            plan: id.id,
+            attempt: id.attempt,
+            data: preprocesses,
+            signed: Transaction::empty_signed(),
+          })]
+        }
         coordinator::ProcessorMessage::BatchPreprocess { id, block, preprocesses } => {
           log::info!(
             "informed of batch (sign ID {}, attempt {}) for block {}",
@@ -694,7 +725,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             })]
           }
         }
-        coordinator::ProcessorMessage::BatchShare { id, shares } => {
+        coordinator::ProcessorMessage::SubstrateShare { id, shares } => {
           vec![Transaction::SubstrateShare(SignData {
             plan: id.id,
             attempt: id.attempt,
@@ -702,6 +733,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           })]
         }
+        coordinator::ProcessorMessage::CosignedBlock { .. } => unreachable!(),
       },
       ProcessorMessage::Substrate(inner_msg) => match inner_msg {
         processor_messages::substrate::ProcessorMessage::Batch { .. } => unreachable!(),
@@ -777,11 +809,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
   true
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: Arc<Serai>,
   mut processors: Pro,
+  p2p: P,
+  cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   network: NetworkId,
   mut tributary_event: mpsc::UnboundedReceiver<TributaryEvent<D, P>>,
 ) {
@@ -838,7 +873,18 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     else {
       continue;
     };
-    if handle_processor_message(&mut db, &key, &serai, &tributaries, network, &msg).await {
+    if handle_processor_message(
+      &mut db,
+      &key,
+      &serai,
+      &p2p,
+      &cosign_channel,
+      &tributaries,
+      network,
+      &msg,
+    )
+    .await
+    {
       processors.ack(msg).await;
     }
   }
@@ -849,6 +895,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: Arc<Serai>,
   processors: Pro,
+  p2p: P,
+  cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
   let mut channels = HashMap::new();
@@ -862,6 +910,8 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
       key.clone(),
       serai.clone(),
       processors.clone(),
+      p2p.clone(),
+      cosign_channel.clone(),
       network,
       recv,
     ));
@@ -1072,11 +1122,27 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   // in a while (presumably because we're behind)
   tokio::spawn(p2p::heartbeat_tributaries_task(p2p.clone(), tributary_event_listener_3));
 
+  // Create the Cosign evaluator
+  let cosign_channel = CosignEvaluator::new(raw_db.clone(), p2p.clone(), serai.clone());
+
   // Handle P2P messages
-  tokio::spawn(p2p::handle_p2p_task(p2p, tributary_event_listener_4));
+  tokio::spawn(p2p::handle_p2p_task(
+    p2p.clone(),
+    cosign_channel.clone(),
+    tributary_event_listener_4,
+  ));
 
   // Handle all messages from processors
-  handle_processors(raw_db, key, serai, processors, tributary_event_listener_5).await;
+  handle_processors(
+    raw_db,
+    key,
+    serai,
+    processors,
+    p2p,
+    cosign_channel,
+    tributary_event_listener_5,
+  )
+  .await;
 }
 
 #[tokio::main]

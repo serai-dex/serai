@@ -55,6 +55,13 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "AllocationPerKeyShare", Some(vec![scale_value(network)])).await
   }
 
+  pub async fn total_allocated_stake(
+    &self,
+    network: NetworkId,
+  ) -> Result<Option<Amount>, SeraiError> {
+    self.0.storage(PALLET, "TotalAllocatedStake", Some(vec![scale_value(network)])).await
+  }
+
   pub async fn allocation(
     &self,
     network: NetworkId,

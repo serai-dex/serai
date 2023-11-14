@@ -510,15 +510,16 @@ pub(crate) async fn handle_application_tx<
         SubstrateSignableId::CosigningSubstrateBlock(hash),
       );
 
+      let key = TributaryDb::<D>::key_pair(txn, spec.set())
+        .expect("cosigning SubstrateBlock despite not setting the key pair")
+        .0
+        .into();
       processors
         .send(
           spec.set().network,
           coordinator::CoordinatorMessage::CosignSubstrateBlock {
             id: SubstrateSignId {
-              key: TributaryDb::<D>::key_pair(txn, spec.set())
-                .expect("cosigning SubstrateBlock despite not setting the key pair")
-                .0
-                .into(),
+              key,
               id: SubstrateSignableId::CosigningSubstrateBlock(hash),
               attempt: 0,
             },
@@ -573,7 +574,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              coordinator::CoordinatorMessage::BatchPreprocesses {
+              coordinator::CoordinatorMessage::SubstratePreprocesses {
                 id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
@@ -604,7 +605,7 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              coordinator::CoordinatorMessage::BatchShares {
+              coordinator::CoordinatorMessage::SubstrateShares {
                 id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
