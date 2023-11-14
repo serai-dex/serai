@@ -86,7 +86,10 @@ pub async fn batch(
   let first_preprocesses = processors[known_signer].recv_message().await;
   let participants = match first_preprocesses {
     CoordinatorMessage::Coordinator(
-      messages::coordinator::CoordinatorMessage::BatchPreprocesses { id: this_id, preprocesses },
+      messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
+        id: this_id,
+        preprocesses,
+      },
     ) => {
       assert_eq!(&id, &this_id);
       assert_eq!(preprocesses.len(), THRESHOLD - 1);
@@ -120,7 +123,7 @@ pub async fn batch(
     assert_eq!(
       processor.recv_message().await,
       CoordinatorMessage::Coordinator(
-        messages::coordinator::CoordinatorMessage::BatchPreprocesses {
+        messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
           id: id.clone(),
           preprocesses
         }
@@ -132,7 +135,7 @@ pub async fn batch(
     let processor =
       &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     processor
-      .send_message(messages::coordinator::ProcessorMessage::BatchShare {
+      .send_message(messages::coordinator::ProcessorMessage::SubstrateShare {
         id: id.clone(),
         shares: vec![[u8::try_from(u16::from(i)).unwrap(); 32]],
       })
@@ -151,7 +154,7 @@ pub async fn batch(
 
     assert_eq!(
       processor.recv_message().await,
-      CoordinatorMessage::Coordinator(messages::coordinator::CoordinatorMessage::BatchShares {
+      CoordinatorMessage::Coordinator(messages::coordinator::CoordinatorMessage::SubstrateShares {
         id: id.clone(),
         shares,
       })

@@ -96,7 +96,7 @@ pub(crate) async fn sign_batch(
 
     if preprocesses.contains_key(&i) {
       coordinator
-        .send_message(messages::coordinator::CoordinatorMessage::BatchPreprocesses {
+        .send_message(messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
           id: id.clone(),
           preprocesses: clone_without(&preprocesses, &i),
         })
@@ -111,7 +111,7 @@ pub(crate) async fn sign_batch(
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::BatchShare {
+          messages::coordinator::ProcessorMessage::SubstrateShare {
             id: this_id,
             shares: mut these_shares,
           },
@@ -130,7 +130,7 @@ pub(crate) async fn sign_batch(
 
     if preprocesses.contains_key(&i) {
       coordinator
-        .send_message(messages::coordinator::CoordinatorMessage::BatchShares {
+        .send_message(messages::coordinator::CoordinatorMessage::SubstrateShares {
           id: id.clone(),
           shares: clone_without(&shares, &i),
         })
