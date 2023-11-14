@@ -36,6 +36,8 @@ impl<D: Db> CosignEvaluator<D> {
     // If we haven't gotten the stake data yet, return
     let Some(stakes) = stakes_lock.as_ref() else { return };
 
+    let total_stake = stakes.values().cloned().sum::<u64>();
+
     let latest_cosigns = self.latest_cosigns.read().unwrap();
     let mut highest_block = 0;
     for (block_num, _) in latest_cosigns.values() {
@@ -47,7 +49,6 @@ impl<D: Db> CosignEvaluator<D> {
       }
       let sum_stake =
         networks.into_iter().map(|network| stakes.get(network).unwrap_or(&0)).sum::<u64>();
-      let total_stake = stakes.values().cloned().sum::<u64>();
       let needed_stake = ((total_stake * 2) / 3) + 1;
       if (total_stake == 0) || (sum_stake > needed_stake) {
         highest_block = highest_block.max(*block_num);

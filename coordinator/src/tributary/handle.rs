@@ -510,10 +510,14 @@ pub(crate) async fn handle_application_tx<
         SubstrateSignableId::CosigningSubstrateBlock(hash),
       );
 
-      let key = TributaryDb::<D>::key_pair(txn, spec.set())
-        .expect("cosigning SubstrateBlock despite not setting the key pair")
-        .0
-        .into();
+      let key = loop {
+        let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
+          // This can happen based on a timing condition
+          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+          continue;
+        };
+        break key_pair.0.into();
+      };
       processors
         .send(
           spec.set().network,

@@ -419,14 +419,19 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
 
     let mut txn = db.0.txn();
     let Some((last_intended_to_cosign_block, mut skipped_block)) = IntendedCosign::get(&txn) else {
-      IntendedCosign::set_intended_cosign(&mut txn, 0);
+      IntendedCosign::set_intended_cosign(&mut txn, 1);
       txn.commit();
       return Ok(());
     };
 
     // If we haven't flagged skipped, and a block within the distance had events, flag the first
     // such block as skipped
-    let distance_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
+    let mut distance_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
+    // last_intended_to_cosign_block == 1 means we have yet to cosign anything, so don't set a
+    // distance
+    if last_intended_to_cosign_block == 1 {
+      distance_end_exclusive = 1;
+    }
     if skipped_block.is_none() {
       for b in (last_intended_to_cosign_block + 1) .. distance_end_exclusive {
         if b > latest_number {
@@ -441,6 +446,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       }
     }
 
+    let mut has_no_cosigners = None;
     let mut cosign = vec![];
 
     // Block we should co-sign no matter what if no prior blocks qualified for co-signing
@@ -481,6 +487,8 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
           .expect("couldn't get block which should've been finalized");
         let serai = serai.as_of(actual_block.header().parent_hash.into());
 
+        has_no_cosigners = Some(actual_block.clone());
+
         for network in serai_client::primitives::NETWORKS {
           // Get the latest session to have set keys
           let Some(latest_session) = serai.validator_sets().session(network).await? else {
@@ -495,8 +503,16 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
           {
             ValidatorSet { network, session: prior_session }
           } else {
-            ValidatorSet { network, session: latest_session }
+            let set = ValidatorSet { network, session: latest_session };
+            if serai.validator_sets().keys(set).await?.is_none() {
+              continue;
+            }
+            set
           };
+
+          // Since this is a valid cosigner, don't flag this block as having no cosigners
+          has_no_cosigners = None;
+
           if in_set(key, &serai, set_with_keys).await?.unwrap() {
             cosign.push((set_with_keys, block, actual_block.hash()));
           }
@@ -506,11 +522,18 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       }
     }
 
-    let mut txn = CosignTxn::new(txn);
-    for (set, block, hash) in cosign {
-      CosignTransactions::append_cosign(&mut txn, set, block, hash);
+    // If this block doesn't have cosigners, yet does have events, automatically mark it as
+    // cosigned
+    if let Some(has_no_cosigners) = has_no_cosigners {
+      SubstrateDb::<D>::set_latest_cosigned_block(&mut txn, has_no_cosigners.number());
+      txn.commit();
+    } else {
+      let mut txn = CosignTxn::new(txn);
+      for (set, block, hash) in cosign {
+        CosignTransactions::append_cosign(&mut txn, set, block, hash);
+      }
+      txn.commit();
     }
-    txn.commit();
   }
 
   // Reduce to the latest cosigned block

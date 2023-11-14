@@ -57,7 +57,11 @@ impl CosignTransactions {
   }
   // Peek at the next cosign transaction.
   pub fn peek_cosign(getter: &impl Get, network: NetworkId) -> Option<(Session, u64, [u8; 32])> {
-    Some(CosignTransactions::get(getter, network)?.swap_remove(0))
+    let mut to_cosign = CosignTransactions::get(getter, network)?;
+    if to_cosign.is_empty() {
+      None?
+    }
+    Some(to_cosign.swap_remove(0))
   }
   // Take the next transaction, panicking if it doesn't exist.
   pub fn take_cosign(mut txn: impl DbTxn, network: NetworkId) {
@@ -99,9 +103,11 @@ impl<D: Db> SubstrateDb<D> {
     txn.put(Self::latest_cosigned_block_key(), latest_cosigned_block.to_le_bytes());
   }
   pub fn latest_cosigned_block<G: Get>(getter: &G) -> u64 {
-    u64::from_le_bytes(
+    let db = u64::from_le_bytes(
       getter.get(Self::latest_cosigned_block_key()).unwrap_or(vec![0; 8]).try_into().unwrap(),
-    )
+    );
+    // Mark the genesis as cosigned
+    db.max(1)
   }
 
   fn event_key(id: &[u8], index: u32) -> Vec<u8> {
