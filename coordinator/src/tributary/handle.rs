@@ -498,7 +498,34 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
-    Transaction::CosignSubstrateBlock(hash) => todo!("TODO(now)"),
+    Transaction::CosignSubstrateBlock(hash) => {
+      TributaryDb::<D>::recognize_topic(
+        txn,
+        genesis,
+        Topic::SubstrateSign(SubstrateSignableId::CosigningSubstrateBlock(hash)),
+      );
+      NonceDecider::handle_substrate_signable(
+        txn,
+        genesis,
+        SubstrateSignableId::CosigningSubstrateBlock(hash),
+      );
+
+      processors
+        .send(
+          spec.set().network,
+          coordinator::CoordinatorMessage::CosignSubstrateBlock {
+            id: SubstrateSignId {
+              key: TributaryDb::<D>::key_pair(txn, spec.set())
+                .expect("cosigning SubstrateBlock despite not setting the key pair")
+                .0
+                .into(),
+              id: SubstrateSignableId::CosigningSubstrateBlock(hash),
+              attempt: 0,
+            },
+          },
+        )
+        .await;
+    }
 
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
