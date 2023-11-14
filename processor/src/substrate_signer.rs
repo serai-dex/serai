@@ -68,6 +68,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
   <Schnorrkel as Algorithm<Ristretto>>::Signature,
 >>::SignatureShare;
 
+// TODO: Rename BatchSigner
 pub struct SubstrateSigner<D: Db> {
   db: PhantomData<D>,
 
