@@ -259,7 +259,7 @@ impl<D: Db> SubstrateSigner<D> {
         panic!("SubstrateSigner passed CosignSubstrateBlock")
       }
 
-      CoordinatorMessage::BatchPreprocesses { id, preprocesses } => {
+      CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
         let (key, id, attempt) = self.verify_id(&id).ok()?;
 
         let substrate_sign_id =
@@ -346,12 +346,12 @@ impl<D: Db> SubstrateSigner<D> {
 
         // Broadcast our shares
         Some(
-          (ProcessorMessage::BatchShare { id: substrate_sign_id, shares: serialized_shares })
+          (ProcessorMessage::SubstrateShare { id: substrate_sign_id, shares: serialized_shares })
             .into(),
         )
       }
 
-      CoordinatorMessage::BatchShares { id, shares } => {
+      CoordinatorMessage::SubstrateShares { id, shares } => {
         let (key, id, attempt) = self.verify_id(&id).ok()?;
 
         let substrate_sign_id =
