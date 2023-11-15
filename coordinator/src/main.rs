@@ -844,38 +844,6 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
       }
     }
 
-    // Handle pending cosigns
-    // This isn't a processor message in the slightest, it's just cleanest to put it here
-    // TODO: Find a better place for this?
-    while let Some((session, block, hash)) = CosignTransactions::peek_cosign(&db, network) {
-      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else {
-        log::warn!("didn't yet have tributary we're supposed to cosign with");
-        break
-      };
-      log::info!(
-        "{network:?} {session:?} co-signing block #{block} (hash {}...)",
-        hex::encode(&hash[.. 8])
-      );
-      let tx = Transaction::CosignSubstrateBlock(hash);
-      let res = tributary.provide_transaction(tx.clone()).await;
-      if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
-        if res == Err(ProvidedError::LocalMismatchesOnChain) {
-          // Spin, since this is a crit for this Tributary
-          loop {
-            log::error!(
-              "{}. tributary: {}, provided: {:?}",
-              "tributary added distinct CosignSubstrateBlock",
-              hex::encode(spec.genesis()),
-              &tx,
-            );
-            sleep(Duration::from_secs(60)).await;
-          }
-        }
-        panic!("provided an invalid CosignSubstrateBlock: {res:?}");
-      }
-      CosignTransactions::take_cosign(db.txn(), network);
-    }
-
     // TODO: Check this ID is sane (last handled ID or expected next ID)
     let Ok(msg) = tokio::time::timeout(Duration::from_secs(1), processors.recv(network)).await
     else {
@@ -900,6 +868,63 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn handle_cosigns<D: Db, P: P2p>(
+  mut db: D,
+  network: NetworkId,
+  mut tributary_event: mpsc::UnboundedReceiver<TributaryEvent<D, P>>,
+) {
+  let mut tributaries = HashMap::new();
+  loop {
+    match tributary_event.try_recv() {
+      Ok(event) => match event {
+        TributaryEvent::NewTributary(tributary) => {
+          let set = tributary.spec.set();
+          assert_eq!(set.network, network);
+          tributaries.insert(set.session, tributary);
+        }
+        TributaryEvent::TributaryRetired(set) => {
+          tributaries.remove(&set.session);
+        }
+      },
+      Err(mpsc::error::TryRecvError::Empty) => {}
+      Err(mpsc::error::TryRecvError::Disconnected) => {
+        panic!("handle_processor_messages tributary_event sender closed")
+      }
+    }
+
+    // Handle pending cosigns
+    while let Some((session, block, hash)) = CosignTransactions::peek_cosign(&db, network) {
+      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else {
+        log::warn!("didn't yet have tributary we're supposed to cosign with");
+        break;
+      };
+      log::info!(
+        "{network:?} {session:?} co-signing block #{block} (hash {}...)",
+        hex::encode(&hash[.. 8])
+      );
+      let tx = Transaction::CosignSubstrateBlock(hash);
+      let res = tributary.provide_transaction(tx.clone()).await;
+      if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+        if res == Err(ProvidedError::LocalMismatchesOnChain) {
+          // Spin, since this is a crit for this Tributary
+          loop {
+            log::error!(
+              "{}. tributary: {}, provided: {:?}",
+              "tributary added distinct CosignSubstrateBlock",
+              hex::encode(spec.genesis()),
+              &tx,
+            );
+            sleep(Duration::from_secs(60)).await;
+          }
+        }
+        panic!("provided an invalid CosignSubstrateBlock: {res:?}");
+      }
+      CosignTransactions::take_cosign(db.txn(), network);
+    }
+  }
+}
+
 pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -914,7 +939,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
     if network == NetworkId::Serai {
       continue;
     }
-    let (send, recv) = mpsc::unbounded_channel();
+    let (processor_send, processor_recv) = mpsc::unbounded_channel();
     tokio::spawn(handle_processor_messages(
       db.clone(),
       key.clone(),
@@ -923,19 +948,25 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
       p2p.clone(),
       cosign_channel.clone(),
       network,
-      recv,
+      processor_recv,
     ));
-    channels.insert(network, send);
+    let (cosign_send, cosign_recv) = mpsc::unbounded_channel();
+    tokio::spawn(handle_cosigns(db.clone(), network, cosign_recv));
+    channels.insert(network, (processor_send, cosign_send));
   }
 
   // Listen to new tributary events
   loop {
     match tributary_event.recv().await.unwrap() {
-      TributaryEvent::NewTributary(tributary) => channels[&tributary.spec.set().network]
-        .send(TributaryEvent::NewTributary(tributary))
-        .unwrap(),
+      TributaryEvent::NewTributary(tributary) => {
+        let (c1, c2) = &channels[&tributary.spec.set().network];
+        c1.send(TributaryEvent::NewTributary(tributary.clone())).unwrap();
+        c2.send(TributaryEvent::NewTributary(tributary)).unwrap();
+      }
       TributaryEvent::TributaryRetired(set) => {
-        channels[&set.network].send(TributaryEvent::TributaryRetired(set)).unwrap()
+        let (c1, c2) = &channels[&set.network];
+        c1.send(TributaryEvent::TributaryRetired(set)).unwrap();
+        c2.send(TributaryEvent::TributaryRetired(set)).unwrap();
       }
     };
   }
