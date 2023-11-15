@@ -1,16 +1,43 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+/// Handler for session life cycle events.
+pub trait SessionHandler<ValidatorId> {
+  /// The given validator set will be used for the genesis session.
+  /// It is guaranteed that the given validator set will also be used
+  /// for the second session, therefore the first call to `on_new_session`
+  /// should provide the same validator set.
+  fn on_genesis_session(validators: &[ValidatorId]);
+
+  /// Session set has changed; act appropriately. Note that this can be called
+  /// before initialization of your pallet.
+  ///
+  /// `changed` is true whenever any of the session keys or underlying economic
+  /// identities or weightings behind those keys has changed.
+  fn on_new_session(validators: &[ValidatorId], queued_validators: &[ValidatorId]);
+
+  /// A notification for end of the session.
+  ///
+  /// Note it is triggered before any [`SessionManager::end_session`] handlers,
+  /// so we can still affect the validator set.
+  fn on_before_session_ending() {}
+
+  /// A validator got disabled. Act accordingly until a new session begins.
+  fn on_disabled(validator_index: u32);
+}
+
 #[allow(deprecated, clippy::let_unit_value)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
+  use super::*;
   use scale_info::TypeInfo;
 
   use sp_core::sr25519::{Public, Signature};
   use sp_std::{vec, vec::Vec};
   use sp_application_crypto::RuntimePublic;
+  use sp_session::ShouldEndSession;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, StoragePrefixedMap};
+  use frame_support::{pallet_prelude::*, StoragePrefixedMap, traits::DisabledValidators};
 
   use serai_primitives::*;
   pub use validator_sets_primitives as primitives;
@@ -20,12 +47,13 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = Public>
-    + coins_pallet::Config
-    + pallet_session::Config<ValidatorId = Public>
-    + TypeInfo
+    frame_system::Config<AccountId = Public> + pallet_babe::Config + coins_pallet::Config + TypeInfo
   {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
+
+    type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
+
+    type SessionHandler: SessionHandler<Self::AccountId>;
   }
 
   #[pallet::genesis_config]
@@ -53,23 +81,17 @@ pub mod pallet {
 
   /// The current session for a network.
   ///
-  /// This does not store the current session for Serai. pallet_session handles that.
+  /// This does not store the current session for Serai.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
+  #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
-  impl<T: Config> Pallet<T> {
-    pub fn session(network: NetworkId) -> Option<Session> {
-      if network == NetworkId::Serai {
-        Some(Session(pallet_session::Pallet::<T>::current_index()))
-      } else {
-        CurrentSession::<T>::get(network)
-      }
-    }
 
-    pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
-      CurrentSession::<T>::get(network)
-    }
-  }
+  /// The current set of serai validators.
+  #[pallet::storage]
+  #[pallet::getter(fn serai_validators)]
+  pub type SeraiValidators<T: Config> =
+    StorageValue<_, BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET }>>, ValueQuery>;
 
   /// The allocation required per key share.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
@@ -106,7 +128,7 @@ pub mod pallet {
     #[inline]
     fn in_active_serai_set(account: Public) -> bool {
       // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with InSet?
-      for validator in pallet_session::Pallet::<T>::validators() {
+      for validator in Self::serai_validators() {
         if validator == account {
           return true;
         }
@@ -269,6 +291,9 @@ pub mod pallet {
     NewSet {
       set: ValidatorSet,
     },
+    NewSession {
+      index: Session,
+    },
     KeyGen {
       set: ValidatorSet,
       key_pair: KeyPair,
@@ -297,14 +322,12 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     fn new_set(network: NetworkId) {
       // Update CurrentSession
-      let session = if network != NetworkId::Serai {
+      let session = {
         let new_session = CurrentSession::<T>::get(network)
           .map(|session| Session(session.0 + 1))
           .unwrap_or(Session(0));
         CurrentSession::<T>::set(network, Some(new_session));
         new_session
-      } else {
-        Self::session(network).unwrap_or(Session(0))
       };
 
       // Clear the current InSet
@@ -372,6 +395,18 @@ pub mod pallet {
     NonExistentValidator,
   }
 
+  #[pallet::hooks]
+  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+      if T::ShouldEndSession::should_end_session(n) {
+        Self::rotate_session();
+        T::BlockWeights::get().max_block
+      } else {
+        Weight::zero()
+      }
+    }
+  }
+
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
@@ -384,6 +419,11 @@ pub mod pallet {
         }
         Pallet::<T>::new_set(id);
       }
+
+      // set the initial validators
+      let initial_validators = Pallet::<T>::participants(NetworkId::Serai);
+      T::SessionHandler::on_genesis_session(&initial_validators);
+      SeraiValidators::<T>::put(initial_validators);
     }
   }
 
@@ -649,6 +689,28 @@ pub mod pallet {
       }
       PendingDeallocations::<T>::take((network, session, key))
     }
+
+    fn rotate_session() {
+      let session = Self::session(NetworkId::Serai).unwrap();
+
+      // Inform the session handlers that a session is going to end.
+      T::SessionHandler::on_before_session_ending();
+      // end the current serai session.
+      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session });
+
+      // Get queued validators.
+      let validators = Self::participants(NetworkId::Serai);
+      SeraiValidators::<T>::put(&validators);
+
+      // make a new session and get the next validator set.
+      Self::new_session();
+      let next_validators = Self::participants(NetworkId::Serai);
+
+      Self::deposit_event(Event::NewSession { index: Session(session.0 + 1) });
+
+      // Tell everyone about the new set.
+      T::SessionHandler::on_new_session(&validators, &next_validators);
+    }
   }
 
   #[pallet::call]
@@ -667,7 +729,7 @@ pub mod pallet {
       // (called by pre_dispatch) checks it
       let _ = signature;
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Self::session(NetworkId::Serai).unwrap();
 
       let set = ValidatorSet { session, network };
 
@@ -742,11 +804,13 @@ pub mod pallet {
       };
 
       // Don't allow the Serai set to set_keys, as they have no reason to do so
+      // This should already be covered by the lack of key in MuSigKeys, yet it doesn't hurt to be
+      // explicit
       if network == &NetworkId::Serai {
         Err(InvalidTransaction::Custom(0))?;
       }
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Self::session(NetworkId::Serai).unwrap();
 
       let set = ValidatorSet { session, network: *network };
       match Self::verify_signature(set, key_pair, signature) {
@@ -779,26 +843,21 @@ pub mod pallet {
     }
   }
 
-  // Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
-  // new_session(i + 1) is called immediately after start_session(i)
-  // then we wait until the session ends then get a call to end_session(i) and so on.
-  impl<T: Config> pallet_session::SessionManager<T::ValidatorId> for Pallet<T> {
-    fn new_session(_new_index: u32) -> Option<Vec<T::ValidatorId>> {
-      Self::new_session();
-      // TODO: Where do we return their stake?
-      Some(Self::participants(NetworkId::Serai).into())
-    }
+  // TODO: Remove this trait, update Grandpa from vs-pallet directly.
+  // TODO: Babe pallet only needs to implement EpochTrigger and it is done.
+  impl<T: Config> SessionHandler<T::AccountId> for Pallet<T> {
+    fn on_genesis_session(_: &[T::AccountId]) {}
+    fn on_new_session(_: &[T::AccountId], _: &[T::AccountId]) {}
+    fn on_before_session_ending() {}
+    fn on_disabled(_: u32) {}
+  }
 
-    fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
-      // TODO: Because we don't call new_session here, we don't emit NewSet { Serai, session: 1 }
-      Some(Self::participants(NetworkId::Serai).into())
+  // Tell Babe to disable a given validator.
+  impl<T: Config> DisabledValidators for Pallet<T> {
+    fn is_disabled(_: u32) -> bool {
+      // TODO
+      false
     }
-
-    fn end_session(end_index: u32) {
-      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: Session(end_index) })
-    }
-
-    fn start_session(_start_index: u32) {}
   }
 }
 

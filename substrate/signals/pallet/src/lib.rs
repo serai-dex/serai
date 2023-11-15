@@ -87,7 +87,7 @@ pub mod pallet {
     //
     // Must only be called for networks which have a set decided.
     fn tally_for_network(signal_id: [u8; 32], network: NetworkId) -> Result<bool, Error<T>> {
-      let this_network_session = VsPallet::<T>::latest_decided_session(network).unwrap();
+      let this_network_session = VsPallet::<T>::session(network).unwrap();
       let this_set = ValidatorSet { network, session: this_network_session };
 
       // This is a bounded O(n) (which is still acceptable) due to the infeasibility of caching
@@ -149,7 +149,7 @@ pub mod pallet {
       let mut total_in_favor_stake = 0;
       let mut total_allocated_stake = 0;
       for network in serai_primitives::NETWORKS {
-        let Some(latest_decided_session) = VsPallet::<T>::latest_decided_session(network) else {
+        let Some(latest_decided_session) = VsPallet::<T>::session(network) else {
           continue;
         };
         // If it has a session, it should have a total allocated stake value

@@ -256,6 +256,9 @@ impl dex::Config for Runtime {
 
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
+
+  type ShouldEndSession = Babe;
+  type SessionHandler = ValidatorSets;
 }
 
 pub struct IdentityValidatorIdOf;
@@ -271,7 +274,7 @@ impl session::Config for Runtime {
   type ValidatorIdOf = IdentityValidatorIdOf;
   type ShouldEndSession = Babe;
   type NextSessionRotation = Babe;
-  type SessionManager = ValidatorSets;
+  type SessionManager = ();
   type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
   type Keys = SessionKeys;
   type WeightInfo = session::weights::SubstrateWeight<Runtime>;
@@ -294,7 +297,7 @@ impl babe::Config for Runtime {
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
   type EpochChangeTrigger = pallet_babe::ExternalTrigger;
-  type DisabledValidators = Session;
+  type DisabledValidators = ValidatorSets;
 
   type WeightInfo = ();
 
