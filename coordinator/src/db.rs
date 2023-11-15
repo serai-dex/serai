@@ -22,8 +22,11 @@ create_db!(
     ActiveTributaryDb: () -> Vec<u8>,
     RetiredTributaryDb: (set: ValidatorSet) -> Vec<u8>,
     SignedTransactionDb: (key: u32) -> Vec<u8>,
-    FirstPreprocessDb:
-      (network: NetworkId, id_type: RecognizedIdType, id: &Vec<u8>) -> Vec<Vec<u8>>,
+    FirstPreprocessDb: (
+      network: NetworkId,
+      id_type: RecognizedIdType,
+      id: &[u8],
+    ) -> Vec<Vec<u8>>,
     LastRecievedBatchDb: (network: NetworkId) -> u32,
     ExpectedBatchDb: (network: NetworkId, id: u32) -> [u8; 32],
     BatchDb: (network: NetworkId, id: u32)  -> SignedBatch,
