@@ -827,6 +827,9 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
 ) {
   let mut tributaries = HashMap::new();
   'outer: loop {
+    // TODO: Create a better async flow for this, as this does still hammer this task
+    tokio::task::yield_now().await;
+
     match tributary_event.try_recv() {
       Ok(event) => match event {
         TributaryEvent::NewTributary(tributary) => {
@@ -941,8 +944,6 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
 
       txn.commit();
     }
-
-    tokio::task::yield_now().await;
   }
 }
 

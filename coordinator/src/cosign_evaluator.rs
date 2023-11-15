@@ -136,6 +136,7 @@ impl<D: Db> CosignEvaluator<D> {
       return Ok(());
     }
 
+    log::info!("received cosign for block {} by {:?}", block.number(), cosign.network);
     self.latest_cosigns.write().unwrap().insert(cosign.network, (block.number(), cosign));
 
     self.update_latest_cosign();
