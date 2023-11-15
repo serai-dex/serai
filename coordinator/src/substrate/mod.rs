@@ -367,15 +367,15 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   let latest_number = serai.latest_block().await?.number();
 
   // TODO: If this block directly builds off a cosigned block *and* doesn't contain events, mark
-  // co-signed,
+  // cosigned,
   // TODO: Can we remove any of these events while maintaining security?
   {
     // If:
-    //   A) This block has events and it's been at least X blocks since the last co-sign or
+    //   A) This block has events and it's been at least X blocks since the last cosign or
     //   B) This block doesn't have events but it's been X blocks since a skipped block which did
     //      have events or
-    //   C) This block key gens (which changes who the co-signers are)
-    // co-sign this block.
+    //   C) This block key gens (which changes who the cosigners are)
+    // cosign this block.
     const COSIGN_DISTANCE: u64 = 5 * 60 / 6; // 5 minutes, expressed in blocks
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
@@ -452,7 +452,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     let mut has_no_cosigners = None;
     let mut cosign = vec![];
 
-    // Block we should co-sign no matter what if no prior blocks qualified for co-signing
+    // Block we should cosign no matter what if no prior blocks qualified for cosigning
     let maximally_latent_cosign_block =
       skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
     for block in (last_intended_to_cosign_block + 1) ..= latest_number {
@@ -461,11 +461,11 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       let block_has_events = block_has_events(&mut txn, serai, block).await?;
       // If this block is within the distance,
       if block < distance_end_exclusive {
-        // and set a key, co-sign it
+        // and set a key, cosign it
         if block_has_events == HasEvents::KeyGen {
           IntendedCosign::set_intended_cosign(&mut txn, block);
           set = true;
-          // Carry skipped if it isn't included by co-signing this block
+          // Carry skipped if it isn't included by cosigning this block
           if let Some(skipped) = skipped_block {
             if skipped > block {
               IntendedCosign::set_skipped_cosign(&mut txn, block);

@@ -44,7 +44,7 @@ impl<T: DbTxn> CosignTxn<T> {
   }
 }
 impl CosignTransactions {
-  // Append a co-sign transaction.
+  // Append a cosign transaction.
   pub fn append_cosign<T: DbTxn>(
     txn: &mut CosignTxn<T>,
     set: ValidatorSet,

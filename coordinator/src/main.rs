@@ -854,7 +854,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
         break;
       };
       log::info!(
-        "{network:?} {session:?} co-signing block #{block} (hash {}...)",
+        "{network:?} {session:?} cosigning block #{block} (hash {}...)",
         hex::encode(&hash[.. 8])
       );
       let tx = Transaction::CosignSubstrateBlock(hash);
