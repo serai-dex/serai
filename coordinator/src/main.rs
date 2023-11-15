@@ -655,10 +655,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
               MainDb::<D>::set_handover_batch(&mut txn, spec.set(), last_received);
               // If this isn't the first batch, meaning we do have to verify all prior batches, and
               // the prior Batch hasn't been verified yet...
-              let prior_batch = last_received - 1;
               if (last_received != 0) &&
                 MainDb::<D>::last_verified_batch(&txn, msg.network)
-                  .map(|last_verified| last_verified < prior_batch)
+                  .map(|last_verified| last_verified < (last_received - 1))
                   .unwrap_or(true)
               {
                 // Withhold this TX until we verify all prior `Batch`s
