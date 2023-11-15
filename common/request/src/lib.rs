@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
+#[cfg(feature = "tls")]
 use hyper_rustls::{HttpsConnectorBuilder, HttpsConnector};
 use hyper::{
   Uri,
@@ -26,18 +27,19 @@ pub enum Error {
   InvalidUri,
   MissingHost,
   InconsistentHost,
-  SslError(Box<dyn Send + Sync + std::error::Error>),
+  ConnectionError(Box<dyn Send + Sync + std::error::Error>),
   Hyper(hyper::Error),
 }
 
+#[cfg(not(feature = "tls"))]
+type Connector = HttpConnector;
+#[cfg(feature = "tls")]
+type Connector = HttpsConnector<HttpConnector>;
+
 #[derive(Clone, Debug)]
 enum Connection {
-  ConnectionPool(hyper::Client<HttpsConnector<HttpConnector>>),
-  Connection {
-    https_builder: HttpsConnector<HttpConnector>,
-    host: Uri,
-    connection: Arc<Mutex<Option<SendRequest<Body>>>>,
-  },
+  ConnectionPool(hyper::Client<Connector>),
+  Connection { connector: Connector, host: Uri, connection: Arc<Mutex<Option<SendRequest<Body>>>> },
 }
 
 #[derive(Clone, Debug)]
@@ -46,24 +48,25 @@ pub struct Client {
 }
 
 impl Client {
-  fn https_builder() -> HttpsConnector<HttpConnector> {
-    HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build()
+  fn connector() -> Connector {
+    #[cfg(feature = "tls")]
+    let res =
+      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
+    #[cfg(not(feature = "tls"))]
+    let res = HttpConnector::new();
+    res
   }
 
   pub fn with_connection_pool() -> Client {
     Client {
-      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::https_builder())),
+      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector())),
     }
   }
 
   pub fn without_connection_pool(host: String) -> Result<Client, Error> {
     Ok(Client {
       connection: Connection::Connection {
-        https_builder: HttpsConnectorBuilder::new()
-          .with_native_roots()
-          .https_or_http()
-          .enable_http1()
-          .build(),
+        connector: Self::connector(),
         host: {
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
           if uri.host().is_none() {
@@ -110,16 +113,18 @@ impl Client {
 
     Ok(Response(match &self.connection {
       Connection::ConnectionPool(client) => client.request(request).await.map_err(Error::Hyper)?,
-      Connection::Connection { https_builder, host, connection } => {
+      Connection::Connection { connector, host, connection } => {
         let mut connection_lock = connection.lock().await;
 
         // If there's not a connection...
         if connection_lock.is_none() {
-          let (requester, connection) = hyper::client::conn::http1::handshake(
-            https_builder.clone().call(host.clone()).await.map_err(Error::SslError)?,
-          )
-          .await
-          .map_err(Error::Hyper)?;
+          let call_res = connector.clone().call(host.clone()).await;
+          #[cfg(not(feature = "tls"))]
+          let call_res = call_res.map_err(|e| Error::ConnectionError(format!("{e:?}").into()));
+          #[cfg(feature = "tls")]
+          let call_res = call_res.map_err(Error::ConnectionError);
+          let (requester, connection) =
+            hyper::client::conn::http1::handshake(call_res?).await.map_err(Error::Hyper)?;
           // This will die when we drop the requester, so we don't need to track an AbortHandle for
           // it
           tokio::spawn(connection);

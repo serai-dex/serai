@@ -25,7 +25,7 @@ frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8
 hex = { version = "0.4", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 serde_json = { version = "1", default-features = false, optional = true }
-simple-request = { path = "../../common/request", version = "0.1", default-features = false, features = ["basic-auth"], optional = true }
+simple-request = { path = "../../common/request", version = "0.1", default-features = false, features = ["tls", "basic-auth"], optional = true }
 
 [dev-dependencies]
 secp256k1 = { version = "0.28", default-features = false, features = ["std"] }

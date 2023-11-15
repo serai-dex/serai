@@ -55,7 +55,7 @@ base58-monero = { version = "2", default-features = false, features = ["check"] 
 
 # Used for the provided HTTP RPC
 digest_auth = { version = "0.3", default-features = false, optional = true }
-simple-request = { path = "../../common/request", version = "0.1", default-features = false, optional = true }
+simple-request = { path = "../../common/request", version = "0.1", default-features = false, features = ["tls"], optional = true }
 tokio = { version = "1", default-features = false, optional = true }
 
 [build-dependencies]
