@@ -611,6 +611,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
+              // The coordinator expects BatchPreprocess to immediately follow Batch
               coordinator.send(
                 messages::substrate::ProcessorMessage::Batch { batch: batch.clone() }
               ).await;

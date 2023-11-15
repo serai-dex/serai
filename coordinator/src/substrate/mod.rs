@@ -366,6 +366,9 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   // Check if there's been a new Substrate block
   let latest_number = serai.latest_block().await?.number();
 
+  // TODO: If this block directly builds off a cosigned block *and* doesn't contain events, mark
+  // co-signed,
+  // TODO: Can we remove any of these events while maintaining security?
   {
     // If:
     //   A) This block has events and it's been at least X blocks since the last co-sign or
@@ -668,7 +671,9 @@ pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -
 
 /// Verifies `Batch`s which have already been indexed from Substrate.
 ///
-/// This has a slight malleability in that doesn't verify *who* published a Batch is as expected.
+/// Spins if a distinct `Batch` is detected on-chain.
+///
+/// This has a slight malleability in that doesn't verify *who* published a `Batch` is as expected.
 /// This is deemed fine.
 pub(crate) async fn verify_published_batches<D: Db>(
   txn: &mut D::Transaction<'_>,
