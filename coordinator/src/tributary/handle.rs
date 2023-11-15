@@ -513,6 +513,7 @@ pub(crate) async fn handle_application_tx<
       let key = loop {
         let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
           // This can happen based on a timing condition
+          log::warn!("CosignSubstrateBlock yet keys weren't set yet");
           tokio::time::sleep(core::time::Duration::from_secs(1)).await;
           continue;
         };

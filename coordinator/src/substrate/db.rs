@@ -11,6 +11,7 @@ use serai_client::{
 
 create_db! {
   NewSubstrateDb {
+    CosignTriggered: () -> (),
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
     CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>

@@ -427,10 +427,9 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     // If we haven't flagged skipped, and a block within the distance had events, flag the first
     // such block as skipped
     let mut distance_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
-    // last_intended_to_cosign_block == 1 means we have yet to cosign anything, so don't set a
-    // distance
-    if last_intended_to_cosign_block == 1 {
-      distance_end_exclusive = 1;
+    // If we've never triggered a cosign, don't skip any cosigns
+    if CosignTriggered::get(&txn).is_none() {
+      distance_end_exclusive = 0;
     }
     if skipped_block.is_none() {
       for b in (last_intended_to_cosign_block + 1) .. distance_end_exclusive {
@@ -440,6 +439,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
 
         if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
           skipped_block = Some(b);
+          log::debug!("skipping cosigning {b} due to proximity to prior cosign");
           IntendedCosign::set_skipped_cosign(&mut txn, b);
           break;
         }
@@ -512,6 +512,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
 
           // Since this is a valid cosigner, don't flag this block as having no cosigners
           has_no_cosigners = None;
+          log::debug!("{:?} will be cosigning {block}", set_with_keys.network);
 
           if in_set(key, &serai, set_with_keys).await?.unwrap() {
             cosign.push((set_with_keys, block, actual_block.hash()));
@@ -525,11 +526,14 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     // If this block doesn't have cosigners, yet does have events, automatically mark it as
     // cosigned
     if let Some(has_no_cosigners) = has_no_cosigners {
+      log::debug!("{} had no cosigners available, marking as cosigned", has_no_cosigners.number());
       SubstrateDb::<D>::set_latest_cosigned_block(&mut txn, has_no_cosigners.number());
       txn.commit();
     } else {
+      CosignTriggered::set(&mut txn, &());
       let mut txn = CosignTxn::new(txn);
       for (set, block, hash) in cosign {
+        log::debug!("cosigning {block} with {:?} {:?}", set.network, set.session);
         CosignTransactions::append_cosign(&mut txn, set, block, hash);
       }
       txn.commit();

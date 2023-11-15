@@ -18,7 +18,7 @@ use frost::Participant;
 use serai_db::{DbTxn, Db};
 use serai_env as env;
 
-use scale::{Encode, Decode};
+use scale::Encode;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
@@ -649,7 +649,12 @@ async fn handle_processor_message<D: Db, P: P2p>(
               &mut txn,
               spec.set().network,
               RecognizedIdType::Batch,
-              &id.id.encode(),
+              &{
+                let SubstrateSignableId::Batch(id) = id.id else {
+                  panic!("BatchPreprocess SubstrateSignableId wasn't Batch")
+                };
+                id.encode()
+              },
               preprocesses,
             );
 
@@ -843,7 +848,10 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     // This isn't a processor message in the slightest, it's just cleanest to put it here
     // TODO: Find a better place for this?
     while let Some((session, block, hash)) = CosignTransactions::peek_cosign(&db, network) {
-      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else { break };
+      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else {
+        log::warn!("didn't yet have tributary we're supposed to cosign with");
+        break
+      };
       log::info!(
         "{network:?} {session:?} co-signing block #{block} (hash {}...)",
         hex::encode(&hash[.. 8])
@@ -873,6 +881,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     else {
       continue;
     };
+    log::trace!("entering handle_processor_message for {:?}", network);
     if handle_processor_message(
       &mut db,
       &key,
@@ -887,6 +896,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
     {
       processors.ack(msg).await;
     }
+    log::trace!("exited handle_processor_message for {:?}", network);
   }
 }
 
@@ -1037,6 +1047,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     });
 
     move |set: ValidatorSet, genesis, id_type, id: Vec<u8>, nonce| {
+      log::debug!("recognized ID {:?} {}", id_type, hex::encode(&id));
       let mut raw_db = raw_db.clone();
       let key = key.clone();
       let tributaries = tributaries.clone();
@@ -1049,6 +1060,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           loop {
             let Some(preprocess) = MainDb::<D>::first_preprocess(raw_db, set.network, id_type, id)
             else {
+              log::warn!("waiting for preprocess for recognized ID");
               sleep(Duration::from_millis(100)).await;
               continue;
             };
@@ -1059,7 +1071,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         let mut tx = match id_type {
           RecognizedIdType::Batch => Transaction::SubstratePreprocess(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
-            plan: SubstrateSignableId::decode(&mut scale::IoReader(&mut id.as_slice())).unwrap(),
+            plan: SubstrateSignableId::Batch(id.as_slice().try_into().unwrap()),
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),
