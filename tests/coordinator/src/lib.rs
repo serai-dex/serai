@@ -223,9 +223,11 @@ impl Processor {
 
   /// Receive a message from the coordinator as a processor.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    let msg = tokio::time::timeout(Duration::from_secs(10), self.queue.next(Service::Coordinator))
-      .await
-      .unwrap();
+    // Set a timeout of an entire 6 minutes as cosigning may be delayed by up to 5 minutes
+    let msg =
+      tokio::time::timeout(Duration::from_secs(6 * 60), self.queue.next(Service::Coordinator))
+        .await
+        .unwrap();
     assert_eq!(msg.from, Service::Coordinator);
     assert_eq!(msg.id, self.next_recv_id);
     self.queue.ack(Service::Coordinator, msg.id).await;

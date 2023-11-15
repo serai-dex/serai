@@ -9,6 +9,9 @@ use crate::*;
 mod key_gen;
 pub use key_gen::key_gen;
 
+mod cosign;
+pub use cosign::potentially_cosign;
+
 mod batch;
 pub use batch::batch;
 

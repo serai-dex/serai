@@ -103,7 +103,7 @@ pub async fn batch(
       participants.insert(known_signer_i);
       participants
     }
-    _ => panic!("coordinator didn't send back BatchPreprocesses"),
+    _ => panic!("coordinator didn't send back SubstratePreprocesses"),
   };
 
   for i in participants.clone() {
@@ -180,7 +180,10 @@ pub async fn batch(
   let serai = processors[0].serai().await;
   let mut last_serai_block = serai.latest_block().await.unwrap().number();
 
-  for processor in processors.iter_mut() {
+  for (i, processor) in processors.iter_mut().enumerate() {
+    if i == excluded_signer {
+      continue;
+    }
     processor
       .send_message(messages::substrate::ProcessorMessage::SignedBatch { batch: batch.clone() })
       .await;
@@ -220,9 +223,9 @@ pub async fn batch(
 
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
-  for processor in processors.iter_mut() {
+  for i in 0 .. processors.len() {
     assert_eq!(
-      processor.recv_message().await,
+      potentially_cosign(processors, i, processor_is, substrate_key).await,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {
@@ -238,7 +241,7 @@ pub async fn batch(
     );
 
     // Send the ack as expected, though it shouldn't trigger any observable behavior
-    processor
+    processors[i]
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
           network: batch.batch.network,
