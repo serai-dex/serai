@@ -26,10 +26,10 @@ pub(crate) async fn recv_batch_preprocesses(
   substrate_key: &[u8; 32],
   batch: &Batch,
   attempt: u32,
-) -> (BatchSignId, HashMap<Participant, Vec<u8>>) {
-  let id = BatchSignId {
+) -> (SubstrateSignId, HashMap<Participant, Vec<u8>>) {
+  let id = SubstrateSignId {
     key: *substrate_key,
-    id: (batch.network, batch.id).encode().try_into().unwrap(),
+    id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
     attempt,
   };
 
@@ -86,7 +86,7 @@ pub(crate) async fn recv_batch_preprocesses(
 pub(crate) async fn sign_batch(
   coordinators: &mut [Coordinator],
   key: [u8; 32],
-  id: BatchSignId,
+  id: SubstrateSignId,
   preprocesses: HashMap<Participant, Vec<u8>>,
 ) -> SignedBatch {
   assert_eq!(preprocesses.len(), THRESHOLD);
@@ -96,7 +96,7 @@ pub(crate) async fn sign_batch(
 
     if preprocesses.contains_key(&i) {
       coordinator
-        .send_message(messages::coordinator::CoordinatorMessage::BatchPreprocesses {
+        .send_message(messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
           id: id.clone(),
           preprocesses: clone_without(&preprocesses, &i),
         })
@@ -111,7 +111,7 @@ pub(crate) async fn sign_batch(
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::BatchShare {
+          messages::coordinator::ProcessorMessage::SubstrateShare {
             id: this_id,
             shares: mut these_shares,
           },
@@ -130,7 +130,7 @@ pub(crate) async fn sign_batch(
 
     if preprocesses.contains_key(&i) {
       coordinator
-        .send_message(messages::coordinator::CoordinatorMessage::BatchShares {
+        .send_message(messages::coordinator::CoordinatorMessage::SubstrateShares {
           id: id.clone(),
           shares: clone_without(&shares, &i),
         })

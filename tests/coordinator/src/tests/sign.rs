@@ -328,9 +328,9 @@ async fn sign_test() {
       let plan_id = plan_id;
 
       // We should now get a SubstrateBlock
-      for processor in processors.iter_mut() {
+      for i in 0 .. processors.len() {
         assert_eq!(
-          processor.recv_message().await,
+          potentially_cosign(&mut processors, i, &participant_is, &substrate_key).await,
           messages::CoordinatorMessage::Substrate(
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
@@ -346,7 +346,7 @@ async fn sign_test() {
         );
 
         // Send the ACK, claiming there's a plan to sign
-        processor
+        processors[i]
           .send_message(messages::ProcessorMessage::Coordinator(
             messages::coordinator::ProcessorMessage::SubstrateBlockAck {
               network: NetworkId::Bitcoin,

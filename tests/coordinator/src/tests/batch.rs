@@ -23,7 +23,10 @@ use serai_client::{
     InInstructionsEvent,
   },
 };
-use messages::{coordinator::BatchSignId, SubstrateContext, CoordinatorMessage};
+use messages::{
+  coordinator::{SubstrateSignableId, SubstrateSignId},
+  SubstrateContext, CoordinatorMessage,
+};
 
 use crate::{*, tests::*};
 
@@ -35,9 +38,9 @@ pub async fn batch(
 ) -> u64 {
   let mut id = [0; 5];
   OsRng.fill_bytes(&mut id);
-  let id = BatchSignId {
+  let id = SubstrateSignId {
     key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes(),
-    id,
+    id: SubstrateSignableId::Batch(id),
     attempt: 0,
   };
 
@@ -83,7 +86,10 @@ pub async fn batch(
   let first_preprocesses = processors[known_signer].recv_message().await;
   let participants = match first_preprocesses {
     CoordinatorMessage::Coordinator(
-      messages::coordinator::CoordinatorMessage::BatchPreprocesses { id: this_id, preprocesses },
+      messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
+        id: this_id,
+        preprocesses,
+      },
     ) => {
       assert_eq!(&id, &this_id);
       assert_eq!(preprocesses.len(), THRESHOLD - 1);
@@ -97,7 +103,7 @@ pub async fn batch(
       participants.insert(known_signer_i);
       participants
     }
-    _ => panic!("coordinator didn't send back BatchPreprocesses"),
+    _ => panic!("coordinator didn't send back SubstratePreprocesses"),
   };
 
   for i in participants.clone() {
@@ -117,7 +123,7 @@ pub async fn batch(
     assert_eq!(
       processor.recv_message().await,
       CoordinatorMessage::Coordinator(
-        messages::coordinator::CoordinatorMessage::BatchPreprocesses {
+        messages::coordinator::CoordinatorMessage::SubstratePreprocesses {
           id: id.clone(),
           preprocesses
         }
@@ -129,7 +135,7 @@ pub async fn batch(
     let processor =
       &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     processor
-      .send_message(messages::coordinator::ProcessorMessage::BatchShare {
+      .send_message(messages::coordinator::ProcessorMessage::SubstrateShare {
         id: id.clone(),
         shares: vec![[u8::try_from(u16::from(i)).unwrap(); 32]],
       })
@@ -148,7 +154,7 @@ pub async fn batch(
 
     assert_eq!(
       processor.recv_message().await,
-      CoordinatorMessage::Coordinator(messages::coordinator::CoordinatorMessage::BatchShares {
+      CoordinatorMessage::Coordinator(messages::coordinator::CoordinatorMessage::SubstrateShares {
         id: id.clone(),
         shares,
       })
@@ -174,7 +180,10 @@ pub async fn batch(
   let serai = processors[0].serai().await;
   let mut last_serai_block = serai.latest_block().await.unwrap().number();
 
-  for processor in processors.iter_mut() {
+  for (i, processor) in processors.iter_mut().enumerate() {
+    if i == excluded_signer {
+      continue;
+    }
     processor
       .send_message(messages::substrate::ProcessorMessage::SignedBatch { batch: batch.clone() })
       .await;
@@ -214,9 +223,9 @@ pub async fn batch(
 
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
-  for processor in processors.iter_mut() {
+  for i in 0 .. processors.len() {
     assert_eq!(
-      processor.recv_message().await,
+      potentially_cosign(processors, i, processor_is, substrate_key).await,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {
@@ -232,7 +241,7 @@ pub async fn batch(
     );
 
     // Send the ack as expected, though it shouldn't trigger any observable behavior
-    processor
+    processors[i]
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
           network: batch.batch.network,

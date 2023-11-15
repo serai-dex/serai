@@ -1,11 +1,78 @@
+use std::sync::{OnceLock, MutexGuard, Mutex};
+
 use scale::{Encode, Decode};
 
 pub use serai_db::*;
 
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, KeyPair},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
+
+create_db! {
+  NewSubstrateDb {
+    CosignTriggered: () -> (),
+    IntendedCosign: () -> (u64, Option<u64>),
+    BlockHasEvents: (block: u64) -> u8,
+    CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>
+  }
+}
+
+impl IntendedCosign {
+  pub fn set_intended_cosign(txn: &mut impl DbTxn, intended: u64) {
+    Self::set(txn, &(intended, None::<u64>));
+  }
+  pub fn set_skipped_cosign(txn: &mut impl DbTxn, skipped: u64) {
+    let (intended, prior_skipped) = Self::get(txn).unwrap();
+    assert!(prior_skipped.is_none());
+    Self::set(txn, &(intended, Some(skipped)));
+  }
+}
+
+// This guarantees:
+// 1) Appended transactions are appended
+// 2) Taking cosigns does not clear any TXs which weren't taken
+// 3) Taking does actually clear the set
+static COSIGN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+pub struct CosignTxn<T: DbTxn>(T, MutexGuard<'static, ()>);
+impl<T: DbTxn> CosignTxn<T> {
+  pub fn new(txn: T) -> Self {
+    Self(txn, COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap())
+  }
+  pub fn commit(self) {
+    self.0.commit();
+  }
+}
+impl CosignTransactions {
+  // Append a cosign transaction.
+  pub fn append_cosign<T: DbTxn>(
+    txn: &mut CosignTxn<T>,
+    set: ValidatorSet,
+    number: u64,
+    hash: [u8; 32],
+  ) {
+    #[allow(clippy::unwrap_or_default)]
+    let mut txs = CosignTransactions::get(&txn.0, set.network).unwrap_or(vec![]);
+    txs.push((set.session, number, hash));
+    CosignTransactions::set(&mut txn.0, set.network, &txs);
+  }
+  // Peek at the next cosign transaction.
+  pub fn peek_cosign(getter: &impl Get, network: NetworkId) -> Option<(Session, u64, [u8; 32])> {
+    let mut to_cosign = CosignTransactions::get(getter, network)?;
+    if to_cosign.is_empty() {
+      None?
+    }
+    Some(to_cosign.swap_remove(0))
+  }
+  // Take the next transaction, panicking if it doesn't exist.
+  pub fn take_cosign(mut txn: impl DbTxn, network: NetworkId) {
+    let _lock = COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+    let mut txs = CosignTransactions::get(&txn, network).unwrap();
+    txs.remove(0);
+    CosignTransactions::set(&mut txn, network, &txs);
+    txn.commit();
+  }
+}
 
 #[derive(Debug)]
 pub struct SubstrateDb<D: Db>(pub D);
@@ -18,16 +85,30 @@ impl<D: Db> SubstrateDb<D> {
     D::key(b"coordinator_substrate", dst, key)
   }
 
-  fn block_key() -> Vec<u8> {
-    Self::substrate_key(b"block", [])
+  fn next_block_key() -> Vec<u8> {
+    Self::substrate_key(b"next_block", [])
   }
   pub fn set_next_block(&mut self, block: u64) {
     let mut txn = self.0.txn();
-    txn.put(Self::block_key(), block.to_le_bytes());
+    txn.put(Self::next_block_key(), block.to_le_bytes());
     txn.commit();
   }
   pub fn next_block(&self) -> u64 {
-    u64::from_le_bytes(self.0.get(Self::block_key()).unwrap_or(vec![0; 8]).try_into().unwrap())
+    u64::from_le_bytes(self.0.get(Self::next_block_key()).unwrap_or(vec![0; 8]).try_into().unwrap())
+  }
+
+  fn latest_cosigned_block_key() -> Vec<u8> {
+    Self::substrate_key(b"latest_cosigned_block", [])
+  }
+  pub fn set_latest_cosigned_block(txn: &mut D::Transaction<'_>, latest_cosigned_block: u64) {
+    txn.put(Self::latest_cosigned_block_key(), latest_cosigned_block.to_le_bytes());
+  }
+  pub fn latest_cosigned_block<G: Get>(getter: &G) -> u64 {
+    let db = u64::from_le_bytes(
+      getter.get(Self::latest_cosigned_block_key()).unwrap_or(vec![0; 8]).try_into().unwrap(),
+    );
+    // Mark the genesis as cosigned
+    db.max(1)
   }
 
   fn event_key(id: &[u8], index: u32) -> Vec<u8> {

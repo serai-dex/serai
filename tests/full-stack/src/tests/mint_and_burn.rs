@@ -555,7 +555,7 @@ async fn mint_and_burn_test() {
         // Check for up to 5 minutes
         let mut found = false;
         let mut i = 0;
-        while i < (5 * 6) {
+        while i < (15 * 6) {
           if let Ok(hash) = rpc.get_block_hash(start_bitcoin_block).await {
             let block = rpc.get_block(&hash).await.unwrap();
             start_bitcoin_block += 1;

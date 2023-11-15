@@ -48,14 +48,14 @@ impl<D: Db> SubstrateSignerDb<D> {
     getter.get(Self::completed_key(id)).is_some()
   }
 
-  fn attempt_key(id: &BatchSignId) -> Vec<u8> {
-    Self::sign_key(b"attempt", id.encode())
+  fn attempt_key(id: [u8; 5], attempt: u32) -> Vec<u8> {
+    Self::sign_key(b"attempt", (id, attempt).encode())
   }
-  fn attempt(txn: &mut D::Transaction<'_>, id: &BatchSignId) {
-    txn.put(Self::attempt_key(id), []);
+  fn attempt(txn: &mut D::Transaction<'_>, id: [u8; 5], attempt: u32) {
+    txn.put(Self::attempt_key(id, attempt), []);
   }
-  fn has_attempt<G: Get>(getter: &G, id: &BatchSignId) -> bool {
-    getter.get(Self::attempt_key(id)).is_some()
+  fn has_attempt<G: Get>(getter: &G, id: [u8; 5], attempt: u32) -> bool {
+    getter.get(Self::attempt_key(id, attempt)).is_some()
   }
 
   fn save_batch(txn: &mut D::Transaction<'_>, batch: &SignedBatch) {
@@ -68,6 +68,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
   <Schnorrkel as Algorithm<Ristretto>>::Signature,
 >>::SignatureShare;
 
+// TODO: Rename BatchSigner
 pub struct SubstrateSigner<D: Db> {
   db: PhantomData<D>,
 
@@ -110,22 +111,27 @@ impl<D: Db> SubstrateSigner<D> {
     }
   }
 
-  fn verify_id(&self, id: &BatchSignId) -> Result<(), ()> {
+  fn verify_id(&self, id: &SubstrateSignId) -> Result<([u8; 32], [u8; 5], u32), ()> {
+    let SubstrateSignId { key, id, attempt } = id;
+    let SubstrateSignableId::Batch(id) = id else { panic!("SubstrateSigner handed non-Batch") };
+
+    assert_eq!(key, &self.keys[0].group_key().to_bytes());
+
     // Check the attempt lines up
-    match self.attempt.get(&id.id) {
+    match self.attempt.get(id) {
       // If we don't have an attempt logged, it's because the coordinator is faulty OR because we
       // rebooted OR we detected the signed batch on chain
       // The latter is the expected flow for batches not actively being participated in
       None => {
-        warn!("not attempting batch {} #{}", hex::encode(id.id), id.attempt);
+        warn!("not attempting batch {} #{}", hex::encode(id), attempt);
         Err(())?;
       }
-      Some(attempt) => {
-        if attempt != &id.attempt {
+      Some(our_attempt) => {
+        if attempt != our_attempt {
           warn!(
             "sent signing data for batch {} #{} yet we have attempt #{}",
-            hex::encode(id.id),
-            id.attempt,
+            hex::encode(id),
+            attempt,
             attempt
           );
           Err(())?;
@@ -133,7 +139,7 @@ impl<D: Db> SubstrateSigner<D> {
       }
     }
 
-    Ok(())
+    Ok((*key, *id, *attempt))
   }
 
   #[must_use]
@@ -176,8 +182,7 @@ impl<D: Db> SubstrateSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = BatchSignId { key: self.keys[0].group_key().to_bytes(), id, attempt };
-    info!("signing batch {} #{}", hex::encode(id.id), id.attempt);
+    info!("signing batch {} #{}", hex::encode(id), attempt);
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -192,16 +197,15 @@ impl<D: Db> SubstrateSigner<D> {
     //
     // Only run if this hasn't already been attempted
     // TODO: This isn't complete as this txn may not be committed with the expected timing
-    if SubstrateSignerDb::<D>::has_attempt(txn, &id) {
+    if SubstrateSignerDb::<D>::has_attempt(txn, id, attempt) {
       warn!(
         "already attempted batch {}, attempt #{}. this is an error if we didn't reboot",
-        hex::encode(id.id),
-        id.attempt
+        hex::encode(id),
+        attempt
       );
       return None;
     }
-
-    SubstrateSignerDb::<D>::attempt(txn, &id);
+    SubstrateSignerDb::<D>::attempt(txn, id, attempt);
 
     let mut machines = vec![];
     let mut preprocesses = vec![];
@@ -215,7 +219,13 @@ impl<D: Db> SubstrateSigner<D> {
       serialized_preprocesses.push(preprocess.serialize());
       preprocesses.push(preprocess);
     }
-    self.preprocessing.insert(id.id, (machines, preprocesses));
+    self.preprocessing.insert(id, (machines, preprocesses));
+
+    let id = SubstrateSignId {
+      key: self.keys[0].group_key().to_bytes(),
+      id: SubstrateSignableId::Batch(id),
+      attempt,
+    };
 
     // Broadcast our preprocesses
     Some(ProcessorMessage::BatchPreprocess { id, block, preprocesses: serialized_preprocesses })
@@ -246,17 +256,22 @@ impl<D: Db> SubstrateSigner<D> {
     msg: CoordinatorMessage,
   ) -> Option<messages::ProcessorMessage> {
     match msg {
-      CoordinatorMessage::BatchPreprocesses { id, preprocesses } => {
-        if self.verify_id(&id).is_err() {
-          return None;
-        }
+      CoordinatorMessage::CosignSubstrateBlock { .. } => {
+        panic!("SubstrateSigner passed CosignSubstrateBlock")
+      }
 
-        let (machines, our_preprocesses) = match self.preprocessing.remove(&id.id) {
+      CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
+        let (key, id, attempt) = self.verify_id(&id).ok()?;
+
+        let substrate_sign_id =
+          SubstrateSignId { key, id: SubstrateSignableId::Batch(id), attempt };
+
+        let (machines, our_preprocesses) = match self.preprocessing.remove(&id) {
           // Either rebooted or RPC error, or some invariant
           None => {
             warn!(
               "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id.id),
+              hex::encode(id),
             );
             return None;
           }
@@ -271,10 +286,16 @@ impl<D: Db> SubstrateSigner<D> {
         } {
           let mut preprocess_ref = preprocesses.get(&l).unwrap().as_slice();
           let Ok(res) = machines[0].read_preprocess(&mut preprocess_ref) else {
-            return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into());
+            return Some(
+              (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                .into(),
+            );
           };
           if !preprocess_ref.is_empty() {
-            return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into());
+            return Some(
+              (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                .into(),
+            );
           }
           parsed.insert(l, res);
         }
@@ -292,22 +313,26 @@ impl<D: Db> SubstrateSigner<D> {
             }
           }
 
-          let (machine, share) =
-            match machine.sign(preprocesses, &batch_message(&self.signable[&id.id])) {
-              Ok(res) => res,
-              Err(e) => match e {
-                FrostError::InternalError(_) |
-                FrostError::InvalidParticipant(_, _) |
-                FrostError::InvalidSigningSet(_) |
-                FrostError::InvalidParticipantQuantity(_, _) |
-                FrostError::DuplicatedParticipant(_) |
-                FrostError::MissingParticipant(_) => unreachable!(),
+          let (machine, share) = match machine
+            .sign(preprocesses, &batch_message(&self.signable[&id]))
+          {
+            Ok(res) => res,
+            Err(e) => match e {
+              FrostError::InternalError(_) |
+              FrostError::InvalidParticipant(_, _) |
+              FrostError::InvalidSigningSet(_) |
+              FrostError::InvalidParticipantQuantity(_, _) |
+              FrostError::DuplicatedParticipant(_) |
+              FrostError::MissingParticipant(_) => unreachable!(),
 
-                FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
-                  return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into())
-                }
-              },
-            };
+              FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
+                return Some(
+                  (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                    .into(),
+                )
+              }
+            },
+          };
           if m == 0 {
             signature_machine = Some(machine);
           }
@@ -318,29 +343,33 @@ impl<D: Db> SubstrateSigner<D> {
 
           shares.push(share);
         }
-        self.signing.insert(id.id, (signature_machine.unwrap(), shares));
+        self.signing.insert(id, (signature_machine.unwrap(), shares));
 
         // Broadcast our shares
-        Some((ProcessorMessage::BatchShare { id, shares: serialized_shares }).into())
+        Some(
+          (ProcessorMessage::SubstrateShare { id: substrate_sign_id, shares: serialized_shares })
+            .into(),
+        )
       }
 
-      CoordinatorMessage::BatchShares { id, shares } => {
-        if self.verify_id(&id).is_err() {
-          return None;
-        }
+      CoordinatorMessage::SubstrateShares { id, shares } => {
+        let (key, id, attempt) = self.verify_id(&id).ok()?;
 
-        let (machine, our_shares) = match self.signing.remove(&id.id) {
+        let substrate_sign_id =
+          SubstrateSignId { key, id: SubstrateSignableId::Batch(id), attempt };
+
+        let (machine, our_shares) = match self.signing.remove(&id) {
           // Rebooted, RPC error, or some invariant
           None => {
             // If preprocessing has this ID, it means we were never sent the preprocess by the
             // coordinator
-            if self.preprocessing.contains_key(&id.id) {
+            if self.preprocessing.contains_key(&id) {
               panic!("never preprocessed yet signing?");
             }
 
             warn!(
               "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id.id)
+              hex::encode(id)
             );
             return None;
           }
@@ -355,10 +384,16 @@ impl<D: Db> SubstrateSigner<D> {
         } {
           let mut share_ref = shares.get(&l).unwrap().as_slice();
           let Ok(res) = machine.read_share(&mut share_ref) else {
-            return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into());
+            return Some(
+              (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                .into(),
+            );
           };
           if !share_ref.is_empty() {
-            return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into());
+            return Some(
+              (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                .into(),
+            );
           }
           parsed.insert(l, res);
         }
@@ -379,30 +414,36 @@ impl<D: Db> SubstrateSigner<D> {
             FrostError::MissingParticipant(_) => unreachable!(),
 
             FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
-              return Some((ProcessorMessage::InvalidParticipant { id, participant: l }).into())
+              return Some(
+                (ProcessorMessage::InvalidParticipant { id: substrate_sign_id, participant: l })
+                  .into(),
+              )
             }
           },
         };
 
-        info!("signed batch {} with attempt #{}", hex::encode(id.id), id.attempt);
+        info!("signed batch {} with attempt #{}", hex::encode(id), attempt);
 
         let batch =
-          SignedBatch { batch: self.signable.remove(&id.id).unwrap(), signature: sig.into() };
+          SignedBatch { batch: self.signable.remove(&id).unwrap(), signature: sig.into() };
 
         // Save the batch in case it's needed for recovery
         SubstrateSignerDb::<D>::save_batch(txn, &batch);
-        SubstrateSignerDb::<D>::complete(txn, id.id);
+        SubstrateSignerDb::<D>::complete(txn, id);
 
         // Stop trying to sign for this batch
-        assert!(self.attempt.remove(&id.id).is_some());
-        assert!(self.preprocessing.remove(&id.id).is_none());
-        assert!(self.signing.remove(&id.id).is_none());
+        assert!(self.attempt.remove(&id).is_some());
+        assert!(self.preprocessing.remove(&id).is_none());
+        assert!(self.signing.remove(&id).is_none());
 
         Some((messages::substrate::ProcessorMessage::SignedBatch { batch }).into())
       }
 
       CoordinatorMessage::BatchReattempt { id } => {
-        self.attempt(txn, id.id, id.attempt).await.map(Into::into)
+        let SubstrateSignableId::Batch(batch_id) = id.id else {
+          panic!("BatchReattempt passed non-Batch ID")
+        };
+        self.attempt(txn, batch_id, id.attempt).await.map(Into::into)
       }
     }
   }

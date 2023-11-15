@@ -3,7 +3,10 @@ use std::sync::Arc;
 
 use rand_core::OsRng;
 
-use tokio::{sync::broadcast, time::sleep};
+use tokio::{
+  sync::{mpsc, broadcast},
+  time::sleep,
+};
 
 use serai_db::MemDb;
 
@@ -32,7 +35,8 @@ async fn handle_p2p_test() {
     let tributary = Arc::new(tributary);
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
-    tokio::spawn(handle_p2p_task(p2p, new_tributary_recv));
+    let (cosign_send, _) = mpsc::unbounded_channel();
+    tokio::spawn(handle_p2p_task(p2p, cosign_send, new_tributary_recv));
     new_tributary_send
       .send(TributaryEvent::NewTributary(ActiveTributary { spec: spec.clone(), tributary }))
       .map_err(|_| "failed to send ActiveTributary")

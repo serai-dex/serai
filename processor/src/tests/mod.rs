@@ -7,6 +7,7 @@ pub(crate) use scanner::{test_scanner, test_no_deadlock_in_multisig_completed};
 mod signer;
 pub(crate) use signer::{sign, test_signer};
 
+mod cosigner;
 mod substrate_signer;
 
 mod wallet;

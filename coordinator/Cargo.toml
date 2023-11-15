@@ -37,6 +37,7 @@ processor-messages = { package = "serai-processor-messages", path = "../processo
 message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary = { package = "tributary-chain", path = "./tributary" }
 
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }

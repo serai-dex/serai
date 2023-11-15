@@ -13,7 +13,12 @@ use serai_client::{
   validator_sets::primitives::{ValidatorSet, KeyPair},
 };
 
-use messages::{coordinator::PlanMeta, CoordinatorMessage};
+use messages::{
+  coordinator::{
+    SubstrateSignableId, PlanMeta, CoordinatorMessage as CoordinatorCoordinatorMessage,
+  },
+  CoordinatorMessage,
+};
 
 use serai_env as env;
 
@@ -43,6 +48,9 @@ use key_gen::{KeyConfirmed, KeyGen};
 
 mod signer;
 use signer::Signer;
+
+mod cosigner;
+use cosigner::Cosigner;
 
 mod substrate_signer;
 use substrate_signer::SubstrateSigner;
@@ -86,6 +94,9 @@ struct TributaryMutable<N: Network, D: Db> {
 
   // There should only be one SubstrateSigner at a time (see #277)
   substrate_signer: Option<SubstrateSigner<D>>,
+
+  // Solely mutated by the tributary.
+  cosigner: Option<Cosigner>,
 }
 
 // Items which are mutably borrowed by Substrate.
@@ -218,16 +229,58 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
 
     CoordinatorMessage::Coordinator(msg) => {
-      if let Some(msg) = tributary_mutable
-        .substrate_signer
-        .as_mut()
-        .expect(
-          "coordinator told us to sign a batch when we don't have a Substrate signer at this time",
-        )
-        .handle(txn, msg)
-        .await
-      {
-        coordinator.send(msg).await;
+      let is_batch = match msg {
+        CoordinatorCoordinatorMessage::CosignSubstrateBlock { .. } => false,
+        CoordinatorCoordinatorMessage::SubstratePreprocesses { ref id, .. } => {
+          matches!(&id.id, SubstrateSignableId::Batch(_))
+        }
+        CoordinatorCoordinatorMessage::SubstrateShares { ref id, .. } => {
+          matches!(&id.id, SubstrateSignableId::Batch(_))
+        }
+        CoordinatorCoordinatorMessage::BatchReattempt { .. } => true,
+      };
+      if is_batch {
+        if let Some(msg) = tributary_mutable
+          .substrate_signer
+          .as_mut()
+          .expect(
+            "coordinator told us to sign a batch when we don't currently have a Substrate signer",
+          )
+          .handle(txn, msg)
+          .await
+        {
+          coordinator.send(msg).await;
+        }
+      } else {
+        match msg {
+          CoordinatorCoordinatorMessage::CosignSubstrateBlock { id } => {
+            let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
+              panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
+            };
+            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_substrate_key(&id.key)
+            else {
+              panic!("didn't have key shares for the key we were told to cosign with");
+            };
+            if let Some((cosigner, msg)) = Cosigner::new(txn, keys, block, id.attempt) {
+              tributary_mutable.cosigner = Some(cosigner);
+              coordinator.send(msg).await;
+            } else {
+              log::warn!("Cosigner::new returned None");
+            }
+          }
+          _ => {
+            if let Some(cosigner) = tributary_mutable.cosigner.as_mut() {
+              if let Some(msg) = cosigner.handle(txn, msg).await {
+                coordinator.send(msg).await;
+              }
+            } else {
+              log::warn!(
+                "received message for cosigner yet didn't have a cosigner. {}",
+                "this is an error if we didn't reboot",
+              );
+            }
+          }
+        }
       }
     }
 
@@ -240,6 +293,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           if context.network_latest_finalized_block.0 == [0; 32] {
             assert!(tributary_mutable.signers.is_empty());
             assert!(tributary_mutable.substrate_signer.is_none());
+            assert!(tributary_mutable.cosigner.is_none());
             // We can't check this as existing is no longer pub
             // assert!(substrate_mutable.existing.as_ref().is_none());
 
@@ -337,7 +391,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             }
           }
 
-          // Since this block was acknowledged, we no longer have to sign the batches for it
+          // Since this block was acknowledged, we no longer have to sign the batches within it
           if let Some(substrate_signer) = tributary_mutable.substrate_signer.as_mut() {
             for batch_id in batches {
               substrate_signer.batch_signed(txn, batch_id);
@@ -480,7 +534,11 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
   // This hedges against being dropped due to full mempools, temporarily too low of a fee...
   tokio::spawn(Signer::<N, D>::rebroadcast_task(raw_db.clone(), network.clone()));
 
-  (main_db, TributaryMutable { key_gen, substrate_signer, signers }, multisig_manager)
+  (
+    main_db,
+    TributaryMutable { key_gen, substrate_signer, cosigner: None, signers },
+    multisig_manager,
+  )
 }
 
 #[allow(clippy::await_holding_lock)] // Needed for txn, unfortunately can't be down-scoped
@@ -553,6 +611,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             for batch in batches {
               info!("created batch {} ({} instructions)", batch.id, batch.instructions.len());
 
+              // The coordinator expects BatchPreprocess to immediately follow Batch
               coordinator.send(
                 messages::substrate::ProcessorMessage::Batch { batch: batch.clone() }
               ).await;

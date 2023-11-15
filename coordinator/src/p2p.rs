@@ -8,6 +8,9 @@ use std::{
 
 use async_trait::async_trait;
 
+use scale::{Encode, Decode};
+use serai_client::primitives::NetworkId;
+
 use serai_db::Db;
 
 use tokio::{
@@ -37,12 +40,20 @@ use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 // TODO: Use distinct topics
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+pub struct CosignedBlock {
+  pub network: NetworkId,
+  pub block: [u8; 32],
+  pub signature: [u8; 64],
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum P2pMessageKind {
   KeepAlive,
   Tributary([u8; 32]),
   Heartbeat([u8; 32]),
   Block([u8; 32]),
+  CosignedBlock,
 }
 
 impl P2pMessageKind {
@@ -63,6 +74,9 @@ impl P2pMessageKind {
         let mut res = vec![3];
         res.extend(genesis);
         res
+      }
+      P2pMessageKind::CosignedBlock => {
+        vec![4]
       }
     }
   }
@@ -87,6 +101,7 @@ impl P2pMessageKind {
         reader.read_exact(&mut genesis).ok()?;
         P2pMessageKind::Block(genesis)
       }),
+      4 => Some(P2pMessageKind::CosignedBlock),
       _ => None,
     }
   }
@@ -122,6 +137,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
         P2pMessageKind::Tributary(genesis) => format!("Tributary({})", hex::encode(genesis)),
         P2pMessageKind::Heartbeat(genesis) => format!("Heartbeat({})", hex::encode(genesis)),
         P2pMessageKind::Block(genesis) => format!("Block({})", hex::encode(genesis)),
+        P2pMessageKind::CosignedBlock => "CosignedBlock".to_string(),
       }
     );
     self.broadcast_raw(actual_msg).await;
@@ -148,6 +164,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
         P2pMessageKind::Tributary(genesis) => format!("Tributary({})", hex::encode(genesis)),
         P2pMessageKind::Heartbeat(genesis) => format!("Heartbeat({})", hex::encode(genesis)),
         P2pMessageKind::Block(genesis) => format!("Block({})", hex::encode(genesis)),
+        P2pMessageKind::CosignedBlock => "CosignedBlock".to_string(),
       }
     );
     Message { sender, kind, msg }
@@ -433,6 +450,7 @@ pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
 
 pub async fn handle_p2p_task<D: Db, P: P2p>(
   p2p: P,
+  cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
   let channels = Arc::new(RwLock::new(HashMap::<_, mpsc::UnboundedSender<Message<P>>>::new()));
@@ -562,6 +580,8 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                         res
                       );
                     }
+
+                    P2pMessageKind::CosignedBlock => unreachable!(),
                   }
                 }
               }
@@ -595,6 +615,14 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
         if let Some(channel) = channels.read().await.get(&genesis) {
           channel.send(msg).unwrap();
         }
+      }
+      P2pMessageKind::CosignedBlock => {
+        let mut msg_ref: &[u8] = msg.msg.as_ref();
+        let Ok(msg) = CosignedBlock::decode(&mut scale::IoReader(&mut msg_ref)) else {
+          log::error!("received CosignedBlock message with invalidly serialized contents");
+          continue;
+        };
+        cosign_channel.send(msg).unwrap();
       }
     }
   }

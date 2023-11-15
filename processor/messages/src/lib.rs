@@ -156,20 +156,37 @@ pub mod sign {
 pub mod coordinator {
   use super::*;
 
+  pub fn cosign_block_msg(block: [u8; 32]) -> Vec<u8> {
+    const DST: &[u8] = b"Cosign";
+    let mut res = vec![u8::try_from(DST.len()).unwrap()];
+    res.extend(DST);
+    res.extend(block);
+    res
+  }
+
+  #[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize,
+  )]
+  pub enum SubstrateSignableId {
+    CosigningSubstrateBlock([u8; 32]),
+    Batch([u8; 5]),
+  }
+
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Zeroize, Encode, Decode, Serialize, Deserialize)]
-  pub struct BatchSignId {
+  pub struct SubstrateSignId {
     pub key: [u8; 32],
-    pub id: [u8; 5],
+    pub id: SubstrateSignableId,
     pub attempt: u32,
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
+    CosignSubstrateBlock { id: SubstrateSignId },
     // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
-    BatchPreprocesses { id: BatchSignId, preprocesses: HashMap<Participant, Vec<u8>> },
-    BatchShares { id: BatchSignId, shares: HashMap<Participant, [u8; 32]> },
+    SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, Vec<u8>> },
+    SubstrateShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
     // Re-attempt a batch signing protocol.
-    BatchReattempt { id: BatchSignId },
+    BatchReattempt { id: SubstrateSignId },
   }
 
   impl CoordinatorMessage {
@@ -179,16 +196,18 @@ pub mod coordinator {
     // This synchrony obtained lets us ignore the synchrony requirement offered here
     pub fn required_block(&self) -> Option<BlockHash> {
       match self {
-        CoordinatorMessage::BatchPreprocesses { .. } => None,
-        CoordinatorMessage::BatchShares { .. } => None,
+        CoordinatorMessage::CosignSubstrateBlock { .. } => None,
+        CoordinatorMessage::SubstratePreprocesses { .. } => None,
+        CoordinatorMessage::SubstrateShares { .. } => None,
         CoordinatorMessage::BatchReattempt { .. } => None,
       }
     }
 
     pub fn key(&self) -> &[u8] {
       match self {
-        CoordinatorMessage::BatchPreprocesses { id, .. } => &id.key,
-        CoordinatorMessage::BatchShares { id, .. } => &id.key,
+        CoordinatorMessage::CosignSubstrateBlock { id } => &id.key,
+        CoordinatorMessage::SubstratePreprocesses { id, .. } => &id.key,
+        CoordinatorMessage::SubstrateShares { id, .. } => &id.key,
         CoordinatorMessage::BatchReattempt { id } => &id.key,
       }
     }
@@ -203,9 +222,11 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, Zeroize, Serialize, Deserialize)]
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
-    InvalidParticipant { id: BatchSignId, participant: Participant },
-    BatchPreprocess { id: BatchSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
-    BatchShare { id: BatchSignId, shares: Vec<[u8; 32]> },
+    InvalidParticipant { id: SubstrateSignId, participant: Participant },
+    CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<Vec<u8>> },
+    BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
+    SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
+    CosignedBlock { block: [u8; 32], signature: Vec<u8> },
   }
 }
 
@@ -350,10 +371,12 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
-          // Unique since this embeds the batch ID (hash of it, including its network) and attempt
-          coordinator::CoordinatorMessage::BatchPreprocesses { id, .. } => (0, id.encode()),
-          coordinator::CoordinatorMessage::BatchShares { id, .. } => (1, id.encode()),
-          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (2, id.encode()),
+          // Unique since this is the entire message
+          coordinator::CoordinatorMessage::CosignSubstrateBlock { id } => (0, id.encode()),
+          // Unique since this embeds the batch ID (including its network) and attempt
+          coordinator::CoordinatorMessage::SubstratePreprocesses { id, .. } => (1, id.encode()),
+          coordinator::CoordinatorMessage::SubstrateShares { id, .. } => (2, id.encode()),
+          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (3, id.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -420,10 +443,12 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::SubstrateBlockAck { network, block, .. } => {
             (0, (network, block).encode())
           }
-          // Unique since BatchSignId
+          // Unique since SubstrateSignId
           coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (2, id.encode()),
-          coordinator::ProcessorMessage::BatchShare { id, .. } => (3, id.encode()),
+          coordinator::ProcessorMessage::CosignPreprocess { id, .. } => (2, id.encode()),
+          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (3, id.encode()),
+          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (4, id.encode()),
+          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (5, block.encode()),
         };
 
         let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];

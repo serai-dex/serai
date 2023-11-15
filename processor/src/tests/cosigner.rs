@@ -13,45 +13,23 @@ use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use scale::Encode;
-use serai_client::{primitives::*, in_instructions::primitives::*};
+use serai_client::primitives::*;
 
-use messages::{
-  substrate,
-  coordinator::{self, SubstrateSignableId, SubstrateSignId, CoordinatorMessage},
-  ProcessorMessage,
-};
-use crate::substrate_signer::SubstrateSigner;
+use messages::coordinator::*;
+use crate::cosigner::Cosigner;
 
 #[tokio::test]
-async fn test_substrate_signer() {
+async fn test_cosigner() {
   let keys = key_gen::<_, Ristretto>(&mut OsRng);
 
   let participant_one = Participant::new(1).unwrap();
 
-  let id: u32 = 5;
-  let block = BlockHash([0xaa; 32]);
-
-  let batch = Batch {
-    network: NetworkId::Monero,
-    id,
-    block,
-    instructions: vec![
-      InInstructionWithBalance {
-        instruction: InInstruction::Transfer(SeraiAddress([0xbb; 32])),
-        balance: Balance { coin: Coin::Bitcoin, amount: Amount(1000) },
-      },
-      InInstructionWithBalance {
-        instruction: InInstruction::Dex(DexCall::SwapAndAddLiquidity(SeraiAddress([0xbb; 32]))),
-        balance: Balance { coin: Coin::Monero, amount: Amount(9999999999999999) },
-      },
-    ],
-  };
+  let block = [0xaa; 32];
 
   let actual_id = SubstrateSignId {
     key: keys.values().next().unwrap().group_key().to_bytes(),
-    id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
-    attempt: 0,
+    id: SubstrateSignableId::CosigningSubstrateBlock(block),
+    attempt: (OsRng.next_u64() >> 32).try_into().unwrap(),
   };
 
   let mut signing_set = vec![];
@@ -73,19 +51,15 @@ async fn test_substrate_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.get(&i).unwrap().clone();
 
-    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
     let mut db = MemDb::new();
-
     let mut txn = db.txn();
-    match signer.sign(&mut txn, batch.clone()).await.unwrap() {
+    let (signer, preprocess) =
+      Cosigner::new(&mut txn, vec![keys], block, actual_id.attempt).unwrap();
+
+    match preprocess {
       // All participants should emit a preprocess
-      coordinator::ProcessorMessage::BatchPreprocess {
-        id,
-        block: batch_block,
-        preprocesses: mut these_preprocesses,
-      } => {
+      ProcessorMessage::CosignPreprocess { id, preprocesses: mut these_preprocesses } => {
         assert_eq!(id, actual_id);
-        assert_eq!(batch_block, block);
         assert_eq!(these_preprocesses.len(), 1);
         if signing_set.contains(&i) {
           preprocesses.insert(i, these_preprocesses.swap_remove(0));
@@ -115,10 +89,7 @@ async fn test_substrate_signer() {
       .await
       .unwrap()
     {
-      ProcessorMessage::Coordinator(coordinator::ProcessorMessage::SubstrateShare {
-        id,
-        shares: mut these_shares,
-      }) => {
+      ProcessorMessage::SubstrateShare { id, shares: mut these_shares } => {
         assert_eq!(id, actual_id);
         assert_eq!(these_shares.len(), 1);
         shares.insert(*i, these_shares.swap_remove(0));
@@ -143,14 +114,12 @@ async fn test_substrate_signer() {
       .await
       .unwrap()
     {
-      ProcessorMessage::Substrate(substrate::ProcessorMessage::SignedBatch {
-        batch: signed_batch,
-      }) => {
-        assert_eq!(signed_batch.batch, batch);
+      ProcessorMessage::CosignedBlock { block: signed_block, signature } => {
+        assert_eq!(signed_block, block);
         assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
-          .verify(&batch_message(&batch), &signed_batch.signature));
+          .verify(&cosign_block_msg(block), &Signature(signature.try_into().unwrap())));
       }
-      _ => panic!("didn't get signed batch back"),
+      _ => panic!("didn't get cosigned block back"),
     }
     txn.commit();
   }

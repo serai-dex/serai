@@ -9,6 +9,8 @@ use frost::Participant;
 
 use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
+use processor_messages::coordinator::SubstrateSignableId;
+
 pub use serai_db::*;
 
 use crate::tributary::TributarySpec;
@@ -16,16 +18,21 @@ use crate::tributary::TributarySpec;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Topic {
   Dkg,
-  Batch([u8; 5]),
+  SubstrateSign(SubstrateSignableId),
   Sign([u8; 32]),
 }
 
 impl Topic {
   fn as_key(&self, genesis: [u8; 32]) -> Vec<u8> {
     let mut res = genesis.to_vec();
+    #[allow(unused_assignments)] // False positive
+    let mut id_buf = vec![];
     let (label, id) = match self {
       Topic::Dkg => (b"dkg".as_slice(), [].as_slice()),
-      Topic::Batch(id) => (b"batch".as_slice(), id.as_slice()),
+      Topic::SubstrateSign(id) => {
+        id_buf = id.encode();
+        (b"substrate_sign".as_slice(), id_buf.as_slice())
+      }
       Topic::Sign(id) => (b"sign".as_slice(), id.as_slice()),
     };
     res.push(u8::try_from(label.len()).unwrap());

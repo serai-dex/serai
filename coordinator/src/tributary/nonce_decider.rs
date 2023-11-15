@@ -1,11 +1,13 @@
 use serai_db::{Get, DbTxn, create_db};
 
+use processor_messages::coordinator::SubstrateSignableId;
+
 use crate::tributary::Transaction;
 
 use scale::Encode;
 
-const BATCH_CODE: u8 = 0;
-const BATCH_SIGNING_CODE: u8 = 1;
+const SUBSTRATE_CODE: u8 = 0;
+const SUBSTRATE_SIGNING_CODE: u8 = 1;
 const PLAN_CODE: u8 = 2;
 const PLAN_SIGNING_CODE: u8 = 3;
 
@@ -30,9 +32,13 @@ impl NextNonceDb {
 /// transactions in response. Enables rebooting/rebuilding validators with full safety.
 pub struct NonceDecider;
 impl NonceDecider {
-  pub fn handle_batch(txn: &mut impl DbTxn, genesis: [u8; 32], batch: [u8; 5]) -> u32 {
+  pub fn handle_substrate_signable(
+    txn: &mut impl DbTxn,
+    genesis: [u8; 32],
+    id: SubstrateSignableId,
+  ) -> u32 {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-    ItemNonceDb::set(txn, genesis, BATCH_CODE, &batch, &nonce_for);
+    ItemNonceDb::set(txn, genesis, SUBSTRATE_CODE, &id.encode(), &nonce_for);
     nonce_for
   }
 
@@ -53,12 +59,16 @@ impl NonceDecider {
   // TODO: The processor won't yield shares for this if the signing protocol aborts. We need to
   // detect when we're expecting shares for an aborted protocol and insert a dummy transaction
   // there.
-  pub fn selected_for_signing_batch(txn: &mut impl DbTxn, genesis: [u8; 32], batch: [u8; 5]) {
+  pub fn selected_for_signing_substrate(
+    txn: &mut impl DbTxn,
+    genesis: [u8; 32],
+    id: SubstrateSignableId,
+  ) {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
-    ItemNonceDb::set(txn, genesis, BATCH_SIGNING_CODE, &batch, &nonce_for);
+    ItemNonceDb::set(txn, genesis, SUBSTRATE_SIGNING_CODE, &id.encode(), &nonce_for);
   }
 
-  // TODO: Same TODO as selected_for_signing_batch
+  // TODO: Same TODO as selected_for_signing_substrate
   pub fn selected_for_signing_plan(txn: &mut impl DbTxn, genesis: [u8; 32], plan: [u8; 32]) {
     let nonce_for = NextNonceDb::allocate_nonce(txn, genesis);
     ItemNonceDb::set(txn, genesis, PLAN_SIGNING_CODE, &plan, &nonce_for);
@@ -86,23 +96,26 @@ impl NonceDecider {
         assert_eq!(*attempt, 0);
         Some(Some(2))
       }
+
+      Transaction::CosignSubstrateBlock(_) => None,
+
       Transaction::Batch(_, _) => None,
       Transaction::SubstrateBlock(_) => None,
-      Transaction::BatchPreprocess(data) => {
+      Transaction::SubstratePreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(ItemNonceDb::get(getter, genesis, BATCH_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, SUBSTRATE_CODE, &data.plan.encode()))
       }
-      Transaction::BatchShare(data) => {
+      Transaction::SubstrateShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(ItemNonceDb::get(getter, genesis, BATCH_SIGNING_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, SUBSTRATE_SIGNING_CODE, &data.plan.encode()))
       }
       Transaction::SignPreprocess(data) => {
         assert_eq!(data.attempt, 0);
-        Some(ItemNonceDb::get(getter, genesis, PLAN_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, PLAN_CODE, &data.plan.encode()))
       }
       Transaction::SignShare(data) => {
         assert_eq!(data.attempt, 0);
-        Some(ItemNonceDb::get(getter, genesis, PLAN_SIGNING_CODE, &data.plan))
+        Some(ItemNonceDb::get(getter, genesis, PLAN_SIGNING_CODE, &data.plan.encode()))
       }
       Transaction::SignCompleted { .. } => None,
     }

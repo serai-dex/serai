@@ -18,7 +18,7 @@ use tributary::{Signed, TransactionKind, TransactionTrait};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
-  coordinator::{self, BatchSignId},
+  coordinator::{self, SubstrateSignableId, SubstrateSignId},
   sign::{self, SignId},
 };
 
@@ -498,10 +498,50 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
+    Transaction::CosignSubstrateBlock(hash) => {
+      TributaryDb::<D>::recognize_topic(
+        txn,
+        genesis,
+        Topic::SubstrateSign(SubstrateSignableId::CosigningSubstrateBlock(hash)),
+      );
+      NonceDecider::handle_substrate_signable(
+        txn,
+        genesis,
+        SubstrateSignableId::CosigningSubstrateBlock(hash),
+      );
+
+      let key = loop {
+        let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
+          // This can happen based on a timing condition
+          log::warn!("CosignSubstrateBlock yet keys weren't set yet");
+          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+          continue;
+        };
+        break key_pair.0.into();
+      };
+      processors
+        .send(
+          spec.set().network,
+          coordinator::CoordinatorMessage::CosignSubstrateBlock {
+            id: SubstrateSignId {
+              key,
+              id: SubstrateSignableId::CosigningSubstrateBlock(hash),
+              attempt: 0,
+            },
+          },
+        )
+        .await;
+    }
+
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
-      TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Batch(batch));
-      let nonce = NonceDecider::handle_batch(txn, genesis, batch);
+      TributaryDb::<D>::recognize_topic(
+        txn,
+        genesis,
+        Topic::SubstrateSign(SubstrateSignableId::Batch(batch)),
+      );
+      let nonce =
+        NonceDecider::handle_substrate_signable(txn, genesis, SubstrateSignableId::Batch(batch));
       recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec(), nonce).await;
     }
 
@@ -518,14 +558,14 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
-    Transaction::BatchPreprocess(data) => {
+    Transaction::SubstratePreprocess(data) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
       match handle(
         txn,
         &DataSpecification {
-          topic: Topic::Batch(data.plan),
+          topic: Topic::SubstrateSign(data.plan),
           label: BATCH_PREPROCESS,
           attempt: data.attempt,
         },
@@ -534,13 +574,13 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::selected_for_signing_batch(txn, genesis, data.plan);
+          NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
           let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
-              coordinator::CoordinatorMessage::BatchPreprocesses {
-                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::SubstratePreprocesses {
+                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
             )
@@ -550,14 +590,14 @@ pub(crate) async fn handle_application_tx<
         Accumulation::NotReady => {}
       }
     }
-    Transaction::BatchShare(data) => {
+    Transaction::SubstrateShare(data) => {
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
       match handle(
         txn,
         &DataSpecification {
-          topic: Topic::Batch(data.plan),
+          topic: Topic::SubstrateSign(data.plan),
           label: BATCH_SHARE,
           attempt: data.attempt,
         },
@@ -570,8 +610,8 @@ pub(crate) async fn handle_application_tx<
           processors
             .send(
               spec.set().network,
-              coordinator::CoordinatorMessage::BatchShares {
-                id: BatchSignId { key, id: data.plan, attempt: data.attempt },
+              coordinator::CoordinatorMessage::SubstrateShares {
+                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))

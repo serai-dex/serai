@@ -5,7 +5,10 @@ use rand_core::OsRng;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use tokio::{sync::broadcast, time::sleep};
+use tokio::{
+  sync::{mpsc, broadcast},
+  time::sleep,
+};
 
 use serai_db::MemDb;
 
@@ -42,7 +45,8 @@ async fn sync_test() {
     let tributary = Arc::new(tributary);
     tributary_arcs.push(tributary.clone());
     let (new_tributary_send, new_tributary_recv) = broadcast::channel(5);
-    let thread = tokio::spawn(handle_p2p_task(p2p, new_tributary_recv));
+    let (cosign_send, _) = mpsc::unbounded_channel();
+    let thread = tokio::spawn(handle_p2p_task(p2p, cosign_send, new_tributary_recv));
     new_tributary_send
       .send(TributaryEvent::NewTributary(ActiveTributary { spec: spec.clone(), tributary }))
       .map_err(|_| "failed to send ActiveTributary")
@@ -77,7 +81,8 @@ async fn sync_test() {
   let syncer_key = Ristretto::generator() * *syncer_key;
   let syncer_tributary = Arc::new(syncer_tributary);
   let (syncer_tributary_send, syncer_tributary_recv) = broadcast::channel(5);
-  tokio::spawn(handle_p2p_task(syncer_p2p.clone(), syncer_tributary_recv));
+  let (cosign_send, _) = mpsc::unbounded_channel();
+  tokio::spawn(handle_p2p_task(syncer_p2p.clone(), cosign_send, syncer_tributary_recv));
   syncer_tributary_send
     .send(TributaryEvent::NewTributary(ActiveTributary {
       spec: spec.clone(),
