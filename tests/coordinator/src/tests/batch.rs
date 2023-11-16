@@ -103,7 +103,7 @@ pub async fn batch(
       participants.insert(known_signer_i);
       participants
     }
-    _ => panic!("coordinator didn't send back SubstratePreprocesses"),
+    other => panic!("coordinator didn't send back SubstratePreprocesses: {:?}", other),
   };
 
   for i in participants.clone() {

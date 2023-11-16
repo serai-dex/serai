@@ -552,7 +552,7 @@ async fn mint_and_burn_test() {
       {
         let rpc = handles[0].bitcoin(&ops).await;
 
-        // Check for up to 5 minutes
+        // Check for up to 15 minutes
         let mut found = false;
         let mut i = 0;
         while i < (15 * 6) {
@@ -582,7 +582,7 @@ async fn mint_and_burn_test() {
           }
         }
         if !found {
-          panic!("couldn't find the expected Bitcoin transaction within 5 minutes");
+          panic!("couldn't find the expected Bitcoin transaction within 15 minutes");
         }
       }
 

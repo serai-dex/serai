@@ -131,23 +131,21 @@ impl<R: RpcConnection> Rpc<R> {
     route: &str,
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
-    serde_json::from_str(
-      std_shims::str::from_utf8(
-        &self
-          .0
-          .post(
-            route,
-            if let Some(params) = params {
-              serde_json::to_string(&params).unwrap().into_bytes()
-            } else {
-              vec![]
-            },
-          )
-          .await?,
+    let res = self
+      .0
+      .post(
+        route,
+        if let Some(params) = params {
+          serde_json::to_string(&params).unwrap().into_bytes()
+        } else {
+          vec![]
+        },
       )
-      .map_err(|_| RpcError::InvalidNode("response wasn't utf-8"))?,
-    )
-    .map_err(|_| RpcError::InvalidNode("response wasn't json"))
+      .await?;
+    let res_str = std_shims::str::from_utf8(&res)
+      .map_err(|_| RpcError::InvalidNode("response wasn't utf-8"))?;
+    serde_json::from_str(res_str)
+      .map_err(|_| RpcError::InvalidNode("response wasn't json: {res_str}"))
   }
 
   /// Perform a JSON-RPC call with the specified method with the provided parameters
