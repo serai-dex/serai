@@ -131,6 +131,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
   async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
     actual_msg.extend(msg);
+    /*
     log::trace!(
       "broadcasting p2p message (kind {})",
       match kind {
@@ -141,6 +142,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
         P2pMessageKind::CosignedBlock => "CosignedBlock".to_string(),
       }
     );
+    */
     self.broadcast_raw(actual_msg).await;
   }
   async fn receive(&self) -> Message<Self> {
@@ -158,6 +160,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
       };
       break (sender, kind, msg_ref.to_vec());
     };
+    /*
     log::trace!(
       "received p2p message (kind {})",
       match kind {
@@ -168,6 +171,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
         P2pMessageKind::CosignedBlock => "CosignedBlock".to_string(),
       }
     );
+    */
     Message { sender, kind, msg }
   }
 }

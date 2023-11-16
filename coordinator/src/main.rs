@@ -259,7 +259,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
           TributaryDb::<D>::set_plan_ids(&mut txn, tributary.spec.genesis(), *block, &plans);
 
           let tx = Transaction::SubstrateBlock(*block);
-          log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
+          log::trace!(
+            "processor message effected transaction {} {:?}",
+            hex::encode(tx.hash()),
+            &tx
+          );
           log::trace!("providing transaction {}", hex::encode(tx.hash()));
           let res = tributary.tributary.provide_transaction(tx).await;
           if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
@@ -700,7 +704,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
     // If this created transactions, publish them
     for mut tx in txs {
-      log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
+      log::trace!("processor message effected transaction {} {:?}", hex::encode(tx.hash()), &tx);
 
       match tx.kind() {
         TransactionKind::Provided(_) => {
@@ -919,6 +923,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
           // Safe since this will drop the txn updating the most recently queued batch
           continue 'outer;
         };
+        log::debug!("providing Batch transaction {:?}", &tx);
         let res = tributary.provide_transaction(tx.clone()).await;
         if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
           if res == Err(ProvidedError::LocalMismatchesOnChain) {

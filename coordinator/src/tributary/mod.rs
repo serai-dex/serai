@@ -170,7 +170,7 @@ impl TributarySpec {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SignData<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> {
   pub plan: Id,
   pub attempt: u32,
@@ -178,6 +178,17 @@ pub struct SignData<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> {
   pub data: Vec<Vec<u8>>,
 
   pub signed: Signed,
+}
+
+impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> Debug for SignData<Id> {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("SignData")
+      .field("id", &hex::encode(self.plan.encode()))
+      .field("attempt", &self.attempt)
+      .field("signer", &hex::encode(self.signed.signer.to_bytes()))
+      .finish_non_exhaustive()
+  }
 }
 
 impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignData<Id> {
@@ -235,7 +246,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignDat
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Transaction {
   RemoveParticipant(Participant),
 
@@ -287,6 +298,67 @@ pub enum Transaction {
     first_signer: <Ristretto as Ciphersuite>::G,
     signature: SchnorrSignature<Ristretto>,
   },
+}
+
+impl Debug for Transaction {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    match self {
+      Transaction::RemoveParticipant(participant) => fmt
+        .debug_struct("Transaction::RemoveParticipant")
+        .field("participant", participant)
+        .finish(),
+      Transaction::DkgCommitments(attempt, _, signed) => fmt
+        .debug_struct("Transaction::DkgCommitments")
+        .field("attempt", attempt)
+        .field("signer", &hex::encode(signed.signer.to_bytes()))
+        .finish_non_exhaustive(),
+      Transaction::DkgShares { attempt, signed, .. } => fmt
+        .debug_struct("Transaction::DkgShares")
+        .field("attempt", attempt)
+        .field("signer", &hex::encode(signed.signer.to_bytes()))
+        .finish_non_exhaustive(),
+      Transaction::InvalidDkgShare { attempt, accuser, faulty, .. } => fmt
+        .debug_struct("Transaction::InvalidDkgShare")
+        .field("attempt", attempt)
+        .field("accuser", accuser)
+        .field("faulty", faulty)
+        .finish_non_exhaustive(),
+      Transaction::DkgConfirmed(attempt, _, signed) => fmt
+        .debug_struct("Transaction::DkgConfirmed")
+        .field("attempt", attempt)
+        .field("signer", &hex::encode(signed.signer.to_bytes()))
+        .finish_non_exhaustive(),
+      Transaction::CosignSubstrateBlock(block) => fmt
+        .debug_struct("Transaction::CosignSubstrateBlock")
+        .field("block", &hex::encode(block))
+        .finish(),
+      Transaction::Batch(block, batch) => fmt
+        .debug_struct("Transaction::Batch")
+        .field("block", &hex::encode(block))
+        .field("batch", &hex::encode(batch))
+        .finish(),
+      Transaction::SubstrateBlock(block) => {
+        fmt.debug_struct("Transaction::SubstrateBlock").field("block", block).finish()
+      }
+      Transaction::SubstratePreprocess(sign_data) => {
+        fmt.debug_struct("Transaction::SubstratePreprocess").field("sign_data", sign_data).finish()
+      }
+      Transaction::SubstrateShare(sign_data) => {
+        fmt.debug_struct("Transaction::SubstrateShare").field("sign_data", sign_data).finish()
+      }
+      Transaction::SignPreprocess(sign_data) => {
+        fmt.debug_struct("Transaction::SignPreprocess").field("sign_data", sign_data).finish()
+      }
+      Transaction::SignShare(sign_data) => {
+        fmt.debug_struct("Transaction::SignShare").field("sign_data", sign_data).finish()
+      }
+      Transaction::SignCompleted { plan, tx_hash, .. } => fmt
+        .debug_struct("Transaction::SignCompleted")
+        .field("plan", &hex::encode(plan))
+        .field("tx_hash", &hex::encode(tx_hash))
+        .finish_non_exhaustive(),
+    }
+  }
 }
 
 impl ReadWrite for Transaction {
