@@ -39,7 +39,7 @@ create_db!(
 
 impl ActiveTributaryDb {
   pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
-    let bytes = getter.get(Self::key()).unwrap_or_default();
+    let bytes =Self::get(getter).unwrap_or_default();
     let mut bytes_ref: &[u8] = bytes.as_ref();
 
     let mut tributaries = vec![];
@@ -63,15 +63,14 @@ impl ActiveTributaryDb {
     for active in active {
       active.write(&mut bytes).unwrap();
     }
-    txn.put(Self::key(), bytes);
-    txn.put(RetiredTributaryDb::key(set), []);
+    Self::set(txn, &bytes);
+    RetiredTributaryDb::set(txn, set, &vec![] as &Vec<u8>);
   }
 }
 
 pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec) {
-  txn.put(InTributaryDb::key(spec.set()), []);
+  InTributaryDb::set(txn,  spec.set(), &vec![] as &Vec<u8>);
 
-  let key = ActiveTributaryDb::key();
   let (mut existing_bytes, existing) = ActiveTributaryDb::active_tributaries(txn);
   for tributary in &existing {
     if tributary == spec {
@@ -80,15 +79,14 @@ pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec
   }
 
   spec.write(&mut existing_bytes).unwrap();
-  txn.put(key, existing_bytes);
+  ActiveTributaryDb::set(txn, &existing_bytes);
 }
 
 impl SignedTransactionDb {
   pub fn take_signed_transaction(txn: &mut impl DbTxn, nonce: u32) -> Option<Transaction> {
-    let key = Self::key(nonce);
-    let res = txn.get(&key).map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
+    let res = SignedTransactionDb::get(txn, nonce).map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
     if res.is_some() {
-      txn.del(&key);
+      txn.del(Self::key(nonce));
     }
     res
   }
@@ -126,15 +124,14 @@ impl HandoverBatchDb {
 }
 impl QueuedBatchesDb {
   pub fn queue(txn: &mut impl DbTxn, set: ValidatorSet, batch: Transaction) {
-    let key = Self::key(set);
-    let mut batches = txn.get(&key).unwrap_or_default();
+    let mut batches = Self::get(txn, set).unwrap_or_default();
     batches.extend(batch.serialize());
-    txn.put(&key, batches);
+    Self::set(txn, set, &batches);
   }
+
   pub fn take(txn: &mut impl DbTxn, set: ValidatorSet) -> Vec<Transaction> {
-    let key = Self::key(set);
-    let batches_vec = txn.get(&key).unwrap_or_default();
-    txn.del(&key);
+    let batches_vec = Self::get(txn, set).unwrap_or_default();
+    txn.del(&Self::key(set));
     let mut batches: &[u8] = &batches_vec;
 
     let mut res = vec![];
