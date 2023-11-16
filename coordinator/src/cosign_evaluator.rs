@@ -256,8 +256,10 @@ impl<D: Db> CosignEvaluator<D> {
         panic!("17% of validator sets (by stake) have co-signed a distinct chain");
       }
     } else {
-      let mut latest_cosigns = self.latest_cosigns.write().await;
-      latest_cosigns.insert(cosign.network, (block.number(), cosign));
+      {
+        let mut latest_cosigns = self.latest_cosigns.write().await;
+        latest_cosigns.insert(cosign.network, (block.number(), cosign));
+      }
       self.update_latest_cosign().await;
     }
 
