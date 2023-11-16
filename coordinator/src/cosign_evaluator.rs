@@ -23,7 +23,7 @@ use processor_messages::coordinator::cosign_block_msg;
 
 use crate::{
   p2p::{CosignedBlock, P2pMessageKind, P2p},
-  substrate::SubstrateDb,
+  substrate::LatestCosignedBlock,
 };
 
 create_db! {
@@ -67,9 +67,9 @@ impl<D: Db> CosignEvaluator<D> {
 
     let mut db_lock = self.db.lock().await;
     let mut txn = db_lock.txn();
-    if highest_block > SubstrateDb::<D>::latest_cosigned_block(&txn) {
+    if highest_block > LatestCosignedBlock::latest_cosigned_block(&txn) {
       log::info!("setting latest cosigned block to {}", highest_block);
-      SubstrateDb::<D>::set_latest_cosigned_block(&mut txn, highest_block);
+      LatestCosignedBlock::set(&mut txn, &highest_block);
     }
     txn.commit();
   }
