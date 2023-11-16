@@ -7631,7 +7631,6 @@ dependencies = [
  "serai-coins-pallet",
  "serai-primitives",
  "sp-api",
- "sp-arithmetic",
  "sp-core",
  "sp-io",
  "sp-runtime",

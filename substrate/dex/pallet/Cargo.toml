@@ -16,7 +16,6 @@ codec = { package = "parity-scale-codec", version = "3.6.1", default-features = 
 scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
 
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-arithmetic = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -37,7 +36,6 @@ std = [
   "scale-info/std",
 
   "sp-std/std",
-  "sp-arithmetic/std",
   "sp-io/std",
   "sp-api/std",
   "sp-runtime/std",
