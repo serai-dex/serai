@@ -574,7 +574,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
         assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
         last_coordinator_msg = Some(msg.id);
 
-        
+
         // Only handle this if we haven't already
         if HandledMessageDb::get(&main_db, msg.id).is_none() {
           HandledMessageDb::set(&mut txn, msg.id, &vec![] as &Vec<u8>);
