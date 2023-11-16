@@ -52,7 +52,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::SubstrateDb;
+use substrate::SessionDb;
 
 #[cfg(test)]
 pub mod tests;
@@ -191,20 +191,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
       sign::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+        Some(SessionDb::get(&txn, &id.key).unwrap())
       }
-      sign::ProcessorMessage::Preprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      sign::ProcessorMessage::Share { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
+      sign::ProcessorMessage::Preprocess { id, .. } => Some(SessionDb::get(&txn, &id.key).unwrap()),
+      sign::ProcessorMessage::Share { id, .. } => Some(SessionDb::get(&txn, &id.key).unwrap()),
       // While the Processor's Scanner will always emit Completed, that's routed through the
       // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
       // confirms it
-      sign::ProcessorMessage::Completed { key, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, key).unwrap())
-      }
+      sign::ProcessorMessage::Completed { key, .. } => Some(SessionDb::get(&txn, key).unwrap()),
     },
     ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
       // This is a special case as it's relevant to *all* Tributaries for this network
@@ -219,7 +213,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         let keys = plans.iter().map(|plan| plan.key.clone()).collect::<HashSet<_>>();
         let mut sessions = vec![];
         for key in keys {
-          let session = SubstrateDb::<D>::session_for_key(&txn, &key).unwrap();
+          let session = SessionDb::get(&txn, &key).unwrap();
           // Only keep them if we're in the Tributary AND they haven't been retied
           let set = ValidatorSet { network: *network, session };
           if MainDb::<D>::in_tributary(&txn, set) && (!MainDb::<D>::is_tributary_retired(&txn, set))
@@ -268,13 +262,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
       coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+        Some(SessionDb::get(&txn, &id.key).unwrap())
       }
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+        Some(SessionDb::get(&txn, &id.key).unwrap())
       }
       coordinator::ProcessorMessage::BatchShare { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
+        Some(SessionDb::get(&txn, &id.key).unwrap())
       }
     },
     // These don't return a relevant Tributary as there's no Tributary with action expected
