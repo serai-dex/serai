@@ -24,6 +24,7 @@ async fn test_cosigner() {
 
   let participant_one = Participant::new(1).unwrap();
 
+  let block_number = OsRng.next_u64();
   let block = [0xaa; 32];
 
   let actual_id = SubstrateSignId {
@@ -54,7 +55,7 @@ async fn test_cosigner() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
     let (signer, preprocess) =
-      Cosigner::new(&mut txn, vec![keys], block, actual_id.attempt).unwrap();
+      Cosigner::new(&mut txn, vec![keys], block_number, block, actual_id.attempt).unwrap();
 
     match preprocess {
       // All participants should emit a preprocess
@@ -114,10 +115,12 @@ async fn test_cosigner() {
       .await
       .unwrap()
     {
-      ProcessorMessage::CosignedBlock { block: signed_block, signature } => {
+      ProcessorMessage::CosignedBlock { block_number, block: signed_block, signature } => {
         assert_eq!(signed_block, block);
-        assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes())
-          .verify(&cosign_block_msg(block), &Signature(signature.try_into().unwrap())));
+        assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes()).verify(
+          &cosign_block_msg(block_number, block),
+          &Signature(signature.try_into().unwrap())
+        ));
       }
       _ => panic!("didn't get cosigned block back"),
     }

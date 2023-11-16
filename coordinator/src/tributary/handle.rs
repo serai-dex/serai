@@ -27,8 +27,8 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, Topic, DataSpecification, TributaryDb, DataSet, Accumulation,
-    TributaryState,
+    Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, TributaryDb, DataSet,
+    Accumulation, TributaryState,
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
@@ -528,6 +528,8 @@ pub(crate) async fn handle_application_tx<
               id: SubstrateSignableId::CosigningSubstrateBlock(hash),
               attempt: 0,
             },
+            block_number: SeraiBlockNumber::get(txn, hash)
+              .expect("CosignSubstrateBlock yet didn't save Serai block number"),
           },
         )
         .await;

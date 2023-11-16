@@ -253,7 +253,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
         }
       } else {
         match msg {
-          CoordinatorCoordinatorMessage::CosignSubstrateBlock { id } => {
+          CoordinatorCoordinatorMessage::CosignSubstrateBlock { id, block_number } => {
             let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
               panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
             };
@@ -261,7 +261,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             else {
               panic!("didn't have key shares for the key we were told to cosign with");
             };
-            if let Some((cosigner, msg)) = Cosigner::new(txn, keys, block, id.attempt) {
+            if let Some((cosigner, msg)) = Cosigner::new(txn, keys, block_number, block, id.attempt)
+            {
               tributary_mutable.cosigner = Some(cosigner);
               coordinator.send(msg).await;
             } else {

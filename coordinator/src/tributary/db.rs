@@ -15,6 +15,12 @@ pub use serai_db::*;
 
 use crate::tributary::TributarySpec;
 
+create_db! {
+  NewTributaryDb {
+    SeraiBlockNumber: (hash: [u8; 32]) -> u64
+  }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Topic {
   Dkg,

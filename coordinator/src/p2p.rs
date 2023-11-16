@@ -43,6 +43,7 @@ const LIBP2P_TOPIC: &str = "serai-coordinator";
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct CosignedBlock {
   pub network: NetworkId,
+  pub block_number: u64,
   pub block: [u8; 32],
   pub signature: [u8; 64],
 }

@@ -156,10 +156,11 @@ pub mod sign {
 pub mod coordinator {
   use super::*;
 
-  pub fn cosign_block_msg(block: [u8; 32]) -> Vec<u8> {
+  pub fn cosign_block_msg(block_number: u64, block: [u8; 32]) -> Vec<u8> {
     const DST: &[u8] = b"Cosign";
     let mut res = vec![u8::try_from(DST.len()).unwrap()];
     res.extend(DST);
+    res.extend(block_number.to_le_bytes());
     res.extend(block);
     res
   }
@@ -181,7 +182,7 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
   pub enum CoordinatorMessage {
-    CosignSubstrateBlock { id: SubstrateSignId },
+    CosignSubstrateBlock { id: SubstrateSignId, block_number: u64 },
     // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
     SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, Vec<u8>> },
     SubstrateShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
@@ -205,7 +206,7 @@ pub mod coordinator {
 
     pub fn key(&self) -> &[u8] {
       match self {
-        CoordinatorMessage::CosignSubstrateBlock { id } => &id.key,
+        CoordinatorMessage::CosignSubstrateBlock { id, .. } => &id.key,
         CoordinatorMessage::SubstratePreprocesses { id, .. } => &id.key,
         CoordinatorMessage::SubstrateShares { id, .. } => &id.key,
         CoordinatorMessage::BatchReattempt { id } => &id.key,
@@ -226,7 +227,7 @@ pub mod coordinator {
     CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<Vec<u8>> },
     BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
     SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
-    CosignedBlock { block: [u8; 32], signature: Vec<u8> },
+    CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
   }
 }
 
@@ -372,7 +373,7 @@ impl CoordinatorMessage {
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           // Unique since this is the entire message
-          coordinator::CoordinatorMessage::CosignSubstrateBlock { id } => (0, id.encode()),
+          coordinator::CoordinatorMessage::CosignSubstrateBlock { id, .. } => (0, id.encode()),
           // Unique since this embeds the batch ID (including its network) and attempt
           coordinator::CoordinatorMessage::SubstratePreprocesses { id, .. } => (1, id.encode()),
           coordinator::CoordinatorMessage::SubstrateShares { id, .. } => (2, id.encode()),

@@ -30,7 +30,7 @@ use tokio::{sync::mpsc, time::sleep};
 use crate::{
   Db,
   processors::Processors,
-  tributary::{TributarySpec, TributaryDb},
+  tributary::{TributarySpec, SeraiBlockNumber, TributaryDb},
 };
 
 mod db;
@@ -456,6 +456,16 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     let maximally_latent_cosign_block =
       skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
     for block in (last_intended_to_cosign_block + 1) ..= latest_number {
+      SeraiBlockNumber::set(
+        &mut txn,
+        serai
+          .block_by_number(block)
+          .await?
+          .expect("couldn't get block which should've been finalized")
+          .hash(),
+        &block,
+      );
+
       let mut set = false;
 
       let block_has_events = block_has_events(&mut txn, serai, block).await?;

@@ -294,9 +294,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
       coordinator::ProcessorMessage::SubstrateShare { id, .. } => {
         Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
       }
-      coordinator::ProcessorMessage::CosignedBlock { block, signature } => {
+      coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
           network,
+          block_number: *block_number,
           block: *block,
           signature: {
             let mut arr = [0; 64];

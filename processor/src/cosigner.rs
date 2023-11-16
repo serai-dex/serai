@@ -38,6 +38,7 @@ pub struct Cosigner {
   #[allow(dead_code)] // False positive
   keys: Vec<ThresholdKeys<Ristretto>>,
 
+  block_number: u64,
   id: [u8; 32],
   attempt: u32,
   #[allow(clippy::type_complexity)]
@@ -50,6 +51,7 @@ impl fmt::Debug for Cosigner {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("Cosigner")
+      .field("block_number", &self.block_number)
       .field("id", &self.id)
       .field("attempt", &self.attempt)
       .field("preprocessing", &self.preprocessing.is_some())
@@ -62,6 +64,7 @@ impl Cosigner {
   pub fn new(
     txn: &mut impl DbTxn,
     keys: Vec<ThresholdKeys<Ristretto>>,
+    block_number: u64,
     id: [u8; 32],
     attempt: u32,
   ) -> Option<(Cosigner, ProcessorMessage)> {
@@ -104,7 +107,7 @@ impl Cosigner {
     };
 
     Some((
-      Cosigner { keys, id, attempt, preprocessing, signing: None },
+      Cosigner { keys, block_number, id, attempt, preprocessing, signing: None },
       ProcessorMessage::CosignPreprocess {
         id: substrate_sign_id,
         preprocesses: serialized_preprocesses,
@@ -176,21 +179,22 @@ impl Cosigner {
             }
           }
 
-          let (machine, share) = match machine.sign(preprocesses, &cosign_block_msg(self.id)) {
-            Ok(res) => res,
-            Err(e) => match e {
-              FrostError::InternalError(_) |
-              FrostError::InvalidParticipant(_, _) |
-              FrostError::InvalidSigningSet(_) |
-              FrostError::InvalidParticipantQuantity(_, _) |
-              FrostError::DuplicatedParticipant(_) |
-              FrostError::MissingParticipant(_) => unreachable!(),
+          let (machine, share) =
+            match machine.sign(preprocesses, &cosign_block_msg(self.block_number, self.id)) {
+              Ok(res) => res,
+              Err(e) => match e {
+                FrostError::InternalError(_) |
+                FrostError::InvalidParticipant(_, _) |
+                FrostError::InvalidSigningSet(_) |
+                FrostError::InvalidParticipantQuantity(_, _) |
+                FrostError::DuplicatedParticipant(_) |
+                FrostError::MissingParticipant(_) => unreachable!(),
 
-              FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
-                return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
-              }
-            },
-          };
+                FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
+                  return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
+                }
+              },
+            };
           if m == 0 {
             signature_machine = Some(machine);
           }
@@ -278,7 +282,11 @@ impl Cosigner {
 
         Completed::set(txn, block, &());
 
-        Some(ProcessorMessage::CosignedBlock { block, signature: sig.to_bytes().to_vec() })
+        Some(ProcessorMessage::CosignedBlock {
+          block_number: self.block_number,
+          block,
+          signature: sig.to_bytes().to_vec(),
+        })
       }
       CoordinatorMessage::BatchReattempt { .. } => panic!("BatchReattempt passed to Cosigner"),
     }
