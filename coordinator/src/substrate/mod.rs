@@ -456,15 +456,11 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     let maximally_latent_cosign_block =
       skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
     for block in (last_intended_to_cosign_block + 1) ..= latest_number {
-      SeraiBlockNumber::set(
-        &mut txn,
-        serai
-          .block_by_number(block)
-          .await?
-          .expect("couldn't get block which should've been finalized")
-          .hash(),
-        &block,
-      );
+      let actual_block = serai
+        .block_by_number(block)
+        .await?
+        .expect("couldn't get block which should've been finalized");
+      SeraiBlockNumber::set(&mut txn, actual_block.hash(), &block);
 
       let mut set = false;
 
@@ -494,10 +490,6 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
         // Get the keys as of the prior block
         // That means if this block is setting new keys (which won't lock in until we process this
         // block), we won't freeze up waiting for the yet-to-be-processed keys to sign this block
-        let actual_block = serai
-          .block_by_number(block)
-          .await?
-          .expect("couldn't get block which should've been finalized");
         let serai = serai.as_of(actual_block.header().parent_hash.into());
 
         has_no_cosigners = Some(actual_block.clone());

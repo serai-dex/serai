@@ -431,24 +431,19 @@ async fn handle_processor_message<D: Db, P: P2p>(
             .i(pub_key)
             .expect("processor message to DKG for a session we aren't a validator in");
 
-          // TODO: This is [receiver_share][sender_share] and is later transposed to
-          // [sender_share][receiver_share]. Make this [sender_share][receiver_share] from the
-          // start?
           // `tx_shares` needs to be done here as while it can be serialized from the HashMap
           // without further context, it can't be deserialized without context
           let mut tx_shares = Vec::with_capacity(shares.len());
-          for i in 1 ..= spec.n() {
-            let i = Participant::new(i).unwrap();
-            if our_i.contains(&i) {
-              for shares in &shares {
+          for shares in &mut shares {
+            tx_shares.push(vec![]);
+            for i in 1 ..= spec.n() {
+              let i = Participant::new(i).unwrap();
+              if our_i.contains(&i) {
                 if shares.contains_key(&i) {
                   panic!("processor sent us our own shares");
                 }
+                continue;
               }
-              continue;
-            }
-            tx_shares.push(vec![]);
-            for shares in &mut shares {
               tx_shares.last_mut().unwrap().push(
                 shares.remove(&i).expect("processor didn't send share for another validator"),
               );

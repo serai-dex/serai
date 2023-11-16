@@ -22,7 +22,7 @@ pub async fn potentially_cosign(
 ) -> CoordinatorMessage {
   let msg = processors[primary_processor].recv_message().await;
   let messages::CoordinatorMessage::Coordinator(
-    messages::coordinator::CoordinatorMessage::CosignSubstrateBlock { id },
+    messages::coordinator::CoordinatorMessage::CosignSubstrateBlock { block_number, id },
   ) = msg.clone()
   else {
     return msg;
@@ -85,7 +85,7 @@ pub async fn potentially_cosign(
       participants.insert(known_signer_i);
       participants
     }
-    _ => panic!("coordinator didn't send back SubstratePreprocesses"),
+    other => panic!("coordinator didn't send back SubstratePreprocesses: {:?}", other),
   };
 
   for i in participants.clone() {
@@ -152,7 +152,7 @@ pub async fn potentially_cosign(
   let signature = Signature(
     schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
       .unwrap()
-      .sign_simple(b"substrate", &cosign_block_msg(block))
+      .sign_simple(b"substrate", &cosign_block_msg(block_number, block))
       .to_bytes(),
   );
 
@@ -162,6 +162,7 @@ pub async fn potentially_cosign(
     }
     processor
       .send_message(messages::coordinator::ProcessorMessage::CosignedBlock {
+        block_number,
         block,
         signature: signature.0.to_vec(),
       })

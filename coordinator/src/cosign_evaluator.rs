@@ -257,7 +257,6 @@ impl<D: Db> CosignEvaluator<D> {
       }
     } else {
       let mut latest_cosigns = self.latest_cosigns.write().await;
-
       latest_cosigns.insert(cosign.network, (block.number(), cosign));
       self.update_latest_cosign().await;
     }

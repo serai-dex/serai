@@ -161,12 +161,12 @@ async fn dkg_test() {
   for (k, key) in keys.iter().enumerate() {
     let attempt = 0;
 
-    let mut shares = vec![];
+    let mut shares = vec![vec![]];
     for i in 0 .. keys.len() {
       if i != k {
         let mut share = vec![0; 256];
         OsRng.fill_bytes(&mut share);
-        shares.push(vec![share]);
+        shares.last_mut().unwrap().push(share);
       }
     }
 
@@ -225,7 +225,7 @@ async fn dkg_test() {
               let relative_i = i - (if i > l { 1 } else { 0 });
               Some((
                 Participant::new((l + 1).try_into().unwrap()).unwrap(),
-                shares[relative_i][0].clone(),
+                shares[0][relative_i].clone(),
               ))
             }
           } else {

@@ -243,7 +243,7 @@ pub enum Transaction {
   DkgCommitments(u32, Vec<Vec<u8>>, Signed),
   DkgShares {
     attempt: u32,
-    // Receiving Participant, Sending Participant, Share
+    // Sending Participant, Receiving Participant, Share
     shares: Vec<Vec<Vec<u8>>>,
     confirmation_nonces: [u8; 64],
     signed: Signed,

@@ -279,38 +279,39 @@ pub(crate) async fn handle_application_tx<
         .expect("transaction added to tributary by signer who isn't a participant");
       let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
 
-      if shares.len() != (usize::from(spec.n() - sender_is_len)) {
-        fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
+      if shares.len() != usize::from(sender_is_len) {
+        fatal_slash::<D>(
+          txn,
+          genesis,
+          signed.signer.to_bytes(),
+          "invalid amount of DKG shares by key shares",
+        );
         return;
       }
       for shares in &shares {
-        if shares.len() != usize::from(sender_is_len) {
-          fatal_slash::<D>(
-            txn,
-            genesis,
-            signed.signer.to_bytes(),
-            "invalid amount of DKG shares by key shares",
-          );
+        if shares.len() != (usize::from(spec.n() - sender_is_len)) {
+          fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
           return;
         }
       }
 
       // Save each share as needed for blame
       {
-        let from = spec.i(signed.signer).unwrap();
-        for (to, shares) in shares.iter().enumerate() {
-          // 0-indexed (the enumeration) to 1-indexed (Participant)
-          let mut to = u16::try_from(to).unwrap() + 1;
-          // Adjust for the omission of the sender's own shares
-          if to >= u16::from(from.start) {
-            to += u16::from(from.end) - u16::from(from.start);
-          }
-          let to = Participant::new(to).unwrap();
+        let from_range = spec.i(signed.signer).unwrap();
+        for (from_offset, shares) in shares.iter().enumerate() {
+          let from =
+            Participant::new(u16::from(from_range.start) + u16::try_from(from_offset).unwrap())
+              .unwrap();
 
-          for (sender_share, share) in shares.iter().enumerate() {
-            let from =
-              Participant::new(u16::from(from.start) + u16::try_from(sender_share).unwrap())
-                .unwrap();
+          for (to_offset, share) in shares.iter().enumerate() {
+            // 0-indexed (the enumeration) to 1-indexed (Participant)
+            let mut to = u16::try_from(to_offset).unwrap() + 1;
+            // Adjust for the omission of the sender's own shares
+            if to >= u16::from(from_range.start) {
+              to += u16::from(from_range.end) - u16::from(from_range.start);
+            }
+            let to = Participant::new(to).unwrap();
+
             TributaryDb::<D>::save_share_for_blame(txn, &genesis, from, to, share);
           }
         }
@@ -331,21 +332,17 @@ pub(crate) async fn handle_application_tx<
           our_i_pos -= sender_is_len;
         }
         let our_i_pos = usize::from(our_i_pos);
-        let shares = shares
-          .drain(
-            our_i_pos .. (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
-          )
-          .collect::<Vec<_>>();
-
-        // Transpose from our shares -> sender shares -> shares to
-        // sender shares -> our shares -> shares
-        let mut transposed = vec![vec![]; shares[0].len()];
-        for shares in shares {
-          for (sender_index, share) in shares.into_iter().enumerate() {
-            transposed[sender_index].push(share);
-          }
-        }
-        transposed
+        shares
+          .iter_mut()
+          .map(|shares| {
+            shares
+              .drain(
+                our_i_pos ..
+                  (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
+              )
+              .collect::<Vec<_>>()
+          })
+          .collect()
       };
       // Drop shares as it's been mutated into invalidity
       drop(shares);
@@ -519,6 +516,8 @@ pub(crate) async fn handle_application_tx<
         };
         break key_pair.0.into();
       };
+      let block_number = SeraiBlockNumber::get(txn, hash)
+        .expect("CosignSubstrateBlock yet didn't save Serai block number");
       processors
         .send(
           spec.set().network,
@@ -528,8 +527,7 @@ pub(crate) async fn handle_application_tx<
               id: SubstrateSignableId::CosigningSubstrateBlock(hash),
               attempt: 0,
             },
-            block_number: SeraiBlockNumber::get(txn, hash)
-              .expect("CosignSubstrateBlock yet didn't save Serai block number"),
+            block_number,
           },
         )
         .await;
