@@ -258,7 +258,6 @@ impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 
   type ShouldEndSession = Babe;
-  type SessionHandler = ValidatorSets;
 }
 
 pub struct IdentityValidatorIdOf;
