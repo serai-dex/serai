@@ -138,7 +138,7 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
 
     // Safe as we should deterministically create transactions, meaning if this is already on-disk,
     // it's what we're saving now
-    SignedTransactionDb::set(txn, signed.nonce, &tx.serialize());
+    SignedTransactionDb::take_signed_transaction(txn, signed.nonce);
 
     (order, signer)
   } else {
