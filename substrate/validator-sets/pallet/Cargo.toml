@@ -19,7 +19,6 @@ sp-core = { git = "https://github.com/serai-dex/substrate", default-features = f
 sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["serde"] }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -43,7 +42,6 @@ std = [
   "sp-io/std",
   "sp-std/std",
   "sp-application-crypto/std",
-  "sp-consensus-grandpa/std",
   "sp-runtime/std",
   "sp-session/std",
 

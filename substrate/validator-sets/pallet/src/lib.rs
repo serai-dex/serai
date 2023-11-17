@@ -10,17 +10,19 @@ pub mod pallet {
   use sp_std::{vec, vec::Vec};
   use sp_application_crypto::RuntimePublic;
   use sp_session::ShouldEndSession;
-  use sp_consensus_grandpa::{AuthorityId, AuthorityWeight};
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, StoragePrefixedMap, traits::DisabledValidators};
+  use frame_support::{
+    pallet_prelude::*, StoragePrefixedMap, traits::DisabledValidators, BoundedVec, WeakBoundedVec,
+  };
 
   use serai_primitives::*;
   pub use validator_sets_primitives as primitives;
   use primitives::*;
 
   use coins_pallet::Pallet as Coins;
-  use grandpa_pallet::Pallet as Grandpa;
+  use grandpa_pallet::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
+  use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
 
   #[pallet::config]
   pub trait Config:
@@ -406,12 +408,14 @@ pub mod pallet {
       // set the initial serai validators
       let initial_validators = Pallet::<T>::participants(NetworkId::Serai);
       SeraiValidators::<T>::put(initial_validators.clone());
+      // TODO: we might not need this call, since it is also called from its genesis build.
+      // If we need it, we probably need it for the Babe pallet too.
       Grandpa::<T>::genesis_session(
         initial_validators
           .iter()
           .copied()
-          .map(|(id, w)| (AuthorityId::from(id), w))
-          .collect::<Vec<(AuthorityId, AuthorityWeight)>>(),
+          .map(|(id, w)| (GrandpaAuthorityId::from(id), w))
+          .collect::<Vec<_>>(),
       );
     }
   }
@@ -692,19 +696,34 @@ pub mod pallet {
 
       // make a new session and get the next validator set.
       Self::new_session();
-      let _ = Self::participants(NetworkId::Serai);
+      let next_validators = Self::participants(NetworkId::Serai);
 
       Self::deposit_event(Event::NewSession { index: Session(session.0 + 1) });
 
       // Tell everyone about the new set.
+      let authorities = validators
+        .iter()
+        .copied()
+        .map(|(id, w)| (BabeAuthorityId::from(id), w))
+        .collect::<Vec<_>>();
+      let next_authorities = next_validators
+        .iter()
+        .copied()
+        .map(|(id, w)| (BabeAuthorityId::from(id), w))
+        .collect::<Vec<_>>();
+      Babe::<T>::enact_epoch_change(
+        WeakBoundedVec::try_from(authorities).unwrap(),
+        WeakBoundedVec::try_from(next_authorities).unwrap(),
+        Some(session.0),
+      );
       Grandpa::<T>::new_session(
         true,
         session.0,
         validators
           .iter()
           .copied()
-          .map(|(id, w)| (AuthorityId::from(id), w))
-          .collect::<Vec<(AuthorityId, AuthorityWeight)>>(),
+          .map(|(id, w)| (GrandpaAuthorityId::from(id), w))
+          .collect::<Vec<_>>(),
       );
     }
   }
