@@ -26,7 +26,7 @@ use serai_client::{
 };
 use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext, CoordinatorMessage};
 
-use crate::{*, tests::*};
+use crate::tests::*;
 
 pub async fn sign<C: Ciphersuite>(
   processors: &mut [Processor],
@@ -189,8 +189,10 @@ async fn sign_test() {
 
       // Connect to the Message Queues as the processor
       let mut new_processors: Vec<Processor> = vec![];
-      for (handles, key) in processors {
-        new_processors.push(Processor::new(NetworkId::Bitcoin, &ops, handles, key).await);
+      for (i, (handles, key)) in processors.into_iter().enumerate() {
+        new_processors.push(
+          Processor::new(i.try_into().unwrap(), NetworkId::Bitcoin, &ops, handles, key).await,
+        );
       }
       let mut processors = new_processors;
 
@@ -328,9 +330,9 @@ async fn sign_test() {
       let plan_id = plan_id;
 
       // We should now get a SubstrateBlock
-      for i in 0 .. processors.len() {
+      for processor in &mut processors {
         assert_eq!(
-          potentially_cosign(&mut processors, i, &participant_is, &substrate_key).await,
+          processor.recv_message().await,
           messages::CoordinatorMessage::Substrate(
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
@@ -346,7 +348,7 @@ async fn sign_test() {
         );
 
         // Send the ACK, claiming there's a plan to sign
-        processors[i]
+        processor
           .send_message(messages::ProcessorMessage::Coordinator(
             messages::coordinator::ProcessorMessage::SubstrateBlockAck {
               network: NetworkId::Bitcoin,

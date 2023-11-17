@@ -20,7 +20,7 @@ use serai_client::{
 };
 use messages::{key_gen::KeyGenId, CoordinatorMessage};
 
-use crate::{*, tests::*};
+use crate::tests::*;
 
 pub async fn key_gen<C: Ciphersuite>(
   processors: &mut [Processor],
@@ -208,6 +208,10 @@ pub async fn key_gen<C: Ciphersuite>(
     (Public(substrate_key), network_key.try_into().unwrap())
   );
 
+  for processor in processors.iter_mut() {
+    processor.set_substrate_key(substrate_priv_key.clone()).await;
+  }
+
   (
     participant_is.into_iter().map(|i| u8::try_from(u16::from(i)).unwrap()).collect(),
     substrate_priv_key,
@@ -233,8 +237,10 @@ async fn key_gen_test() {
 
       // Connect to the Message Queues as the processor
       let mut new_processors: Vec<Processor> = vec![];
-      for (handles, key) in processors {
-        new_processors.push(Processor::new(NetworkId::Bitcoin, &ops, handles, key).await);
+      for (i, (handles, key)) in processors.into_iter().enumerate() {
+        new_processors.push(
+          Processor::new(i.try_into().unwrap(), NetworkId::Bitcoin, &ops, handles, key).await,
+        );
       }
       let mut processors = new_processors;
 

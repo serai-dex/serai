@@ -223,9 +223,9 @@ pub async fn batch(
 
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
-  for i in 0 .. processors.len() {
+  for processor in processors {
     assert_eq!(
-      potentially_cosign(processors, i, processor_is, substrate_key).await,
+      processor.recv_message().await,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {
@@ -241,7 +241,7 @@ pub async fn batch(
     );
 
     // Send the ack as expected, though it shouldn't trigger any observable behavior
-    processors[i]
+    processor
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
           network: batch.batch.network,
@@ -272,8 +272,10 @@ async fn batch_test() {
 
       // Connect to the Message Queues as the processor
       let mut new_processors: Vec<Processor> = vec![];
-      for (handles, key) in processors {
-        new_processors.push(Processor::new(NetworkId::Bitcoin, &ops, handles, key).await);
+      for (i, (handles, key)) in processors.into_iter().enumerate() {
+        new_processors.push(
+          Processor::new(i.try_into().unwrap(), NetworkId::Bitcoin, &ops, handles, key).await,
+        );
       }
       let mut processors = new_processors;
 
