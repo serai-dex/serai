@@ -5,9 +5,8 @@ use sp_core::Pair as PairTrait;
 use sc_service::ChainType;
 
 use serai_runtime::{
-  primitives::*, WASM_BINARY, opaque::SessionKeys, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig,
-  SystemConfig, CoinsConfig, DexConfig, ValidatorSetsConfig, SessionConfig, BabeConfig,
-  GrandpaConfig, AuthorityDiscoveryConfig,
+  primitives::*, WASM_BINARY, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig,
+  CoinsConfig, DexConfig, ValidatorSetsConfig, BabeConfig, GrandpaConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -21,16 +20,6 @@ fn testnet_genesis(
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
 ) -> RuntimeGenesisConfig {
-  let session_key = |name| {
-    let key = account_from_name(name);
-    (
-      key,
-      key,
-      // TODO: Properly diversify these?
-      SessionKeys { babe: key.into(), grandpa: key.into(), authority_discovery: key.into() },
-    )
-  };
-
   RuntimeGenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
@@ -61,15 +50,12 @@ fn testnet_genesis(
         .collect(),
       participants: validators.iter().map(|name| account_from_name(name)).collect(),
     },
-    session: SessionConfig { keys: validators.iter().map(|name| session_key(*name)).collect() },
     babe: BabeConfig {
       authorities: vec![],
       epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
       _config: PhantomData,
     },
     grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
-
-    authority_discovery: AuthorityDiscoveryConfig { keys: vec![], _config: PhantomData },
   }
 }
 
