@@ -21,14 +21,14 @@ pub mod pallet {
   use primitives::*;
 
   use coins_pallet::Pallet as Coins;
-  use grandpa_pallet::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
+  use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
   use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
 
   #[pallet::config]
   pub trait Config:
     frame_system::Config<AccountId = Public>
     + pallet_babe::Config
-    + grandpa_pallet::Config
+    + pallet_grandpa::Config
     + coins_pallet::Config
     + TypeInfo
   {
