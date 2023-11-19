@@ -62,6 +62,10 @@ macro_rules! create_db {
             bincode::deserialize(data.as_ref()).unwrap()
           })
         }
+        #[allow(dead_code)]
+        pub fn del(txn: &mut impl DbTxn $(, $arg: $arg_type)*) {
+          txn.del(&$field_name::key($($arg),*))
+        }
       }
     )*
   };
