@@ -37,7 +37,6 @@ pub(crate) use tributary::{ReadWrite, P2p as TributaryP2p};
 
 use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 
-// TODO: Use distinct topics
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
