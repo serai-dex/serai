@@ -22,7 +22,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           rust-toolchain: ${{ steps.nightly.outputs.version }}
-          rust-components: clippy
+          rust-components: rust-src, clippy
 
       - name: Run Clippy
         run: cargo clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
@@ -41,7 +41,7 @@ jobs:
       - name: Install cargo
         uses: dtolnay/rust-toolchain@5cb429dd810e16ff67df78472fa81cf760f4d1c0
         with:
-          toolchain: 1.73.0
+          toolchain: 1.74.0
 
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
