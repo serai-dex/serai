@@ -184,8 +184,7 @@ impl TransactionTrait<Bitcoin> for Transaction {
     buf
   }
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Transaction::consensus_decode(reader)
-      .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{e}")))
+    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
   }
 
   #[cfg(test)]
@@ -223,12 +222,10 @@ impl EventualityTrait for Eventuality {
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let plan_binding_input = OutPoint::consensus_decode(reader).map_err(|_| {
-      io::Error::new(io::ErrorKind::Other, "couldn't decode outpoint in eventuality")
-    })?;
-    let outputs = Vec::<TxOut>::consensus_decode(reader).map_err(|_| {
-      io::Error::new(io::ErrorKind::Other, "couldn't decode outputs in eventuality")
-    })?;
+    let plan_binding_input = OutPoint::consensus_decode(reader)
+      .map_err(|_| io::Error::other("couldn't decode outpoint in eventuality"))?;
+    let outputs = Vec::<TxOut>::consensus_decode(reader)
+      .map_err(|_| io::Error::other("couldn't decode outputs in eventuality"))?;
     Ok(Eventuality { plan_binding_input, outputs })
   }
   fn serialize(&self) -> Vec<u8> {

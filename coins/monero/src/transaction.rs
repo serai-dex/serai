@@ -67,9 +67,7 @@ impl Input {
           key_image: read_torsion_free_point(r)?,
         }
       }
-      _ => {
-        Err(io::Error::new(io::ErrorKind::Other, "Tried to deserialize unknown/unused input type"))?
-      }
+      _ => Err(io::Error::other("Tried to deserialize unknown/unused input type"))?,
     })
   }
 }
@@ -109,7 +107,7 @@ impl Output {
     let amount = read_varint(r)?;
     let amount = if rct {
       if amount != 0 {
-        Err(io::Error::new(io::ErrorKind::Other, "RCT TX output wasn't 0"))?;
+        Err(io::Error::other("RCT TX output wasn't 0"))?;
       }
       None
     } else {
@@ -119,10 +117,7 @@ impl Output {
     let view_tag = match read_byte(r)? {
       2 => false,
       3 => true,
-      _ => Err(io::Error::new(
-        io::ErrorKind::Other,
-        "Tried to deserialize unknown/unused output type",
-      ))?,
+      _ => Err(io::Error::other("Tried to deserialize unknown/unused output type"))?,
     };
 
     Ok(Output {
@@ -220,14 +215,14 @@ impl TransactionPrefix {
     let version = read_varint(r)?;
     // TODO: Create an enum out of version
     if (version == 0) || (version > 2) {
-      Err(io::Error::new(io::ErrorKind::Other, "unrecognized transaction version"))?;
+      Err(io::Error::other("unrecognized transaction version"))?;
     }
 
     let timelock = Timelock::from_raw(read_varint(r)?);
 
     let inputs = read_vec(|r| Input::read(r), r)?;
     if inputs.is_empty() {
-      Err(io::Error::new(io::ErrorKind::Other, "transaction had no inputs"))?;
+      Err(io::Error::other("transaction had no inputs"))?;
     }
     let is_miner_tx = matches!(inputs[0], Input::Gen { .. });
 
@@ -310,9 +305,7 @@ impl Transaction {
           .inputs
           .iter()
           .map(|input| match input {
-            Input::Gen(..) => {
-              Err(io::Error::new(io::ErrorKind::Other, "Input::Gen present in non-coinbase v1 TX"))?
-            }
+            Input::Gen(..) => Err(io::Error::other("Input::Gen present in non-coinbase v1 TX"))?,
             // v1 TXs can burn v2 outputs
             // dcff3fe4f914d6b6bd4a5b800cc4cca8f2fdd1bd73352f0700d463d36812f328 is one such TX
             // It includes a pre-RCT signature for a RCT output, yet if you interpret the RCT
@@ -326,16 +319,13 @@ impl Transaction {
         let mut out = 0;
         for output in &prefix.outputs {
           if output.amount.is_none() {
-            Err(io::Error::new(io::ErrorKind::Other, "v1 transaction had a 0-amount output"))?;
+            Err(io::Error::other("v1 transaction had a 0-amount output"))?;
           }
           out += output.amount.unwrap();
         }
 
         if in_amount < out {
-          Err(io::Error::new(
-            io::ErrorKind::Other,
-            "transaction spent more than it had as inputs",
-          ))?;
+          Err(io::Error::other("transaction spent more than it had as inputs"))?;
         }
         rct_signatures.base.fee = in_amount - out;
       }
@@ -353,7 +343,7 @@ impl Transaction {
         r,
       )?;
     } else {
-      Err(io::Error::new(io::ErrorKind::Other, "Tried to deserialize unknown version"))?;
+      Err(io::Error::other("Tried to deserialize unknown version"))?;
     }
 
     Ok(Transaction { prefix, signatures, rct_signatures })

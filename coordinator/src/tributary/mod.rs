@@ -151,8 +151,8 @@ impl TributarySpec {
 
     let mut network = [0; 1];
     reader.read_exact(&mut network)?;
-    let network = NetworkId::decode(&mut &network[..])
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid network"))?;
+    let network =
+      NetworkId::decode(&mut &network[..]).map_err(|_| io::Error::other("invalid network"))?;
 
     let mut validators_len = [0; 4];
     reader.read_exact(&mut validators_len)?;
@@ -194,7 +194,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> Debug for SignData<Id
 impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignData<Id> {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let plan = Id::decode(&mut scale::IoReader(&mut *reader))
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid plan in SignData"))?;
+      .map_err(|_| io::Error::other("invalid plan in SignData"))?;
 
     let mut attempt = [0; 4];
     reader.read_exact(&mut attempt)?;
@@ -204,7 +204,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignDat
       let mut data_pieces = [0];
       reader.read_exact(&mut data_pieces)?;
       if data_pieces[0] == 0 {
-        Err(io::Error::new(io::ErrorKind::Other, "zero pieces of data in SignData"))?;
+        Err(io::Error::other("zero pieces of data in SignData"))?;
       }
       let mut all_data = vec![];
       for _ in 0 .. data_pieces[0] {
@@ -236,7 +236,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignDat
         // Monero is limited to ~120 inputs per TX
         //
         // Bitcoin has a much higher input count of 520, yet it only uses 64 bytes per preprocess
-        Err(io::Error::new(io::ErrorKind::Other, "signing data exceeded 65535 bytes"))?;
+        Err(io::Error::other("signing data exceeded 65535 bytes"))?;
       }
       writer.write_all(&u16::try_from(data.len()).unwrap().to_le_bytes())?;
       writer.write_all(data)?;
@@ -370,9 +370,8 @@ impl ReadWrite for Transaction {
       0 => Ok(Transaction::RemoveParticipant({
         let mut participant = [0; 2];
         reader.read_exact(&mut participant)?;
-        Participant::new(u16::from_le_bytes(participant)).ok_or_else(|| {
-          io::Error::new(io::ErrorKind::Other, "invalid participant in RemoveParticipant")
-        })?
+        Participant::new(u16::from_le_bytes(participant))
+          .ok_or_else(|| io::Error::other("invalid participant in RemoveParticipant"))?
       })),
 
       1 => {
@@ -385,15 +384,14 @@ impl ReadWrite for Transaction {
           reader.read_exact(&mut commitments_len)?;
           let commitments_len = usize::from(commitments_len[0]);
           if commitments_len == 0 {
-            Err(io::Error::new(io::ErrorKind::Other, "zero commitments in DkgCommitments"))?;
+            Err(io::Error::other("zero commitments in DkgCommitments"))?;
           }
 
           let mut each_commitments_len = [0; 2];
           reader.read_exact(&mut each_commitments_len)?;
           let each_commitments_len = usize::from(u16::from_le_bytes(each_commitments_len));
           if (commitments_len * each_commitments_len) > TRANSACTION_SIZE_LIMIT {
-            Err(io::Error::new(
-              io::ErrorKind::Other,
+            Err(io::Error::other(
               "commitments present in transaction exceeded transaction size limit",
             ))?;
           }
@@ -454,15 +452,13 @@ impl ReadWrite for Transaction {
 
         let mut accuser = [0; 2];
         reader.read_exact(&mut accuser)?;
-        let accuser = Participant::new(u16::from_le_bytes(accuser)).ok_or_else(|| {
-          io::Error::new(io::ErrorKind::Other, "invalid participant in InvalidDkgShare")
-        })?;
+        let accuser = Participant::new(u16::from_le_bytes(accuser))
+          .ok_or_else(|| io::Error::other("invalid participant in InvalidDkgShare"))?;
 
         let mut faulty = [0; 2];
         reader.read_exact(&mut faulty)?;
-        let faulty = Participant::new(u16::from_le_bytes(faulty)).ok_or_else(|| {
-          io::Error::new(io::ErrorKind::Other, "invalid participant in InvalidDkgShare")
-        })?;
+        let faulty = Participant::new(u16::from_le_bytes(faulty))
+          .ok_or_else(|| io::Error::other("invalid participant in InvalidDkgShare"))?;
 
         let mut blame_len = [0; 2];
         reader.read_exact(&mut blame_len)?;
@@ -534,7 +530,7 @@ impl ReadWrite for Transaction {
         Ok(Transaction::SignCompleted { plan, tx_hash, first_signer, signature })
       }
 
-      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
+      _ => Err(io::Error::other("invalid transaction type")),
     }
   }
 
@@ -549,15 +545,12 @@ impl ReadWrite for Transaction {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
         if commitments.is_empty() {
-          Err(io::Error::new(io::ErrorKind::Other, "zero commitments in DkgCommitments"))?
+          Err(io::Error::other("zero commitments in DkgCommitments"))?
         }
         writer.write_all(&[u8::try_from(commitments.len()).unwrap()])?;
         for commitments_i in commitments {
           if commitments_i.len() != commitments[0].len() {
-            Err(io::Error::new(
-              io::ErrorKind::Other,
-              "commitments of differing sizes in DkgCommitments",
-            ))?
+            Err(io::Error::other("commitments of differing sizes in DkgCommitments"))?
           }
         }
         writer.write_all(&u16::try_from(commitments[0].len()).unwrap().to_le_bytes())?;

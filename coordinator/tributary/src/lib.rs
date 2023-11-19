@@ -81,7 +81,7 @@ impl<T: TransactionTrait> ReadWrite for Transaction<T> {
         let tx = T::read(reader)?;
         Ok(Transaction::Application(tx))
       }
-      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
+      _ => Err(io::Error::other("invalid transaction type")),
     }
   }
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

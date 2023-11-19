@@ -385,7 +385,7 @@ impl<R: RpcConnection> Rpc<R> {
       let mut is_okay = false;
 
       if read_bytes::<_, { EPEE_HEADER.len() }>(&mut indexes)? != EPEE_HEADER {
-        Err(io::Error::new(io::ErrorKind::Other, "invalid header"))?;
+        Err(io::Error::other("invalid header"))?;
       }
 
       let read_object = |reader: &mut &[u8]| -> io::Result<Vec<u64>> {
@@ -401,7 +401,7 @@ impl<R: RpcConnection> Rpc<R> {
           let iters = if type_with_array_flag != kind { read_epee_vi(reader)? } else { 1 };
 
           if (&name == b"o_indexes") && (kind != 5) {
-            Err(io::Error::new(io::ErrorKind::Other, "o_indexes weren't u64s"))?;
+            Err(io::Error::other("o_indexes weren't u64s"))?;
           }
 
           let f = match kind {
@@ -428,28 +428,19 @@ impl<R: RpcConnection> Rpc<R> {
               let len = read_epee_vi(reader)?;
               read_raw_vec(
                 read_byte,
-                len
-                  .try_into()
-                  .map_err(|_| io::Error::new(io::ErrorKind::Other, "u64 length exceeded usize"))?,
+                len.try_into().map_err(|_| io::Error::other("u64 length exceeded usize"))?,
                 reader,
               )
             },
             // bool
             11 => |reader: &mut &[u8]| read_raw_vec(read_byte, 1, reader),
             // object, errors here as it shouldn't be used on this call
-            12 => |_: &mut &[u8]| {
-              Err(io::Error::new(
-                io::ErrorKind::Other,
-                "node used object in reply to get_o_indexes",
-              ))
-            },
-            // array, so far unused
-            13 => |_: &mut &[u8]| {
-              Err(io::Error::new(io::ErrorKind::Other, "node used the unused array type"))
-            },
-            _ => {
-              |_: &mut &[u8]| Err(io::Error::new(io::ErrorKind::Other, "node used an invalid type"))
+            12 => {
+              |_: &mut &[u8]| Err(io::Error::other("node used object in reply to get_o_indexes"))
             }
+            // array, so far unused
+            13 => |_: &mut &[u8]| Err(io::Error::other("node used the unused array type")),
+            _ => |_: &mut &[u8]| Err(io::Error::other("node used an invalid type")),
           };
 
           let mut bytes_res = vec![];
@@ -461,21 +452,23 @@ impl<R: RpcConnection> Rpc<R> {
           match name.as_slice() {
             b"o_indexes" => {
               for o_index in bytes_res {
-                actual_res.push(u64::from_le_bytes(o_index.try_into().map_err(|_| {
-                  io::Error::new(io::ErrorKind::Other, "node didn't provide 8 bytes for a u64")
-                })?));
+                actual_res.push(u64::from_le_bytes(
+                  o_index
+                    .try_into()
+                    .map_err(|_| io::Error::other("node didn't provide 8 bytes for a u64"))?,
+                ));
               }
               res = Some(actual_res);
             }
             b"status" => {
               if bytes_res
                 .first()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "status wasn't a string"))?
+                .ok_or_else(|| io::Error::other("status wasn't a string"))?
                 .as_slice() !=
                 b"OK"
               {
                 // TODO: Better handle non-OK responses
-                Err(io::Error::new(io::ErrorKind::Other, "response wasn't OK"))?;
+                Err(io::Error::other("response wasn't OK"))?;
               }
               is_okay = true;
             }
@@ -490,7 +483,7 @@ impl<R: RpcConnection> Rpc<R> {
         // Didn't return a response with a status
         // (if the status wasn't okay, we would've already errored)
         if !is_okay {
-          Err(io::Error::new(io::ErrorKind::Other, "response didn't contain a status"))?;
+          Err(io::Error::other("response didn't contain a status"))?;
         }
 
         // If the Vec was empty, it would've been omitted, hence the unwrap_or

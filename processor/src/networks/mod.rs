@@ -94,7 +94,7 @@ impl OutputType {
       1 => OutputType::Branch,
       2 => OutputType::Change,
       3 => OutputType::Forwarded,
-      _ => Err(io::Error::new(io::ErrorKind::Other, "invalid OutputType"))?,
+      _ => Err(io::Error::other("invalid OutputType"))?,
     })
   }
 }
