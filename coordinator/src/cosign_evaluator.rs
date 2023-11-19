@@ -29,7 +29,7 @@ use crate::{
 create_db! {
   CosignDb {
     ReceivedCosign: (set: ValidatorSet, block: [u8; 32]) -> Vec<u8>,
-    DistinctChain: (set: ValidatorSet) -> ()
+    DistinctChain: (set: ValidatorSet) -> (),
   }
 }
 

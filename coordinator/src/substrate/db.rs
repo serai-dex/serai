@@ -14,7 +14,7 @@ create_db! {
     CosignTriggered: () -> (),
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
-    CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>
+    CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>,
   }
 }
 

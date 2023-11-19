@@ -25,7 +25,7 @@ use crate::{Get, DbTxn, create_db};
 create_db! {
   CosignerDb {
     Completed: (id: [u8; 32]) -> (),
-    Attempt: (id: [u8; 32], attempt: u32) -> ()
+    Attempt: (id: [u8; 32], attempt: u32) -> (),
   }
 }
 

@@ -38,7 +38,7 @@ pub fn serai_db_key(
 #[macro_export]
 macro_rules! create_db {
   ($db_name: ident {
-    $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty),*
+    $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty$(,)?)*
   }) => {
     $(
       #[derive(Clone, Debug)]

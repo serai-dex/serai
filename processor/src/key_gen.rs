@@ -39,7 +39,7 @@ create_db!(
     // These do assume a key is only used once across sets, which holds true so long as a single
     // participant is honest in their execution of the protocol
     KeysDb: (network_key: &[u8]) -> Vec<u8>,
-    NetworkKey: (substrate_key: [u8; 32]) -> Vec<u8>
+    NetworkKey: (substrate_key: [u8; 32]) -> Vec<u8>,
   }
 );
 
