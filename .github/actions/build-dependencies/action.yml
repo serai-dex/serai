@@ -52,7 +52,7 @@ runs:
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.rust-components }}
-        targets: wasm32-unknown-unknown, riscv32imac-unknown-none-elf
+        targets: wasm32-unknown-unknown
 
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43
