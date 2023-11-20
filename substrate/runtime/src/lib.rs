@@ -429,7 +429,6 @@ sp_api::impl_runtime_apis! {
 
   impl sp_session::SessionKeys<Block> for Runtime {
     fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
-      // TODO: Do we still need this opaque::SessionKeys? if not, what do we use here?
       opaque::SessionKeys::generate(seed)
     }
 
@@ -542,9 +541,8 @@ sp_api::impl_runtime_apis! {
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
       ValidatorSets::serai_validators()
-        .to_vec()
-        .iter()
-        .map(|(id, _)| AuthorityDiscoveryId::from(*id))
+        .into_iter()
+        .map(|(id, _)| AuthorityDiscoveryId::from(id))
         .collect()
     }
   }

@@ -20,6 +20,7 @@ fn testnet_genesis(
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
 ) -> RuntimeGenesisConfig {
+  let validators = validators.iter().map(|name| account_from_name(name)).collect::<Vec<_>>();
   RuntimeGenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
@@ -48,14 +49,17 @@ fn testnet_genesis(
           NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
         })
         .collect(),
-      participants: validators.iter().map(|name| account_from_name(name)).collect(),
+      participants: validators.clone(),
     },
     babe: BabeConfig {
-      authorities: vec![],
+      authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
       epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
       _config: PhantomData,
     },
-    grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
+    grandpa: GrandpaConfig {
+      authorities: validators.into_iter().map(|validator| (validator.into(), 1)).collect(),
+      _config: PhantomData,
+    },
   }
 }
 

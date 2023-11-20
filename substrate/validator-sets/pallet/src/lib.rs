@@ -4,6 +4,7 @@
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
+
   use scale_info::TypeInfo;
 
   use sp_core::sr25519::{Public, Signature};
@@ -13,7 +14,7 @@ pub mod pallet {
 
   use frame_system::pallet_prelude::*;
   use frame_support::{
-    pallet_prelude::*, StoragePrefixedMap, traits::DisabledValidators, BoundedVec, WeakBoundedVec,
+    pallet_prelude::*, traits::DisabledValidators, BoundedVec, WeakBoundedVec, StoragePrefixedMap,
   };
 
   use serai_primitives::*;
@@ -21,15 +22,16 @@ pub mod pallet {
   use primitives::*;
 
   use coins_pallet::Pallet as Coins;
-  use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
+
   use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
+  use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
 
   #[pallet::config]
   pub trait Config:
     frame_system::Config<AccountId = Public>
+    + coins_pallet::Config
     + pallet_babe::Config
     + pallet_grandpa::Config
-    + coins_pallet::Config
     + TypeInfo
   {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
@@ -272,9 +274,6 @@ pub mod pallet {
     NewSet {
       set: ValidatorSet,
     },
-    NewSession {
-      index: Session,
-    },
     KeyGen {
       set: ValidatorSet,
       key_pair: KeyPair,
@@ -343,6 +342,8 @@ pub mod pallet {
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
+
+      // Only set the MuSig key for non-Serai sets, as only non-Serai sets should publish keys
       if network != NetworkId::Serai {
         MuSigKeys::<T>::set(
           set,
@@ -408,15 +409,6 @@ pub mod pallet {
       // set the initial serai validators
       let initial_validators = Pallet::<T>::participants(NetworkId::Serai);
       SeraiValidators::<T>::put(initial_validators.clone());
-      // TODO: we might not need this call, since it is also called from its genesis build.
-      // If we need it, we probably need it for the Babe pallet too.
-      Grandpa::<T>::genesis_session(
-        initial_validators
-          .iter()
-          .copied()
-          .map(|(id, w)| (GrandpaAuthorityId::from(id), w))
-          .collect::<Vec<_>>(),
-      );
     }
   }
 
@@ -654,9 +646,10 @@ pub mod pallet {
       for network in serai_primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };
-        // Only spawn a NewSet if the current set was actually established with a completed
-        // handover protocol
-        if Self::handover_completed(network, current_session) {
+        // Only spawn a new set if:
+        // - This is Serai, as we need to rotate Serai upon a new session (per Babe)
+        // - The current set was actually established with a completed handover protocol
+        if (network == NetworkId::Serai) || Self::handover_completed(network, current_session) {
           Pallet::<T>::new_set(network);
         }
       }
@@ -684,46 +677,36 @@ pub mod pallet {
     }
 
     fn rotate_session() {
-      let session = Self::session(NetworkId::Serai).unwrap();
+      let prior_serai_participants = Self::participants(NetworkId::Serai);
+      let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
 
       // TODO: T::SessionHandler::on_before_session_ending() was here.
       // end the current serai session.
-      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session });
-
-      // Get queued validators.
-      let validators = Self::participants(NetworkId::Serai);
-      SeraiValidators::<T>::put(&validators);
+      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
 
       // make a new session and get the next validator set.
       Self::new_session();
+
+      // Update Babe and Grandpa
+      let session = prior_serai_session.0 + 1;
+      let validators = prior_serai_participants;
       let next_validators = Self::participants(NetworkId::Serai);
-
-      Self::deposit_event(Event::NewSession { index: Session(session.0 + 1) });
-
-      // Tell everyone about the new set.
-      let authorities = validators
-        .iter()
-        .copied()
-        .map(|(id, w)| (BabeAuthorityId::from(id), w))
-        .collect::<Vec<_>>();
-      let next_authorities = next_validators
-        .iter()
-        .copied()
-        .map(|(id, w)| (BabeAuthorityId::from(id), w))
-        .collect::<Vec<_>>();
+      SeraiValidators::<T>::put(&validators);
       Babe::<T>::enact_epoch_change(
-        WeakBoundedVec::try_from(authorities).unwrap(),
-        WeakBoundedVec::try_from(next_authorities).unwrap(),
-        Some(session.0),
+        WeakBoundedVec::force_from(
+          validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          None,
+        ),
+        WeakBoundedVec::force_from(
+          next_validators.into_iter().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          None,
+        ),
+        Some(session),
       );
       Grandpa::<T>::new_session(
         true,
-        session.0,
-        validators
-          .iter()
-          .copied()
-          .map(|(id, w)| (GrandpaAuthorityId::from(id), w))
-          .collect::<Vec<_>>(),
+        session,
+        validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
       );
     }
   }
@@ -858,7 +841,6 @@ pub mod pallet {
     }
   }
 
-  // Tell Babe to disable a given validator.
   impl<T: Config> DisabledValidators for Pallet<T> {
     fn is_disabled(_: u32) -> bool {
       // TODO
