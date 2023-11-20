@@ -181,7 +181,7 @@ impl<D: Db> SubstrateSigner<D> {
       );
       return None;
     }
-    AttemptDb::set(txn, id, attempt, &vec![] as &Vec<u8>);
+    AttemptDb::set(txn, id, attempt, ());
 
     let mut machines = vec![];
     let mut preprocesses = vec![];
