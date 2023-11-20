@@ -540,7 +540,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     )
     .await?;
     *next_block += 1;
-    let mut txn = db.txn(); // TODO: this line belongs to a removed method, remove SubstrateDb
+    let mut txn = db.txn();
     BlockDb::set(&mut txn, next_block);
     txn.commit();
     log::info!("handled substrate block {b}");
