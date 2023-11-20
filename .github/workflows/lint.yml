@@ -23,7 +23,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install nightly rust
-        run: rustup toolchain install --profile minimal -c clippy ${{ steps.nightly.outputs.version }}
+        run: rustup toolchain install --profile minimal -c clippy "${{ steps.nightly.outputs.version }}"
 
       - name: Run Clippy
         run: cargo +${{ steps.nightly.outputs.version }} clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
@@ -55,7 +55,7 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install nightly rust
-        run: rustup toolchain install --profile minimal -c rustfmt ${{ steps.nightly.outputs.version }}
+        run: rustup toolchain install --profile minimal -c rustfmt "${{ steps.nightly.outputs.version }}"
 
       - name: Run rustfmt
         run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
