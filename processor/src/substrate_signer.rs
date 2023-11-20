@@ -33,8 +33,8 @@ fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
 
 create_db!(
   SubstrateSignerDb {
-    CompletedDb: (id: [u8; 5]) -> [u8; 0],
-    AttemptDb: (id: [u8; 5], attempt: u32) -> [u8; 0],
+    CompletedDb: (id: [u8; 5]) -> (),
+    AttemptDb: (id: [u8; 5], attempt: u32) -> (),
     BatchDb: (block: BlockHash) -> SignedBatch
   }
 );
@@ -405,7 +405,7 @@ impl<D: Db> SubstrateSigner<D> {
 
         // Save the batch in case it's needed for recovery
         BatchDb::set(txn, batch.batch.block, &batch);
-        CompletedDb::set(txn, id, &[] as &[u8; 0]);
+        CompletedDb::set(txn, id, ());
 
         // Stop trying to sign for this batch
         assert!(self.attempt.remove(&id).is_some());
@@ -428,7 +428,7 @@ impl<D: Db> SubstrateSigner<D> {
     let sign_id = batch_sign_id(self.network, id);
 
     // Stop trying to sign for this batch
-    CompletedDb::set(txn, sign_id, &[] as &[u8; 0]);
+    CompletedDb::set(txn, sign_id, ());
 
     self.signable.remove(&sign_id);
     self.attempt.remove(&sign_id);
