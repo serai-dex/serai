@@ -573,7 +573,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
         // Only handle this if we haven't already
         if HandledMessageDb::get(&main_db, msg.id).is_none() {
-          HandledMessageDb::set(&mut txn, msg.id, &[] as &[u8; 0]);
+          HandledMessageDb::set(&mut txn, msg.id, &());
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered
