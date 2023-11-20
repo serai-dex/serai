@@ -2,7 +2,6 @@ use core::{marker::PhantomData, fmt};
 use std::collections::HashMap;
 
 use rand_core::OsRng;
-pub use serai_db::*;
 use ciphersuite::group::GroupEncoding;
 use frost::{
   ThresholdKeys, FrostError,
@@ -13,6 +12,9 @@ use log::{info, debug, warn, error};
 
 use scale::Encode;
 use messages::sign::*;
+
+pub use serai_db::*;
+
 use crate::{
   Get, DbTxn, Db,
   networks::{Transaction, Eventuality, Network},
@@ -20,7 +22,7 @@ use crate::{
 
 create_db!(
   SignerDb {
-    CompletedDb: (id: [u8; 32]) -> Vec<u8>,
+    CompletionsDb: (id: [u8; 32]) -> Vec<u8>,
     EventualityDb: (id: [u8; 32]) -> Vec<u8>,
     AttemptDb: (id: &SignId) -> (),
     TransactionDb: (id: &[u8]) -> Vec<u8>,
@@ -54,7 +56,7 @@ impl CompletedOnChainDb {
     );
   }
 }
-impl CompletedDb {
+impl CompletionsDb {
   fn completions<N: Network>(
     getter: &impl Get,
     id: [u8; 32],
@@ -101,7 +103,7 @@ impl EventualityDb {
   }
 
   fn eventuality<N: Network>(getter: &impl Get, id: [u8; 32]) -> Option<N::Eventuality> {
-    Some(N::Eventuality::read::<&[u8]>(&mut getter.get(Self::key(id))?.as_ref()).unwrap())
+    Some(N::Eventuality::read(&mut getter.get(Self::key(id))?.as_slice()).unwrap())
   }
 }
 
@@ -158,7 +160,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     log::info!("rebroadcasting transactions for plans whose completions yet to be confirmed...");
     loop {
       for active in ActiveSignsDb::get(&db).unwrap_or_default() {
-        for completion in CompletedDb::completions::<N>(&db, active) {
+        for completion in CompletionsDb::completions::<N>(&db, active) {
           log::info!("rebroadcasting {}", hex::encode(&completion));
           // TODO: Don't drop the error entirely. Check for invariants
           let _ = network
@@ -219,7 +221,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
   #[must_use]
   fn already_completed(&self, txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
-    if !CompletedDb::completions::<N>(txn, id).is_empty() {
+    if !CompletionsDb::completions::<N>(txn, id).is_empty() {
       debug!(
         "SignTransaction/Reattempt order for {}, which we've already completed signing",
         hex::encode(id)
@@ -267,7 +269,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
     // Save this completion to the DB
     CompletedOnChainDb::complete_on_chain(txn, &id);
-    CompletedDb::complete::<N>(txn, id, &tx);
+    CompletionsDb::complete::<N>(txn, id, &tx);
 
     if first_completion {
       Some(self.complete(id, tx.id()))
@@ -306,7 +308,7 @@ impl<N: Network, D: Db> Signer<N, D> {
         let first_completion = !self.already_completed(txn, id);
 
         // Save this completion to the DB
-        CompletedDb::complete::<N>(txn, id, &tx);
+        CompletionsDb::complete::<N>(txn, id, &tx);
 
         if first_completion {
           return Some(self.complete(id, tx.id()));
@@ -320,7 +322,7 @@ impl<N: Network, D: Db> Signer<N, D> {
       }
     } else {
       // If we don't have this in RAM, it should be because we already finished signing it
-      assert!(!CompletedDb::completions::<N>(txn, id).is_empty());
+      assert!(!CompletionsDb::completions::<N>(txn, id).is_empty());
       info!(
         "signer {} informed of the eventuality completion for plan {}, {}",
         hex::encode(self.keys[0].group_key().to_bytes()),
@@ -586,7 +588,7 @@ impl<N: Network, D: Db> Signer<N, D> {
         };
 
         // Save the transaction in case it's needed for recovery
-        CompletedDb::complete::<N>(txn, id.id, &tx);
+        CompletionsDb::complete::<N>(txn, id.id, &tx);
 
         // Publish it
         let tx_id = tx.id();
