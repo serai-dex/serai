@@ -44,7 +44,7 @@ impl ActiveSignsDb {
 
 impl CompletedOnChainDb {
   fn complete_on_chain(txn: &mut impl DbTxn, id: &[u8; 32]) {
-    CompletedOnChainDb::set(txn, id, ());
+    CompletedOnChainDb::set(txn, id, &());
     ActiveSignsDb::set(
       txn,
       &ActiveSignsDb::get(txn)
@@ -397,7 +397,7 @@ impl<N: Network, D: Db> Signer<N, D> {
       );
       return None;
     }
-    AttemptDb::set(txn, &id, ());
+    AttemptDb::set(txn, &id, &());
 
     // Attempt to create the TX
     let mut machines = vec![];
