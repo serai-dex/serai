@@ -20,8 +20,6 @@ use messages::{
   CoordinatorMessage,
 };
 
-use scale::Encode;
-
 use serai_env as env;
 
 use message_queue::{Service, client::MessageQueue};
@@ -354,9 +352,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // We can't set these keys for activation until we know their queue block, which we
             // won't until the next Batch is confirmed
             // Set this variable so when we get the next Batch event, we can handle it
-            let mut buf = (set, key_pair).encode();
-            buf.extend(block_before_queue_block.as_ref());
-            PendingActivationsDb::set(txn, &buf);
+            PendingActivationsDb::set_pending_activation::<N>(txn,block_before_queue_block, set, key_pair);
           }
         }
 
@@ -392,7 +388,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
               )
               .await;
               //clear pending activation
-              PendingActivationsDb::set(txn, &vec![] as &Vec<u8>);
+              txn.del(PendingActivationsDb::key());
             }
           }
 
@@ -577,7 +573,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
         // Only handle this if we haven't already
         if HandledMessageDb::get(&main_db, msg.id).is_none() {
-          HandledMessageDb::set(&mut txn, msg.id, &vec![] as &Vec<u8>);
+          HandledMessageDb::set(&mut txn, msg.id, &[] as &[u8; 0]);
 
           // This is isolated to better think about how its ordered, or rather, about how the other
           // cases aren't ordered

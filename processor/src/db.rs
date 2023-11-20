@@ -9,7 +9,7 @@ use crate::networks::{Block, Network};
 
 create_db!(
   MainDb {
-    HandledMessageDb: (id: u64) -> Vec<u8>,
+    HandledMessageDb: (id: u64) -> (),
     PendingActivationsDb: () -> Vec<u8>
   }
 );
@@ -29,5 +29,15 @@ impl PendingActivationsDb {
       }
     }
     None
+  }
+  pub fn set_pending_activation<N: Network>(
+    txn: &mut impl DbTxn,
+    block_before_queue_block: <N::Block as Block<N>>::Id,
+    set: ValidatorSet,
+    key_pair: KeyPair,
+  ) {
+    let mut buf = (set, key_pair).encode();
+    buf.extend(block_before_queue_block.as_ref());
+    Self::set(txn, &buf);
   }
 }
