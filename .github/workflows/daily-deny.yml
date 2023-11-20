@@ -17,11 +17,6 @@ jobs:
           path: ~/.cargo/advisory-db
           key: rust-advisory-db
 
-      - name: Install cargo
-        uses: dtolnay/rust-toolchain@5cb429dd810e16ff67df78472fa81cf760f4d1c0
-        with:
-          toolchain: 1.74.0
-
       - name: Install cargo deny
         run: cargo install --locked cargo-deny
 
