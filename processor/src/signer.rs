@@ -22,10 +22,10 @@ create_db!(
   SignerDb {
     CompletedDb: (id: [u8; 32]) -> Vec<u8>,
     EventualityDb: (id: [u8; 32]) -> Vec<u8>,
-    AttemptDb: (id: &SignId) -> [u8; 0],
+    AttemptDb: (id: &SignId) -> (),
     TransactionDb: (id: &[u8]) -> Vec<u8>,
     ActiveSignsDb: () -> Vec<[u8; 32]>,
-    CompletedOnChainDb: (id: &[u8; 32]) -> Vec<[u8; 32]>
+    CompletedOnChainDb: (id: &[u8; 32]) -> (),
   }
 );
 
@@ -42,7 +42,7 @@ impl ActiveSignsDb {
 
 impl CompletedOnChainDb {
   fn complete_on_chain(txn: &mut impl DbTxn, id: &[u8; 32]) {
-    CompletedOnChainDb::set(txn, id, &vec![] as &Vec<[u8; 32]>);
+    CompletedOnChainDb::set(txn, id, ());
     ActiveSignsDb::set(
       txn,
       &ActiveSignsDb::get(txn)
@@ -395,7 +395,7 @@ impl<N: Network, D: Db> Signer<N, D> {
       );
       return None;
     }
-    AttemptDb::set(txn, &id, &vec![] as &Vec<u8>);
+    AttemptDb::set(txn, &id, ());
 
     // Attempt to create the TX
     let mut machines = vec![];
