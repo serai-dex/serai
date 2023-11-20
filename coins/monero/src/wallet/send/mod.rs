@@ -965,7 +965,7 @@ impl Eventuality {
       String::from_utf8(read_vec(read_byte, r)?)
         .ok()
         .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid address"))
+        .ok_or_else(|| io::Error::other("invalid address"))
     }
 
     fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
@@ -977,12 +977,12 @@ impl Eventuality {
             view: match read_byte(r)? {
               0 => None,
               1 => Some(Zeroizing::new(read_scalar(r)?)),
-              _ => Err(io::Error::new(io::ErrorKind::Other, "invalid change payment"))?,
+              _ => Err(io::Error::other("invalid change payment"))?,
             },
           },
           read_u64(r)?,
         ),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid payment"))?,
+        _ => Err(io::Error::other("invalid payment"))?,
       })
     }
 

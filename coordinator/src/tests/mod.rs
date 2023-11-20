@@ -62,11 +62,14 @@ impl LocalP2p {
 impl P2p for LocalP2p {
   type Id = usize;
 
-  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
+  async fn subscribe(&self, _genesis: [u8; 32]) {}
+  async fn unsubscribe(&self, _genesis: [u8; 32]) {}
+
+  async fn send_raw(&self, to: Self::Id, _genesis: Option<[u8; 32]>, msg: Vec<u8>) {
     self.1.write().await.1[to].push_back((self.0, msg));
   }
 
-  async fn broadcast_raw(&self, msg: Vec<u8>) {
+  async fn broadcast_raw(&self, _genesis: Option<[u8; 32]>, msg: Vec<u8>) {
     // Content-based deduplication
     let mut lock = self.1.write().await;
     {

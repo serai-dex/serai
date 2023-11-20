@@ -91,10 +91,8 @@ impl ReceivedOutput {
   pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
     Ok(ReceivedOutput {
       offset: Secp256k1::read_F(r)?,
-      output: TxOut::consensus_decode(r)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid TxOut"))?,
-      outpoint: OutPoint::consensus_decode(r)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid OutPoint"))?,
+      output: TxOut::consensus_decode(r).map_err(|_| io::Error::other("invalid TxOut"))?,
+      outpoint: OutPoint::consensus_decode(r).map_err(|_| io::Error::other("invalid OutPoint"))?,
     })
   }
 

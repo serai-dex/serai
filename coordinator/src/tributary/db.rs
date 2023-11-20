@@ -17,7 +17,7 @@ use crate::tributary::TributarySpec;
 
 create_db! {
   NewTributaryDb {
-    SeraiBlockNumber: (hash: [u8; 32]) -> u64
+    SeraiBlockNumber: (hash: [u8; 32]) -> u64,
   }
 }
 

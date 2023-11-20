@@ -62,7 +62,7 @@ impl PaymentId {
     Ok(match read_byte(r)? {
       0 => PaymentId::Unencrypted(read_bytes(r)?),
       1 => PaymentId::Encrypted(read_bytes(r)?),
-      _ => Err(io::Error::new(io::ErrorKind::Other, "unknown payment ID type"))?,
+      _ => Err(io::Error::other("unknown payment ID type"))?,
     })
   }
 }
@@ -106,13 +106,13 @@ impl ExtraField {
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
         if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
-          Err(io::Error::new(io::ErrorKind::Other, "too long nonce"))?;
+          Err(io::Error::other("too long nonce"))?;
         }
         nonce
       }),
       3 => ExtraField::MergeMining(read_varint(r)?, read_bytes(r)?),
       4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
-      _ => Err(io::Error::new(io::ErrorKind::Other, "unknown extra field"))?,
+      _ => Err(io::Error::other("unknown extra field"))?,
     })
   }
 }

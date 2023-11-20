@@ -223,7 +223,7 @@ impl<C: Curve> Commitments<C> {
       let dleq = MultiDLEqProof::read(reader, dleq_generators.len())?;
       dleq
         .verify(&mut dleq_transcript::<T>(context), &dleq_generators, &dleq_nonces)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid DLEq proof"))?;
+        .map_err(|_| io::Error::other("invalid DLEq proof"))?;
       Some(dleq)
     } else {
       None

@@ -741,6 +741,11 @@ pub mod pallet {
         Call::__Ignore(_, _) => unreachable!(),
       };
 
+      // Don't allow the Serai set to set_keys, as they have no reason to do so
+      if network == &NetworkId::Serai {
+        Err(InvalidTransaction::Custom(0))?;
+      }
+
       let session = Session(pallet_session::Pallet::<T>::current_index());
 
       let set = ValidatorSet { session, network: *network };

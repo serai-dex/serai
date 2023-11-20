@@ -55,11 +55,9 @@ pub(crate) fn read_point<R: Read, G: PrimeGroup>(r: &mut R) -> io::Result<G> {
   let mut repr = G::Repr::default();
   r.read_exact(repr.as_mut())?;
   let point = G::from_bytes(&repr);
-  let Some(point) = Option::<G>::from(point) else {
-    Err(io::Error::new(io::ErrorKind::Other, "invalid point"))?
-  };
+  let Some(point) = Option::<G>::from(point) else { Err(io::Error::other("invalid point"))? };
   if point.to_bytes().as_ref() != repr.as_ref() {
-    Err(io::Error::new(io::ErrorKind::Other, "non-canonical point"))?;
+    Err(io::Error::other("non-canonical point"))?;
   }
   Ok(point)
 }

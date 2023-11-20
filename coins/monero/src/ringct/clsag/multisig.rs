@@ -184,10 +184,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     reader.read_exact(&mut bytes)?;
     // dfg ensures the point is torsion free
     let xH = Option::<dfg::EdwardsPoint>::from(dfg::EdwardsPoint::from_bytes(&bytes))
-      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid key image"))?;
+      .ok_or_else(|| io::Error::other("invalid key image"))?;
     // Ensure this is a canonical point
     if xH.to_bytes() != bytes {
-      Err(io::Error::new(io::ErrorKind::Other, "non-canonical key image"))?;
+      Err(io::Error::other("non-canonical key image"))?;
     }
 
     Ok(ClsagAddendum { key_image: xH, dleq: DLEqProof::<dfg::EdwardsPoint>::read(reader)? })

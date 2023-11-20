@@ -147,8 +147,8 @@ impl RctBase {
   }
 
   pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(RctBase, RctType)> {
-    let rct_type = RctType::from_byte(read_byte(r)?)
-      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid RCT type"))?;
+    let rct_type =
+      RctType::from_byte(read_byte(r)?).ok_or_else(|| io::Error::other("invalid RCT type"))?;
 
     match rct_type {
       RctType::Null => {}
@@ -164,7 +164,7 @@ impl RctBase {
           // If there are Bulletproofs, there must be a matching amount of outputs, implicitly
           // banning 0 outputs
           // Since HF 12 (CLSAG being 13), a 2-output minimum has also been enforced
-          Err(io::Error::new(io::ErrorKind::Other, "RCT with Bulletproofs(+) had 0 outputs"))?;
+          Err(io::Error::other("RCT with Bulletproofs(+) had 0 outputs"))?;
         }
       }
     }
@@ -273,7 +273,7 @@ impl RctPrunable {
     // And then for RctNull, that's only allowed for miner TXs which require one input of
     // Input::Gen
     if decoys.is_empty() {
-      Err(io::Error::new(io::ErrorKind::Other, "transaction had no inputs"))?;
+      Err(io::Error::other("transaction had no inputs"))?;
     }
 
     Ok(match rct_type {
@@ -295,7 +295,7 @@ impl RctPrunable {
               read_varint(r)?
             }) != 1
             {
-              Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
+              Err(io::Error::other("n bulletproofs instead of one"))?;
             }
             Bulletproofs::read(r)?
           },
@@ -306,7 +306,7 @@ impl RctPrunable {
       RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
         bulletproofs: {
           if read_varint::<_, u64>(r)? != 1 {
-            Err(io::Error::new(io::ErrorKind::Other, "n bulletproofs instead of one"))?;
+            Err(io::Error::other("n bulletproofs instead of one"))?;
           }
           (if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus })(
             r,

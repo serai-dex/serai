@@ -93,7 +93,7 @@ pub trait Ciphersuite:
 
     // ff mandates this is canonical
     let res = Option::<Self::F>::from(Self::F::from_repr(encoding))
-      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "non-canonical scalar"));
+      .ok_or_else(|| io::Error::other("non-canonical scalar"));
     encoding.as_mut().zeroize();
     res
   }
@@ -106,9 +106,9 @@ pub trait Ciphersuite:
     reader.read_exact(encoding.as_mut())?;
 
     let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
-      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))?;
+      .ok_or_else(|| io::Error::other("invalid point"))?;
     if point.to_bytes().as_ref() != encoding.as_ref() {
-      Err(io::Error::new(io::ErrorKind::Other, "non-canonical point"))?;
+      Err(io::Error::other("non-canonical point"))?;
     }
     Ok(point)
   }

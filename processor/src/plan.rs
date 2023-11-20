@@ -34,7 +34,7 @@ impl<N: Network> Payment<N> {
       .address
       .clone()
       .try_into()
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "address couldn't be serialized"))?;
+      .map_err(|_| io::Error::other("address couldn't be serialized"))?;
     writer.write_all(&u32::try_from(address.len()).unwrap().to_le_bytes())?;
     writer.write_all(&address)?;
 
@@ -52,8 +52,7 @@ impl<N: Network> Payment<N> {
     reader.read_exact(&mut buf)?;
     let mut address = vec![0; usize::try_from(u32::from_le_bytes(buf)).unwrap()];
     reader.read_exact(&mut address)?;
-    let address = N::Address::try_from(address)
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid address"))?;
+    let address = N::Address::try_from(address).map_err(|_| io::Error::other("invalid address"))?;
 
     let mut buf = [0; 1];
     reader.read_exact(&mut buf)?;
@@ -68,7 +67,7 @@ impl<N: Network> Payment<N> {
     };
 
     let balance = Balance::decode(&mut scale::IoReader(reader))
-      .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid balance"))?;
+      .map_err(|_| io::Error::other("invalid balance"))?;
 
     Ok(Payment { address, data, balance })
   }
@@ -152,13 +151,10 @@ impl<N: Network> Plan<N> {
     // TODO: Have Plan construction fail if change cannot be serialized
     let change = if let Some(change) = &self.change {
       change.clone().try_into().map_err(|_| {
-        io::Error::new(
-          io::ErrorKind::Other,
-          format!(
-            "an address we said to use as change couldn't be convered to a Vec<u8>: {}",
-            change.to_string(),
-          ),
-        )
+        io::Error::other(format!(
+          "an address we said to use as change couldn't be convered to a Vec<u8>: {}",
+          change.to_string(),
+        ))
       })?
     } else {
       vec![]
@@ -188,16 +184,14 @@ impl<N: Network> Plan<N> {
     reader.read_exact(&mut len)?;
     let mut change = vec![0; usize::from(len[0])];
     reader.read_exact(&mut change)?;
-    let change = if change.is_empty() {
-      None
-    } else {
-      Some(N::Address::try_from(change).map_err(|_| {
-        io::Error::new(
-          io::ErrorKind::Other,
-          "couldn't deserialize an Address serialized into a Plan",
-        )
-      })?)
-    };
+    let change =
+      if change.is_empty() {
+        None
+      } else {
+        Some(N::Address::try_from(change).map_err(|_| {
+          io::Error::other("couldn't deserialize an Address serialized into a Plan")
+        })?)
+      };
 
     Ok(Plan { key, inputs, payments, change })
   }

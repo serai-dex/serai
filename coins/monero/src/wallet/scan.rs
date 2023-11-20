@@ -146,7 +146,7 @@ impl Metadata {
     let subaddress = if read_byte(r)? == 1 {
       Some(
         SubaddressIndex::new(read_u32(r)?, read_u32(r)?)
-          .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid subaddress in metadata"))?,
+          .ok_or_else(|| io::Error::other("invalid subaddress in metadata"))?,
       )
     } else {
       None

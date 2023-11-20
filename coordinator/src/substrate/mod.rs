@@ -368,7 +368,6 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
 
   // TODO: If this block directly builds off a cosigned block *and* doesn't contain events, mark
   // cosigned,
-  // TODO: Can we remove any of these events while maintaining security?
   {
     // If:
     //   A) This block has events and it's been at least X blocks since the last cosign or
@@ -533,16 +532,14 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     if let Some(has_no_cosigners) = has_no_cosigners {
       log::debug!("{} had no cosigners available, marking as cosigned", has_no_cosigners.number());
       SubstrateDb::<D>::set_latest_cosigned_block(&mut txn, has_no_cosigners.number());
-      txn.commit();
     } else {
       CosignTriggered::set(&mut txn, &());
-      let mut txn = CosignTxn::new(txn);
       for (set, block, hash) in cosign {
         log::debug!("cosigning {block} with {:?} {:?}", set.network, set.session);
         CosignTransactions::append_cosign(&mut txn, set, block, hash);
       }
-      txn.commit();
     }
+    txn.commit();
   }
 
   // Reduce to the latest cosigned block

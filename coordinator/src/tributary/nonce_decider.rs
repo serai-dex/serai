@@ -14,7 +14,7 @@ const PLAN_SIGNING_CODE: u8 = 3;
 create_db!(
   NonceDeciderDb {
     NextNonceDb: (genesis: [u8; 32]) -> u32,
-    ItemNonceDb: (genesis: [u8; 32], code: u8, id: &[u8]) -> u32
+    ItemNonceDb: (genesis: [u8; 32], code: u8, id: &[u8]) -> u32,
   }
 );
 

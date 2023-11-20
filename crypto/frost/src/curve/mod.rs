@@ -125,7 +125,7 @@ pub trait Curve: Ciphersuite {
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let res = <Self as Ciphersuite>::read_G(reader)?;
     if res.is_identity().into() {
-      Err(io::Error::new(io::ErrorKind::Other, "identity point"))?;
+      Err(io::Error::other("identity point"))?;
     }
     Ok(res)
   }

@@ -1,5 +1,3 @@
-use std::sync::{OnceLock, MutexGuard, Mutex};
-
 use scale::{Encode, Decode};
 
 pub use serai_db::*;
@@ -10,11 +8,10 @@ use serai_client::{
 };
 
 create_db! {
-  NewSubstrateDb {
+  SubstrateDb {
     CosignTriggered: () -> (),
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
-    CosignTransactions: (network: NetworkId) -> Vec<(Session, u64, [u8; 32])>
   }
 }
 
@@ -29,48 +26,15 @@ impl IntendedCosign {
   }
 }
 
-// This guarantees:
-// 1) Appended transactions are appended
-// 2) Taking cosigns does not clear any TXs which weren't taken
-// 3) Taking does actually clear the set
-static COSIGN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-pub struct CosignTxn<T: DbTxn>(T, MutexGuard<'static, ()>);
-impl<T: DbTxn> CosignTxn<T> {
-  pub fn new(txn: T) -> Self {
-    Self(txn, COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap())
-  }
-  pub fn commit(self) {
-    self.0.commit();
+db_channel! {
+  SubstrateDb {
+    CosignTransactions: (network: NetworkId) -> (Session, u64, [u8; 32]),
   }
 }
 impl CosignTransactions {
   // Append a cosign transaction.
-  pub fn append_cosign<T: DbTxn>(
-    txn: &mut CosignTxn<T>,
-    set: ValidatorSet,
-    number: u64,
-    hash: [u8; 32],
-  ) {
-    #[allow(clippy::unwrap_or_default)]
-    let mut txs = CosignTransactions::get(&txn.0, set.network).unwrap_or(vec![]);
-    txs.push((set.session, number, hash));
-    CosignTransactions::set(&mut txn.0, set.network, &txs);
-  }
-  // Peek at the next cosign transaction.
-  pub fn peek_cosign(getter: &impl Get, network: NetworkId) -> Option<(Session, u64, [u8; 32])> {
-    let mut to_cosign = CosignTransactions::get(getter, network)?;
-    if to_cosign.is_empty() {
-      None?
-    }
-    Some(to_cosign.swap_remove(0))
-  }
-  // Take the next transaction, panicking if it doesn't exist.
-  pub fn take_cosign(mut txn: impl DbTxn, network: NetworkId) {
-    let _lock = COSIGN_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
-    let mut txs = CosignTransactions::get(&txn, network).unwrap();
-    txs.remove(0);
-    CosignTransactions::set(&mut txn, network, &txs);
-    txn.commit();
+  pub fn append_cosign(txn: &mut impl DbTxn, set: ValidatorSet, number: u64, hash: [u8; 32]) {
+    CosignTransactions::send(txn, set.network, &(set.session, number, hash))
   }
 }
 

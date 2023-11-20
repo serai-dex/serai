@@ -412,7 +412,7 @@ async fn block_tx_ordering() {
       match kind[0] {
         0 => Ok(SignedTx::Signed(Box::new(SignedTransaction::read(reader)?))),
         1 => Ok(SignedTx::Provided(Box::new(ProvidedTransaction::read(reader)?))),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "invalid transaction type")),
+        _ => Err(io::Error::other("invalid transaction type")),
       }
     }
 

@@ -14,7 +14,7 @@ use ff::{Field, PrimeField};
 use group::prime::PrimeGroup;
 
 #[cfg(feature = "serialize")]
-use std::io::{self, ErrorKind, Error, Read, Write};
+use std::io::{self, Error, Read, Write};
 
 /// A cross-group DLEq proof capable of proving that two public keys, across two different curves,
 /// share a private key.
@@ -91,7 +91,7 @@ fn read_scalar<R: Read, F: PrimeField>(r: &mut R) -> io::Result<F> {
   r.read_exact(repr.as_mut())?;
   let scalar = F::from_repr(repr);
   if scalar.is_none().into() {
-    Err(Error::new(ErrorKind::Other, "invalid scalar"))?;
+    Err(Error::other("invalid scalar"))?;
   }
   Ok(scalar.unwrap())
 }

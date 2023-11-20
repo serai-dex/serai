@@ -28,6 +28,10 @@ mod shims {
       Error { kind, error: Box::new(error) }
     }
 
+    pub fn other<E: 'static + Send + Sync>(error: E) -> Error {
+      Error { kind: ErrorKind::Other, error: Box::new(error) }
+    }
+
     pub fn kind(&self) -> ErrorKind {
       self.kind
     }

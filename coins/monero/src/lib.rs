@@ -141,7 +141,7 @@ impl Protocol {
       0 => match read_byte(r)? {
         14 => Protocol::v14,
         16 => Protocol::v16,
-        _ => Err(io::Error::new(io::ErrorKind::Other, "unrecognized monero protocol"))?,
+        _ => Err(io::Error::other("unrecognized monero protocol"))?,
       },
       // Custom
       1 => match read_byte(r)? {
@@ -150,26 +150,24 @@ impl Protocol {
           bp_plus: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+            _ => Err(io::Error::other("invalid bool serialization"))?,
           },
           optimal_rct_type: RctType::from_byte(read_byte(r)?)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid RctType serialization"))?,
+            .ok_or_else(|| io::Error::other("invalid RctType serialization"))?,
           view_tags: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+            _ => Err(io::Error::other("invalid bool serialization"))?,
           },
           v16_fee: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid bool serialization"))?,
+            _ => Err(io::Error::other("invalid bool serialization"))?,
           },
         },
-        _ => {
-          Err(io::Error::new(io::ErrorKind::Other, "unrecognized custom protocol serialization"))?
-        }
+        _ => Err(io::Error::other("unrecognized custom protocol serialization"))?,
       },
-      _ => Err(io::Error::new(io::ErrorKind::Other, "unrecognized protocol serialization"))?,
+      _ => Err(io::Error::other("unrecognized protocol serialization"))?,
     })
   }
 }

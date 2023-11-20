@@ -259,7 +259,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
           TributaryDb::<D>::set_plan_ids(&mut txn, tributary.spec.genesis(), *block, &plans);
 
           let tx = Transaction::SubstrateBlock(*block);
-          log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
+          log::trace!(
+            "processor message effected transaction {} {:?}",
+            hex::encode(tx.hash()),
+            &tx
+          );
           log::trace!("providing transaction {}", hex::encode(tx.hash()));
           let res = tributary.tributary.provide_transaction(tx).await;
           if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
@@ -700,7 +704,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
     // If this created transactions, publish them
     for mut tx in txs {
-      log::trace!("processor message effected transaction {}", hex::encode(tx.hash()));
+      log::trace!("processor message effected transaction {} {:?}", hex::encode(tx.hash()), &tx);
 
       match tx.kind() {
         TransactionKind::Provided(_) => {
@@ -843,33 +847,36 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
     }
 
     // Handle pending cosigns
-    while let Some((session, block, hash)) = CosignTransactions::peek_cosign(&db, network) {
-      let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else {
-        log::warn!("didn't yet have tributary we're supposed to cosign with");
-        break;
-      };
-      log::info!(
-        "{network:?} {session:?} cosigning block #{block} (hash {}...)",
-        hex::encode(&hash[.. 8])
-      );
-      let tx = Transaction::CosignSubstrateBlock(hash);
-      let res = tributary.provide_transaction(tx.clone()).await;
-      if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
-        if res == Err(ProvidedError::LocalMismatchesOnChain) {
-          // Spin, since this is a crit for this Tributary
-          loop {
-            log::error!(
-              "{}. tributary: {}, provided: {:?}",
-              "tributary added distinct CosignSubstrateBlock",
-              hex::encode(spec.genesis()),
-              &tx,
-            );
-            sleep(Duration::from_secs(60)).await;
+    {
+      let mut txn = db.txn();
+      while let Some((session, block, hash)) = CosignTransactions::try_recv(&mut txn, network) {
+        let Some(ActiveTributary { spec, tributary }) = tributaries.get(&session) else {
+          log::warn!("didn't yet have tributary we're supposed to cosign with");
+          break;
+        };
+        log::info!(
+          "{network:?} {session:?} cosigning block #{block} (hash {}...)",
+          hex::encode(&hash[.. 8])
+        );
+        let tx = Transaction::CosignSubstrateBlock(hash);
+        let res = tributary.provide_transaction(tx.clone()).await;
+        if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
+          if res == Err(ProvidedError::LocalMismatchesOnChain) {
+            // Spin, since this is a crit for this Tributary
+            loop {
+              log::error!(
+                "{}. tributary: {}, provided: {:?}",
+                "tributary added distinct CosignSubstrateBlock",
+                hex::encode(spec.genesis()),
+                &tx,
+              );
+              sleep(Duration::from_secs(60)).await;
+            }
           }
+          panic!("provided an invalid CosignSubstrateBlock: {res:?}");
         }
-        panic!("provided an invalid CosignSubstrateBlock: {res:?}");
       }
-      CosignTransactions::take_cosign(db.txn(), network);
+      txn.commit();
     }
 
     // Verify any publifshed `Batch`s
@@ -919,6 +926,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
           // Safe since this will drop the txn updating the most recently queued batch
           continue 'outer;
         };
+        log::debug!("providing Batch transaction {:?}", &tx);
         let res = tributary.provide_transaction(tx.clone()).await;
         if !(res.is_ok() || (res == Err(ProvidedError::AlreadyProvided))) {
           if res == Err(ProvidedError::LocalMismatchesOnChain) {

@@ -306,8 +306,7 @@ mod lib {
     /// Read keys from a type satisfying std::io::Read.
     pub fn read<R: io::Read>(reader: &mut R) -> io::Result<ThresholdCore<C>> {
       {
-        let different =
-          || io::Error::new(io::ErrorKind::Other, "deserializing ThresholdCore for another curve");
+        let different = || io::Error::other("deserializing ThresholdCore for another curve");
 
         let mut id_len = [0; 4];
         reader.read_exact(&mut id_len)?;
@@ -331,8 +330,7 @@ mod lib {
         (
           read_u16()?,
           read_u16()?,
-          Participant::new(read_u16()?)
-            .ok_or(io::Error::new(io::ErrorKind::Other, "invalid participant index"))?,
+          Participant::new(read_u16()?).ok_or(io::Error::other("invalid participant index"))?,
         )
       };
 
@@ -344,8 +342,7 @@ mod lib {
       }
 
       Ok(ThresholdCore::new(
-        ThresholdParams::new(t, n, i)
-          .map_err(|_| io::Error::new(io::ErrorKind::Other, "invalid parameters"))?,
+        ThresholdParams::new(t, n, i).map_err(|_| io::Error::other("invalid parameters"))?,
         secret_share,
         verification_shares,
       ))

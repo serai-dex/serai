@@ -8,7 +8,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
-FROM rust:1.73-slim-bookworm as builder
+FROM rust:1.74-slim-bookworm as builder
 
 COPY --from=mimalloc libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload

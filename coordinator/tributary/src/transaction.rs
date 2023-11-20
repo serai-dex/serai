@@ -55,7 +55,7 @@ impl ReadWrite for Signed {
     reader.read_exact(&mut nonce)?;
     let nonce = u32::from_le_bytes(nonce);
     if nonce >= (u32::MAX - 1) {
-      Err(io::Error::new(io::ErrorKind::Other, "nonce exceeded limit"))?;
+      Err(io::Error::other("nonce exceeded limit"))?;
     }
 
     let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
@@ -64,7 +64,7 @@ impl ReadWrite for Signed {
       // We should never produce zero signatures though meaning this should never come up
       // If it does somehow come up, this is a decent courtesy
       signature.zeroize();
-      Err(io::Error::new(io::ErrorKind::Other, "signature nonce was identity"))?;
+      Err(io::Error::other("signature nonce was identity"))?;
     }
 
     Ok(Signed { signer, nonce, signature })
@@ -73,7 +73,7 @@ impl ReadWrite for Signed {
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     // This is either an invalid signature or a private key leak
     if self.signature.R.is_identity().into() {
-      Err(io::Error::new(io::ErrorKind::Other, "signature nonce was identity"))?;
+      Err(io::Error::other("signature nonce was identity"))?;
     }
     writer.write_all(&self.signer.to_bytes())?;
     writer.write_all(&self.nonce.to_le_bytes())?;
