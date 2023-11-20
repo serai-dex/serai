@@ -181,7 +181,7 @@ impl<D: Db> SubstrateSigner<D> {
       );
       return None;
     }
-    AttemptDb::set(txn, id, attempt, ());
+    AttemptDb::set(txn, id, attempt, &());
 
     let mut machines = vec![];
     let mut preprocesses = vec![];
@@ -405,7 +405,7 @@ impl<D: Db> SubstrateSigner<D> {
 
         // Save the batch in case it's needed for recovery
         BatchDb::set(txn, batch.batch.block, &batch);
-        CompletedDb::set(txn, id, ());
+        CompletedDb::set(txn, id, &());
 
         // Stop trying to sign for this batch
         assert!(self.attempt.remove(&id).is_some());
@@ -428,7 +428,7 @@ impl<D: Db> SubstrateSigner<D> {
     let sign_id = batch_sign_id(self.network, id);
 
     // Stop trying to sign for this batch
-    CompletedDb::set(txn, sign_id, ());
+    CompletedDb::set(txn, sign_id, &());
 
     self.signable.remove(&sign_id);
     self.attempt.remove(&sign_id);
