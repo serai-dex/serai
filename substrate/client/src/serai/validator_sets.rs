@@ -44,7 +44,10 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "CurrentSession", Some(vec![scale_value(network)])).await
   }
 
-  pub async fn participants(&self, network: NetworkId) -> Result<Option<Vec<Public>>, SeraiError> {
+  pub async fn participants(
+    &self,
+    network: NetworkId,
+  ) -> Result<Option<Vec<(Public, u16)>>, SeraiError> {
     self.0.storage(PALLET, "Participants", Some(vec![scale_value(network)])).await
   }
 

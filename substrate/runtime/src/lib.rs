@@ -53,6 +53,7 @@ use support::{
   },
   parameter_types, construct_runtime,
 };
+use codec::{Encode, Decode};
 
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
@@ -540,9 +541,13 @@ sp_api::impl_runtime_apis! {
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
-      ValidatorSets::serai_validators()
+      Babe::authorities()
         .into_iter()
-        .map(|(id, _)| AuthorityDiscoveryId::from(id))
+        .map(|(id, _)| {
+          // TODO: any better way to do this?
+          let key = id.encode();
+          AuthorityDiscoveryId::decode(&mut key.as_slice()).unwrap()
+        })
         .collect()
     }
   }

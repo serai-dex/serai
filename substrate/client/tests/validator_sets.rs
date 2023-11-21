@@ -49,7 +49,12 @@ serai_test!(
 
     {
       let vs_serai = serai.with_current_latest_block().await.unwrap().validator_sets();
-      let participants = vs_serai.participants(set.network).await.unwrap().unwrap();
+      let participants = vs_serai.participants(set.network).await
+        .unwrap()
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect::<Vec<_>>();
       let participants_ref: &[_] = participants.as_ref();
       assert_eq!(participants_ref, [public].as_ref());
       assert_eq!(vs_serai.musig_key(set).await.unwrap().unwrap(), musig_key(set, &[public]).0);

@@ -11,6 +11,7 @@ pub mod pallet {
   use sp_std::{vec, vec::Vec};
   use sp_application_crypto::RuntimePublic;
   use sp_session::ShouldEndSession;
+  use sp_runtime::traits::IsMember;
 
   use frame_system::pallet_prelude::*;
   use frame_support::{
@@ -64,17 +65,10 @@ pub mod pallet {
 
   /// The current session for a network.
   ///
-  /// This does not store the current session for Serai.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
   #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
-
-  /// The current set of serai validators.
-  #[pallet::storage]
-  #[pallet::getter(fn serai_validators)]
-  pub type SeraiValidators<T: Config> =
-    StorageValue<_, BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>, ValueQuery>;
 
   /// The allocation required per key share.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
@@ -110,13 +104,8 @@ pub mod pallet {
     // current set's validators
     #[inline]
     fn in_active_serai_set(account: Public) -> bool {
-      // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with InSet?
-      for (validator, _) in Self::serai_validators() {
-        if validator == account {
-          return true;
-        }
-      }
-      false
+      // TODO: TODO: is_member is internally O(n). Update Babe to use an O(1) storage lookup?
+      Babe::<T>::is_member(&BabeAuthorityId::from(account))
     }
 
     /// Returns true if the account is included in an active set.
@@ -405,10 +394,6 @@ pub mod pallet {
         }
         Pallet::<T>::new_set(id);
       }
-
-      // set the initial serai validators
-      let initial_validators = Pallet::<T>::participants(NetworkId::Serai);
-      SeraiValidators::<T>::put(initial_validators.clone());
     }
   }
 
@@ -691,7 +676,6 @@ pub mod pallet {
       let session = prior_serai_session.0 + 1;
       let validators = prior_serai_participants;
       let next_validators = Self::participants(NetworkId::Serai);
-      SeraiValidators::<T>::put(&validators);
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
           validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
