@@ -440,7 +440,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           let mut tx_shares = Vec::with_capacity(shares.len());
           for shares in &mut shares {
             tx_shares.push(vec![]);
-            for i in 1..=spec.n() {
+            for i in 1 ..= spec.n() {
               let i = Participant::new(i).unwrap();
               if our_i.contains(&i) {
                 if shares.contains_key(&i) {
@@ -655,8 +655,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
               MainDb::<D>::set_handover_batch(&mut txn, spec.set(), last_received);
               // If this isn't the first batch, meaning we do have to verify all prior batches, and
               // the prior Batch hasn't been verified yet...
-              if (last_received != 0)
-                && MainDb::<D>::last_verified_batch(&txn, msg.network)
+              if (last_received != 0) &&
+                MainDb::<D>::last_verified_batch(&txn, msg.network)
                   .map(|last_verified| last_verified < (last_received - 1))
                   .unwrap_or(true)
               {
@@ -856,7 +856,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
         };
         log::info!(
           "{network:?} {session:?} cosigning block #{block} (hash {}...)",
-          hex::encode(&hash[..8])
+          hex::encode(&hash[.. 8])
         );
         let tx = Transaction::CosignSubstrateBlock(hash);
         let res = tributary.provide_transaction(tx.clone()).await;
@@ -893,7 +893,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
         // Check if any of these `Batch`s were a handover `Batch` or the `Batch` before a handover
         // `Batch`
         // If so, we need to publish queued provided `Batch` transactions
-        for batch in start_id..=last_id {
+        for batch in start_id ..= last_id {
           let is_pre_handover = MainDb::<D>::is_handover_batch(&txn, network, batch + 1);
           if let Some(set) = is_pre_handover {
             let mut queued = MainDb::<D>::take_queued_batches(&mut txn, set);

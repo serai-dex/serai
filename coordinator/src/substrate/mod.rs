@@ -403,10 +403,10 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
             return Ok(HasEvents::KeyGen);
           }
 
-          let has_no_events = serai.coins().burn_with_instruction_events().await?.is_empty()
-            && serai.in_instructions().batch_events().await?.is_empty()
-            && serai.validator_sets().new_set_events().await?.is_empty()
-            && serai.validator_sets().set_retired_events().await?.is_empty();
+          let has_no_events = serai.coins().burn_with_instruction_events().await?.is_empty() &&
+            serai.in_instructions().batch_events().await?.is_empty() &&
+            serai.validator_sets().new_set_events().await?.is_empty() &&
+            serai.validator_sets().set_retired_events().await?.is_empty();
 
           let has_events = if has_no_events { HasEvents::No } else { HasEvents::Yes };
 
@@ -434,7 +434,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       distance_end_exclusive = 0;
     }
     if skipped_block.is_none() {
-      for b in (last_intended_to_cosign_block + 1)..distance_end_exclusive {
+      for b in (last_intended_to_cosign_block + 1) .. distance_end_exclusive {
         if b > latest_number {
           break;
         }
@@ -454,7 +454,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     // Block we should cosign no matter what if no prior blocks qualified for cosigning
     let maximally_latent_cosign_block =
       skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
-    for block in (last_intended_to_cosign_block + 1)..=latest_number {
+    for block in (last_intended_to_cosign_block + 1) ..= latest_number {
       let actual_block = serai
         .block_by_number(block)
         .await?
@@ -477,8 +477,8 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
             }
           }
         }
-      } else if (Some(block) == maximally_latent_cosign_block)
-        || (block_has_events != HasEvents::No)
+      } else if (Some(block) == maximally_latent_cosign_block) ||
+        (block_has_events != HasEvents::No)
       {
         // Since this block was outside the distance and had events/was maximally latent, cosign it
         IntendedCosign::set_intended_cosign(&mut txn, block);
@@ -549,7 +549,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     return Ok(());
   }
 
-  for b in *next_block..=latest_number {
+  for b in *next_block ..= latest_number {
     log::info!("found substrate block {b}");
     handle_block(
       db,
@@ -609,8 +609,8 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       else {
         // Timed out, which may be because Serai isn't finalizing or may be some issue with the
         // notifier
-        if serai.latest_block().await.map(|block| block.number()).ok()
-          == Some(next_substrate_block.saturating_sub(1))
+        if serai.latest_block().await.map(|block| block.number()).ok() ==
+          Some(next_substrate_block.saturating_sub(1))
         {
           log::info!("serai hasn't finalized a block in the last 60s...");
         } else {
@@ -681,7 +681,7 @@ pub(crate) async fn verify_published_batches<D: Db>(
 ) -> Option<u32> {
   // TODO: Localize from MainDb to SubstrateDb
   let last = crate::MainDb::<D>::last_verified_batch(txn, network);
-  for id in last.map(|last| last + 1).unwrap_or(0)..=optimistic_up_to {
+  for id in last.map(|last| last + 1).unwrap_or(0) ..= optimistic_up_to {
     let Some(on_chain) = SubstrateDb::<D>::batch_instructions_hash(txn, network, id) else {
       break;
     };

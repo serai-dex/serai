@@ -233,7 +233,7 @@ pub(crate) async fn handle_application_tx<
         continue;
       };
       let mut data_vec = Vec::<_>::decode(&mut all_segments.as_slice()).unwrap();
-      for i in u16::from(range.start)..u16::from(range.end) {
+      for i in u16::from(range.start) .. u16::from(range.end) {
         let i = Participant::new(i).unwrap();
         data.insert(i, data_vec.remove(0));
       }
@@ -338,7 +338,8 @@ pub(crate) async fn handle_application_tx<
           .map(|shares| {
             shares
               .drain(
-                our_i_pos..(our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
+                our_i_pos ..
+                  (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
               )
               .collect::<Vec<_>>()
           })
@@ -414,8 +415,8 @@ pub(crate) async fn handle_application_tx<
     // TODO: Ban self-accusals
     Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
       let range = spec.i(signed.signer).unwrap();
-      if (u16::from(accuser) < u16::from(range.start))
-        || (u16::from(range.end) <= u16::from(accuser))
+      if (u16::from(accuser) < u16::from(range.start)) ||
+        (u16::from(range.end) <= u16::from(accuser))
       {
         fatal_slash::<D>(
           txn,
@@ -426,8 +427,8 @@ pub(crate) async fn handle_application_tx<
         return;
       }
 
-      if !((u16::from(range.start) <= u16::from(faulty))
-        && (u16::from(faulty) < u16::from(range.end)))
+      if !((u16::from(range.start) <= u16::from(faulty)) &&
+        (u16::from(faulty) < u16::from(range.end)))
       {
         fatal_slash::<D>(
           txn,

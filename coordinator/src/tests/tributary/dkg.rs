@@ -162,7 +162,7 @@ async fn dkg_test() {
     let attempt = 0;
 
     let mut shares = vec![vec![]];
-    for i in 0..keys.len() {
+    for i in 0 .. keys.len() {
       if i != k {
         let mut share = vec![0; 256];
         OsRng.fill_bytes(&mut share);
@@ -339,7 +339,7 @@ async fn dkg_test() {
 
         // Call
         type Call = serai_client::runtime::validator_sets::Call<serai_client::runtime::Runtime>;
-        let tx = Call::decode(&mut &tx[4..]).unwrap();
+        let tx = Call::decode(&mut &tx[4 ..]).unwrap();
         match tx {
           Call::set_keys { network, key_pair: set_key_pair, signature } => {
             assert_eq!(set, spec.set());
