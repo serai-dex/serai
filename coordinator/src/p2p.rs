@@ -22,8 +22,6 @@ use libp2p::{
   futures::StreamExt,
   identity::Keypair,
   PeerId,
-  tcp::Config as TcpConfig,
-  noise, yamux,
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
     IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
@@ -276,16 +274,7 @@ impl LibP2p {
     // TODO: Relay client?
     let mut swarm = SwarmBuilder::with_existing_identity(throwaway_key_pair)
       .with_tokio()
-      .with_tcp(TcpConfig::default().nodelay(true), noise::Config::new, || {
-        let mut config = yamux::Config::default();
-        // 1 MiB default + max message size
-        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_MESSAGE_SIZE);
-        // 256 KiB default + max message size
-        config
-          .set_receive_window_size(((256 * 1024) + MAX_LIBP2P_MESSAGE_SIZE).try_into().unwrap());
-        config
-      })
-      .unwrap()
+      .with_quic()
       .with_behaviour(|_| behavior)
       .unwrap()
       .build();
