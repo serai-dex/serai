@@ -541,7 +541,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     .await?;
     *next_block += 1;
     let mut txn = db.txn();
-    BlockDb::set(&mut txn, next_block);
+    NextBlock::set(&mut txn, next_block);
     txn.commit();
     log::info!("handled substrate block {b}");
   }
@@ -558,7 +558,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   tributary_retired: mpsc::UnboundedSender<ValidatorSet>,
 ) {
   log::info!("scanning substrate");
-  let mut next_substrate_block = BlockDb::get(&db).unwrap_or_default();
+  let mut next_substrate_block = NextBlock::get(&db).unwrap_or_default();
 
   /*
   let new_substrate_block_notifier = {

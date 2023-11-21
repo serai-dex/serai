@@ -13,7 +13,7 @@ create_db!(
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
     LatestCosignedBlock: () -> u64,
-    BlockDb: () -> u64,
+    NextBlock: () -> u64,
     EventDb: (id: &[u8], index: u32) -> [u8; 0],
     SessionDb: (key: &[u8]) -> Session,
     BatchDb: (network: NetworkId, id: u32) -> [u8; 32]
