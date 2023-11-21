@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn, Db, create_db, Get};
 
 use tendermint::ext::{Network, Commit};
+use scale::Encode;
 
 use crate::{
   ACCOUNT_MEMPOOL_LIMIT, ReadWrite,
@@ -19,31 +20,27 @@ use crate::{
 pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
-
   txs: HashMap<[u8; 32], Transaction<T>>,
   next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 }
 
-impl<D: Db, T: TransactionTrait> Mempool<D, T> {
-  fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
+create_db!(
+  Mempool {
+    TransactionDb: (hash: [u8; 32]) -> Vec<u8>,
+    CurrentMempoolDb: (genesis: [u8; 32]) -> Vec<u8>
   }
-  fn current_mempool_key(&self) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"current", self.genesis)
-  }
+);
 
+impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   // save given tx to the mempool db
   fn save_tx(&mut self, tx: Transaction<T>) {
     let tx_hash = tx.hash();
-    let transaction_key = self.transaction_key(&tx_hash);
-    let current_mempool_key = self.current_mempool_key();
-    #[allow(clippy::unwrap_or_default)]
-    let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let mut current_mempool = CurrentMempoolDb::get(&self.db, self.genesis).unwrap_or_default();
 
     let mut txn = self.db.txn();
-    txn.put(transaction_key, tx.serialize());
+    TransactionDb::set(&mut txn, tx_hash, &tx.serialize());
     current_mempool.extend(tx_hash);
-    txn.put(current_mempool_key, current_mempool);
+    CurrentMempoolDb::set(&mut txn, self.genesis, &current_mempool);
     txn.commit();
 
     self.txs.insert(tx_hash, tx);
@@ -60,12 +57,12 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
     let mut res = Mempool { db, genesis, txs: HashMap::new(), next_nonces: HashMap::new() };
 
-    let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
+    let current_mempool = CurrentMempoolDb::get(&res.db, res.genesis).unwrap_or_default();
 
     for hash in current_mempool.chunks(32) {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
-        Transaction::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref())
+        Transaction::read::<&[u8]>(&mut TransactionDb::get(&res.db, hash).unwrap().as_ref())
           .unwrap();
       debug_assert_eq!(tx.hash(), hash);
 
@@ -220,10 +217,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
   /// Remove a transaction from the mempool.
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
-    let transaction_key = self.transaction_key(tx);
-    let current_mempool_key = self.current_mempool_key();
     #[allow(clippy::unwrap_or_default)]
-    let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let current_mempool = CurrentMempoolDb::get(&self.db, self.genesis).unwrap_or(vec![]);
 
     let mut i = 0;
     while i < current_mempool.len() {
@@ -235,10 +230,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
     // This doesn't have to be atomic with any greater operation
     let mut txn = self.db.txn();
-    txn.del(transaction_key);
+    txn.del(TransactionDb::key(*tx));
     if i != current_mempool.len() {
-      txn
-        .put(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
+      CurrentMempoolDb::set(
+        &mut txn,
+        self.genesis,
+        &[&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat(),
+      );
     }
     txn.commit();
 
