@@ -467,8 +467,10 @@ pub(crate) async fn handle_application_tx<
           let preprocesses = ConfirmationNonces::get(txn, genesis, attempt).unwrap();
           // TODO: This can technically happen under very very very specific timing as the txn put
           // happens before DkgConfirmed, yet the txn commit isn't guaranteed to
-          let key_pair = CurrentlyCompletingKeyPair::get(txn, genesis)
-            .expect("in DkgConfirmed handling, which happens after everyone (including us) fires DkgConfirmed, yet no confirming key pair");
+          let key_pair = CurrentlyCompletingKeyPair::get(txn, genesis).expect(
+            "in DkgConfirmed handling, which happens after everyone \
+              (including us) fires DkgConfirmed, yet no confirming key pair",
+          );
           let sig =
             match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
