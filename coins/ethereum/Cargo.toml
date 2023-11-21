@@ -7,6 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/coins/ethereum"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
 edition = "2021"
 publish = false
+rust-version = "1.74"
 
 [package.metadata.docs.rs]
 all-features = true

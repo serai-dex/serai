@@ -5,6 +5,7 @@ description = "Serai coins primitives"
 license = "MIT"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+rust-version = "1.69"
 
 [package.metadata.docs.rs]
 all-features = true
