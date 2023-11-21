@@ -2,14 +2,14 @@ use std::collections::{VecDeque, HashMap};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn, Db, Get, create_db};
 
-use scale::Decode;
+use scale::{Encode, Decode};
 
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  ReadWrite, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
+  ReadWrite, ProvidedError, ProvidedTransactions, BlockQuantityDb, LocalQuantityDb, BlockError, Block, Mempool, Transaction,
   transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
 };
 
@@ -28,39 +28,21 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
 }
 
-impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
-  fn tip_key(genesis: [u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"tip", genesis)
+create_db!(
+  TributaryBlockchainDb {
+    TipsDb: (genesis: [u8; 32]) -> [u8; 32],
+    BlockNumberDb: (genesis: [u8; 32]) -> Vec<u8>,
+    BlockDb: (genesis:  [u8; 32], hash: &[u8; 32]) -> Vec<u8>,
+    BlockHashDb: (genesis: [u8; 32], block_number: u32) -> [u8; 32],
+    CommitDb: (genesis: [u8; 32], block: &[u8; 32]) -> Vec<u8>,
+    BlockAfterDb: (genesis: [u8; 32], hash: [u8; 32]) -> [u8; 32],
+    UnsignedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>,
+    ProvidedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>,
+    NextNonceDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>
   }
-  fn block_number_key(&self) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_number", self.genesis)
-  }
-  fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block", [genesis, hash].concat())
-  }
-  fn block_hash_key(genesis: &[u8], block_number: u32) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_hash", [genesis, &block_number.to_le_bytes()].concat())
-  }
-  fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
-  }
-  fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
-  }
-  fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
-  }
-  fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
-  }
-  fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
-    D::key(
-      b"tributary_blockchain",
-      b"next_nonce",
-      [self.genesis.as_ref(), signer.to_bytes().as_ref()].concat(),
-    )
-  }
+);
 
+impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn new(
     db: D,
     genesis: [u8; 32],
@@ -84,17 +66,16 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
       next_block_notifications: VecDeque::new(),
     };
-
+    let self_db = res.db.as_ref().unwrap();
     if let Some((block_number, tip)) = {
-      let db = res.db.as_ref().unwrap();
-      db.get(res.block_number_key()).map(|number| (number, db.get(Self::tip_key(genesis)).unwrap()))
+      BlockNumberDb::get(self_db, genesis).map(|number| (number, TipsDb::get(self_db, genesis).unwrap()))
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
     }
 
     for participant in participants {
-      if let Some(next_nonce) = res.db.as_ref().unwrap().get(res.next_nonce_key(participant)) {
+      if let Some(next_nonce) = NextNonceDb::get(self_db, genesis, participant.to_bytes()) {
         res.next_nonces.insert(*participant, u32::from_le_bytes(next_nonce.try_into().unwrap()));
       }
     }
@@ -111,32 +92,16 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
-    db.get(Self::block_key(&genesis, block))
+    BlockDb::get(db, genesis, block)
       .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_ref()).unwrap())
   }
 
-  pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {
-    db.get(Self::commit_key(&genesis, block))
-  }
-
-  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u32) -> Option<[u8; 32]> {
-    db.get(Self::block_hash_key(&genesis, block)).map(|h| h.try_into().unwrap())
-  }
-
   pub(crate) fn commit(&self, block: &[u8; 32]) -> Option<Vec<u8>> {
-    Self::commit_from_db(self.db.as_ref().unwrap(), self.genesis, block)
-  }
-
-  pub(crate) fn block_hash(&self, block: u32) -> Option<[u8; 32]> {
-    Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block)
+    CommitDb::get(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
   pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
-    self.commit(&self.block_hash(block)?)
-  }
-
-  pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
-    db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
+    CommitDb::get(self.db.as_ref().unwrap(), self.genesis, &BlockHashDb::get(self.db.as_ref().unwrap(), self.genesis, block).unwrap())
   }
 
   pub(crate) fn locally_provided_txs_in_block(
@@ -145,19 +110,14 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     block: &[u8; 32],
     order: &str,
   ) -> bool {
-    let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
-    let local =
-      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
-    let block_key =
-      ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
-    let block =
-      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
-
+    let order_bytes = order.as_bytes();
+    let local = LocalQuantityDb::get(db, genesis, order_bytes).unwrap_or_default();
+    let block = BlockQuantityDb::get(db, genesis, block, order_bytes).unwrap_or_default();
     local >= block
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
-    db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
+    TipsDb::get(db, genesis).unwrap_or(genesis)
   }
 
   pub(crate) fn add_transaction<N: Network>(
@@ -170,15 +130,15 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let genesis = self.genesis;
 
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
-      let hash = Self::block_hash_from_db(db, genesis, block)?;
+      let hash = BlockHashDb::get(db, genesis, block)?;
       // we must have a commit per valid hash
-      let commit = Self::commit_from_db(db, genesis, &hash).unwrap();
+      let commit = CommitDb::get(db, genesis, &hash).unwrap();
       // commit has to be valid if it is coming from our db
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
 
     let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+      |hash: [u8; 32]| UnsignedIncludedDb::get(db, self.genesis, hash).is_some();
     self.mempool.add::<N>(&self.next_nonces, internal, tx, schema, unsigned_in_chain, commit)
   }
 
@@ -194,7 +154,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+      |hash: [u8; 32]| UnsignedIncludedDb::get(db, self.genesis, hash).is_some();
 
     let block = Block::new(
       self.tip,
@@ -214,9 +174,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
     let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+      |hash: [u8; 32]| UnsignedIncludedDb::get(db, self.genesis, hash).is_some();
     let provided_in_chain =
-      |hash: [u8; 32]| db.get(Self::provided_included_key(&self.genesis, &hash)).is_some();
+      |hash: [u8; 32]| ProvidedIncludedDb::get(db, self.genesis, hash).is_some();
     let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
@@ -259,29 +219,30 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let mut txn = db.txn();
 
     self.tip = block.hash();
-    txn.put(Self::tip_key(self.genesis), self.tip);
+    TipsDb::set(&mut txn, self.genesis, &self.tip);
 
     self.block_number += 1;
-    txn.put(self.block_number_key(), self.block_number.to_le_bytes());
+    BlockNumberDb::set(&mut txn, self.genesis, &self.block_number.to_le_bytes());
 
-    txn.put(Self::block_hash_key(&self.genesis, self.block_number), self.tip);
+    BlockHashDb::set(&mut txn, self.genesis, self.block_number, &self.tip);
 
-    txn.put(Self::block_key(&self.genesis, &self.tip), block.serialize());
-    txn.put(Self::commit_key(&self.genesis, &self.tip), commit);
+    BlockDb::set(&mut txn, self.genesis, &self.tip, &block.serialize());
 
-    txn.put(Self::block_after_key(&self.genesis, &block.parent()), block.hash());
+    CommitDb::set(&mut txn, self.genesis, &self.tip, &commit);
+
+    BlockAfterDb::set(&mut txn, self.genesis, block.parent(), &block.hash());
 
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided(order) => {
           let hash = tx.hash();
           self.provided.complete(&mut txn, order, self.tip, hash);
-          txn.put(Self::provided_included_key(&self.genesis, &hash), []);
+          ProvidedIncludedDb::set(&mut txn, self.genesis, hash, &[] as &[u8; 0]);
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();
           // Save as included on chain
-          txn.put(Self::unsigned_included_key(&self.genesis, &hash), []);
+          UnsignedIncludedDb::set(&mut txn, self.genesis, hash, &[] as &[u8; 0]);
           // remove from the mempool
           self.mempool.remove(&hash);
         }
@@ -294,8 +255,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           if prev != *nonce {
             panic!("verified block had an invalid nonce");
           }
-
-          txn.put(self.next_nonce_key(signer), next_nonce.to_le_bytes());
+          NextNonceDb::set(&mut txn, self.genesis, signer.to_bytes(), &next_nonce.to_le_bytes());
 
           self.mempool.remove(&tx.hash());
         }

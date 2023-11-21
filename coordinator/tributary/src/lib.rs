@@ -397,13 +397,13 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
     Blockchain::<D, T>::block_from_db(&self.0, self.1, hash)
   }
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
-    Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
+    CommitDb::get(&self.0, self.1, &hash)
   }
   pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
     self.commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap())
   }
   pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
-    Blockchain::<D, T>::block_after(&self.0, self.1, hash)
+    BlockAfterDb::get(&self.0, self.1, *hash)
   }
   pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
     self

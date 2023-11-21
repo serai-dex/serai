@@ -29,6 +29,8 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 serai-db = { path = "../../common/db" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
+bincode = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
 

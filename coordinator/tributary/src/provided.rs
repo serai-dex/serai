@@ -2,8 +2,8 @@ use std::collections::{VecDeque, HashMap};
 
 use thiserror::Error;
 
-use serai_db::{Get, DbTxn, Db};
-
+use serai_db::{Get, DbTxn, Db, create_db};
+use scale::Encode;
 use crate::transaction::{TransactionKind, TransactionError, Transaction, verify_transaction};
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
@@ -30,43 +30,26 @@ pub struct ProvidedTransactions<D: Db, T: Transaction> {
   pub(crate) transactions: HashMap<&'static str, VecDeque<T>>,
 }
 
-impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
-  fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
-    D::key(b"tributary_provided", b"transaction", [self.genesis.as_ref(), hash].concat())
+create_db!(
+  TributaryProvidedDb {
+    TransactionDb: (genesis: &[u8], hash: &[u8]) -> Vec<u8>,
+    CurrentDb: (genesis: &[u8]) -> Vec<u8>,
+    LocalQuantityDb: (genesis: &[u8], order: &[u8]) -> u32,
+    OnChainQuantityDb: (genesis: &[u8], order: &[u8]) -> u32,
+    BlockQuantityDb: (genesis: &[u8], block: &[u8], order: &[u8]) -> u32,
+    OnChainTxDb: (genesis: &[u8], order: &[u8], id: &[u8]) -> Vec<u8>
   }
-  fn current_provided_key(&self) -> Vec<u8> {
-    D::key(b"tributary_provided", b"current", self.genesis)
-  }
-  pub(crate) fn locally_provided_quantity_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
-    D::key(b"tributary_provided", b"local_quantity", [genesis, order.as_bytes()].concat())
-  }
-  pub(crate) fn on_chain_provided_quantity_key(genesis: &[u8; 32], order: &str) -> Vec<u8> {
-    D::key(b"tributary_provided", b"on_chain_quantity", [genesis, order.as_bytes()].concat())
-  }
-  pub(crate) fn block_provided_quantity_key(
-    genesis: &[u8; 32],
-    block: &[u8; 32],
-    order: &str,
-  ) -> Vec<u8> {
-    D::key(b"tributary_provided", b"block_quantity", [genesis, block, order.as_bytes()].concat())
-  }
+);
 
-  pub(crate) fn on_chain_provided_key(genesis: &[u8; 32], order: &str, id: u32) -> Vec<u8> {
-    D::key(
-      b"tributary_provided",
-      b"on_chain_tx",
-      [genesis, order.as_bytes(), &id.to_le_bytes()].concat(),
-    )
-  }
+impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
     let mut res = ProvidedTransactions { db, genesis, transactions: HashMap::new() };
-
-    let currently_provided = res.db.get(res.current_provided_key()).unwrap_or(vec![]);
+    let currently_provided = CurrentDb::get(&res.db, &genesis).unwrap_or_default();
     let mut i = 0;
     while i < currently_provided.len() {
       let tx = T::read::<&[u8]>(
-        &mut res.db.get(res.transaction_key(&currently_provided[i .. (i + 32)])).unwrap().as_ref(),
+        &mut TransactionDb::get(&res.db, &res.genesis, &currently_provided[i .. (i + 32)]).unwrap().as_ref()
       )
       .unwrap();
 
@@ -96,50 +79,39 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     let tx_hash = tx.hash();
 
     // Check it wasn't already provided
-    let provided_key = self.transaction_key(&tx_hash);
-    if self.db.get(&provided_key).is_some() {
+    if TransactionDb::get(&self.db, &self.genesis, &tx_hash).is_some() {
       Err(ProvidedError::AlreadyProvided)?;
     }
 
     // get local and on-chain tx numbers
-    let local_key = Self::locally_provided_quantity_key(&self.genesis, order);
-    let mut local_quantity = self
-      .db
-      .get(&local_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
-    let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
-    let on_chain_quantity = self
-      .db
-      .get(on_chain_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
-
-    let current_provided_key = self.current_provided_key();
-
+    let order_bytes = order.as_bytes();
+    let mut local_quantity = LocalQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
+    let on_chain_quantity = OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
+    
     // This would have a race-condition with multiple calls to provide, though this takes &mut self
     // peventing multiple calls at once
     let mut txn = self.db.txn();
-    txn.put(provided_key, tx.serialize());
+    CurrentDb::set(&mut txn, &self.genesis, &tx.serialize());
+    
 
     let this_provided_id = local_quantity;
 
     local_quantity += 1;
-    txn.put(local_key, local_quantity.to_le_bytes());
+    LocalQuantityDb::set(&mut txn, &self.genesis, order_bytes, &local_quantity);
 
     if this_provided_id < on_chain_quantity {
       // Verify against the on-chain version
       if tx_hash.as_ref() !=
-        txn.get(Self::on_chain_provided_key(&self.genesis, order, this_provided_id)).unwrap()
+      OnChainTxDb::get(&txn, &self.genesis, order_bytes, &this_provided_id.to_le_bytes()).unwrap()
       {
         Err(ProvidedError::LocalMismatchesOnChain)?;
       }
       txn.commit();
     } else {
       #[allow(clippy::unwrap_or_default)]
-      let mut currently_provided = txn.get(&current_provided_key).unwrap_or(vec![]);
+      let mut currently_provided = CurrentDb::get(&txn, &self.genesis).unwrap_or_default();
       currently_provided.extend(tx_hash);
-      txn.put(current_provided_key, currently_provided);
+      CurrentDb::set(&mut txn, &self.genesis, &currently_provided);
       txn.commit();
 
       if self.transactions.get(order).is_none() {
@@ -161,9 +133,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
   ) {
     if let Some(next_tx) = self.transactions.get_mut(order).and_then(|queue| queue.pop_front()) {
       assert_eq!(next_tx.hash(), tx);
-
-      let current_provided_key = self.current_provided_key();
-      let mut currently_provided = txn.get(&current_provided_key).unwrap();
+      let mut currently_provided = CurrentDb::get(txn, &self.genesis).unwrap();
 
       // Find this TX's hash
       let mut i = 0;
@@ -178,24 +148,20 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
           panic!("couldn't find completed TX in currently provided");
         }
       }
-
-      txn.put(current_provided_key, currently_provided);
+      CurrentDb::set(txn, &self.genesis, &currently_provided);
     }
 
     // bump the on-chain tx number.
-    let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
-    let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
-    let mut on_chain_quantity = self
-      .db
-      .get(&on_chain_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
-
+    let order_bytes = order.as_bytes();
+    let mut on_chain_quantity = OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
     let this_provided_id = on_chain_quantity;
-    txn.put(Self::on_chain_provided_key(&self.genesis, order, this_provided_id), tx);
+
+//    let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
+    
+    OnChainTxDb::set(txn, &self.genesis, order_bytes, &this_provided_id.to_le_bytes(), &tx);
 
     on_chain_quantity += 1;
-    txn.put(on_chain_key, on_chain_quantity.to_le_bytes());
-    txn.put(block_order_key, on_chain_quantity.to_le_bytes());
+    OnChainQuantityDb::set(txn, &self.genesis, order_bytes, &on_chain_quantity);
+    BlockQuantityDb::set(txn, &self.genesis, &block, order_bytes, &on_chain_quantity);
   }
 }
