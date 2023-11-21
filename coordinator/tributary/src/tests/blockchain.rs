@@ -23,7 +23,8 @@ use crate::{
   tests::{
     ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::DummyP2p,
     new_genesis, random_evidence_tx,
-  }, blockchain::BlockAfterDb,
+  },
+  blockchain::BlockAfterDb,
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
@@ -52,10 +53,7 @@ fn block_addition() {
   assert!(blockchain.add_block::<N>(&block, vec![], validators).is_ok());
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
-  assert_eq!(
-    BlockAfterDb::get(&db, genesis, block.parent()).unwrap(),
-    block.hash()
-  );
+  assert_eq!(BlockAfterDb::get(&db, genesis, block.parent()).unwrap(), block.hash());
 }
 
 #[test]

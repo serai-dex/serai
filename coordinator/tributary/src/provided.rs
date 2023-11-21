@@ -37,19 +37,20 @@ create_db!(
     LocalQuantityDb: (genesis: &[u8], order: &[u8]) -> u32,
     OnChainQuantityDb: (genesis: &[u8], order: &[u8]) -> u32,
     BlockQuantityDb: (genesis: &[u8], block: &[u8], order: &[u8]) -> u32,
-    OnChainTxDb: (genesis: &[u8], order: &[u8], id: &[u8]) -> Vec<u8>
+    OnChainTxDb: (genesis: &[u8], order: &[u8], id: u32) -> [u8; 32]
   }
 );
 
 impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
-
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
     let mut res = ProvidedTransactions { db, genesis, transactions: HashMap::new() };
     let currently_provided = CurrentDb::get(&res.db, &genesis).unwrap_or_default();
     let mut i = 0;
     while i < currently_provided.len() {
       let tx = T::read::<&[u8]>(
-        &mut TransactionDb::get(&res.db, &res.genesis, &currently_provided[i .. (i + 32)]).unwrap().as_ref()
+        &mut TransactionDb::get(&res.db, &res.genesis, &currently_provided[i .. (i + 32)])
+          .unwrap()
+          .as_ref(),
       )
       .unwrap();
 
@@ -85,14 +86,15 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
     // get local and on-chain tx numbers
     let order_bytes = order.as_bytes();
-    let mut local_quantity = LocalQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
-    let on_chain_quantity = OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
-    
+    let mut local_quantity =
+      LocalQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
+    let on_chain_quantity =
+      OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
+
     // This would have a race-condition with multiple calls to provide, though this takes &mut self
     // peventing multiple calls at once
     let mut txn = self.db.txn();
     TransactionDb::set(&mut txn, &self.genesis, &tx_hash, &tx.serialize());
-    
 
     let this_provided_id = local_quantity;
 
@@ -102,7 +104,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     if this_provided_id < on_chain_quantity {
       // Verify against the on-chain version
       if tx_hash.as_ref() !=
-      OnChainTxDb::get(&txn, &self.genesis, order_bytes, &this_provided_id.to_le_bytes()).unwrap()
+        OnChainTxDb::get(&txn, &self.genesis, order_bytes, this_provided_id).unwrap()
       {
         Err(ProvidedError::LocalMismatchesOnChain)?;
       }
@@ -153,12 +155,13 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
     // bump the on-chain tx number.
     let order_bytes = order.as_bytes();
-    let mut on_chain_quantity = OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
+    let mut on_chain_quantity =
+      OnChainQuantityDb::get(&self.db, &self.genesis, order_bytes).unwrap_or_default();
     let this_provided_id = on_chain_quantity;
 
-//    let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
-    
-    OnChainTxDb::set(txn, &self.genesis, order_bytes, &this_provided_id.to_le_bytes(), &tx);
+    //    let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
+
+    OnChainTxDb::set(txn, &self.genesis, order_bytes, this_provided_id, &tx);
 
     on_chain_quantity += 1;
     OnChainQuantityDb::set(txn, &self.genesis, order_bytes, &on_chain_quantity);

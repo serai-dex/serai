@@ -9,7 +9,8 @@ use scale::{Encode, Decode};
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  ReadWrite, ProvidedError, ProvidedTransactions, BlockQuantityDb, LocalQuantityDb, BlockError, Block, Mempool, Transaction,
+  ReadWrite, ProvidedError, ProvidedTransactions, BlockQuantityDb, LocalQuantityDb, BlockError,
+  Block, Mempool, Transaction,
   transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
 };
 
@@ -68,7 +69,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     };
     let self_db = res.db.as_ref().unwrap();
     if let Some((block_number, tip)) = {
-      BlockNumberDb::get(self_db, genesis).map(|number| (number, TipsDb::get(self_db, genesis).unwrap()))
+      BlockNumberDb::get(self_db, genesis)
+        .map(|number| (number, TipsDb::get(self_db, genesis).unwrap()))
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
@@ -101,7 +103,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
-    CommitDb::get(self.db.as_ref().unwrap(), self.genesis, &BlockHashDb::get(self.db.as_ref().unwrap(), self.genesis, block).unwrap())
+    CommitDb::get(
+      self.db.as_ref().unwrap(),
+      self.genesis,
+      &BlockHashDb::get(self.db.as_ref().unwrap(), self.genesis, block).unwrap(),
+    )
   }
 
   pub(crate) fn locally_provided_txs_in_block(
