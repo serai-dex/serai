@@ -13,7 +13,7 @@ use sp_runtime::traits::Verify;
 
 use tokio::time::sleep;
 
-use serai_db::{DbTxn, Db, MemDb};
+use serai_db::{Db, MemDb, DbTxn};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
@@ -23,7 +23,7 @@ use processor_messages::{
 use tributary::{TransactionTrait, Tributary};
 
 use crate::{
-  tributary::{TributaryDb, Transaction, TributarySpec, scanner::handle_new_blocks},
+  tributary::{Transaction, TributarySpec, scanner::handle_new_blocks},
   tests::{
     MemProcessors, LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
@@ -81,8 +81,8 @@ async fn dkg_test() {
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     spec: &TributarySpec,
     tributary: &Tributary<MemDb, Transaction, LocalP2p>,
-  ) -> (TributaryDb<MemDb>, MemProcessors) {
-    let mut scanner_db = TributaryDb(MemDb::new());
+  ) -> (MemDb, MemProcessors) {
+    let mut scanner_db = MemDb::new();
     let processors = MemProcessors::new();
     handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
       &mut scanner_db,
@@ -162,7 +162,7 @@ async fn dkg_test() {
     let attempt = 0;
 
     let mut shares = vec![vec![]];
-    for i in 0 .. keys.len() {
+    for i in 0..keys.len() {
       if i != k {
         let mut share = vec![0; 256];
         OsRng.fill_bytes(&mut share);
@@ -289,7 +289,7 @@ async fn dkg_test() {
     if i != 0 {
       scanner_db = &mut local_scanner_db;
     }
-    let mut txn = scanner_db.0.txn();
+    let mut txn = scanner_db.txn();
     let share =
       crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
     txn.commit();
@@ -339,7 +339,7 @@ async fn dkg_test() {
 
         // Call
         type Call = serai_client::runtime::validator_sets::Call<serai_client::runtime::Runtime>;
-        let tx = Call::decode(&mut &tx[4 ..]).unwrap();
+        let tx = Call::decode(&mut &tx[4..]).unwrap();
         match tx {
           Call::set_keys { network, key_pair: set_key_pair, signature } => {
             assert_eq!(set, spec.set());
