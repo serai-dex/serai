@@ -45,17 +45,12 @@ create_db!(
 );
 
 impl BlockKeyDb {
-
   fn save_block<N: Network>(txn: &mut impl DbTxn, number: usize, id: &<N::Block as Block<N>>::Id) {
-    Self::set(
-      txn,
-      u64::try_from(number).unwrap(),
-      &BlockNumberKeyDb::to_block_number_key::<N>(id)
-    );
+    Self::set(txn, u64::try_from(number).unwrap(), &BlockNumberKeyDb::to_block_number_key::<N>(id));
     BlockNumberKeyDb::set(
       txn,
       BlockNumberKeyDb::to_block_number_key::<N>(id),
-      &u64::try_from(number).unwrap()
+      &u64::try_from(number).unwrap(),
     );
   }
 
@@ -75,7 +70,7 @@ impl BlockNumberKeyDb {
 
   fn block_number<N: Network>(getter: &impl Get, id: &<N::Block as Block<N>>::Id) -> Option<usize> {
     let key = Self::to_block_number_key::<N>(id);
-    Self::get(getter, key).map(|number| usize::try_from(number).unwrap())  
+    Self::get(getter, key).map(|number| usize::try_from(number).unwrap())
   }
 }
 
@@ -116,7 +111,10 @@ impl KeysDb {
     while !bytes.is_empty() {
       let mut activation_number = [0; 8];
       bytes.read_exact(&mut activation_number).unwrap();
-      res.push((u64::from_le_bytes(activation_number).try_into().unwrap(), N::Curve::read_G(&mut bytes).unwrap()));
+      res.push((
+        u64::from_le_bytes(activation_number).try_into().unwrap(),
+        N::Curve::read_G(&mut bytes).unwrap(),
+      ));
     }
     res
   }
@@ -175,7 +173,7 @@ impl ScannedBlocksDb {
   fn save_scanned_block<N: Network>(txn: &mut impl DbTxn, block: usize) -> Vec<N::Output> {
     let id = BlockKeyDb::block::<N>(txn, block);
     let outputs = id.as_ref().and_then(|id| OutputsDb::outputs::<N>(txn, id)).unwrap_or_default();
-    
+
     // Mark all the outputs from this block as seen
     for output in &outputs {
       SeenDb::set(txn, SeenDb::to_seen_key::<N>(&output.id()), b"");
@@ -187,8 +185,7 @@ impl ScannedBlocksDb {
   }
 
   fn latest_scanned_block(getter: &impl Get) -> Option<usize> {
-    Self::get(getter)
-      .map(|number| usize::try_from(number).unwrap())
+    Self::get(getter).map(|number| usize::try_from(number).unwrap())
   }
 }
 
@@ -205,8 +202,12 @@ impl RetirementBlocksDb {
     Self::set(txn, Self::to_retirement_block_key::<N>(key), &u64::try_from(block).unwrap());
   }
 
-  fn retirement_block<N: Network>(getter: &impl Get, key: &<N::Curve as Ciphersuite>::G) -> Option<usize> {
-    Self::get(getter, Self::to_retirement_block_key::<N>(key)).map(|number| usize::try_from(number).unwrap())  
+  fn retirement_block<N: Network>(
+    getter: &impl Get,
+    key: &<N::Curve as Ciphersuite>::G,
+  ) -> Option<usize> {
+    Self::get(getter, Self::to_retirement_block_key::<N>(key))
+      .map(|number| usize::try_from(number).unwrap())
   }
 }
 
@@ -699,7 +700,8 @@ impl<N: Network, D: Db> Scanner<N, D> {
         // - There's outputs
         // as only those blocks are meaningful and warrant obtaining synchrony over
         let is_retirement_block =
-          RetirementBlocksDb::retirement_block::<N>(&db, &scanner.keys[0].1) == Some(block_being_scanned);
+          RetirementBlocksDb::retirement_block::<N>(&db, &scanner.keys[0].1) ==
+            Some(block_being_scanned);
         let sent_block = if has_activation || is_retirement_block || (!outputs.is_empty()) {
           // Save the outputs to disk
           let mut txn = db.txn();
