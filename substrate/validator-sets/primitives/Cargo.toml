@@ -6,6 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/validator-sets/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+rust-version = "1.74"
 
 [package.metadata.docs.rs]
 all-features = true
