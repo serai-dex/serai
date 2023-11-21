@@ -277,9 +277,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     // yet rotation occurs on Serai's clock, disconnecting any errors here from any prior.
 
     // N::CONFIRMATIONS + 10 minutes
-    let period_1_start = new.activation_block
-      + N::CONFIRMATIONS
-      + (10usize * 60).div_ceil(N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
+    let period_1_start = new.activation_block +
+      N::CONFIRMATIONS +
+      (10usize * 60).div_ceil(N::ESTIMATED_BLOCK_TIME_IN_SECONDS);
 
     // N::CONFIRMATIONS
     let period_2_start = period_1_start + N::CONFIRMATIONS;
@@ -602,8 +602,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     // It won't be if this block's `InInstruction`s were split into multiple `Batch`s
     let (acquired_lock, (mut existing_outputs, new_outputs)) = {
       let (acquired_lock, mut outputs) = if ScannerHandle::<N, D>::db_scanned(txn)
-        .expect("published a Batch despite never scanning a block")
-        < block_number
+        .expect("published a Batch despite never scanning a block") <
+        block_number
       {
         // Load plans crated when we scanned the block
         plans = PlansFromScanningDb::take_plans_from_scanning::<N>(txn, block_number).unwrap();
@@ -654,9 +654,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         existing_payments,
         match *step {
           RotationStep::UseExisting => existing_key,
-          RotationStep::NewAsChange
-          | RotationStep::ForwardFromExisting
-          | RotationStep::ClosingExisting => self.new.as_ref().unwrap().key,
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => self.new.as_ref().unwrap().key,
         },
         match *step {
           RotationStep::UseExisting | RotationStep::NewAsChange => false,
@@ -670,9 +670,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // Assert these are only created during the expected step
         match *step {
           RotationStep::UseExisting => {}
-          RotationStep::NewAsChange
-          | RotationStep::ForwardFromExisting
-          | RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
         }
       }
     }
@@ -925,9 +925,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
                 DelayedOutputDb::save_delayed_output(txn, instruction);
                 continue;
               }
-              RotationStep::NewAsChange
-              | RotationStep::ForwardFromExisting
-              | RotationStep::ClosingExisting => {}
+              RotationStep::NewAsChange |
+              RotationStep::ForwardFromExisting |
+              RotationStep::ClosingExisting => {}
             }
           }
 
@@ -942,9 +942,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         // If any outputs were delayed, append them into this block
         match step {
           RotationStep::UseExisting => {}
-          RotationStep::NewAsChange
-          | RotationStep::ForwardFromExisting
-          | RotationStep::ClosingExisting => {
+          RotationStep::NewAsChange |
+          RotationStep::ForwardFromExisting |
+          RotationStep::ClosingExisting => {
             instructions.extend(DelayedOutputDb::take_delayed_outputs(txn));
           }
         }
@@ -1024,8 +1024,8 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     // 4) If this Eventuality will trigger a Plan, it'll still be in the plans HashMap.
     let scheduler_is_empty = closing && existing.scheduler.empty();
     // Nothing is still being signed
-    let no_active_plans = scheduler_is_empty
-      && PlanDb::active_plans::<N>(txn, existing.key.to_bytes().as_ref()).is_empty();
+    let no_active_plans = scheduler_is_empty &&
+      PlanDb::active_plans::<N>(txn, existing.key.to_bytes().as_ref()).is_empty();
 
     self
       .scanner

@@ -37,8 +37,8 @@ impl PlanDb {
 
       // If we've already noted we're signing this, return
       assert_eq!(signing.len() % 32, 0);
-      for i in 0..(signing.len() / 32) {
-        if signing[(i * 32)..((i + 1) * 32)] == id {
+      for i in 0 .. (signing.len() / 32) {
+        if signing[(i * 32) .. ((i + 1) * 32)] == id {
           return;
         }
       }
@@ -60,14 +60,14 @@ impl PlanDb {
     let mut res = vec![];
 
     assert_eq!(signing.len() % 32, 0);
-    for i in 0..(signing.len() / 32) {
-      let id = &signing[(i * 32)..((i + 1) * 32)];
+    for i in 0 .. (signing.len() / 32) {
+      let id = &signing[(i * 32) .. ((i + 1) * 32)];
       let buf = Self::get(getter, id).unwrap();
 
-      let block_number = u64::from_le_bytes(buf[..8].try_into().unwrap());
-      let plan = Plan::<N>::read::<&[u8]>(&mut &buf[8..]).unwrap();
+      let block_number = u64::from_le_bytes(buf[.. 8].try_into().unwrap());
+      let plan = Plan::<N>::read::<&[u8]>(&mut &buf[8 ..]).unwrap();
       assert_eq!(id, &plan.id());
-      let operating_costs = u64::from_le_bytes(buf[(buf.len() - 8)..].try_into().unwrap());
+      let operating_costs = u64::from_le_bytes(buf[(buf.len() - 8) ..].try_into().unwrap());
       res.push((block_number, plan, operating_costs));
     }
     res
@@ -78,7 +78,7 @@ impl PlanDb {
     key: <N::Curve as Ciphersuite>::G,
     id: [u8; 32],
   ) -> bool {
-    let plan = Plan::<N>::read::<&[u8]>(&mut &Self::get(getter, &id).unwrap()[8..]).unwrap();
+    let plan = Plan::<N>::read::<&[u8]>(&mut &Self::get(getter, &id).unwrap()[8 ..]).unwrap();
     assert_eq!(plan.id(), id);
     (key == plan.key) && (Some(N::change_address(plan.key)) == plan.change)
   }
@@ -108,12 +108,12 @@ impl ResolvedDb {
     assert_eq!(signing.len() % 32, 0);
 
     let mut found = false;
-    for i in 0..(signing.len() / 32) {
+    for i in 0 .. (signing.len() / 32) {
       let start = i * 32;
       let end = i + 32;
-      if signing[start..end] == plan {
+      if signing[start .. end] == plan {
         found = true;
-        signing = [&signing[..start], &signing[end..]].concat().to_vec();
+        signing = [&signing[.. start], &signing[end ..]].concat().to_vec();
         break;
       }
     }
