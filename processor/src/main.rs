@@ -352,7 +352,12 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // We can't set these keys for activation until we know their queue block, which we
             // won't until the next Batch is confirmed
             // Set this variable so when we get the next Batch event, we can handle it
-            PendingActivationsDb::set_pending_activation::<N>(txn,block_before_queue_block, set, key_pair);
+            PendingActivationsDb::set_pending_activation::<N>(
+              txn,
+              block_before_queue_block,
+              set,
+              key_pair,
+            );
           }
         }
 
@@ -533,7 +538,11 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
   // This hedges against being dropped due to full mempools, temporarily too low of a fee...
   tokio::spawn(Signer::<N, D>::rebroadcast_task(raw_db.clone(), network.clone()));
 
-  (raw_db.clone(), TributaryMutable { key_gen, batch_signer, cosigner: None, signers }, multisig_manager)
+  (
+    raw_db.clone(),
+    TributaryMutable { key_gen, batch_signer, cosigner: None, signers },
+    multisig_manager,
+  )
 }
 
 #[allow(clippy::await_holding_lock)] // Needed for txn, unfortunately can't be down-scoped
