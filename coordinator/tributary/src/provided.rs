@@ -91,7 +91,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     // This would have a race-condition with multiple calls to provide, though this takes &mut self
     // peventing multiple calls at once
     let mut txn = self.db.txn();
-    CurrentDb::set(&mut txn, &self.genesis, &tx.serialize());
+    TransactionDb::set(&mut txn, &self.genesis, &tx_hash, &tx.serialize());
     
 
     let this_provided_id = local_quantity;

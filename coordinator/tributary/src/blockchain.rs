@@ -37,7 +37,7 @@ create_db!(
     CommitDb: (genesis: [u8; 32], block: &[u8; 32]) -> Vec<u8>,
     BlockAfterDb: (genesis: [u8; 32], hash: [u8; 32]) -> [u8; 32],
     UnsignedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>,
-    ProvidedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>,
+    ProvidedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> [u8; 0],
     NextNonceDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>
   }
 );
