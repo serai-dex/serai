@@ -21,10 +21,10 @@ use messages::{
   coordinator::{self, SubstrateSignableId, SubstrateSignId, CoordinatorMessage},
   ProcessorMessage,
 };
-use crate::substrate_signer::SubstrateSigner;
+use crate::batch_signer::BatchSigner;
 
 #[tokio::test]
-async fn test_substrate_signer() {
+async fn test_batch_signer() {
   let keys = key_gen::<_, Ristretto>(&mut OsRng);
 
   let participant_one = Participant::new(1).unwrap();
@@ -73,7 +73,7 @@ async fn test_substrate_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.get(&i).unwrap().clone();
 
-    let mut signer = SubstrateSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
+    let mut signer = BatchSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
     let mut db = MemDb::new();
 
     let mut txn = db.txn();

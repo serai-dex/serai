@@ -8,7 +8,7 @@ mod signer;
 pub(crate) use signer::{sign, test_signer};
 
 mod cosigner;
-mod substrate_signer;
+mod batch_signer;
 
 mod wallet;
 pub(crate) use wallet::test_wallet;

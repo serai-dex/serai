@@ -32,7 +32,7 @@ fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
 }
 
 create_db!(
-  SubstrateSignerDb {
+  BatchSignerDb {
     CompletedDb: (id: [u8; 5]) -> (),
     AttemptDb: (id: [u8; 5], attempt: u32) -> (),
     BatchDb: (block: BlockHash) -> SignedBatch
@@ -44,8 +44,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
   <Schnorrkel as Algorithm<Ristretto>>::Signature,
 >>::SignatureShare;
 
-// TODO: Rename BatchSigner
-pub struct SubstrateSigner<D: Db> {
+pub struct BatchSigner<D: Db> {
   db: PhantomData<D>,
 
   network: NetworkId,
@@ -61,20 +60,20 @@ pub struct SubstrateSigner<D: Db> {
     HashMap<[u8; 5], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 }
 
-impl<D: Db> fmt::Debug for SubstrateSigner<D> {
+impl<D: Db> fmt::Debug for BatchSigner<D> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
-      .debug_struct("SubstrateSigner")
+      .debug_struct("BatchSigner")
       .field("signable", &self.signable)
       .field("attempt", &self.attempt)
       .finish_non_exhaustive()
   }
 }
 
-impl<D: Db> SubstrateSigner<D> {
-  pub fn new(network: NetworkId, keys: Vec<ThresholdKeys<Ristretto>>) -> SubstrateSigner<D> {
+impl<D: Db> BatchSigner<D> {
+  pub fn new(network: NetworkId, keys: Vec<ThresholdKeys<Ristretto>>) -> BatchSigner<D> {
     assert!(!keys.is_empty());
-    SubstrateSigner {
+    BatchSigner {
       db: PhantomData,
 
       network,
@@ -89,7 +88,7 @@ impl<D: Db> SubstrateSigner<D> {
 
   fn verify_id(&self, id: &SubstrateSignId) -> Result<([u8; 32], [u8; 5], u32), ()> {
     let SubstrateSignId { key, id, attempt } = id;
-    let SubstrateSignableId::Batch(id) = id else { panic!("SubstrateSigner handed non-Batch") };
+    let SubstrateSignableId::Batch(id) = id else { panic!("BatchSigner handed non-Batch") };
 
     assert_eq!(key, &self.keys[0].group_key().to_bytes());
 
@@ -233,7 +232,7 @@ impl<D: Db> SubstrateSigner<D> {
   ) -> Option<messages::ProcessorMessage> {
     match msg {
       CoordinatorMessage::CosignSubstrateBlock { .. } => {
-        panic!("SubstrateSigner passed CosignSubstrateBlock")
+        panic!("BatchSigner passed CosignSubstrateBlock")
       }
 
       CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
