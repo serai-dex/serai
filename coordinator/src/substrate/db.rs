@@ -14,7 +14,7 @@ create_db!(
     BlockHasEvents: (block: u64) -> u8,
     LatestCosignedBlock: () -> u64,
     NextBlock: () -> u64,
-    EventDb: (id: &[u8], index: u32) -> [u8; 0],
+    EventDb: (id: &[u8], index: u32) -> (),
     SessionDb: (key: &[u8]) -> Session,
     BatchDb: (network: NetworkId, id: u32) -> [u8; 32]
   }
