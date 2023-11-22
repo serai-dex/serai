@@ -204,7 +204,7 @@ impl Serai {
       .0
       .rpc()
       .deref()
-      .request::<[u8; 32]>("author_submitExtrinsic", subxt::rpc::rpc_params![tx])
+      .request::<String>("author_submitExtrinsic", subxt::rpc::rpc_params![hex::encode(tx)])
       .await
       // Drop the hash, which is the hash of the raw extrinsic, as extrinsics are allowed to share
       // hashes and this hash is accordingly useless/unsafe

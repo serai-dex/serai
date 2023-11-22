@@ -19,6 +19,7 @@ thiserror = { version = "1", optional = true }
 
 futures = "0.3"
 
+hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
 scale-info = { version = "2", optional = true }
 
