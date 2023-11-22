@@ -10,6 +10,8 @@ use tokio::sync::broadcast;
 use scale::{Encode, Decode};
 use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai};
 
+use serai_db::DbTxn;
+
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
   tendermint::{
@@ -22,13 +24,9 @@ use crate::{
   Db,
   tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributarySpec, Transaction, EventDb},
+  tributary::{TributarySpec, Transaction, LastBlock, EventDb},
   P2p,
 };
-
-use super::LastBlock;
-
-use serai_db::DbTxn;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum RecognizedIdType {

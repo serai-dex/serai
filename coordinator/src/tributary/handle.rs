@@ -31,7 +31,7 @@ use crate::{
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
-    FatallySlashed, ShareBlame, PlanIds, ConfirmationNonces, KeyPairDb, AttemptDb, DataDb,
+    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, KeyPairDb, AttemptDb, DataDb,
   },
 };
 
@@ -177,7 +177,7 @@ pub(crate) async fn handle_application_tx<
     };
 
     // If they've already published a TX for this attempt, slash
-    if DataDb::get(txn, genesis, &data_spec.as_key(genesis), &signed.signer.to_bytes()).is_some() {
+    if DataDb::get(txn, genesis, data_spec, &signed.signer.to_bytes()).is_some() {
       fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return Accumulation::NotReady;
     }
@@ -313,7 +313,7 @@ pub(crate) async fn handle_application_tx<
             }
             let to = Participant::new(to).unwrap();
 
-            ShareBlame::set(txn, genesis, from.into(), to.into(), &share);
+            DkgShare::set(txn, genesis, from.into(), to.into(), &share);
           }
         }
       }
@@ -439,7 +439,7 @@ pub(crate) async fn handle_application_tx<
         return;
       }
 
-      let share = ShareBlame::get(txn, genesis, accuser.into(), faulty.into()).unwrap();
+      let share = DkgShare::get(txn, genesis, accuser.into(), faulty.into()).unwrap();
       processors
         .send(
           spec.set().network,
