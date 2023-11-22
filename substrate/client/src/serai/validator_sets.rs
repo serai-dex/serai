@@ -4,8 +4,6 @@ use serai_runtime::{primitives::Amount, validator_sets, ValidatorSets, Runtime};
 pub use validator_sets::primitives;
 use primitives::{Session, ValidatorSet, KeyPair};
 
-use subxt::utils::Encoded;
-
 use crate::{primitives::NetworkId, Serai, TemporalSerai, SeraiError, scale_value};
 
 const PALLET: &str = "ValidatorSets";
@@ -82,7 +80,7 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "Keys", Some(vec![scale_value(set)])).await
   }
 
-  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Encoded {
+  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Vec<u8> {
     Serai::unsigned::<ValidatorSets, _>(&validator_sets::Call::<Runtime>::set_keys {
       network,
       key_pair,

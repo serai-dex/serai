@@ -5,9 +5,7 @@ use serai_runtime::{
 pub use coins::primitives;
 use primitives::OutInstructionWithBalance;
 
-use subxt::tx::Payload;
-
-use crate::{TemporalSerai, SeraiError, Composite, scale_value, scale_composite};
+use crate::{TemporalSerai, SeraiError, scale_value};
 
 const PALLET: &str = "Coins";
 
@@ -56,23 +54,22 @@ impl<'a> SeraiCoins<'a> {
     ))
   }
 
-  pub fn transfer(to: SeraiAddress, balance: Balance) -> Payload<Composite<()>> {
-    Payload::new(
-      PALLET,
-      "transfer",
-      scale_composite(serai_runtime::coins::Call::<Runtime>::transfer { to: to.into(), balance }),
-    )
+  pub fn transfer(to: SeraiAddress, balance: Balance) -> serai_runtime::RuntimeCall {
+    serai_runtime::RuntimeCall::Coins(serai_runtime::coins::Call::<Runtime>::transfer {
+      to: to.into(),
+      balance,
+    })
   }
 
-  pub fn burn(balance: Balance) -> Payload<Composite<()>> {
-    Payload::new(PALLET, "burn", scale_composite(coins::Call::<Runtime>::burn { balance }))
+  pub fn burn(balance: Balance) -> serai_runtime::RuntimeCall {
+    serai_runtime::RuntimeCall::Coins(serai_runtime::coins::Call::<Runtime>::burn { balance })
   }
 
-  pub fn burn_with_instruction(instruction: OutInstructionWithBalance) -> Payload<Composite<()>> {
-    Payload::new(
-      PALLET,
-      "burn_with_instruction",
-      scale_composite(coins::Call::<Runtime>::burn_with_instruction { instruction }),
+  pub fn burn_with_instruction(
+    instruction: OutInstructionWithBalance,
+  ) -> serai_runtime::RuntimeCall {
+    serai_runtime::RuntimeCall::Coins(
+      serai_runtime::coins::Call::<Runtime>::burn_with_instruction { instruction },
     )
   }
 }

@@ -11,7 +11,6 @@ use serai_runtime::coins::primitives::OutInstructionWithBalance;
 use sp_core::Pair;
 
 use serai_client::{
-  subxt::config::extrinsic_params::BaseExtrinsicParamsBuilder,
   primitives::{
     Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, Data, ExternalAddress,
     insecure_pair_from_name,
@@ -95,9 +94,8 @@ serai_test!(
           &PairSigner::new(pair),
           &SeraiCoins::burn_with_instruction(instruction.clone()),
           0,
-          BaseExtrinsicParamsBuilder::new(),
+          Default::default(),
         )
-        .unwrap(),
     )
     .await;
 

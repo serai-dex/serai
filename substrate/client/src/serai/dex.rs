@@ -4,11 +4,7 @@ use serai_runtime::{
   dex, Dex, Runtime,
 };
 
-use subxt::tx::Payload;
-
-use crate::{SeraiError, Composite, TemporalSerai, scale_composite};
-
-const PALLET: &str = "Dex";
+use crate::{SeraiError, TemporalSerai};
 
 pub type DexEvent = dex::Event<Runtime>;
 
@@ -26,19 +22,15 @@ impl<'a> SeraiDex<'a> {
     min_coin_amount: Amount,
     min_sri_amount: Amount,
     address: SeraiAddress,
-  ) -> Payload<Composite<()>> {
-    Payload::new(
-      PALLET,
-      "add_liquidity",
-      scale_composite(dex::Call::<Runtime>::add_liquidity {
-        coin,
-        coin_desired: coin_amount.0,
-        sri_desired: sri_amount.0,
-        coin_min: min_coin_amount.0,
-        sri_min: min_sri_amount.0,
-        mint_to: address.into(),
-      }),
-    )
+  ) -> serai_runtime::RuntimeCall {
+    serai_runtime::RuntimeCall::Dex(dex::Call::<Runtime>::add_liquidity {
+      coin,
+      coin_desired: coin_amount.0,
+      sri_desired: sri_amount.0,
+      coin_min: min_coin_amount.0,
+      sri_min: min_sri_amount.0,
+      mint_to: address.into(),
+    })
   }
 
   pub fn swap(
@@ -47,7 +39,7 @@ impl<'a> SeraiDex<'a> {
     amount_in: Amount,
     amount_out_min: Amount,
     address: SeraiAddress,
-  ) -> Payload<Composite<()>> {
+  ) -> serai_runtime::RuntimeCall {
     let path = if to_coin.is_native() {
       BoundedVec::try_from(vec![from_coin, Coin::Serai]).unwrap()
     } else if from_coin.is_native() {
@@ -56,15 +48,11 @@ impl<'a> SeraiDex<'a> {
       BoundedVec::try_from(vec![from_coin, Coin::Serai, to_coin]).unwrap()
     };
 
-    Payload::new(
-      PALLET,
-      "swap_exact_tokens_for_tokens",
-      scale_composite(dex::Call::<Runtime>::swap_exact_tokens_for_tokens {
-        path,
-        amount_in: amount_in.0,
-        amount_out_min: amount_out_min.0,
-        send_to: address.into(),
-      }),
-    )
+    serai_runtime::RuntimeCall::Dex(dex::Call::<Runtime>::swap_exact_tokens_for_tokens {
+      path,
+      amount_in: amount_in.0,
+      amount_out_min: amount_out_min.0,
+      send_to: address.into(),
+    })
   }
 }

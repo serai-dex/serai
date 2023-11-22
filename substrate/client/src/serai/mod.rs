@@ -4,7 +4,7 @@ use futures::stream::{Stream, StreamExt};
 
 use scale::{Encode, Decode, Compact};
 mod scale_value;
-pub(crate) use scale_value::{Value, Composite, scale_value, scale_composite};
+pub(crate) use scale_value::{Value, scale_value};
 
 pub use sp_core::{
   Pair as PairTrait,
@@ -14,13 +14,12 @@ pub use sp_core::{
 pub use subxt;
 use subxt::{
   error::Error as SubxtError,
-  utils::Encoded,
   config::{
     Header as HeaderTrait,
     substrate::{BlakeTwo256, SubstrateHeader},
-    extrinsic_params::{BaseExtrinsicParams, BaseExtrinsicParamsBuilder},
+    extrinsic_params::BaseExtrinsicParams,
   },
-  tx::{Signer, Payload, TxClient},
+  tx::Signer,
   rpc::types::{ChainBlock, ChainBlockExtrinsic},
   Config as SubxtConfig, OnlineClient,
 };
@@ -149,7 +148,7 @@ impl Serai {
     Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(SeraiError::RpcError)?))
   }
 
-  fn unsigned<P: 'static, C: Encode>(call: &C) -> Encoded {
+  fn unsigned<P: 'static, C: Encode>(call: &C) -> Vec<u8> {
     // TODO: Should Serai purge the old transaction code AND set this to 0/1?
     const TRANSACTION_VERSION: u8 = 4;
 
@@ -162,30 +161,54 @@ impl Serai {
     bytes.extend(call.encode());
 
     // Prefix the length
-    let mut complete_bytes = scale::Compact(u32::try_from(bytes.len()).unwrap()).encode();
+    let mut complete_bytes = Compact(u32::try_from(bytes.len()).unwrap()).encode();
     complete_bytes.extend(bytes);
-    Encoded(complete_bytes)
+    complete_bytes
   }
 
   pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
     &self,
     signer: &S,
-    payload: &Payload<Composite<()>>,
+    call: &serai_runtime::RuntimeCall,
     nonce: u32,
-    params: BaseExtrinsicParamsBuilder<SeraiConfig, Tip>,
-  ) -> Result<Encoded, SeraiError> {
-    TxClient::new(self.0.offline())
-      .create_signed_with_nonce(payload, signer, nonce, params)
-      .map(|tx| Encoded(tx.into_encoded()))
-      // TODO: Don't have this potentially return an error (requires modifying the Payload type)
-      .map_err(|_| SeraiError::InvalidRuntime)
+    tip: Tip,
+  ) -> Vec<u8> {
+    const SPEC_VERSION: u32 = 100;
+    const IMPL_VERSION: u32 = 1;
+    const TRANSACTION_VERSION: u8 = 4;
+
+    let era = subxt::config::substrate::Era::Immortal;
+    let extra = (era, Compact(nonce), tip);
+    let genesis = self.0.genesis_hash();
+    let mortality_checkpoint = genesis;
+    let mut signature_payload =
+      (call, extra, SPEC_VERSION, IMPL_VERSION, genesis, mortality_checkpoint).encode();
+    if signature_payload.len() > 256 {
+      use subxt::config::Hasher;
+      signature_payload = BlakeTwo256::hash(&signature_payload).0.to_vec();
+    }
+    let signature = signer.sign(&signature_payload);
+
+    let signed = 1 << 7;
+    let extrinsic =
+      (signed + TRANSACTION_VERSION, signer.address(), signature, extra, call).encode();
+    let mut res = Compact(u32::try_from(extrinsic.len()).unwrap()).encode();
+    res.extend(&extrinsic);
+    res
   }
 
-  pub async fn publish(&self, tx: &Encoded) -> Result<(), SeraiError> {
-    // Drop the hash, which is the hash of the raw TX, as TXs are allowed to share hashes and this
-    // hash is practically useless/unsafe
-    // If we are to return something, it should be block included in and position within block
-    self.0.rpc().submit_extrinsic(tx).await.map(|_| ()).map_err(SeraiError::RpcError)
+  pub async fn publish(&self, tx: &[u8]) -> Result<(), SeraiError> {
+    self
+      .0
+      .rpc()
+      .deref()
+      .request::<[u8; 32]>("author_submitExtrinsic", subxt::rpc::rpc_params![tx])
+      .await
+      // Drop the hash, which is the hash of the raw extrinsic, as extrinsics are allowed to share
+      // hashes and this hash is accordingly useless/unsafe
+      // If we are to return something, it should be block included in and position within block
+      .map(|_| ())
+      .map_err(SeraiError::RpcError)
   }
 
   pub async fn latest_block_hash(&self) -> Result<[u8; 32], SeraiError> {

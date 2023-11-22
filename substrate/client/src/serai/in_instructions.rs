@@ -2,8 +2,6 @@ use serai_runtime::{in_instructions, InInstructions, Runtime};
 pub use in_instructions::primitives;
 use primitives::SignedBatch;
 
-use subxt::utils::Encoded;
-
 use crate::{
   primitives::{BlockHash, NetworkId},
   SeraiError, Serai, TemporalSerai, scale_value,
@@ -41,7 +39,7 @@ impl<'a> SeraiInInstructions<'a> {
       .await
   }
 
-  pub fn execute_batch(batch: SignedBatch) -> Encoded {
+  pub fn execute_batch(batch: SignedBatch) -> Vec<u8> {
     Serai::unsigned::<InInstructions, _>(&in_instructions::Call::<Runtime>::execute_batch { batch })
   }
 }
