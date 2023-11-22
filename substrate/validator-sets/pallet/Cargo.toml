@@ -21,11 +21,13 @@ sp-io = { git = "https://github.com/serai-dex/substrate", default-features = fal
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
@@ -42,11 +44,13 @@ std = [
   "sp-std/std",
   "sp-application-crypto/std",
   "sp-runtime/std",
+  "sp-session/std",
 
   "frame-system/std",
   "frame-support/std",
 
-  "pallet-session/std",
+  "pallet-babe/std",
+  "pallet-grandpa/std",
 
   "serai-primitives/std",
   "validator-sets-primitives/std",

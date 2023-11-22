@@ -50,7 +50,6 @@ coins-pallet = { package = "serai-coins-pallet", path = "../coins/pallet", defau
 dex-pallet = { package = "serai-dex-pallet", path = "../dex/pallet", default-features = false }
 
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets/pallet", default-features = false }
-pallet-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../in-instructions/pallet", default-features = false }
 
@@ -58,8 +57,6 @@ signals-pallet = { package = "serai-signals-pallet", path = "../signals/pallet",
 
 pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
-
-pallet-authority-discovery = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -105,7 +102,6 @@ std = [
   "dex-pallet/std",
 
   "validator-sets-pallet/std",
-  "pallet-session/std",
 
   "in-instructions-pallet/std",
 
@@ -113,8 +109,6 @@ std = [
 
   "pallet-babe/std",
   "pallet-grandpa/std",
-
-  "pallet-authority-discovery/std",
 
   "frame-system-rpc-runtime-api/std",
   "pallet-transaction-payment-rpc-runtime-api/std",

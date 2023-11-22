@@ -45,7 +45,7 @@ async fn in_set(
     return Ok(None);
   };
   let key = (Ristretto::generator() * key.deref()).to_bytes();
-  Ok(Some(participants.iter().any(|participant| participant.0 == key)))
+  Ok(Some(participants.iter().any(|(participant, _)| participant.0 == key)))
 }
 
 async fn handle_new_set<D: Db>(
@@ -67,21 +67,10 @@ async fn handle_new_set<D: Db>(
       let set_participants =
         serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 
-      let allocation_per_key_share = serai
-        .allocation_per_key_share(set.network)
-        .await?
-        .expect("NewSet for set which didn't have an allocation per key share")
-        .0;
-
-      let mut set_data = vec![];
-      for participant in set_participants {
-        let allocation = serai
-          .allocation(set.network, participant)
-          .await?
-          .expect("validator selected for set yet didn't have an allocation")
-          .0;
-        set_data.push((participant, u16::try_from(allocation / allocation_per_key_share).unwrap()));
-      }
+      let mut set_data = set_participants
+        .into_iter()
+        .map(|(k, w)| (k, u16::try_from(w).unwrap()))
+        .collect::<Vec<_>>();
       amortize_excess_key_shares(&mut set_data);
       set_data
     };

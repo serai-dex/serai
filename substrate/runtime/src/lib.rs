@@ -20,7 +20,6 @@ pub use coins_pallet as coins;
 pub use dex_pallet as dex;
 
 pub use validator_sets_pallet as validator_sets;
-pub use pallet_session as session;
 
 pub use in_instructions_pallet as in_instructions;
 
@@ -28,8 +27,6 @@ pub use signals_pallet as signals;
 
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
-
-pub use pallet_authority_discovery as authority_discovery;
 
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
@@ -41,7 +38,7 @@ use sp_version::NativeVersion;
 
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, OpaqueKeys, BlakeTwo256, Block as BlockT},
+  traits::{Convert, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
   ApplyExtrinsicResult, Perbill,
 };
@@ -83,12 +80,9 @@ pub mod opaque {
     pub struct SessionKeys {
       pub babe: Babe,
       pub grandpa: Grandpa,
-      pub authority_discovery: AuthorityDiscovery,
     }
   }
 }
-
-use opaque::SessionKeys;
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
@@ -166,12 +160,6 @@ impl Contains<RuntimeCall> for CallFilter {
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
-
-      RuntimeCall::Session(call) => match call {
-        session::Call::set_keys { .. } => true,
-        session::Call::purge_keys { .. } => false,
-        session::Call::__Ignore(_, _) => false,
-      },
 
       RuntimeCall::Babe(call) => match call {
         babe::Call::report_equivocation { .. } => true,
@@ -256,6 +244,8 @@ impl dex::Config for Runtime {
 
 impl validator_sets::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
+
+  type ShouldEndSession = Babe;
 }
 
 pub struct IdentityValidatorIdOf;
@@ -263,18 +253,6 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
   fn convert(key: PublicKey) -> Option<PublicKey> {
     Some(key)
   }
-}
-
-impl session::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  type ValidatorId = PublicKey;
-  type ValidatorIdOf = IdentityValidatorIdOf;
-  type ShouldEndSession = Babe;
-  type NextSessionRotation = Babe;
-  type SessionManager = ValidatorSets;
-  type SessionHandler = <SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
-  type Keys = SessionKeys;
-  type WeightInfo = session::weights::SubstrateWeight<Runtime>;
 }
 
 impl signals::Config for Runtime {
@@ -294,7 +272,7 @@ impl babe::Config for Runtime {
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
   type EpochChangeTrigger = pallet_babe::ExternalTrigger;
-  type DisabledValidators = Session;
+  type DisabledValidators = ValidatorSets;
 
   type WeightInfo = ();
 
@@ -315,10 +293,6 @@ impl grandpa::Config for Runtime {
   type MaxSetIdSessionEntries = ConstU64<0>;
   type KeyOwnerProof = sp_core::Void;
   type EquivocationReportSystem = ();
-}
-
-impl authority_discovery::Config for Runtime {
-  type MaxAuthorities = MaxAuthorities;
 }
 
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
@@ -357,7 +331,6 @@ construct_runtime!(
     Dex: dex,
 
     ValidatorSets: validator_sets,
-    Session: session,
 
     InInstructions: in_instructions,
 
@@ -365,8 +338,6 @@ construct_runtime!(
 
     Babe: babe,
     Grandpa: grandpa,
-
-    AuthorityDiscovery: authority_discovery,
   }
 );
 
@@ -569,7 +540,10 @@ sp_api::impl_runtime_apis! {
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
-      AuthorityDiscovery::authorities()
+      Babe::authorities()
+        .into_iter()
+        .map(|(id, _)| AuthorityDiscoveryId::from(id.into_inner()))
+        .collect()
     }
   }
 }

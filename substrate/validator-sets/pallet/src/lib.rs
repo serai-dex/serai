@@ -3,14 +3,20 @@
 #[allow(deprecated, clippy::let_unit_value)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
+  use super::*;
+
   use scale_info::TypeInfo;
 
   use sp_core::sr25519::{Public, Signature};
   use sp_std::{vec, vec::Vec};
   use sp_application_crypto::RuntimePublic;
+  use sp_session::ShouldEndSession;
+  use sp_runtime::traits::IsMember;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, StoragePrefixedMap};
+  use frame_support::{
+    pallet_prelude::*, traits::DisabledValidators, BoundedVec, WeakBoundedVec, StoragePrefixedMap,
+  };
 
   use serai_primitives::*;
   pub use validator_sets_primitives as primitives;
@@ -18,14 +24,20 @@ pub mod pallet {
 
   use coins_pallet::Pallet as Coins;
 
+  use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
+  use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
+
   #[pallet::config]
   pub trait Config:
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
-    + pallet_session::Config<ValidatorId = Public>
+    + pallet_babe::Config
+    + pallet_grandpa::Config
     + TypeInfo
   {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
+
+    type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
   #[pallet::genesis_config]
@@ -52,22 +64,18 @@ pub mod pallet {
   pub struct Pallet<T>(PhantomData<T>);
 
   /// The current session for a network.
-  ///
-  /// This does not store the current session for Serai. pallet_session handles that.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
+  #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
   impl<T: Config> Pallet<T> {
-    pub fn session(network: NetworkId) -> Option<Session> {
-      if network == NetworkId::Serai {
-        Some(Session(pallet_session::Pallet::<T>::current_index()))
-      } else {
-        CurrentSession::<T>::get(network)
-      }
-    }
-
     pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
-      CurrentSession::<T>::get(network)
+      let session = Self::session(network);
+      // we already decided about the next session for serai.
+      if network == NetworkId::Serai {
+        return session.map(|s| Session(s.0 + 1));
+      }
+      session
     }
   }
 
@@ -84,7 +92,7 @@ pub mod pallet {
     _,
     Identity,
     NetworkId,
-    BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
+    BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
     ValueQuery,
   >;
   /// The validators selected to be in-set, yet with the ability to perform a check for presence.
@@ -105,13 +113,8 @@ pub mod pallet {
     // current set's validators
     #[inline]
     fn in_active_serai_set(account: Public) -> bool {
-      // TODO: This is bounded O(n). Can we get O(1) via a storage lookup, like we do with InSet?
-      for validator in pallet_session::Pallet::<T>::validators() {
-        if validator == account {
-          return true;
-        }
-      }
-      false
+      // TODO: is_member is internally O(n). Update Babe to use an O(1) storage lookup?
+      Babe::<T>::is_member(&BabeAuthorityId::from(account))
     }
 
     /// Returns true if the account is included in an active set.
@@ -297,14 +300,12 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     fn new_set(network: NetworkId) {
       // Update CurrentSession
-      let session = if network != NetworkId::Serai {
+      let session = {
         let new_session = CurrentSession::<T>::get(network)
           .map(|session| Session(session.0 + 1))
           .unwrap_or(Session(0));
         CurrentSession::<T>::set(network, Some(new_session));
         new_session
-      } else {
-        Self::session(network).unwrap_or(Session(0))
       };
 
       // Clear the current InSet
@@ -326,20 +327,26 @@ pub mod pallet {
       while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
+        let these_key_shares = amount.0 / allocation_per_key_share;
         InSet::<T>::set(Self::in_set_key(network, key), Some(()));
-        participants.push(key);
+        participants.push((key, these_key_shares));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
-        key_shares += amount.0 / allocation_per_key_share;
+        key_shares += these_key_shares;
         total_stake += amount.0;
       }
       TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
+
+      // Only set the MuSig key for non-Serai sets, as only non-Serai sets should publish keys
       if network != NetworkId::Serai {
-        MuSigKeys::<T>::set(set, Some(musig_key(set, &participants)));
+        MuSigKeys::<T>::set(
+          set,
+          Some(musig_key(set, &participants.iter().map(|(id, _)| *id).collect::<Vec<_>>())),
+        );
       }
       Participants::<T>::set(network, participants.try_into().unwrap());
     }
@@ -370,6 +377,19 @@ pub mod pallet {
     BadSignature,
     /// Validator wasn't registered or active.
     NonExistentValidator,
+  }
+
+  #[pallet::hooks]
+  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+      if T::ShouldEndSession::should_end_session(n) {
+        Self::rotate_session();
+        // TODO: set the proper weights
+        T::BlockWeights::get().max_block
+      } else {
+        Weight::zero()
+      }
+    }
   }
 
   #[pallet::genesis_build]
@@ -621,9 +641,10 @@ pub mod pallet {
       for network in serai_primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };
-        // Only spawn a NewSet if the current set was actually established with a completed
-        // handover protocol
-        if Self::handover_completed(network, current_session) {
+        // Only spawn a new set if:
+        // - This is Serai, as we need to rotate Serai upon a new session (per Babe)
+        // - The current set was actually established with a completed handover protocol
+        if (network == NetworkId::Serai) || Self::handover_completed(network, current_session) {
           Pallet::<T>::new_set(network);
         }
       }
@@ -649,6 +670,39 @@ pub mod pallet {
       }
       PendingDeallocations::<T>::take((network, session, key))
     }
+
+    fn rotate_session() {
+      let prior_serai_participants = Self::participants(NetworkId::Serai);
+      let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
+
+      // TODO: T::SessionHandler::on_before_session_ending() was here.
+      // end the current serai session.
+      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
+
+      // make a new session and get the next validator set.
+      Self::new_session();
+
+      // Update Babe and Grandpa
+      let session = prior_serai_session.0 + 1;
+      let validators = prior_serai_participants;
+      let next_validators = Self::participants(NetworkId::Serai);
+      Babe::<T>::enact_epoch_change(
+        WeakBoundedVec::force_from(
+          validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          None,
+        ),
+        WeakBoundedVec::force_from(
+          next_validators.into_iter().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          None,
+        ),
+        Some(session),
+      );
+      Grandpa::<T>::new_session(
+        true,
+        session,
+        validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+      );
+    }
   }
 
   #[pallet::call]
@@ -667,7 +721,7 @@ pub mod pallet {
       // (called by pre_dispatch) checks it
       let _ = signature;
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Self::session(NetworkId::Serai).unwrap();
 
       let set = ValidatorSet { session, network };
 
@@ -742,11 +796,13 @@ pub mod pallet {
       };
 
       // Don't allow the Serai set to set_keys, as they have no reason to do so
+      // This should already be covered by the lack of key in MuSigKeys, yet it doesn't hurt to be
+      // explicit
       if network == &NetworkId::Serai {
         Err(InvalidTransaction::Custom(0))?;
       }
 
-      let session = Session(pallet_session::Pallet::<T>::current_index());
+      let session = Self::session(NetworkId::Serai).unwrap();
 
       let set = ValidatorSet { session, network: *network };
       match Self::verify_signature(set, key_pair, signature) {
@@ -779,26 +835,11 @@ pub mod pallet {
     }
   }
 
-  // Call order is end_session(i - 1) -> start_session(i) -> new_session(i + 1)
-  // new_session(i + 1) is called immediately after start_session(i)
-  // then we wait until the session ends then get a call to end_session(i) and so on.
-  impl<T: Config> pallet_session::SessionManager<T::ValidatorId> for Pallet<T> {
-    fn new_session(_new_index: u32) -> Option<Vec<T::ValidatorId>> {
-      Self::new_session();
-      // TODO: Where do we return their stake?
-      Some(Self::participants(NetworkId::Serai).into())
+  impl<T: Config> DisabledValidators for Pallet<T> {
+    fn is_disabled(_: u32) -> bool {
+      // TODO
+      false
     }
-
-    fn new_session_genesis(_: u32) -> Option<Vec<T::ValidatorId>> {
-      // TODO: Because we don't call new_session here, we don't emit NewSet { Serai, session: 1 }
-      Some(Self::participants(NetworkId::Serai).into())
-    }
-
-    fn end_session(end_index: u32) {
-      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: Session(end_index) })
-    }
-
-    fn start_session(_start_index: u32) {}
   }
 }
 
