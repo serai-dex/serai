@@ -27,13 +27,15 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, TributaryDb, DataSet,
-    Accumulation, TributaryState,
+    Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet, Accumulation,
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
+    FatallySlashed, ShareBlame, PlanIds, ConfirmationNonces, KeyPairDb, AttemptDb, DataDb,
   },
 };
+
+use super::CurrentlyCompletingKeyPair;
 
 const DKG_COMMITMENTS: &str = "commitments";
 const DKG_SHARES: &str = "shares";
@@ -61,14 +63,13 @@ pub fn dkg_confirmation_nonces(
 //
 // The caller must ensure only error_generating_key_pair or generated_key_pair is called for a
 // given attempt.
-pub fn error_generating_key_pair<D: Db, G: Get>(
+pub fn error_generating_key_pair<G: Get>(
   getter: &G,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
   attempt: u32,
 ) -> Option<Participant> {
-  let preprocesses =
-    TributaryDb::<D>::confirmation_nonces(getter, spec.genesis(), attempt).unwrap();
+  let preprocesses = ConfirmationNonces::get(getter, spec.genesis(), attempt).unwrap();
 
   // Sign a key pair which can't be valid
   // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
@@ -90,8 +91,8 @@ pub fn generated_key_pair<D: Db>(
   key_pair: &KeyPair,
   attempt: u32,
 ) -> Result<[u8; 32], Participant> {
-  TributaryDb::<D>::save_currently_completing_key_pair(txn, spec.genesis(), key_pair);
-  let preprocesses = TributaryDb::<D>::confirmation_nonces(txn, spec.genesis(), attempt).unwrap();
+  CurrentlyCompletingKeyPair::set(txn, spec.genesis(), key_pair);
+  let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
@@ -102,7 +103,7 @@ pub(super) fn fatal_slash<D: Db>(
   reason: &str,
 ) {
   log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
-  TributaryDb::<D>::set_fatally_slashed(txn, genesis, account);
+  FatallySlashed::set_fatally_slashed(txn, genesis, account);
   // TODO: disconnect the node from network/ban from further participation in all Tributaries
 
   // TODO: If during DKG, trigger a re-attempt
@@ -155,7 +156,7 @@ pub(crate) async fn handle_application_tx<
   // TODO: Because fatally slashed participants can still publish onto the blockchain, they have
   // a notable DoS ability
   if let TransactionKind::Signed(signed) = tx.kind() {
-    if TributaryDb::<D>::is_fatally_slashed(txn, genesis, signed.signer.to_bytes()) {
+    if FatallySlashed::get(txn, genesis, signed.signer.to_bytes()).is_some() {
       return;
     }
   }
@@ -164,7 +165,7 @@ pub(crate) async fn handle_application_tx<
                 data_spec: &DataSpecification,
                 bytes: Vec<u8>,
                 signed: &Signed| {
-    let Some(curr_attempt) = TributaryDb::<D>::attempt(txn, genesis, data_spec.topic) else {
+    let Some(curr_attempt) = AttemptDb::attempt(txn, genesis, data_spec.topic) else {
       // Premature publication of a valid ID/publication of an invalid ID
       fatal_slash::<D>(
         txn,
@@ -176,7 +177,7 @@ pub(crate) async fn handle_application_tx<
     };
 
     // If they've already published a TX for this attempt, slash
-    if TributaryDb::<D>::data(txn, genesis, data_spec, signed.signer).is_some() {
+    if DataDb::get(txn, genesis, &data_spec.as_key(genesis), &signed.signer.to_bytes()).is_some() {
       fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return Accumulation::NotReady;
     }
@@ -203,7 +204,7 @@ pub(crate) async fn handle_application_tx<
     // TODO: If this is shares, we need to check they are part of the selected signing set
 
     // Accumulate this data
-    TributaryState::<D>::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
+    DataDb::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
   };
 
   fn check_sign_data_len<D: Db>(
@@ -312,7 +313,7 @@ pub(crate) async fn handle_application_tx<
             }
             let to = Participant::new(to).unwrap();
 
-            TributaryDb::<D>::save_share_for_blame(txn, &genesis, from, to, share);
+            ShareBlame::set(txn, genesis, from.into(), to.into(), &share);
           }
         }
       }
@@ -367,7 +368,7 @@ pub(crate) async fn handle_application_tx<
           else {
             panic!("got all DKG shares yet confirmation nonces aren't Ready(Participating(_))");
           };
-          TributaryDb::<D>::save_confirmation_nonces(txn, genesis, attempt, confirmation_nonces);
+          ConfirmationNonces::set(txn, genesis, attempt, &confirmation_nonces);
 
           // shares is a HashMap<Participant, Vec<Vec<Vec<u8>>>>, with the values representing:
           // - Each of the sender's shares
@@ -438,7 +439,7 @@ pub(crate) async fn handle_application_tx<
         return;
       }
 
-      let share = TributaryDb::<D>::share_for_blame(txn, &genesis, accuser, faulty).unwrap();
+      let share = ShareBlame::get(txn, genesis, accuser.into(), faulty.into()).unwrap();
       processors
         .send(
           spec.set().network,
@@ -463,16 +464,13 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(shares)) => {
           log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
-          let preprocesses = TributaryDb::<D>::confirmation_nonces(txn, genesis, attempt).unwrap();
+          let preprocesses = ConfirmationNonces::get(txn, genesis, attempt).unwrap();
           // TODO: This can technically happen under very very very specific timing as the txn put
           // happens before DkgConfirmed, yet the txn commit isn't guaranteed to
-          let key_pair = TributaryDb::<D>::currently_completing_key_pair(txn, genesis)
-            .unwrap_or_else(|| {
-              panic!(
-                "in DkgConfirmed handling, which happens after everyone {}",
-                "(including us) fires DkgConfirmed, yet no confirming key pair"
-              )
-            });
+          let key_pair = CurrentlyCompletingKeyPair::get(txn, genesis).expect(
+            "in DkgConfirmed handling, which happens after everyone \
+              (including us) fires DkgConfirmed, yet no confirming key pair",
+          );
           let sig =
             match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
@@ -496,7 +494,7 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::CosignSubstrateBlock(hash) => {
-      TributaryDb::<D>::recognize_topic(
+      AttemptDb::recognize_topic(
         txn,
         genesis,
         Topic::SubstrateSign(SubstrateSignableId::CosigningSubstrateBlock(hash)),
@@ -508,7 +506,7 @@ pub(crate) async fn handle_application_tx<
       );
 
       let key = loop {
-        let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
+        let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
           // This can happen based on a timing condition
           log::warn!("CosignSubstrateBlock yet keys weren't set yet");
           tokio::time::sleep(core::time::Duration::from_secs(1)).await;
@@ -535,7 +533,7 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::Batch(_, batch) => {
       // Because this Batch has achieved synchrony, its batch ID should be authorized
-      TributaryDb::<D>::recognize_topic(
+      AttemptDb::recognize_topic(
         txn,
         genesis,
         Topic::SubstrateSign(SubstrateSignableId::Batch(batch)),
@@ -546,14 +544,14 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SubstrateBlock(block) => {
-      let plan_ids = TributaryDb::<D>::plan_ids(txn, genesis, block).expect(
+      let plan_ids = PlanIds::get(txn, &genesis, block).expect(
         "synced a tributary block finalizing a substrate block in a provided transaction \
           despite us not providing that transaction",
       );
 
       let nonces = NonceDecider::handle_substrate_block(txn, genesis, &plan_ids);
       for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
-        TributaryDb::<D>::recognize_topic(txn, genesis, Topic::Sign(id));
+        AttemptDb::recognize_topic(txn, genesis, Topic::Sign(id));
         recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id.to_vec(), nonce).await;
       }
     }
@@ -575,7 +573,7 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
-          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
+          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
@@ -606,7 +604,7 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
-          let key = TributaryDb::<D>::key_pair(txn, spec.set()).unwrap().0 .0;
+          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
@@ -629,7 +627,7 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
+      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -668,7 +666,7 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = TributaryDb::<D>::key_pair(txn, spec.set());
+      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -709,7 +707,7 @@ pub(crate) async fn handle_application_tx<
         hex::encode(plan)
       );
 
-      if TributaryDb::<D>::attempt(txn, genesis, Topic::Sign(plan)).is_none() {
+      if AttemptDb::attempt(txn, genesis, Topic::Sign(plan)).is_none() {
         fatal_slash::<D>(
           txn,
           genesis,
@@ -720,7 +718,7 @@ pub(crate) async fn handle_application_tx<
       };
 
       // TODO: Confirm this signer hasn't prior published a completion
-      let Some(key_pair) = TributaryDb::<D>::key_pair(txn, spec.set()) else {
+      let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
         panic!("SignCompleted for recognized plan ID despite not having a key pair for this set")
       };
       processors

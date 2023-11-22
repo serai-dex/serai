@@ -30,7 +30,7 @@ use tokio::{sync::mpsc, time::sleep};
 use crate::{
   Db,
   processors::Processors,
-  tributary::{TributarySpec, SeraiBlockNumber, TributaryDb},
+  tributary::{TributarySpec, SeraiBlockNumber, KeyPairDb},
 };
 
 mod db;
@@ -305,7 +305,7 @@ async fn handle_block<D: Db, Pro: Processors>(
         // Immediately ensure this key pair is accessible to the tributary, before we fire any
         // events off of it
         let mut txn = db.0.txn();
-        TributaryDb::<D>::set_key_pair(&mut txn, set, &key_pair);
+        KeyPairDb::set(&mut txn, set, &key_pair);
         txn.commit();
 
         handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;

@@ -38,7 +38,7 @@ use ::tributary::{
 
 mod tributary;
 use crate::tributary::{
-  TributarySpec, SignData, Transaction, TributaryDb, NonceDecider, scanner::RecognizedIdType,
+  TributarySpec, SignData, Transaction, NonceDecider, scanner::RecognizedIdType, PlanIds,
 };
 
 mod db;
@@ -256,7 +256,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             .iter()
             .filter_map(|plan| Some(plan.id).filter(|_| plan.key == key))
             .collect::<Vec<_>>();
-          TributaryDb::<D>::set_plan_ids(&mut txn, tributary.spec.genesis(), *block, &plans);
+          PlanIds::set(&mut txn, &tributary.spec.genesis(), *block, &plans);
 
           let tx = Transaction::SubstrateBlock(*block);
           log::trace!(
@@ -472,7 +472,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // As for the safety of calling error_generating_key_pair, the processor is presumed
           // to only send InvalidShare or GeneratedKeyPair for a given attempt
           let mut txs = if let Some(faulty) =
-            crate::tributary::error_generating_key_pair::<D, _>(&txn, key, spec, id.attempt)
+            crate::tributary::error_generating_key_pair::<_>(&txn, key, spec, id.attempt)
           {
             vec![Transaction::RemoveParticipant(faulty)]
           } else {

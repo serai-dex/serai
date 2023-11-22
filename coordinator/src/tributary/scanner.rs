@@ -18,15 +18,17 @@ use tributary::{
   },
 };
 
-use serai_db::DbTxn;
-
 use crate::{
   Db,
   tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributaryDb, TributarySpec, Transaction},
+  tributary::{TributarySpec, Transaction, EventDb},
   P2p,
 };
+
+use super::LastBlock;
+
+use serai_db::DbTxn;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum RecognizedIdType {
@@ -53,7 +55,7 @@ async fn handle_block<
   RID: RIDTrait<FRid>,
   P: P2p,
 >(
-  db: &mut TributaryDb<D>,
+  db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: RID,
   processors: &Pro,
@@ -69,12 +71,12 @@ async fn handle_block<
   let mut event_id = 0;
   #[allow(clippy::explicit_counter_loop)] // event_id isn't TX index. It just currently lines up
   for tx in block.transactions {
-    if TributaryDb::<D>::handled_event(&db.0, hash, event_id) {
+    if EventDb::get(db, hash, event_id).is_some() {
       event_id += 1;
       continue;
     }
 
-    let mut txn = db.0.txn();
+    let mut txn = db.txn();
 
     match tx {
       TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
@@ -121,7 +123,7 @@ async fn handle_block<
       }
     }
 
-    TributaryDb::<D>::handle_event(&mut txn, hash, event_id);
+    EventDb::handle_event(&mut txn, hash, event_id);
     txn.commit();
 
     event_id += 1;
@@ -139,7 +141,7 @@ pub(crate) async fn handle_new_blocks<
   RID: RIDTrait<FRid>,
   P: P2p,
 >(
-  db: &mut TributaryDb<D>,
+  db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: RID,
   processors: &Pro,
@@ -148,7 +150,7 @@ pub(crate) async fn handle_new_blocks<
   tributary: &TributaryReader<D, Transaction>,
 ) {
   let genesis = tributary.genesis();
-  let mut last_block = db.last_block(genesis);
+  let mut last_block = LastBlock::get(db, genesis).unwrap_or(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
 
@@ -176,7 +178,9 @@ pub(crate) async fn handle_new_blocks<
     )
     .await;
     last_block = next;
-    db.set_last_block(genesis, next);
+    let mut txn = db.txn();
+    LastBlock::set(&mut txn, genesis, &next);
+    txn.commit();
   }
 }
 
@@ -209,7 +213,7 @@ pub(crate) async fn scan_tributaries_task<
           async move {
             let spec = &spec;
             let reader = tributary.reader();
-            let mut tributary_db = TributaryDb::new(raw_db.clone());
+            let mut tributary_db = raw_db.clone();
             loop {
               // Check if the set was retired, and if so, don't further operate
               if crate::MainDb::<D>::is_tributary_retired(&raw_db, spec.set()) {
