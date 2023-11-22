@@ -8,7 +8,7 @@ use ciphersuite::{Ciphersuite, Ristretto};
 use tokio::sync::broadcast;
 
 use scale::{Encode, Decode};
-use serai_client::{validator_sets::primitives::ValidatorSet, subxt::utils::Encoded, Serai};
+use serai_client::{validator_sets::primitives::ValidatorSet, Serai};
 
 use serai_db::DbTxn;
 
@@ -48,7 +48,7 @@ async fn handle_block<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
+  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
@@ -134,7 +134,7 @@ pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
+  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,

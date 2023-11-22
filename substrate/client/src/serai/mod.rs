@@ -1,3 +1,5 @@
+use core::ops::Deref;
+
 use thiserror::Error;
 
 use futures::stream::{Stream, StreamExt};

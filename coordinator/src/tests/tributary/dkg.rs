@@ -318,7 +318,6 @@ async fn dkg_test() {
       let spec = spec.clone();
       let key_pair = key_pair.clone();
       async move {
-        let tx = tx.0;
         // Version, Pallet, Call, Network, Key Pair, Signature
         let expected_len = 1 + 1 + 1 + 1 + 32 + 1 + key_pair.1.len() + 64;
         // It's length prefixed

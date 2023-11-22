@@ -10,7 +10,6 @@ use scale::{Encode, Decode};
 use serai_client::{
   Public, Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair},
-  subxt::utils::Encoded,
   SeraiValidatorSets,
 };
 
@@ -138,7 +137,7 @@ pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Encoded) -> FPst,
+  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
 >(

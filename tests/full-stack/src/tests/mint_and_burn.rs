@@ -248,16 +248,12 @@ async fn mint_and_burn_test() {
         // Fund the new account to pay for fees
         let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
         serai
-          .publish(
-            &serai
-              .sign(
-                &PairSigner::new(insecure_pair_from_name("Ferdie")),
-                &SeraiCoins::transfer(address, balance),
-                0,
-                Default::default(),
-              )
-              .unwrap(),
-          )
+          .publish(&serai.sign(
+            &PairSigner::new(insecure_pair_from_name("Ferdie")),
+            &SeraiCoins::transfer(address, balance),
+            0,
+            Default::default(),
+          ))
           .await
           .unwrap();
 
@@ -506,16 +502,12 @@ async fn mint_and_burn_test() {
             };
 
             serai
-              .publish(
-                &serai
-                  .sign(
-                    serai_pair,
-                    &SeraiCoins::burn_with_instruction(out_instruction),
-                    nonce,
-                    Default::default(),
-                  )
-                  .unwrap(),
-              )
+              .publish(&serai.sign(
+                serai_pair,
+                &SeraiCoins::burn_with_instruction(out_instruction),
+                nonce,
+                Default::default(),
+              ))
               .await
               .unwrap();
           }
