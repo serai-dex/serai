@@ -21,6 +21,9 @@ RUN apt install -y pkg-config clang
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler
 
+# Add the wasm toolchain
+RUN rustup target add wasm32-unknown-unknown
+
 # Add files for build
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -36,9 +39,6 @@ ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
 WORKDIR /serai
-
-# Add the wasm toolchain
-RUN rustup target add wasm32-unknown-unknown
 
 # Mount the caches and build
 RUN --mount=type=cache,target=/root/.cargo \
