@@ -64,11 +64,20 @@ pub mod pallet {
   pub struct Pallet<T>(PhantomData<T>);
 
   /// The current session for a network.
-  ///
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
   #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
+  impl<T: Config> Pallet<T> {
+    pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
+      let session = Self::session(network);
+      // we already decided about the next session for serai.
+      if network == NetworkId::Serai {
+        return session.map(|s| Session(s.0 + 1));
+      }
+      session
+    }
+  }
 
   /// The allocation required per key share.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
@@ -91,7 +100,7 @@ pub mod pallet {
   // before the spammable key.
   #[pallet::storage]
   pub type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
   impl<T: Config> Pallet<T> {
     fn in_set_key(
       network: NetworkId,
@@ -104,7 +113,7 @@ pub mod pallet {
     // current set's validators
     #[inline]
     fn in_active_serai_set(account: Public) -> bool {
-      // TODO: TODO: is_member is internally O(n). Update Babe to use an O(1) storage lookup?
+      // TODO: is_member is internally O(n). Update Babe to use an O(1) storage lookup?
       Babe::<T>::is_member(&BabeAuthorityId::from(account))
     }
 
@@ -319,7 +328,7 @@ pub mod pallet {
         let Some((key, amount)) = iter.next() else { break };
 
         let these_key_shares = amount.0 / allocation_per_key_share;
-        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
+        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
         participants.push((key, these_key_shares));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
@@ -375,6 +384,7 @@ pub mod pallet {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
       if T::ShouldEndSession::should_end_session(n) {
         Self::rotate_session();
+        // TODO: set the proper weights
         T::BlockWeights::get().max_block
       } else {
         Weight::zero()

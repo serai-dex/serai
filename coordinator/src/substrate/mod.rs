@@ -64,11 +64,15 @@ async fn handle_new_set<D: Db>(
 
     let set_data = {
       let serai = serai.as_of(block.hash()).validator_sets();
-      let mut set_participants =
+      let set_participants =
         serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 
-      amortize_excess_key_shares(&mut set_participants);
-      set_participants
+      let mut set_data = set_participants
+        .into_iter()
+        .map(|(k, w)| (k, u16::try_from(w).unwrap()))
+        .collect::<Vec<_>>();
+      amortize_excess_key_shares(&mut set_data);
+      set_data
     };
 
     let time = if let Ok(time) = block.time() {
