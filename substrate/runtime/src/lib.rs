@@ -88,8 +88,7 @@ pub mod opaque {
 pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
   impl_name: create_runtime_str!("core"),
-  // TODO: 1? Do we prefer some level of compatibility or our own path?
-  spec_version: 100,
+  spec_version: 1,
   impl_version: 1,
   apis: RUNTIME_API_VERSIONS,
   transaction_version: 1,

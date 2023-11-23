@@ -1,6 +1,6 @@
 use serai_runtime::primitives::{Coin, Amount};
 
-use serai_client::{Serai, SeraiDex, PairSigner};
+use serai_client::{Serai, SeraiDex};
 use sp_core::{sr25519::Pair, Pair as PairTrait};
 
 use crate::common::tx::publish_tx;
@@ -17,7 +17,7 @@ pub async fn add_liquidity(
   let address = pair.public();
 
   let tx = serai.sign(
-    &PairSigner::new(pair),
+    &pair,
     &SeraiDex::add_liquidity(coin, coin_amount, sri_amount, Amount(1), Amount(1), address.into()),
     nonce,
     Default::default(),
@@ -39,7 +39,7 @@ pub async fn swap(
   let address = pair.public();
 
   let tx = serai.sign(
-    &PairSigner::new(pair),
+    &pair,
     &SeraiDex::swap(from_coin, to_coin, amount_in, amount_out_min, address.into()),
     nonce,
     Default::default(),

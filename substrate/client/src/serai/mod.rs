@@ -13,7 +13,6 @@ pub use sp_core::{
   sr25519::{Public, Pair},
 };
 
-pub use subxt;
 use subxt::{
   error::Error as SubxtError,
   config::{
@@ -21,7 +20,6 @@ use subxt::{
     substrate::{BlakeTwo256, SubstrateHeader},
     extrinsic_params::BaseExtrinsicParams,
   },
-  tx::Signer,
   rpc::types::{ChainBlock, ChainBlockExtrinsic},
   Config as SubxtConfig, OnlineClient,
 };
@@ -150,41 +148,32 @@ impl Serai {
     Ok(Serai(OnlineClient::<SeraiConfig>::from_url(url).await.map_err(SeraiError::RpcError)?))
   }
 
-  fn unsigned<P: 'static, C: Encode>(call: &C) -> Vec<u8> {
+  fn unsigned(call: &serai_runtime::RuntimeCall) -> Vec<u8> {
     // TODO: Should Serai purge the old transaction code AND set this to 0/1?
-    const TRANSACTION_VERSION: u8 = 4;
+    const EXTRINSIC_FORMAT_VERSION: u8 = 4;
 
-    // Protocol version
-    let mut bytes = vec![TRANSACTION_VERSION];
-
-    // Pallet index
-    bytes.push(u8::try_from(PalletInfo::index::<P>().unwrap()).unwrap());
-    // Call
+    let mut bytes = vec![EXTRINSIC_FORMAT_VERSION];
     bytes.extend(call.encode());
-
-    // Prefix the length
-    let mut complete_bytes = Compact(u32::try_from(bytes.len()).unwrap()).encode();
-    complete_bytes.extend(bytes);
-    complete_bytes
+    bytes
   }
 
-  pub fn sign<S: Send + Sync + Signer<SeraiConfig>>(
+  pub fn sign(
     &self,
-    signer: &S,
+    signer: &Pair,
     call: &serai_runtime::RuntimeCall,
     nonce: u32,
     tip: Tip,
   ) -> Vec<u8> {
-    const SPEC_VERSION: u32 = 100;
-    const IMPL_VERSION: u32 = 1;
-    const TRANSACTION_VERSION: u8 = 4;
+    const SPEC_VERSION: u32 = 1;
+    const TX_VERSION: u32 = 1;
+    const EXTRINSIC_FORMAT_VERSION: u8 = 4;
 
     let era = subxt::config::substrate::Era::Immortal;
     let extra = (era, Compact(nonce), tip);
     let genesis = self.0.genesis_hash();
     let mortality_checkpoint = genesis;
     let mut signature_payload =
-      (call, extra, SPEC_VERSION, IMPL_VERSION, genesis, mortality_checkpoint).encode();
+      (call, extra, SPEC_VERSION, TX_VERSION, genesis, mortality_checkpoint).encode();
     if signature_payload.len() > 256 {
       use subxt::config::Hasher;
       signature_payload = BlakeTwo256::hash(&signature_payload).0.to_vec();
@@ -192,19 +181,20 @@ impl Serai {
     let signature = signer.sign(&signature_payload);
 
     let signed = 1 << 7;
-    let extrinsic =
-      (signed + TRANSACTION_VERSION, signer.address(), signature, extra, call).encode();
-    let mut res = Compact(u32::try_from(extrinsic.len()).unwrap()).encode();
-    res.extend(&extrinsic);
-    res
+    (signed + EXTRINSIC_FORMAT_VERSION, signer.public(), signature, extra, call).encode()
   }
 
   pub async fn publish(&self, tx: &[u8]) -> Result<(), SeraiError> {
+    let mut length_prefixed = Compact(u32::try_from(tx.len()).unwrap()).encode();
+    length_prefixed.extend(tx);
     self
       .0
       .rpc()
       .deref()
-      .request::<String>("author_submitExtrinsic", subxt::rpc::rpc_params![hex::encode(tx)])
+      .request::<String>(
+        "author_submitExtrinsic",
+        subxt::rpc::rpc_params![hex::encode(length_prefixed)],
+      )
       .await
       // Drop the hash, which is the hash of the raw extrinsic, as extrinsics are allowed to share
       // hashes and this hash is accordingly useless/unsafe
@@ -384,25 +374,5 @@ impl<'a> TemporalSerai<'a> {
 
   pub fn validator_sets(self) -> SeraiValidatorSets<'a> {
     SeraiValidatorSets(self)
-  }
-}
-
-#[derive(Clone)]
-pub struct PairSigner(Pair, <SeraiConfig as SubxtConfig>::AccountId);
-impl PairSigner {
-  pub fn new(pair: Pair) -> Self {
-    let id = pair.public();
-    PairSigner(pair, id)
-  }
-}
-impl Signer<SeraiConfig> for PairSigner {
-  fn account_id(&self) -> &<SeraiConfig as SubxtConfig>::AccountId {
-    &self.1
-  }
-  fn address(&self) -> <SeraiConfig as SubxtConfig>::Address {
-    self.1.into()
-  }
-  fn sign(&self, payload: &[u8]) -> <SeraiConfig as SubxtConfig>::Signature {
-    self.0.sign(payload)
   }
 }

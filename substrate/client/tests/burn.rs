@@ -20,7 +20,7 @@ use serai_client::{
     primitives::{InInstruction, InInstructionWithBalance, Batch},
   },
   coins::{primitives::OutInstruction, CoinsEvent},
-  PairSigner, Serai, SeraiCoins,
+  Serai, SeraiCoins,
 };
 
 mod common;
@@ -91,7 +91,7 @@ serai_test!(
       serai,
       &serai
         .sign(
-          &PairSigner::new(pair),
+          &pair,
           &SeraiCoins::burn_with_instruction(instruction.clone()),
           0,
           Default::default(),

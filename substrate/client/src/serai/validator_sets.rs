@@ -81,10 +81,8 @@ impl<'a> SeraiValidatorSets<'a> {
   }
 
   pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Vec<u8> {
-    Serai::unsigned::<ValidatorSets, _>(&validator_sets::Call::<Runtime>::set_keys {
-      network,
-      key_pair,
-      signature,
-    })
+    Serai::unsigned(&serai_runtime::RuntimeCall::ValidatorSets(
+      validator_sets::Call::<Runtime>::set_keys { network, key_pair, signature },
+    ))
   }
 }

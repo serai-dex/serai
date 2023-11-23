@@ -34,7 +34,7 @@ pub async fn publish_tx(serai: &Serai, tx: &[u8]) -> [u8; 32] {
     };
 
     for transaction in block.transactions() {
-      if transaction.0 == tx[2 ..] {
+      if transaction.0 == tx {
         return block.hash();
       }
     }

@@ -12,7 +12,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use dkg::Participant;
 
 use serai_client::{
-  PairTrait, PairSigner,
+  PairTrait,
   primitives::{
     NetworkId, Coin, Amount, Balance, BlockHash, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
@@ -211,7 +211,7 @@ async fn sign_test() {
         let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
         serai
           .publish(&serai.sign(
-            &PairSigner::new(insecure_pair_from_name("Ferdie")),
+            &insecure_pair_from_name("Ferdie"),
             &SeraiCoins::transfer(address, balance),
             0,
             Default::default(),
@@ -219,7 +219,7 @@ async fn sign_test() {
           .await
           .unwrap();
 
-        (PairSigner::new(pair), address)
+        (pair, address)
       };
 
       #[allow(clippy::inconsistent_digit_grouping)]

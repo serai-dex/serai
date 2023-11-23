@@ -40,6 +40,8 @@ impl<'a> SeraiInInstructions<'a> {
   }
 
   pub fn execute_batch(batch: SignedBatch) -> Vec<u8> {
-    Serai::unsigned::<InInstructions, _>(&in_instructions::Call::<Runtime>::execute_batch { batch })
+    Serai::unsigned(&serai_runtime::RuntimeCall::InInstructions(
+      in_instructions::Call::<Runtime>::execute_batch { batch },
+    ))
   }
 }

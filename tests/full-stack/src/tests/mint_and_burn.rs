@@ -16,7 +16,7 @@ use serai_client::{
   validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::Shorthand,
   coins::primitives::{OutInstruction, OutInstructionWithBalance},
-  PairTrait, PairSigner, SeraiCoins,
+  PairTrait, SeraiCoins,
 };
 
 use crate::tests::*;
@@ -249,7 +249,7 @@ async fn mint_and_burn_test() {
         let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
         serai
           .publish(&serai.sign(
-            &PairSigner::new(insecure_pair_from_name("Ferdie")),
+            &insecure_pair_from_name("Ferdie"),
             &SeraiCoins::transfer(address, balance),
             0,
             Default::default(),
@@ -257,7 +257,7 @@ async fn mint_and_burn_test() {
           .await
           .unwrap();
 
-        (PairSigner::new(pair), address)
+        (pair, address)
       };
 
       // Send in BTC
