@@ -320,27 +320,21 @@ async fn dkg_test() {
       async move {
         // Version, Pallet, Call, Network, Key Pair, Signature
         let expected_len = 1 + 1 + 1 + 1 + 32 + 1 + key_pair.1.len() + 64;
-        // It's length prefixed
-        assert_eq!(tx.len(), 2 + expected_len);
-        let expected_len = u16::try_from(expected_len).unwrap();
-
-        // Check the encoded length
-        let bottom_six = expected_len & 0b111111;
-        let upper_eight = expected_len >> 6;
-        assert_eq!(u8::try_from((bottom_six << 2) | 1).unwrap(), tx[0]);
-        assert_eq!(u8::try_from(upper_eight).unwrap(), tx[1]);
+        assert_eq!(tx.len(), expected_len);
 
         // Version
-        assert_eq!(tx[2], 4);
-
-        // Pallet
-        // TODO
+        assert_eq!(tx[0], 4);
 
         // Call
-        type Call = serai_client::runtime::validator_sets::Call<serai_client::runtime::Runtime>;
-        let tx = Call::decode(&mut &tx[4 ..]).unwrap();
+        let tx = serai_client::runtime::RuntimeCall::decode(&mut &tx[1 ..]).unwrap();
         match tx {
-          Call::set_keys { network, key_pair: set_key_pair, signature } => {
+          serai_client::runtime::RuntimeCall::ValidatorSets(
+            serai_client::runtime::validator_sets::Call::set_keys {
+              network,
+              key_pair: set_key_pair,
+              signature,
+            },
+          ) => {
             assert_eq!(set, spec.set());
             assert_eq!(set.network, network);
             assert_eq!(key_pair, set_key_pair);
