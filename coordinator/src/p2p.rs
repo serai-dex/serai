@@ -279,7 +279,7 @@ impl LibP2p {
       .unwrap()
       .build();
     const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
-    swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
+    swarm.listen_on(format!("/ip4/0.0.0.0/udp/{PORT}").parse().unwrap()).unwrap();
 
     let (broadcast_send, mut broadcast_recv) = mpsc::unbounded_channel();
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
@@ -366,7 +366,7 @@ impl LibP2p {
                 ))) => {
                   for (peer, mut addr) in list {
                     // Check the port is as expected to prevent trying to peer with Substrate nodes
-                    if addr.pop() == Some(libp2p::multiaddr::Protocol::Tcp(PORT)) {
+                    if addr.pop() == Some(libp2p::multiaddr::Protocol::Udp(PORT)) {
                       log::info!("found peer via mdns");
                       swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer);
                     }
