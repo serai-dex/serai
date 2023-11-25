@@ -63,7 +63,7 @@ pub async fn batch(
       .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
         id: id.clone(),
         block: batch.block,
-        preprocesses: vec![[processor_is[i]; 64].to_vec()],
+        preprocesses: vec![[processor_is[i]; 64]],
       })
       .await;
   }
@@ -77,7 +77,7 @@ pub async fn batch(
     .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
       id: id.clone(),
       block: batch.block,
-      preprocesses: vec![[processor_is[excluded_signer]; 64].to_vec()],
+      preprocesses: vec![[processor_is[excluded_signer]; 64]],
     })
     .await;
 
@@ -98,7 +98,7 @@ pub async fn batch(
 
       let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
-        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 64]);
+        assert_eq!(preprocess, [u8::try_from(u16::from(p)).unwrap(); 64]);
       }
       participants.insert(known_signer_i);
       participants
@@ -116,7 +116,7 @@ pub async fn batch(
     let mut preprocesses = participants
       .clone()
       .into_iter()
-      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64].to_vec()))
+      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64]))
       .collect::<HashMap<_, _>>();
     preprocesses.remove(&i);
 

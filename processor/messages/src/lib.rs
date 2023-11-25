@@ -209,8 +209,7 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     CosignSubstrateBlock { id: SubstrateSignId, block_number: u64 },
-    // Uses Vec<u8> instead of [u8; 64] since serde Deserialize isn't implemented for [u8; 64]
-    SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, Vec<u8>> },
+    SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, [u8; 64]> },
     SubstrateShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
     // Re-attempt a batch signing protocol.
     BatchReattempt { id: SubstrateSignId },
@@ -252,8 +251,8 @@ pub mod coordinator {
   pub enum ProcessorMessage {
     SubstrateBlockAck { network: NetworkId, block: u64, plans: Vec<PlanMeta> },
     InvalidParticipant { id: SubstrateSignId, participant: Participant },
-    CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<Vec<u8>> },
-    BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<Vec<u8>> },
+    CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
+    BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<[u8; 64]> },
     SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
     CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
   }

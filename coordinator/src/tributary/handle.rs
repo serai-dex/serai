@@ -556,9 +556,16 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SubstratePreprocess(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+      let signer = data.signed.signer;
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, signer, data.data.len()) else {
         return;
       };
+      for data in &data.data {
+        if data.len() != 64 {
+          fatal_slash::<D>(txn, genesis, signer.to_bytes(), "non-64-byte Substrate preprocess");
+          return;
+        }
+      }
       match handle(
         txn,
         &DataSpecification {
@@ -578,7 +585,10 @@ pub(crate) async fn handle_application_tx<
               spec.set().network,
               coordinator::CoordinatorMessage::SubstratePreprocesses {
                 id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
-                preprocesses,
+                preprocesses: preprocesses
+                  .into_iter()
+                  .map(|(k, v)| (k, v.try_into().unwrap()))
+                  .collect(),
               },
             )
             .await;

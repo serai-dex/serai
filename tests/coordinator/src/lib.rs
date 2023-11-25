@@ -309,7 +309,7 @@ impl Processor {
                 res
                   .send_message(messages::coordinator::ProcessorMessage::CosignPreprocess {
                     id: id.clone(),
-                    preprocesses: vec![vec![raw_i; 64]],
+                    preprocesses: vec![[raw_i; 64]],
                   })
                   .await;
               }

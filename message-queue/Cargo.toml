@@ -43,7 +43,7 @@ serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
-serai-primitives = { path = "../substrate/primitives" }
+serai-primitives = { path = "../substrate/primitives", features = ["borsh", "serde"] }
 
 jsonrpsee = { version = "0.16", default-features = false, features = ["server"], optional = true }
 simple-request = { path = "../common/request", default-features = false }

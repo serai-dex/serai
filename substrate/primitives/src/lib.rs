@@ -58,7 +58,7 @@ pub const MAX_ADDRESS_LEN: u32 = 196;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "borsh_serialize_bounded_vec",
       deserialize_with = "borsh_deserialize_bounded_vec"
@@ -102,7 +102,7 @@ pub const MAX_DATA_LEN: u32 = 512;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Data(
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "borsh_serialize_bounded_vec",
       deserialize_with = "borsh_deserialize_bounded_vec"

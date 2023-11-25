@@ -587,7 +587,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           vec![Transaction::SubstratePreprocess(SignData {
             plan: id.id,
             attempt: id.attempt,
-            data: preprocesses,
+            data: preprocesses.into_iter().map(Into::into).collect(),
             signed: Transaction::empty_signed(),
           })]
         }
@@ -612,7 +612,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
                 };
                 id.encode()
               },
-              preprocesses,
+              preprocesses.into_iter().map(Into::into).collect(),
             );
 
             let intended = Transaction::Batch(
@@ -681,7 +681,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             vec![Transaction::SubstratePreprocess(SignData {
               plan: id.id,
               attempt: id.attempt,
-              data: preprocesses,
+              data: preprocesses.into_iter().map(Into::into).collect(),
               signed: Transaction::empty_signed(),
             })]
           }

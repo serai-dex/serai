@@ -11,7 +11,7 @@ use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
 /// The type used to identify networks.
@@ -112,7 +112,7 @@ pub const MAX_COINS_PER_NETWORK: u32 = 8;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Network {
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "borsh_serialize_bounded_vec",
       deserialize_with = "borsh_deserialize_bounded_vec"

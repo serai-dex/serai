@@ -52,7 +52,7 @@ pub async fn sign<C: Ciphersuite>(
     processor
       .send_message(messages::sign::ProcessorMessage::Preprocess {
         id: id.clone(),
-        preprocesses: vec![[processor_is[i]; 64].to_vec()],
+        preprocesses: vec![vec![processor_is[i]; 128]],
       })
       .await;
   }
@@ -65,7 +65,7 @@ pub async fn sign<C: Ciphersuite>(
   processors[excluded_signer]
     .send_message(messages::sign::ProcessorMessage::Preprocess {
       id: id.clone(),
-      preprocesses: vec![[processor_is[excluded_signer]; 64].to_vec()],
+      preprocesses: vec![vec![processor_is[excluded_signer]; 128]],
     })
     .await;
 
@@ -83,7 +83,7 @@ pub async fn sign<C: Ciphersuite>(
 
       let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
-        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 64]);
+        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 128]);
       }
       participants.insert(known_signer_i);
       participants
@@ -101,7 +101,7 @@ pub async fn sign<C: Ciphersuite>(
     let mut preprocesses = participants
       .clone()
       .into_iter()
-      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64].to_vec()))
+      .map(|i| (i, vec![u8::try_from(u16::from(i)).unwrap(); 128]))
       .collect::<HashMap<_, _>>();
     preprocesses.remove(&i);
 
