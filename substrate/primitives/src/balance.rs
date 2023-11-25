@@ -3,7 +3,7 @@ use core::ops::{Add, Sub, Mul};
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -18,7 +18,8 @@ use crate::{Coin, Amount};
 #[derive(
   Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Balance {
   pub coin: Coin,

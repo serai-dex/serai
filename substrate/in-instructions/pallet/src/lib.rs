@@ -12,15 +12,6 @@ use serai_primitives::{BlockHash, NetworkId};
 pub use in_instructions_primitives as primitives;
 use primitives::*;
 
-#[derive(Clone, Copy, Encode, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(scale::Decode, thiserror::Error))]
-pub enum PalletError {
-  #[cfg_attr(feature = "std", error("batch for unrecognized network"))]
-  UnrecognizedNetwork,
-  #[cfg_attr(feature = "std", error("invalid signature for batch"))]
-  InvalidSignature,
-}
-
 #[frame_support::pallet]
 pub mod pallet {
   use sp_std::vec;

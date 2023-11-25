@@ -5,7 +5,7 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -32,7 +32,7 @@ pub use balance::*;
 mod account;
 pub use account::*;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const B: u32>(
   bounded: &BoundedVec<T, ConstU32<B>>,
   writer: &mut W,
@@ -40,7 +40,7 @@ pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const
   borsh::BorshSerialize::serialize(bounded.as_slice(), writer)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, const B: u32>(
   reader: &mut R,
 ) -> Result<BoundedVec<T, ConstU32<B>>, borsh::io::Error> {
@@ -54,7 +54,7 @@ pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, co
 pub const MAX_ADDRESS_LEN: u32 = 196;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(
   #[cfg_attr(
@@ -66,7 +66,6 @@ pub struct ExternalAddress(
   )]
   BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>,
 );
-
 #[cfg(feature = "std")]
 impl Zeroize for ExternalAddress {
   fn zeroize(&mut self) {
@@ -99,7 +98,7 @@ impl AsRef<[u8]> for ExternalAddress {
 // Should be enough for a Uniswap v3 call
 pub const MAX_DATA_LEN: u32 = 512;
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Data(
   #[cfg_attr(

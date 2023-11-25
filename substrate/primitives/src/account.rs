@@ -1,7 +1,7 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -18,7 +18,7 @@ use sp_runtime::traits::{LookupError, Lookup, StaticLookup};
 
 pub type PublicKey = Public;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_serialize_public<W: borsh::io::Write>(
   public: &Public,
   writer: &mut W,
@@ -26,7 +26,7 @@ pub fn borsh_serialize_public<W: borsh::io::Write>(
   borsh::BorshSerialize::serialize(&public.0, writer)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_deserialize_public<R: borsh::io::Read>(
   reader: &mut R,
 ) -> Result<Public, borsh::io::Error> {
@@ -34,7 +34,7 @@ pub fn borsh_deserialize_public<R: borsh::io::Read>(
   Ok(Public(public))
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_serialize_signature<W: borsh::io::Write>(
   signature: &Signature,
   writer: &mut W,
@@ -42,7 +42,7 @@ pub fn borsh_serialize_signature<W: borsh::io::Write>(
   borsh::BorshSerialize::serialize(&signature.0, writer)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 pub fn borsh_deserialize_signature<R: borsh::io::Read>(
   reader: &mut R,
 ) -> Result<Signature, borsh::io::Error> {
@@ -53,7 +53,8 @@ pub fn borsh_deserialize_signature<R: borsh::io::Read>(
 #[derive(
   Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SeraiAddress(pub [u8; 32]);
 impl SeraiAddress {

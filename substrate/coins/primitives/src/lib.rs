@@ -5,7 +5,7 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "std")]
+#[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
@@ -18,24 +18,27 @@ use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, system_addr
 pub const FEE_ACCOUNT: SeraiAddress = system_address(b"Coins-fees");
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct OutInstruction {
   pub address: ExternalAddress,
   pub data: Option<Data>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct OutInstructionWithBalance {
   pub instruction: OutInstruction,
   pub balance: Balance,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum Destination {
   Native(SeraiAddress),
   External(OutInstruction),
