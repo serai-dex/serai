@@ -233,7 +233,7 @@ impl Coordinator {
   /// Receive a message from a processor as its coordinator.
   pub async fn recv_message(&mut self) -> ProcessorMessage {
     let msg = tokio::time::timeout(
-      core::time::Duration::from_secs(10),
+      core::time::Duration::from_secs(20),
       self.queue.next(Service::Processor(self.network)),
     )
     .await

@@ -217,11 +217,12 @@ fn batch_test() {
       let key_pair = key_gen(&mut coordinators, network).await;
 
       // Now we we have to mine blocks to activate the key
-      // (the first key is activated when the coin's block time exceeds the Serai time it was
-      // confirmed at)
-
-      for _ in 0 .. confirmations(network) {
+      // (the first key is activated when the network's time as of a block exceeds the Serai time
+      // it was confirmed at)
+      // Mine multiple sets of medians to ensure the median is sufficiently advanced
+      for _ in 0 .. (10 * confirmations(network)) {
         coordinators[0].add_block(&ops).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
       }
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
