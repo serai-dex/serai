@@ -7916,6 +7916,7 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
+ "serai-in-instructions-pallet",
  "serai-primitives",
  "serai-validator-sets-pallet",
  "sp-core",

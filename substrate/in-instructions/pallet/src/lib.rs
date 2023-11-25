@@ -55,6 +55,7 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
+    Halt { network: NetworkId },
   }
 
   #[pallet::error]
@@ -76,6 +77,10 @@ pub mod pallet {
   #[pallet::getter(fn last_batch_block)]
   pub(crate) type LastBatchBlock<T: Config> =
     StorageMap<_, Blake2_256, NetworkId, BlockNumberFor<T>, OptionQuery>;
+
+  // Halted networks.
+  #[pallet::storage]
+  pub(crate) type Halted<T: Config> = StorageMap<_, Blake2_256, NetworkId, (), OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
@@ -208,6 +213,12 @@ pub mod pallet {
       }
       Ok(())
     }
+
+    pub fn halt(network: NetworkId) -> Result<(), DispatchError> {
+      Halted::<T>::set(network, Some(()));
+      Self::deposit_event(Event::Halt { network });
+      Ok(())
+    }
   }
 
   fn keys_for_network<T: Config>(
@@ -301,6 +312,10 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
+      if Halted::<T>::contains_key(network) {
+        Err(InvalidTransaction::Custom(1))?;
+      }
+
       // If it wasn't valid by the prior key, meaning it was valid by the current key, the current
       // key is publishing `Batch`s. This should only happen once the current key has verified all
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
@@ -341,7 +356,7 @@ pub mod pallet {
         // Accordingly, there's no value in writing code to fully slash the network, when such an
         // even would require a runtime upgrade to fully resolve anyways
         if instruction.balance.coin.network() != batch.batch.network {
-          Err(InvalidTransaction::Custom(1))?;
+          Err(InvalidTransaction::Custom(2))?;
         }
       }
 
