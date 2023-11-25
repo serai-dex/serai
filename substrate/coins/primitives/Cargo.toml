@@ -26,7 +26,7 @@ serai-primitives = { path = "../../primitives", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 [features]
-std = ["zeroize", "borsh?/std", "serde/std", "scale/std", "scale-info/std", "sp-runtime/std", "serai-primitives/std"]
+std = ["zeroize", "borsh?/std", "serde?/std", "scale/std", "scale-info/std", "sp-runtime/std", "serai-primitives/std"]
 borsh = ["dep:borsh", "serai-primitives/borsh"]
 serde = ["dep:serde", "serai-primitives/serde"]
 default = ["std"]

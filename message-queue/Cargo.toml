@@ -39,7 +39,7 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 # Uses a single threaded runtime since this shouldn't ever be CPU-bound
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros"] }
 
-serai-db = { path = "../common/db", optional = true }
+serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
 
 serai-env = { path = "../common/env" }
 
@@ -49,4 +49,4 @@ jsonrpsee = { version = "0.16", default-features = false, features = ["server"],
 simple-request = { path = "../common/request", default-features = false }
 
 [features]
-binaries = ["serai-db", "serai-db/rocksdb", "jsonrpsee"]
+binaries = ["serai-db", "jsonrpsee"]

@@ -49,16 +49,16 @@ monero-serai = { path = "../coins/monero", default-features = false, features = 
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"], optional = true }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"] }
-serai-env = { path = "../common/env" }
+serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
+serai-env = { path = "../common/env", optional = true }
 serai-client = { path = "../substrate/client", default-features = false }
 
-messages = { package = "serai-processor-messages", path = "./messages" }
+messages = { package = "serai-processor-messages", path = "./messages", optional = true }
 
-message-queue = { package = "serai-message-queue", path = "../message-queue" }
+message-queue = { package = "serai-message-queue", path = "../message-queue", optional = true }
 
 [dev-dependencies]
 futures = { version = "0.3", default-features = false }
@@ -76,3 +76,5 @@ bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
+
+binaries = ["env_logger", "serai-db", "serai-env", "messages", "message-queue"]

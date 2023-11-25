@@ -12,9 +12,7 @@ use in_instructions_primitives::{Batch, SignedBatch};
 use coins_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{ValidatorSet, KeyPair};
 
-#[derive(
-  Clone, Copy, PartialEq, Eq, Debug, Zeroize, Encode, Decode, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct SubstrateContext {
   pub serai_time: u64,
   pub network_latest_finalized_block: BlockHash,
@@ -239,9 +237,7 @@ pub mod coordinator {
     }
   }
 
-  #[derive(
-    Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, BorshSerialize, BorshDeserialize,
-  )]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
   pub struct PlanMeta {
     pub key: Vec<u8>,
     pub id: [u8; 32],
@@ -261,7 +257,7 @@ pub mod coordinator {
 pub mod substrate {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     ConfirmKeyPair {
       context: SubstrateContext,
@@ -287,9 +283,7 @@ pub mod substrate {
     }
   }
 
-  #[derive(
-    Clone, PartialEq, Eq, Debug, Zeroize, Encode, Decode, BorshSerialize, BorshDeserialize,
-  )]
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     Batch { batch: Batch },
     SignedBatch { batch: SignedBatch },

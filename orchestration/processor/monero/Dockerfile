@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --release --features monero -p serai-processor && \
+  cargo build --release --features "binaries monero" -p serai-processor && \
   mv /serai/target/release/serai-processor /serai/bin
 FROM debian:bookworm-slim as image
 

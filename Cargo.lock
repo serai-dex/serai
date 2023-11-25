@@ -7526,6 +7526,7 @@ dependencies = [
  "serai-docker-tests",
  "serai-runtime",
  "sp-core",
+ "sp-runtime",
  "subxt",
  "thiserror",
  "tokio",

@@ -168,15 +168,14 @@ impl Serai {
     const TX_VERSION: u32 = 1;
     const EXTRINSIC_FORMAT_VERSION: u8 = 4;
 
-    let era = subxt::config::substrate::Era::Immortal;
+    let era = sp_runtime::generic::Era::Immortal;
     let extra = (era, Compact(nonce), tip);
     let genesis = self.0.genesis_hash();
     let mortality_checkpoint = genesis;
     let mut signature_payload =
       (call, extra, SPEC_VERSION, TX_VERSION, genesis, mortality_checkpoint).encode();
     if signature_payload.len() > 256 {
-      use subxt::config::Hasher;
-      signature_payload = BlakeTwo256::hash(&signature_payload).0.to_vec();
+      signature_payload = sp_core::blake2_256(&signature_payload).to_vec();
     }
     let signature = signer.sign(&signature_payload);
 
