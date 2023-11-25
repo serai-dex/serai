@@ -5,7 +5,7 @@ use sp_core::{sr25519::Public, Pair};
 use serai_client::{
   primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
-    primitives::{Session, ValidatorSet, musig_key},
+    primitives::{Session, ValidatorSet, KeyPair, musig_key},
     ValidatorSetsEvent,
   },
   Serai,
@@ -28,7 +28,7 @@ serai_test!(
     OsRng.fill_bytes(&mut ristretto_key);
     let mut external_key = vec![0; 33];
     OsRng.fill_bytes(&mut external_key);
-    let key_pair = (Public(ristretto_key), external_key.try_into().unwrap());
+    let key_pair = KeyPair(Public(ristretto_key), external_key.try_into().unwrap());
 
     // Make sure the genesis is as expected
     assert_eq!(

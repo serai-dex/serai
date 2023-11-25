@@ -21,7 +21,7 @@ use serai_env as env;
 use scale::Encode;
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
   Public, Serai, SeraiInInstructions,
 };
 
@@ -501,7 +501,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             &mut txn,
             key,
             spec,
-            &(Public(substrate_key), network_key.try_into().unwrap()),
+            &KeyPair(Public(substrate_key), network_key.try_into().unwrap()),
             id.attempt,
           );
 
@@ -587,7 +587,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           vec![Transaction::SubstratePreprocess(SignData {
             plan: id.id,
             attempt: id.attempt,
-            data: preprocesses,
+            data: preprocesses.into_iter().map(Into::into).collect(),
             signed: Transaction::empty_signed(),
           })]
         }
@@ -612,7 +612,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
                 };
                 id.encode()
               },
-              preprocesses,
+              preprocesses.into_iter().map(Into::into).collect(),
             );
 
             let intended = Transaction::Batch(
@@ -681,7 +681,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             vec![Transaction::SubstratePreprocess(SignData {
               plan: id.id,
               attempt: id.attempt,
-              data: preprocesses,
+              data: preprocesses.into_iter().map(Into::into).collect(),
               signed: Transaction::empty_signed(),
             })]
           }

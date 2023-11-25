@@ -14,7 +14,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
 
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
@@ -30,7 +31,8 @@ coins-primitives = { package = "serai-coins-primitives", path = "../../coins/pri
 std = [
   "zeroize",
 
-  "serde/std",
+  "borsh?/std",
+  "serde?/std",
 
   "scale/std",
   "scale-info/std",
@@ -40,6 +42,8 @@ std = [
   "sp-runtime/std",
 
   "serai-primitives/std",
-  "coins-primitives/std"
+  "coins-primitives/std",
 ]
+borsh = ["dep:borsh", "serai-primitives/borsh", "coins-primitives/borsh"]
+serde = ["dep:serde", "serai-primitives/serde", "coins-primitives/serde"]
 default = ["std"]

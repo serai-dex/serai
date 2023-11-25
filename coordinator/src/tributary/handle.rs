@@ -72,7 +72,7 @@ pub fn error_generating_key_pair<G: Get>(
 
   // Sign a key pair which can't be valid
   // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
-  let key_pair = (Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
+  let key_pair = KeyPair(Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
   match DkgConfirmer::share(spec, key, attempt, preprocesses, &key_pair) {
     Ok(mut share) => {
       // Zeroize the share to ensure it's not accessed
@@ -312,7 +312,7 @@ pub(crate) async fn handle_application_tx<
             }
             let to = Participant::new(to).unwrap();
 
-            DkgShare::set(txn, genesis, from.into(), to.into(), &share);
+            DkgShare::set(txn, genesis, from.into(), to.into(), share);
           }
         }
       }
@@ -556,9 +556,16 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SubstratePreprocess(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+      let signer = data.signed.signer;
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, signer, data.data.len()) else {
         return;
       };
+      for data in &data.data {
+        if data.len() != 64 {
+          fatal_slash::<D>(txn, genesis, signer.to_bytes(), "non-64-byte Substrate preprocess");
+          return;
+        }
+      }
       match handle(
         txn,
         &DataSpecification {
@@ -578,7 +585,10 @@ pub(crate) async fn handle_application_tx<
               spec.set().network,
               coordinator::CoordinatorMessage::SubstratePreprocesses {
                 id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
-                preprocesses,
+                preprocesses: preprocesses
+                  .into_iter()
+                  .map(|(k, v)| (k, v.try_into().unwrap()))
+                  .collect(),
               },
             )
             .await;

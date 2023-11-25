@@ -5,6 +5,9 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "borsh")]
+use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -27,10 +30,10 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 // This is the account which will be the origin for any dispatched `InInstruction`s.
 pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructions-executor");
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum OutAddress {
   Serai(SeraiAddress),
   External(ExternalAddress),
@@ -56,10 +59,10 @@ impl OutAddress {
   }
 }
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DexCall {
   // address to send the lp tokens to
   // TODO: Update this per documentation/Shorthand
@@ -68,44 +71,37 @@ pub enum DexCall {
   Swap(Balance, OutAddress),
 }
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
   Dex(DexCall),
 }
 
-#[derive(
-  Clone,
-  PartialEq,
-  Eq,
-  Serialize,
-  Deserialize,
-  Encode,
-  Decode,
-  MaxEncodedLen,
-  TypeInfo,
-  RuntimeDebug,
-)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,
   pub instruction: InInstruction,
 }
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct InInstructionWithBalance {
   pub instruction: InInstruction,
   pub balance: Balance,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Batch {
   pub network: NetworkId,
   pub id: u32,
@@ -113,9 +109,18 @@ pub struct Batch {
   pub instructions: Vec<InInstructionWithBalance>,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SignedBatch {
   pub batch: Batch,
+  #[cfg_attr(
+    feature = "borsh",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_signature",
+      deserialize_with = "serai_primitives::borsh_deserialize_signature"
+    )
+  )]
   pub signature: Signature,
 }
 

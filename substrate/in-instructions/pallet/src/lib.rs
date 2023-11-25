@@ -2,24 +2,12 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use scale::Encode;
-
 use sp_io::hashing::blake2_256;
-use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockHash, NetworkId};
 
 pub use in_instructions_primitives as primitives;
 use primitives::*;
-
-#[derive(Clone, Copy, Encode, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(scale::Decode, thiserror::Error))]
-pub enum PalletError {
-  #[cfg_attr(feature = "std", error("batch for unrecognized network"))]
-  UnrecognizedNetwork,
-  #[cfg_attr(feature = "std", error("invalid signature for batch"))]
-  InvalidSignature,
-}
 
 #[frame_support::pallet]
 pub mod pallet {

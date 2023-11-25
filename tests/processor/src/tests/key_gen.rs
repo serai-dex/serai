@@ -4,7 +4,7 @@ use dkg::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_client::{
   primitives::{NetworkId, BlockHash, PublicKey},
-  validator_sets::primitives::{Session, KeyPair, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 
 use messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage, ProcessorMessage};
@@ -122,8 +122,10 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
     network_latest_finalized_block: BlockHash([0; 32]),
   };
 
-  let key_pair =
-    (PublicKey::from_raw(substrate_key.unwrap()), network_key.clone().unwrap().try_into().unwrap());
+  let key_pair = KeyPair(
+    PublicKey::from_raw(substrate_key.unwrap()),
+    network_key.clone().unwrap().try_into().unwrap(),
+  );
 
   for coordinator in coordinators {
     coordinator

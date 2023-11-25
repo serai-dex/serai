@@ -10,7 +10,7 @@ impl<D: Db> Queue<D> {
   }
 
   fn message_count_key(&self) -> Vec<u8> {
-    Self::key(b"message_count", bincode::serialize(&(self.1, self.2)).unwrap())
+    Self::key(b"message_count", borsh::to_vec(&(self.1, self.2)).unwrap())
   }
   pub(crate) fn message_count(&self) -> u64 {
     self
@@ -21,7 +21,7 @@ impl<D: Db> Queue<D> {
   }
 
   fn last_acknowledged_key(&self) -> Vec<u8> {
-    Self::key(b"last_acknowledged", bincode::serialize(&(self.1, self.2)).unwrap())
+    Self::key(b"last_acknowledged", borsh::to_vec(&(self.1, self.2)).unwrap())
   }
   pub(crate) fn last_acknowledged(&self) -> Option<u64> {
     self
@@ -31,7 +31,7 @@ impl<D: Db> Queue<D> {
   }
 
   fn message_key(&self, id: u64) -> Vec<u8> {
-    Self::key(b"message", bincode::serialize(&(self.1, self.2, id)).unwrap())
+    Self::key(b"message", borsh::to_vec(&(self.1, self.2, id)).unwrap())
   }
   // TODO: This is fine as-used, yet gets from the DB while having a txn. It should get from the
   // txn

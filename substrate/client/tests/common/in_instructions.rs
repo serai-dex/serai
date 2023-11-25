@@ -10,7 +10,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
     InInstructionsEvent,
@@ -30,7 +30,7 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   {
     keys
   } else {
-    let keys = (pair.public(), vec![].try_into().unwrap());
+    let keys = KeyPair(pair.public(), vec![].try_into().unwrap());
     set_keys(serai, set, keys.clone()).await;
     keys
   };

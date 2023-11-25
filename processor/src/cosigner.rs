@@ -95,7 +95,7 @@ impl Cosigner {
 
       let (machine, preprocess) = machine.preprocess(&mut OsRng);
       machines.push(machine);
-      serialized_preprocesses.push(preprocess.serialize());
+      serialized_preprocesses.push(preprocess.serialize().try_into().unwrap());
       preprocesses.push(preprocess);
     }
     let preprocessing = Some((machines, preprocesses));

@@ -44,7 +44,7 @@ impl PlanDb {
       }
 
       signing.extend(&id);
-      SigningDb::set(txn, key, &id);
+      SigningDb::set(txn, key, &signing);
     }
 
     {

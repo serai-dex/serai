@@ -16,7 +16,7 @@ pub fn serai_db_key(
 /// Creates a unit struct and a default implementation for the `key`, `get`, and `set`. The macro
 /// uses a syntax similar to defining a function. Parameters are concatenated to produce a key,
 /// they must be `scale` encodable. The return type is used to auto encode and decode the database
-/// value bytes using `bincode`.
+/// value bytes using `borsh`.
 ///
 /// # Arguments
 ///
@@ -52,14 +52,14 @@ macro_rules! create_db {
           )
         }
         #[allow(dead_code)]
-        pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &impl serde::Serialize) {
+        pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &$field_type) {
           let key = $field_name::key($($arg),*);
-          txn.put(&key, bincode::serialize(data).unwrap());
+          txn.put(&key, borsh::to_vec(data).unwrap());
         }
         #[allow(dead_code)]
         pub fn get(getter: &impl Get, $($arg: $arg_type),*) -> Option<$field_type> {
           getter.get($field_name::key($($arg),*)).map(|data| {
-            bincode::deserialize(data.as_ref()).unwrap()
+            borsh::from_slice(data.as_ref()).unwrap()
           })
         }
         #[allow(dead_code)]

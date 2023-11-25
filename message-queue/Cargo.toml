@@ -20,7 +20,7 @@ serde = { version = "1", default-features = false, features = ["std", "derive"] 
 
 # Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 # Libs
@@ -43,7 +43,7 @@ serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
-serai-primitives = { path = "../substrate/primitives" }
+serai-primitives = { path = "../substrate/primitives", features = ["borsh", "serde"] }
 
 jsonrpsee = { version = "0.16", default-features = false, features = ["server"], optional = true }
 simple-request = { path = "../common/request", default-features = false }

@@ -676,6 +676,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf617fabf5cdbdc92f774bfe5062d870f228b80056d41180797abf48bed4056e"
+dependencies = [
+ "borsh-derive",
+ "cfg_aliases",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f404657a7ea7b5249e36808dff544bc88a28f26e0ac40009f674b7a009d14be3"
+dependencies = [
+ "once_cell",
+ "proc-macro-crate 2.0.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+ "syn_derive",
+]
+
+[[package]]
 name = "bounded-collections"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1636,6 +1660,7 @@ dependencies = [
 name = "dkg"
 version = "0.5.1"
 dependencies = [
+ "borsh",
  "chacha20",
  "ciphersuite",
  "dleq",
@@ -2434,7 +2459,7 @@ version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#49b7d20ef96b6ad42ea0266ea27f128e0ef3214d"
 dependencies = [
  "frame-support-procedural-tools-derive",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -3408,7 +3433,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44e8ab85614a08792b9bff6c8feee23be78c98d0182d4c622c05256ab553892a"
 dependencies = [
  "heck",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -4569,7 +4594,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc076939022111618a5026d3be019fd8b366e76314538ff9a1b59ffbcbf98bcd"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -4594,7 +4619,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d38685e08adb338659871ecfc6ee47ba9b22dcc8abcf6975d379cc49145c3040"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -4854,7 +4879,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c11e44798ad209ccdd91fc192f0526a369a01234f7373e1b141c96d7cee4f0e"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -5150,7 +5175,7 @@ version = "3.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "312270ee71e1cd70289dacf597cab7b207aa107d2f28191c2ae45b2ece18a260"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -5505,7 +5530,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
 dependencies = [
  "once_cell",
- "toml_edit",
+ "toml_edit 0.19.15",
+]
+
+[[package]]
+name = "proc-macro-crate"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e8366a6159044a37876a2b9817124296703c586a5c92e2c53751fa06d8d43e8"
+dependencies = [
+ "toml_edit 0.20.7",
 ]
 
 [[package]]
@@ -6351,7 +6385,7 @@ name = "sc-chain-spec-derive"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#49b7d20ef96b6ad42ea0266ea27f128e0ef3214d"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -7113,7 +7147,7 @@ name = "sc-tracing-proc-macro"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#49b7d20ef96b6ad42ea0266ea27f128e0ef3214d"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -7209,7 +7243,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4391f0dfbb6690f035f6d2a15d6a12f88cc5395c36bcc056db07ffa2a90870ec"
 dependencies = [
  "darling 0.14.4",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -7237,7 +7271,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "316e0fb10ec0fee266822bd641bab5e332a4ab80ef8c5b5ff35e5401a394f5a6"
 dependencies = [
  "darling 0.14.4",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -7263,7 +7297,7 @@ version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abf2c68b89cafb3b8d918dd07b42be0da66ff202cf1155c5739a4e0c1ea0dc19"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -7518,6 +7552,7 @@ dependencies = [
 name = "serai-coins-primitives"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
@@ -7531,8 +7566,8 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "bincode",
  "blake2",
+ "borsh",
  "ciphersuite",
  "env_logger",
  "flexible-transcript",
@@ -7551,8 +7586,6 @@ dependencies = [
  "serai-env",
  "serai-message-queue",
  "serai-processor-messages",
- "serde",
- "serde_json",
  "sp-application-crypto",
  "sp-runtime",
  "tokio",
@@ -7565,6 +7598,7 @@ name = "serai-coordinator-tests"
 version = "0.1.0"
 dependencies = [
  "blake2",
+ "borsh",
  "ciphersuite",
  "dkg",
  "dockertest",
@@ -7577,7 +7611,6 @@ dependencies = [
  "serai-message-queue",
  "serai-message-queue-tests",
  "serai-processor-messages",
- "serde_json",
  "tokio",
  "zeroize",
 ]
@@ -7658,13 +7691,13 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "thiserror",
 ]
 
 [[package]]
 name = "serai-in-instructions-primitives"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
@@ -7680,7 +7713,7 @@ dependencies = [
 name = "serai-message-queue"
 version = "0.1.0"
 dependencies = [
- "bincode",
+ "borsh",
  "ciphersuite",
  "env_logger",
  "flexible-transcript",
@@ -7773,6 +7806,7 @@ dependencies = [
 name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -7787,8 +7821,8 @@ name = "serai-processor"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "bincode",
  "bitcoin-serai",
+ "borsh",
  "ciphersuite",
  "dalek-ff-group",
  "dockertest",
@@ -7824,13 +7858,13 @@ dependencies = [
 name = "serai-processor-messages"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "dkg",
  "parity-scale-codec",
  "serai-coins-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-primitives",
- "serde",
  "zeroize",
 ]
 
@@ -7839,6 +7873,7 @@ name = "serai-processor-tests"
 version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
+ "borsh",
  "ciphersuite",
  "curve25519-dalek",
  "dkg",
@@ -7948,6 +7983,7 @@ dependencies = [
 name = "serai-validator-sets-primitives"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "ciphersuite",
  "dkg",
  "parity-scale-codec",
@@ -8277,7 +8313,7 @@ dependencies = [
  "Inflector",
  "blake2",
  "expander",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -8664,7 +8700,7 @@ version = "11.0.0"
 source = "git+https://github.com/serai-dex/substrate#49b7d20ef96b6ad42ea0266ea27f128e0ef3214d"
 dependencies = [
  "Inflector",
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -9174,6 +9210,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn_derive"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1329189c02ff984e9736652b1631330da25eaa6bc639089ed4915d25446cbe7b"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
 name = "synstructure"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9465,7 +9513,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.19.15",
 ]
 
 [[package]]
@@ -9486,6 +9534,17 @@ dependencies = [
  "indexmap 2.1.0",
  "serde",
  "serde_spanned",
+ "toml_datetime",
+ "winnow",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.20.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70f427fce4d84c72b5b732388bf4a9f4531b53f74e2887e3ecb2481f68f66d81"
+dependencies = [
+ "indexmap 2.1.0",
  "toml_datetime",
  "winnow",
 ]

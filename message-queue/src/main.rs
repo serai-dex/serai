@@ -76,7 +76,7 @@ mod binaries {
       [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
     }
     fn intent_key(from: Service, to: Service, intent: &[u8]) -> Vec<u8> {
-      key(b"intent_seen", bincode::serialize(&(from, to, intent)).unwrap())
+      key(b"intent_seen", borsh::to_vec(&(from, to, intent)).unwrap())
     }
     let mut db = db.write().unwrap();
     let mut txn = db.txn();

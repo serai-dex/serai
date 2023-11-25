@@ -16,7 +16,7 @@ use dkg::ThresholdParams;
 use serai_client::{
   primitives::NetworkId,
   Public,
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 use messages::{key_gen::KeyGenId, CoordinatorMessage};
 
@@ -205,7 +205,7 @@ pub async fn key_gen<C: Ciphersuite>(
       .await
       .unwrap()
       .unwrap(),
-    (Public(substrate_key), network_key.try_into().unwrap())
+    KeyPair(Public(substrate_key), network_key.try_into().unwrap())
   );
 
   for processor in processors.iter_mut() {

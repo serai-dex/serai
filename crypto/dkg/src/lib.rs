@@ -31,6 +31,7 @@ pub mod tests;
 
 /// The ID of a participant, defined as a non-zero u16.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Participant(pub(crate) u16);
 impl Participant {
@@ -146,6 +147,7 @@ mod lib {
   /// Parameters for a multisig.
   // These fields should not be made public as they should be static
   #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+  #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
   #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
   pub struct ThresholdParams {
     /// Participants needed to sign on behalf of the group.
