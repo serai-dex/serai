@@ -12,7 +12,7 @@ use serai_db::{DbTxn, Db, MemDb};
 use sp_application_crypto::sr25519;
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 
 use messages::key_gen::*;
@@ -139,7 +139,7 @@ pub async fn test_key_gen<N: Network>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen
-      .confirm(&mut txn, ID.set, (sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
+      .confirm(&mut txn, ID.set, KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
       .await;
     txn.commit();
 

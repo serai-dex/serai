@@ -1,12 +1,17 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use serde::{Serialize, Deserialize};
-
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
+use serde::{Serialize, Deserialize};
+
 use sp_core::{ConstU32, bounded::BoundedVec};
+
+#[cfg(feature = "std")]
+use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
 /// The type used to identify networks.
 #[derive(
@@ -23,7 +28,7 @@ use sp_core::{ConstU32, bounded::BoundedVec};
   MaxEncodedLen,
   TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum NetworkId {
   Serai,
   Bitcoin,
@@ -46,14 +51,14 @@ pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai
   Ord,
   Hash,
   Debug,
-  Serialize,
-  Deserialize,
   Encode,
   Decode,
+  Serialize,
+  Deserialize,
   MaxEncodedLen,
   TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum Coin {
   Serai,
   Bitcoin,
@@ -123,10 +128,16 @@ impl Coin {
 pub const MAX_COINS_PER_NETWORK: u32 = 8;
 
 /// Network definition.
-#[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
 pub struct Network {
+  #[cfg_attr(
+    feature = "std",
+    borsh(
+      serialize_with = "borsh_serialize_bounded_vec",
+      deserialize_with = "borsh_deserialize_bounded_vec"
+    )
+  )]
   coins: BoundedVec<Coin, ConstU32<{ MAX_COINS_PER_NETWORK }>>,
 }
 

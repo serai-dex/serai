@@ -5,6 +5,8 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -28,9 +30,9 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructions-executor");
 
 #[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum OutAddress {
   Serai(SeraiAddress),
   External(ExternalAddress),
@@ -57,9 +59,9 @@ impl OutAddress {
 }
 
 #[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum DexCall {
   // address to send the lp tokens to
   // TODO: Update this per documentation/Shorthand
@@ -69,9 +71,9 @@ pub enum DexCall {
 }
 
 #[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
   Dex(DexCall),
@@ -89,23 +91,23 @@ pub enum InInstruction {
   TypeInfo,
   RuntimeDebug,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct RefundableInInstruction {
   pub origin: Option<ExternalAddress>,
   pub instruction: InInstruction,
 }
 
 #[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct InInstructionWithBalance {
   pub instruction: InInstruction,
   pub balance: Balance,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize, TypeInfo, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct Batch {
   pub network: NetworkId,
   pub id: u32,
@@ -113,9 +115,17 @@ pub struct Batch {
   pub instructions: Vec<InInstructionWithBalance>,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize, TypeInfo, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
 pub struct SignedBatch {
   pub batch: Batch,
+  #[cfg_attr(
+    feature = "std",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_signature",
+      deserialize_with = "serai_primitives::borsh_deserialize_signature"
+    )
+  )]
   pub signature: Signature,
 }
 

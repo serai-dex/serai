@@ -41,9 +41,8 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serde = "1"
-serde_json = { version = "1", default-features = false, features = ["std"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }

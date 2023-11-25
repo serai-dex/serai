@@ -21,7 +21,7 @@ use serai_env as env;
 use scale::Encode;
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
   Public, Serai, SeraiInInstructions,
 };
 
@@ -501,7 +501,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             &mut txn,
             key,
             spec,
-            &(Public(substrate_key), network_key.try_into().unwrap()),
+            &KeyPair(Public(substrate_key), network_key.try_into().unwrap()),
             id.attempt,
           );
 

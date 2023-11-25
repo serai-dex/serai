@@ -268,7 +268,7 @@ impl Processor {
               assert_eq!(msg.from, Service::Coordinator);
               assert_eq!(msg.id, *next_recv_id);
 
-              let msg_msg = serde_json::from_slice(&msg.msg).unwrap();
+              let msg_msg = borsh::from_slice(&msg.msg).unwrap();
               if !is_cosign_message(&msg_msg) {
                 continue;
               }
@@ -387,7 +387,7 @@ impl Processor {
           to: Service::Coordinator,
           intent: msg.intent(),
         },
-        serde_json::to_string(&msg).unwrap().into_bytes(),
+        borsh::to_vec(&msg).unwrap(),
       )
       .await;
     *next_send_id += 1;
@@ -408,7 +408,7 @@ impl Processor {
       assert_eq!(msg.id, *next_recv_id);
 
       // If this is a cosign message, let the cosign task handle it
-      let msg_msg = serde_json::from_slice(&msg.msg).unwrap();
+      let msg_msg = borsh::from_slice(&msg.msg).unwrap();
       if is_cosign_message(&msg_msg) {
         continue;
       }

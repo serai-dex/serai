@@ -51,7 +51,6 @@ impl CompletedOnChainDb {
         .unwrap_or_default()
         .into_iter()
         .filter(|active| active != id)
-        .flatten()
         .collect::<Vec<_>>(),
     );
   }

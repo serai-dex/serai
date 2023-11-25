@@ -72,7 +72,7 @@ pub fn error_generating_key_pair<G: Get>(
 
   // Sign a key pair which can't be valid
   // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
-  let key_pair = (Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
+  let key_pair = KeyPair(Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
   match DkgConfirmer::share(spec, key, attempt, preprocesses, &key_pair) {
     Ok(mut share) => {
       // Zeroize the share to ensure it's not accessed
@@ -312,7 +312,7 @@ pub(crate) async fn handle_application_tx<
             }
             let to = Participant::new(to).unwrap();
 
-            DkgShare::set(txn, genesis, from.into(), to.into(), &share);
+            DkgShare::set(txn, genesis, from.into(), to.into(), share);
           }
         }
       }

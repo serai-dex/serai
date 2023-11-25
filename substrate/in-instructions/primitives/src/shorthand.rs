@@ -1,6 +1,8 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -15,9 +17,9 @@ use crate::RefundableInInstruction;
 use crate::InInstruction;
 
 #[derive(
-  Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub enum Shorthand {
   Raw(RefundableInInstruction),
   Swap {

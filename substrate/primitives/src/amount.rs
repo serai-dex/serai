@@ -6,6 +6,8 @@ use core::{
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -25,14 +27,14 @@ pub type SubstrateAmount = u64;
   Eq,
   PartialOrd,
   Debug,
-  Serialize,
-  Deserialize,
   Encode,
   Decode,
+  Serialize,
+  Deserialize,
   MaxEncodedLen,
   TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct Amount(pub SubstrateAmount);
 
 impl Add for Amount {

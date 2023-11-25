@@ -1,6 +1,8 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -17,14 +19,14 @@ use sp_core::H256;
   Eq,
   Hash,
   Debug,
-  Serialize,
-  Deserialize,
   Encode,
   Decode,
+  Serialize,
+  Deserialize,
   MaxEncodedLen,
   TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct BlockNumber(pub u64);
 impl From<u64> for BlockNumber {
   fn from(number: u64) -> BlockNumber {
@@ -51,7 +53,7 @@ impl From<u64> for BlockNumber {
   MaxEncodedLen,
   TypeInfo,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct BlockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for BlockHash {

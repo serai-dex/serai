@@ -17,9 +17,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 zeroize = { version = "1", default-features = false, features = ["std", "derive"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
-serde = { version = "1", default-features = false, features = ["std", "derive"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "serde"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "borsh", "serde"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../../substrate/in-instructions/primitives", default-features = false, features = ["std"] }

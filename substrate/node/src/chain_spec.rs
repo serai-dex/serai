@@ -51,7 +51,7 @@ fn testnet_genesis(
         .collect(),
       participants: validators.clone(),
     },
-    signals: SignalsConfig { _config: PhantomData },
+    signals: SignalsConfig::default(),
     babe: BabeConfig {
       authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
       epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),

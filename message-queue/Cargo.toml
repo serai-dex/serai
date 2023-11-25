@@ -20,7 +20,7 @@ serde = { version = "1", default-features = false, features = ["std", "derive"] 
 
 # Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 # Libs

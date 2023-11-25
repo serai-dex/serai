@@ -10,6 +10,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
 use sp_runtime::traits::Verify;
+use serai_client::validator_sets::primitives::KeyPair;
 
 use tokio::time::sleep;
 
@@ -279,7 +280,7 @@ async fn dkg_test() {
   OsRng.fill_bytes(&mut substrate_key);
   let mut network_key = vec![0; usize::try_from((OsRng.next_u64() % 32) + 32).unwrap()];
   OsRng.fill_bytes(&mut network_key);
-  let key_pair = (serai_client::Public(substrate_key), network_key.try_into().unwrap());
+  let key_pair = KeyPair(serai_client::Public(substrate_key), network_key.try_into().unwrap());
 
   let mut txs = vec![];
   for (i, key) in keys.iter().enumerate() {

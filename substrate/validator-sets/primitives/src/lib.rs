@@ -7,6 +7,9 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
+#[cfg(feature = "std")]
+use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
@@ -27,16 +30,16 @@ pub const MAX_KEY_LEN: u32 = 96;
   PartialEq,
   Eq,
   Hash,
+  Default,
   Debug,
-  Serialize,
-  Deserialize,
   Encode,
   Decode,
   TypeInfo,
   MaxEncodedLen,
-  Default,
+  Serialize,
+  Deserialize,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
@@ -47,14 +50,14 @@ pub struct Session(pub u32);
   Eq,
   Hash,
   Debug,
-  Serialize,
-  Deserialize,
   Encode,
   Decode,
   TypeInfo,
   MaxEncodedLen,
+  Serialize,
+  Deserialize,
 )]
-#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,
@@ -67,7 +70,35 @@ pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for signing Batches, and their key on the external network.
-pub type KeyPair = (Public, ExternalKey);
+#[derive(
+  Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen, Serialize, Deserialize,
+)]
+#[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+pub struct KeyPair(
+  #[cfg_attr(
+    feature = "std",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_public",
+      deserialize_with = "serai_primitives::borsh_deserialize_public"
+    )
+  )]
+  pub Public,
+  #[cfg_attr(
+    feature = "std",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_bounded_vec",
+      deserialize_with = "serai_primitives::borsh_deserialize_bounded_vec"
+    )
+  )]
+  pub ExternalKey,
+);
+#[cfg(feature = "std")]
+impl Zeroize for KeyPair {
+  fn zeroize(&mut self) {
+    self.0 .0.zeroize();
+    self.1.as_mut().zeroize();
+  }
+}
 
 /// The MuSig context for a validator set.
 pub fn musig_context(set: ValidatorSet) -> Vec<u8> {
