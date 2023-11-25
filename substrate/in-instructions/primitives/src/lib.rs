@@ -115,7 +115,7 @@ pub struct Batch {
 pub struct SignedBatch {
   pub batch: Batch,
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "serai_primitives::borsh_serialize_signature",
       deserialize_with = "serai_primitives::borsh_deserialize_signature"

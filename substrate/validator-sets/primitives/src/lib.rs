@@ -55,7 +55,7 @@ pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct KeyPair(
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "serai_primitives::borsh_serialize_public",
       deserialize_with = "serai_primitives::borsh_deserialize_public"
@@ -63,7 +63,7 @@ pub struct KeyPair(
   )]
   pub Public,
   #[cfg_attr(
-    feature = "std",
+    feature = "borsh",
     borsh(
       serialize_with = "serai_primitives::borsh_serialize_bounded_vec",
       deserialize_with = "serai_primitives::borsh_deserialize_bounded_vec"
