@@ -19,7 +19,7 @@ ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.4", default-f
 dkg = { path = "../../../crypto/dkg", version = "0.5", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"], optional = true }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
@@ -30,5 +30,6 @@ sp-std = { git = "https://github.com/serai-dex/substrate", default-features = fa
 serai-primitives = { path = "../../primitives", default-features = false }
 
 [features]
-std = ["zeroize", "ciphersuite/std", "dkg/std", "borsh", "serde/std", "scale/std", "scale-info/std", "sp-core/std", "sp-std/std", "serai-primitives/std"]
+std = ["zeroize", "ciphersuite/std", "dkg/std", "borsh", "serde?/std", "scale/std", "scale-info/std", "sp-core/std", "sp-std/std", "serai-primitives/std"]
+serde = ["dep:serde", "serai-primitives/serde"]
 default = ["std"]

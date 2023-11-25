@@ -8,6 +8,7 @@ use zeroize::Zeroize;
 
 #[cfg(feature = "std")]
 use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -21,20 +22,10 @@ use scale_info::TypeInfo;
 pub type SubstrateAmount = u64;
 /// The type used for amounts.
 #[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  PartialOrd,
-  Debug,
-  Encode,
-  Decode,
-  Serialize,
-  Deserialize,
-  MaxEncodedLen,
-  TypeInfo,
+  Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Amount(pub SubstrateAmount);
 
 impl Add for Amount {

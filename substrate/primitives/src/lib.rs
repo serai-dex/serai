@@ -7,6 +7,7 @@ use zeroize::Zeroize;
 
 #[cfg(feature = "std")]
 use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -52,10 +53,9 @@ pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, co
 // When JAMTIS arrives, it'll become 112 or potentially even 142 bytes
 pub const MAX_ADDRESS_LEN: u32 = 196;
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExternalAddress(
   #[cfg_attr(
     feature = "std",
@@ -98,10 +98,9 @@ impl AsRef<[u8]> for ExternalAddress {
 
 // Should be enough for a Uniswap v3 call
 pub const MAX_DATA_LEN: u32 = 512;
-#[derive(
-  Clone, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Data(
   #[cfg_attr(
     feature = "std",

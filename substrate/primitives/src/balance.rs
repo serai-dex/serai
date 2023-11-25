@@ -5,6 +5,7 @@ use zeroize::Zeroize;
 
 #[cfg(feature = "std")]
 use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use scale::{Encode, Decode, MaxEncodedLen};
@@ -15,9 +16,10 @@ use crate::{Coin, Amount};
 /// The type used for balances (a Coin and Balance).
 #[rustfmt::skip]
 #[derive(
-  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, Serialize, Deserialize, MaxEncodedLen, TypeInfo,
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Balance {
   pub coin: Coin,
   pub amount: Amount,

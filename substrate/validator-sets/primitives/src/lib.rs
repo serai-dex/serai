@@ -10,6 +10,7 @@ use scale_info::TypeInfo;
 
 #[cfg(feature = "std")]
 use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
@@ -25,39 +26,16 @@ pub const MAX_KEY_LEN: u32 = 96;
 
 /// The type used to identify a specific session of validators.
 #[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  Hash,
-  Default,
-  Debug,
-  Encode,
-  Decode,
-  TypeInfo,
-  MaxEncodedLen,
-  Serialize,
-  Deserialize,
+  Clone, Copy, PartialEq, Eq, Hash, Default, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  Hash,
-  Debug,
-  Encode,
-  Decode,
-  TypeInfo,
-  MaxEncodedLen,
-  Serialize,
-  Deserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,
@@ -70,10 +48,9 @@ pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for signing Batches, and their key on the external network.
-#[derive(
-  Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen, Serialize, Deserialize,
-)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct KeyPair(
   #[cfg_attr(
     feature = "std",

@@ -7586,7 +7586,6 @@ dependencies = [
  "serai-env",
  "serai-message-queue",
  "serai-processor-messages",
- "serde",
  "sp-application-crypto",
  "sp-runtime",
  "tokio",
@@ -7612,7 +7611,6 @@ dependencies = [
  "serai-message-queue",
  "serai-message-queue-tests",
  "serai-processor-messages",
- "serde_json",
  "tokio",
  "zeroize",
 ]
