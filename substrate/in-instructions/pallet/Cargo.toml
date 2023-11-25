@@ -13,8 +13,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-thiserror = { version = "1", optional = true }
-
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
@@ -36,8 +34,6 @@ validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../..
 
 [features]
 std = [
-  "thiserror",
-
   "scale/std",
   "scale-info/std",
 

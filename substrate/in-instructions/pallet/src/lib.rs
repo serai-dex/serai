@@ -2,10 +2,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use scale::Encode;
-
 use sp_io::hashing::blake2_256;
-use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockHash, NetworkId};
 
