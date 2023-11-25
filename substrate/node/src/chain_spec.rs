@@ -6,7 +6,7 @@ use sc_service::ChainType;
 
 use serai_runtime::{
   primitives::*, WASM_BINARY, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig,
-  CoinsConfig, DexConfig, ValidatorSetsConfig, BabeConfig, GrandpaConfig,
+  CoinsConfig, DexConfig, ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -51,6 +51,7 @@ fn testnet_genesis(
         .collect(),
       participants: validators.clone(),
     },
+    signals: SignalsConfig { _config: PhantomData },
     babe: BabeConfig {
       authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
       epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
