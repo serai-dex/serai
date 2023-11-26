@@ -57,7 +57,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::{CosignTransactions, SubstrateDb};
+use substrate::CosignTransactions;
 
 mod cosign_evaluator;
 use cosign_evaluator::CosignEvaluator;
@@ -205,49 +205,40 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
-      sign::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      sign::ProcessorMessage::Preprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      sign::ProcessorMessage::Share { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
+      sign::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
+      sign::ProcessorMessage::Preprocess { id, .. } => Some(id.session),
+      sign::ProcessorMessage::Share { id, .. } => Some(id.session),
       // While the Processor's Scanner will always emit Completed, that's routed through the
       // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
       // confirms it
       sign::ProcessorMessage::Completed { session, .. } => Some(*session),
     },
     ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
-      // This is a special case as it's relevant to *all* Tributaries for this network
+      // This is a special case as it's relevant to *all* Tributaries for this network we're
+      // signing in
       // It doesn't return a Tributary to become `relevant_tributary` though
       coordinator::ProcessorMessage::SubstrateBlockAck { block, plans } => {
         // Get the sessions for these keys
-        let keys = plans.iter().map(|plan| plan.key.clone()).collect::<HashSet<_>>();
-        let mut sessions = vec![];
-        for key in keys {
-          let session = SubstrateDb::<D>::session_for_key(&txn, &key).unwrap();
-          // Only keep them if we're in the Tributary AND they haven't been retied
-          let set = ValidatorSet { network, session };
-          if MainDb::<D>::in_tributary(&txn, set) && (!MainDb::<D>::is_tributary_retired(&txn, set))
-          {
-            sessions.push((session, key));
-          }
-        }
+        let sessions = plans
+          .iter()
+          .map(|plan| plan.session)
+          .filter(|session| {
+            !MainDb::<D>::is_tributary_retired(&txn, ValidatorSet { network, session: *session })
+          })
+          .collect::<HashSet<_>>();
 
         // Ensure we have the Tributaries
-        for (session, _) in &sessions {
+        for session in &sessions {
           if !tributaries.contains_key(session) {
             return false;
           }
         }
 
-        for (session, key) in sessions {
+        for session in sessions {
           let tributary = &tributaries[&session];
           let plans = plans
             .iter()
-            .filter_map(|plan| Some(plan.id).filter(|_| plan.key == key))
+            .filter_map(|plan| Some(plan.id).filter(|_| plan.session == session))
             .collect::<Vec<_>>();
           PlanIds::set(&mut txn, &tributary.spec.genesis(), *block, &plans);
 

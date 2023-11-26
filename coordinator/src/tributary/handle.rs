@@ -30,7 +30,7 @@ use crate::{
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
-    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, KeyPairDb, AttemptDb, DataDb,
+    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
   },
 };
 
@@ -633,7 +633,6 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -651,14 +650,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               sign::CoordinatorMessage::Preprocesses {
-                id: SignId {
-                  key: key_pair
-                    .expect("completed SignPreprocess despite not setting the key pair")
-                    .1
-                    .into(),
-                  id: data.plan,
-                  attempt: data.attempt,
-                },
+                id: SignId { session: spec.set().session, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
             )
@@ -672,7 +664,6 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -689,14 +680,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               sign::CoordinatorMessage::Shares {
-                id: SignId {
-                  key: key_pair
-                    .expect("completed SignShares despite not setting the key pair")
-                    .1
-                    .into(),
-                  id: data.plan,
-                  attempt: data.attempt,
-                },
+                id: SignId { session: spec.set().session, id: data.plan, attempt: data.attempt },
                 shares,
               },
             )
@@ -724,13 +708,15 @@ pub(crate) async fn handle_application_tx<
       };
 
       // TODO: Confirm this signer hasn't prior published a completion
-      let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
-        panic!("SignCompleted for recognized plan ID despite not having a key pair for this set")
-      };
+
       processors
         .send(
           spec.set().network,
-          sign::CoordinatorMessage::Completed { key: key_pair.1.to_vec(), id: plan, tx: tx_hash },
+          sign::CoordinatorMessage::Completed {
+            session: spec.set().session,
+            id: plan,
+            tx: tx_hash,
+          },
         )
         .await;
     }

@@ -370,7 +370,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys[0].group_key().to_bytes().as_ref().to_vec(), id, attempt };
+    let id = SignId { session: self.session, id, attempt };
 
     info!("signing for {} #{}", hex::encode(id.id), id.attempt);
 
@@ -602,7 +602,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
       CoordinatorMessage::Reattempt { id } => self.attempt(txn, id.id, id.attempt).await,
 
-      CoordinatorMessage::Completed { key: _, id, tx: mut tx_vec } => {
+      CoordinatorMessage::Completed { session: _, id, tx: mut tx_vec } => {
         let mut tx = <N::Transaction as Transaction<N>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
           let true_len = tx_vec.len();

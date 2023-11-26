@@ -19,7 +19,7 @@ use crate::{*, tests::*};
 #[allow(unused)]
 pub(crate) async fn recv_sign_preprocesses(
   coordinators: &mut [Coordinator],
-  key: Vec<u8>,
+  session: Session,
   attempt: u32,
 ) -> (SignId, HashMap<Participant, Vec<u8>>) {
   let mut id = None;
@@ -34,7 +34,7 @@ pub(crate) async fn recv_sign_preprocesses(
         preprocesses: mut these_preprocesses,
       }) => {
         if id.is_none() {
-          assert_eq!(&this_id.key, &key);
+          assert_eq!(&this_id.session, &session);
           assert_eq!(this_id.attempt, attempt);
           id = Some(this_id.clone());
         }
@@ -238,8 +238,8 @@ fn send_test() {
 
       // Start signing the TX
       let (mut id, mut preprocesses) =
-        recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), 0).await;
-      assert_eq!(id, SignId { key: key_pair.1.to_vec(), id: plans[0].id, attempt: 0 });
+        recv_sign_preprocesses(&mut coordinators, Session(0), 0).await;
+      assert_eq!(id, SignId { session: Session(0), id: plans[0].id, attempt: 0 });
 
       // Trigger a random amount of re-attempts
       for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
@@ -251,8 +251,7 @@ fn send_test() {
             .send_message(messages::sign::CoordinatorMessage::Reattempt { id: id.clone() })
             .await;
         }
-        (id, preprocesses) =
-          recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), attempt).await;
+        (id, preprocesses) = recv_sign_preprocesses(&mut coordinators, Session(0), attempt).await;
       }
       let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
 
@@ -276,7 +275,7 @@ fn send_test() {
           // Tell them of it as a completion of the relevant signing nodess
           coordinator
             .send_message(messages::sign::CoordinatorMessage::Completed {
-              key: key_pair.1.to_vec(),
+              session: Session(0),
               id: id.id,
               tx: tx_id.clone(),
             })

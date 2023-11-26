@@ -106,7 +106,7 @@ pub mod sign {
 
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
   pub struct SignId {
-    pub key: Vec<u8>,
+    pub session: Session,
     pub id: [u8; 32],
     pub attempt: u32,
   }
@@ -120,7 +120,7 @@ pub mod sign {
     // Re-attempt a signing protocol.
     Reattempt { id: SignId },
     // Completed a signing protocol already.
-    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
+    Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
   }
 
   impl CoordinatorMessage {
@@ -128,12 +128,12 @@ pub mod sign {
       None
     }
 
-    pub fn key(&self) -> &[u8] {
+    pub fn session(&self) -> Session {
       match self {
-        CoordinatorMessage::Preprocesses { id, .. } => &id.key,
-        CoordinatorMessage::Shares { id, .. } => &id.key,
-        CoordinatorMessage::Reattempt { id } => &id.key,
-        CoordinatorMessage::Completed { key, .. } => key,
+        CoordinatorMessage::Preprocesses { id, .. } => id.session,
+        CoordinatorMessage::Shares { id, .. } => id.session,
+        CoordinatorMessage::Reattempt { id } => id.session,
+        CoordinatorMessage::Completed { session, .. } => *session,
       }
     }
   }
@@ -204,7 +204,7 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub struct PlanMeta {
-    pub key: Vec<u8>,
+    pub session: Session,
     pub id: [u8; 32],
   }
 

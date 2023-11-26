@@ -44,7 +44,7 @@ mod coordinator;
 pub use coordinator::*;
 
 mod key_gen;
-use key_gen::{KeyConfirmed, KeyGen};
+use key_gen::{SessionDb, KeyConfirmed, KeyGen};
 
 mod signer;
 use signer::Signer;
@@ -84,7 +84,7 @@ struct TributaryMutable<N: Network, D: Db> {
   // invalidating the Tributary's mutable borrow. The signer is coded to allow for attempted usage
   // of a dropped task.
   key_gen: KeyGen<N, D>,
-  signers: HashMap<Vec<u8>, Signer<N, D>>,
+  signers: HashMap<Session, Signer<N, D>>,
 
   // This is also mutably borrowed by the Scanner.
   // The Scanner starts new sign tasks.
@@ -206,7 +206,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       }
       tributary_mutable
         .signers
-        .insert(key_pair.1.into(), Signer::new(network.clone(), session, network_keys));
+        .insert(session, Signer::new(network.clone(), session, network_keys));
     }
 
     substrate_mutable.add_key(txn, activation_number, network_key).await;
@@ -220,7 +220,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     CoordinatorMessage::Sign(msg) => {
       if let Some(msg) = tributary_mutable
         .signers
-        .get_mut(msg.key())
+        .get_mut(&msg.session())
         .expect("coordinator told us to sign with a signer we don't have")
         .handle(txn, msg)
         .await
@@ -415,9 +415,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
                 block: substrate_block,
                 plans: to_sign
                   .iter()
-                  .map(|signable| PlanMeta {
-                    key: signable.0.to_bytes().as_ref().to_vec(),
-                    id: signable.1,
+                  .filter_map(|signable| {
+                    SessionDb::get(txn, signable.0.to_bytes().as_ref())
+                      .map(|session| PlanMeta { session, id: signable.1 })
                   })
                   .collect(),
               })
@@ -427,7 +427,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // See commentary in TributaryMutable for why this is safe
           let signers = &mut tributary_mutable.signers;
           for (key, id, tx, eventuality) in to_sign {
-            if let Some(signer) = signers.get_mut(key.to_bytes().as_ref()) {
+            if let Some(session) = SessionDb::get(txn, key.to_bytes().as_ref()) {
+              let signer = signers.get_mut(&session).unwrap();
               if let Some(msg) = signer.sign_transaction(txn, id, tx, eventuality).await {
                 coordinator.send(msg).await;
               }
@@ -516,7 +517,6 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
     let mut signer = Signer::new(network.clone(), session, network_keys);
 
     // Sign any TXs being actively signed
-    let key = key.to_bytes();
     for (plan, tx, eventuality) in &actively_signing {
       if plan.key == network_key {
         let mut txn = raw_db.txn();
@@ -530,7 +530,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
       }
     }
 
-    signers.insert(key.as_ref().to_vec(), signer);
+    signers.insert(session, signer);
   }
 
   // Spawn a task to rebroadcast signed TXs yet to be mined into a finalized block
@@ -629,7 +629,9 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
             if let Some((retired_key, new_key)) = retired_key_new_key {
               // Safe to mutate since all signing operations are done and no more will be added
-              tributary_mutable.signers.remove(retired_key.to_bytes().as_ref());
+              if let Some(retired_session) = SessionDb::get(&txn, retired_key.to_bytes().as_ref()) {
+                tributary_mutable.signers.remove(&retired_session);
+              }
               tributary_mutable.batch_signer.take();
               let keys = tributary_mutable.key_gen.keys(&new_key);
               if let Some((session, (substrate_keys, _))) = keys {
@@ -639,7 +641,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
             }
           },
           MultisigEvent::Completed(key, id, tx) => {
-            if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
+            if let Some(session) = SessionDb::get(&txn, &key) {
+              let signer = tributary_mutable.signers.get_mut(&session).unwrap();
               if let Some(msg) = signer.completed(&mut txn, id, tx) {
                 coordinator.send(msg).await;
               }

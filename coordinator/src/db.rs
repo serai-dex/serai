@@ -34,17 +34,11 @@ impl<D: Db> MainDb<D> {
     getter.get(Self::handled_message_key(network, id)).is_some()
   }
 
-  fn in_tributary_key(set: ValidatorSet) -> Vec<u8> {
-    Self::main_key(b"in_tributary", set.encode())
-  }
   fn active_tributaries_key() -> Vec<u8> {
     Self::main_key(b"active_tributaries", [])
   }
   fn retired_tributary_key(set: ValidatorSet) -> Vec<u8> {
     Self::main_key(b"retired_tributary", set.encode())
-  }
-  pub fn in_tributary<G: Get>(getter: &G, set: ValidatorSet) -> bool {
-    getter.get(Self::in_tributary_key(set)).is_some()
   }
   pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
     let bytes = getter.get(Self::active_tributaries_key()).unwrap_or(vec![]);
@@ -58,8 +52,6 @@ impl<D: Db> MainDb<D> {
     (bytes, tributaries)
   }
   pub fn add_participating_in_tributary(txn: &mut D::Transaction<'_>, spec: &TributarySpec) {
-    txn.put(Self::in_tributary_key(spec.set()), []);
-
     let key = Self::active_tributaries_key();
     let (mut existing_bytes, existing) = Self::active_tributaries(txn);
     for tributary in &existing {
