@@ -23,6 +23,9 @@ use super::*;
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
+/// 1hr worth of blocks.
+pub const ORACLE_WINDOW_SIZE: u32 = 600;
+
 /// Stores the lp_token coin id a particular pool has been assigned.
 #[derive(Decode, Encode, Default, PartialEq, Eq, MaxEncodedLen, TypeInfo)]
 pub struct PoolInfo<PoolCoinId> {

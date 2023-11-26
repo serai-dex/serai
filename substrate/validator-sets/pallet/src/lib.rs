@@ -22,7 +22,8 @@ pub mod pallet {
   pub use validator_sets_primitives as primitives;
   use primitives::*;
 
-  use coins_pallet::Pallet as Coins;
+  use coins_pallet::{Pallet as Coins, AllowMint};
+  use dex_pallet::Pallet as Dex;
 
   use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
   use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
@@ -31,6 +32,7 @@ pub mod pallet {
   pub trait Config:
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
+    + dex_pallet::Config
     + pallet_babe::Config
     + pallet_grandpa::Config
     + TypeInfo
@@ -681,6 +683,8 @@ pub mod pallet {
 
       // make a new session and get the next validator set.
       Self::new_session();
+      // let the Dex know session is rotated.
+      Dex::<T>::on_new_session();
 
       // Update Babe and Grandpa
       let session = prior_serai_session.0 + 1;
@@ -832,6 +836,30 @@ pub mod pallet {
     // Explicitly provide a pre-dispatch which calls validate_unsigned
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
+    }
+  }
+
+  impl<T: Config> AllowMint for Pallet<T> {
+    fn allow(coin: Coin, supply: SubstrateAmount) -> bool {
+      let price = Dex::<T>::oracle_value(coin);
+      if price.is_none() {
+        return false;
+      }
+
+      let total_coin_value = supply.saturating_mul(price.unwrap().0);
+      let margin = total_coin_value.saturating_div(5);
+
+      // required stake formula (COIN_VALUE * 1.5) + margin
+      let required = total_coin_value.saturating_mul(3).saturating_div(2).saturating_add(margin);
+
+      let staked = Self::total_allocated_stake(coin.network());
+      if staked.is_none() {
+        return false;
+      }
+
+      // TODO: ETH & DAI belongs to the same network. If the coin is ETH or DAI stake should cover
+      // value of the both supply. Required has to take into account the other coin in that case?
+      staked.unwrap().0 >= required
     }
   }
 

@@ -33,6 +33,7 @@ serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 
 [features]
 std = [
@@ -56,6 +57,7 @@ std = [
   "validator-sets-primitives/std",
 
   "coins-pallet/std",
+  "dex-pallet/std",
 ]
 
 runtime-benchmarks = [

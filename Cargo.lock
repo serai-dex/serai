@@ -7933,6 +7933,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
+ "serai-dex-pallet",
  "serai-primitives",
  "serai-validator-sets-primitives",
  "sp-application-crypto",

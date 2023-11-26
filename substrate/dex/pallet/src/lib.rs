@@ -154,6 +154,29 @@ pub mod pallet {
   #[pallet::storage]
   pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<Coin>, OptionQuery>;
 
+  #[pallet::storage]
+  #[pallet::getter(fn last_quote_for_block)]
+  pub type LastQuoteForBlock<T: Config> =
+    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, [u8; 8], ValueQuery>;
+
+  /// Moving window of oracle prices.
+  #[pallet::storage]
+  #[pallet::getter(fn oracle_prices)]
+  pub type OraclePrices<T: Config> = StorageMap<_, Identity, [u8; 8], u16, OptionQuery>;
+  impl<T: Config> Pallet<T> {
+    // TODO: make sure this is correct
+    /// Get the highest sustained(lowest) value of the window
+    pub fn highest_sustained_price() -> Amount {
+      let mut iter = OraclePrices::<T>::iter_keys();
+      iter.set_last_raw_key(0u64.to_be_bytes().to_vec());
+      Amount(u64::from_be_bytes(iter.next().unwrap()))
+    }
+  }
+
+  #[pallet::storage]
+  #[pallet::getter(fn oracle_value)]
+  pub type OracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+
   // Pallet's events.
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -311,6 +334,37 @@ pub mod pallet {
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_finalize(n: BlockNumberFor<T>) {
+      for coin in Pools::<T>::iter_keys() {
+        // insert the new price to our oracle window
+        let last = Self::quote_price_exact_tokens_for_tokens(coin, Coin::native(), 1, false)
+          .unwrap()
+          .to_be_bytes();
+        LastQuoteForBlock::<T>::set(n, coin, last);
+        let observed = OraclePrices::<T>::get(last).unwrap_or(0);
+        OraclePrices::<T>::set(last, Some(observed + 1));
+
+        // pop the earliest key from the window once we reach its full size.
+        if n >= ORACLE_WINDOW_SIZE.into() {
+          let begin_amount = Self::last_quote_for_block(n - ORACLE_WINDOW_SIZE.into(), coin);
+          // delete the amount if # of observant for this price is now 0.
+          OraclePrices::<T>::mutate_exists(begin_amount, |v| {
+            *v = Some(v.unwrap() - 1);
+            if *v == Some(0) {
+              *v = None;
+            }
+          });
+        }
+
+        // update the oracle value
+        let highest_sustained = Self::highest_sustained_price();
+        let oracle_value = OracleValue::<T>::get(coin).unwrap_or(Amount(0));
+        if highest_sustained > oracle_value {
+          OracleValue::<T>::set(coin, Some(highest_sustained));
+        }
+      }
+    }
+
     fn integrity_test() {
       assert!(T::MaxSwapPathLength::get() > 1, "the `MaxSwapPathLength` should be greater than 1",);
     }
@@ -337,6 +391,14 @@ pub mod pallet {
       Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token: coin });
 
       Ok(())
+    }
+
+    /// A hook to be called whenever session is rotated.
+    pub fn on_new_session() {
+      // reset the oracle value
+      for coin in Pools::<T>::iter_keys() {
+        OracleValue::<T>::set(coin, None);
+      }
     }
   }
 

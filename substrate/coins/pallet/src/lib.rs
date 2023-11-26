@@ -1,7 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use serai_primitives::{Coin, SubstrateAmount};
+
+pub trait AllowMint {
+  fn allow(coin: Coin, supply: SubstrateAmount) -> bool;
+}
+
+impl AllowMint for () {
+  fn allow(_: Coin, _: SubstrateAmount) -> bool {
+    true
+  }
+}
+
 #[frame_support::pallet]
 pub mod pallet {
+  use super::*;
   use sp_std::{vec::Vec, any::TypeId};
   use sp_core::sr25519::Public;
   use sp_runtime::{
@@ -23,6 +36,7 @@ pub mod pallet {
   #[pallet::config]
   pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
     type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    type AllowMint: AllowMint;
   }
 
   #[pallet::genesis_config]
@@ -43,6 +57,7 @@ pub mod pallet {
     AmountOverflowed,
     NotEnoughCoins,
     BurnWithInstructionNotAllowed,
+    NotEnoughStake,
   }
 
   #[pallet::event]
@@ -142,14 +157,20 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
-      // update the balance
-      Self::increase_balance_internal(to, balance)?;
-
-      // update the supply
       let new_supply = Self::supply(balance.coin)
         .checked_add(balance.amount.0)
         .ok_or(Error::<T, I>::AmountOverflowed)?;
+
+      // skip the economics check for lp tokens.
+      if TypeId::of::<I>() != TypeId::of::<LiquidityTokensInstance>() &&
+        !T::AllowMint::allow(balance.coin, new_supply)
+      {
+        Err(Error::<T, I>::NotEnoughStake)?;
+      }
       Supply::<T, I>::set(balance.coin, new_supply);
+
+      // update the balance
+      Self::increase_balance_internal(to, balance)?;
 
       Self::deposit_event(Event::Mint { to, balance });
       Ok(())
