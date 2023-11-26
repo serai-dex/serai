@@ -769,7 +769,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   mut db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: Arc<Serai>,
-  mut processors: Pro,
+  processors: Pro,
   p2p: P,
   cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   network: NetworkId,

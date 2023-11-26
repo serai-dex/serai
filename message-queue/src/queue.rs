@@ -45,7 +45,7 @@ impl<D: Db> Queue<D> {
     let msg_key = self.message_key(id);
     let msg_count_key = self.message_count_key();
 
-    txn.put(msg_key, serde_json::to_vec(&msg).unwrap());
+    txn.put(msg_key, borsh::to_vec(&msg).unwrap());
     txn.put(msg_count_key, (id + 1).to_le_bytes());
 
     id
@@ -53,7 +53,7 @@ impl<D: Db> Queue<D> {
 
   pub(crate) fn get_message(&self, id: u64) -> Option<QueuedMessage> {
     let msg: Option<QueuedMessage> =
-      self.0.get(self.message_key(id)).map(|bytes| serde_json::from_slice(&bytes).unwrap());
+      self.0.get(self.message_key(id)).map(|bytes| borsh::from_slice(&bytes).unwrap());
     if let Some(msg) = msg.as_ref() {
       assert_eq!(msg.id, id, "message stored at {id} has ID {}", msg.id);
     }
