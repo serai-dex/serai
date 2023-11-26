@@ -144,7 +144,7 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
             // block which has a time greater than or equal to the Serai time
             .unwrap_or(BlockHash([0; 32])),
         },
-        set,
+        session: set.session,
         key_pair,
       },
     )
@@ -232,7 +232,6 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
             serai_time: block.time().unwrap() / 1000,
             network_latest_finalized_block,
           },
-          network,
           block: block.number(),
           burns: burns.remove(&network).unwrap(),
           batches: batches.remove(&network).unwrap(),

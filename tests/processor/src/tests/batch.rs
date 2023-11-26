@@ -171,7 +171,6 @@ pub(crate) async fn substrate_block(
   match block.clone() {
     messages::substrate::CoordinatorMessage::SubstrateBlock {
       context: _,
-      network: sent_network,
       block: sent_block,
       burns: _,
       batches: _,
@@ -179,13 +178,8 @@ pub(crate) async fn substrate_block(
       coordinator.send_message(block).await;
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-            network: recvd_network,
-            block: recvd_block,
-            plans,
-          },
+          messages::coordinator::ProcessorMessage::SubstrateBlockAck { block: recvd_block, plans },
         ) => {
-          assert_eq!(recvd_network, sent_network);
           assert_eq!(recvd_block, sent_block);
           plans
         }
@@ -214,7 +208,7 @@ fn batch_test() {
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
       // Generate keys
-      let key_pair = key_gen(&mut coordinators, network).await;
+      let key_pair = key_gen(&mut coordinators).await;
 
       // Now we we have to mine blocks to activate the key
       // (the first key is activated when the network's time as of a block exceeds the Serai time
@@ -319,7 +313,6 @@ fn batch_test() {
                 serai_time,
                 network_latest_finalized_block: batch.batch.block,
               },
-              network,
               block: substrate_block_num + u64::from(i),
               burns: vec![],
               batches: vec![batch.batch.id],

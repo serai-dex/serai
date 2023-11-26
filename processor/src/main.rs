@@ -10,7 +10,7 @@ use tokio::time::sleep;
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  validator_sets::primitives::{Session, KeyPair},
 };
 
 use messages::{
@@ -187,20 +187,20 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     substrate_mutable: &mut SubstrateMutable<N, D>,
     tributary_mutable: &mut TributaryMutable<N, D>,
     txn: &mut D::Transaction<'_>,
-    set: ValidatorSet,
+    session: Session,
     key_pair: KeyPair,
     activation_number: usize,
   ) {
-    info!("activating {set:?}'s keys at {activation_number}");
+    info!("activating {session:?}'s keys at {activation_number}");
 
     let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
       .expect("Substrate finalized invalid point as a network's key");
 
-    if tributary_mutable.key_gen.in_set(&set) {
+    if tributary_mutable.key_gen.in_set(&session) {
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
-        tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-      if set.session.0 == 0 {
+        tributary_mutable.key_gen.confirm(txn, session, key_pair.clone()).await;
+      if session.0 == 0 {
         tributary_mutable.batch_signer = Some(BatchSigner::new(N::NETWORK, substrate_keys));
       }
       tributary_mutable
@@ -287,7 +287,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
     CoordinatorMessage::Substrate(msg) => {
       match msg {
-        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
+        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, session, key_pair } => {
           // This is the first key pair for this network so no block has been finalized yet
           // TODO: Write documentation for this in docs/
           // TODO: Use an Option instead of a magic?
@@ -339,7 +339,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
               substrate_mutable,
               tributary_mutable,
               txn,
-              set,
+              session,
               key_pair,
               activation_number,
             )
@@ -355,7 +355,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             PendingActivationsDb::set_pending_activation::<N>(
               txn,
               block_before_queue_block,
-              set,
+              session,
               key_pair,
             );
           }
@@ -363,14 +363,13 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
-          network: network_id,
           block: substrate_block,
           burns,
           batches,
         } => {
-          assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
-
-          if let Some((block, set, key_pair)) = PendingActivationsDb::pending_activation::<N>(txn) {
+          if let Some((block, session, key_pair)) =
+            PendingActivationsDb::pending_activation::<N>(txn)
+          {
             // Only run if this is a Batch belonging to a distinct block
             if context.network_latest_finalized_block.as_ref() != block.as_ref() {
               let mut queue_block = <N::Block as Block<N>>::Id::default();
@@ -387,7 +386,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
                 substrate_mutable,
                 tributary_mutable,
                 txn,
-                set,
+                session,
                 key_pair,
                 activation_number,
               )
@@ -412,7 +411,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           if !tributary_mutable.signers.is_empty() {
             coordinator
               .send(messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-                network: N::NETWORK,
                 block: substrate_block,
                 plans: to_sign
                   .iter()

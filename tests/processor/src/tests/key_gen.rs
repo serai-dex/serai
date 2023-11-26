@@ -4,14 +4,14 @@ use dkg::{Participant, ThresholdParams, tests::clone_without};
 
 use serai_client::{
   primitives::{NetworkId, BlockHash, PublicKey},
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
+  validator_sets::primitives::{Session, KeyPair},
 };
 
 use messages::{SubstrateContext, key_gen::KeyGenId, CoordinatorMessage, ProcessorMessage};
 
 use crate::{*, tests::*};
 
-pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId) -> KeyPair {
+pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
   // Perform an interaction with all processors via their coordinators
   async fn interact_with_all<
     FS: Fn(Participant) -> messages::key_gen::CoordinatorMessage,
@@ -33,7 +33,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
   }
 
   // Order a key gen
-  let id = KeyGenId { set: ValidatorSet { session: Session(0), network }, attempt: 0 };
+  let id = KeyGenId { session: Session(0), attempt: 0 };
 
   let mut commitments = HashMap::new();
   interact_with_all(
@@ -132,7 +132,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator], network: NetworkId
       .send_message(CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::ConfirmKeyPair {
           context,
-          set: id.set,
+          session: id.session,
           key_pair: key_pair.clone(),
         },
       ))
@@ -158,7 +158,7 @@ fn key_gen_test() {
         .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
         .collect::<Vec<_>>();
 
-      key_gen(&mut coordinators, network).await;
+      key_gen(&mut coordinators).await;
     });
   }
 }

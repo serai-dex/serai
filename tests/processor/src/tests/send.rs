@@ -158,7 +158,7 @@ fn send_test() {
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
       // Generate keys
-      let key_pair = key_gen(&mut coordinators, network).await;
+      let key_pair = key_gen(&mut coordinators).await;
 
       // Now we we have to mine blocks to activate the key
       // (the first key is activated when the network's time as of a block exceeds the Serai time
@@ -216,7 +216,6 @@ fn send_test() {
               serai_time,
               network_latest_finalized_block: batch.batch.block,
             },
-            network,
             block: substrate_block_num,
             burns: vec![OutInstructionWithBalance {
               instruction: OutInstruction { address: wallet.address(), data: None },

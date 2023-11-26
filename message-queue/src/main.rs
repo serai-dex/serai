@@ -66,12 +66,7 @@ mod binaries {
     // Assert one, and only one of these, is the coordinator
     assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
-    // Verify (from, intent) hasn't been prior seen
-    // At the time of writing, intents should be unique even across `from`. There's a DoS where
-    // a service sends another service's intent, causing the other service to have their message
-    // dropped though.
-    // Including from prevents that DoS, and allows simplifying intents to solely unique within
-    // a service (not within all of Serai).
+    // Verify (from, to, intent) hasn't been prior seen
     fn key(domain: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
       [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
     }

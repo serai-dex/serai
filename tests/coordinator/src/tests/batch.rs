@@ -232,7 +232,6 @@ pub async fn batch(
             serai_time: last_block.time().unwrap() / 1000,
             network_latest_finalized_block: batch.batch.block,
           },
-          network: batch.batch.network,
           block: last_serai_block,
           burns: vec![],
           batches: vec![batch.batch.id],
@@ -244,7 +243,6 @@ pub async fn batch(
     processor
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-          network: batch.batch.network,
           block: last_serai_block,
           plans: vec![],
         },

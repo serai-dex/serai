@@ -331,7 +331,6 @@ async fn sign_test() {
                 serai_time: last_serai_block.time().unwrap() / 1000,
                 network_latest_finalized_block: coin_block,
               },
-              network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
               burns: vec![out_instruction.clone()],
               batches: vec![],
@@ -343,7 +342,6 @@ async fn sign_test() {
         processor
           .send_message(messages::ProcessorMessage::Coordinator(
             messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-              network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
               plans: vec![PlanMeta {
                 key: (Secp256k1::generator() * *network_key).to_bytes().to_vec(),

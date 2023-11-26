@@ -260,7 +260,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               key_gen::CoordinatorMessage::Commitments {
-                id: KeyGenId { set: spec.set(), attempt },
+                id: KeyGenId { session: spec.set().session, attempt },
                 commitments,
               },
             )
@@ -397,7 +397,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               key_gen::CoordinatorMessage::Shares {
-                id: KeyGenId { set: spec.set(), attempt },
+                id: KeyGenId { session: spec.set().session, attempt },
                 shares: expanded_shares,
               },
             )
@@ -443,7 +443,7 @@ pub(crate) async fn handle_application_tx<
         .send(
           spec.set().network,
           key_gen::CoordinatorMessage::VerifyBlame {
-            id: KeyGenId { set: spec.set(), attempt },
+            id: KeyGenId { session: spec.set().session, attempt },
             accuser,
             accused: faulty,
             share,

@@ -116,7 +116,7 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-        id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
+        id: processor_messages::key_gen::KeyGenId { session: set.session, attempt: 0 },
         params: frost::ThresholdParams::new(spec.t(), spec.n(), our_i.start).unwrap(),
         shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
@@ -195,12 +195,12 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // We'll only receive these if we fired GenerateKey, which we'll only do if if we're
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-      key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::Shares { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Shares { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.session),
     },
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
@@ -224,19 +224,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
     ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
       // This is a special case as it's relevant to *all* Tributaries for this network
       // It doesn't return a Tributary to become `relevant_tributary` though
-      coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
-        assert_eq!(
-          *network, msg.network,
-          "processor claimed to be a different network than it was for SubstrateBlockAck",
-        );
-
+      coordinator::ProcessorMessage::SubstrateBlockAck { block, plans } => {
         // Get the sessions for these keys
         let keys = plans.iter().map(|plan| plan.key.clone()).collect::<HashSet<_>>();
         let mut sessions = vec![];
         for key in keys {
           let session = SubstrateDb::<D>::session_for_key(&txn, &key).unwrap();
           // Only keep them if we're in the Tributary AND they haven't been retied
-          let set = ValidatorSet { network: *network, session };
+          let set = ValidatorSet { network, session };
           if MainDb::<D>::in_tributary(&txn, set) && (!MainDb::<D>::is_tributary_retired(&txn, set))
           {
             sessions.push((session, key));
@@ -462,11 +457,6 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }]
         }
         key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in InvalidShare",
-          );
-
           // Check if the MuSig signature had any errors as if so, we need to provide
           // RemoveParticipant
           // As for the safety of calling error_generating_key_pair, the processor is presumed
@@ -490,11 +480,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           txs
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in GeneratedKeyPair",
-          );
-          // TODO2: Also check the other KeyGenId fields
+          // TODO2: Check the KeyGenId fields
 
           // Tell the Tributary the key pair, get back the share for the MuSig signature
           let share = crate::tributary::generated_key_pair::<D>(
@@ -514,11 +500,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
             }
           }
         }
-        key_gen::ProcessorMessage::Blame { id, participant } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in Blame",
-          );
+        // This is a response to the ordered VerifyBlame, which is why this satisfies the provided
+        // transaction's needs to be perfectly ordered
+        key_gen::ProcessorMessage::Blame { id: _, participant } => {
           vec![Transaction::RemoveParticipant(participant)]
         }
       },

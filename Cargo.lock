@@ -7866,7 +7866,6 @@ dependencies = [
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-primitives",
- "zeroize",
 ]
 
 [[package]]
