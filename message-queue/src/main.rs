@@ -26,6 +26,9 @@ mod binaries {
 
   pub(crate) use crate::queue::Queue;
 
+  #[cfg(all(feature = "redb", not(feature = "rocksdb")))]
+  pub(crate) type Db = Arc<serai_db::Redb>;
+  #[cfg(feature = "rocksdb")]
   pub(crate) type Db = serai_db::RocksDB;
 
   #[allow(clippy::type_complexity)]
