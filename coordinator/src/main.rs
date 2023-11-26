@@ -1253,7 +1253,7 @@ async fn main() {
   };
   let p2p = LibP2p::new();
 
-  let processors = Arc::new(MessageQueue::from_env(Service::Coordinator));
+  let processors = Arc::new(Mutex::new(MessageQueue::from_env(Service::Coordinator)));
 
   let serai = || async {
     loop {

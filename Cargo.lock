@@ -7719,7 +7719,6 @@ dependencies = [
  "env_logger",
  "flexible-transcript",
  "hex",
- "jsonrpsee",
  "log",
  "once_cell",
  "rand_core",
@@ -7727,9 +7726,6 @@ dependencies = [
  "serai-db",
  "serai-env",
  "serai-primitives",
- "serde",
- "serde_json",
- "simple-request",
  "tokio",
  "zeroize",
 ]

@@ -2,19 +2,16 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serde::{Serialize, Deserialize};
 
 use serai_primitives::NetworkId;
 
-#[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Service {
   Processor(NetworkId),
   Coordinator,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct QueuedMessage {
   pub from: Service,
   pub id: u64,
@@ -22,11 +19,18 @@ pub struct QueuedMessage {
   pub sig: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Metadata {
   pub from: Service,
   pub to: Service,
   pub intent: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum MessageQueueRequest {
+  Queue { meta: Metadata, msg: Vec<u8>, sig: Vec<u8> },
+  Next { from: Service, to: Service },
+  Ack { from: Service, to: Service, id: u64, sig: Vec<u8> },
 }
 
 pub fn message_challenge(

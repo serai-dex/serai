@@ -9,19 +9,21 @@ use ciphersuite::{
 };
 use schnorr_signatures::SchnorrSignature;
 
-use serde::{Serialize, Deserialize};
-
-use simple_request::{hyper::Request, Client};
+use tokio::{
+  io::{AsyncReadExt, AsyncWriteExt},
+  net::TcpStream,
+};
 
 use serai_env as env;
 
-use crate::{Service, Metadata, QueuedMessage, message_challenge, ack_challenge};
+#[rustfmt::skip]
+use crate::{Service, Metadata, QueuedMessage, MessageQueueRequest, message_challenge, ack_challenge};
 
 pub struct MessageQueue {
   pub service: Service,
   priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub_key: <Ristretto as Ciphersuite>::G,
-  client: Client,
+  socket: Option<TcpStream>,
   url: String,
 }
 
@@ -37,15 +39,12 @@ impl MessageQueue {
     if !url.contains(':') {
       url += ":2287";
     }
-    if !url.starts_with("http://") {
-      url = "http://".to_string() + &url;
-    }
 
     MessageQueue {
       service,
       pub_key: Ristretto::generator() * priv_key.deref(),
       priv_key,
-      client: Client::with_connection_pool(),
+      socket: None,
       url,
     }
   }
@@ -72,63 +71,29 @@ impl MessageQueue {
     Self::new(service, url, priv_key)
   }
 
-  async fn json_call(&self, method: &'static str, params: serde_json::Value) -> serde_json::Value {
-    #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-    struct JsonRpcRequest {
-      jsonrpc: &'static str,
-      method: &'static str,
-      params: serde_json::Value,
-      id: u64,
-    }
-
-    let mut res = loop {
-      // Make the request
-      match self
-        .client
-        .request(
-          Request::post(&self.url)
-            .header("Content-Type", "application/json")
-            .body(
-              serde_json::to_vec(&JsonRpcRequest {
-                jsonrpc: "2.0",
-                method,
-                params: params.clone(),
-                id: 0,
-              })
-              .unwrap()
-              .into(),
-            )
-            .unwrap(),
-        )
-        .await
-      {
-        Ok(req) => {
-          // Get the response
-          match req.body().await {
-            Ok(res) => break res,
-            Err(e) => {
-              dbg!(e);
-            }
-          }
-        }
-        Err(e) => {
-          dbg!(e);
-        }
+  async fn send(&mut self, msg: MessageQueueRequest) {
+    loop {
+      while self.socket.is_none() {
+        // Sleep, so we don't hammer re-attempts
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+        self.socket = TcpStream::connect(&self.url).await.ok();
       }
 
-      // Sleep for a second before trying again
-      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
-    };
-
-    let json: serde_json::Value =
-      serde_json::from_reader(&mut res).expect("message-queue returned invalid JSON");
-    if json.get("result").is_none() {
-      panic!("call failed: {json}");
+      let socket = self.socket.as_mut().unwrap();
+      let msg = borsh::to_vec(&msg).unwrap();
+      let Ok(_) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+        self.socket = None;
+        continue;
+      };
+      let Ok(_) = socket.write_all(&msg).await else {
+        self.socket = None;
+        continue;
+      };
+      break;
     }
-    json
   }
 
-  pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) {
+  pub async fn queue(&mut self, metadata: Metadata, msg: Vec<u8>) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
@@ -146,30 +111,57 @@ impl MessageQueue {
     )
     .serialize();
 
-    let json = self.json_call("queue", serde_json::json!([metadata, msg, sig])).await;
-    if json.get("result") != Some(&serde_json::Value::Bool(true)) {
-      panic!("failed to queue message: {json}");
+    let msg = MessageQueueRequest::Queue { meta: metadata, msg, sig };
+    loop {
+      self.send(msg.clone()).await;
+      if self.socket.as_mut().unwrap().read_u8().await.ok() != Some(1) {
+        self.socket = None;
+        continue;
+      }
+      break;
     }
   }
 
-  pub async fn next(&self, from: Service) -> QueuedMessage {
+  pub async fn next(&mut self, from: Service) -> QueuedMessage {
+    let msg = MessageQueueRequest::Next { from, to: self.service };
     loop {
-      let json = self.json_call("next", serde_json::json!([from, self.service])).await;
-
-      // Convert from a Value to a type via reserialization
-      let msg: Option<QueuedMessage> = serde_json::from_str(
-        &serde_json::to_string(
-          &json.get("result").expect("successful JSON RPC call didn't have result"),
-        )
-        .unwrap(),
-      )
-      .expect("next didn't return an Option<QueuedMessage>");
+      self.send(msg.clone()).await;
 
       // If there wasn't a message, check again in 1s
-      let Some(msg) = msg else {
-        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+      let Ok(status) = self.socket.as_mut().unwrap().read_u8().await else {
+        self.socket = None;
         continue;
       };
+      if status == 0 {
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+        continue;
+      }
+
+      // Timeout after 5 seconds in case there's an issue with the length handling
+      let Ok(msg) = tokio::time::timeout(core::time::Duration::from_secs(5), async {
+        // Read the message length
+        let Ok(len) = self.socket.as_mut().unwrap().read_u32_le().await else {
+          self.socket = None;
+          return vec![];
+        };
+        let mut buf = vec![0; usize::try_from(len).unwrap()];
+        // Read the message
+        let Ok(_) = self.socket.as_mut().unwrap().read_exact(&mut buf).await else {
+          self.socket = None;
+          return vec![];
+        };
+        buf
+      })
+      .await
+      else {
+        self.socket = None;
+        continue;
+      };
+      if msg.is_empty() {
+        continue;
+      }
+
+      let msg: QueuedMessage = borsh::from_slice(msg.as_slice()).unwrap();
 
       // Verify the message
       // Verify the sender is sane
@@ -191,7 +183,7 @@ impl MessageQueue {
     }
   }
 
-  pub async fn ack(&self, from: Service, id: u64) {
+  pub async fn ack(&mut self, from: Service, id: u64) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
@@ -202,9 +194,14 @@ impl MessageQueue {
     )
     .serialize();
 
-    let json = self.json_call("ack", serde_json::json!([from, self.service, id, sig])).await;
-    if json.get("result") != Some(&serde_json::Value::Bool(true)) {
-      panic!("failed to ack message {id}: {json}");
+    let msg = MessageQueueRequest::Ack { from, to: self.service, id, sig };
+    loop {
+      self.send(msg.clone()).await;
+      if self.socket.as_mut().unwrap().read_u8().await.ok() != Some(1) {
+        self.socket = None;
+        continue;
+      }
+      break;
     }
   }
 }

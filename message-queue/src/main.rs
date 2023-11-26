@@ -15,9 +15,12 @@ mod binaries {
 
   pub(crate) use serai_primitives::NetworkId;
 
-  use serai_db::{Get, DbTxn, Db as DbTrait};
+  pub(crate) use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+  };
 
-  pub(crate) use jsonrpsee::{RpcModule, server::ServerBuilder};
+  use serai_db::{Get, DbTxn, Db as DbTrait};
 
   pub(crate) use crate::messages::*;
 
@@ -51,7 +54,7 @@ mod binaries {
     successful ordering by the time this call returns.
   */
   pub(crate) fn queue_message(
-    db: &RwLock<Db>,
+    db: &mut Db,
     meta: Metadata,
     msg: Vec<u8>,
     sig: SchnorrSignature<Ristretto>,
@@ -78,7 +81,6 @@ mod binaries {
     fn intent_key(from: Service, to: Service, intent: &[u8]) -> Vec<u8> {
       key(b"intent_seen", borsh::to_vec(&(from, to, intent)).unwrap())
     }
-    let mut db = db.write().unwrap();
     let mut txn = db.txn();
     let intent_key = intent_key(meta.from, meta.to, &meta.intent);
     if Get::get(&txn, &intent_key).is_some() {
@@ -148,7 +150,7 @@ mod binaries {
 }
 
 #[cfg(feature = "binaries")]
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
   use binaries::*;
 
@@ -225,48 +227,55 @@ async fn main() {
   register_service(Service::Coordinator, read_key("COORDINATOR_KEY").unwrap());
 
   // Start server
-  let builder = ServerBuilder::new();
-  // TODO: Add middleware to check some key is present in the header, making this an authed
-  // connection
-  // TODO: Set max request/response size
   // 5132 ^ ((b'M' << 8) | b'Q')
-  let listen_on: &[std::net::SocketAddr] = &["0.0.0.0:2287".parse().unwrap()];
-  let server = builder.build(listen_on).await.unwrap();
+  let server = TcpListener::bind("0.0.0.0:2287").await.unwrap();
 
-  let mut module = RpcModule::new(RwLock::new(db));
-  module
-    .register_method("queue", |args, db| {
-      let args = args.parse::<(Metadata, Vec<u8>, Vec<u8>)>().unwrap();
-      queue_message(
-        db,
-        args.0,
-        args.1,
-        SchnorrSignature::<Ristretto>::read(&mut args.2.as_slice()).unwrap(),
-      );
-      Ok(true)
-    })
-    .unwrap();
-  module
-    .register_method("next", |args, _| {
-      let (from, to) = args.parse::<(Service, Service)>().unwrap();
-      Ok(get_next_message(from, to))
-    })
-    .unwrap();
-  module
-    .register_method("ack", |args, _| {
-      let args = args.parse::<(Service, Service, u64, Vec<u8>)>().unwrap();
-      ack_message(
-        args.0,
-        args.1,
-        args.2,
-        SchnorrSignature::<Ristretto>::read(&mut args.3.as_slice()).unwrap(),
-      );
-      Ok(true)
-    })
-    .unwrap();
+  loop {
+    let (mut socket, _) = server.accept().await.unwrap();
+    // TODO: Add a magic value with a key at the start of the connection to make this authed
+    let mut db = db.clone();
+    tokio::spawn(async move {
+      loop {
+        let Ok(msg_len) = socket.read_u32_le().await else { break };
+        let mut buf = vec![0; usize::try_from(msg_len).unwrap()];
+        let Ok(_) = socket.read_exact(&mut buf).await else { break };
+        let msg = borsh::from_slice(&buf).unwrap();
 
-  // Run until stopped, which it never will
-  server.start(module).unwrap().stopped().await;
+        match msg {
+          MessageQueueRequest::Queue { meta, msg, sig } => {
+            queue_message(
+              &mut db,
+              meta,
+              msg,
+              SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
+            );
+            let Ok(_) = socket.write_all(&[1]).await else { break };
+          }
+          MessageQueueRequest::Next { from, to } => match get_next_message(from, to) {
+            Some(msg) => {
+              let Ok(_) = socket.write_all(&[1]).await else { break };
+              let msg = borsh::to_vec(&msg).unwrap();
+              let len = u32::try_from(msg.len()).unwrap();
+              let Ok(_) = socket.write_all(&len.to_le_bytes()).await else { break };
+              let Ok(_) = socket.write_all(&msg).await else { break };
+            }
+            None => {
+              let Ok(_) = socket.write_all(&[0]).await else { break };
+            }
+          },
+          MessageQueueRequest::Ack { from, to, id, sig } => {
+            ack_message(
+              from,
+              to,
+              id,
+              SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
+            );
+            let Ok(_) = socket.write_all(&[1]).await else { break };
+          }
+        }
+      }
+    });
+  }
 }
 
 #[cfg(not(feature = "binaries"))]
