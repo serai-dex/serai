@@ -24,7 +24,7 @@ pub trait Processors: 'static + Send + Sync + Clone {
 #[async_trait::async_trait]
 impl Processors for Arc<Mutex<MessageQueue>> {
   async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>) {
-    let queue = self.lock().await;
+    let mut queue = self.lock().await;
 
     let msg: CoordinatorMessage = msg.into();
     let metadata =
@@ -33,7 +33,7 @@ impl Processors for Arc<Mutex<MessageQueue>> {
     queue.queue(metadata, msg).await;
   }
   async fn recv(&self, network: NetworkId) -> Message {
-    let queue = self.lock().await;
+    let mut queue = self.lock().await;
 
     let msg = queue.next(Service::Processor(network)).await;
     assert_eq!(msg.from, Service::Processor(network));
@@ -47,8 +47,8 @@ impl Processors for Arc<Mutex<MessageQueue>> {
     return Message { id, network, msg };
   }
   async fn ack(&self, msg: Message) {
-    let queue = self.lock().await;
+    let mut queue = self.lock().await;
 
-    MessageQueue::ack(queue, Service::Processor(msg.network), msg.id).await
+    MessageQueue::ack(&mut queue, Service::Processor(msg.network), msg.id).await
   }
 }
