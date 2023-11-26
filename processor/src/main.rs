@@ -10,7 +10,7 @@ use tokio::time::sleep;
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  validator_sets::primitives::{Session, KeyPair},
 };
 
 use messages::{
@@ -44,7 +44,7 @@ mod coordinator;
 pub use coordinator::*;
 
 mod key_gen;
-use key_gen::{KeyConfirmed, KeyGen};
+use key_gen::{SessionDb, KeyConfirmed, KeyGen};
 
 mod signer;
 use signer::Signer;
@@ -84,7 +84,7 @@ struct TributaryMutable<N: Network, D: Db> {
   // invalidating the Tributary's mutable borrow. The signer is coded to allow for attempted usage
   // of a dropped task.
   key_gen: KeyGen<N, D>,
-  signers: HashMap<Vec<u8>, Signer<N, D>>,
+  signers: HashMap<Session, Signer<N, D>>,
 
   // This is also mutably borrowed by the Scanner.
   // The Scanner starts new sign tasks.
@@ -187,25 +187,26 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     substrate_mutable: &mut SubstrateMutable<N, D>,
     tributary_mutable: &mut TributaryMutable<N, D>,
     txn: &mut D::Transaction<'_>,
-    set: ValidatorSet,
+    session: Session,
     key_pair: KeyPair,
     activation_number: usize,
   ) {
-    info!("activating {set:?}'s keys at {activation_number}");
+    info!("activating {session:?}'s keys at {activation_number}");
 
     let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
       .expect("Substrate finalized invalid point as a network's key");
 
-    if tributary_mutable.key_gen.in_set(&set) {
+    if tributary_mutable.key_gen.in_set(&session) {
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
-        tributary_mutable.key_gen.confirm(txn, set, key_pair.clone()).await;
-      if set.session.0 == 0 {
-        tributary_mutable.batch_signer = Some(BatchSigner::new(N::NETWORK, substrate_keys));
+        tributary_mutable.key_gen.confirm(txn, session, key_pair.clone()).await;
+      if session.0 == 0 {
+        tributary_mutable.batch_signer =
+          Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
       }
       tributary_mutable
         .signers
-        .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
+        .insert(session, Signer::new(network.clone(), session, network_keys));
     }
 
     substrate_mutable.add_key(txn, activation_number, network_key).await;
@@ -219,7 +220,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     CoordinatorMessage::Sign(msg) => {
       if let Some(msg) = tributary_mutable
         .signers
-        .get_mut(msg.key())
+        .get_mut(&msg.session())
         .expect("coordinator told us to sign with a signer we don't have")
         .handle(txn, msg)
         .await
@@ -257,11 +258,11 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
               panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
             };
-            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_substrate_key(&id.key)
-            else {
+            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_session(id.session) else {
               panic!("didn't have key shares for the key we were told to cosign with");
             };
-            if let Some((cosigner, msg)) = Cosigner::new(txn, keys, block_number, block, id.attempt)
+            if let Some((cosigner, msg)) =
+              Cosigner::new(txn, id.session, keys, block_number, block, id.attempt)
             {
               tributary_mutable.cosigner = Some(cosigner);
               coordinator.send(msg).await;
@@ -287,7 +288,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
     CoordinatorMessage::Substrate(msg) => {
       match msg {
-        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, set, key_pair } => {
+        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, session, key_pair } => {
           // This is the first key pair for this network so no block has been finalized yet
           // TODO: Write documentation for this in docs/
           // TODO: Use an Option instead of a magic?
@@ -339,7 +340,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
               substrate_mutable,
               tributary_mutable,
               txn,
-              set,
+              session,
               key_pair,
               activation_number,
             )
@@ -355,7 +356,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             PendingActivationsDb::set_pending_activation::<N>(
               txn,
               block_before_queue_block,
-              set,
+              session,
               key_pair,
             );
           }
@@ -363,14 +364,13 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
-          network: network_id,
           block: substrate_block,
           burns,
           batches,
         } => {
-          assert_eq!(network_id, N::NETWORK, "coordinator sent us data for another network");
-
-          if let Some((block, set, key_pair)) = PendingActivationsDb::pending_activation::<N>(txn) {
+          if let Some((block, session, key_pair)) =
+            PendingActivationsDb::pending_activation::<N>(txn)
+          {
             // Only run if this is a Batch belonging to a distinct block
             if context.network_latest_finalized_block.as_ref() != block.as_ref() {
               let mut queue_block = <N::Block as Block<N>>::Id::default();
@@ -387,7 +387,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
                 substrate_mutable,
                 tributary_mutable,
                 txn,
-                set,
+                session,
                 key_pair,
                 activation_number,
               )
@@ -412,13 +412,12 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           if !tributary_mutable.signers.is_empty() {
             coordinator
               .send(messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-                network: N::NETWORK,
                 block: substrate_block,
                 plans: to_sign
                   .iter()
-                  .map(|signable| PlanMeta {
-                    key: signable.0.to_bytes().as_ref().to_vec(),
-                    id: signable.1,
+                  .filter_map(|signable| {
+                    SessionDb::get(txn, signable.0.to_bytes().as_ref())
+                      .map(|session| PlanMeta { session, id: signable.1 })
                   })
                   .collect(),
               })
@@ -428,7 +427,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           // See commentary in TributaryMutable for why this is safe
           let signers = &mut tributary_mutable.signers;
           for (key, id, tx, eventuality) in to_sign {
-            if let Some(signer) = signers.get_mut(key.to_bytes().as_ref()) {
+            if let Some(session) = SessionDb::get(txn, key.to_bytes().as_ref()) {
+              let signer = signers.get_mut(&session).unwrap();
               if let Some(msg) = signer.sign_transaction(txn, id, tx, eventuality).await {
                 coordinator.send(msg).await;
               }
@@ -494,7 +494,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
   let mut signers = HashMap::new();
 
   for (i, key) in current_keys.iter().enumerate() {
-    let Some((substrate_keys, network_keys)) = key_gen.keys(key) else { continue };
+    let Some((session, (substrate_keys, network_keys))) = key_gen.keys(key) else { continue };
     let network_key = network_keys[0].group_key();
 
     // If this is the oldest key, load the BatchSigner for it as the active BatchSigner
@@ -503,7 +503,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
     if i == 0 {
-      batch_signer = Some(BatchSigner::new(N::NETWORK, substrate_keys));
+      batch_signer = Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
     }
 
     // The Scanner re-fires events as needed for batch_signer yet not signer
@@ -514,10 +514,9 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
     // 2) Cause re-emission of Batch events, which we'd need to check the safety of
     //    (TODO: Do anyways?)
     // 3) Violate the attempt counter (TODO: Is this already being violated?)
-    let mut signer = Signer::new(network.clone(), network_keys);
+    let mut signer = Signer::new(network.clone(), session, network_keys);
 
     // Sign any TXs being actively signed
-    let key = key.to_bytes();
     for (plan, tx, eventuality) in &actively_signing {
       if plan.key == network_key {
         let mut txn = raw_db.txn();
@@ -531,7 +530,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
       }
     }
 
-    signers.insert(key.as_ref().to_vec(), signer);
+    signers.insert(session, signer);
   }
 
   // Spawn a task to rebroadcast signed TXs yet to be mined into a finalized block
@@ -630,16 +629,20 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
             if let Some((retired_key, new_key)) = retired_key_new_key {
               // Safe to mutate since all signing operations are done and no more will be added
-              tributary_mutable.signers.remove(retired_key.to_bytes().as_ref());
+              if let Some(retired_session) = SessionDb::get(&txn, retired_key.to_bytes().as_ref()) {
+                tributary_mutable.signers.remove(&retired_session);
+              }
               tributary_mutable.batch_signer.take();
-              if let Some((substrate_keys, _)) = tributary_mutable.key_gen.keys(&new_key) {
+              let keys = tributary_mutable.key_gen.keys(&new_key);
+              if let Some((session, (substrate_keys, _))) = keys {
                 tributary_mutable.batch_signer =
-                  Some(BatchSigner::new(N::NETWORK, substrate_keys));
+                  Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
               }
             }
           },
           MultisigEvent::Completed(key, id, tx) => {
-            if let Some(signer) = tributary_mutable.signers.get_mut(&key) {
+            if let Some(session) = SessionDb::get(&txn, &key) {
+              let signer = tributary_mutable.signers.get_mut(&session).unwrap();
               if let Some(msg) = signer.completed(&mut txn, id, tx) {
                 coordinator.send(msg).await;
               }

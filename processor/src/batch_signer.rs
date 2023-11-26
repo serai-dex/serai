@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
-use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   ThresholdKeys, FrostError,
@@ -21,6 +20,7 @@ use scale::Encode;
 use serai_client::{
   primitives::{NetworkId, BlockHash},
   in_instructions::primitives::{Batch, SignedBatch, batch_message},
+  validator_sets::primitives::Session,
 };
 
 use messages::coordinator::*;
@@ -48,6 +48,7 @@ pub struct BatchSigner<D: Db> {
   db: PhantomData<D>,
 
   network: NetworkId,
+  session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
   signable: HashMap<[u8; 5], Batch>,
@@ -71,12 +72,17 @@ impl<D: Db> fmt::Debug for BatchSigner<D> {
 }
 
 impl<D: Db> BatchSigner<D> {
-  pub fn new(network: NetworkId, keys: Vec<ThresholdKeys<Ristretto>>) -> BatchSigner<D> {
+  pub fn new(
+    network: NetworkId,
+    session: Session,
+    keys: Vec<ThresholdKeys<Ristretto>>,
+  ) -> BatchSigner<D> {
     assert!(!keys.is_empty());
     BatchSigner {
       db: PhantomData,
 
       network,
+      session,
       keys,
 
       signable: HashMap::new(),
@@ -86,11 +92,11 @@ impl<D: Db> BatchSigner<D> {
     }
   }
 
-  fn verify_id(&self, id: &SubstrateSignId) -> Result<([u8; 32], [u8; 5], u32), ()> {
-    let SubstrateSignId { key, id, attempt } = id;
+  fn verify_id(&self, id: &SubstrateSignId) -> Result<(Session, [u8; 5], u32), ()> {
+    let SubstrateSignId { session, id, attempt } = id;
     let SubstrateSignableId::Batch(id) = id else { panic!("BatchSigner handed non-Batch") };
 
-    assert_eq!(key, &self.keys[0].group_key().to_bytes());
+    assert_eq!(session, &self.session);
 
     // Check the attempt lines up
     match self.attempt.get(id) {
@@ -114,7 +120,7 @@ impl<D: Db> BatchSigner<D> {
       }
     }
 
-    Ok((*key, *id, *attempt))
+    Ok((*session, *id, *attempt))
   }
 
   #[must_use]
@@ -196,11 +202,7 @@ impl<D: Db> BatchSigner<D> {
     }
     self.preprocessing.insert(id, (machines, preprocesses));
 
-    let id = SubstrateSignId {
-      key: self.keys[0].group_key().to_bytes(),
-      id: SubstrateSignableId::Batch(id),
-      attempt,
-    };
+    let id = SubstrateSignId { session: self.session, id: SubstrateSignableId::Batch(id), attempt };
 
     // Broadcast our preprocesses
     Some(ProcessorMessage::BatchPreprocess { id, block, preprocesses: serialized_preprocesses })
@@ -236,10 +238,10 @@ impl<D: Db> BatchSigner<D> {
       }
 
       CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
-        let (key, id, attempt) = self.verify_id(&id).ok()?;
+        let (session, id, attempt) = self.verify_id(&id).ok()?;
 
         let substrate_sign_id =
-          SubstrateSignId { key, id: SubstrateSignableId::Batch(id), attempt };
+          SubstrateSignId { session, id: SubstrateSignableId::Batch(id), attempt };
 
         let (machines, our_preprocesses) = match self.preprocessing.remove(&id) {
           // Either rebooted or RPC error, or some invariant
@@ -328,10 +330,10 @@ impl<D: Db> BatchSigner<D> {
       }
 
       CoordinatorMessage::SubstrateShares { id, shares } => {
-        let (key, id, attempt) = self.verify_id(&id).ok()?;
+        let (session, id, attempt) = self.verify_id(&id).ok()?;
 
         let substrate_sign_id =
-          SubstrateSignId { key, id: SubstrateSignableId::Batch(id), attempt };
+          SubstrateSignId { session, id: SubstrateSignableId::Batch(id), attempt };
 
         let (machine, our_shares) = match self.signing.remove(&id) {
           // Rebooted, RPC error, or some invariant

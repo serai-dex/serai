@@ -132,7 +132,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );
@@ -150,7 +150,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );
@@ -214,7 +214,7 @@ async fn dkg_test() {
   // Each scanner should emit a distinct shares message
   let shares_for = |i: usize| {
     CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
-      id: KeyGenId { set: spec.set(), attempt: 0 },
+      id: KeyGenId { session: spec.set().session, attempt: 0 },
       shares: vec![txs
         .iter()
         .enumerate()
@@ -267,7 +267,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );

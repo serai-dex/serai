@@ -28,7 +28,7 @@ pub async fn key_gen<C: Ciphersuite>(
   let mut participant_is = vec![];
 
   let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
-  let id = KeyGenId { set, attempt: 0 };
+  let id = KeyGenId { session: set.session, attempt: 0 };
 
   for (i, processor) in processors.iter_mut().enumerate() {
     let msg = processor.recv_message().await;
@@ -173,7 +173,7 @@ pub async fn key_gen<C: Ciphersuite>(
         CoordinatorMessage::Substrate(
           messages::substrate::CoordinatorMessage::ConfirmKeyPair {
             context,
-            set: this_set,
+            session,
             ref key_pair,
           },
         ) => {
@@ -186,7 +186,7 @@ pub async fn key_gen<C: Ciphersuite>(
               70
           );
           assert_eq!(context.network_latest_finalized_block.0, [0; 32]);
-          assert_eq!(set, this_set);
+          assert_eq!(set.session, session);
           assert_eq!(key_pair.0 .0, substrate_key);
           assert_eq!(&key_pair.1, &network_key);
         }

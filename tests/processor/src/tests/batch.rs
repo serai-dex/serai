@@ -15,6 +15,7 @@ use serai_client::{
   in_instructions::primitives::{
     InInstruction, InInstructionWithBalance, Batch, SignedBatch, batch_message,
   },
+  validator_sets::primitives::Session,
 };
 
 use processor::networks::{Network, Bitcoin, Monero};
@@ -23,12 +24,12 @@ use crate::{*, tests::*};
 
 pub(crate) async fn recv_batch_preprocesses(
   coordinators: &mut [Coordinator],
-  substrate_key: &[u8; 32],
+  session: Session,
   batch: &Batch,
   attempt: u32,
 ) -> (SubstrateSignId, HashMap<Participant, [u8; 64]>) {
   let id = SubstrateSignId {
-    key: *substrate_key,
+    session,
     id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
     attempt,
   };
@@ -171,7 +172,6 @@ pub(crate) async fn substrate_block(
   match block.clone() {
     messages::substrate::CoordinatorMessage::SubstrateBlock {
       context: _,
-      network: sent_network,
       block: sent_block,
       burns: _,
       batches: _,
@@ -179,13 +179,8 @@ pub(crate) async fn substrate_block(
       coordinator.send_message(block).await;
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-            network: recvd_network,
-            block: recvd_block,
-            plans,
-          },
+          messages::coordinator::ProcessorMessage::SubstrateBlockAck { block: recvd_block, plans },
         ) => {
-          assert_eq!(recvd_network, sent_network);
           assert_eq!(recvd_block, sent_block);
           plans
         }
@@ -214,7 +209,7 @@ fn batch_test() {
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
       // Generate keys
-      let key_pair = key_gen(&mut coordinators, network).await;
+      let key_pair = key_gen(&mut coordinators).await;
 
       // Now we we have to mine blocks to activate the key
       // (the first key is activated when the network's time as of a block exceeds the Serai time
@@ -284,7 +279,7 @@ fn batch_test() {
 
         // Make sure the processors picked it up by checking they're trying to sign a batch for it
         let (mut id, mut preprocesses) =
-          recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, 0).await;
+          recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
         // Trigger a random amount of re-attempts
         for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
           // TODO: Double check how the processor handles this ID field
@@ -298,8 +293,7 @@ fn batch_test() {
               .await;
           }
           (id, preprocesses) =
-            recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, attempt)
-              .await;
+            recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, attempt).await;
         }
 
         // Continue with signing the batch
@@ -319,7 +313,6 @@ fn batch_test() {
                 serai_time,
                 network_latest_finalized_block: batch.batch.block,
               },
-              network,
               block: substrate_block_num + u64::from(i),
               burns: vec![],
               batches: vec![batch.batch.id],

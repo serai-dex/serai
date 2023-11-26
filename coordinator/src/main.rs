@@ -57,7 +57,7 @@ pub mod processors;
 use processors::Processors;
 
 mod substrate;
-use substrate::{CosignTransactions, SubstrateDb};
+use substrate::CosignTransactions;
 
 mod cosign_evaluator;
 use cosign_evaluator::CosignEvaluator;
@@ -116,7 +116,7 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-        id: processor_messages::key_gen::KeyGenId { set, attempt: 0 },
+        id: processor_messages::key_gen::KeyGenId { session: set.session, attempt: 0 },
         params: frost::ThresholdParams::new(spec.t(), spec.n(), our_i.start).unwrap(),
         shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
@@ -195,66 +195,50 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // We'll only receive these if we fired GenerateKey, which we'll only do if if we're
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-      key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::Shares { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.set.session),
-      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.set.session),
+      key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Shares { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.session),
     },
     // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
-      sign::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      sign::ProcessorMessage::Preprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      sign::ProcessorMessage::Share { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
+      sign::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
+      sign::ProcessorMessage::Preprocess { id, .. } => Some(id.session),
+      sign::ProcessorMessage::Share { id, .. } => Some(id.session),
       // While the Processor's Scanner will always emit Completed, that's routed through the
       // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
       // confirms it
-      sign::ProcessorMessage::Completed { key, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, key).unwrap())
-      }
+      sign::ProcessorMessage::Completed { session, .. } => Some(*session),
     },
     ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
-      // This is a special case as it's relevant to *all* Tributaries for this network
+      // This is a special case as it's relevant to *all* Tributaries for this network we're
+      // signing in
       // It doesn't return a Tributary to become `relevant_tributary` though
-      coordinator::ProcessorMessage::SubstrateBlockAck { network, block, plans } => {
-        assert_eq!(
-          *network, msg.network,
-          "processor claimed to be a different network than it was for SubstrateBlockAck",
-        );
-
+      coordinator::ProcessorMessage::SubstrateBlockAck { block, plans } => {
         // Get the sessions for these keys
-        let keys = plans.iter().map(|plan| plan.key.clone()).collect::<HashSet<_>>();
-        let mut sessions = vec![];
-        for key in keys {
-          let session = SubstrateDb::<D>::session_for_key(&txn, &key).unwrap();
-          // Only keep them if we're in the Tributary AND they haven't been retied
-          let set = ValidatorSet { network: *network, session };
-          if MainDb::<D>::in_tributary(&txn, set) && (!MainDb::<D>::is_tributary_retired(&txn, set))
-          {
-            sessions.push((session, key));
-          }
-        }
+        let sessions = plans
+          .iter()
+          .map(|plan| plan.session)
+          .filter(|session| {
+            !MainDb::<D>::is_tributary_retired(&txn, ValidatorSet { network, session: *session })
+          })
+          .collect::<HashSet<_>>();
 
         // Ensure we have the Tributaries
-        for (session, _) in &sessions {
+        for session in &sessions {
           if !tributaries.contains_key(session) {
             return false;
           }
         }
 
-        for (session, key) in sessions {
+        for session in sessions {
           let tributary = &tributaries[&session];
           let plans = plans
             .iter()
-            .filter_map(|plan| Some(plan.id).filter(|_| plan.key == key))
+            .filter_map(|plan| Some(plan.id).filter(|_| plan.session == session))
             .collect::<Vec<_>>();
           PlanIds::set(&mut txn, &tributary.spec.genesis(), *block, &plans);
 
@@ -286,18 +270,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
         None
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
-      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::SubstrateShare { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
+      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::BatchPreprocess { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::SubstrateShare { id, .. } => Some(id.session),
       coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
           network,
@@ -462,11 +438,6 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }]
         }
         key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in InvalidShare",
-          );
-
           // Check if the MuSig signature had any errors as if so, we need to provide
           // RemoveParticipant
           // As for the safety of calling error_generating_key_pair, the processor is presumed
@@ -490,11 +461,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           txs
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in GeneratedKeyPair",
-          );
-          // TODO2: Also check the other KeyGenId fields
+          // TODO2: Check the KeyGenId fields
 
           // Tell the Tributary the key pair, get back the share for the MuSig signature
           let share = crate::tributary::generated_key_pair::<D>(
@@ -514,11 +481,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
             }
           }
         }
-        key_gen::ProcessorMessage::Blame { id, participant } => {
-          assert_eq!(
-            id.set.network, msg.network,
-            "processor claimed to be a different network than it was for in Blame",
-          );
+        // This is a response to the ordered VerifyBlame, which is why this satisfies the provided
+        // transaction's needs to be perfectly ordered
+        key_gen::ProcessorMessage::Blame { id: _, participant } => {
           vec![Transaction::RemoveParticipant(participant)]
         }
       },
@@ -556,7 +521,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           })]
         }
-        sign::ProcessorMessage::Completed { key: _, id, tx } => {
+        sign::ProcessorMessage::Completed { session: _, id, tx } => {
           let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
           #[allow(non_snake_case)]
           let R = <Ristretto as Ciphersuite>::generator() * r.deref();

@@ -30,7 +30,7 @@ use crate::{
     nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
-    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, KeyPairDb, AttemptDb, DataDb,
+    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
   },
 };
 
@@ -260,7 +260,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               key_gen::CoordinatorMessage::Commitments {
-                id: KeyGenId { set: spec.set(), attempt },
+                id: KeyGenId { session: spec.set().session, attempt },
                 commitments,
               },
             )
@@ -397,7 +397,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               key_gen::CoordinatorMessage::Shares {
-                id: KeyGenId { set: spec.set(), attempt },
+                id: KeyGenId { session: spec.set().session, attempt },
                 shares: expanded_shares,
               },
             )
@@ -443,7 +443,7 @@ pub(crate) async fn handle_application_tx<
         .send(
           spec.set().network,
           key_gen::CoordinatorMessage::VerifyBlame {
-            id: KeyGenId { set: spec.set(), attempt },
+            id: KeyGenId { session: spec.set().session, attempt },
             accuser,
             accused: faulty,
             share,
@@ -504,15 +504,6 @@ pub(crate) async fn handle_application_tx<
         SubstrateSignableId::CosigningSubstrateBlock(hash),
       );
 
-      let key = loop {
-        let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
-          // This can happen based on a timing condition
-          log::warn!("CosignSubstrateBlock yet keys weren't set yet");
-          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
-          continue;
-        };
-        break key_pair.0.into();
-      };
       let block_number = SeraiBlockNumber::get(txn, hash)
         .expect("CosignSubstrateBlock yet didn't save Serai block number");
       processors
@@ -520,7 +511,7 @@ pub(crate) async fn handle_application_tx<
           spec.set().network,
           coordinator::CoordinatorMessage::CosignSubstrateBlock {
             id: SubstrateSignId {
-              key,
+              session: spec.set().session,
               id: SubstrateSignableId::CosigningSubstrateBlock(hash),
               attempt: 0,
             },
@@ -579,12 +570,15 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
-          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::SubstratePreprocesses {
-                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId {
+                  session: spec.set().session,
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 preprocesses: preprocesses
                   .into_iter()
                   .map(|(k, v)| (k, v.try_into().unwrap()))
@@ -613,12 +607,15 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
-          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::SubstrateShares {
-                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId {
+                  session: spec.set().session,
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))
@@ -636,7 +633,6 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -654,14 +650,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               sign::CoordinatorMessage::Preprocesses {
-                id: SignId {
-                  key: key_pair
-                    .expect("completed SignPreprocess despite not setting the key pair")
-                    .1
-                    .into(),
-                  id: data.plan,
-                  attempt: data.attempt,
-                },
+                id: SignId { session: spec.set().session, id: data.plan, attempt: data.attempt },
                 preprocesses,
               },
             )
@@ -675,7 +664,6 @@ pub(crate) async fn handle_application_tx<
       let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
         return;
       };
-      let key_pair = KeyPairDb::get(txn, spec.set());
       match handle(
         txn,
         &DataSpecification {
@@ -692,14 +680,7 @@ pub(crate) async fn handle_application_tx<
             .send(
               spec.set().network,
               sign::CoordinatorMessage::Shares {
-                id: SignId {
-                  key: key_pair
-                    .expect("completed SignShares despite not setting the key pair")
-                    .1
-                    .into(),
-                  id: data.plan,
-                  attempt: data.attempt,
-                },
+                id: SignId { session: spec.set().session, id: data.plan, attempt: data.attempt },
                 shares,
               },
             )
@@ -727,13 +708,15 @@ pub(crate) async fn handle_application_tx<
       };
 
       // TODO: Confirm this signer hasn't prior published a completion
-      let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
-        panic!("SignCompleted for recognized plan ID despite not having a key pair for this set")
-      };
+
       processors
         .send(
           spec.set().network,
-          sign::CoordinatorMessage::Completed { key: key_pair.1.to_vec(), id: plan, tx: tx_hash },
+          sign::CoordinatorMessage::Completed {
+            session: spec.set().session,
+            id: plan,
+            tx: tx_hash,
+          },
         )
         .await;
     }

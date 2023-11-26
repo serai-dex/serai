@@ -22,6 +22,7 @@ use serai_client::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
   },
+  validator_sets::primitives::Session,
 };
 use messages::{
   coordinator::{SubstrateSignableId, SubstrateSignId},
@@ -33,16 +34,13 @@ use crate::{*, tests::*};
 pub async fn batch(
   processors: &mut [Processor],
   processor_is: &[u8],
+  session: Session,
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
   let mut id = [0; 5];
   OsRng.fill_bytes(&mut id);
-  let id = SubstrateSignId {
-    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes(),
-    id: SubstrateSignableId::Batch(id),
-    attempt: 0,
-  };
+  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(id), attempt: 0 };
 
   for processor in processors.iter_mut() {
     processor
@@ -232,7 +230,6 @@ pub async fn batch(
             serai_time: last_block.time().unwrap() / 1000,
             network_latest_finalized_block: batch.batch.block,
           },
-          network: batch.batch.network,
           block: last_serai_block,
           burns: vec![],
           batches: vec![batch.batch.id],
@@ -244,7 +241,6 @@ pub async fn batch(
     processor
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-          network: batch.batch.network,
           block: last_serai_block,
           plans: vec![],
         },
@@ -283,6 +279,7 @@ async fn batch_test() {
       batch(
         &mut processors,
         &processor_is,
+        Session(0),
         &substrate_key,
         Batch {
           network: NetworkId::Bitcoin,

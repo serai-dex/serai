@@ -30,7 +30,7 @@ use tokio::{sync::mpsc, time::sleep};
 use crate::{
   Db,
   processors::Processors,
-  tributary::{TributarySpec, SeraiBlockNumber, KeyPairDb},
+  tributary::{TributarySpec, SeraiBlockNumber},
 };
 
 mod db;
@@ -116,19 +116,13 @@ async fn handle_new_set<D: Db>(
   Ok(())
 }
 
-async fn handle_key_gen<D: Db, Pro: Processors>(
-  db: &mut D,
+async fn handle_key_gen<Pro: Processors>(
   processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  // This has to be saved *before* we send ConfirmKeyPair
-  let mut txn = db.txn();
-  SubstrateDb::<D>::save_session_for_keys(&mut txn, &key_pair, set.session);
-  txn.commit();
-
   processors
     .send(
       set.network,
@@ -144,7 +138,7 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
             // block which has a time greater than or equal to the Serai time
             .unwrap_or(BlockHash([0; 32])),
         },
-        set,
+        session: set.session,
         key_pair,
       },
     )
@@ -232,7 +226,6 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
             serai_time: block.time().unwrap() / 1000,
             network_latest_finalized_block,
           },
-          network,
           block: block.number(),
           burns: burns.remove(&network).unwrap(),
           batches: batches.remove(&network).unwrap(),
@@ -291,13 +284,7 @@ async fn handle_block<D: Db, Pro: Processors>(
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
-        // Immediately ensure this key pair is accessible to the tributary, before we fire any
-        // events off of it
-        let mut txn = db.0.txn();
-        KeyPairDb::set(&mut txn, set, &key_pair);
-        txn.commit();
-
-        handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }

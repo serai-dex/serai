@@ -4,10 +4,9 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
+use ciphersuite::Secp256k1;
 
 use dkg::Participant;
 
@@ -22,23 +21,20 @@ use serai_client::{
     CoinsEvent,
   },
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  validator_sets::primitives::Session,
   SeraiCoins,
 };
 use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext, CoordinatorMessage};
 
 use crate::tests::*;
 
-pub async fn sign<C: Ciphersuite>(
+pub async fn sign(
   processors: &mut [Processor],
   processor_is: &[u8],
-  network_key: &Zeroizing<C::F>,
+  session: Session,
   plan_id: [u8; 32],
 ) {
-  let id = SignId {
-    key: (C::generator() * **network_key).to_bytes().as_ref().to_vec(),
-    id: plan_id,
-    attempt: 0,
-  };
+  let id = SignId { session, id: plan_id, attempt: 0 };
 
   // Select a random participant to exclude, so we know for sure who *is* participating
   assert_eq!(COORDINATORS - THRESHOLD, 1);
@@ -150,7 +146,7 @@ pub async fn sign<C: Ciphersuite>(
       &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     processor
       .send_message(messages::sign::ProcessorMessage::Completed {
-        key: id.key.clone(),
+        session,
         id: id.id,
         tx: b"signed_tx".to_vec(),
       })
@@ -163,7 +159,7 @@ pub async fn sign<C: Ciphersuite>(
     assert_eq!(
       processor.recv_message().await,
       CoordinatorMessage::Sign(messages::sign::CoordinatorMessage::Completed {
-        key: id.key.clone(),
+        session,
         id: id.id,
         tx: b"signed_tx".to_vec()
       })
@@ -196,8 +192,7 @@ async fn sign_test() {
       }
       let mut processors = new_processors;
 
-      let (participant_is, substrate_key, network_key) =
-        key_gen::<Secp256k1>(&mut processors).await;
+      let (participant_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
 
       // 'Send' external coins into Serai
       let serai = processors[0].serai().await;
@@ -230,6 +225,7 @@ async fn sign_test() {
       let block_included_in = batch(
         &mut processors,
         &participant_is,
+        Session(0),
         &substrate_key,
         Batch {
           network: NetworkId::Bitcoin,
@@ -331,7 +327,6 @@ async fn sign_test() {
                 serai_time: last_serai_block.time().unwrap() / 1000,
                 network_latest_finalized_block: coin_block,
               },
-              network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
               burns: vec![out_instruction.clone()],
               batches: vec![],
@@ -343,18 +338,14 @@ async fn sign_test() {
         processor
           .send_message(messages::ProcessorMessage::Coordinator(
             messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-              network: NetworkId::Bitcoin,
               block: last_serai_block.number(),
-              plans: vec![PlanMeta {
-                key: (Secp256k1::generator() * *network_key).to_bytes().to_vec(),
-                id: plan_id,
-              }],
+              plans: vec![PlanMeta { session: Session(0), id: plan_id }],
             },
           ))
           .await;
       }
 
-      sign::<Secp256k1>(&mut processors, &participant_is, &network_key, plan_id).await;
+      sign(&mut processors, &participant_is, Session(0), plan_id).await;
     })
     .await;
 }

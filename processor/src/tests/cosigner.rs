@@ -13,7 +13,7 @@ use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use serai_client::primitives::*;
+use serai_client::{primitives::*, validator_sets::primitives::Session};
 
 use messages::coordinator::*;
 use crate::cosigner::Cosigner;
@@ -28,7 +28,7 @@ async fn test_cosigner() {
   let block = [0xaa; 32];
 
   let actual_id = SubstrateSignId {
-    key: keys.values().next().unwrap().group_key().to_bytes(),
+    session: Session(0),
     id: SubstrateSignableId::CosigningSubstrateBlock(block),
     attempt: (OsRng.next_u64() >> 32).try_into().unwrap(),
   };
@@ -55,7 +55,8 @@ async fn test_cosigner() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
     let (signer, preprocess) =
-      Cosigner::new(&mut txn, vec![keys], block_number, block, actual_id.attempt).unwrap();
+      Cosigner::new(&mut txn, Session(0), vec![keys], block_number, block, actual_id.attempt)
+        .unwrap();
 
     match preprocess {
       // All participants should emit a preprocess
