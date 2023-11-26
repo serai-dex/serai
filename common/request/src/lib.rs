@@ -6,13 +6,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[cfg(feature = "tls")]
-use hyper_rustls::{HttpsConnectorBuilder, HttpsConnector};
-use hyper::{
-  Uri,
-  header::HeaderValue,
-  body::Body,
-  service::Service,
-  client::{HttpConnector, conn::http1::SendRequest},
+use tower_service::Service as TowerService;
+#[cfg(feature = "tls")]
+use hyper_boring::HttpsConnector;
+use hyper::{Uri, header::HeaderValue, body::Bytes, client::conn::http1::SendRequest};
+use hyper_util::{
+  rt::tokio::TokioExecutor,
+  client::legacy::{Client as HyperClient, connect::HttpConnector},
 };
 pub use hyper;
 
@@ -29,6 +29,7 @@ pub enum Error {
   InconsistentHost,
   ConnectionError(Box<dyn Send + Sync + std::error::Error>),
   Hyper(hyper::Error),
+  HyperUtil(hyper_util::client::legacy::Error),
 }
 
 #[cfg(not(feature = "tls"))]
@@ -36,10 +37,19 @@ type Connector = HttpConnector;
 #[cfg(feature = "tls")]
 type Connector = HttpsConnector<HttpConnector>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum Connection {
-  ConnectionPool(hyper::Client<Connector>),
-  Connection { connector: Connector, host: Uri, connection: Arc<Mutex<Option<SendRequest<Body>>>> },
+  ConnectionPool(HyperClient<Connector, Full<Bytes>>),
+  Connection {
+    connector: Connector,
+    host: Uri,
+    connection: Arc<Mutex<Option<SendRequest<Full<Bytes>>>>>,
+  },
+}
+impl core::fmt::Debug for Connection {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt.debug_struct("Connection").finish_non_exhaustive()
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -48,25 +58,26 @@ pub struct Client {
 }
 
 impl Client {
-  fn connector() -> Connector {
+  fn connector() -> Result<Connector, Error> {
     #[cfg(feature = "tls")]
-    let res =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
+    let res = HttpsConnector::new().map_err(|e| Error::ConnectionError(format!("{e:?}").into()))?;
     #[cfg(not(feature = "tls"))]
     let res = HttpConnector::new();
-    res
+    Ok(res)
   }
 
-  pub fn with_connection_pool() -> Client {
-    Client {
-      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector())),
-    }
+  pub fn with_connection_pool() -> Result<Client, Error> {
+    Ok(Client {
+      connection: Connection::ConnectionPool(
+        HyperClient::builder(TokioExecutor::new()).build(Self::connector()?),
+      ),
+    })
   }
 
   pub fn without_connection_pool(host: String) -> Result<Client, Error> {
     Ok(Client {
       connection: Connection::Connection {
-        connector: Self::connector(),
+        connector: Self::connector()?,
         host: {
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
           if uri.host().is_none() {
@@ -79,7 +90,7 @@ impl Client {
     })
   }
 
-  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_>, Error> {
+  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response, Error> {
     let request: Request = request.into();
     let mut request = request.0;
     if let Some(header_host) = request.headers().get(hyper::header::HOST) {
@@ -111,8 +122,10 @@ impl Client {
         .insert(hyper::header::HOST, HeaderValue::from_str(&host).map_err(|_| Error::InvalidUri)?);
     }
 
-    let response = match &self.connection {
-      Connection::ConnectionPool(client) => client.request(request).await.map_err(Error::Hyper)?,
+    Ok(Response(match &self.connection {
+      Connection::ConnectionPool(client) => {
+        client.request(request).await.map_err(Error::HyperUtil)?
+      }
       Connection::Connection { connector, host, connection } => {
         let mut connection_lock = connection.lock().await;
 
@@ -137,7 +150,7 @@ impl Client {
           // Send the request
           let res = connection.send_request(request).await;
           if let Ok(res) = res {
-            return Ok(Response(res, self));
+            return Ok(Response(res));
           }
           err = res.err();
         }
@@ -145,8 +158,6 @@ impl Client {
         *connection_lock = None;
         Err(Error::Hyper(err.unwrap()))?
       }
-    };
-
-    Ok(Response(response, self))
+    }))
   }
 }

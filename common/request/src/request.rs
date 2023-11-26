@@ -1,12 +1,12 @@
-use hyper::body::Body;
 #[cfg(feature = "basic-auth")]
-use hyper::header::HeaderValue;
+use hyper::{body::Bytes, header::HeaderValue};
+pub use http_body_util::Full;
 
 #[cfg(feature = "basic-auth")]
 use crate::Error;
 
 #[derive(Debug)]
-pub struct Request(pub(crate) hyper::Request<Body>);
+pub struct Request(pub(crate) hyper::Request<Full<Bytes>>);
 impl Request {
   #[cfg(feature = "basic-auth")]
   fn username_password_from_uri(&self) -> Result<(String, String), Error> {
@@ -59,8 +59,8 @@ impl Request {
     let _ = self.basic_auth_from_uri();
   }
 }
-impl From<hyper::Request<Body>> for Request {
-  fn from(request: hyper::Request<Body>) -> Request {
+impl From<hyper::Request<Full<Bytes>>> for Request {
+  fn from(request: hyper::Request<Full<Bytes>>) -> Request {
     Request(request)
   }
 }

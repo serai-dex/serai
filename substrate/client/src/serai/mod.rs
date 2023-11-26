@@ -150,7 +150,7 @@ impl Serai {
   }
 
   pub async fn new(url: String) -> Result<Self, SeraiError> {
-    let client = Client::with_connection_pool();
+    let client = Client::with_connection_pool().map_err(|_| SeraiError::ConnectionError)?;
     let mut res = Serai { url, client, genesis: [0xfe; 32] };
     res.genesis = res.block_hash(0).await?.ok_or_else(|| {
       SeraiError::InvalidNode("node didn't have the first block's hash".to_string())

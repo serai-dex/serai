@@ -6,7 +6,7 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
-use simple_request::{hyper, Request, Client};
+use simple_request::{hyper, Full, Request, Client};
 
 use bitcoin::{
   hashes::{Hash, hex::FromHex},
@@ -62,7 +62,8 @@ impl Rpc {
   /// provided to this library, if the RPC has an incompatible argument layout. That is not checked
   /// at time of RPC creation.
   pub async fn new(url: String) -> Result<Rpc, RpcError> {
-    let rpc = Rpc { client: Client::with_connection_pool(), url };
+    let rpc =
+      Rpc { client: Client::with_connection_pool().map_err(|_| RpcError::ConnectionError)?, url };
 
     // Make an RPC request to verify the node is reachable and sane
     let res: String = rpc.rpc_call("help", json!([])).await?;
@@ -110,11 +111,11 @@ impl Rpc {
     let mut request = Request::from(
       hyper::Request::post(&self.url)
         .header("Content-Type", "application/json")
-        .body(
+        .body(Full::new(
           serde_json::to_vec(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
             .unwrap()
             .into(),
-        )
+        ))
         .unwrap(),
     );
     request.with_basic_auth();

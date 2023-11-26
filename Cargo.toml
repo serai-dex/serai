@@ -93,3 +93,5 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 # subxt *can* pull these off crates.io yet there's no benefit to this
 sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
 sp-std = { git = "https://github.com/serai-dex/substrate" }
+
+hyper-boring = { git = "https://github.com/cloudflare/boring", rev = "423c260d87b69a926594ded0dd693b5cf1220452" }

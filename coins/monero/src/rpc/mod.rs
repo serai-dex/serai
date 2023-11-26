@@ -135,11 +135,7 @@ impl<R: RpcConnection> Rpc<R> {
       .0
       .post(
         route,
-        if let Some(params) = params {
-          serde_json::to_string(&params).unwrap().into_bytes()
-        } else {
-          vec![]
-        },
+        if let Some(params) = params { serde_json::to_vec(&params).unwrap() } else { vec![] },
       )
       .await?;
     let res_str = std_shims::str::from_utf8(&res)

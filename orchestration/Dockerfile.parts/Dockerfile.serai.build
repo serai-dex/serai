@@ -6,7 +6,7 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 # Add dev dependencies
-RUN apt install -y pkg-config clang
+RUN apt install -y pkg-config clang cmake git
 
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler

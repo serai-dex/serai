@@ -1,15 +1,16 @@
 use hyper::{
   StatusCode,
   header::{HeaderValue, HeaderMap},
-  body::{Buf, Body},
+  body::{Buf, Incoming},
 };
+use http_body_util::BodyExt;
 
-use crate::{Client, Error};
+use crate::Error;
 
 // Borrows the client so its async task lives as long as this response exists.
 #[derive(Debug)]
-pub struct Response<'a>(pub(crate) hyper::Response<Body>, pub(crate) &'a Client);
-impl<'a> Response<'a> {
+pub struct Response(pub(crate) hyper::Response<Incoming>);
+impl Response {
   pub fn status(&self) -> StatusCode {
     self.0.status()
   }
@@ -17,6 +18,12 @@ impl<'a> Response<'a> {
     self.0.headers()
   }
   pub async fn body(self) -> Result<impl std::io::Read, Error> {
-    hyper::body::aggregate(self.0.into_body()).await.map(Buf::reader).map_err(Error::Hyper)
+    self
+      .0
+      .into_body()
+      .collect()
+      .await
+      .map_err(Error::Hyper)
+      .map(|collected| Buf::reader(collected.aggregate()))
   }
 }

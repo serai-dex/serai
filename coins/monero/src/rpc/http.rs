@@ -90,7 +90,7 @@ impl HttpRpc {
         &client
           .request(
             Request::post(url.clone())
-              .body(vec![].into())
+              .body("".into())
               .map_err(|e| RpcError::ConnectionError(format!("couldn't make request: {e:?}")))?,
           )
           .await
@@ -102,7 +102,9 @@ impl HttpRpc {
         connection: Arc::new(Mutex::new((challenge, client))),
       }
     } else {
-      Authentication::Unauthenticated(Client::with_connection_pool())
+      Authentication::Unauthenticated(
+        Client::with_connection_pool().map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+      )
     };
 
     Ok(Rpc(HttpRpc { authentication, url }))
@@ -117,7 +119,7 @@ impl HttpRpc {
         .map_err(|e| RpcError::ConnectionError(format!("couldn't make request: {e:?}")))
     };
 
-    async fn body_from_response(response: Response<'_>) -> Result<Vec<u8>, RpcError> {
+    async fn body_from_response(response: Response) -> Result<Vec<u8>, RpcError> {
       /*
       let length = usize::try_from(
         response
@@ -210,50 +212,37 @@ impl HttpRpc {
             .1
             .request(request)
             .await
-            .map_err(|e| RpcError::ConnectionError(format!("{e:?}")));
+            .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
 
-          let (error, is_stale) = match &response {
-            Err(e) => (Some(e.clone()), false),
-            Ok(response) => (
-              None,
-              if response.status() == StatusCode::UNAUTHORIZED {
-                if let Some(header) = response.headers().get("www-authenticate") {
-                  header
-                    .to_str()
-                    .map_err(|_| {
-                      RpcError::InvalidNode("www-authenticate header wasn't a string".to_string())
-                    })?
-                    .contains("stale")
-                } else {
-                  false
-                }
-              } else {
-                false
-              },
-            ),
-          };
+          let mut is_stale = false;
+          if response.status() == StatusCode::UNAUTHORIZED {
+            if let Some(header) = response.headers().get("www-authenticate") {
+              if header
+                .to_str()
+                .map_err(|_| {
+                  RpcError::InvalidNode("www-authenticate header wasn't a string".to_string())
+                })?
+                .contains("stale")
+              {
+                is_stale = true;
+              }
+            }
+          }
 
-          // If the connection entered an error state, drop the cached challenge as challenges are
-          // per-connection
-          // We don't need to create a new connection as simple-request will for us
-          if error.is_some() || is_stale {
+          // If the authentication is stale, drop the cached challenge and retry
+          if is_stale {
             connection_lock.0 = None;
             // If we're not already on our second attempt, move to the next loop iteration
             // (retrying all of this once)
             if attempt == 0 {
               continue;
             }
-            if let Some(e) = error {
-              Err(e)?
-            } else {
-              debug_assert!(is_stale);
-              Err(RpcError::InvalidNode(
-                "node claimed fresh connection had stale authentication".to_string(),
-              ))?
-            }
-          } else {
-            body_from_response(response.unwrap()).await?
+            Err(RpcError::InvalidNode(
+              "node claimed fresh connection had stale authentication".to_string(),
+            ))?
           }
+
+          body_from_response(response).await?
         }
       });
     }
