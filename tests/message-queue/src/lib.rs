@@ -79,7 +79,7 @@ fn basic_functionality() {
       let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
 
       // Queue some messages
-      let mut coordinator =
+      let coordinator =
         MessageQueue::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
       coordinator
         .queue(
@@ -107,7 +107,7 @@ fn basic_functionality() {
       }
 
       // Successfully get it
-      let mut bitcoin = MessageQueue::new(
+      let bitcoin = MessageQueue::new(
         Service::Processor(NetworkId::Bitcoin),
         rpc.clone(),
         Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
@@ -148,7 +148,7 @@ fn basic_functionality() {
         )
         .await;
 
-      let mut monero = MessageQueue::new(
+      let monero = MessageQueue::new(
         Service::Processor(NetworkId::Monero),
         rpc,
         Zeroizing::new(priv_keys[&NetworkId::Monero]),
