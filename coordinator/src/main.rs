@@ -16,7 +16,6 @@ use schnorr::SchnorrSignature;
 use frost::Participant;
 
 use serai_db::{DbTxn, Db};
-use serai_env as env;
 
 use scale::Encode;
 use serai_client::{
@@ -1199,7 +1198,17 @@ async fn main() {
 
   log::info!("starting coordinator service...");
 
-  let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
+  #[allow(unused_variables, unreachable_code)]
+  let db = {
+    #[cfg(all(feature = "redb", feature = "rocksdb"))]
+    panic!("built with redb and rocksdb");
+    #[cfg(all(feature = "redb", not(feature = "rocksdb")))]
+    let db = serai_db::new_redb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    #[cfg(feature = "rocksdb")]
+    let db =
+      serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    db
+  };
 
   let key = {
     let mut key_hex = serai_env::var("SERAI_KEY").expect("Serai key wasn't provided");

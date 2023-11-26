@@ -169,7 +169,17 @@ async fn main() {
   log::info!("Starting message-queue service...");
 
   // Open the DB
-  let db = serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+  #[allow(unused_variables, unreachable_code)]
+  let db = {
+    #[cfg(all(feature = "redb", feature = "rocksdb"))]
+    panic!("built with redb and rocksdb");
+    #[cfg(all(feature = "redb", not(feature = "rocksdb")))]
+    let db = serai_db::new_redb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    #[cfg(feature = "rocksdb")]
+    let db =
+      serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    db
+  };
 
   let read_key = |str| {
     let key = serai_env::var(str)?;

@@ -30,7 +30,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"] }
+serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env" }
 
 processor-messages = { package = "serai-processor-messages", path = "../processor/messages" }
@@ -55,3 +55,7 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+
+[features]
+redb = ["serai-db/redb"]
+rocksdb = ["serai-db/rocksdb"]

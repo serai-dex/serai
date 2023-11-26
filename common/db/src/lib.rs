@@ -9,6 +9,11 @@ mod rocks;
 #[cfg(feature = "rocksdb")]
 pub use rocks::{RocksDB, new_rocksdb};
 
+#[cfg(feature = "redb")]
+mod redb;
+#[cfg(feature = "redb")]
+pub use redb::{Redb, new_redb};
+
 /// An object implementing get.
 pub trait Get {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;

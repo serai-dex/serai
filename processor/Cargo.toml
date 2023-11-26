@@ -52,7 +52,7 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"], optional = true }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
+serai-db = { path = "../common/db", optional = true }
 serai-env = { path = "../common/env", optional = true }
 # TODO: Replace with direct usage of primitives
 serai-client = { path = "../substrate/client", default-features = false }
@@ -78,4 +78,6 @@ bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
 
-binaries = ["env_logger", "serai-db", "serai-env", "messages", "message-queue"]
+binaries = ["env_logger", "serai-env", "messages", "message-queue"]
+redb = ["serai-db/redb"]
+rocksdb = ["serai-db/rocksdb"]

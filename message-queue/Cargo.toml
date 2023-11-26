@@ -37,11 +37,12 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 # Uses a single threaded runtime since this shouldn't ever be CPU-bound
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"], optional = true }
+serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
 serai-primitives = { path = "../substrate/primitives", features = ["borsh"] }
 
 [features]
-binaries = ["serai-db"]
+redb = ["serai-db/redb"]
+rocksdb = ["serai-db/rocksdb"]
