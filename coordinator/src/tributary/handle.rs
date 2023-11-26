@@ -504,15 +504,6 @@ pub(crate) async fn handle_application_tx<
         SubstrateSignableId::CosigningSubstrateBlock(hash),
       );
 
-      let key = loop {
-        let Some(key_pair) = KeyPairDb::get(txn, spec.set()) else {
-          // This can happen based on a timing condition
-          log::warn!("CosignSubstrateBlock yet keys weren't set yet");
-          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
-          continue;
-        };
-        break key_pair.0.into();
-      };
       let block_number = SeraiBlockNumber::get(txn, hash)
         .expect("CosignSubstrateBlock yet didn't save Serai block number");
       processors
@@ -520,7 +511,7 @@ pub(crate) async fn handle_application_tx<
           spec.set().network,
           coordinator::CoordinatorMessage::CosignSubstrateBlock {
             id: SubstrateSignId {
-              key,
+              session: spec.set().session,
               id: SubstrateSignableId::CosigningSubstrateBlock(hash),
               attempt: 0,
             },
@@ -579,12 +570,15 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
-          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::SubstratePreprocesses {
-                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId {
+                  session: spec.set().session,
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 preprocesses: preprocesses
                   .into_iter()
                   .map(|(k, v)| (k, v.try_into().unwrap()))
@@ -613,12 +607,15 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
-          let key = KeyPairDb::get(txn, spec.set()).unwrap().0 .0;
           processors
             .send(
               spec.set().network,
               coordinator::CoordinatorMessage::SubstrateShares {
-                id: SubstrateSignId { key, id: data.plan, attempt: data.attempt },
+                id: SubstrateSignId {
+                  session: spec.set().session,
+                  id: data.plan,
+                  attempt: data.attempt,
+                },
                 shares: shares
                   .into_iter()
                   .map(|(validator, share)| (validator, share.try_into().unwrap()))

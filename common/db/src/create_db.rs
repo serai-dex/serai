@@ -51,12 +51,10 @@ macro_rules! create_db {
             ($($arg),*).encode()
           )
         }
-        #[allow(dead_code)]
         pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &$field_type) {
           let key = $field_name::key($($arg),*);
           txn.put(&key, borsh::to_vec(data).unwrap());
         }
-        #[allow(dead_code)]
         pub fn get(getter: &impl Get, $($arg: $arg_type),*) -> Option<$field_type> {
           getter.get($field_name::key($($arg),*)).map(|data| {
             borsh::from_slice(data.as_ref()).unwrap()

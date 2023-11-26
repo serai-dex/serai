@@ -232,6 +232,7 @@ async fn sign_test() {
       let block_included_in = batch(
         &mut processors,
         &participant_is,
+        Session(0),
         &substrate_key,
         Batch {
           network: NetworkId::Bitcoin,

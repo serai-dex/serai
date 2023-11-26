@@ -173,7 +173,7 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
   pub struct SubstrateSignId {
-    pub key: [u8; 32],
+    pub session: Session,
     pub id: SubstrateSignableId,
     pub attempt: u32,
   }
@@ -198,15 +198,6 @@ pub mod coordinator {
         CoordinatorMessage::SubstratePreprocesses { .. } => None,
         CoordinatorMessage::SubstrateShares { .. } => None,
         CoordinatorMessage::BatchReattempt { .. } => None,
-      }
-    }
-
-    pub fn key(&self) -> &[u8] {
-      match self {
-        CoordinatorMessage::CosignSubstrateBlock { id, .. } => &id.key,
-        CoordinatorMessage::SubstratePreprocesses { id, .. } => &id.key,
-        CoordinatorMessage::SubstrateShares { id, .. } => &id.key,
-        CoordinatorMessage::BatchReattempt { id } => &id.key,
       }
     }
   }

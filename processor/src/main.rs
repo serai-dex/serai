@@ -201,7 +201,8 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       let KeyConfirmed { substrate_keys, network_keys } =
         tributary_mutable.key_gen.confirm(txn, session, key_pair.clone()).await;
       if session.0 == 0 {
-        tributary_mutable.batch_signer = Some(BatchSigner::new(N::NETWORK, substrate_keys));
+        tributary_mutable.batch_signer =
+          Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
       }
       tributary_mutable
         .signers
@@ -257,11 +258,11 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
               panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
             };
-            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_substrate_key(&id.key)
-            else {
+            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_session(id.session) else {
               panic!("didn't have key shares for the key we were told to cosign with");
             };
-            if let Some((cosigner, msg)) = Cosigner::new(txn, keys, block_number, block, id.attempt)
+            if let Some((cosigner, msg)) =
+              Cosigner::new(txn, id.session, keys, block_number, block, id.attempt)
             {
               tributary_mutable.cosigner = Some(cosigner);
               coordinator.send(msg).await;
@@ -501,7 +502,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
     // We don't have to load any state for this since the Scanner will re-fire any events
     // necessary, only no longer scanning old blocks once Substrate acks them
     if i == 0 {
-      batch_signer = Some(BatchSigner::new(N::NETWORK, substrate_keys));
+      batch_signer = Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
     }
 
     // The Scanner re-fires events as needed for batch_signer yet not signer
@@ -630,9 +631,10 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               // Safe to mutate since all signing operations are done and no more will be added
               tributary_mutable.signers.remove(retired_key.to_bytes().as_ref());
               tributary_mutable.batch_signer.take();
-              if let Some((_, (substrate_keys, _))) = tributary_mutable.key_gen.keys(&new_key) {
+              let keys = tributary_mutable.key_gen.keys(&new_key);
+              if let Some((session, (substrate_keys, _))) = keys {
                 tributary_mutable.batch_signer =
-                  Some(BatchSigner::new(N::NETWORK, substrate_keys));
+                  Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
               }
             }
           },

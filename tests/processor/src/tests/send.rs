@@ -197,7 +197,7 @@ fn send_test() {
 
       // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
       let (id, preprocesses) =
-        recv_batch_preprocesses(&mut coordinators, &key_pair.0 .0, &expected_batch, 0).await;
+        recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
 
       // Continue with signing the batch
       let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;

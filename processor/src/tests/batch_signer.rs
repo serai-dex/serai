@@ -14,7 +14,8 @@ use sp_application_crypto::{RuntimePublic, sr25519::Public};
 use serai_db::{DbTxn, Db, MemDb};
 
 use scale::Encode;
-use serai_client::{primitives::*, in_instructions::primitives::*};
+#[rustfmt::skip]
+use serai_client::{primitives::*, in_instructions::primitives::*, validator_sets::primitives::Session};
 
 use messages::{
   substrate,
@@ -49,7 +50,7 @@ async fn test_batch_signer() {
   };
 
   let actual_id = SubstrateSignId {
-    key: keys.values().next().unwrap().group_key().to_bytes(),
+    session: Session(0),
     id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
     attempt: 0,
   };
@@ -73,7 +74,7 @@ async fn test_batch_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.get(&i).unwrap().clone();
 
-    let mut signer = BatchSigner::<MemDb>::new(NetworkId::Monero, vec![keys]);
+    let mut signer = BatchSigner::<MemDb>::new(NetworkId::Monero, Session(0), vec![keys]);
     let mut db = MemDb::new();
 
     let mut txn = db.txn();

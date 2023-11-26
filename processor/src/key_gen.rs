@@ -40,7 +40,7 @@ create_db!(
     // participant is honest in their execution of the protocol
     KeysDb: (network_key: &[u8]) -> Vec<u8>,
     SessionDb: (network_key: &[u8]) -> Session,
-    NetworkKeyDb: (substrate_key: [u8; 32]) -> Vec<u8>,
+    NetworkKeyDb: (session: Session) -> Vec<u8>,
   }
 );
 
@@ -106,7 +106,7 @@ impl KeysDb {
       keys.1[0].group_key().to_bytes().as_ref(),
     );
     txn.put(Self::key(key_pair.1.as_ref()), keys_vec);
-    NetworkKeyDb::set(txn, key_pair.0.into(), &key_pair.1.clone().into_inner());
+    NetworkKeyDb::set(txn, session, &key_pair.1.clone().into_inner());
     SessionDb::set(txn, key_pair.1.as_ref(), &session);
     keys
   }
@@ -122,14 +122,12 @@ impl KeysDb {
     Some((SessionDb::get(getter, network_key.to_bytes().as_ref()).unwrap(), res))
   }
 
-  pub fn substrate_keys_by_substrate_key<N: Network>(
+  pub fn substrate_keys_by_session<N: Network>(
     getter: &impl Get,
-    substrate_key: &[u8; 32],
+    session: Session,
   ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    let network_key = NetworkKeyDb::get(getter, *substrate_key)?;
-    let res = GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1;
-    assert_eq!(&res.0[0].group_key().to_bytes(), substrate_key);
-    Some(res.0)
+    let network_key = NetworkKeyDb::get(getter, session)?;
+    Some(GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1 .0)
   }
 }
 
@@ -168,11 +166,11 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeysDb::keys::<N>(&self.db, key)
   }
 
-  pub fn substrate_keys_by_substrate_key(
+  pub fn substrate_keys_by_session(
     &self,
-    substrate_key: &[u8; 32],
+    session: Session,
   ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    KeysDb::substrate_keys_by_substrate_key::<N>(&self.db, substrate_key)
+    KeysDb::substrate_keys_by_session::<N>(&self.db, session)
   }
 
   pub async fn handle(

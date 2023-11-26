@@ -279,18 +279,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
         None
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
-      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::BatchPreprocess { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
-      coordinator::ProcessorMessage::SubstrateShare { id, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, &id.key).unwrap())
-      }
+      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::BatchPreprocess { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::SubstrateShare { id, .. } => Some(id.session),
       coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
           network,
