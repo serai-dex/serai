@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --all-features -p serai-message-queue && \
+  cargo build --features "binaries redb" -p serai-message-queue && \
   mv /serai/target/debug/serai-message-queue /serai/bin
 FROM debian:bookworm-slim as image
 
