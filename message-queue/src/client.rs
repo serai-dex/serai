@@ -23,7 +23,6 @@ pub struct MessageQueue {
   pub service: Service,
   priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub_key: <Ristretto as Ciphersuite>::G,
-  socket: Option<TcpStream>,
   url: String,
 }
 
@@ -40,13 +39,7 @@ impl MessageQueue {
       url += ":2287";
     }
 
-    MessageQueue {
-      service,
-      pub_key: Ristretto::generator() * priv_key.deref(),
-      priv_key,
-      socket: None,
-      url,
-    }
+    MessageQueue { service, pub_key: Ristretto::generator() * priv_key.deref(), priv_key, url }
   }
 
   pub fn from_env(service: Service) -> MessageQueue {
@@ -71,29 +64,17 @@ impl MessageQueue {
     Self::new(service, url, priv_key)
   }
 
-  async fn send(&mut self, msg: MessageQueueRequest) {
-    loop {
-      while self.socket.is_none() {
-        // Sleep, so we don't hammer re-attempts
-        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
-        self.socket = TcpStream::connect(&self.url).await.ok();
-      }
-
-      let socket = self.socket.as_mut().unwrap();
-      let msg = borsh::to_vec(&msg).unwrap();
-      let Ok(_) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
-        self.socket = None;
-        continue;
-      };
-      let Ok(_) = socket.write_all(&msg).await else {
-        self.socket = None;
-        continue;
-      };
-      break;
-    }
+  #[must_use]
+  async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> bool {
+    let msg = borsh::to_vec(&msg).unwrap();
+    let Ok(_) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+      return false;
+    };
+    let Ok(_) = socket.write_all(&msg).await else { return false };
+    true
   }
 
-  pub async fn queue(&mut self, metadata: Metadata, msg: Vec<u8>) {
+  pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
@@ -112,49 +93,68 @@ impl MessageQueue {
     .serialize();
 
     let msg = MessageQueueRequest::Queue { meta: metadata, msg, sig };
+    let mut first = true;
     loop {
-      self.send(msg.clone()).await;
-      if self.socket.as_mut().unwrap().read_u8().await.ok() != Some(1) {
-        self.socket = None;
+      // Sleep, so we don't hammer re-attempts
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+      }
+      first = false;
+
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      if !Self::send(&mut socket, msg.clone()).await {
+        continue;
+      }
+      if socket.read_u8().await.ok() != Some(1) {
         continue;
       }
       break;
     }
   }
 
-  pub async fn next(&mut self, from: Service) -> QueuedMessage {
+  pub async fn next(&self, from: Service) -> QueuedMessage {
     let msg = MessageQueueRequest::Next { from, to: self.service };
-    loop {
-      self.send(msg.clone()).await;
+    let mut first = true;
+    'outer: loop {
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+        continue;
+      }
+      first = false;
 
-      // If there wasn't a message, check again in 1s
-      let Ok(status) = self.socket.as_mut().unwrap().read_u8().await else {
-        self.socket = None;
-        continue;
-      };
-      if status == 0 {
-        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
-        continue;
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+
+      loop {
+        if !Self::send(&mut socket, msg.clone()).await {
+          continue 'outer;
+        }
+        let Ok(status) = socket.read_u8().await else {
+          continue 'outer;
+        };
+        // If there wasn't a message, check again in 1s
+        if status == 0 {
+          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+          continue;
+        }
+        assert_eq!(status, 1);
+        break;
       }
 
       // Timeout after 5 seconds in case there's an issue with the length handling
       let Ok(msg) = tokio::time::timeout(core::time::Duration::from_secs(5), async {
         // Read the message length
-        let Ok(len) = self.socket.as_mut().unwrap().read_u32_le().await else {
-          self.socket = None;
+        let Ok(len) = socket.read_u32_le().await else {
           return vec![];
         };
         let mut buf = vec![0; usize::try_from(len).unwrap()];
         // Read the message
-        let Ok(_) = self.socket.as_mut().unwrap().read_exact(&mut buf).await else {
-          self.socket = None;
+        let Ok(_) = socket.read_exact(&mut buf).await else {
           return vec![];
         };
         buf
       })
       .await
       else {
-        self.socket = None;
         continue;
       };
       if msg.is_empty() {
@@ -183,7 +183,7 @@ impl MessageQueue {
     }
   }
 
-  pub async fn ack(&mut self, from: Service, id: u64) {
+  pub async fn ack(&self, from: Service, id: u64) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
@@ -195,10 +195,18 @@ impl MessageQueue {
     .serialize();
 
     let msg = MessageQueueRequest::Ack { from, to: self.service, id, sig };
+    let mut first = true;
     loop {
-      self.send(msg.clone()).await;
-      if self.socket.as_mut().unwrap().read_u8().await.ok() != Some(1) {
-        self.socket = None;
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+      }
+      first = false;
+
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      if !Self::send(&mut socket, msg.clone()).await {
+        continue;
+      }
+      if socket.read_u8().await.ok() != Some(1) {
         continue;
       }
       break;

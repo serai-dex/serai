@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
-
 use serai_client::primitives::NetworkId;
 use processor_messages::{ProcessorMessage, CoordinatorMessage};
 
@@ -22,20 +20,16 @@ pub trait Processors: 'static + Send + Sync + Clone {
 }
 
 #[async_trait::async_trait]
-impl Processors for Arc<Mutex<MessageQueue>> {
+impl Processors for Arc<MessageQueue> {
   async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>) {
-    let mut queue = self.lock().await;
-
     let msg: CoordinatorMessage = msg.into();
     let metadata =
-      Metadata { from: queue.service, to: Service::Processor(network), intent: msg.intent() };
+      Metadata { from: self.service, to: Service::Processor(network), intent: msg.intent() };
     let msg = borsh::to_vec(&msg).unwrap();
-    queue.queue(metadata, msg).await;
+    self.queue(metadata, msg).await;
   }
   async fn recv(&self, network: NetworkId) -> Message {
-    let mut queue = self.lock().await;
-
-    let msg = queue.next(Service::Processor(network)).await;
+    let msg = self.next(Service::Processor(network)).await;
     assert_eq!(msg.from, Service::Processor(network));
 
     let id = msg.id;
@@ -47,8 +41,6 @@ impl Processors for Arc<Mutex<MessageQueue>> {
     return Message { id, network, msg };
   }
   async fn ack(&self, msg: Message) {
-    let mut queue = self.lock().await;
-
-    MessageQueue::ack(&mut queue, Service::Processor(msg.network), msg.id).await
+    MessageQueue::ack(self, Service::Processor(msg.network), msg.id).await
   }
 }
