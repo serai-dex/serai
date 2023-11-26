@@ -39,7 +39,8 @@ create_db!(
     // These do assume a key is only used once across sets, which holds true so long as a single
     // participant is honest in their execution of the protocol
     KeysDb: (network_key: &[u8]) -> Vec<u8>,
-    NetworkKey: (substrate_key: [u8; 32]) -> Vec<u8>,
+    SessionDb: (network_key: &[u8]) -> Session,
+    NetworkKeyDb: (substrate_key: [u8; 32]) -> Vec<u8>,
   }
 );
 
@@ -104,8 +105,9 @@ impl KeysDb {
       },
       keys.1[0].group_key().to_bytes().as_ref(),
     );
-    txn.put(KeysDb::key(keys.1[0].group_key().to_bytes().as_ref()), keys_vec);
-    NetworkKey::set(txn, key_pair.0.into(), &key_pair.1.clone().into_inner());
+    txn.put(Self::key(key_pair.1.as_ref()), keys_vec);
+    NetworkKeyDb::set(txn, key_pair.0.into(), &key_pair.1.clone().into_inner());
+    SessionDb::set(txn, key_pair.1.as_ref(), &session);
     keys
   }
 
@@ -113,18 +115,18 @@ impl KeysDb {
   fn keys<N: Network>(
     getter: &impl Get,
     network_key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
+  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
     let res =
       GeneratedKeysDb::read_keys::<N>(getter, &Self::key(network_key.to_bytes().as_ref()))?.1;
     assert_eq!(&res.1[0].group_key(), network_key);
-    Some(res)
+    Some((SessionDb::get(getter, network_key.to_bytes().as_ref()).unwrap(), res))
   }
 
   pub fn substrate_keys_by_substrate_key<N: Network>(
     getter: &impl Get,
     substrate_key: &[u8; 32],
   ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    let network_key = NetworkKey::get(getter, *substrate_key)?;
+    let network_key = NetworkKeyDb::get(getter, *substrate_key)?;
     let res = GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1;
     assert_eq!(&res.0[0].group_key().to_bytes(), substrate_key);
     Some(res.0)
@@ -160,7 +162,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
+  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
     // This is safe, despite not having a txn, since it's a static value
     // It doesn't change over time/in relation to other operations
     KeysDb::keys::<N>(&self.db, key)

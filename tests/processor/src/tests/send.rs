@@ -9,8 +9,9 @@ use messages::{sign::SignId, SubstrateContext};
 
 use serai_client::{
   primitives::{BlockHash, NetworkId},
-  in_instructions::primitives::Batch,
   coins::primitives::{OutInstruction, OutInstructionWithBalance},
+  in_instructions::primitives::Batch,
+  validator_sets::primitives::Session,
 };
 
 use crate::{*, tests::*};
@@ -62,6 +63,7 @@ pub(crate) async fn recv_sign_preprocesses(
 #[allow(unused)]
 pub(crate) async fn sign_tx(
   coordinators: &mut [Coordinator],
+  session: Session,
   id: SignId,
   preprocesses: HashMap<Participant, Vec<u8>>,
 ) -> Vec<u8> {
@@ -120,11 +122,11 @@ pub(crate) async fn sign_tx(
     if preprocesses.contains_key(&i) {
       match coordinator.recv_message().await {
         messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
-          key,
+          session: this_session,
           id: this_id,
           tx: this_tx,
         }) => {
-          assert_eq!(&key, &id.key);
+          assert_eq!(session, this_session);
           assert_eq!(&this_id, &id.id);
 
           if tx.is_none() {
@@ -237,7 +239,6 @@ fn send_test() {
       // Start signing the TX
       let (mut id, mut preprocesses) =
         recv_sign_preprocesses(&mut coordinators, key_pair.1.to_vec(), 0).await;
-      // TODO: Should this use the Substrate key?
       assert_eq!(id, SignId { key: key_pair.1.to_vec(), id: plans[0].id, attempt: 0 });
 
       // Trigger a random amount of re-attempts
@@ -255,7 +256,7 @@ fn send_test() {
       }
       let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
 
-      let tx_id = sign_tx(&mut coordinators, id.clone(), preprocesses).await;
+      let tx_id = sign_tx(&mut coordinators, Session(0), id.clone(), preprocesses).await;
 
       // Make sure all participating nodes published the TX
       let participating =
@@ -283,11 +284,11 @@ fn send_test() {
           // Verify they send Completed back
           match coordinator.recv_message().await {
             messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
-              key,
+              session,
               id: this_id,
               tx: this_tx,
             }) => {
-              assert_eq!(&key, &id.key);
+              assert_eq!(session, Session(0));
               assert_eq!(&this_id, &id.id);
               assert_eq!(this_tx, tx_id);
             }

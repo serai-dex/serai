@@ -147,7 +147,7 @@ pub mod sign {
     // Signed share for the specified signing protocol.
     Share { id: SignId, shares: Vec<Vec<u8>> },
     // Completed a signing protocol already.
-    Completed { key: Vec<u8>, id: [u8; 32], tx: Vec<u8> },
+    Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
   }
 }
 

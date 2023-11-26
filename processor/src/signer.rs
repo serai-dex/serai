@@ -11,6 +11,7 @@ use frost::{
 use log::{info, debug, warn, error};
 
 use scale::Encode;
+use serai_client::validator_sets::primitives::Session;
 use messages::sign::*;
 
 pub use serai_db::*;
@@ -131,6 +132,7 @@ pub struct Signer<N: Network, D: Db> {
 
   network: N,
 
+  session: Session,
   keys: Vec<ThresholdKeys<N::Curve>>,
 
   signable: HashMap<[u8; 32], N::SignableTransaction>,
@@ -172,13 +174,14 @@ impl<N: Network, D: Db> Signer<N, D> {
       tokio::time::sleep(core::time::Duration::from_secs(5 * 60)).await;
     }
   }
-  pub fn new(network: N, keys: Vec<ThresholdKeys<N::Curve>>) -> Signer<N, D> {
+  pub fn new(network: N, session: Session, keys: Vec<ThresholdKeys<N::Curve>>) -> Signer<N, D> {
     assert!(!keys.is_empty());
     Signer {
       db: PhantomData,
 
       network,
 
+      session,
       keys,
 
       signable: HashMap::new(),
@@ -250,11 +253,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     self.signing.remove(&id);
 
     // Emit the event for it
-    ProcessorMessage::Completed {
-      key: self.keys[0].group_key().to_bytes().as_ref().to_vec(),
-      id,
-      tx: tx_id.as_ref().to_vec(),
-    }
+    ProcessorMessage::Completed { session: self.session, id, tx: tx_id.as_ref().to_vec() }
   }
 
   #[must_use]

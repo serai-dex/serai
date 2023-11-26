@@ -205,7 +205,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       }
       tributary_mutable
         .signers
-        .insert(key_pair.1.into(), Signer::new(network.clone(), network_keys));
+        .insert(key_pair.1.into(), Signer::new(network.clone(), session, network_keys));
     }
 
     substrate_mutable.add_key(txn, activation_number, network_key).await;
@@ -492,7 +492,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
   let mut signers = HashMap::new();
 
   for (i, key) in current_keys.iter().enumerate() {
-    let Some((substrate_keys, network_keys)) = key_gen.keys(key) else { continue };
+    let Some((session, (substrate_keys, network_keys))) = key_gen.keys(key) else { continue };
     let network_key = network_keys[0].group_key();
 
     // If this is the oldest key, load the BatchSigner for it as the active BatchSigner
@@ -512,7 +512,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
     // 2) Cause re-emission of Batch events, which we'd need to check the safety of
     //    (TODO: Do anyways?)
     // 3) Violate the attempt counter (TODO: Is this already being violated?)
-    let mut signer = Signer::new(network.clone(), network_keys);
+    let mut signer = Signer::new(network.clone(), session, network_keys);
 
     // Sign any TXs being actively signed
     let key = key.to_bytes();
@@ -630,7 +630,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               // Safe to mutate since all signing operations are done and no more will be added
               tributary_mutable.signers.remove(retired_key.to_bytes().as_ref());
               tributary_mutable.batch_signer.take();
-              if let Some((substrate_keys, _)) = tributary_mutable.key_gen.keys(&new_key) {
+              if let Some((_, (substrate_keys, _))) = tributary_mutable.key_gen.keys(&new_key) {
                 tributary_mutable.batch_signer =
                   Some(BatchSigner::new(N::NETWORK, substrate_keys));
               }

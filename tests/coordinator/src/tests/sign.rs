@@ -22,6 +22,7 @@ use serai_client::{
     CoinsEvent,
   },
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  validator_sets::primitives::Session,
   SeraiCoins,
 };
 use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext, CoordinatorMessage};
@@ -31,6 +32,7 @@ use crate::tests::*;
 pub async fn sign<C: Ciphersuite>(
   processors: &mut [Processor],
   processor_is: &[u8],
+  session: Session,
   network_key: &Zeroizing<C::F>,
   plan_id: [u8; 32],
 ) {
@@ -150,7 +152,7 @@ pub async fn sign<C: Ciphersuite>(
       &mut processors[processor_is.iter().position(|p_i| u16::from(*p_i) == u16::from(i)).unwrap()];
     processor
       .send_message(messages::sign::ProcessorMessage::Completed {
-        key: id.key.clone(),
+        session,
         id: id.id,
         tx: b"signed_tx".to_vec(),
       })
@@ -352,7 +354,7 @@ async fn sign_test() {
           .await;
       }
 
-      sign::<Secp256k1>(&mut processors, &participant_is, &network_key, plan_id).await;
+      sign::<Secp256k1>(&mut processors, &participant_is, Session(0), &network_key, plan_id).await;
     })
     .await;
 }

@@ -10,7 +10,10 @@ use frost::{
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
+use serai_client::{
+  primitives::{NetworkId, Coin, Amount, Balance},
+  validator_sets::primitives::Session,
+};
 
 use messages::sign::*;
 use crate::{
@@ -33,11 +36,9 @@ pub async fn sign<N: Network>(
     attempt: 0,
   };
 
-  let mut group_key = None;
   let mut keys = HashMap::new();
   let mut txs = HashMap::new();
   for (i, (these_keys, this_tx)) in keys_txs.drain() {
-    group_key = Some(these_keys.group_key());
     keys.insert(i, these_keys);
     txs.insert(i, this_tx);
   }
@@ -49,7 +50,7 @@ pub async fn sign<N: Network>(
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), vec![keys]));
+    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), Session(0), vec![keys]));
     dbs.insert(i, MemDb::new());
   }
   drop(keys);
@@ -130,8 +131,8 @@ pub async fn sign<N: Network>(
       .await
       .unwrap()
     {
-      ProcessorMessage::Completed { key, id, tx } => {
-        assert_eq!(&key, group_key.unwrap().to_bytes().as_ref());
+      ProcessorMessage::Completed { session, id, tx } => {
+        assert_eq!(session, Session(0));
         assert_eq!(id, actual_id.id);
         if tx_id.is_none() {
           tx_id = Some(tx.clone());

@@ -217,9 +217,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
       // While the Processor's Scanner will always emit Completed, that's routed through the
       // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
       // confirms it
-      sign::ProcessorMessage::Completed { key, .. } => {
-        Some(SubstrateDb::<D>::session_for_key(&txn, key).unwrap())
-      }
+      sign::ProcessorMessage::Completed { session, .. } => Some(*session),
     },
     ProcessorMessage::Coordinator(inner_msg) => match inner_msg {
       // This is a special case as it's relevant to *all* Tributaries for this network
@@ -540,7 +538,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           })]
         }
-        sign::ProcessorMessage::Completed { key: _, id, tx } => {
+        sign::ProcessorMessage::Completed { session: _, id, tx } => {
           let r = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
           #[allow(non_snake_case)]
           let R = <Ristretto as Ciphersuite>::generator() * r.deref();
