@@ -13,8 +13,8 @@ impl Get for WriteTransaction<'_> {
 }
 impl DbTxn for WriteTransaction<'_> {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    let mut table = self.open_table::<&[u8], &[u8]>(TableDefinition::new("default")).unwrap();
-    table.insert(key.as_ref(), value.as_ref()).unwrap();
+    let mut table = self.open_table::<&[u8], Vec<u8>>(TableDefinition::new("default")).unwrap();
+    table.insert(key.as_ref(), &value.as_ref().to_vec()).unwrap();
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
     let mut table = self.open_table::<&[u8], Vec<u8>>(TableDefinition::new("default")).unwrap();
