@@ -275,6 +275,17 @@ impl LibP2p {
     let mut swarm = SwarmBuilder::with_existing_identity(throwaway_key_pair)
       .with_tokio()
       .with_quic()
+      /*
+      .with_quic_config(|mut config| {
+        config.max_idle_timeout = 85;
+        // We send KeepAlive after 80, so this isn't needed
+        config.keep_alive_interval = Duration::from_secs(config.max_idle_timeout.into() + 1);
+        // 1 MiB + max message size
+        config.max_stream_data = (1024 * 1024) + u32::try_from(MAX_LIBP2P_MESSAGE_SIZE).unwrap();
+        // Support 10 maxed out streams
+        config.max_connection_data = 10 * config.max_stream_data;
+      })
+      */
       .with_behaviour(|_| behavior)
       .unwrap()
       .build();
@@ -365,8 +376,8 @@ impl LibP2p {
                   libp2p::mdns::Event::Discovered(list),
                 ))) => {
                   for (peer, mut addr) in list {
-                    // Check the port is as expected to prevent trying to peer with Substrate nodes
-                    if addr.pop() == Some(libp2p::multiaddr::Protocol::Udp(PORT)) {
+                    // Only peer with Quic, effectively preventing connecting to Substrate nodes
+                    if addr.pop() == Some(libp2p::multiaddr::Protocol::QuicV1) {
                       log::info!("found peer via mdns");
                       swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer);
                     }
