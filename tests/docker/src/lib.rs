@@ -9,7 +9,7 @@ use std::{
 use tokio::{sync::Mutex, process::Command};
 
 static BUILT: OnceLock<Mutex<HashMap<String, Arc<Mutex<bool>>>>> = OnceLock::new();
-pub async fn build(name: String) {
+async fn build_inner(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
   // Only one call to build will acquire this lock
   let mut built_lock = built.lock().await;
@@ -202,6 +202,11 @@ pub async fn build(name: String) {
 
   println!("Built!");
 
+  // Set built
+  *built_lock = true;
+}
+
+async fn clear_cache_if_github() {
   if std::env::var("GITHUB_CI").is_ok() {
     println!("In CI, so clearing cache to prevent hitting the storage limits.");
     if !Command::new("docker")
@@ -215,20 +220,23 @@ pub async fn build(name: String) {
       .status
       .success()
     {
-      println!("failed to clear cache after building {name}\n");
+      println!("failed to clear cache\n");
     }
   }
+}
 
-  // Set built
-  *built_lock = true;
+pub async fn build(name: String) {
+  build_inner(name).await;
+  clear_cache_if_github().await;
 }
 
 pub async fn build_batch(names: Vec<String>) {
   let mut handles = vec![];
   for name in names.into_iter().collect::<HashSet<_>>() {
-    handles.push(tokio::spawn(build(name)));
+    handles.push(tokio::spawn(build_inner(name)));
   }
   for handle in handles {
     handle.await.unwrap();
   }
+  clear_cache_if_github().await;
 }

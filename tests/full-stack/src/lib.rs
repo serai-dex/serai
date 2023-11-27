@@ -32,13 +32,21 @@ pub struct Handles {
 }
 
 pub async fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
-  let mut docker_names = serai_processor_tests::docker_names(NetworkId::Bitcoin);
-  docker_names.append(&mut serai_processor_tests::docker_names(NetworkId::Monero));
-  docker_names.extend([
+  let mut processor_docker_names = serai_processor_tests::docker_names(NetworkId::Bitcoin);
+  processor_docker_names.extend(serai_processor_tests::docker_names(NetworkId::Monero));
+
+  let mut docker_names = vec![
     serai_message_queue_tests::docker_name(),
     serai_coordinator_tests::serai_docker_name(),
     serai_coordinator_tests::coordinator_docker_name(),
-  ]);
+  ];
+
+  // If this is in the GH CI, build in two stages so we don't hit storage limits
+  if std::env::var("GITHUB_CI").is_ok() {
+    serai_docker_tests::build_batch(processor_docker_names).await;
+  } else {
+    docker_names.extend(processor_docker_names);
+  }
   serai_docker_tests::build_batch(docker_names).await;
 
   let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance().await;
