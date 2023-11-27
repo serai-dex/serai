@@ -66,7 +66,7 @@ message-queue = { package = "serai-message-queue", path = "../message-queue", op
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
 
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+sp-application-crypto = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
 
 dockertest = "0.4"
 serai-docker-tests = { path = "../tests/docker" }

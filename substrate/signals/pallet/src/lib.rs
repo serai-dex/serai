@@ -14,7 +14,7 @@ pub mod pallet {
   use sp_io::hashing::blake2_256;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, sp_runtime};
+  use frame_support::pallet_prelude::*;
 
   use serai_primitives::*;
   use serai_signals_primitives::SignalId;

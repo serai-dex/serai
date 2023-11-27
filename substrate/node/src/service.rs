@@ -8,7 +8,7 @@ use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInh
 use sp_io::SubstrateHostFunctions;
 use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, WasmExecutor};
 
-use sc_network_common::sync::warp::WarpSyncParams;
+use sc_network_sync::warp::WarpSyncParams;
 use sc_network::{Event, NetworkEventStream};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
@@ -40,7 +40,7 @@ type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
   SelectChain,
-  sc_consensus::DefaultImportQueue<Block, FullClient>,
+  sc_consensus::DefaultImportQueue<Block>,
   sc_transaction_pool::FullPool<Block, FullClient>,
   (
     BabeBlockImport,
@@ -104,6 +104,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
 
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
+    512,
     &client,
     select_chain.clone(),
     telemetry.as_ref().map(Telemetry::handle),
@@ -186,6 +187,8 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       import_queue,
       block_announce_validator_builder: None,
       warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+      // TODO: Add a BlockRequestHandler here
+      block_relay: None,
     })?;
 
   if config.offchain_worker.enabled {
@@ -199,7 +202,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
         offchain_db: backend.offchain_storage(),
         transaction_pool: Some(OffchainTransactionPoolFactory::new(transaction_pool.clone())),
         network_provider: network.clone(),
-        enable_http_requests: true,
         custom_extensions: |_| vec![],
       })
       .run(client.clone(), task_manager.spawn_handle()),
@@ -311,7 +313,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       grandpa::run_grandpa_voter(grandpa::GrandpaParams {
         config: grandpa::Config {
           gossip_duration: std::time::Duration::from_millis(333),
-          justification_period: 512,
+          justification_generation_period: 10,
           name: Some(name),
           observer_enabled: false,
           keystore: if role.is_authority() { Some(keystore) } else { None },

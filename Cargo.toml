@@ -94,8 +94,13 @@ panic = "unwind"
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
 # subxt *can* pull these off crates.io yet there's no benefit to this
-sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
-sp-std = { git = "https://github.com/serai-dex/substrate" }
+sp-core-hashing = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+
+# The external arkworks-substrate repo refers back to the paritytech
+# polkadot-sdk repo, hence patching it to point to serai-dex's
+[patch."https://github.com/paritytech/polkadot-sdk"]
+sp-crypto-ec-utils = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"

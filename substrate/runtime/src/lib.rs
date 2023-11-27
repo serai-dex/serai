@@ -36,8 +36,6 @@ use sp_core::OpaqueMetadata;
 use sp_std::prelude::*;
 
 use sp_version::RuntimeVersion;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
@@ -100,16 +98,9 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   spec_name: create_runtime_str!("serai"),
   impl_name: create_runtime_str!("core"),
   spec_version: 1,
-  impl_version: 1,
   apis: RUNTIME_API_VERSIONS,
-  transaction_version: 1,
   state_version: 1,
 };
-
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-  NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
-}
 
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
@@ -170,13 +161,13 @@ impl Contains<RuntimeCall> for CallFilter {
       RuntimeCall::Babe(call) => match call {
         babe::Call::report_equivocation { .. } |
         babe::Call::report_equivocation_unsigned { .. } => true,
-        babe::Call::plan_config_change { .. } | babe::Call::__Ignore(_, _) => false,
+        babe::Call::__Ignore(_, _) => false,
       },
 
       RuntimeCall::Grandpa(call) => match call {
         grandpa::Call::report_equivocation { .. } |
         grandpa::Call::report_equivocation_unsigned { .. } => true,
-        grandpa::Call::note_stalled { .. } | grandpa::Call::__Ignore(_, _) => false,
+        grandpa::Call::__Ignore(_, _) => false,
       },
     }
   }
@@ -200,13 +191,8 @@ impl system::Config for Runtime {
   type Version = Version;
   type PalletInfo = PalletInfo;
 
-  type OnNewAccount = ();
-  type OnKilledAccount = ();
-  type OnSetCode = ();
-
   type AccountData = ();
   type SystemWeightInfo = ();
-  type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
   type MaxConsumers = support::traits::ConstU32<16>;
 }
@@ -308,6 +294,7 @@ impl babe::Config for Runtime {
 
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
 
   type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
@@ -318,7 +305,9 @@ impl grandpa::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 
   type WeightInfo = ();
+
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
 
   type MaxSetIdSessionEntries = ConstU64<0>;
   type KeyOwnerProof = MembershipProof<Self>;

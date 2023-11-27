@@ -23,45 +23,45 @@ name = "serai-node"
 clap = { version = "4", features = ["derive"] }
 
 futures = "0.3"
-jsonrpsee = { version = "0.16", features = ["server"] }
+jsonrpsee = { version = "0.20", features = ["server"] }
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sp-io = { git = "https://github.com/serai-dex/substrate" }
-sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
-sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-io = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-blockchain = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-block-builder = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 serai-runtime = { path = "../runtime", features = ["std"] }
 
-sc-offchain = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
-sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
-sc-executor = { git = "https://github.com/serai-dex/substrate" }
-sc-service = { git = "https://github.com/serai-dex/substrate" }
-sc-client-api = { git = "https://github.com/serai-dex/substrate" }
-sc-network-common = { git = "https://github.com/serai-dex/substrate" }
-sc-network = { git = "https://github.com/serai-dex/substrate" }
+sc-offchain = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-transaction-pool = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-transaction-pool-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-executor = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-service = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-client-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-network-sync = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-network = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-sc-consensus = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
-sc-authority-discovery = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-consensus-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-authority-discovery = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
-sc-cli = { git = "https://github.com/serai-dex/substrate" }
+sc-telemetry = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sc-cli = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
+sc-rpc-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
-pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
+substrate-frame-rpc-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }
+substrate-build-script-utils = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 [features]
 default = []
