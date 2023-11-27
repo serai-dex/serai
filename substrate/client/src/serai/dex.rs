@@ -1,7 +1,7 @@
 use sp_core::bounded_vec::BoundedVec;
 use serai_runtime::{
   primitives::{SeraiAddress, Amount, Coin},
-  dex, Dex, Runtime,
+  dex, Runtime,
 };
 
 use crate::{SeraiError, TemporalSerai};
@@ -11,8 +11,19 @@ pub type DexEvent = dex::Event<Runtime>;
 #[derive(Clone, Copy)]
 pub struct SeraiDex<'a>(pub(crate) TemporalSerai<'a>);
 impl<'a> SeraiDex<'a> {
-  pub async fn all_events(&self) -> Result<Vec<DexEvent>, SeraiError> {
-    self.0.events::<Dex, _>(|_| true).await
+  pub async fn events(&self) -> Result<Vec<DexEvent>, SeraiError> {
+    self
+      .0
+      .events(
+        |event| {
+          if let serai_runtime::RuntimeEvent::Dex(event) = event {
+            Some(event)
+          } else {
+            None
+          }
+        },
+      )
+      .await
   }
 
   pub fn add_liquidity(

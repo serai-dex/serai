@@ -20,7 +20,7 @@ pub async fn add_liquidity(
     &pair,
     &SeraiDex::add_liquidity(coin, coin_amount, sri_amount, Amount(1), Amount(1), address.into()),
     nonce,
-    Default::default(),
+    0,
   );
 
   publish_tx(serai, &tx).await

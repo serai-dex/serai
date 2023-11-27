@@ -28,7 +28,7 @@ pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u
   let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
   assert_eq!(
     serai
-      .with_current_latest_block()
+      .as_of_latest_finalized_block()
       .await
       .unwrap()
       .validator_sets()
@@ -48,7 +48,7 @@ pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u
     musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &[public_key]).unwrap();
   assert_eq!(
     serai
-      .with_current_latest_block()
+      .as_of_latest_finalized_block()
       .await
       .unwrap()
       .validator_sets()
@@ -69,7 +69,7 @@ pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u
     &set_keys_message(&set, &key_pair),
   );
 
-  // Vote in a key pair
+  // Set the key pair
   let block = publish_tx(
     serai,
     &SeraiValidatorSets::set_keys(set.network, key_pair.clone(), Signature(sig.to_bytes())),

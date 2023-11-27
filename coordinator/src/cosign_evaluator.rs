@@ -75,7 +75,7 @@ impl<D: Db> CosignEvaluator<D> {
   }
 
   async fn update_stakes(&self) -> Result<(), SeraiError> {
-    let serai = self.serai.as_of(self.serai.latest_block_hash().await?);
+    let serai = self.serai.as_of_latest_finalized_block().await?;
 
     let mut stakes = HashMap::new();
     for network in NETWORKS {
@@ -112,13 +112,13 @@ impl<D: Db> CosignEvaluator<D> {
     }
 
     // If this an old cosign (older than a day), drop it
-    let latest_block = self.serai.latest_block().await?;
+    let latest_block = self.serai.latest_finalized_block().await?;
     if (cosign.block_number + (24 * 60 * 60 / 6)) < latest_block.number() {
       log::debug!("received old cosign supposedly signed by {:?}", cosign.network);
       return Ok(());
     }
 
-    let Some(block) = self.serai.block_by_number(cosign.block_number).await? else {
+    let Some(block) = self.serai.finalized_block_by_number(cosign.block_number).await? else {
       log::warn!("received cosign with a block number which doesn't map to a block");
       return Ok(());
     };

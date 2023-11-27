@@ -1222,8 +1222,8 @@ async fn main() {
 
   let serai = || async {
     loop {
-      let Ok(serai) = Serai::new(&format!(
-        "ws://{}:9944",
+      let Ok(serai) = Serai::new(format!(
+        "http://{}:9944",
         serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
       ))
       .await

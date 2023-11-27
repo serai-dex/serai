@@ -201,7 +201,7 @@ async fn mint_and_burn_test() {
             let print_at = halt_at / 2;
             for i in 0 .. halt_at {
               if let Some(key_pair) = serai
-                .with_current_latest_block()
+                .as_of_latest_finalized_block()
                 .await
                 .unwrap()
                 .validator_sets()
@@ -417,7 +417,7 @@ async fn mint_and_burn_test() {
             let print_at = halt_at / 2;
             for i in 0 .. halt_at {
               if serai
-                .with_current_latest_block()
+                .as_of_latest_finalized_block()
                 .await
                 .unwrap()
                 .in_instructions()

@@ -50,7 +50,8 @@ serai_test!(
     let serai = serai.as_of(block);
     {
       let serai = serai.in_instructions();
-      assert_eq!(serai.latest_block_for_network(network).await.unwrap(), Some(block_hash));
+      let latest_finalized = serai.latest_block_for_network(network).await.unwrap();
+      assert_eq!(latest_finalized, Some(block_hash));
       let batches = serai.batch_events().await.unwrap();
       assert_eq!(
         batches,
