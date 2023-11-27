@@ -1,13 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use serai_primitives::{Coin, SubstrateAmount};
+use serai_primitives::{Coin, SubstrateAmount, Balance};
 
 pub trait AllowMint {
-  fn allow(coin: Coin, supply: SubstrateAmount) -> bool;
+  fn allow(balance: &Balance) -> bool;
 }
 
 impl AllowMint for () {
-  fn allow(_: Coin, _: SubstrateAmount) -> bool {
+  fn allow(_: &Balance) -> bool {
     true
   }
 }
@@ -163,7 +163,7 @@ pub mod pallet {
 
       // skip the economics check for lp tokens.
       if TypeId::of::<I>() != TypeId::of::<LiquidityTokensInstance>() &&
-        !T::AllowMint::allow(balance.coin, new_supply)
+        !T::AllowMint::allow(&balance)
       {
         Err(Error::<T, I>::NotEnoughStake)?;
       }

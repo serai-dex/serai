@@ -354,6 +354,7 @@ pub mod pallet {
               *v = None;
             }
           });
+          // TODO: delete old LastQuoteForBlock keys as well?
         }
 
         // update the oracle value
