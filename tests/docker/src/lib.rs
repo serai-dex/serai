@@ -38,13 +38,15 @@ pub async fn build(name: String) {
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
 
+  let name_without_serai_dev = name.split("serai-dev-").nth(1).unwrap_or(&name);
+
   // If this Docker image was created after this repo was last edited, return here
   // This should have better performance than Docker and allows running while offline
   if let Ok(res) = Command::new("docker")
     .arg("inspect")
     .arg("-f")
     .arg("{{ .Metadata.LastTagTime }}")
-    .arg(format!("serai-dev-{name}"))
+    .arg(name.clone())
     .output()
     .await
   {
@@ -60,16 +62,19 @@ pub async fn build(name: String) {
       );
 
       let mut dockerfile_path = orchestration_path.clone();
-      if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
-        dockerfile_path = dockerfile_path.join("coins");
-      }
-      if name.contains("-processor") {
-        dockerfile_path = dockerfile_path
-          .join("processor")
-          .join(name.split('-').next().unwrap())
-          .join("Dockerfile");
-      } else {
-        dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+      {
+        let name = name_without_serai_dev;
+        if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(&name) {
+          dockerfile_path = dockerfile_path.join("coins");
+        }
+        if name.contains("-processor") {
+          dockerfile_path = dockerfile_path
+            .join("processor")
+            .join(name.split('-').next().unwrap())
+            .join("Dockerfile");
+        } else {
+          dockerfile_path = dockerfile_path.join(name).join("Dockerfile");
+        }
       }
 
       // For all services, if the Dockerfile was edited after the image was built we should rebuild
@@ -78,7 +83,7 @@ pub async fn build(name: String) {
 
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
-      let mut metadatas = match name.as_str() {
+      let mut metadatas = match name_without_serai_dev {
         "bitcoin" => vec![],
         "monero" => vec![],
         "message-queue" => vec![
@@ -152,6 +157,7 @@ pub async fn build(name: String) {
   println!("Building {}...", &name);
 
   // Version which always prints
+  /*
   if !Command::new("docker")
     .current_dir(orchestration_path)
     .arg("compose")
@@ -166,15 +172,16 @@ pub async fn build(name: String) {
   {
     panic!("failed to build {name}");
   }
+  */
 
   // Version which only prints on error
-  /*
   let res = Command::new("docker")
     .current_dir(orchestration_path)
     .arg("compose")
     .arg("build")
-    .arg(&name)
+    .arg(name_without_serai_dev)
     .output()
+    .await
     .unwrap();
   if !res.status.success() {
     println!("failed to build {name}\n");
@@ -192,7 +199,6 @@ pub async fn build(name: String) {
     );
     panic!("failed to build {name}");
   }
-  */
 
   println!("Built!");
 
