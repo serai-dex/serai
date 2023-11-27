@@ -301,6 +301,8 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn new_set(network: NetworkId) {
+      // TODO: prevent new set if it doesn't have enough stake for economic security.
+
       // Update CurrentSession
       let session = {
         let new_session = CurrentSession::<T>::get(network)
