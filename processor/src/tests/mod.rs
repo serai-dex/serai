@@ -44,49 +44,59 @@ macro_rules! test_network {
       test_key_gen::<$N>().await;
     }
 
-    #[test]
-    fn $scanner() {
+    #[tokio::test]
+    async fn $scanner() {
       *INIT_LOGGER;
-      let docker = $docker();
-      docker.run(|ops| async move {
-        test_scanner($network(&ops).await).await;
-      });
+      let docker = $docker().await;
+      docker
+        .run_async(|ops| async move {
+          test_scanner($network(&ops).await).await;
+        })
+        .await;
     }
 
-    #[test]
-    fn $signer() {
+    #[tokio::test]
+    async fn $signer() {
       *INIT_LOGGER;
-      let docker = $docker();
-      docker.run(|ops| async move {
-        test_signer($network(&ops).await).await;
-      });
+      let docker = $docker().await;
+      docker
+        .run_async(|ops| async move {
+          test_signer($network(&ops).await).await;
+        })
+        .await;
     }
 
-    #[test]
-    fn $wallet() {
+    #[tokio::test]
+    async fn $wallet() {
       *INIT_LOGGER;
-      let docker = $docker();
-      docker.run(|ops| async move {
-        test_wallet($network(&ops).await).await;
-      });
+      let docker = $docker().await;
+      docker
+        .run_async(|ops| async move {
+          test_wallet($network(&ops).await).await;
+        })
+        .await;
     }
 
-    #[test]
-    fn $addresses() {
+    #[tokio::test]
+    async fn $addresses() {
       *INIT_LOGGER;
-      let docker = $docker();
-      docker.run(|ops| async move {
-        test_addresses($network(&ops).await).await;
-      });
+      let docker = $docker().await;
+      docker
+        .run_async(|ops| async move {
+          test_addresses($network(&ops).await).await;
+        })
+        .await;
     }
 
-    #[test]
-    fn $no_deadlock_in_multisig_completed() {
+    #[tokio::test]
+    async fn $no_deadlock_in_multisig_completed() {
       *INIT_LOGGER;
-      let docker = $docker();
-      docker.run(|ops| async move {
-        test_no_deadlock_in_multisig_completed($network(&ops).await).await;
-      });
+      let docker = $docker().await;
+      docker
+        .run_async(|ops| async move {
+          test_no_deadlock_in_multisig_completed($network(&ops).await).await;
+        })
+        .await;
     }
   };
 }

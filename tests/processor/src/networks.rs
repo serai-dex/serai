@@ -21,8 +21,19 @@ pub const RPC_PASS: &str = "seraidex";
 pub const BTC_PORT: u32 = 8332;
 pub const XMR_PORT: u32 = 18081;
 
-pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
-  serai_docker_tests::build("bitcoin".to_string());
+pub fn network_docker_name(network: NetworkId) -> String {
+  match network {
+    NetworkId::Serai => {
+      panic!("asking for docker name for external network Serai, which isn't external")
+    }
+    NetworkId::Bitcoin => "bitcoin".to_string(),
+    NetworkId::Ethereum => todo!(),
+    NetworkId::Monero => "monero".to_string(),
+  }
+}
+
+pub async fn bitcoin_instance() -> (TestBodySpecification, u32) {
+  serai_docker_tests::build(network_docker_name(NetworkId::Bitcoin)).await;
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
@@ -41,8 +52,8 @@ pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
   (composition, BTC_PORT)
 }
 
-pub fn monero_instance() -> (TestBodySpecification, u32) {
-  serai_docker_tests::build("monero".to_string());
+pub async fn monero_instance() -> (TestBodySpecification, u32) {
+  serai_docker_tests::build(network_docker_name(NetworkId::Monero)).await;
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
@@ -63,11 +74,11 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
   (composition, XMR_PORT)
 }
 
-pub fn network_instance(network: NetworkId) -> (TestBodySpecification, u32) {
+pub async fn network_instance(network: NetworkId) -> (TestBodySpecification, u32) {
   match network {
-    NetworkId::Bitcoin => bitcoin_instance(),
+    NetworkId::Bitcoin => bitcoin_instance().await,
     NetworkId::Ethereum => todo!(),
-    NetworkId::Monero => monero_instance(),
+    NetworkId::Monero => monero_instance().await,
     NetworkId::Serai => {
       panic!("Serai is not a valid network to spawn an instance of for a processor")
     }

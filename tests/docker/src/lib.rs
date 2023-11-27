@@ -1,19 +1,27 @@
 use std::{
-  sync::{Mutex, OnceLock},
+  sync::{OnceLock, Arc},
   collections::{HashSet, HashMap},
   time::SystemTime,
   path::PathBuf,
   fs, env,
-  process::Command,
 };
 
-static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
-pub fn build(name: String) {
+use tokio::{sync::Mutex, process::Command};
+
+static BUILT: OnceLock<Mutex<HashMap<String, Arc<Mutex<bool>>>>> = OnceLock::new();
+pub async fn build(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
   // Only one call to build will acquire this lock
-  let mut built_lock = built.lock().unwrap();
-  if built_lock.contains_key(&name) {
-    // If it was built, return
+  let mut built_lock = built.lock().await;
+  if !built_lock.contains_key(&name) {
+    built_lock.insert(name.clone(), Arc::new(Mutex::new(false)));
+  }
+  let this_lock = built_lock[&name].clone();
+  drop(built_lock);
+
+  let mut built_lock = this_lock.lock().await;
+  // Already built
+  if *built_lock {
     return;
   }
 
@@ -38,6 +46,7 @@ pub fn build(name: String) {
     .arg("{{ .Metadata.LastTagTime }}")
     .arg(format!("serai-dev-{name}"))
     .output()
+    .await
   {
     let last_tag_time_buf = String::from_utf8(res.stdout).expect("docker had non-utf8 output");
     let last_tag_time = last_tag_time_buf.trim();
@@ -133,7 +142,7 @@ pub fn build(name: String) {
       if let Some(last_modified) = last_modified {
         if last_modified < created_time {
           println!("{} was built after the most recent source code edits, assuming built.", name);
-          built_lock.insert(name, true);
+          *built_lock = true;
           return;
         }
       }
@@ -151,6 +160,7 @@ pub fn build(name: String) {
     .spawn()
     .unwrap()
     .wait()
+    .await
     .unwrap()
     .success()
   {
@@ -194,6 +204,7 @@ pub fn build(name: String) {
       .arg("--all")
       .arg("--force")
       .output()
+      .await
       .unwrap()
       .status
       .success()
@@ -203,5 +214,15 @@ pub fn build(name: String) {
   }
 
   // Set built
-  built_lock.insert(name, true);
+  *built_lock = true;
+}
+
+pub async fn build_batch(names: Vec<String>) {
+  let mut handles = vec![];
+  for name in names.into_iter().collect::<HashSet<_>>() {
+    handles.push(tokio::spawn(build(name)));
+  }
+  for handle in handles {
+    handle.await.unwrap();
+  }
 }

@@ -21,7 +21,7 @@ pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
 pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
-pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
+pub(crate) async fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for i in 0 .. COORDINATORS {
@@ -33,7 +33,8 @@ pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, Dock
       4 => "Eve",
       5 => "Ferdie",
       _ => panic!("needed a 7th name for a serai node"),
-    });
+    })
+    .await;
     coordinators.push((handles, coord_key));
     for composition in compositions {
       test.provide_container(composition);

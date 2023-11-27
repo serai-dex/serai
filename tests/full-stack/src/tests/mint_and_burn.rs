@@ -26,7 +26,7 @@ use crate::tests::*;
 #[tokio::test]
 async fn mint_and_burn_test() {
   let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
-  let (handles, test) = new_test();
+  let (handles, test) = new_test().await;
 
   test
     .run_async(|ops| async move {

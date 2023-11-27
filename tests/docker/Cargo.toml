@@ -15,3 +15,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 chrono = "0.4"
+
+tokio = { version = "1", default-features = false, features = ["sync", "rt"] }

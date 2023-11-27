@@ -19,8 +19,8 @@ mod bitcoin {
     check::<IsTrue<{ Bitcoin::DUST >= bitcoin_serai::wallet::DUST }>>();
   }
 
-  fn spawn_bitcoin() -> DockerTest {
-    serai_docker_tests::build("bitcoin".to_string());
+  async fn spawn_bitcoin() -> DockerTest {
+    serai_docker_tests::build("bitcoin".to_string()).await;
 
     let composition = TestBodySpecification::with_image(
       Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
@@ -73,8 +73,8 @@ mod monero {
   use super::*;
   use crate::networks::{Network, Monero};
 
-  fn spawn_monero() -> DockerTest {
-    serai_docker_tests::build("monero".to_string());
+  async fn spawn_monero() -> DockerTest {
+    serai_docker_tests::build("monero".to_string()).await;
 
     let composition = TestBodySpecification::with_image(
       Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
