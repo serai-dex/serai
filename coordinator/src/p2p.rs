@@ -191,7 +191,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
 #[derive(NetworkBehaviour)]
 struct Behavior {
   gossipsub: GsBehavior,
-  //#[cfg(debug_assertions)]
+  #[cfg(debug_assertions)]
   mdns: libp2p::mdns::tokio::Behaviour,
 }
 
@@ -261,8 +261,7 @@ impl LibP2p {
       },
 
       // Only use MDNS in debug environments, as it should have no value in a release build
-      // TODO: We do tests on release binaries as of right now...
-      //#[cfg(debug_assertions)]
+      #[cfg(debug_assertions)]
       mdns: {
         log::info!("creating mdns service");
         libp2p::mdns::tokio::Behaviour::new(libp2p::mdns::Config::default(), throwaway_peer_id)
@@ -371,7 +370,7 @@ impl LibP2p {
             // Handle new incoming messages
             event = swarm.next() => {
               match event {
-                //#[cfg(debug_assertions)]
+                #[cfg(debug_assertions)]
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Mdns(
                   libp2p::mdns::Event::Discovered(list),
                 ))) => {
@@ -383,7 +382,7 @@ impl LibP2p {
                     }
                   }
                 }
-                //#[cfg(debug_assertions)]
+                #[cfg(debug_assertions)]
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Mdns(
                   libp2p::mdns::Event::Expired(list),
                 ))) => {

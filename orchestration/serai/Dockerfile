@@ -46,8 +46,8 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --release -p serai-node && \
-  mv /serai/target/release/serai-node /serai/bin
+  cargo build -p serai-node && \
+  mv /serai/target/debug/serai-node /serai/bin
 FROM debian:bookworm-slim as image
 
 COPY --from=mimalloc libmimalloc.so /usr/lib
