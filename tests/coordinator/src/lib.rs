@@ -213,7 +213,7 @@ impl Processor {
 
     // Sleep until the Substrate RPC starts
     let serai_rpc = ops.handle(&handles.0).host_port(9944).unwrap();
-    let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
+    let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
