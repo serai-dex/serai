@@ -313,7 +313,9 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       grandpa::run_grandpa_voter(grandpa::GrandpaParams {
         config: grandpa::Config {
           gossip_duration: std::time::Duration::from_millis(333),
-          justification_generation_period: 10,
+          // This is the delay between generating justifications for blocks
+          // We attemopt to generate a justification for every block
+          justification_generation_period: 0,
           name: Some(name),
           observer_enabled: false,
           keystore: if role.is_authority() { Some(keystore) } else { None },
