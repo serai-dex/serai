@@ -164,11 +164,11 @@ pub mod pallet {
   #[pallet::getter(fn oracle_prices)]
   pub type OraclePrices<T: Config> = StorageMap<_, Identity, [u8; 8], u16, OptionQuery>;
   impl<T: Config> Pallet<T> {
-    // TODO: make sure this is correct
     /// Get the highest sustained(lowest) value of the window
     pub fn highest_sustained_price() -> Amount {
       let mut iter = OraclePrices::<T>::iter_keys();
-      iter.set_last_raw_key(0u64.to_be_bytes().to_vec());
+      // we can unwrap because we will always have at least 1 key in this map
+      // before this function is called.
       Amount(u64::from_be_bytes(iter.next().unwrap()))
     }
   }
@@ -181,7 +181,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    /// A successful call of the `CretaPool` extrinsic will create this event.
+    /// A successful call of the `CreatePool` extrinsic will create this event.
     PoolCreated {
       /// The pool id associated with the pool. Note that the order of the coins may not be
       /// the same as the order specified in the create pool extrinsic.
@@ -338,7 +338,7 @@ pub mod pallet {
       for coin in Pools::<T>::iter_keys() {
         // insert the new price to our oracle window
         let last = Self::quote_price_exact_tokens_for_tokens(coin, Coin::native(), 1, false)
-          .unwrap()
+          .unwrap_or(0)
           .to_be_bytes();
         LastQuoteForBlock::<T>::set(n, coin, last);
         let observed = OraclePrices::<T>::get(last).unwrap_or(0);

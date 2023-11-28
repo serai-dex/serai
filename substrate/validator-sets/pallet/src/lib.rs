@@ -727,10 +727,11 @@ pub mod pallet {
       // of each session since we have to wait for that block to end to update the window and
       // the oracle value accordingly.
       let price = Dex::<T>::oracle_value(balance.coin).unwrap_or(Amount(0));
-      let total_coin_value = balance.amount.0.saturating_mul(price.0);
+      let mut total_coin_value = balance.amount.0.saturating_mul(price.0);
 
       // required stake formula (COIN_VALUE * 1.5) + margin(20%)
-      total_coin_value.saturating_mul(3).saturating_div(2).saturating_div(5)
+      total_coin_value = total_coin_value.saturating_mul(3).saturating_div(2);
+      total_coin_value.saturating_add(total_coin_value.saturating_div(5))
     }
 
     /// Returns the current total required stake for a given `network`.
@@ -884,13 +885,9 @@ pub mod pallet {
       let current_required = Self::required_stake_for_network(balance.coin.network());
       let new_required = current_required.saturating_add(Self::required_stake(balance));
 
-      // get the total stake for the network
-      let staked = Self::total_allocated_stake(balance.coin.network());
-      if staked.is_none() {
-        return false;
-      }
-
-      staked.unwrap().0 >= new_required
+      // get the total stake for the network & compare.
+      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
+      staked.0 >= new_required
     }
   }
 

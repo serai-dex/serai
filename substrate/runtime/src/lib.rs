@@ -327,9 +327,9 @@ construct_runtime!(
 
     TransactionPayment: transaction_payment,
 
+    Dex: dex,
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
-    Dex: dex,
 
     ValidatorSets: validator_sets,
 
