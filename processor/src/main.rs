@@ -569,11 +569,12 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
       // KeyGen specifically may take a notable amount of processing time
       // While that shouldn't be an issue in practice, as after processing an attempt it'll handle
       // the other messages in the queue, it may be beneficial to parallelize these
-      // They could likely be parallelized by type (KeyGen, Sign, Substrate) without issue
+      // They could potentially be parallelized by type (KeyGen, Sign, Substrate) without issue
       msg = coordinator.recv() => {
-        assert_eq!(msg.id, (last_coordinator_msg.unwrap_or(msg.id - 1) + 1));
+        if let Some(last_coordinator_msg) = last_coordinator_msg {
+          assert_eq!(msg.id, last_coordinator_msg + 1);
+        }
         last_coordinator_msg = Some(msg.id);
-
 
         // Only handle this if we haven't already
         if HandledMessageDb::get(&main_db, msg.id).is_none() {
