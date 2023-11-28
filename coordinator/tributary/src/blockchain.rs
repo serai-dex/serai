@@ -9,7 +9,7 @@ use scale::{Encode, Decode};
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  ReadWrite, ProvidedError, ProvidedTransactions, BlockQuantityDb, LocalQuantityDb, BlockError,
+  ReadWrite, ProvidedError, ProvidedTransactions, BlockProvidedQuantityDb, LocalProvidedQuantityDb, BlockError,
   Block, Mempool, Transaction,
   transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
 };
@@ -32,14 +32,14 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 create_db!(
   TributaryBlockchainDb {
     TipsDb: (genesis: [u8; 32]) -> [u8; 32],
-    BlockNumberDb: (genesis: [u8; 32]) -> Vec<u8>,
+    BlockNumberDb: (genesis: [u8; 32]) -> u32,
     BlockDb: (genesis:  [u8; 32], hash: &[u8; 32]) -> Vec<u8>,
     BlockHashDb: (genesis: [u8; 32], block_number: u32) -> [u8; 32],
     CommitDb: (genesis: [u8; 32], block: &[u8; 32]) -> Vec<u8>,
     BlockAfterDb: (genesis: [u8; 32], hash: [u8; 32]) -> [u8; 32],
-    UnsignedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>,
-    ProvidedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> [u8; 0],
-    NextNonceDb: (genesis: [u8; 32], hash: [u8; 32]) -> Vec<u8>
+    UnsignedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> (),
+    ProvidedIncludedDb: (genesis: [u8; 32], hash: [u8; 32]) -> (),
+    NextNonceDb: (genesis: [u8; 32], signer: [u8; 32]) -> u32
   }
 );
 
@@ -72,13 +72,13 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       BlockNumberDb::get(self_db, genesis)
         .map(|number| (number, TipsDb::get(self_db, genesis).unwrap()))
     } {
-      res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
+      res.block_number = block_number;
       res.tip.copy_from_slice(&tip);
     }
 
     for participant in participants {
       if let Some(next_nonce) = NextNonceDb::get(self_db, genesis, participant.to_bytes()) {
-        res.next_nonces.insert(*participant, u32::from_le_bytes(next_nonce.try_into().unwrap()));
+        res.next_nonces.insert(*participant, next_nonce);
       }
     }
 
@@ -106,7 +106,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     CommitDb::get(
       self.db.as_ref().unwrap(),
       self.genesis,
-      &BlockHashDb::get(self.db.as_ref().unwrap(), self.genesis, block).unwrap(),
+      &BlockHashDb::get(self.db.as_ref().unwrap(), self.genesis, block)?,
     )
   }
 
@@ -117,8 +117,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     order: &str,
   ) -> bool {
     let order_bytes = order.as_bytes();
-    let local = LocalQuantityDb::get(db, genesis, order_bytes).unwrap_or_default();
-    let block = BlockQuantityDb::get(db, genesis, block, order_bytes).unwrap_or_default();
+    let local = LocalProvidedQuantityDb::get(db, genesis, order_bytes).unwrap_or_default();
+    let block = BlockProvidedQuantityDb::get(db, genesis, block, order_bytes).unwrap_or_default();
     local >= block
   }
 
@@ -228,7 +228,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     TipsDb::set(&mut txn, self.genesis, &self.tip);
 
     self.block_number += 1;
-    BlockNumberDb::set(&mut txn, self.genesis, &self.block_number.to_le_bytes());
+    BlockNumberDb::set(&mut txn, self.genesis, &self.block_number);
 
     BlockHashDb::set(&mut txn, self.genesis, self.block_number, &self.tip);
 
@@ -243,12 +243,12 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
         TransactionKind::Provided(order) => {
           let hash = tx.hash();
           self.provided.complete(&mut txn, order, self.tip, hash);
-          ProvidedIncludedDb::set(&mut txn, self.genesis, hash, &[] as &[u8; 0]);
+          ProvidedIncludedDb::set(&mut txn, self.genesis, hash, &());
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();
           // Save as included on chain
-          UnsignedIncludedDb::set(&mut txn, self.genesis, hash, &[] as &[u8; 0]);
+          UnsignedIncludedDb::set(&mut txn, self.genesis, hash, &());
           // remove from the mempool
           self.mempool.remove(&hash);
         }
@@ -261,7 +261,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           if prev != *nonce {
             panic!("verified block had an invalid nonce");
           }
-          NextNonceDb::set(&mut txn, self.genesis, signer.to_bytes(), &next_nonce.to_le_bytes());
+          NextNonceDb::set(&mut txn, self.genesis, signer.to_bytes(), &next_nonce);
 
           self.mempool.remove(&tx.hash());
         }
