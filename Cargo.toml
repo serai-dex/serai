@@ -36,6 +36,9 @@ members = [
   "coordinator/tributary",
   "coordinator",
 
+  "substrate/tree-cleanup/bandersnatch_vrfs",
+  "substrate/tree-cleanup/w3f-bls",
+
   "substrate/primitives",
 
   "substrate/coins/primitives",
@@ -96,6 +99,13 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 # subxt *can* pull these off crates.io yet there's no benefit to this
 sp-core-hashing = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+
+# cargo believes the following are in-tree despite no features activating them
+# We provide empty crates to not only prove they're unused, yet also clean up
+# our Cargo.lock
+w3f-bls = { path = "substrate/tree-cleanup/w3f-bls" }
+[patch."https://github.com/w3f/ring-vrf"]
+bandersnatch_vrfs = { path = "substrate/tree-cleanup/bandersnatch_vrfs" }
 
 # The external arkworks-substrate repo refers back to the paritytech
 # polkadot-sdk repo, hence patching it to point to serai-dex's

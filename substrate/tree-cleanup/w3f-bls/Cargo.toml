@@ -1,0 +1,17 @@
+[package]
+name = "w3f-bls"
+version = "0.1.3"
+description = "Empty library to remove the unused w3f-bls from the Cargo.lock"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tree-cleanup/w3f-bls"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.74"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+std = []
