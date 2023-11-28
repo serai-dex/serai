@@ -58,23 +58,23 @@ pub mod pallet {
   // The ID of the last executed Batch for a network.
   #[pallet::storage]
   #[pallet::getter(fn batches)]
-  pub(crate) type LastBatch<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
+  pub(crate) type LastBatch<T: Config> = StorageMap<_, Identity, NetworkId, u32, OptionQuery>;
 
   // The last Serai block in which this validator set included a batch
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
   pub(crate) type LastBatchBlock<T: Config> =
-    StorageMap<_, Blake2_256, NetworkId, BlockNumberFor<T>, OptionQuery>;
+    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
 
   // Halted networks.
   #[pallet::storage]
-  pub(crate) type Halted<T: Config> = StorageMap<_, Blake2_256, NetworkId, (), OptionQuery>;
+  pub(crate) type Halted<T: Config> = StorageMap<_, Identity, NetworkId, (), OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
   #[pallet::getter(fn latest_network_block)]
   pub(crate) type LatestNetworkBlock<T: Config> =
-    StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
+    StorageMap<_, Identity, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
     // Use a dedicated transaction layer when executing this InInstruction

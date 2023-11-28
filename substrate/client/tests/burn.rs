@@ -94,7 +94,7 @@ serai_test!(
           &pair,
           &SeraiCoins::burn_with_instruction(instruction.clone()),
           0,
-          Default::default(),
+          0,
         )
     )
     .await;

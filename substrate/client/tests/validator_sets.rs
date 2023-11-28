@@ -33,7 +33,7 @@ serai_test!(
     // Make sure the genesis is as expected
     assert_eq!(
       serai
-        .as_of(serai.block_by_number(0).await.unwrap().unwrap().hash())
+        .as_of(serai.finalized_block_by_number(0).await.unwrap().unwrap().hash())
         .validator_sets()
         .new_set_events()
         .await
@@ -48,7 +48,7 @@ serai_test!(
     );
 
     {
-      let vs_serai = serai.with_current_latest_block().await.unwrap().validator_sets();
+      let vs_serai = serai.as_of_latest_finalized_block().await.unwrap().validator_sets();
       let participants = vs_serai.participants(set.network).await
         .unwrap()
         .unwrap()

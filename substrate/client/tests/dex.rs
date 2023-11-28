@@ -29,8 +29,8 @@ use common::{
 // TODO: Check Transfer events
 serai_test!(
   create_pool: (|serai: Serai| async move {
-    let block = serai.block_by_number(0).await.unwrap().unwrap().hash();
-    let events = serai.as_of(block).dex().all_events().await.unwrap();
+    let block = serai.finalized_block_by_number(0).await.unwrap().unwrap().hash();
+    let events = serai.as_of(block).dex().events().await.unwrap();
 
     assert_eq!(
       events,
@@ -85,7 +85,7 @@ serai_test!(
       pair.clone()
     ).await;
     // get only the add liq events
-    let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+    let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
 
     assert_eq!(
@@ -133,7 +133,7 @@ serai_test!(
       .await;
 
     // get only the swap events
-    let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+    let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     let mut path = BoundedVec::try_from(vec![coin, Coin::Serai]).unwrap();
@@ -153,7 +153,7 @@ serai_test!(
     block = common_swap(&serai, Coin::Serai, coin, amount_in, Amount(1), 2, pair.clone()).await;
 
     // get only the swap events
-    let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+    let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     path = BoundedVec::try_from(vec![Coin::Serai, coin]).unwrap();
@@ -213,7 +213,7 @@ serai_test!(
     let block = common_swap(&serai, coin1, coin2, amount_in, Amount(1), 2, pair.clone()).await;
 
     // get only the swap events
-    let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+    let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
     let path = BoundedVec::try_from(vec![coin1, Coin::Serai, coin2]).unwrap();
@@ -270,7 +270,7 @@ serai_test!(
     };
 
     let block = provide_batch(&serai, batch).await;
-    let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+    let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
     assert_eq!(
       events,
@@ -356,7 +356,7 @@ serai_test!(
 
       let block = provide_batch(&serai, batch).await;
       coin1_batch_id += 1;
-      let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+      let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
       let path = BoundedVec::try_from(vec![coin1, Coin::Serai, coin2]).unwrap();
@@ -395,7 +395,7 @@ serai_test!(
       };
 
       let block = provide_batch(&serai, batch).await;
-      let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+      let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
       let path = BoundedVec::try_from(vec![coin2, Coin::Serai, coin1]).unwrap();
@@ -433,7 +433,7 @@ serai_test!(
       };
 
       let block = provide_batch(&serai, batch).await;
-      let mut events = serai.as_of(block).dex().all_events().await.unwrap();
+      let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
       let path = BoundedVec::try_from(vec![coin1, Coin::Serai]).unwrap();

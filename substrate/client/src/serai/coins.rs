@@ -1,11 +1,13 @@
+use scale::Encode;
+
 use serai_runtime::{
-  primitives::{SeraiAddress, SubstrateAmount, Amount, Coin, Balance},
-  coins, Coins, Runtime,
+  primitives::{SeraiAddress, Amount, Coin, Balance},
+  coins, Runtime,
 };
 pub use coins::primitives;
 use primitives::OutInstructionWithBalance;
 
-use crate::{TemporalSerai, SeraiError, scale_value};
+use crate::{TemporalSerai, SeraiError};
 
 const PALLET: &str = "Coins";
 
@@ -19,21 +21,33 @@ impl<'a> SeraiCoins<'a> {
   }
 
   pub async fn mint_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
-    self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::Mint { .. })).await
+    self
+      .0
+      .events(|event| {
+        if let serai_runtime::RuntimeEvent::Coins(event) = event {
+          Some(event).filter(|event| matches!(event, CoinsEvent::Mint { .. }))
+        } else {
+          None
+        }
+      })
+      .await
   }
 
   pub async fn burn_with_instruction_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
-    self.0.events::<Coins, _>(|event| matches!(event, CoinsEvent::BurnWithInstruction { .. })).await
+    self
+      .0
+      .events(|event| {
+        if let serai_runtime::RuntimeEvent::Coins(event) = event {
+          Some(event).filter(|event| matches!(event, CoinsEvent::BurnWithInstruction { .. }))
+        } else {
+          None
+        }
+      })
+      .await
   }
 
   pub async fn coin_supply(&self, coin: Coin) -> Result<Amount, SeraiError> {
-    Ok(Amount(
-      self
-        .0
-        .storage::<SubstrateAmount>(PALLET, "Supply", Some(vec![scale_value(coin)]))
-        .await?
-        .unwrap_or(0),
-    ))
+    Ok(self.0.storage(PALLET, "Supply", coin).await?.unwrap_or(Amount(0)))
   }
 
   pub async fn coin_balance(
@@ -41,17 +55,17 @@ impl<'a> SeraiCoins<'a> {
     coin: Coin,
     address: SeraiAddress,
   ) -> Result<Amount, SeraiError> {
-    Ok(Amount(
+    Ok(
       self
         .0
-        .storage::<SubstrateAmount>(
+        .storage(
           PALLET,
           "Balances",
-          Some(vec![scale_value(address), scale_value(coin)]),
+          (sp_core::hashing::blake2_128(&address.encode()), &address.0, coin),
         )
         .await?
-        .unwrap_or(0),
-    ))
+        .unwrap_or(Amount(0)),
+    )
   }
 
   pub fn transfer(to: SeraiAddress, balance: Balance) -> serai_runtime::RuntimeCall {

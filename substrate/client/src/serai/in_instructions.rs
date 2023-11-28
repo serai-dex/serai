@@ -1,10 +1,10 @@
-use serai_runtime::{in_instructions, InInstructions, Runtime};
+use serai_runtime::{in_instructions, Runtime};
 pub use in_instructions::primitives;
 use primitives::SignedBatch;
 
 use crate::{
   primitives::{BlockHash, NetworkId},
-  SeraiError, Serai, TemporalSerai, scale_value,
+  SeraiError, Serai, TemporalSerai,
 };
 
 pub type InInstructionsEvent = in_instructions::Event<Runtime>;
@@ -22,20 +22,26 @@ impl<'a> SeraiInInstructions<'a> {
     &self,
     network: NetworkId,
   ) -> Result<Option<BlockHash>, SeraiError> {
-    self.0.storage(PALLET, "LatestNetworkBlock", Some(vec![scale_value(network)])).await
+    self.0.storage(PALLET, "LatestNetworkBlock", network).await
   }
 
   pub async fn last_batch_for_network(
     &self,
     network: NetworkId,
   ) -> Result<Option<u32>, SeraiError> {
-    self.0.storage(PALLET, "LastBatch", Some(vec![scale_value(network)])).await
+    self.0.storage(PALLET, "LastBatch", network).await
   }
 
   pub async fn batch_events(&self) -> Result<Vec<InInstructionsEvent>, SeraiError> {
     self
       .0
-      .events::<InInstructions, _>(|event| matches!(event, InInstructionsEvent::Batch { .. }))
+      .events(|event| {
+        if let serai_runtime::RuntimeEvent::InInstructions(event) = event {
+          Some(event).filter(|event| matches!(event, InInstructionsEvent::Batch { .. }))
+        } else {
+          None
+        }
+      })
       .await
   }
 

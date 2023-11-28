@@ -213,12 +213,12 @@ impl Processor {
 
     // Sleep until the Substrate RPC starts
     let serai_rpc = ops.handle(&handles.0).host_port(9944).unwrap();
-    let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
+    let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = Serai::new(&serai_rpc).await else { continue };
-      if client.latest_block_hash().await.is_err() {
+      let Ok(client) = Serai::new(serai_rpc.clone()).await else { continue };
+      if client.latest_finalized_block_hash().await.is_err() {
         continue;
       }
       break;
@@ -371,7 +371,7 @@ impl Processor {
   }
 
   pub async fn serai(&self) -> Serai {
-    Serai::new(&self.serai_rpc).await.unwrap()
+    Serai::new(self.serai_rpc.clone()).await.unwrap()
   }
 
   /// Send a message to the coordinator as a processor.

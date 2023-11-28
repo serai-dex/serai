@@ -241,7 +241,7 @@ async fn sign_test() {
 
       {
         let block_included_in_hash =
-          serai.block_by_number(block_included_in).await.unwrap().unwrap().hash();
+          serai.finalized_block_by_number(block_included_in).await.unwrap().unwrap().hash();
 
         let serai = serai.as_of(block_included_in_hash).coins();
         assert_eq!(
@@ -284,9 +284,9 @@ async fn sign_test() {
           tokio::time::sleep(Duration::from_secs(6)).await;
         }
 
-        while last_serai_block <= serai.latest_block().await.unwrap().number() {
+        while last_serai_block <= serai.latest_finalized_block().await.unwrap().number() {
           let burn_events = serai
-            .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+            .as_of(serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
             .coins()
             .burn_with_instruction_events()
             .await
@@ -307,7 +307,8 @@ async fn sign_test() {
         }
       }
 
-      let last_serai_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
+      let last_serai_block =
+        serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
       let last_serai_block_hash = last_serai_block.hash();
       let serai = serai.as_of(last_serai_block_hash).coins();
       assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));

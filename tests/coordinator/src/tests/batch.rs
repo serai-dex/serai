@@ -176,7 +176,7 @@ pub async fn batch(
   let batch = SignedBatch { batch, signature };
 
   let serai = processors[0].serai().await;
-  let mut last_serai_block = serai.latest_block().await.unwrap().number();
+  let mut last_serai_block = serai.latest_finalized_block().await.unwrap().number();
 
   for (i, processor) in processors.iter_mut().enumerate() {
     if i == excluded_signer {
@@ -194,9 +194,9 @@ pub async fn batch(
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
 
-    while last_serai_block <= serai.latest_block().await.unwrap().number() {
+    while last_serai_block <= serai.latest_finalized_block().await.unwrap().number() {
       let batch_events = serai
-        .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+        .as_of(serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
         .in_instructions()
         .batch_events()
         .await
@@ -220,7 +220,7 @@ pub async fn batch(
   }
 
   // Verify the coordinator sends SubstrateBlock to all processors
-  let last_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
+  let last_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
   for processor in processors {
     assert_eq!(
       processor.recv_message().await,

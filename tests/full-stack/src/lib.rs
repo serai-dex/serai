@@ -132,13 +132,13 @@ pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
 impl Handles {
   pub async fn serai(&self, ops: &DockerOperations) -> Serai {
     let serai_rpc = ops.handle(&self.serai).host_port(9944).unwrap();
-    let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
+    let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
 
     // If the RPC server has yet to start, sleep for up to 60s until it does
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = Serai::new(&serai_rpc).await else { continue };
-      if client.latest_block_hash().await.is_err() {
+      let Ok(client) = Serai::new(serai_rpc.clone()).await else { continue };
+      if client.latest_finalized_block_hash().await.is_err() {
         continue;
       }
       return client;
