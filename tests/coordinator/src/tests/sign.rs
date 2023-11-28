@@ -307,7 +307,8 @@ async fn sign_test() {
         }
       }
 
-      let last_serai_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
+      let last_serai_block =
+        serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
       let last_serai_block_hash = last_serai_block.hash();
       let serai = serai.as_of(last_serai_block_hash).coins();
       assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));

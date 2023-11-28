@@ -582,11 +582,13 @@ pub async fn scan_task<D: Db, Pro: Processors>(
     move |next_substrate_block| async move {
       loop {
         match serai.latest_finalized_block().await {
-          Ok(latest) => if latest.header().number >= next_substrate_block {
-            return latest;
-        } else {
-          sleep(Duration::from_secs(3)).await;
-        }
+          Ok(latest) => {
+            if latest.header().number >= next_substrate_block {
+              return latest;
+            } else {
+              sleep(Duration::from_secs(3)).await;
+            }
+          }
           Err(e) => {
             log::error!("couldn't communicate with serai node: {e}");
             sleep(Duration::from_secs(5)).await;
@@ -601,7 +603,8 @@ pub async fn scan_task<D: Db, Pro: Processors>(
     // await the next block, yet if our notifier had an error, re-create it
     {
       let Ok(_) =
-        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.take().unwrap()).await
+        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.take().unwrap())
+          .await
       else {
         // Timed out, which may be because Serai isn't finalizing or may be some issue with the
         // notifier

@@ -25,14 +25,8 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   // TODO: Get the latest session
   let set = ValidatorSet { session: Session(0), network: batch.network };
   let pair = insecure_pair_from_name(&format!("ValidatorSet {:?}", set));
-  let keys = if let Some(keys) = serai
-    .as_of_latest_finalized_block()
-    .await
-    .unwrap()
-    .validator_sets()
-    .keys(set)
-    .await
-    .unwrap()
+  let keys = if let Some(keys) =
+    serai.as_of_latest_finalized_block().await.unwrap().validator_sets().keys(set).await.unwrap()
   {
     keys
   } else {

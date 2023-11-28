@@ -119,8 +119,12 @@ impl Serai {
       .await
       .map_err(|_| SeraiError::ConnectionError)?;
 
-    let res: RpcResponse<Res> = serde_json::from_reader(&mut res)
-      .map_err(|e| SeraiError::InvalidRuntime(format!("response was a different type than expected: {:?}", e.classify())))?;
+    let res: RpcResponse<Res> = serde_json::from_reader(&mut res).map_err(|e| {
+      SeraiError::InvalidRuntime(format!(
+        "response was a different type than expected: {:?}",
+        e.classify()
+      ))
+    })?;
     match res {
       RpcResponse::Ok { result } => Ok(result),
       RpcResponse::Err { error } => Err(SeraiError::ErrorInResponse(error.message)),
@@ -222,9 +226,7 @@ impl Serai {
     struct WrappedBlock {
       block: SeraiBlock,
     }
-    let block: Option<WrappedBlock> = self
-      .call("chain_getBlock", [hex::encode(hash)])
-      .await?;
+    let block: Option<WrappedBlock> = self.call("chain_getBlock", [hex::encode(hash)]).await?;
     let Some(block) = block else { return Ok(None) };
     Ok(Some(Block(block.block)))
   }
