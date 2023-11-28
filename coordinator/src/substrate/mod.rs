@@ -597,14 +597,15 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       }
     }
   };
-  let mut substrate_block_notifier = Some(new_substrate_block_notifier(next_substrate_block));
 
   loop {
     // await the next block, yet if our notifier had an error, re-create it
     {
-      let Ok(_) =
-        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.take().unwrap())
-          .await
+      let Ok(_) = tokio::time::timeout(
+        Duration::from_secs(60),
+        new_substrate_block_notifier(next_substrate_block),
+      )
+      .await
       else {
         // Timed out, which may be because Serai isn't finalizing or may be some issue with the
         // notifier
@@ -613,7 +614,6 @@ pub async fn scan_task<D: Db, Pro: Processors>(
         {
           log::info!("serai hasn't finalized a block in the last 60s...");
         }
-        substrate_block_notifier = Some(new_substrate_block_notifier(next_substrate_block));
         continue;
       };
 
