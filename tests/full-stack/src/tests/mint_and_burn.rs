@@ -366,6 +366,7 @@ async fn mint_and_burn_test() {
         Protocol::v16.ring_len(),
         rpc.get_height().await.unwrap(),
         &[output.clone()],
+        true,/*fingerprintable_canonical*/
       )
       .await
       .unwrap()

@@ -17,6 +17,7 @@ use monero_serai::{
     SpendableOutput, Fee,
   },
   transaction::Transaction,
+  DEFAULT_LOCK_WINDOW,
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
@@ -53,7 +54,12 @@ pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 3
 
   // Mine until tx's outputs are unlocked
   let o_indexes: Vec<u64> = rpc.get_o_indexes(tx_hash).await.unwrap();
-  while rpc.get_unlocked_outputs(&o_indexes, height).await.unwrap().into_iter().all(|o| o.is_none())
+  while rpc
+    .get_outs(&o_indexes)
+    .await
+    .unwrap()
+    .into_iter()
+    .all(|o| (!(o.unlocked && height >= (o.height + DEFAULT_LOCK_WINDOW))))
   {
     height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
   }
@@ -267,7 +273,8 @@ macro_rules! test {
               &rpc,
               protocol.ring_len(),
               rpc.get_height().await.unwrap(),
-              &[miner_tx.clone()]
+              &[miner_tx.clone()],
+              true, /*fingerprintable_canonical*/
             )
             .await
             .unwrap();

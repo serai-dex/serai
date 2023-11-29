@@ -19,10 +19,9 @@ use serde_json::{Value, json};
 use crate::{
   Protocol,
   serialize::*,
-  transaction::{Input, Transaction},
+  transaction::{Input, Timelock, Transaction},
   block::Block,
   wallet::{FeePriority, Fee},
-  DEFAULT_LOCK_WINDOW,
 };
 
 #[cfg(feature = "http-rpc")]
@@ -61,6 +60,7 @@ pub struct OutputResponse {
   pub unlocked: bool,
   key: String,
   mask: String,
+  txid: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -571,18 +571,34 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(res.outs)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them
-  /// if they are unlocked.
+  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
+  /// timelock has been satisfied.
+  ///
+  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
+  /// Monero transactions.
   pub async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
     height: usize,
+    fingerprintable_canonical: bool,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
 
+    // Only need to fetch txs to do canonical check on timelock
+    let txs = if fingerprintable_canonical {
+      self
+        .get_transactions(
+          &outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
+        )
+        .await?
+    } else {
+      Vec::new()
+    };
+
     outs
       .iter()
-      .map(|out| {
+      .enumerate()
+      .map(|(i, out)| {
         // Allow keys to be invalid, though if they are, return None to trigger selection of a new
         // decoy
         // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
@@ -595,10 +611,13 @@ impl<R: RpcConnection> Rpc<R> {
         ) else {
           return Ok(None);
         };
-        Ok(
-          Some([key, rpc_point(&out.mask)?])
-            .filter(|_| out.unlocked && height >= (out.height + DEFAULT_LOCK_WINDOW)),
-        )
+        Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
+          if fingerprintable_canonical {
+            Timelock::Block(height) >= txs[i].prefix.timelock
+          } else {
+            out.unlocked
+          }
+        }))
       })
       .collect()
   }

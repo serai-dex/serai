@@ -314,6 +314,7 @@ impl Wallet {
           Protocol::v16.ring_len(),
           rpc.get_height().await.unwrap(),
           &these_inputs,
+          true, /*fingerprintable_canonical*/
         )
         .await
         .unwrap();

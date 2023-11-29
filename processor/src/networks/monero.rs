@@ -344,6 +344,7 @@ impl Monero {
       protocol.ring_len(),
       block_number + 1,
       &spendable_outputs,
+      true, /*fingerprintable_canonical*/
     )
     .await
     .map_err(map_rpc_err)?;
@@ -748,6 +749,7 @@ impl Network for Monero {
       protocol.ring_len(),
       self.rpc.get_height().await.unwrap(),
       &outputs,
+      true, /*fingerprintable_canonical*/
     )
     .await
     .unwrap();

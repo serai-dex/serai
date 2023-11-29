@@ -50,7 +50,9 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   real: &[u64],
   used: &mut HashSet<u64>,
   count: usize,
+  fingerprintable_canonical: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
+  // TODO: consider removing this extra RPC and expect the caller to handle it
   if height > rpc.get_height().await? {
     // TODO: Don't use InternalError for the caller's failure
     Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
@@ -119,7 +121,12 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
 
     // TODO: make sure that the real output is included in the response, and
     // that mask and key are equal to expected
-    for (i, output) in rpc.get_unlocked_outputs(&candidates, height).await?.iter_mut().enumerate() {
+    for (i, output) in rpc
+      .get_unlocked_outputs(&candidates, height, fingerprintable_canonical)
+      .await?
+      .iter_mut()
+      .enumerate()
+    {
       // Don't include the real spend as a decoy, despite requesting it
       if real_indexes.contains(&i) {
         continue;
@@ -170,12 +177,20 @@ impl Decoys {
   }
 
   /// Select decoys using the same distribution as Monero.
+  ///
+  /// When fingerprintable_canonical is true:
+  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
+  /// function will use the same distribution to select decoys. It is fingerprintable
+  /// because a caller using this will not be able to select decoys that are timelocked
+  /// with a timestamp. Any transaction which includes timestamp timelocked outputs in its
+  /// rings could not be constructed using this function.
   pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
     rng: &mut R,
     rpc: &Rpc<RPC>,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
+    fingerprintable_canonical: bool,
   ) -> Result<Vec<Decoys>, RpcError> {
     #[cfg(feature = "cache-distribution")]
     #[cfg(not(feature = "std"))]
@@ -247,6 +262,7 @@ impl Decoys {
       &real,
       &mut used,
       inputs.len() * decoy_count,
+      fingerprintable_canonical,
     )
     .await?;
     real.zeroize();
@@ -296,6 +312,7 @@ impl Decoys {
               &[],
               &mut used,
               ring_len - ring.len(),
+              fingerprintable_canonical,
             )
             .await?,
           );

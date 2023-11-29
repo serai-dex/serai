@@ -30,6 +30,7 @@ async fn add_inputs(
     protocol.ring_len(),
     rpc.get_height().await.unwrap(),
     &spendable_outputs,
+    true, /*fingerprintable_canonical*/
   )
   .await
   .unwrap();
