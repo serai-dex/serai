@@ -1,6 +1,7 @@
 use core::ops::Deref;
 use std_shims::{
   vec::Vec,
+  string::ToString,
   io::{self, Read, Write},
 };
 
