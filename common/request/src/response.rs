@@ -4,11 +4,12 @@ use hyper::{
   body::{Buf, Body},
 };
 
-use crate::Error;
+use crate::{Client, Error};
 
+// Borrows the client so its async task lives as long as this response exists.
 #[derive(Debug)]
-pub struct Response(pub(crate) hyper::Response<Body>);
-impl Response {
+pub struct Response<'a>(pub(crate) hyper::Response<Body>, pub(crate) &'a Client);
+impl<'a> Response<'a> {
   pub fn status(&self) -> StatusCode {
     self.0.status()
   }

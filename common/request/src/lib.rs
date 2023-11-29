@@ -79,7 +79,7 @@ impl Client {
     })
   }
 
-  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response, Error> {
+  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_>, Error> {
     let request: Request = request.into();
     let mut request = request.0;
     if let Some(header_host) = request.headers().get(hyper::header::HOST) {
@@ -111,7 +111,7 @@ impl Client {
         .insert(hyper::header::HOST, HeaderValue::from_str(&host).map_err(|_| Error::InvalidUri)?);
     }
 
-    Ok(Response(match &self.connection {
+    let response = match &self.connection {
       Connection::ConnectionPool(client) => client.request(request).await.map_err(Error::Hyper)?,
       Connection::Connection { connector, host, connection } => {
         let mut connection_lock = connection.lock().await;
@@ -125,8 +125,8 @@ impl Client {
           let call_res = call_res.map_err(Error::ConnectionError);
           let (requester, connection) =
             hyper::client::conn::http1::handshake(call_res?).await.map_err(Error::Hyper)?;
-          // This will die when we drop the requester, so we don't need to track an AbortHandle for
-          // it
+          // This will die when we drop the requester, so we don't need to track an AbortHandle
+          // for it
           tokio::spawn(connection);
           *connection_lock = Some(requester);
         }
@@ -137,7 +137,7 @@ impl Client {
           // Send the request
           let res = connection.send_request(request).await;
           if let Ok(res) = res {
-            return Ok(Response(res));
+            return Ok(Response(res, self));
           }
           err = res.err();
         }
@@ -145,6 +145,8 @@ impl Client {
         *connection_lock = None;
         Err(Error::Hyper(err.unwrap()))?
       }
-    }))
+    };
+
+    Ok(Response(response, self))
   }
 }

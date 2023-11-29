@@ -117,12 +117,50 @@ impl HttpRpc {
         .map_err(|e| RpcError::ConnectionError(format!("couldn't make request: {e:?}")))
     };
 
+    async fn body_from_response(response: Response<'_>) -> Result<Vec<u8>, RpcError> {
+      /*
+      let length = usize::try_from(
+        response
+          .headers()
+          .get("content-length")
+          .ok_or(RpcError::InvalidNode("no content-length header"))?
+          .to_str()
+          .map_err(|_| RpcError::InvalidNode("non-ascii content-length value"))?
+          .parse::<u32>()
+          .map_err(|_| RpcError::InvalidNode("non-u32 content-length value"))?,
+      )
+      .unwrap();
+      // Only pre-allocate 1 MB so a malicious node which claims a content-length of 1 GB actually
+      // has to send 1 GB of data to cause a 1 GB allocation
+      let mut res = Vec::with_capacity(length.max(1024 * 1024));
+      let mut body = response.into_body();
+      while res.len() < length {
+        let Some(data) = body.data().await else { break };
+        res.extend(data.map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?.as_ref());
+      }
+      */
+
+      let mut res = Vec::with_capacity(128);
+      response
+        .body()
+        .await
+        .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
+        .read_to_end(&mut res)
+        .unwrap();
+      Ok(res)
+    }
+
     for attempt in 0 .. 2 {
-      let response = match &self.authentication {
-        Authentication::Unauthenticated(client) => client
-          .request(request_fn(self.url.clone() + "/" + route)?)
-          .await
-          .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+      return Ok(match &self.authentication {
+        Authentication::Unauthenticated(client) => {
+          body_from_response(
+            client
+              .request(request_fn(self.url.clone() + "/" + route)?)
+              .await
+              .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
+          )
+          .await?
+        }
         Authentication::Authenticated { username, password, connection } => {
           let mut connection_lock = connection.lock().await;
 
@@ -168,26 +206,16 @@ impl HttpRpc {
             );
           }
 
-          let response_result = connection_lock
+          let response = connection_lock
             .1
             .request(request)
             .await
             .map_err(|e| RpcError::ConnectionError(format!("{e:?}")));
 
-          // If the connection entered an error state, drop the cached challenge as challenges are
-          // per-connection
-          // We don't need to create a new connection as simple-request will for us
-          if response_result.is_err() {
-            connection_lock.0 = None;
-          }
-
-          // If we're not already on our second attempt and:
-          // A) We had a connection error
-          // B) We need to re-auth due to this token being stale
-          // Move to the next loop iteration (retrying all of this)
-          if (attempt == 0) &&
-            (response_result.is_err() || {
-              let response = response_result.as_ref().unwrap();
+          let (error, is_stale) = match &response {
+            Err(e) => (Some(e.clone()), false),
+            Ok(response) => (
+              None,
               if response.status() == StatusCode::UNAUTHORIZED {
                 if let Some(header) = response.headers().get("www-authenticate") {
                   header
@@ -201,49 +229,33 @@ impl HttpRpc {
                 }
               } else {
                 false
-              }
-            })
-          {
-            // Drop the cached authentication before we do
+              },
+            ),
+          };
+
+          // If the connection entered an error state, drop the cached challenge as challenges are
+          // per-connection
+          // We don't need to create a new connection as simple-request will for us
+          if error.is_some() || is_stale {
             connection_lock.0 = None;
-            continue;
+            // If we're not already on our second attempt, move to the next loop iteration
+            // (retrying all of this once)
+            if attempt == 0 {
+              continue;
+            }
+            if let Some(e) = error {
+              Err(e)?
+            } else {
+              debug_assert!(is_stale);
+              Err(RpcError::InvalidNode(
+                "node claimed fresh connection had stale authentication".to_string(),
+              ))?
+            }
+          } else {
+            body_from_response(response.unwrap()).await?
           }
-
-          response_result?
         }
-      };
-
-      /*
-      let length = usize::try_from(
-        response
-          .headers()
-          .get("content-length")
-          .ok_or(RpcError::InvalidNode("no content-length header"))?
-          .to_str()
-          .map_err(|_| RpcError::InvalidNode("non-ascii content-length value"))?
-          .parse::<u32>()
-          .map_err(|_| RpcError::InvalidNode("non-u32 content-length value"))?,
-      )
-      .unwrap();
-      // Only pre-allocate 1 MB so a malicious node which claims a content-length of 1 GB actually
-      // has to send 1 GB of data to cause a 1 GB allocation
-      let mut res = Vec::with_capacity(length.max(1024 * 1024));
-      let mut body = response.into_body();
-      while res.len() < length {
-        let Some(data) = body.data().await else { break };
-        res.extend(data.map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?.as_ref());
-      }
-      */
-
-      let mut res = Vec::with_capacity(128);
-      response
-        .body()
-        .await
-        .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
-        .read_to_end(&mut res)
-        .unwrap();
-
-      return Ok(res);
+      });
     }
 
     unreachable!()
