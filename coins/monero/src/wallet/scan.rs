@@ -234,7 +234,7 @@ impl SpendableOutput {
       .await?
       .get(usize::from(self.output.absolute.o))
       .ok_or(RpcError::InvalidNode(
-        "node returned output indexes didn't include an index for this output",
+        "node returned output indexes didn't include an index for this output".to_string(),
       ))?;
     Ok(())
   }

@@ -42,12 +42,10 @@ impl HttpRpc {
   ) -> Result<Option<(WwwAuthenticateHeader, u64)>, RpcError> {
     Ok(if let Some(header) = response.headers().get("www-authenticate") {
       Some((
-        digest_auth::parse(
-          header
-            .to_str()
-            .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?,
-        )
-        .map_err(|_| RpcError::InvalidNode("invalid digest-auth response"))?,
+        digest_auth::parse(header.to_str().map_err(|_| {
+          RpcError::InvalidNode("www-authenticate header wasn't a string".to_string())
+        })?)
+        .map_err(|_| RpcError::InvalidNode("invalid digest-auth response".to_string()))?,
         0,
       ))
     } else {
@@ -161,7 +159,9 @@ impl HttpRpc {
               HeaderValue::from_str(
                 &challenge
                   .respond(&context)
-                  .map_err(|_| RpcError::InvalidNode("couldn't respond to digest-auth challenge"))?
+                  .map_err(|_| {
+                    RpcError::InvalidNode("couldn't respond to digest-auth challenge".to_string())
+                  })?
                   .to_header_string(),
               )
               .unwrap(),
@@ -192,7 +192,9 @@ impl HttpRpc {
                 if let Some(header) = response.headers().get("www-authenticate") {
                   header
                     .to_str()
-                    .map_err(|_| RpcError::InvalidNode("www-authenticate header wasn't a string"))?
+                    .map_err(|_| {
+                      RpcError::InvalidNode("www-authenticate header wasn't a string".to_string())
+                    })?
                     .contains("stale")
                 } else {
                   false
