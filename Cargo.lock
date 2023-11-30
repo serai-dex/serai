@@ -9372,6 +9372,7 @@ name = "tributary-chain"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bincode",
  "blake2",
  "ciphersuite",
  "flexible-transcript",
@@ -9383,6 +9384,7 @@ dependencies = [
  "rand_chacha",
  "schnorr-signatures",
  "serai-db",
+ "serde",
  "subtle",
  "tendermint-machine",
  "thiserror",
