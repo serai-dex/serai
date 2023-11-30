@@ -565,7 +565,7 @@ impl<R: RpcConnection> Rpc<R> {
       .await?;
 
     if res.status != "OK" {
-      Err(RpcError::InvalidNode)?;
+      Err(RpcError::InvalidNode("bad response to get_outs".to_string()))?;
     }
 
     Ok(res.outs)
