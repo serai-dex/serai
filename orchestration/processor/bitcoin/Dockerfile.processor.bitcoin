@@ -1,2 +1,2 @@
-  cargo build --features "binaries bitcoin" -p serai-processor && \
+  cargo build --features "binaries parity-db bitcoin" -p serai-processor && \
   mv /serai/target/debug/serai-processor /serai/bin

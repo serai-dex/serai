@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --features "binaries bitcoin" -p serai-processor && \
+  cargo build --features "binaries parity-db bitcoin" -p serai-processor && \
   mv /serai/target/debug/serai-processor /serai/bin
 FROM debian:bookworm-slim as image
 

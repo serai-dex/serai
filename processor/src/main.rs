@@ -679,7 +679,18 @@ async fn main() {
   }
   env_logger::init();
 
-  let db = serai_db::new_rocksdb(&env::var("DB_PATH").expect("path to DB wasn't specified"));
+  #[allow(unused_variables, unreachable_code)]
+  let db = {
+    #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
+    panic!("built with parity-db and rocksdb");
+    #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
+    let db =
+      serai_db::new_parity_db(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    #[cfg(feature = "rocksdb")]
+    let db =
+      serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    db
+  };
 
   // Network configuration
   let url = {

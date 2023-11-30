@@ -1,2 +1,2 @@
-  cargo build --features "binaries monero" -p serai-processor && \
+  cargo build --features "binaries parity-db monero" -p serai-processor && \
   mv /serai/target/debug/serai-processor /serai/bin
