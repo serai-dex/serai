@@ -360,13 +360,12 @@ async fn mint_and_burn_test() {
         .unwrap()
         .swap_remove(0);
 
-      let decoys = Decoys::select(
+      let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
         Protocol::v16.ring_len(),
         rpc.get_height().await.unwrap(),
         &[output.clone()],
-        true,/*fingerprintable_canonical*/
       )
       .await
       .unwrap()

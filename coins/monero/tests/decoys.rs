@@ -25,13 +25,12 @@ test!(
     // Then make a second tx1
     |protocol: Protocol, rpc: Rpc<_>, mut builder: Builder, addr, state: _| async move {
       let output_tx0: SpendableOutput = state;
-      let decoys = Decoys::select(
+      let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
         protocol.ring_len(),
         rpc.get_height().await.unwrap(),
         &[output_tx0.clone()],
-        true, /*fingerprintable_canonical*/
       )
       .await
       .unwrap();
@@ -65,13 +64,12 @@ test!(
       let mut selected_fresh_decoy = false;
       let mut attempts = 1000;
       while !selected_fresh_decoy && attempts > 0 {
-        let decoys = Decoys::select(
+        let decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng, // TODO: use a seeded RNG to consistently select the latest output
           &rpc,
           protocol.ring_len(),
           height,
           &[output_tx0.clone()],
-          true, /*fingerprintable_canonical*/
         )
         .await
         .unwrap();
@@ -110,7 +108,6 @@ test!(
         protocol.ring_len(),
         rpc.get_height().await.unwrap(),
         &[output_tx0.clone()],
-        false, /*fingerprintable_canonical*/
       )
       .await
       .unwrap();
@@ -150,7 +147,6 @@ test!(
           protocol.ring_len(),
           height,
           &[output_tx0.clone()],
-          false, /*fingerprintable_canonical*/
         )
         .await
         .unwrap();

@@ -338,13 +338,12 @@ impl Monero {
 
     // All signers need to select the same decoys
     // All signers use the same height and a seeded RNG to make sure they do so.
-    let decoys = Decoys::select(
+    let decoys = Decoys::fingerprintable_canonical_select(
       &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
       &self.rpc,
       protocol.ring_len(),
       block_number + 1,
       &spendable_outputs,
-      true, /*fingerprintable_canonical*/
     )
     .await
     .map_err(map_rpc_err)?;
@@ -743,13 +742,12 @@ impl Network for Monero {
 
     let protocol = self.rpc.get_protocol().await.unwrap();
 
-    let decoys = Decoys::select(
+    let decoys = Decoys::fingerprintable_canonical_select(
       &mut OsRng,
       &self.rpc,
       protocol.ring_len(),
       self.rpc.get_height().await.unwrap(),
       &outputs,
-      true, /*fingerprintable_canonical*/
     )
     .await
     .unwrap();

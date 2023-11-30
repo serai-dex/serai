@@ -53,7 +53,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
   fingerprintable_canonical: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   // TODO: consider removing this extra RPC and expect the caller to handle it
-  if height > rpc.get_height().await? {
+  if fingerprintable_canonical && height > rpc.get_height().await? {
     // TODO: Don't use InternalError for the caller's failure
     Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
   }
@@ -150,48 +150,14 @@ fn offset(ring: &[u64]) -> Vec<u64> {
   res
 }
 
-/// Decoy data, containing the actual member as well (at index `i`).
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct Decoys {
-  pub(crate) i: u8,
-  pub(crate) offsets: Vec<u64>,
-  pub(crate) ring: Vec<[EdwardsPoint; 2]>,
-}
-
-#[allow(clippy::len_without_is_empty)]
-impl Decoys {
-  pub fn fee_weight(offsets: &[u64]) -> usize {
-    varint_len(offsets.len()) + offsets.iter().map(|offset| varint_len(*offset)).sum::<usize>()
-  }
-
-  pub fn len(&self) -> usize {
-    self.offsets.len()
-  }
-
-  pub fn indexes(&self) -> Vec<u64> {
-    let mut res = vec![self.offsets[0]; self.len()];
-    for m in 1 .. res.len() {
-      res[m] = res[m - 1] + self.offsets[m];
-    }
-    res
-  }
-
-  /// Select decoys using the same distribution as Monero.
-  ///
-  /// When fingerprintable_canonical is true:
-  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
-  /// function will use the same distribution to select decoys. It is fingerprintable
-  /// because a caller using this will not be able to select decoys that are timelocked
-  /// with a timestamp. Any transaction which includes timestamp timelocked outputs in its
-  /// rings could not be constructed using this function.
-  pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
-    rng: &mut R,
-    rpc: &Rpc<RPC>,
-    ring_len: usize,
-    height: usize,
-    inputs: &[SpendableOutput],
-    fingerprintable_canonical: bool,
-  ) -> Result<Vec<Decoys>, RpcError> {
+async fn select_decoys<R: RngCore + CryptoRng, RPC: RpcConnection>(
+  rng: &mut R,
+  rpc: &Rpc<RPC>,
+  ring_len: usize,
+  height: usize,
+  inputs: &[SpendableOutput],
+  fingerprintable_canonical: bool,
+) -> Result<Vec<Decoys>, RpcError> {
     #[cfg(feature = "cache-distribution")]
     #[cfg(not(feature = "std"))]
     let mut distribution = DISTRIBUTION().lock();
@@ -332,5 +298,61 @@ impl Decoys {
     }
 
     Ok(res)
+}
+
+/// Decoy data, containing the actual member as well (at index `i`).
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct Decoys {
+  pub(crate) i: u8,
+  pub(crate) offsets: Vec<u64>,
+  pub(crate) ring: Vec<[EdwardsPoint; 2]>,
+}
+
+#[allow(clippy::len_without_is_empty)]
+impl Decoys {
+  pub fn fee_weight(offsets: &[u64]) -> usize {
+    varint_len(offsets.len()) + offsets.iter().map(|offset| varint_len(*offset)).sum::<usize>()
+  }
+
+  pub fn len(&self) -> usize {
+    self.offsets.len()
+  }
+
+  pub fn indexes(&self) -> Vec<u64> {
+    let mut res = vec![self.offsets[0]; self.len()];
+    for m in 1 .. res.len() {
+      res[m] = res[m - 1] + self.offsets[m];
+    }
+    res
+  }
+
+  /// Select decoys using the same distribution as Monero. Relies on the monerod RPC
+  /// response for an output's unlocked status, minimizing trips to the daemon.
+  pub async fn select<R: RngCore + CryptoRng, RPC: RpcConnection>(
+    rng: &mut R,
+    rpc: &Rpc<RPC>,
+    ring_len: usize,
+    height: usize,
+    inputs: &[SpendableOutput],
+  ) -> Result<Vec<Decoys>, RpcError> {
+    select_decoys(rng, rpc, ring_len, height, inputs, false).await
+  }
+
+  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
+  /// function will use the same distribution to select decoys. It is fingerprintable
+  /// because a caller using this will not be able to select decoys that are timelocked
+  /// with a timestamp. Any transaction which includes timestamp timelocked outputs in its
+  /// rings could not be constructed using this function.
+  ///
+  /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
+  /// output's unlocked status and remove all usage of fingerprintable_canonical
+  pub async fn fingerprintable_canonical_select<R: RngCore + CryptoRng, RPC: RpcConnection>(
+    rng: &mut R,
+    rpc: &Rpc<RPC>,
+    ring_len: usize,
+    height: usize,
+    inputs: &[SpendableOutput],
+  ) -> Result<Vec<Decoys>, RpcError> {
+    select_decoys(rng, rpc, ring_len, height, inputs, true).await
   }
 }

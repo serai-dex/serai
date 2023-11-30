@@ -268,13 +268,12 @@ macro_rules! test {
           let temp = Box::new({
             let mut builder = builder.clone();
 
-            let decoys = Decoys::select(
+            let decoys = Decoys::fingerprintable_canonical_select(
               &mut OsRng,
               &rpc,
               protocol.ring_len(),
               rpc.get_height().await.unwrap(),
               &[miner_tx.clone()],
-              true, /*fingerprintable_canonical*/
             )
             .await
             .unwrap();
