@@ -25,7 +25,7 @@ impl DbTxn for Transaction<'_> {
 
 impl Get for Arc<ParityDb> {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    ParityDb::get(&*self, 0, key.as_ref()).unwrap()
+    ParityDb::get(self, 0, key.as_ref()).unwrap()
   }
 }
 impl Db for Arc<ParityDb> {
