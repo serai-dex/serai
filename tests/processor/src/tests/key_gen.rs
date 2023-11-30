@@ -142,23 +142,25 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
   key_pair
 }
 
-#[test]
-fn key_gen_test() {
+#[tokio::test]
+async fn key_gen_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
-    let (coordinators, test) = new_test(network);
+    let (coordinators, test) = new_test(network).await;
 
-    test.run(|ops| async move {
-      // Sleep for a second for the message-queue to boot
-      // It isn't an error to start immediately, it just silences an error
-      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+    test
+      .run_async(|ops| async move {
+        // Sleep for a second for the message-queue to boot
+        // It isn't an error to start immediately, it just silences an error
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
 
-      // Connect to the Message Queues as the coordinator
-      let mut coordinators = coordinators
-        .into_iter()
-        .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
-        .collect::<Vec<_>>();
+        // Connect to the Message Queues as the coordinator
+        let mut coordinators = coordinators
+          .into_iter()
+          .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
+          .collect::<Vec<_>>();
 
-      key_gen(&mut coordinators).await;
-    });
+        key_gen(&mut coordinators).await;
+      })
+      .await;
   }
 }

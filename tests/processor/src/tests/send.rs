@@ -142,163 +142,166 @@ pub(crate) async fn sign_tx(
   tx.unwrap()
 }
 
-#[test]
-fn send_test() {
+#[tokio::test]
+async fn send_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
-    let (coordinators, test) = new_test(network);
+    let (coordinators, test) = new_test(network).await;
 
-    test.run(|ops| async move {
-      tokio::time::sleep(Duration::from_secs(1)).await;
-
-      let mut coordinators = coordinators
-        .into_iter()
-        .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
-        .collect::<Vec<_>>();
-
-      // Create a wallet before we start generating keys
-      let mut wallet = Wallet::new(network, &ops, coordinators[0].network_handle.clone()).await;
-      coordinators[0].sync(&ops, &coordinators[1 ..]).await;
-
-      // Generate keys
-      let key_pair = key_gen(&mut coordinators).await;
-
-      // Now we we have to mine blocks to activate the key
-      // (the first key is activated when the network's time as of a block exceeds the Serai time
-      // it was confirmed at)
-      // Mine multiple sets of medians to ensure the median is sufficiently advanced
-      for _ in 0 .. (10 * confirmations(network)) {
-        coordinators[0].add_block(&ops).await;
+    test
+      .run_async(|ops| async move {
         tokio::time::sleep(Duration::from_secs(1)).await;
-      }
-      coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-      // Send into the processor's wallet
-      let (tx, balance_sent) = wallet.send_to_address(&ops, &key_pair.1, None).await;
-      for coordinator in &mut coordinators {
-        coordinator.publish_transacton(&ops, &tx).await;
-      }
+        let mut coordinators = coordinators
+          .into_iter()
+          .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
+          .collect::<Vec<_>>();
 
-      // Put the TX past the confirmation depth
-      let mut block_with_tx = None;
-      for _ in 0 .. confirmations(network) {
-        let (hash, _) = coordinators[0].add_block(&ops).await;
-        if block_with_tx.is_none() {
-          block_with_tx = Some(hash);
+        // Create a wallet before we start generating keys
+        let mut wallet = Wallet::new(network, &ops, coordinators[0].network_handle.clone()).await;
+        coordinators[0].sync(&ops, &coordinators[1 ..]).await;
+
+        // Generate keys
+        let key_pair = key_gen(&mut coordinators).await;
+
+        // Now we we have to mine blocks to activate the key
+        // (the first key is activated when the network's time as of a block exceeds the Serai time
+        // it was confirmed at)
+        // Mine multiple sets of medians to ensure the median is sufficiently advanced
+        for _ in 0 .. (10 * confirmations(network)) {
+          coordinators[0].add_block(&ops).await;
+          tokio::time::sleep(Duration::from_secs(1)).await;
         }
-      }
-      coordinators[0].sync(&ops, &coordinators[1 ..]).await;
+        coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-      // Sleep for 10s
-      // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
-      tokio::time::sleep(Duration::from_secs(10)).await;
-
-      let expected_batch =
-        Batch { network, id: 0, block: BlockHash(block_with_tx.unwrap()), instructions: vec![] };
-
-      // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
-      let (id, preprocesses) =
-        recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
-
-      // Continue with signing the batch
-      let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
-
-      // Check it
-      assert_eq!(batch.batch, expected_batch);
-
-      // Fire a SubstrateBlock with a burn
-      let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
-      let serai_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-
-      let mut plans = vec![];
-      for coordinator in &mut coordinators {
-        let these_plans = substrate_block(
-          coordinator,
-          messages::substrate::CoordinatorMessage::SubstrateBlock {
-            context: SubstrateContext {
-              serai_time,
-              network_latest_finalized_block: batch.batch.block,
-            },
-            block: substrate_block_num,
-            burns: vec![OutInstructionWithBalance {
-              instruction: OutInstruction { address: wallet.address(), data: None },
-              balance: balance_sent,
-            }],
-            batches: vec![batch.batch.id],
-          },
-        )
-        .await;
-
-        if plans.is_empty() {
-          plans = these_plans;
-        } else {
-          assert_eq!(plans, these_plans);
-        }
-      }
-      assert_eq!(plans.len(), 1);
-
-      // Start signing the TX
-      let (mut id, mut preprocesses) =
-        recv_sign_preprocesses(&mut coordinators, Session(0), 0).await;
-      assert_eq!(id, SignId { session: Session(0), id: plans[0].id, attempt: 0 });
-
-      // Trigger a random amount of re-attempts
-      for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
-        // TODO: Double check how the processor handles this ID field
-        // It should be able to assert its perfectly sequential
-        id.attempt = attempt;
-        for coordinator in coordinators.iter_mut() {
-          coordinator
-            .send_message(messages::sign::CoordinatorMessage::Reattempt { id: id.clone() })
-            .await;
-        }
-        (id, preprocesses) = recv_sign_preprocesses(&mut coordinators, Session(0), attempt).await;
-      }
-      let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
-
-      let tx_id = sign_tx(&mut coordinators, Session(0), id.clone(), preprocesses).await;
-
-      // Make sure all participating nodes published the TX
-      let participating =
-        participating.iter().map(|p| usize::from(u16::from(*p) - 1)).collect::<HashSet<_>>();
-      for participant in &participating {
-        assert!(coordinators[*participant].get_transaction(&ops, &tx_id).await.is_some());
-      }
-
-      // Publish this transaction to the left out nodes
-      let tx = coordinators[*participating.iter().next().unwrap()]
-        .get_transaction(&ops, &tx_id)
-        .await
-        .unwrap();
-      for (i, coordinator) in coordinators.iter_mut().enumerate() {
-        if !participating.contains(&i) {
+        // Send into the processor's wallet
+        let (tx, balance_sent) = wallet.send_to_address(&ops, &key_pair.1, None).await;
+        for coordinator in &mut coordinators {
           coordinator.publish_transacton(&ops, &tx).await;
-          // Tell them of it as a completion of the relevant signing nodess
-          coordinator
-            .send_message(messages::sign::CoordinatorMessage::Completed {
-              session: Session(0),
-              id: id.id,
-              tx: tx_id.clone(),
-            })
-            .await;
-          // Verify they send Completed back
-          match coordinator.recv_message().await {
-            messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
-              session,
-              id: this_id,
-              tx: this_tx,
-            }) => {
-              assert_eq!(session, Session(0));
-              assert_eq!(&this_id, &id.id);
-              assert_eq!(this_tx, tx_id);
-            }
-            _ => panic!("processor didn't send Completed"),
+        }
+
+        // Put the TX past the confirmation depth
+        let mut block_with_tx = None;
+        for _ in 0 .. confirmations(network) {
+          let (hash, _) = coordinators[0].add_block(&ops).await;
+          if block_with_tx.is_none() {
+            block_with_tx = Some(hash);
           }
         }
-      }
+        coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-      // TODO: Test the Eventuality from the blockchain, instead of from the coordinator
-      // TODO: Test what happenns when Completed is sent with a non-existent TX ID
-      // TODO: Test what happenns when Completed is sent with a non-completing TX ID
-    });
+        // Sleep for 10s
+        // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
+        tokio::time::sleep(Duration::from_secs(10)).await;
+
+        let expected_batch =
+          Batch { network, id: 0, block: BlockHash(block_with_tx.unwrap()), instructions: vec![] };
+
+        // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
+        let (id, preprocesses) =
+          recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
+
+        // Continue with signing the batch
+        let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
+
+        // Check it
+        assert_eq!(batch.batch, expected_batch);
+
+        // Fire a SubstrateBlock with a burn
+        let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
+        let serai_time =
+          SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+
+        let mut plans = vec![];
+        for coordinator in &mut coordinators {
+          let these_plans = substrate_block(
+            coordinator,
+            messages::substrate::CoordinatorMessage::SubstrateBlock {
+              context: SubstrateContext {
+                serai_time,
+                network_latest_finalized_block: batch.batch.block,
+              },
+              block: substrate_block_num,
+              burns: vec![OutInstructionWithBalance {
+                instruction: OutInstruction { address: wallet.address(), data: None },
+                balance: balance_sent,
+              }],
+              batches: vec![batch.batch.id],
+            },
+          )
+          .await;
+
+          if plans.is_empty() {
+            plans = these_plans;
+          } else {
+            assert_eq!(plans, these_plans);
+          }
+        }
+        assert_eq!(plans.len(), 1);
+
+        // Start signing the TX
+        let (mut id, mut preprocesses) =
+          recv_sign_preprocesses(&mut coordinators, Session(0), 0).await;
+        assert_eq!(id, SignId { session: Session(0), id: plans[0].id, attempt: 0 });
+
+        // Trigger a random amount of re-attempts
+        for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
+          // TODO: Double check how the processor handles this ID field
+          // It should be able to assert its perfectly sequential
+          id.attempt = attempt;
+          for coordinator in coordinators.iter_mut() {
+            coordinator
+              .send_message(messages::sign::CoordinatorMessage::Reattempt { id: id.clone() })
+              .await;
+          }
+          (id, preprocesses) = recv_sign_preprocesses(&mut coordinators, Session(0), attempt).await;
+        }
+        let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
+
+        let tx_id = sign_tx(&mut coordinators, Session(0), id.clone(), preprocesses).await;
+
+        // Make sure all participating nodes published the TX
+        let participating =
+          participating.iter().map(|p| usize::from(u16::from(*p) - 1)).collect::<HashSet<_>>();
+        for participant in &participating {
+          assert!(coordinators[*participant].get_transaction(&ops, &tx_id).await.is_some());
+        }
+
+        // Publish this transaction to the left out nodes
+        let tx = coordinators[*participating.iter().next().unwrap()]
+          .get_transaction(&ops, &tx_id)
+          .await
+          .unwrap();
+        for (i, coordinator) in coordinators.iter_mut().enumerate() {
+          if !participating.contains(&i) {
+            coordinator.publish_transacton(&ops, &tx).await;
+            // Tell them of it as a completion of the relevant signing nodess
+            coordinator
+              .send_message(messages::sign::CoordinatorMessage::Completed {
+                session: Session(0),
+                id: id.id,
+                tx: tx_id.clone(),
+              })
+              .await;
+            // Verify they send Completed back
+            match coordinator.recv_message().await {
+              messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Completed {
+                session,
+                id: this_id,
+                tx: this_tx,
+              }) => {
+                assert_eq!(session, Session(0));
+                assert_eq!(&this_id, &id.id);
+                assert_eq!(this_tx, tx_id);
+              }
+              _ => panic!("processor didn't send Completed"),
+            }
+          }
+        }
+
+        // TODO: Test the Eventuality from the blockchain, instead of from the coordinator
+        // TODO: Test what happenns when Completed is sent with a non-existent TX ID
+        // TODO: Test what happenns when Completed is sent with a non-completing TX ID
+      })
+      .await;
   }
 }

@@ -31,19 +31,38 @@ pub struct Handles {
   serai: String,
 }
 
-pub fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
-  let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance();
+pub async fn full_stack(name: &str) -> (Handles, Vec<TestBodySpecification>) {
+  let mut processor_docker_names = serai_processor_tests::docker_names(NetworkId::Bitcoin);
+  processor_docker_names.extend(serai_processor_tests::docker_names(NetworkId::Monero));
 
-  let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin);
+  let mut docker_names = vec![
+    serai_message_queue_tests::docker_name(),
+    serai_coordinator_tests::serai_docker_name(),
+    serai_coordinator_tests::coordinator_docker_name(),
+  ];
+
+  // If this is in the GH CI, build in two stages so we don't hit storage limits
+  if std::env::var("GITHUB_CI").is_ok() {
+    serai_docker_tests::build_batch(processor_docker_names).await;
+  } else {
+    docker_names.extend(processor_docker_names);
+  }
+  serai_docker_tests::build_batch(docker_names).await;
+
+  let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance().await;
+
+  let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin).await;
   let bitcoin_processor_composition =
-    processor_instance(NetworkId::Bitcoin, bitcoin_port, message_queue_keys[&NetworkId::Bitcoin]);
+    processor_instance(NetworkId::Bitcoin, bitcoin_port, message_queue_keys[&NetworkId::Bitcoin])
+      .await;
 
-  let (monero_composition, monero_port) = network_instance(NetworkId::Monero);
+  let (monero_composition, monero_port) = network_instance(NetworkId::Monero).await;
   let monero_processor_composition =
-    processor_instance(NetworkId::Monero, monero_port, message_queue_keys[&NetworkId::Monero]);
+    processor_instance(NetworkId::Monero, monero_port, message_queue_keys[&NetworkId::Monero])
+      .await;
 
-  let coordinator_composition = coordinator_instance(name, coord_key);
-  let serai_composition = serai_composition(name);
+  let coordinator_composition = coordinator_instance(name, coord_key).await;
+  let serai_composition = serai_composition(name).await;
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits

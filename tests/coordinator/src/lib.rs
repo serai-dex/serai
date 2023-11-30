@@ -37,14 +37,18 @@ mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-pub fn coordinator_instance(
+pub fn coordinator_docker_name() -> String {
+  "serai-dev-coordinator".to_string()
+}
+
+pub async fn coordinator_instance(
   name: &str,
   message_queue_key: <Ristretto as Ciphersuite>::F,
 ) -> TestBodySpecification {
-  serai_docker_tests::build("coordinator".to_string());
+  serai_docker_tests::build("coordinator".to_string()).await;
 
   TestBodySpecification::with_image(
-    Image::with_repository("serai-dev-coordinator").pull_policy(PullPolicy::Never),
+    Image::with_repository(coordinator_docker_name()).pull_policy(PullPolicy::Never),
   )
   .replace_env(
     [
@@ -63,11 +67,15 @@ pub fn coordinator_instance(
   )
 }
 
-pub fn serai_composition(name: &str) -> TestBodySpecification {
-  serai_docker_tests::build("serai".to_string());
+pub fn serai_docker_name() -> String {
+  "serai-dev-serai".to_string()
+}
+
+pub async fn serai_composition(name: &str) -> TestBodySpecification {
+  serai_docker_tests::build("serai".to_string()).await;
 
   TestBodySpecification::with_image(
-    Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
+    Image::with_repository(serai_docker_name()).pull_policy(PullPolicy::Never),
   )
   .replace_cmd(vec![
     "serai-node".to_string(),
@@ -82,15 +90,22 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
 }
 
 pub type Handles = (String, String, String);
-pub fn coordinator_stack(
+pub async fn coordinator_stack(
   name: &str,
 ) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
-  let serai_composition = serai_composition(name);
+  serai_docker_tests::build_batch(vec![
+    serai_docker_name(),
+    serai_message_queue_tests::docker_name(),
+    coordinator_docker_name(),
+  ])
+  .await;
+
+  let serai_composition = serai_composition(name).await;
 
   let (coord_key, message_queue_keys, message_queue_composition) =
-    serai_message_queue_tests::instance();
+    serai_message_queue_tests::instance().await;
 
-  let coordinator_composition = coordinator_instance(name, coord_key);
+  let coordinator_composition = coordinator_instance(name, coord_key).await;
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits

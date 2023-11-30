@@ -1,19 +1,27 @@
 use std::{
-  sync::{Mutex, OnceLock},
+  sync::{OnceLock, Arc},
   collections::{HashSet, HashMap},
   time::SystemTime,
   path::PathBuf,
   fs, env,
-  process::Command,
 };
 
-static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
-pub fn build(name: String) {
+use tokio::{sync::Mutex, process::Command};
+
+static BUILT: OnceLock<Mutex<HashMap<String, Arc<Mutex<bool>>>>> = OnceLock::new();
+async fn build_inner(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
   // Only one call to build will acquire this lock
-  let mut built_lock = built.lock().unwrap();
-  if built_lock.contains_key(&name) {
-    // If it was built, return
+  let mut built_lock = built.lock().await;
+  if !built_lock.contains_key(&name) {
+    built_lock.insert(name.clone(), Arc::new(Mutex::new(false)));
+  }
+  let this_lock = built_lock[&name].clone();
+  drop(built_lock);
+
+  let mut built_lock = this_lock.lock().await;
+  // Already built
+  if *built_lock {
     return;
   }
 
@@ -30,14 +38,17 @@ pub fn build(name: String) {
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
 
+  let name_without_serai_dev = name.split("serai-dev-").nth(1).unwrap_or(&name);
+
   // If this Docker image was created after this repo was last edited, return here
   // This should have better performance than Docker and allows running while offline
   if let Ok(res) = Command::new("docker")
     .arg("inspect")
     .arg("-f")
     .arg("{{ .Metadata.LastTagTime }}")
-    .arg(format!("serai-dev-{name}"))
+    .arg(name.clone())
     .output()
+    .await
   {
     let last_tag_time_buf = String::from_utf8(res.stdout).expect("docker had non-utf8 output");
     let last_tag_time = last_tag_time_buf.trim();
@@ -51,16 +62,19 @@ pub fn build(name: String) {
       );
 
       let mut dockerfile_path = orchestration_path.clone();
-      if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
-        dockerfile_path = dockerfile_path.join("coins");
-      }
-      if name.contains("-processor") {
-        dockerfile_path = dockerfile_path
-          .join("processor")
-          .join(name.split('-').next().unwrap())
-          .join("Dockerfile");
-      } else {
-        dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+      {
+        let name = name_without_serai_dev;
+        if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(&name) {
+          dockerfile_path = dockerfile_path.join("coins");
+        }
+        if name.contains("-processor") {
+          dockerfile_path = dockerfile_path
+            .join("processor")
+            .join(name.split('-').next().unwrap())
+            .join("Dockerfile");
+        } else {
+          dockerfile_path = dockerfile_path.join(name).join("Dockerfile");
+        }
       }
 
       // For all services, if the Dockerfile was edited after the image was built we should rebuild
@@ -69,7 +83,7 @@ pub fn build(name: String) {
 
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
-      let mut metadatas = match name.as_str() {
+      let mut metadatas = match name_without_serai_dev {
         "bitcoin" => vec![],
         "monero" => vec![],
         "message-queue" => vec![
@@ -133,7 +147,7 @@ pub fn build(name: String) {
       if let Some(last_modified) = last_modified {
         if last_modified < created_time {
           println!("{} was built after the most recent source code edits, assuming built.", name);
-          built_lock.insert(name, true);
+          *built_lock = true;
           return;
         }
       }
@@ -143,6 +157,7 @@ pub fn build(name: String) {
   println!("Building {}...", &name);
 
   // Version which always prints
+  /*
   if !Command::new("docker")
     .current_dir(orchestration_path)
     .arg("compose")
@@ -151,20 +166,22 @@ pub fn build(name: String) {
     .spawn()
     .unwrap()
     .wait()
+    .await
     .unwrap()
     .success()
   {
     panic!("failed to build {name}");
   }
+  */
 
   // Version which only prints on error
-  /*
   let res = Command::new("docker")
     .current_dir(orchestration_path)
     .arg("compose")
     .arg("build")
-    .arg(&name)
+    .arg(name_without_serai_dev)
     .output()
+    .await
     .unwrap();
   if !res.status.success() {
     println!("failed to build {name}\n");
@@ -182,10 +199,14 @@ pub fn build(name: String) {
     );
     panic!("failed to build {name}");
   }
-  */
 
   println!("Built!");
 
+  // Set built
+  *built_lock = true;
+}
+
+async fn clear_cache_if_github() {
   if std::env::var("GITHUB_CI").is_ok() {
     println!("In CI, so clearing cache to prevent hitting the storage limits.");
     if !Command::new("docker")
@@ -194,14 +215,28 @@ pub fn build(name: String) {
       .arg("--all")
       .arg("--force")
       .output()
+      .await
       .unwrap()
       .status
       .success()
     {
-      println!("failed to clear cache after building {name}\n");
+      println!("failed to clear cache\n");
     }
   }
+}
 
-  // Set built
-  built_lock.insert(name, true);
+pub async fn build(name: String) {
+  build_inner(name).await;
+  clear_cache_if_github().await;
+}
+
+pub async fn build_batch(names: Vec<String>) {
+  let mut handles = vec![];
+  for name in names.into_iter().collect::<HashSet<_>>() {
+    handles.push(tokio::spawn(build_inner(name)));
+  }
+  for handle in handles {
+    handle.await.unwrap();
+  }
+  clear_cache_if_github().await;
 }

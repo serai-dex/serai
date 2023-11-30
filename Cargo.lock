@@ -7399,6 +7399,7 @@ name = "serai-docker-tests"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "tokio",
 ]
 
 [[package]]
@@ -7418,6 +7419,7 @@ dependencies = [
  "rand_core",
  "serai-client",
  "serai-coordinator-tests",
+ "serai-docker-tests",
  "serai-message-queue-tests",
  "serai-processor",
  "serai-processor-tests",

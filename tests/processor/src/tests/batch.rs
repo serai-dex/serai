@@ -191,164 +191,167 @@ pub(crate) async fn substrate_block(
   }
 }
 
-#[test]
-fn batch_test() {
+#[tokio::test]
+async fn batch_test() {
   for network in [NetworkId::Bitcoin, NetworkId::Monero] {
-    let (coordinators, test) = new_test(network);
+    let (coordinators, test) = new_test(network).await;
 
-    test.run(|ops| async move {
-      tokio::time::sleep(Duration::from_secs(1)).await;
-
-      let mut coordinators = coordinators
-        .into_iter()
-        .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
-        .collect::<Vec<_>>();
-
-      // Create a wallet before we start generating keys
-      let mut wallet = Wallet::new(network, &ops, coordinators[0].network_handle.clone()).await;
-      coordinators[0].sync(&ops, &coordinators[1 ..]).await;
-
-      // Generate keys
-      let key_pair = key_gen(&mut coordinators).await;
-
-      // Now we we have to mine blocks to activate the key
-      // (the first key is activated when the network's time as of a block exceeds the Serai time
-      // it was confirmed at)
-      // Mine multiple sets of medians to ensure the median is sufficiently advanced
-      for _ in 0 .. (10 * confirmations(network)) {
-        coordinators[0].add_block(&ops).await;
+    test
+      .run_async(|ops| async move {
         tokio::time::sleep(Duration::from_secs(1)).await;
-      }
-      coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-      // Run twice, once with an instruction and once without
-      let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
-      for i in 0 .. 2 {
-        let mut serai_address = [0; 32];
-        OsRng.fill_bytes(&mut serai_address);
-        let instruction =
-          if i == 0 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
+        let mut coordinators = coordinators
+          .into_iter()
+          .map(|(handles, key)| Coordinator::new(network, &ops, handles, key))
+          .collect::<Vec<_>>();
 
-        // Send into the processor's wallet
-        let (tx, balance_sent) =
-          wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
-        for coordinator in &mut coordinators {
-          coordinator.publish_transacton(&ops, &tx).await;
-        }
+        // Create a wallet before we start generating keys
+        let mut wallet = Wallet::new(network, &ops, coordinators[0].network_handle.clone()).await;
+        coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-        // Put the TX past the confirmation depth
-        let mut block_with_tx = None;
-        for _ in 0 .. confirmations(network) {
-          let (hash, _) = coordinators[0].add_block(&ops).await;
-          if block_with_tx.is_none() {
-            block_with_tx = Some(hash);
-          }
+        // Generate keys
+        let key_pair = key_gen(&mut coordinators).await;
+
+        // Now we we have to mine blocks to activate the key
+        // (the first key is activated when the network's time as of a block exceeds the Serai time
+        // it was confirmed at)
+        // Mine multiple sets of medians to ensure the median is sufficiently advanced
+        for _ in 0 .. (10 * confirmations(network)) {
+          coordinators[0].add_block(&ops).await;
+          tokio::time::sleep(Duration::from_secs(1)).await;
         }
         coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
-        // Sleep for 10s
-        // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
-        tokio::time::sleep(Duration::from_secs(10)).await;
+        // Run twice, once with an instruction and once without
+        let substrate_block_num = (OsRng.next_u64() % 4_000_000_000u64) + 1;
+        for i in 0 .. 2 {
+          let mut serai_address = [0; 32];
+          OsRng.fill_bytes(&mut serai_address);
+          let instruction =
+            if i == 0 { Some(InInstruction::Transfer(SeraiAddress(serai_address))) } else { None };
 
-        let expected_batch = Batch {
-          network,
-          id: i,
-          block: BlockHash(block_with_tx.unwrap()),
-          instructions: if let Some(instruction) = &instruction {
-            vec![InInstructionWithBalance {
-              instruction: instruction.clone(),
-              balance: Balance {
-                coin: balance_sent.coin,
-                amount: Amount(
-                  balance_sent.amount.0 -
-                    (2 * if network == NetworkId::Bitcoin {
-                      Bitcoin::COST_TO_AGGREGATE
-                    } else {
-                      Monero::COST_TO_AGGREGATE
-                    }),
-                ),
-              },
-            }]
-          } else {
-            // This shouldn't have an instruction as we didn't add any data into the TX we sent
-            // Empty batches remain valuable as they let us achieve consensus on the block and spend
-            // contained outputs
-            vec![]
-          },
-        };
-
-        // Make sure the processors picked it up by checking they're trying to sign a batch for it
-        let (mut id, mut preprocesses) =
-          recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
-        // Trigger a random amount of re-attempts
-        for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
-          // TODO: Double check how the processor handles this ID field
-          // It should be able to assert its perfectly sequential
-          id.attempt = attempt;
-          for coordinator in coordinators.iter_mut() {
-            coordinator
-              .send_message(messages::coordinator::CoordinatorMessage::BatchReattempt {
-                id: id.clone(),
-              })
-              .await;
+          // Send into the processor's wallet
+          let (tx, balance_sent) =
+            wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
+          for coordinator in &mut coordinators {
+            coordinator.publish_transacton(&ops, &tx).await;
           }
-          (id, preprocesses) =
-            recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, attempt).await;
-        }
 
-        // Continue with signing the batch
-        let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
-
-        // Check it
-        assert_eq!(batch.batch, expected_batch);
-
-        // Fire a SubstrateBlock
-        let serai_time =
-          SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-        for coordinator in &mut coordinators {
-          let plans = substrate_block(
-            coordinator,
-            messages::substrate::CoordinatorMessage::SubstrateBlock {
-              context: SubstrateContext {
-                serai_time,
-                network_latest_finalized_block: batch.batch.block,
-              },
-              block: substrate_block_num + u64::from(i),
-              burns: vec![],
-              batches: vec![batch.batch.id],
-            },
-          )
-          .await;
-          if instruction.is_some() || (instruction.is_none() && (network == NetworkId::Monero)) {
-            assert!(plans.is_empty());
-          } else {
-            // If no instruction was used, and the processor csn presume the origin, it'd have
-            // created a refund Plan
-            assert_eq!(plans.len(), 1);
-          }
-        }
-      }
-
-      // With the latter InInstruction not existing, we should've triggered a refund if the origin
-      // was detectable
-      // Check this is trying to sign a Plan
-      if network != NetworkId::Monero {
-        let mut refund_id = None;
-        for coordinator in &mut coordinators {
-          match coordinator.recv_message().await {
-            messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Preprocess {
-              id,
-              ..
-            }) => {
-              if refund_id.is_none() {
-                refund_id = Some(id.clone());
-              }
-              assert_eq!(refund_id.as_ref().unwrap(), &id);
+          // Put the TX past the confirmation depth
+          let mut block_with_tx = None;
+          for _ in 0 .. confirmations(network) {
+            let (hash, _) = coordinators[0].add_block(&ops).await;
+            if block_with_tx.is_none() {
+              block_with_tx = Some(hash);
             }
-            _ => panic!("processor didn't send preprocess for expected refund transaction"),
+          }
+          coordinators[0].sync(&ops, &coordinators[1 ..]).await;
+
+          // Sleep for 10s
+          // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
+          tokio::time::sleep(Duration::from_secs(10)).await;
+
+          let expected_batch = Batch {
+            network,
+            id: i,
+            block: BlockHash(block_with_tx.unwrap()),
+            instructions: if let Some(instruction) = &instruction {
+              vec![InInstructionWithBalance {
+                instruction: instruction.clone(),
+                balance: Balance {
+                  coin: balance_sent.coin,
+                  amount: Amount(
+                    balance_sent.amount.0 -
+                      (2 * if network == NetworkId::Bitcoin {
+                        Bitcoin::COST_TO_AGGREGATE
+                      } else {
+                        Monero::COST_TO_AGGREGATE
+                      }),
+                  ),
+                },
+              }]
+            } else {
+              // This shouldn't have an instruction as we didn't add any data into the TX we sent
+              // Empty batches remain valuable as they let us achieve consensus on the block and
+              // spend contained outputs
+              vec![]
+            },
+          };
+
+          // Make sure the processors picked it up by checking they're trying to sign a batch for it
+          let (mut id, mut preprocesses) =
+            recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, 0).await;
+          // Trigger a random amount of re-attempts
+          for attempt in 1 ..= u32::try_from(OsRng.next_u64() % 4).unwrap() {
+            // TODO: Double check how the processor handles this ID field
+            // It should be able to assert its perfectly sequential
+            id.attempt = attempt;
+            for coordinator in coordinators.iter_mut() {
+              coordinator
+                .send_message(messages::coordinator::CoordinatorMessage::BatchReattempt {
+                  id: id.clone(),
+                })
+                .await;
+            }
+            (id, preprocesses) =
+              recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, attempt)
+                .await;
+          }
+
+          // Continue with signing the batch
+          let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;
+
+          // Check it
+          assert_eq!(batch.batch, expected_batch);
+
+          // Fire a SubstrateBlock
+          let serai_time =
+            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+          for coordinator in &mut coordinators {
+            let plans = substrate_block(
+              coordinator,
+              messages::substrate::CoordinatorMessage::SubstrateBlock {
+                context: SubstrateContext {
+                  serai_time,
+                  network_latest_finalized_block: batch.batch.block,
+                },
+                block: substrate_block_num + u64::from(i),
+                burns: vec![],
+                batches: vec![batch.batch.id],
+              },
+            )
+            .await;
+            if instruction.is_some() || (instruction.is_none() && (network == NetworkId::Monero)) {
+              assert!(plans.is_empty());
+            } else {
+              // If no instruction was used, and the processor csn presume the origin, it'd have
+              // created a refund Plan
+              assert_eq!(plans.len(), 1);
+            }
           }
         }
-      }
-    });
+
+        // With the latter InInstruction not existing, we should've triggered a refund if the origin
+        // was detectable
+        // Check this is trying to sign a Plan
+        if network != NetworkId::Monero {
+          let mut refund_id = None;
+          for coordinator in &mut coordinators {
+            match coordinator.recv_message().await {
+              messages::ProcessorMessage::Sign(messages::sign::ProcessorMessage::Preprocess {
+                id,
+                ..
+              }) => {
+                if refund_id.is_none() {
+                  refund_id = Some(id.clone());
+                }
+                assert_eq!(refund_id.as_ref().unwrap(), &id);
+              }
+              _ => panic!("processor didn't send preprocess for expected refund transaction"),
+            }
+          }
+        }
+      })
+      .await;
   }
 }

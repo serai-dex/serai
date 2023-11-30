@@ -14,7 +14,7 @@ macro_rules! serai_test {
           TestBodySpecification, DockerTest,
         };
 
-        serai_docker_tests::build("serai".to_string());
+        serai_docker_tests::build("serai".to_string()).await;
 
         let handle = concat!("serai_client-serai_node-", stringify!($name));
 

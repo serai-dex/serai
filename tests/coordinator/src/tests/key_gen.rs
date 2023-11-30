@@ -222,7 +222,7 @@ pub async fn key_gen<C: Ciphersuite>(
 #[tokio::test]
 async fn key_gen_test() {
   let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
-  let (processors, test) = new_test();
+  let (processors, test) = new_test().await;
 
   test
     .run_async(|ops| async move {

@@ -24,7 +24,20 @@ mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-pub fn processor_instance(
+fn network_str(network: NetworkId) -> &'static str {
+  match network {
+    NetworkId::Serai => panic!("starting a processor for Serai"),
+    NetworkId::Bitcoin => "bitcoin",
+    NetworkId::Ethereum => "ethereum",
+    NetworkId::Monero => "monero",
+  }
+}
+
+pub fn processor_docker_name(network: NetworkId) -> String {
+  format!("{}-processor", network_str(network))
+}
+
+pub async fn processor_instance(
   network: NetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
@@ -32,17 +45,12 @@ pub fn processor_instance(
   let mut entropy = [0; 32];
   OsRng.fill_bytes(&mut entropy);
 
-  let network_str = match network {
-    NetworkId::Serai => panic!("starting a processor for Serai"),
-    NetworkId::Bitcoin => "bitcoin",
-    NetworkId::Ethereum => "ethereum",
-    NetworkId::Monero => "monero",
-  };
-  let image = format!("{network_str}-processor");
-  serai_docker_tests::build(image.clone());
+  let network_str = network_str(network);
+  serai_docker_tests::build(processor_docker_name(network)).await;
 
   TestBodySpecification::with_image(
-    Image::with_repository(format!("serai-dev-{image}")).pull_policy(PullPolicy::Never),
+    Image::with_repository(format!("serai-dev-{}", processor_docker_name(network)))
+      .pull_policy(PullPolicy::Never),
   )
   .replace_env(
     [
@@ -58,17 +66,23 @@ pub fn processor_instance(
   )
 }
 
+pub fn docker_names(network: NetworkId) -> Vec<String> {
+  vec![network_docker_name(network), processor_docker_name(network)]
+}
+
 pub type Handles = (String, String, String);
-pub fn processor_stack(
+pub async fn processor_stack(
   network: NetworkId,
 ) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
-  let (network_composition, network_rpc_port) = network_instance(network);
+  serai_docker_tests::build_batch(docker_names(network)).await;
+
+  let (network_composition, network_rpc_port) = network_instance(network).await;
 
   let (coord_key, message_queue_keys, message_queue_composition) =
-    serai_message_queue_tests::instance();
+    serai_message_queue_tests::instance().await;
 
   let processor_composition =
-    processor_instance(network, network_rpc_port, message_queue_keys[&network]);
+    processor_instance(network, network_rpc_port, message_queue_keys[&network]).await;
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
