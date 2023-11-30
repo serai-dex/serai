@@ -1,5 +1,6 @@
+use hyper::body::Bytes;
 #[cfg(feature = "basic-auth")]
-use hyper::{body::Bytes, header::HeaderValue};
+use hyper::header::HeaderValue;
 pub use http_body_util::Full;
 
 #[cfg(feature = "basic-auth")]

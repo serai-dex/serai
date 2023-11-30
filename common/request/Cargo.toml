@@ -15,18 +15,18 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 hyper = { version = "1", default-features = false, features = ["http1", "client"] }
-hyper-util = { version = "0.1", default-features = false, features = ["http1", "client", "tokio"] }
+hyper-util = { version = "0.1", default-features = false, features = ["http1", "client-legacy", "tokio"] }
 http-body-util = { version = "0.1", default-features = false }
 
 tokio = { version = "1", default-features = false }
 
-tower-service = { version = "0.3", default-features = false, optional = true }
+tower-service = { version = "0.3", default-features = false }
 hyper-boring = { version = "5", default-features = false, optional = true }
 
 zeroize = { version = "1", optional = true }
 base64ct = { version = "1", features = ["alloc"], optional = true }
 
 [features]
-tls = ["tower-service", "hyper-boring"]
+tls = ["hyper-boring"]
 basic-auth = ["zeroize", "base64ct"]
 default = ["tls"]

@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-#[cfg(feature = "tls")]
 use tower_service::Service as TowerService;
 #[cfg(feature = "tls")]
 use hyper_boring::HttpsConnector;
