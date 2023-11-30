@@ -9,9 +9,9 @@ mod rocks;
 #[cfg(feature = "rocksdb")]
 pub use rocks::{RocksDB, new_rocksdb};
 
-#[cfg(feature = "parity_db")]
+#[cfg(feature = "parity-db")]
 mod parity_db;
-#[cfg(feature = "parity_db")]
+#[cfg(feature = "parity-db")]
 pub use parity_db::{ParityDb, new_parity_db};
 
 /// An object implementing get.

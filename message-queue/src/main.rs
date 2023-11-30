@@ -23,7 +23,7 @@ pub(crate) use crate::messages::*;
 pub(crate) use crate::queue::Queue;
 
 #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
-pub(crate) type Db = Arc<serai_db::Redb>;
+pub(crate) type Db = Arc<serai_db::ParityDb>;
 #[cfg(feature = "rocksdb")]
 pub(crate) type Db = serai_db::RocksDB;
 

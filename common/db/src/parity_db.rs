@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-pub use ::parity_db::Db as ParityDb;
-use ::redb::*;
+pub use ::parity_db::{Options, Db as ParityDb};
 
 use crate::*;
 
@@ -37,5 +36,5 @@ impl Db for Arc<ParityDb> {
 }
 
 pub fn new_parity_db(path: &str) -> Arc<ParityDb> {
-  Arc::new(ParityDb::open_or_crate(Options::with_columns(path, 1)).unwrap())
+  Arc::new(ParityDb::open_or_create(&Options::with_columns(std::path::Path::new(path), 1)).unwrap())
 }
