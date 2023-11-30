@@ -595,6 +595,7 @@ impl<R: RpcConnection> Rpc<R> {
       Vec::new()
     };
 
+    // TODO: https://github.com/serai-dex/serai/issues/104
     outs
       .iter()
       .enumerate()

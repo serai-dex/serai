@@ -341,7 +341,7 @@ impl Decoys {
   /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
   /// function will use the same distribution to select decoys. It is fingerprintable
   /// because a caller using this will not be able to select decoys that are timelocked
-  /// with a timestamp. Any transaction which includes timestamp timelocked outputs in its
+  /// with a timestamp. Any transaction which includes timestamp timelocked decoys in its
   /// rings could not be constructed using this function.
   ///
   /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
