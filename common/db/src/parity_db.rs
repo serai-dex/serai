@@ -8,7 +8,13 @@ pub struct Transaction<'a>(&'a Arc<ParityDb>, Vec<(u8, Vec<u8>, Option<Vec<u8>>)
 
 impl Get for Transaction<'_> {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.get(key)
+    let mut res = self.0.get(&key);
+    for change in &self.1 {
+      if change.1 == key.as_ref() {
+        res = change.2.clone();
+      }
+    }
+    res
   }
 }
 impl DbTxn for Transaction<'_> {
