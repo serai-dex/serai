@@ -44,5 +44,5 @@ serai-env = { path = "../common/env" }
 serai-primitives = { path = "../substrate/primitives", features = ["borsh"] }
 
 [features]
-redb = ["serai-db/redb"]
+parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]

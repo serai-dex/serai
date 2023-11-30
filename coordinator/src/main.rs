@@ -1200,10 +1200,11 @@ async fn main() {
 
   #[allow(unused_variables, unreachable_code)]
   let db = {
-    #[cfg(all(feature = "redb", feature = "rocksdb"))]
-    panic!("built with redb and rocksdb");
-    #[cfg(all(feature = "redb", not(feature = "rocksdb")))]
-    let db = serai_db::new_redb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
+    panic!("built with parity-db and rocksdb");
+    #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
+    let db =
+      serai_db::new_parity_db(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
     #[cfg(feature = "rocksdb")]
     let db =
       serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));

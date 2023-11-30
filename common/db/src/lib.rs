@@ -9,10 +9,10 @@ mod rocks;
 #[cfg(feature = "rocksdb")]
 pub use rocks::{RocksDB, new_rocksdb};
 
-#[cfg(feature = "redb")]
-mod redb;
-#[cfg(feature = "redb")]
-pub use redb::{Redb, new_redb};
+#[cfg(feature = "parity_db")]
+mod parity_db;
+#[cfg(feature = "parity_db")]
+pub use parity_db::{ParityDb, new_parity_db};
 
 /// An object implementing get.
 pub trait Get {

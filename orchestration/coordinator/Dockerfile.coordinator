@@ -1,2 +1,2 @@
-  cargo build -p serai-coordinator --features redb && \
+  cargo build -p serai-coordinator --features parity-db && \
   mv /serai/target/debug/serai-coordinator /serai/bin

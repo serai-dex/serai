@@ -79,5 +79,5 @@ ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
 
 binaries = ["env_logger", "serai-env", "messages", "message-queue"]
-redb = ["serai-db/redb"]
+parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]

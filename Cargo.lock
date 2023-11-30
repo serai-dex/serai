@@ -5715,15 +5715,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redb"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08837f9a129bde83c51953b8c96cbb3422b940166b730caa954836106eb1dfd2"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7381,7 +7372,7 @@ dependencies = [
 name = "serai-db"
 version = "0.1.0"
 dependencies = [
- "redb",
+ "parity-db",
  "rocksdb",
 ]
 
