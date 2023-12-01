@@ -46,6 +46,7 @@ frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-f
 serai-primitives = { path = "../primitives", default-features = false }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-authorship = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
@@ -98,6 +99,7 @@ std = [
   "serai-primitives/std",
 
   "pallet-timestamp/std",
+  "pallet-authorship/std",
 
   "pallet-transaction-payment/std",
 

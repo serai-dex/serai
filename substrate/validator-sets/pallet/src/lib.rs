@@ -1,5 +1,53 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::traits::FindAuthor;
+
+use serai_primitives::NetworkId;
+use sp_core::sr25519::Public;
+use sp_session::{GetSessionNumber, GetValidatorCount};
+use sp_runtime::ConsensusEngineId;
+
+use scale::{Encode, Decode};
+use scale_info::TypeInfo;
+
+// `session` and `validator_count` is only there to satisfy the `GetSessionNumber`
+// and `GetValidatorCount` traits.
+#[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+pub struct MembershipProof {
+  pub session: u32,
+  pub validator_count: u32,
+  pub key: Public,
+}
+impl GetSessionNumber for MembershipProof {
+  fn session(&self) -> u32 {
+    self.session
+  }
+}
+impl GetValidatorCount for MembershipProof {
+  fn validator_count(&self) -> u32 {
+    self.validator_count
+  }
+}
+
+/// Wraps the author-scraping logic for consensus engines that can recover
+/// the canonical index of an author. This then transforms it into the
+/// registering account-ID of that session key index.
+/// TODO: check if you can simplify this, otherwise let kayaba know this is taken from sessios.
+pub struct FindAccountFromAuthorIndex<T, Inner>(sp_std::marker::PhantomData<(T, Inner)>);
+
+impl<T: Config, Inner: FindAuthor<u32>> FindAuthor<T::AccountId>
+  for FindAccountFromAuthorIndex<T, Inner>
+{
+  fn find_author<'a, I>(digests: I) -> Option<T::AccountId>
+  where
+    I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
+  {
+    let i = Inner::find_author(digests)?;
+    let v = <Pallet<T>>::participants(NetworkId::Serai)[i as usize];
+    Some(v.0)
+  }
+}
+
 #[allow(deprecated, clippy::let_unit_value)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
@@ -11,11 +59,14 @@ pub mod pallet {
   use sp_std::{vec, vec::Vec};
   use sp_application_crypto::RuntimePublic;
   use sp_session::ShouldEndSession;
-  use sp_runtime::traits::IsMember;
+  use sp_runtime::{traits::IsMember, KeyTypeId};
+  use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 
   use frame_system::pallet_prelude::*;
   use frame_support::{
-    pallet_prelude::*, traits::DisabledValidators, BoundedVec, WeakBoundedVec, StoragePrefixedMap,
+    pallet_prelude::*,
+    traits::{DisabledValidators, KeyOwnerProofSystem},
+    BoundedVec, WeakBoundedVec, StoragePrefixedMap,
   };
 
   use serai_primitives::*;
@@ -25,8 +76,13 @@ pub mod pallet {
   use coins_pallet::{Pallet as Coins, AllowMint};
   use dex_pallet::Pallet as Dex;
 
-  use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
-  use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
+  use pallet_babe::{
+    Pallet as Babe, AuthorityId as BabeAuthorityId, EquivocationOffence as BabeEquivocationOffence,
+  };
+  use pallet_grandpa::{
+    Pallet as Grandpa, AuthorityId as GrandpaAuthorityId,
+    EquivocationOffence as GrandpaEquivocationOffence,
+  };
 
   #[pallet::config]
   pub trait Config:
@@ -565,7 +621,7 @@ pub mod pallet {
       } else {
         to_unlock_on.0 += 1;
       }
-      // Increase the session by one, creating a cooldown period
+      // Increase the session by one, creating a cool down period
       to_unlock_on.0 += 1;
       let existing =
         PendingDeallocations::<T>::get((network, to_unlock_on, account)).unwrap_or(Amount(0));
@@ -907,6 +963,81 @@ pub mod pallet {
       // get the total stake for the network & compare.
       let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
       staked.0 >= new_required
+    }
+  }
+
+  impl<T: Config, D: AsRef<[u8]>> KeyOwnerProofSystem<(KeyTypeId, D)> for Pallet<T> {
+    type Proof = MembershipProof;
+    type IdentificationTuple = Public;
+
+    fn prove(key: (KeyTypeId, D)) -> Option<Self::Proof> {
+      let (_, data) = key;
+      let validator = Public::try_from(data.as_ref()).unwrap();
+      // TODO: check if it is currently a member
+      // TODO: check if it is member of prev session
+
+      Some(MembershipProof {
+        session: Self::session(NetworkId::Serai).unwrap().0,
+        validator_count: Self::participants(NetworkId::Serai).len() as u32,
+        key: validator,
+      })
+    }
+
+    fn check_proof(key: (KeyTypeId, D), proof: Self::Proof) -> Option<Self::IdentificationTuple> {
+      let (_, data) = key;
+      let validator = Public::try_from(data.as_ref()).unwrap();
+      if validator != proof.key {
+        return None;
+      }
+      // TODO: check if it is currently a member
+      // TODO: check if it is member of prev session
+      Some(validator)
+    }
+  }
+
+  impl<T: Config> ReportOffence<Public, Public, BabeEquivocationOffence<Public>> for Pallet<T> {
+    /// Report an `offence` and reward given `reporters`.
+    fn report_offence(
+      _: Vec<Public>,
+      _: BabeEquivocationOffence<Public>,
+    ) -> Result<(), OffenceError> {
+      Ok(())
+      // slash the offender
+      // TODO: remove from the set as well?
+    }
+
+    /// Returns true iff all of the given offenders have been previously reported
+    /// at the given time slot. This function is useful to prevent the sending of
+    /// duplicate offence reports.
+    fn is_known_offence(
+      offenders: &[Public],
+      _: &<BabeEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
+    ) -> bool {
+      // Check if the offence has already been reported for offender,
+      // and if so then we can discard the report.
+      // TODO: create a BabeEquivocationOffence using the offender & time_slot
+      // and check for it in the map.
+      false
+    }
+  }
+
+  impl<T: Config> ReportOffence<Public, Public, GrandpaEquivocationOffence<Public>> for Pallet<T> {
+    /// Report an `offence` and reward given `reporters`.
+    fn report_offence(
+      _: Vec<Public>,
+      _: GrandpaEquivocationOffence<Public>,
+    ) -> Result<(), OffenceError> {
+      Ok(())
+    }
+
+    /// Returns true iff all of the given offenders have been previously reported
+    /// at the given time slot. This function is useful to prevent the sending of
+    /// duplicate offence reports.
+    fn is_known_offence(
+      offenders: &[Public],
+      _: &<GrandpaEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
+    ) -> bool {
+      false
     }
   }
 

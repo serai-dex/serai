@@ -27,6 +27,7 @@ sp-std = { git = "https://github.com/serai-dex/substrate", default-features = fa
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-staking = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -51,6 +52,7 @@ std = [
   "sp-application-crypto/std",
   "sp-runtime/std",
   "sp-session/std",
+  "sp-staking/std",
 
   "frame-system/std",
   "frame-support/std",

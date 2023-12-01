@@ -7671,6 +7671,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
+ "pallet-authorship",
  "pallet-babe",
  "pallet-grandpa",
  "pallet-timestamp",
@@ -7748,6 +7749,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-session",
+ "sp-staking",
  "sp-std",
 ]
 

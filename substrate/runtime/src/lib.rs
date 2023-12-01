@@ -47,13 +47,17 @@ use sp_runtime::{
 use primitives::{PublicKey, AccountLookup, SubstrateAmount};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains},
+  traits::{ConstU8, ConstU32, ConstU64, Contains, KeyOwnerProofSystem},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
   },
   parameter_types, construct_runtime,
 };
+
+use codec::Encode;
+
+use validator_sets::MembershipProof;
 
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
@@ -143,6 +147,7 @@ parameter_types! {
     );
 
   pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
+  pub ReportLongevity: u64 = 24 * 600; // TODO: get epoch duration from babe.
 }
 
 pub struct CallFilter;
@@ -275,6 +280,21 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+// for publishing equivocation evidences.
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+  RuntimeCall: From<C>,
+{
+  type Extrinsic = UncheckedExtrinsic;
+  type OverarchingCall = RuntimeCall;
+}
+
+// for validating equivocation evidences.
+impl pallet_authorship::Config for Runtime {
+  type FindAuthor = validator_sets::FindAccountFromAuthorIndex<Self, Babe>;
+  type EventHandler = ();
+}
+
 impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
@@ -283,12 +303,11 @@ impl babe::Config for Runtime {
   type DisabledValidators = ValidatorSets;
 
   type WeightInfo = ();
-
   type MaxAuthorities = MaxAuthorities;
 
-  // TODO: Handle equivocation reports
-  type KeyOwnerProof = sp_core::Void;
-  type EquivocationReportSystem = ();
+  type KeyOwnerProof = MembershipProof;
+  type EquivocationReportSystem =
+    babe::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
 
 impl grandpa::Config for Runtime {
@@ -297,10 +316,10 @@ impl grandpa::Config for Runtime {
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
 
-  // TODO: Handle equivocation reports
   type MaxSetIdSessionEntries = ConstU64<0>;
-  type KeyOwnerProof = sp_core::Void;
-  type EquivocationReportSystem = ();
+  type KeyOwnerProof = MembershipProof;
+  type EquivocationReportSystem =
+    grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
 
 pub type Executive = frame_executive::Executive<
@@ -460,17 +479,20 @@ sp_api::impl_runtime_apis! {
     }
 
     fn generate_key_ownership_proof(
-      _: sp_consensus_babe::Slot,
-      _: BabeId,
+      _slot: sp_consensus_babe::Slot,
+      authority_id: BabeId,
     ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
-      None
+      ValidatorSets::prove((sp_consensus_babe::KEY_TYPE, authority_id))
+        .map(|p| p.encode())
+        .map(sp_consensus_babe::OpaqueKeyOwnershipProof::new)
     }
 
     fn submit_report_equivocation_unsigned_extrinsic(
-      _: sp_consensus_babe::EquivocationProof<Header>,
-      _: sp_consensus_babe::OpaqueKeyOwnershipProof,
+      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
+      key_owner_proof: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      None
+      let key_owner_proof = key_owner_proof.decode()?;
+      Babe::submit_unsigned_equivocation_report(equivocation_proof, key_owner_proof)
     }
   }
 
@@ -484,17 +506,20 @@ sp_api::impl_runtime_apis! {
     }
 
     fn submit_report_equivocation_unsigned_extrinsic(
-      _: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
-      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+      equivocation_proof: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
+      key_owner_proof: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      None
+      let key_owner_proof = key_owner_proof.decode()?;
+      Grandpa::submit_unsigned_equivocation_report(equivocation_proof, key_owner_proof)
     }
 
     fn generate_key_ownership_proof(
       _set_id: sp_consensus_grandpa::SetId,
-      _authority_id: GrandpaId,
+      authority_id: GrandpaId,
     ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
-      None
+      ValidatorSets::prove((sp_consensus_grandpa::KEY_TYPE, authority_id))
+        .map(|p| p.encode())
+        .map(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new)
     }
   }
 
