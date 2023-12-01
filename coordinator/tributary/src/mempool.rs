@@ -20,8 +20,9 @@ pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
 
+  last_nonce_in_mempool: HashMap<(<Ristretto as Ciphersuite>::G, Vec<u8>), u32>,
   txs: HashMap<[u8; 32], Transaction<T>>,
-  next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  txs_per_signer: HashMap<<Ristretto as Ciphersuite>::G, u32>,
 }
 
 impl<D: Db, T: TransactionTrait> Mempool<D, T> {
@@ -58,7 +59,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   }
 
   pub(crate) fn new(db: D, genesis: [u8; 32]) -> Self {
-    let mut res = Mempool { db, genesis, txs: HashMap::new(), next_nonces: HashMap::new() };
+    let mut res = Mempool {
+      db,
+      genesis,
+      last_nonce_in_mempool: HashMap::new(),
+      txs: HashMap::new(),
+      txs_per_signer: HashMap::new(),
+    };
 
     let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
 
@@ -73,21 +80,24 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         Transaction::Tendermint(tx) => {
           res.txs.insert(hash, Transaction::Tendermint(tx));
         }
-        Transaction::Application(tx) => {
-          match tx.kind() {
-            TransactionKind::Signed(Signed { signer, nonce, .. }) => {
-              if let Some(prev) = res.next_nonces.insert(*signer, nonce + 1) {
-                // These mempool additions should've been ordered
-                debug_assert!(prev < *nonce);
-              }
-              res.txs.insert(hash, Transaction::Application(tx));
+        Transaction::Application(tx) => match tx.kind() {
+          TransactionKind::Signed(order, Signed { signer, nonce, .. }) => {
+            let amount = *res.txs_per_signer.get(signer).unwrap_or(&0) + 1;
+            res.txs_per_signer.insert(*signer, amount);
+
+            if let Some(prior_nonce) =
+              res.last_nonce_in_mempool.insert((*signer, order.clone()), *nonce)
+            {
+              assert_eq!(prior_nonce, nonce - 1);
             }
-            TransactionKind::Unsigned => {
-              res.txs.insert(hash, Transaction::Application(tx));
-            }
-            _ => panic!("mempool database had a provided transaction"),
+
+            res.txs.insert(hash, Transaction::Application(tx));
           }
-        }
+          TransactionKind::Unsigned => {
+            res.txs.insert(hash, Transaction::Application(tx));
+          }
+          _ => panic!("mempool database had a provided transaction"),
+        },
       }
     }
 
@@ -95,9 +105,12 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   }
 
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
-  pub(crate) fn add<N: Network>(
+  pub(crate) fn add<
+    N: Network,
+    F: FnOnce(<Ristretto as Ciphersuite>::G, Vec<u8>) -> Option<u32>,
+  >(
     &mut self,
-    blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    blockchain_next_nonce: F,
     internal: bool,
     tx: Transaction<T>,
     schema: N::SignatureScheme,
@@ -119,32 +132,31 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {
-          TransactionKind::Signed(Signed { signer, nonce, .. }) => {
+          TransactionKind::Signed(order, Signed { signer, .. }) => {
             // Get the nonce from the blockchain
-            let Some(blockchain_next_nonce) = blockchain_next_nonces.get(signer).cloned() else {
+            let Some(blockchain_next_nonce) = blockchain_next_nonce(*signer, order.clone()) else {
               // Not a participant
               Err(TransactionError::InvalidSigner)?
             };
+            let mut next_nonce = blockchain_next_nonce;
 
-            // If the blockchain's nonce is greater than the mempool's, use it
-            // Default to true so if the mempool hasn't tracked this nonce yet, it'll be inserted
-            let mut blockchain_is_greater = true;
-            if let Some(mempool_next_nonce) = self.next_nonces.get(signer) {
-              blockchain_is_greater = blockchain_next_nonce > *mempool_next_nonce;
-            }
-
-            if blockchain_is_greater {
-              self.next_nonces.insert(*signer, blockchain_next_nonce);
+            if let Some(mempool_last_nonce) =
+              self.last_nonce_in_mempool.get(&(*signer, order.clone()))
+            {
+              assert!(*mempool_last_nonce >= blockchain_next_nonce);
+              next_nonce = *mempool_last_nonce + 1;
             }
 
             // If we have too many transactions from this sender, don't add this yet UNLESS we are
             // this sender
-            if !internal && (nonce >= &(blockchain_next_nonce + ACCOUNT_MEMPOOL_LIMIT)) {
+            let amount_in_pool = *self.txs_per_signer.get(signer).unwrap_or(&0) + 1;
+            if !internal && (amount_in_pool > ACCOUNT_MEMPOOL_LIMIT) {
               Err(TransactionError::TooManyInMempool)?;
             }
 
-            verify_transaction(app_tx, self.genesis, &mut self.next_nonces)?;
-            debug_assert_eq!(self.next_nonces[signer], nonce + 1);
+            verify_transaction(app_tx, self.genesis, &mut |_, _| Some(next_nonce))?;
+            self.last_nonce_in_mempool.insert((*signer, order.clone()), next_nonce);
+            self.txs_per_signer.insert(*signer, amount_in_pool);
           }
           TransactionKind::Unsigned => {
             // check we have the tx in the pool/chain
@@ -165,38 +177,26 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   }
 
   // Returns None if the mempool doesn't have a nonce tracked.
-  pub(crate) fn next_nonce(&self, signer: &<Ristretto as Ciphersuite>::G) -> Option<u32> {
-    self.next_nonces.get(signer).cloned()
+  pub(crate) fn next_nonce_in_mempool(
+    &self,
+    signer: &<Ristretto as Ciphersuite>::G,
+    order: Vec<u8>,
+  ) -> Option<u32> {
+    self.last_nonce_in_mempool.get(&(*signer, order)).cloned().map(|nonce| nonce + 1)
   }
 
   /// Get transactions to include in a block.
-  pub(crate) fn block(
-    &mut self,
-    blockchain_next_nonces: &HashMap<<Ristretto as Ciphersuite>::G, u32>,
-    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
-  ) -> Vec<Transaction<T>> {
+  pub(crate) fn block(&mut self) -> Vec<Transaction<T>> {
     let mut unsigned = vec![];
     let mut signed = vec![];
     for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
       let tx = &self.txs[&hash];
 
-      // Verify this hasn't gone stale
       match tx.kind() {
-        TransactionKind::Signed(Signed { signer, nonce, .. }) => {
-          if blockchain_next_nonces[signer] > *nonce {
-            self.remove(&hash);
-            continue;
-          }
-
-          // Since this TX isn't stale, include it
+        TransactionKind::Signed(_, Signed { .. }) => {
           signed.push(tx.clone());
         }
         TransactionKind::Unsigned => {
-          if unsigned_in_chain(hash) {
-            self.remove(&hash);
-            continue;
-          }
-
           unsigned.push(tx.clone());
         }
         _ => panic!("provided transaction entered mempool"),
@@ -205,7 +205,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
     // Sort signed by nonce
     let nonce = |tx: &Transaction<T>| {
-      if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
+      if let TransactionKind::Signed(_, Signed { nonce, .. }) = tx.kind() {
         *nonce
       } else {
         unreachable!()
@@ -242,7 +242,16 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     }
     txn.commit();
 
-    self.txs.remove(tx);
+    if let Some(tx) = self.txs.remove(tx) {
+      if let TransactionKind::Signed(order, Signed { signer, nonce, .. }) = tx.kind() {
+        let amount = *self.txs_per_signer.get(signer).unwrap() - 1;
+        self.txs_per_signer.insert(*signer, amount);
+
+        if self.last_nonce_in_mempool.get(&(*signer, order.clone())) == Some(nonce) {
+          self.last_nonce_in_mempool.remove(&(*signer, order));
+        }
+      }
+    }
   }
 
   #[cfg(test)]

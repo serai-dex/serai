@@ -89,7 +89,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
   pub(crate) fn provide(&mut self, tx: T) -> Result<(), ProvidedError> {
     let TransactionKind::Provided(order) = tx.kind() else { Err(ProvidedError::NotProvided)? };
 
-    match verify_transaction(&tx, self.genesis, &mut HashMap::new()) {
+    match verify_transaction(&tx, self.genesis, &mut |_, _| None) {
       Ok(()) => {}
       Err(e) => Err(ProvidedError::InvalidProvided(e))?,
     }

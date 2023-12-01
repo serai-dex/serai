@@ -36,16 +36,15 @@ async fn mempool_addition() {
 
   let first_tx = signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = first_tx.1.signer;
-  assert_eq!(mempool.next_nonce(&signer), None);
+  assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), None);
 
   // validators
   let validators = Arc::new(Validators::new(genesis, vec![(signer, 1)]).unwrap());
 
   // Add TX 0
-  let mut blockchain_next_nonces = HashMap::from([(signer, 0)]);
   assert!(mempool
-    .add::<N>(
-      &blockchain_next_nonces,
+    .add::<N, _>(
+      &|_, _| Some(0),
       true,
       Transaction::Application(first_tx.clone()),
       validators.clone(),
@@ -53,15 +52,15 @@ async fn mempool_addition() {
       commit,
     )
     .unwrap());
-  assert_eq!(mempool.next_nonce(&signer), Some(1));
+  assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), Some(1));
 
   // add a tendermint evidence tx
   let evidence_tx =
     random_evidence_tx::<N>(Signer::new(genesis, key.clone()).into(), TendermintBlock(vec![]))
       .await;
   assert!(mempool
-    .add::<N>(
-      &blockchain_next_nonces,
+    .add::<N, _>(
+      &|_, _| None,
       true,
       Transaction::Tendermint(evidence_tx.clone()),
       validators.clone(),
@@ -75,8 +74,8 @@ async fn mempool_addition() {
 
   // Adding them again should fail
   assert_eq!(
-    mempool.add::<N>(
-      &blockchain_next_nonces,
+    mempool.add::<N, _>(
+      &|_, _| Some(0),
       true,
       Transaction::Application(first_tx.clone()),
       validators.clone(),
@@ -86,8 +85,8 @@ async fn mempool_addition() {
     Err(TransactionError::InvalidNonce)
   );
   assert_eq!(
-    mempool.add::<N>(
-      &blockchain_next_nonces,
+    mempool.add::<N, _>(
+      &|_, _| None,
       true,
       Transaction::Tendermint(evidence_tx.clone()),
       validators.clone(),
@@ -100,8 +99,8 @@ async fn mempool_addition() {
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
   assert_eq!(
-    mempool.add::<N>(
-      &blockchain_next_nonces,
+    mempool.add::<N, _>(
+      &|_, _| Some(0),
       true,
       Transaction::Application(second_tx.clone()),
       validators.clone(),
@@ -110,10 +109,10 @@ async fn mempool_addition() {
     ),
     Ok(true)
   );
-  assert_eq!(mempool.next_nonce(&signer), Some(2));
+  assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), Some(2));
   assert_eq!(
-    mempool.add::<N>(
-      &blockchain_next_nonces,
+    mempool.add::<N, _>(
+      &|_, _| Some(0),
       true,
       Transaction::Application(second_tx.clone()),
       validators.clone(),
@@ -128,11 +127,10 @@ async fn mempool_addition() {
   let second_key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
   let tx = signed_transaction(&mut OsRng, genesis, &second_key, 2);
   let second_signer = tx.1.signer;
-  assert_eq!(mempool.next_nonce(&second_signer), None);
-  blockchain_next_nonces.insert(second_signer, 2);
+  assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), None);
   assert!(mempool
-    .add::<N>(
-      &blockchain_next_nonces,
+    .add::<N, _>(
+      &|_, _| Some(2),
       true,
       Transaction::Application(tx.clone()),
       validators.clone(),
@@ -140,24 +138,18 @@ async fn mempool_addition() {
       commit
     )
     .unwrap());
-  assert_eq!(mempool.next_nonce(&second_signer), Some(3));
+  assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), Some(3));
 
   // Getting a block should work
-  assert_eq!(mempool.block(&blockchain_next_nonces, unsigned_in_chain).len(), 4);
+  assert_eq!(mempool.block().len(), 4);
 
-  // If the blockchain says an account had its nonce updated, it should cause a prune
-  blockchain_next_nonces.insert(signer, 1);
-  let mut block = mempool.block(&blockchain_next_nonces, unsigned_in_chain);
-  assert_eq!(block.len(), 3);
-  assert!(!block.iter().any(|tx| tx.hash() == first_tx.hash()));
-  assert_eq!(mempool.txs(), &block.drain(..).map(|tx| (tx.hash(), tx)).collect::<HashMap<_, _>>());
-
-  // Removing should also successfully prune
+  // Removing should successfully prune
   mempool.remove(&tx.hash());
 
   assert_eq!(
     mempool.txs(),
     &HashMap::from([
+      (first_tx.hash(), Transaction::Application(first_tx)),
       (second_tx.hash(), Transaction::Application(second_tx)),
       (evidence_tx.hash(), Transaction::Tendermint(evidence_tx))
     ])
@@ -173,13 +165,12 @@ fn too_many_mempool() {
   };
   let unsigned_in_chain = |_: [u8; 32]| false;
   let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
-  let signer = signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;
 
   // We should be able to add transactions up to the limit
   for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {
     assert!(mempool
-      .add::<N>(
-        &HashMap::from([(signer, 0)]),
+      .add::<N, _>(
+        &|_, _| Some(0),
         false,
         Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
         validators.clone(),
@@ -190,8 +181,8 @@ fn too_many_mempool() {
   }
   // Yet adding more should fail
   assert_eq!(
-    mempool.add::<N>(
-      &HashMap::from([(signer, 0)]),
+    mempool.add::<N, _>(
+      &|_, _| Some(0),
       false,
       Transaction::Application(signed_transaction(
         &mut OsRng,
