@@ -81,6 +81,32 @@ impl ReadWrite for Signed {
   }
 }
 
+impl Signed {
+  fn read_without_nonce<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
+    let signer = Ristretto::read_G(reader)?;
+
+    let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
+    if signature.R.is_identity().into() {
+      // Anyone malicious could remove this and try to find zero signatures
+      // We should never produce zero signatures though meaning this should never come up
+      // If it does somehow come up, this is a decent courtesy
+      signature.zeroize();
+      Err(io::Error::other("signature nonce was identity"))?;
+    }
+
+    Ok(Signed { signer, nonce, signature })
+  }
+
+  fn write_without_nonce<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    // This is either an invalid signature or a private key leak
+    if self.signature.R.is_identity().into() {
+      Err(io::Error::other("signature nonce was identity"))?;
+    }
+    writer.write_all(&self.signer.to_bytes())?;
+    self.signature.write(writer)
+  }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionKind<'a> {

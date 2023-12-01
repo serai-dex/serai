@@ -27,7 +27,6 @@ use crate::{
   processors::Processors,
   tributary::{
     Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet, Accumulation,
-    nonce_decider::NonceDecider,
     dkg_confirmer::DkgConfirmer,
     scanner::{RecognizedIdType, RIDTrait},
     FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
@@ -498,11 +497,6 @@ pub(crate) async fn handle_application_tx<
         genesis,
         Topic::SubstrateSign(SubstrateSignableId::CosigningSubstrateBlock(hash)),
       );
-      NonceDecider::handle_substrate_signable(
-        txn,
-        genesis,
-        SubstrateSignableId::CosigningSubstrateBlock(hash),
-      );
 
       let block_number = SeraiBlockNumber::get(txn, hash)
         .expect("CosignSubstrateBlock yet didn't save Serai block number");
@@ -528,9 +522,7 @@ pub(crate) async fn handle_application_tx<
         genesis,
         Topic::SubstrateSign(SubstrateSignableId::Batch(batch)),
       );
-      let nonce =
-        NonceDecider::handle_substrate_signable(txn, genesis, SubstrateSignableId::Batch(batch));
-      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec(), nonce).await;
+      recognized_id(spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec()).await;
     }
 
     Transaction::SubstrateBlock(block) => {
@@ -539,10 +531,9 @@ pub(crate) async fn handle_application_tx<
           despite us not providing that transaction",
       );
 
-      let nonces = NonceDecider::handle_substrate_block(txn, genesis, &plan_ids);
-      for (nonce, id) in nonces.into_iter().zip(plan_ids.into_iter()) {
+      for id in plan_ids.into_iter() {
         AttemptDb::recognize_topic(txn, genesis, Topic::Sign(id));
-        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id.to_vec(), nonce).await;
+        recognized_id(spec.set(), genesis, RecognizedIdType::Plan, id.to_vec()).await;
       }
     }
 
@@ -569,7 +560,6 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::selected_for_signing_substrate(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,
@@ -645,7 +635,6 @@ pub(crate) async fn handle_application_tx<
       ) {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
-          NonceDecider::selected_for_signing_plan(txn, genesis, data.plan);
           processors
             .send(
               spec.set().network,

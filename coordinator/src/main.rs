@@ -37,7 +37,7 @@ use ::tributary::{
 
 mod tributary;
 use crate::tributary::{
-  TributarySpec, SignData, Transaction, NonceDecider, scanner::RecognizedIdType, PlanIds,
+  TributarySpec, SignData, Transaction, scanner::RecognizedIdType, PlanIds,
 };
 
 mod db;
@@ -698,24 +698,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }
         }
         TransactionKind::Signed(_) => {
-          log::trace!("getting next nonce for Tributary TX in response to processor message");
-
-          let nonce = loop {
-            let Some(nonce) =
-              NonceDecider::nonce(&txn, genesis, &tx).expect("signed TX didn't have nonce")
-            else {
-              // This can be None if the following events occur, in order:
-              // 1) We scanned the relevant transaction(s) in a Tributary block
-              // 2) The processor was sent a message and responded
-              // 3) The Tributary TXN has yet to be committed
-              log::warn!("nonce has yet to be saved for processor-instigated transaction");
-              sleep(Duration::from_millis(100)).await;
-              continue;
-            };
-            break nonce;
-          };
-          tx.sign(&mut OsRng, genesis, key, nonce);
-
+          tx.sign(&mut OsRng, genesis, key);
           publish_signed_transaction(&mut txn, tributary, tx).await;
         }
       }
@@ -1066,7 +1049,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       }
     });
 
-    move |set: ValidatorSet, genesis, id_type, id: Vec<u8>, nonce| {
+    move |set: ValidatorSet, genesis, id_type, id: Vec<u8>| {
       log::debug!("recognized ID {:?} {}", id_type, hex::encode(&id));
       let mut raw_db = raw_db.clone();
       let key = key.clone();
@@ -1104,7 +1087,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           }),
         };
 
-        tx.sign(&mut OsRng, genesis, &key, nonce);
+        tx.sign(&mut OsRng, genesis, &key);
 
         let mut first = true;
         loop {

@@ -35,10 +35,10 @@ pub enum RecognizedIdType {
 }
 
 pub(crate) trait RIDTrait<FRid>:
-  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>, u32) -> FRid
+  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
 {
 }
-impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>, u32) -> FRid>
+impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid>
   RIDTrait<FRid> for F
 {
 }
