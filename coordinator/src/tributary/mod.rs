@@ -35,9 +35,6 @@ use tributary::{
 mod db;
 pub use db::*;
 
-mod nonce_decider;
-pub use nonce_decider::*;
-
 mod dkg_confirmer;
 
 mod handle;
@@ -191,8 +188,8 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> Debug for SignData<Id
   }
 }
 
-impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignData<Id> {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
+  fn read<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
     let plan = Id::decode(&mut scale::IoReader(&mut *reader))
       .map_err(|_| io::Error::other("invalid plan in SignData"))?;
 
@@ -217,7 +214,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignDat
       all_data
     };
 
-    let signed = Signed::read(reader)?;
+    let signed = Signed::read_without_nonce(reader, nonce)?;
 
     Ok(SignData { plan, attempt, data, signed })
   }
@@ -242,7 +239,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> ReadWrite for SignDat
       writer.write_all(data)?;
     }
 
-    self.signed.write(writer)
+    self.signed.write_without_nonce(writer)
   }
 }
 
@@ -403,7 +400,7 @@ impl ReadWrite for Transaction {
           commitments
         };
 
-        let signed = Signed::read(reader)?;
+        let signed = Signed::read_without_nonce(reader, 0)?;
 
         Ok(Transaction::DkgCommitments(attempt, commitments, signed))
       }
@@ -440,7 +437,7 @@ impl ReadWrite for Transaction {
         let mut confirmation_nonces = [0; 64];
         reader.read_exact(&mut confirmation_nonces)?;
 
-        let signed = Signed::read(reader)?;
+        let signed = Signed::read_without_nonce(reader, 1)?;
 
         Ok(Transaction::DkgShares { attempt, shares, confirmation_nonces, signed })
       }
@@ -465,7 +462,8 @@ impl ReadWrite for Transaction {
         let mut blame = vec![0; u16::from_le_bytes(blame_len).into()];
         reader.read_exact(&mut blame)?;
 
-        let signed = Signed::read(reader)?;
+        // This shares a nonce with DkgConfirmed as only one is expected
+        let signed = Signed::read_without_nonce(reader, 2)?;
 
         Ok(Transaction::InvalidDkgShare {
           attempt,
@@ -484,7 +482,7 @@ impl ReadWrite for Transaction {
         let mut confirmation_share = [0; 32];
         reader.read_exact(&mut confirmation_share)?;
 
-        let signed = Signed::read(reader)?;
+        let signed = Signed::read_without_nonce(reader, 2)?;
 
         Ok(Transaction::DkgConfirmed(attempt, confirmation_share, signed))
       }
@@ -509,11 +507,11 @@ impl ReadWrite for Transaction {
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      8 => SignData::read(reader).map(Transaction::SubstratePreprocess),
-      9 => SignData::read(reader).map(Transaction::SubstrateShare),
+      8 => SignData::read(reader, 0).map(Transaction::SubstratePreprocess),
+      9 => SignData::read(reader, 1).map(Transaction::SubstrateShare),
 
-      10 => SignData::read(reader).map(Transaction::SignPreprocess),
-      11 => SignData::read(reader).map(Transaction::SignShare),
+      10 => SignData::read(reader, 0).map(Transaction::SignPreprocess),
+      11 => SignData::read(reader, 1).map(Transaction::SignShare),
 
       12 => {
         let mut plan = [0; 32];
@@ -557,7 +555,7 @@ impl ReadWrite for Transaction {
         for commitments in commitments {
           writer.write_all(commitments)?;
         }
-        signed.write(writer)
+        signed.write_without_nonce(writer)
       }
 
       Transaction::DkgShares { attempt, shares, confirmation_nonces, signed } => {
@@ -586,7 +584,7 @@ impl ReadWrite for Transaction {
         }
 
         writer.write_all(confirmation_nonces)?;
-        signed.write(writer)
+        signed.write_without_nonce(writer)
       }
 
       Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
@@ -602,14 +600,14 @@ impl ReadWrite for Transaction {
         writer.write_all(&blame_len.to_le_bytes())?;
         writer.write_all(blame.as_ref().unwrap_or(&vec![]))?;
 
-        signed.write(writer)
+        signed.write_without_nonce(writer)
       }
 
       Transaction::DkgConfirmed(attempt, share, signed) => {
         writer.write_all(&[4])?;
         writer.write_all(&attempt.to_le_bytes())?;
         writer.write_all(share)?;
-        signed.write(writer)
+        signed.write_without_nonce(writer)
       }
 
       Transaction::CosignSubstrateBlock(block) => {
@@ -663,21 +661,21 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipant(_) => TransactionKind::Provided("remove"),
 
-      Transaction::DkgCommitments(_, _, signed) => TransactionKind::Signed(signed),
-      Transaction::DkgShares { signed, .. } => TransactionKind::Signed(signed),
-      Transaction::InvalidDkgShare { signed, .. } => TransactionKind::Signed(signed),
-      Transaction::DkgConfirmed(_, _, signed) => TransactionKind::Signed(signed),
+      Transaction::DkgCommitments(attempt, _, signed) => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
+      Transaction::DkgShares { attempt, signed, .. } => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
+      Transaction::InvalidDkgShare { attempt, signed, .. } => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
+      Transaction::DkgConfirmed(attempt, _, signed) => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
 
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
 
       Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
-      Transaction::SubstratePreprocess(data) => TransactionKind::Signed(&data.signed),
-      Transaction::SubstrateShare(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SubstratePreprocess(data) => TransactionKind::Signed((b"substrate", data.0.plan, data.0.attempt).encode(), &data.signed),
+      Transaction::SubstrateShare(data) => TransactionKind::Signed((b"substrate", data.0.plan, data.0.attempt).encode(), &data.signed),
 
-      Transaction::SignPreprocess(data) => TransactionKind::Signed(&data.signed),
-      Transaction::SignShare(data) => TransactionKind::Signed(&data.signed),
+      Transaction::SignPreprocess(data) => TransactionKind::Signed((b"sign", data.0.plan, data.0.attempt).encode(), &data.signed),
+      Transaction::SignShare(data) => TransactionKind::Signed((b"sign", data.0.plan, data.0.attempt).encode(), &data.signed),
       Transaction::SignCompleted { .. } => TransactionKind::Unsigned,
     }
   }
@@ -729,7 +727,6 @@ impl Transaction {
     rng: &mut R,
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    nonce: u32,
   ) {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       match tx {
@@ -756,7 +753,27 @@ impl Transaction {
 
     let signed_ref = signed(self);
     signed_ref.signer = Ristretto::generator() * key.deref();
-    signed_ref.nonce = nonce;
+
+    signed_ref.nonce = match tx {
+      Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
+
+      Transaction::DkgCommitments(_, _, _) => 0,
+      Transaction::DkgShares { .. } => 1,
+      Transaction::InvalidDkgShare { .. } => 2,
+      Transaction::DkgConfirmed(_, _, _) => 2,
+
+      Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
+
+      Transaction::Batch(_, _) => panic!("signing Batch"),
+      Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
+
+      Transaction::SubstratePreprocess(_) => 0,
+      Transaction::SubstrateShare(_) => 1,
+
+      Transaction::SignPreprocess(_) => 0,
+      Transaction::SignShare(_) => 1,
+      Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
+    };
 
     let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
     signed(self).signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
