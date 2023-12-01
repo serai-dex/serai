@@ -199,7 +199,6 @@ async fn handle_processor_message<D: Db, P: P2p>(
       key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.session),
       key_gen::ProcessorMessage::Blame { id, .. } => Some(id.session),
     },
-    // TODO: Review replacing key with Session in messages?
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
       sign::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),

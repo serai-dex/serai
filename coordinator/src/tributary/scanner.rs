@@ -63,7 +63,6 @@ async fn handle_block<
 ) {
   log::info!("found block for Tributary {:?}", spec.set());
 
-  let genesis = spec.genesis();
   let hash = block.hash();
 
   let mut event_id = 0;
@@ -102,7 +101,8 @@ async fn handle_block<
         // mark the node as fatally slashed
         fatal_slash::<D>(
           &mut txn,
-          genesis,
+          spec,
+          key,
           msgs.0.msg.sender,
           &format!("invalid tendermint messages: {:?}", msgs),
         );

@@ -50,6 +50,7 @@ create_db!(
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
     ConfirmationNonces: (genesis: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
     CurrentlyCompletingKeyPair: (genesis: [u8; 32]) -> KeyPair,
+    DkgCompleted: (genesis: [u8; 32]) -> (),
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
     DataDb: (genesis: [u8; 32], data_spec: &DataSpecification, signer_bytes: &[u8; 32]) -> Vec<u8>,

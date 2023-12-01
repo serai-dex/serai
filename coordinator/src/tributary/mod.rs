@@ -36,6 +36,7 @@ mod db;
 pub use db::*;
 
 mod dkg_confirmer;
+mod dkg_removal;
 
 mod handle;
 pub use handle::*;
@@ -226,7 +227,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
     writer.write_all(&[u8::try_from(self.data.len()).unwrap()])?;
     for data in &self.data {
       if data.len() > u16::MAX.into() {
-        // Currently, the largest individual preproces is a Monero transaction
+        // Currently, the largest individual preprocess is a Monero transaction
         // It provides 4 commitments per input (128 bytes), a 64-byte proof for them, along with a
         // key image and proof (96 bytes)
         // Even with all of that, we could support 227 inputs in a single TX

@@ -28,8 +28,9 @@ use crate::{
   tributary::{
     Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet, Accumulation,
     dkg_confirmer::DkgConfirmer,
+    dkg_removal::DkgRemoval,
     scanner::{RecognizedIdType, RIDTrait},
-    FatallySlashed, DkgShare, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
+    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
   },
 };
 
@@ -96,15 +97,25 @@ pub fn generated_key_pair<D: Db>(
 
 pub(super) fn fatal_slash<D: Db>(
   txn: &mut D::Transaction<'_>,
-  genesis: [u8; 32],
-  account: [u8; 32],
+  spec: &TributarySpec,
+  our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  slashing: [u8; 32],
   reason: &str,
 ) {
-  log::warn!("fatally slashing {}. reason: {}", hex::encode(account), reason);
-  FatallySlashed::set_fatally_slashed(txn, genesis, account);
+  let genesis = spec.genesis();
+
+  log::warn!("fatally slashing {}. reason: {}", hex::encode(slashing), reason);
+  FatallySlashed::set_fatally_slashed(txn, genesis, slashing);
   // TODO: disconnect the node from network/ban from further participation in all Tributaries
 
   // TODO: If during DKG, trigger a re-attempt
+  // Despite triggering a re-attempt, this DKG may still complete and may become in-use
+
+  // If during a DKG, remove the participant
+  if DkgCompleted::get(txn, genesis).is_none() {
+    let preprocess = DkgRemoval::preprocess(spec, our_key, 0);
+    todo!()
+  }
 }
 
 // TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
@@ -114,6 +125,7 @@ pub(super) fn fatal_slash<D: Db>(
 fn fatal_slash_with_participant_index<D: Db>(
   spec: &TributarySpec,
   txn: &mut <D as Db>::Transaction<'_>,
+  our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   i: Participant,
   reason: &str,
 ) {
@@ -129,7 +141,7 @@ fn fatal_slash_with_participant_index<D: Db>(
   }
   let validator = validator.unwrap();
 
-  fatal_slash::<D>(txn, spec.genesis(), validator.to_bytes(), reason);
+  fatal_slash::<D>(txn, spec, our_key, validator.to_bytes(), reason);
 }
 
 pub(crate) async fn handle_application_tx<
@@ -167,7 +179,8 @@ pub(crate) async fn handle_application_tx<
       // Premature publication of a valid ID/publication of an invalid ID
       fatal_slash::<D>(
         txn,
-        genesis,
+        spec,
+        key,
         signed.signer.to_bytes(),
         "published data for ID without an attempt",
       );
@@ -178,7 +191,7 @@ pub(crate) async fn handle_application_tx<
     // This shouldn't be reachable since nonces were made inserted by the coordinator, yet it's a
     // cheap check to leave in for safety
     if DataDb::get(txn, genesis, data_spec, &signed.signer.to_bytes()).is_some() {
-      fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
+      fatal_slash::<D>(txn, spec, key, signed.signer.to_bytes(), "published data multiple times");
       return Accumulation::NotReady;
     }
 
@@ -191,7 +204,8 @@ pub(crate) async fn handle_application_tx<
     if data_spec.attempt > curr_attempt {
       fatal_slash::<D>(
         txn,
-        genesis,
+        spec,
+        key,
         signed.signer.to_bytes(),
         "published data with an attempt which hasn't started",
       );
@@ -210,6 +224,7 @@ pub(crate) async fn handle_application_tx<
   fn check_sign_data_len<D: Db>(
     txn: &mut D::Transaction<'_>,
     spec: &TributarySpec,
+    our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     signer: <Ristretto as Ciphersuite>::G,
     len: usize,
   ) -> Result<(), ()> {
@@ -217,7 +232,8 @@ pub(crate) async fn handle_application_tx<
     if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
       fatal_slash::<D>(
         txn,
-        spec.genesis(),
+        spec,
+        our_key,
         signer.to_bytes(),
         "signer published a distinct amount of sign data than they had shares",
       );
@@ -242,10 +258,10 @@ pub(crate) async fn handle_application_tx<
 
   match tx {
     Transaction::RemoveParticipant(i) => {
-      fatal_slash_with_participant_index::<D>(spec, txn, i, "RemoveParticipant Provided TX")
+      fatal_slash_with_participant_index::<D>(spec, txn, key, i, "RemoveParticipant Provided TX")
     }
     Transaction::DkgCommitments(attempt, commitments, signed) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, signed.signer, commitments.len()) else {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, signed.signer, commitments.len()) else {
         return;
       };
       match handle(
@@ -283,7 +299,8 @@ pub(crate) async fn handle_application_tx<
       if shares.len() != usize::from(sender_is_len) {
         fatal_slash::<D>(
           txn,
-          genesis,
+          spec,
+          key,
           signed.signer.to_bytes(),
           "invalid amount of DKG shares by key shares",
         );
@@ -291,7 +308,13 @@ pub(crate) async fn handle_application_tx<
       }
       for shares in &shares {
         if shares.len() != (usize::from(spec.n() - sender_is_len)) {
-          fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "invalid amount of DKG shares");
+          fatal_slash::<D>(
+            txn,
+            spec,
+            key,
+            signed.signer.to_bytes(),
+            "invalid amount of DKG shares",
+          );
           return;
         }
       }
@@ -419,7 +442,8 @@ pub(crate) async fn handle_application_tx<
       {
         fatal_slash::<D>(
           txn,
-          genesis,
+          spec,
+          key,
           signed.signer.to_bytes(),
           "accused with a Participant index which wasn't theirs",
         );
@@ -431,7 +455,8 @@ pub(crate) async fn handle_application_tx<
       {
         fatal_slash::<D>(
           txn,
-          genesis,
+          spec,
+          key,
           signed.signer.to_bytes(),
           "accused self of having an InvalidDkgShare",
         );
@@ -474,10 +499,18 @@ pub(crate) async fn handle_application_tx<
             match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
               Err(p) => {
-                fatal_slash_with_participant_index::<D>(spec, txn, p, "invalid DkgConfirmer share");
+                fatal_slash_with_participant_index::<D>(
+                  spec,
+                  txn,
+                  key,
+                  p,
+                  "invalid DkgConfirmer share",
+                );
                 return;
               }
             };
+
+          DkgCompleted::set(txn, genesis, &());
 
           publish_serai_tx(
             spec.set(),
@@ -540,12 +573,12 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::SubstratePreprocess(data) => {
       let signer = data.signed.signer;
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, signer, data.data.len()) else {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, signer, data.data.len()) else {
         return;
       };
       for data in &data.data {
         if data.len() != 64 {
-          fatal_slash::<D>(txn, genesis, signer.to_bytes(), "non-64-byte Substrate preprocess");
+          fatal_slash::<D>(txn, spec, key, signer.to_bytes(), "non-64-byte Substrate preprocess");
           return;
         }
       }
@@ -583,7 +616,8 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::SubstrateShare(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      else {
         return;
       };
       match handle(
@@ -621,7 +655,8 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SignPreprocess(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      else {
         return;
       };
       match handle(
@@ -651,7 +686,8 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::SignShare(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, data.signed.signer, data.data.len()) else {
+      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      else {
         return;
       };
       match handle(
@@ -690,7 +726,8 @@ pub(crate) async fn handle_application_tx<
       if AttemptDb::attempt(txn, genesis, Topic::Sign(plan)).is_none() {
         fatal_slash::<D>(
           txn,
-          genesis,
+          spec,
+          key,
           first_signer.to_bytes(),
           "claimed an unrecognized plan was completed",
         );
