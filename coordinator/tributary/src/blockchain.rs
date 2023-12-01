@@ -1,8 +1,8 @@
-use std::collections::{VecDeque, HashMap};
+use std::collections::{VecDeque, HashSet};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn, Db};
 
 use scale::Decode;
 
@@ -20,7 +20,7 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 
   block_number: u32,
   tip: [u8; 32],
-  next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  participants: HashSet<<Ristretto as Ciphersuite>::G>,
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
@@ -53,11 +53,15 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
   }
-  fn next_nonce_key(&self, signer: &<Ristretto as Ciphersuite>::G) -> Vec<u8> {
+  fn next_nonce_key(
+    genesis: &[u8; 32],
+    signer: &<Ristretto as Ciphersuite>::G,
+    order: &[u8],
+  ) -> Vec<u8> {
     D::key(
       b"tributary_blockchain",
       b"next_nonce",
-      [self.genesis.as_ref(), signer.to_bytes().as_ref()].concat(),
+      [genesis.as_ref(), signer.to_bytes().as_ref(), order].concat(),
     )
   }
 
@@ -66,18 +70,13 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     genesis: [u8; 32],
     participants: &[<Ristretto as Ciphersuite>::G],
   ) -> Self {
-    let mut next_nonces = HashMap::new();
-    for participant in participants {
-      next_nonces.insert(*participant, 0);
-    }
-
     let mut res = Self {
       db: Some(db.clone()),
       genesis,
+      participants: participants.iter().cloned().collect(),
 
       block_number: 0,
       tip: genesis,
-      next_nonces,
 
       provided: ProvidedTransactions::new(db.clone(), genesis),
       mempool: Mempool::new(db, genesis),
@@ -91,12 +90,6 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     } {
       res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
-    }
-
-    for participant in participants {
-      if let Some(next_nonce) = res.db.as_ref().unwrap().get(res.next_nonce_key(participant)) {
-        res.next_nonces.insert(*participant, u32::from_le_bytes(next_nonce.try_into().unwrap()));
-      }
     }
 
     res
@@ -179,27 +172,58 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     let unsigned_in_chain =
       |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
-    self.mempool.add::<N>(&self.next_nonces, internal, tx, schema, unsigned_in_chain, commit)
+    self.mempool.add::<N, _>(
+      |signer, order| {
+        if self.participants.contains(&signer) {
+          Some(
+            db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
+              .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+              .unwrap_or(0),
+          )
+        } else {
+          None
+        }
+      },
+      internal,
+      tx,
+      schema,
+      unsigned_in_chain,
+      commit,
+    )
   }
 
   pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
     self.provided.provide(tx)
   }
 
-  /// Returns the next nonce for signing, or None if they aren't a participant.
-  pub(crate) fn next_nonce(&self, key: <Ristretto as Ciphersuite>::G) -> Option<u32> {
-    Some(self.next_nonces.get(&key).cloned()?.max(self.mempool.next_nonce(&key).unwrap_or(0)))
+  pub(crate) fn next_nonce(
+    &self,
+    signer: &<Ristretto as Ciphersuite>::G,
+    order: &[u8],
+  ) -> Option<u32> {
+    if let Some(next_nonce) = self.mempool.next_nonce_in_mempool(signer, order.to_vec()) {
+      return Some(next_nonce);
+    }
+    if self.participants.contains(signer) {
+      Some(
+        self
+          .db
+          .as_ref()
+          .unwrap()
+          .get(Self::next_nonce_key(&self.genesis, signer, order))
+          .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+          .unwrap_or(0),
+      )
+    } else {
+      None
+    }
   }
 
   pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
-    let db = self.db.as_ref().unwrap();
-    let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
-
     let block = Block::new(
       self.tip,
       self.provided.transactions.values().flatten().cloned().collect(),
-      self.mempool.block(&self.next_nonces, unsigned_in_chain),
+      self.mempool.block(),
     );
     // build_block should not return invalid blocks
     self.verify_block::<N>(&block, schema, false).unwrap();
@@ -222,17 +246,34 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       // commit has to be valid if it is coming from our db
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
-    block.verify::<N>(
+
+    let mut txn_db = db.clone();
+    let mut txn = txn_db.txn();
+    let res = block.verify::<N, _>(
       self.genesis,
       self.tip,
       self.provided.transactions.clone(),
-      self.next_nonces.clone(),
+      &mut |signer, order| {
+        if self.participants.contains(signer) {
+          let key = Self::next_nonce_key(&self.genesis, signer, order);
+          let next = txn
+            .get(&key)
+            .map(|next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()))
+            .unwrap_or(0);
+          txn.put(key, (next + 1).to_le_bytes());
+          Some(next)
+        } else {
+          None
+        }
+      },
       schema,
       &commit,
       unsigned_in_chain,
       provided_in_chain,
       allow_non_local_provided,
-    )
+    );
+    drop(txn);
+    res
   }
 
   /// Add a block.
@@ -285,18 +326,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           // remove from the mempool
           self.mempool.remove(&hash);
         }
-        TransactionKind::Signed(Signed { signer, nonce, .. }) => {
+        TransactionKind::Signed(order, Signed { signer, nonce, .. }) => {
           let next_nonce = nonce + 1;
-          let prev = self
-            .next_nonces
-            .insert(*signer, next_nonce)
-            .expect("block had signed transaction from non-participant");
-          if prev != *nonce {
-            panic!("verified block had an invalid nonce");
-          }
-
-          txn.put(self.next_nonce_key(signer), next_nonce.to_le_bytes());
-
+          txn.put(Self::next_nonce_key(&self.genesis, signer, &order), next_nonce.to_le_bytes());
           self.mempool.remove(&tx.hash());
         }
       }

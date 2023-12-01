@@ -7,13 +7,12 @@ use thiserror::Error;
 
 use blake2::{Digest, Blake2s256};
 
-use ciphersuite::{Ciphersuite, Ristretto};
-
 use tendermint::ext::{Network, Commit};
 
 use crate::{
   transaction::{
-    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, verify_transaction,
+    TransactionError, Signed, TransactionKind, Transaction as TransactionTrait, GAIN,
+    verify_transaction,
   },
   BLOCK_SIZE_LIMIT, ReadWrite, merkle, Transaction,
   tendermint::tx::verify_tendermint_tx,
@@ -122,7 +121,7 @@ impl<T: TransactionTrait> Block<T> {
     let mut unsigned = vec![];
     for tx in mempool {
       match tx.kind() {
-        TransactionKind::Signed(_) => signed.push(tx),
+        TransactionKind::Signed(_, _) => signed.push(tx),
         TransactionKind::Unsigned => unsigned.push(tx),
         TransactionKind::Provided(_) => panic!("provided transaction entered mempool"),
       }
@@ -135,7 +134,7 @@ impl<T: TransactionTrait> Block<T> {
 
     // Check TXs are sorted by nonce.
     let nonce = |tx: &Transaction<T>| {
-      if let TransactionKind::Signed(Signed { nonce, .. }) = tx.kind() {
+      if let TransactionKind::Signed(_, Signed { nonce, .. }) = tx.kind() {
         *nonce
       } else {
         0
@@ -169,12 +168,12 @@ impl<T: TransactionTrait> Block<T> {
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub(crate) fn verify<N: Network>(
+  pub(crate) fn verify<N: Network, G: GAIN>(
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
-    mut next_nonces: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+    get_and_increment_nonce: &mut G,
     schema: N::SignatureScheme,
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
@@ -259,10 +258,12 @@ impl<T: TransactionTrait> Block<T> {
             Err(e) => Err(BlockError::TransactionError(e))?,
           }
         }
-        Transaction::Application(tx) => match verify_transaction(tx, genesis, &mut next_nonces) {
-          Ok(()) => {}
-          Err(e) => Err(BlockError::TransactionError(e))?,
-        },
+        Transaction::Application(tx) => {
+          match verify_transaction(tx, genesis, get_and_increment_nonce) {
+            Ok(()) => {}
+            Err(e) => Err(BlockError::TransactionError(e))?,
+          }
+        }
       }
     }
 

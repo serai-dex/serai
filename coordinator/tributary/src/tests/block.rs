@@ -61,7 +61,7 @@ impl ReadWrite for NonceTransaction {
 
 impl TransactionTrait for NonceTransaction {
   fn kind(&self) -> TransactionKind<'_> {
-    TransactionKind::Signed(&self.2)
+    TransactionKind::Signed(vec![], &self.2)
   }
 
   fn hash(&self) -> [u8; 32] {
@@ -84,11 +84,11 @@ fn empty_block() {
   let unsigned_in_chain = |_: [u8; 32]| false;
   let provided_in_chain = |_: [u8; 32]| false;
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
-    .verify::<N>(
+    .verify::<N, _>(
       GENESIS,
       LAST,
       HashMap::new(),
-      HashMap::new(),
+      &mut |_, _| None,
       validators,
       commit,
       unsigned_in_chain,
@@ -119,11 +119,16 @@ fn duplicate_nonces() {
     let unsigned_in_chain = |_: [u8; 32]| false;
     let provided_in_chain = |_: [u8; 32]| false;
 
-    let res = Block::new(LAST, vec![], mempool).verify::<N>(
+    let mut last_nonce = 0;
+    let res = Block::new(LAST, vec![], mempool).verify::<N, _>(
       GENESIS,
       LAST,
       HashMap::new(),
-      HashMap::from([(<Ristretto as Ciphersuite>::G::identity(), 0)]),
+      &mut |_, _| {
+        let res = last_nonce;
+        last_nonce += 1;
+        Some(res)
+      },
       validators.clone(),
       commit,
       unsigned_in_chain,

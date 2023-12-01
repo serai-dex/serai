@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::{io, collections::HashMap};
+use std::io;
 
 use zeroize::Zeroize;
 use thiserror::Error;
@@ -82,7 +82,7 @@ impl ReadWrite for Signed {
 }
 
 impl Signed {
-  fn read_without_nonce<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
+  pub fn read_without_nonce<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
     let signer = Ristretto::read_G(reader)?;
 
     let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
@@ -97,7 +97,7 @@ impl Signed {
     Ok(Signed { signer, nonce, signature })
   }
 
-  fn write_without_nonce<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write_without_nonce<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     // This is either an invalid signature or a private key leak
     if self.signature.R.is_identity().into() {
       Err(io::Error::other("signature nonce was identity"))?;
@@ -132,7 +132,7 @@ pub enum TransactionKind<'a> {
   Unsigned,
 
   /// A signed transaction.
-  Signed(&'a Signed),
+  Signed(Vec<u8>, &'a Signed),
 }
 
 // TODO: Should this be renamed TransactionTrait now that a literal Transaction exists?
@@ -156,13 +156,14 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Panics if called on non-signed transactions.
   fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
     match self.kind() {
-      TransactionKind::Signed(Signed { signature, .. }) => {
+      TransactionKind::Signed(order, Signed { signature, .. }) => {
         <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
           &Blake2b512::digest(
             [
               b"Tributary Signed Transaction",
               genesis.as_ref(),
               &self.hash(),
+              order.as_ref(),
               signature.R.to_bytes().as_ref(),
             ]
             .concat(),
@@ -175,11 +176,14 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   }
 }
 
+pub trait GAIN: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32> {}
+impl<F: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32>> GAIN for F {}
+
 // This will only cause mutations when the transaction is valid
-pub(crate) fn verify_transaction<T: Transaction>(
+pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
-  next_nonces: &mut HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  get_and_increment_nonce: &mut F,
 ) -> Result<(), TransactionError> {
   if tx.serialize().len() > TRANSACTION_SIZE_LIMIT {
     Err(TransactionError::TooLargeTransaction)?;
@@ -190,9 +194,9 @@ pub(crate) fn verify_transaction<T: Transaction>(
   match tx.kind() {
     TransactionKind::Provided(_) => {}
     TransactionKind::Unsigned => {}
-    TransactionKind::Signed(Signed { signer, nonce, signature }) => {
-      if let Some(next_nonce) = next_nonces.get(signer) {
-        if nonce != next_nonce {
+    TransactionKind::Signed(order, Signed { signer, nonce, signature }) => {
+      if let Some(next_nonce) = get_and_increment_nonce(signer, &order) {
+        if *nonce != next_nonce {
           Err(TransactionError::InvalidNonce)?;
         }
       } else {
@@ -204,8 +208,6 @@ pub(crate) fn verify_transaction<T: Transaction>(
       if !signature.verify(*signer, tx.sig_hash(genesis)) {
         Err(TransactionError::InvalidSignature)?;
       }
-
-      next_nonces.insert(*signer, nonce + 1);
     }
   }
 
