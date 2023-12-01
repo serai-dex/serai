@@ -1,4 +1,4 @@
-use std::{sync::Arc, io::Read};
+use std::{sync::Arc, io::Read, time::Duration};
 
 use async_trait::async_trait;
 
@@ -11,6 +11,8 @@ use simple_request::{
 };
 
 use crate::rpc::{RpcError, RpcConnection, Rpc};
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug)]
 enum Authentication {
@@ -34,6 +36,7 @@ enum Authentication {
 pub struct HttpRpc {
   authentication: Authentication,
   url: String,
+  request_timeout: Duration,
 }
 
 impl HttpRpc {
@@ -57,7 +60,18 @@ impl HttpRpc {
   ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub async fn new(mut url: String) -> Result<Rpc<HttpRpc>, RpcError> {
+  pub async fn new(url: String) -> Result<Rpc<HttpRpc>, RpcError> {
+    Self::new_custom_timeout(url, DEFAULT_TIMEOUT).await
+  }
+
+  /// Create a new HTTP(S) RPC connection with a custom timeout.
+  ///
+  /// A daemon requiring authentication can be used via including the username and password in the
+  /// URL.
+  pub async fn new_custom_timeout(
+    mut url: String,
+    request_timeout: Duration,
+  ) -> Result<Rpc<HttpRpc>, RpcError> {
     let authentication = if url.contains('@') {
       // Parse out the username and password
       let url_clone = url;
@@ -105,7 +119,7 @@ impl HttpRpc {
       Authentication::Unauthenticated(Client::with_connection_pool())
     };
 
-    Ok(Rpc(HttpRpc { authentication, url }))
+    Ok(Rpc(HttpRpc { authentication, url, request_timeout }))
   }
 }
 
@@ -265,8 +279,7 @@ impl HttpRpc {
 #[async_trait]
 impl RpcConnection for HttpRpc {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    // TODO: Make this timeout configurable
-    tokio::time::timeout(core::time::Duration::from_secs(30), self.inner_post(route, body))
+    tokio::time::timeout(self.request_timeout, self.inner_post(route, body))
       .await
       .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
   }
