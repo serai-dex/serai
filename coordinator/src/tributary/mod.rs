@@ -702,7 +702,7 @@ impl TransactionTrait for Transaction {
       // Make sure the part we're cutting off is the signature
       assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), signed.signature.serialize());
     }
-    Blake2s256::digest([b"Coordinator Tributary Transaction".as_ref(), &tx].concat()).into()
+    Blake2s256::digest([b"Coordinator Tributary Transaction".as_slice(), &tx].concat()).into()
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
