@@ -38,8 +38,8 @@ pub(crate) trait RIDTrait<FRid>:
   Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
 {
 }
-impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid>
-  RIDTrait<FRid> for F
+impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid>
+  for F
 {
 }
 

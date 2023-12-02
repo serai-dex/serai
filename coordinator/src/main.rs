@@ -36,9 +36,7 @@ use ::tributary::{
 };
 
 mod tributary;
-use crate::tributary::{
-  TributarySpec, SignData, Transaction, scanner::RecognizedIdType, PlanIds,
-};
+use crate::tributary::{TributarySpec, SignData, Transaction, scanner::RecognizedIdType, PlanIds};
 
 mod db;
 use db::MainDb;
@@ -135,14 +133,14 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
 ) {
   log::debug!("publishing transaction {}", hex::encode(tx.hash()));
 
-  let signer = if let TransactionKind::Signed(signed) = tx.kind() {
+  let (order, signer) = if let TransactionKind::Signed(order, signed) = tx.kind() {
     let signer = signed.signer;
 
     // Safe as we should deterministically create transactions, meaning if this is already on-disk,
     // it's what we're saving now
     MainDb::<D>::save_signed_transaction(txn, signed.nonce, tx);
 
-    signer
+    (order, signer)
   } else {
     panic!("non-signed transaction passed to publish_signed_transaction");
   };
@@ -152,7 +150,7 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
   while let Some(tx) = MainDb::<D>::take_signed_transaction(
     txn,
     tributary
-      .next_nonce(signer)
+      .next_nonce(&signer, &order)
       .await
       .expect("we don't have a nonce, meaning we aren't a participant on this tributary"),
   ) {
@@ -697,7 +695,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             Err(e) => panic!("created an invalid unsigned transaction: {e:?}"),
           }
         }
-        TransactionKind::Signed(_) => {
+        TransactionKind::Signed(_, _) => {
           tx.sign(&mut OsRng, genesis, key);
           publish_signed_transaction(&mut txn, tributary, tx).await;
         }

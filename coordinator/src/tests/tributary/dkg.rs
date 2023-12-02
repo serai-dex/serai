@@ -50,7 +50,7 @@ async fn dkg_test() {
 
     let mut tx =
       Transaction::DkgCommitments(attempt, vec![commitments], Transaction::empty_signed());
-    tx.sign(&mut OsRng, spec.genesis(), key, 0);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
 
@@ -177,7 +177,7 @@ async fn dkg_test() {
       confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec, 0),
       signed: Transaction::empty_signed(),
     };
-    tx.sign(&mut OsRng, spec.genesis(), key, 1);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
 
@@ -296,7 +296,7 @@ async fn dkg_test() {
     txn.commit();
 
     let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());
-    tx.sign(&mut OsRng, spec.genesis(), key, 2);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
   let block_before_tx = tributaries[0].1.tip().await;

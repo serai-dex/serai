@@ -153,7 +153,7 @@ pub(crate) async fn handle_application_tx<
   // Don't handle transactions from fatally slashed participants
   // TODO: Because fatally slashed participants can still publish onto the blockchain, they have
   // a notable DoS ability
-  if let TransactionKind::Signed(signed) = tx.kind() {
+  if let TransactionKind::Signed(_, signed) = tx.kind() {
     if FatallySlashed::get(txn, genesis, signed.signer.to_bytes()).is_some() {
       return;
     }
