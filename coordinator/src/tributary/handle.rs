@@ -175,6 +175,8 @@ pub(crate) async fn handle_application_tx<
     };
 
     // If they've already published a TX for this attempt, slash
+    // This shouldn't be reachable since nonces were made inserted by the coordinator, yet it's a
+    // cheap check to leave in for safety
     if DataDb::get(txn, genesis, data_spec, &signed.signer.to_bytes()).is_some() {
       fatal_slash::<D>(txn, genesis, signed.signer.to_bytes(), "published data multiple times");
       return Accumulation::NotReady;
@@ -409,7 +411,6 @@ pub(crate) async fn handle_application_tx<
       }
     }
 
-    // TODO: Only accept one of either InvalidDkgShare/DkgConfirmed per signer
     // TODO: Ban self-accusals
     Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
       let range = spec.i(signed.signer).unwrap();
