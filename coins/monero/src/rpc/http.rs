@@ -61,14 +61,14 @@ impl HttpRpc {
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
   pub async fn new(url: String) -> Result<Rpc<HttpRpc>, RpcError> {
-    Self::new_custom_timeout(url, DEFAULT_TIMEOUT).await
+    Self::with_custom_timeout(url, DEFAULT_TIMEOUT).await
   }
 
   /// Create a new HTTP(S) RPC connection with a custom timeout.
   ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub async fn new_custom_timeout(
+  pub async fn with_custom_timeout(
     mut url: String,
     request_timeout: Duration,
   ) -> Result<Rpc<HttpRpc>, RpcError> {
