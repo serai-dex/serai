@@ -5,7 +5,7 @@ use rand_core::{RngCore, OsRng};
 use scale::{Encode, Decode};
 use processor_messages::coordinator::SubstrateSignableId;
 
-use tributary::{ReadWrite, tests::random_signed};
+use tributary::{ReadWrite, tests::random_signed_with_nonce};
 
 use crate::tributary::{SignData, Transaction};
 
@@ -34,6 +34,7 @@ fn random_vec<R: RngCore>(rng: &mut R, limit: usize) -> Vec<u8> {
 fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + Decode>(
   rng: &mut R,
   plan: Id,
+  nonce: u32,
 ) -> SignData<Id> {
   SignData {
     plan,
@@ -47,7 +48,7 @@ fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + De
       res
     },
 
-    signed: random_signed(&mut OsRng),
+    signed: random_signed_with_nonce(&mut OsRng, nonce),
   }
 }
 
@@ -83,18 +84,40 @@ fn tx_size_limit() {
 
 #[test]
 fn serialize_sign_data() {
+  fn test_read_write<Id: Clone + PartialEq + Eq + Debug + Encode + Decode>(value: SignData<Id>) {
+    let mut buf = vec![];
+    value.write(&mut buf).unwrap();
+    assert_eq!(value, SignData::read(&mut buf.as_slice(), value.signed.nonce).unwrap())
+  }
+
   let mut plan = [0; 3];
   OsRng.fill_bytes(&mut plan);
-  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  test_read_write(random_sign_data::<_, _>(
+    &mut OsRng,
+    plan,
+    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+  ));
   let mut plan = [0; 5];
   OsRng.fill_bytes(&mut plan);
-  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  test_read_write(random_sign_data::<_, _>(
+    &mut OsRng,
+    plan,
+    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+  ));
   let mut plan = [0; 8];
   OsRng.fill_bytes(&mut plan);
-  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  test_read_write(random_sign_data::<_, _>(
+    &mut OsRng,
+    plan,
+    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+  ));
   let mut plan = [0; 24];
   OsRng.fill_bytes(&mut plan);
-  test_read_write(random_sign_data::<_, _>(&mut OsRng, plan));
+  test_read_write(random_sign_data::<_, _>(
+    &mut OsRng,
+    plan,
+    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+  ));
 }
 
 #[test]
@@ -114,7 +137,7 @@ fn serialize_transaction() {
     test_read_write(Transaction::DkgCommitments(
       random_u32(&mut OsRng),
       commitments,
-      random_signed(&mut OsRng),
+      random_signed_with_nonce(&mut OsRng, 0),
     ));
   }
 
@@ -145,7 +168,7 @@ fn serialize_transaction() {
         OsRng.fill_bytes(&mut nonces);
         nonces
       },
-      signed: random_signed(&mut OsRng),
+      signed: random_signed_with_nonce(&mut OsRng, 1),
     });
   }
 
@@ -165,7 +188,7 @@ fn serialize_transaction() {
       } else {
         Some(random_vec(&mut OsRng, 500)).filter(|blame| !blame.is_empty())
       },
-      signed: random_signed(&mut OsRng),
+      signed: random_signed_with_nonce(&mut OsRng, 2),
     });
   }
 
@@ -176,7 +199,7 @@ fn serialize_transaction() {
       OsRng.fill_bytes(&mut share);
       share
     },
-    random_signed(&mut OsRng),
+    random_signed_with_nonce(&mut OsRng, 2),
   ));
 
   {
@@ -200,6 +223,7 @@ fn serialize_transaction() {
     test_read_write(Transaction::SubstratePreprocess(random_sign_data(
       &mut OsRng,
       SubstrateSignableId::Batch(plan),
+      0,
     )));
   }
   {
@@ -208,18 +232,19 @@ fn serialize_transaction() {
     test_read_write(Transaction::SubstrateShare(random_sign_data(
       &mut OsRng,
       SubstrateSignableId::Batch(plan),
+      1,
     )));
   }
 
   {
     let mut plan = [0; 32];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng, plan)));
+    test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng, plan, 0)));
   }
   {
     let mut plan = [0; 32];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng, plan)));
+    test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng, plan, 1)));
   }
 
   {
@@ -230,8 +255,8 @@ fn serialize_transaction() {
     test_read_write(Transaction::SignCompleted {
       plan,
       tx_hash,
-      first_signer: random_signed(&mut OsRng).signer,
-      signature: random_signed(&mut OsRng).signature,
+      first_signer: random_signed_with_nonce(&mut OsRng, 2).signer,
+      signature: random_signed_with_nonce(&mut OsRng, 2).signature,
     });
   }
 }

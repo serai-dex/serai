@@ -42,6 +42,12 @@ pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   }
 }
 
+pub fn random_signed_with_nonce<R: RngCore + CryptoRng>(rng: &mut R, nonce: u32) -> Signed {
+  let mut signed = random_signed(rng);
+  signed.nonce = nonce;
+  signed
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ProvidedTransaction(pub Vec<u8>);
 

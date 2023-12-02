@@ -41,7 +41,7 @@ async fn tx_test() {
   let block_before_tx = tributaries[sender].1.tip().await;
   let mut tx =
     Transaction::DkgCommitments(attempt, vec![commitments.clone()], Transaction::empty_signed());
-  tx.sign(&mut OsRng, spec.genesis(), &key, 0);
+  tx.sign(&mut OsRng, spec.genesis(), &key);
 
   assert_eq!(tributaries[sender].1.add_transaction(tx.clone()).await, Ok(true));
   let included_in = wait_for_tx_inclusion(&tributaries[sender].1, block_before_tx, tx.hash()).await;

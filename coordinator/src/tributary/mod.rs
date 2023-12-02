@@ -189,7 +189,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> Debug for SignData<Id
 }
 
 impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
-  fn read<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
+  pub(crate) fn read<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
     let plan = Id::decode(&mut scale::IoReader(&mut *reader))
       .map_err(|_| io::Error::other("invalid plan in SignData"))?;
 
@@ -219,7 +219,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
     Ok(SignData { plan, attempt, data, signed })
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&self.plan.encode())?;
     writer.write_all(&self.attempt.to_le_bytes())?;
 
@@ -661,28 +661,44 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipant(_) => TransactionKind::Provided("remove"),
 
-      Transaction::DkgCommitments(attempt, _, signed) => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
-      Transaction::DkgShares { attempt, signed, .. } => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
-      Transaction::InvalidDkgShare { attempt, signed, .. } => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
-      Transaction::DkgConfirmed(attempt, _, signed) => TransactionKind::Signed((b"dkg", attempt).encode(), signed),
+      Transaction::DkgCommitments(attempt, _, signed) => {
+        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
+      }
+      Transaction::DkgShares { attempt, signed, .. } => {
+        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
+      }
+      Transaction::InvalidDkgShare { attempt, signed, .. } => {
+        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
+      }
+      Transaction::DkgConfirmed(attempt, _, signed) => {
+        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
+      }
 
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
 
       Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
-      Transaction::SubstratePreprocess(data) => TransactionKind::Signed((b"substrate", data.0.plan, data.0.attempt).encode(), &data.signed),
-      Transaction::SubstrateShare(data) => TransactionKind::Signed((b"substrate", data.0.plan, data.0.attempt).encode(), &data.signed),
+      Transaction::SubstratePreprocess(data) => {
+        TransactionKind::Signed((b"substrate", data.plan, data.attempt).encode(), &data.signed)
+      }
+      Transaction::SubstrateShare(data) => {
+        TransactionKind::Signed((b"substrate", data.plan, data.attempt).encode(), &data.signed)
+      }
 
-      Transaction::SignPreprocess(data) => TransactionKind::Signed((b"sign", data.0.plan, data.0.attempt).encode(), &data.signed),
-      Transaction::SignShare(data) => TransactionKind::Signed((b"sign", data.0.plan, data.0.attempt).encode(), &data.signed),
+      Transaction::SignPreprocess(data) => {
+        TransactionKind::Signed((b"sign", data.plan, data.attempt).encode(), &data.signed)
+      }
+      Transaction::SignShare(data) => {
+        TransactionKind::Signed((b"sign", data.plan, data.attempt).encode(), &data.signed)
+      }
       Transaction::SignCompleted { .. } => TransactionKind::Unsigned,
     }
   }
 
   fn hash(&self) -> [u8; 32] {
     let mut tx = self.serialize();
-    if let TransactionKind::Signed(signed) = self.kind() {
+    if let TransactionKind::Signed(_, signed) = self.kind() {
       // Make sure the part we're cutting off is the signature
       assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), signed.signature.serialize());
     }
@@ -728,57 +744,61 @@ impl Transaction {
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   ) {
-    fn signed(tx: &mut Transaction) -> &mut Signed {
-      match tx {
+    fn signed(tx: &mut Transaction) -> (u32, &mut Signed) {
+      let nonce = match tx {
         Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
 
-        Transaction::DkgCommitments(_, _, ref mut signed) => signed,
-        Transaction::DkgShares { ref mut signed, .. } => signed,
-        Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
-        Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
+        Transaction::DkgCommitments(_, _, _) => 0,
+        Transaction::DkgShares { .. } => 1,
+        Transaction::InvalidDkgShare { .. } => 2,
+        Transaction::DkgConfirmed(_, _, _) => 2,
 
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
         Transaction::Batch(_, _) => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
-        Transaction::SubstratePreprocess(ref mut data) => &mut data.signed,
-        Transaction::SubstrateShare(ref mut data) => &mut data.signed,
+        Transaction::SubstratePreprocess(_) => 0,
+        Transaction::SubstrateShare(_) => 1,
 
-        Transaction::SignPreprocess(ref mut data) => &mut data.signed,
-        Transaction::SignShare(ref mut data) => &mut data.signed,
+        Transaction::SignPreprocess(_) => 0,
+        Transaction::SignShare(_) => 1,
         Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
-      }
+      };
+
+      (
+        nonce,
+        match tx {
+          Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
+
+          Transaction::DkgCommitments(_, _, ref mut signed) => signed,
+          Transaction::DkgShares { ref mut signed, .. } => signed,
+          Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
+          Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
+
+          Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
+
+          Transaction::Batch(_, _) => panic!("signing Batch"),
+          Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
+
+          Transaction::SubstratePreprocess(ref mut data) => &mut data.signed,
+          Transaction::SubstrateShare(ref mut data) => &mut data.signed,
+
+          Transaction::SignPreprocess(ref mut data) => &mut data.signed,
+          Transaction::SignShare(ref mut data) => &mut data.signed,
+          Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
+        },
+      )
     }
 
-    let signed_ref = signed(self);
+    let (nonce, signed_ref) = signed(self);
     signed_ref.signer = Ristretto::generator() * key.deref();
-
-    signed_ref.nonce = match tx {
-      Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
-
-      Transaction::DkgCommitments(_, _, _) => 0,
-      Transaction::DkgShares { .. } => 1,
-      Transaction::InvalidDkgShare { .. } => 2,
-      Transaction::DkgConfirmed(_, _, _) => 2,
-
-      Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
-
-      Transaction::Batch(_, _) => panic!("signing Batch"),
-      Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
-
-      Transaction::SubstratePreprocess(_) => 0,
-      Transaction::SubstrateShare(_) => 1,
-
-      Transaction::SignPreprocess(_) => 0,
-      Transaction::SignShare(_) => 1,
-      Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
-    };
+    signed_ref.nonce = nonce;
 
     let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
-    signed(self).signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
+    signed(self).1.signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
     let sig_hash = self.sig_hash(genesis);
-    signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+    signed(self).1.signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 
   pub fn sign_completed_challenge(&self) -> <Ristretto as Ciphersuite>::F {
