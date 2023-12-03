@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 mod key_gen;
 pub(crate) use key_gen::test_key_gen;
 
@@ -17,7 +19,10 @@ mod addresses;
 pub(crate) use addresses::test_addresses;
 
 // Effective Once
-static INIT_LOGGER: once_cell::sync::Lazy<()> = once_cell::sync::Lazy::new(env_logger::init);
+static INIT_LOGGER_CELL: OnceLock<()> = OnceLock::new();
+fn init_logger() {
+  *INIT_LOGGER_CELL.get_or_init(env_logger::init)
+}
 
 #[macro_export]
 macro_rules! test_network {
@@ -33,20 +38,20 @@ macro_rules! test_network {
     $no_deadlock_in_multisig_completed: ident,
   ) => {
     use $crate::tests::{
-      INIT_LOGGER, test_key_gen, test_scanner, test_no_deadlock_in_multisig_completed, test_signer,
+      init_logger, test_key_gen, test_scanner, test_no_deadlock_in_multisig_completed, test_signer,
       test_wallet, test_addresses,
     };
 
     // This doesn't interact with a node and accordingly doesn't need to be run
     #[tokio::test]
     async fn $key_gen() {
-      *INIT_LOGGER;
+      init_logger();
       test_key_gen::<$N>().await;
     }
 
     #[test]
     fn $scanner() {
-      *INIT_LOGGER;
+      init_logger();
       let docker = $docker();
       docker.run(|ops| async move {
         test_scanner($network(&ops).await).await;
@@ -55,7 +60,7 @@ macro_rules! test_network {
 
     #[test]
     fn $signer() {
-      *INIT_LOGGER;
+      init_logger();
       let docker = $docker();
       docker.run(|ops| async move {
         test_signer($network(&ops).await).await;
@@ -64,7 +69,7 @@ macro_rules! test_network {
 
     #[test]
     fn $wallet() {
-      *INIT_LOGGER;
+      init_logger();
       let docker = $docker();
       docker.run(|ops| async move {
         test_wallet($network(&ops).await).await;
@@ -73,7 +78,7 @@ macro_rules! test_network {
 
     #[test]
     fn $addresses() {
-      *INIT_LOGGER;
+      init_logger();
       let docker = $docker();
       docker.run(|ops| async move {
         test_addresses($network(&ops).await).await;
@@ -82,7 +87,7 @@ macro_rules! test_network {
 
     #[test]
     fn $no_deadlock_in_multisig_completed() {
-      *INIT_LOGGER;
+      init_logger();
       let docker = $docker();
       docker.run(|ops| async move {
         test_no_deadlock_in_multisig_completed($network(&ops).await).await;

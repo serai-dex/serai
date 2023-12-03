@@ -16,7 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # Macros
 async-trait = { version = "0.1", default-features = false }
-once_cell = { version = "1", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 thiserror = { version = "1", default-features = false }
 serde = { version = "1", default-features = false, features = ["std", "derive"] }
@@ -62,8 +61,6 @@ messages = { package = "serai-processor-messages", path = "./messages", optional
 message-queue = { package = "serai-message-queue", path = "../message-queue", optional = true }
 
 [dev-dependencies]
-futures = { version = "0.3", default-features = false }
-
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
 
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }

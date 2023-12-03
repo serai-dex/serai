@@ -17,7 +17,7 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 parity-scale-codec = { version = "3", default-features = false, features = ["std", "derive"] }
 
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
-tokio = { version = "1", default-features = false, features = ["sync", "time"] }
+tokio = { version = "1", default-features = false, features = ["time"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
