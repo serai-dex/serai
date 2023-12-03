@@ -320,9 +320,18 @@ fn scanner(
     kinds.insert(offset_ref.to_vec(), kind);
   };
 
-  register(OutputType::Branch, *BRANCH_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"branch")));
-  register(OutputType::Change, *CHANGE_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"change")));
-  register(OutputType::Forwarded, *FORWARD_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"forward")));
+  register(
+    OutputType::Branch,
+    *BRANCH_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"branch")),
+  );
+  register(
+    OutputType::Change,
+    *CHANGE_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"change")),
+  );
+  register(
+    OutputType::Forwarded,
+    *FORWARD_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"forward")),
+  );
 
   (scanner, offsets, kinds)
 }
