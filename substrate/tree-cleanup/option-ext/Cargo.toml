@@ -1,0 +1,14 @@
+[package]
+name = "option-ext"
+version = "0.2.0"
+description = "Non-MPL option-ext with the exactly needed API for directories"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tree-cleanup/option-ext"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.74"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
