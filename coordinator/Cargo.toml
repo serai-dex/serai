@@ -54,8 +54,8 @@ libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", branch = "experimental", default-features = false, features = ["std"] }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", branch = "experimental", default-features = false, features = ["std"] }
+sp-application-crypto = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
 
 [features]
 parity-db = ["serai-db/parity-db"]
