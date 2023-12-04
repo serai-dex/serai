@@ -203,6 +203,17 @@ fn serialize_transaction() {
   ));
 
   {
+    let mut key = [0; 32];
+    OsRng.fill_bytes(&mut key);
+    test_read_write(Transaction::DkgRemovalPreprocess(random_sign_data(&mut OsRng, key, 0)));
+  }
+  {
+    let mut key = [0; 32];
+    OsRng.fill_bytes(&mut key);
+    test_read_write(Transaction::DkgRemovalShare(random_sign_data(&mut OsRng, key, 1)));
+  }
+
+  {
     let mut block = [0; 32];
     OsRng.fill_bytes(&mut block);
     test_read_write(Transaction::CosignSubstrateBlock(block));

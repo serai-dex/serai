@@ -24,7 +24,10 @@ use processor_messages::{
 use tributary::{TransactionTrait, Tributary};
 
 use crate::{
-  tributary::{Transaction, TributarySpec, scanner::handle_new_blocks},
+  tributary::{
+    Transaction, TributarySpec,
+    scanner::{PstTxType, handle_new_blocks},
+  },
   tests::{
     MemProcessors, LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
@@ -85,14 +88,19 @@ async fn dkg_test() {
   ) -> (MemDb, MemProcessors) {
     let mut scanner_db = MemDb::new();
     let processors = MemProcessors::new();
-    handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
       &mut scanner_db,
       key,
       |_, _, _, _| async {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
-      |_, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      |_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      &|_| async {
+        panic!(
+          "test tried to publish a new Tributary TX from handle_application_tx in new_processors"
+        )
+      },
       spec,
       &tributary.reader(),
     )
@@ -111,14 +119,19 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    &|_| async {
+      panic!(
+        "test tried to publish a new Tributary TX from handle_application_tx after Commitments"
+      )
+    },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -190,14 +203,19 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    &|_| async {
+      panic!(
+        "test tried to publish a new Tributary TX from handle_application_tx after some shares"
+      )
+    },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -238,12 +256,13 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX") },
+    &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -308,14 +327,16 @@ async fn dkg_test() {
   }
 
   // The scanner should successfully try to publish a transaction with a validly signed signature
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
     |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    |set, tx| {
+    |set, tx_type, tx| {
+      assert_eq!(tx_type, PstTxType::SetKeys);
+
       let spec = spec.clone();
       let key_pair = key_pair.clone();
       async move {
@@ -368,6 +389,7 @@ async fn dkg_test() {
         }
       }
     },
+    &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),
   )

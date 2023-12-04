@@ -112,4 +112,20 @@ impl<'a> SeraiValidatorSets<'a> {
       validator_sets::Call::<Runtime>::set_keys { network, key_pair, signature },
     ))
   }
+
+  pub fn remove_participant(
+    network: NetworkId,
+    to_remove: Public,
+    signers: Vec<Public>,
+    signature: Signature,
+  ) -> Vec<u8> {
+    Serai::unsigned(&serai_runtime::RuntimeCall::ValidatorSets(
+      validator_sets::Call::<Runtime>::remove_participant {
+        network,
+        to_remove,
+        signers,
+        signature,
+      },
+    ))
+  }
 }

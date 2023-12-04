@@ -85,22 +85,49 @@ pub mod pallet {
   #[pallet::getter(fn allocation_per_key_share)]
   pub type AllocationPerKeyShare<T: Config> =
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
-  /// The validators selected to be in-set.
+  /// The validators selected to be in-set who haven't been removed.
   #[pallet::storage]
-  #[pallet::getter(fn participants)]
-  pub type Participants<T: Config> = StorageMap<
+  pub(crate) type Participants<T: Config> = StorageMap<
     _,
     Identity,
     NetworkId,
     BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
-    ValueQuery,
+    OptionQuery,
   >;
-  /// The validators selected to be in-set, yet with the ability to perform a check for presence.
+  /// The validators selected to be in-set, regardless of if removed, with the ability to perform a
+  /// check for presence.
   // Uses Identity so we can call clear_prefix over network, manually inserting a Blake2 hash
   // before the spammable key.
   #[pallet::storage]
-  pub type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
+  pub(crate) type InSet<T: Config> =
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
+
+  // TODO: Merge this with SortedAllocationsIter
+  struct InSetIter<T: Config> {
+    _t: PhantomData<T>,
+    prefix: Vec<u8>,
+    last: Vec<u8>,
+  }
+  impl<T: Config> InSetIter<T> {
+    fn new(network: NetworkId) -> Self {
+      let mut prefix = InSet::<T>::final_prefix().to_vec();
+      prefix.extend(&network.encode());
+      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
+    }
+  }
+  impl<T: Config> Iterator for InSetIter<T> {
+    type Item = u64;
+    fn next(&mut self) -> Option<Self::Item> {
+      let next = sp_io::storage::next_key(&self.last)?;
+      if !next.starts_with(&self.prefix) {
+        return None;
+      }
+      let res = u64::decode(&mut sp_io::storage::get(&next).unwrap().as_ref()).unwrap();
+      self.last = next;
+      Some(res)
+    }
+  }
+
   impl<T: Config> Pallet<T> {
     fn in_set_key(
       network: NetworkId,
@@ -118,6 +145,8 @@ pub mod pallet {
     }
 
     /// Returns true if the account is included in an active set.
+    ///
+    /// This will still include participants which were removed from the DKG.
     pub fn in_active_set(network: NetworkId, account: Public) -> bool {
       if network == NetworkId::Serai {
         Self::in_active_serai_set(account)
@@ -127,6 +156,8 @@ pub mod pallet {
     }
 
     /// Returns true if the account has been definitively included in an active or upcoming set.
+    ///
+    /// This will still include participants which were removed from the DKG.
     pub fn in_set(network: NetworkId, account: Public) -> bool {
       if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
         return true;
@@ -258,7 +289,6 @@ pub mod pallet {
 
   /// The MuSig key for a validator set.
   #[pallet::storage]
-  #[pallet::getter(fn musig_key)]
   pub type MuSigKeys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, Public, OptionQuery>;
 
   /// The generated key pair for a given validator set instance.
@@ -271,6 +301,10 @@ pub mod pallet {
   pub enum Event<T: Config> {
     NewSet {
       set: ValidatorSet,
+    },
+    ParticipantRemoved {
+      set: ValidatorSet,
+      removed: T::AccountId,
     },
     KeyGen {
       set: ValidatorSet,
@@ -328,7 +362,7 @@ pub mod pallet {
         let Some((key, amount)) = iter.next() else { break };
 
         let these_key_shares = amount.0 / allocation_per_key_share;
-        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
+        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
         participants.push((key, these_key_shares));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
@@ -348,7 +382,7 @@ pub mod pallet {
           Some(musig_key(set, &participants.iter().map(|(id, _)| *id).collect::<Vec<_>>())),
         );
       }
-      Participants::<T>::set(network, participants.try_into().unwrap());
+      Participants::<T>::set(network, Some(participants.try_into().unwrap()));
     }
   }
 
@@ -672,7 +706,8 @@ pub mod pallet {
     }
 
     fn rotate_session() {
-      let prior_serai_participants = Self::participants(NetworkId::Serai);
+      let prior_serai_participants = Participants::<T>::get(NetworkId::Serai)
+        .expect("no Serai participants upon rotate_session");
       let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
 
       // TODO: T::SessionHandler::on_before_session_ending() was here.
@@ -685,7 +720,8 @@ pub mod pallet {
       // Update Babe and Grandpa
       let session = prior_serai_session.0 + 1;
       let validators = prior_serai_participants;
-      let next_validators = Self::participants(NetworkId::Serai);
+      let next_validators =
+        Participants::<T>::get(NetworkId::Serai).expect("no Serai participants after new_session");
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
           validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
@@ -733,6 +769,26 @@ pub mod pallet {
 
     #[pallet::call_index(1)]
     #[pallet::weight(0)] // TODO
+    pub fn remove_participant(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      to_remove: Public,
+      signers: Vec<Public>,
+      signature: Signature,
+    ) -> DispatchResult {
+      ensure_none(origin)?;
+
+      // Nothing occurs here as validate_unsigned does everything
+      let _ = network;
+      let _ = to_remove;
+      let _ = signers;
+      let _ = signature;
+
+      Ok(())
+    }
+
+    #[pallet::call_index(2)]
+    #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
       Coins::<T>::transfer_internal(
@@ -743,7 +799,7 @@ pub mod pallet {
       Self::increase_allocation(network, validator, amount)
     }
 
-    #[pallet::call_index(2)]
+    #[pallet::call_index(3)]
     #[pallet::weight(0)] // TODO
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
@@ -760,7 +816,7 @@ pub mod pallet {
       Ok(())
     }
 
-    #[pallet::call_index(3)]
+    #[pallet::call_index(4)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn claim_deallocation(
       origin: OriginFor<T>,
@@ -787,46 +843,137 @@ pub mod pallet {
 
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       // Match to be exhaustive
-      let (network, key_pair, signature) = match call {
-        Call::set_keys { network, ref key_pair, ref signature } => (network, key_pair, signature),
+      match call {
+        Call::set_keys { network, ref key_pair, ref signature } => {
+          // Don't allow the Serai set to set_keys, as they have no reason to do so
+          // This should already be covered by the lack of key in MuSigKeys, yet it doesn't hurt to
+          // be explicit
+          if network == &NetworkId::Serai {
+            Err(InvalidTransaction::Custom(0))?;
+          }
+
+          let session = Self::session(NetworkId::Serai).unwrap();
+
+          let set = ValidatorSet { session, network: *network };
+          match Self::verify_signature(set, key_pair, signature) {
+            Err(Error::AlreadyGeneratedKeys) => Err(InvalidTransaction::Stale)?,
+            Err(Error::NonExistentValidatorSet) |
+            Err(Error::InsufficientAllocation) |
+            Err(Error::NotEnoughAllocated) |
+            Err(Error::AllocationWouldRemoveFaultTolerance) |
+            Err(Error::AllocationWouldPreventFaultTolerance) |
+            Err(Error::DeallocationWouldRemoveParticipant) |
+            Err(Error::DeallocationWouldRemoveFaultTolerance) |
+            Err(Error::NonExistentDeallocation) |
+            Err(Error::NonExistentValidator) |
+            Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
+            Err(Error::__Ignore(_, _)) => unreachable!(),
+            Ok(()) => (),
+          }
+
+          ValidTransaction::with_tag_prefix("ValidatorSets")
+            .and_provides((0, set))
+            .longevity(u64::MAX)
+            .propagate(true)
+            .build()
+        }
+        Call::remove_participant { network, to_remove, signers, signature } => {
+          if network == &NetworkId::Serai {
+            Err(InvalidTransaction::Custom(0))?;
+          }
+
+          // Confirm this set has a session
+          let Some(current_session) = Self::session(*network) else {
+            Err(InvalidTransaction::Custom(1))?
+          };
+          // This is needed as modify storage variables of the latest decided session
+          assert_eq!(Pallet::<T>::latest_decided_session(*network), Some(current_session));
+          let set = ValidatorSet { network: *network, session: current_session };
+          // Confirm it has yet to set keys
+          if Keys::<T>::get(set).is_some() {
+            Err(InvalidTransaction::Custom(2))?;
+          }
+
+          let mut participants =
+            Participants::<T>::get(network).expect("session existed without participants");
+
+          // Require signers be sorted to ensure no duplicates are present
+          let mut last_signer = None;
+          let mut signing_key_shares = 0;
+          for signer in signers {
+            if let Some(last_signer) = last_signer {
+              if last_signer >= signer {
+                Err(InvalidTransaction::Custom(3))?;
+              }
+            }
+            last_signer = Some(signer);
+
+            // Doesn't use InSet as InSet *includes* removed validators
+            // Only non-removed validators should be considered as contributing
+            let Some(shares) = participants
+              .iter()
+              .find(|(participant, _)| participant == to_remove)
+              .map(|(_, shares)| shares)
+            else {
+              Err(InvalidTransaction::Custom(4))?
+            };
+            signing_key_shares += shares;
+          }
+
+          // Check 67% are participating in this removal
+          // This is done by iterating over InSet, which isn't mutated on removal, and reading the
+          // shares from that
+          let mut all_key_shares = 0;
+          for shares in InSetIter::<T>::new(*network) {
+            all_key_shares += shares;
+          }
+          // 2f + 1
+          if signing_key_shares < ((2 * (all_key_shares - signing_key_shares)) + 1) {
+            Err(InvalidTransaction::Custom(5))?;
+          }
+
+          // Perform the removal
+          let Some(removal_index) =
+            participants.iter().position(|participant| &participant.0 == to_remove)
+          else {
+            Err(InvalidTransaction::Custom(6))?
+          };
+          participants.remove(removal_index);
+
+          // Verify the signature with the MuSig key of the signers
+          if !musig_key(set, signers)
+            .verify(&remove_participant_message(&set, *to_remove), signature)
+          {
+            Err(InvalidTransaction::BadProof)?;
+          }
+
+          // Set the new MuSig key
+          MuSigKeys::<T>::set(
+            set,
+            Some(musig_key(set, &participants.iter().map(|(id, _)| *id).collect::<Vec<_>>())),
+          );
+          Participants::<T>::set(network, Some(participants));
+
+          // This does not remove from TotalAllocatedStake or InSet in order to:
+          // 1) Not decrease the stake present in this set. This means removed participants are
+          //    still liable for the economic security of the external network. This prevents
+          //    a decided set, which is economically secure, from falling below the threshold.
+          // 2) Not allow parties removed to immediately deallocate, per commentary on deallocation
+          //    scheduling (https://github.com/serai-dex/serai/issues/394).
+
+          Pallet::<T>::deposit_event(Event::ParticipantRemoved { set, removed: *to_remove });
+
+          ValidTransaction::with_tag_prefix("ValidatorSets")
+            .and_provides((1, set, to_remove))
+            .longevity(u64::MAX)
+            .propagate(true)
+            .build()
+        }
         Call::allocate { .. } | Call::deallocate { .. } | Call::claim_deallocation { .. } => {
           Err(InvalidTransaction::Call)?
         }
         Call::__Ignore(_, _) => unreachable!(),
-      };
-
-      // Don't allow the Serai set to set_keys, as they have no reason to do so
-      // This should already be covered by the lack of key in MuSigKeys, yet it doesn't hurt to be
-      // explicit
-      if network == &NetworkId::Serai {
-        Err(InvalidTransaction::Custom(0))?;
       }
-
-      let session = Self::session(NetworkId::Serai).unwrap();
-
-      let set = ValidatorSet { session, network: *network };
-      match Self::verify_signature(set, key_pair, signature) {
-        Err(Error::AlreadyGeneratedKeys) => Err(InvalidTransaction::Stale)?,
-        Err(Error::NonExistentValidatorSet) |
-        Err(Error::InsufficientAllocation) |
-        Err(Error::NotEnoughAllocated) |
-        Err(Error::AllocationWouldRemoveFaultTolerance) |
-        Err(Error::AllocationWouldPreventFaultTolerance) |
-        Err(Error::DeallocationWouldRemoveParticipant) |
-        Err(Error::DeallocationWouldRemoveFaultTolerance) |
-        Err(Error::NonExistentDeallocation) |
-        Err(Error::NonExistentValidator) |
-        Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
-        Err(Error::__Ignore(_, _)) => unreachable!(),
-        Ok(()) => (),
-      }
-
-      ValidTransaction::with_tag_prefix("validator-sets")
-        .and_provides(set)
-        // Set a 10 block longevity, though this should be included in the next block
-        .longevity(10)
-        .propagate(true)
-        .build()
     }
 
     // Explicitly provide a pre-dispatch which calls validate_unsigned
