@@ -67,6 +67,9 @@ members = [
   "tests/coordinator",
   "tests/full-stack",
   "tests/reproducible-runtime",
+
+  "patches/option-ext",
+  "patches/directories-next",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
@@ -93,11 +96,16 @@ panic = "unwind"
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
-# subxt *can* pull these off crates.io yet there's no benefit to this
-sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
-sp-std = { git = "https://github.com/serai-dex/substrate" }
-
+# Needed due to dockertest's usage of `Rc`s when we need `Arc`s
 dockertest = { git = "https://github.com/kayabaNerve/dockertest-rs", branch = "arc" }
+
+# directories-next was created because directories was unmaintained
+# directories-next is now unmaintained while directories is maintained
+# The directories author pulls in ridiculously pointless crates and prefers
+# copyleft licenses
+# The following two patches resolve everything
+option-ext = { path = "patches/option-ext" }
+directories-next = { path = "patches/directories-next" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
