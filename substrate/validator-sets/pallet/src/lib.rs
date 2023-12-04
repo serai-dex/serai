@@ -177,10 +177,6 @@ pub mod pallet {
     pub fn in_latest_decided_set(network: NetworkId, account: Public) -> bool {
       InSet::<T>::contains_key(Self::in_set_key(network, account))
     }
-
-    fn shares_in_latest_decided_set(network: NetworkId, account: Public) -> Option<u64> {
-      InSet::<T>::get(Self::in_set_key(network, account))
-    }
   }
 
   /// The total stake allocated to this network by the active set of validators.
@@ -912,9 +908,13 @@ pub mod pallet {
             }
             last_signer = Some(signer);
 
-            // This does allow removed validators to vote to remove other validators, an
-            // interesting edge case, though not one which breaks the security of the system
-            let Some(shares) = Pallet::<T>::shares_in_latest_decided_set(*network, *signer) else {
+            // Doesn't use InSet as InSet *includes* removed validators
+            // Only non-removed validators should be considered as contributing
+            let Some(shares) = participants
+              .iter()
+              .find(|(participant, _)| participant == to_remove)
+              .map(|(_, shares)| shares)
+            else {
               Err(InvalidTransaction::Custom(4))?
             };
             signing_key_shares += shares;
