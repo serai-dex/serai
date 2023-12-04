@@ -29,10 +29,7 @@ impl GetValidatorCount for MembershipProof {
   }
 }
 
-/// Wraps the author-scraping logic for consensus engines that can recover
-/// the canonical index of an author. This then transforms it into the
-/// registering account-ID of that session key index.
-/// TODO: check if you can simplify this, otherwise let kayaba know this is taken from sessios.
+// TODO: check if you can simplify this(taken from pallet session).
 pub struct FindAccountFromAuthorIndex<T, Inner>(sp_std::marker::PhantomData<(T, Inner)>);
 
 impl<T: Config, Inner: FindAuthor<u32>> FindAuthor<T::AccountId>
@@ -56,13 +53,17 @@ pub mod pallet {
   use scale_info::TypeInfo;
 
   use sp_core::sr25519::{Public, Signature};
-  use sp_std::{vec, vec::Vec};
+  use sp_std::{
+    vec,
+    vec::Vec,
+    ops::{Add, Sub},
+  };
   use sp_application_crypto::RuntimePublic;
   use sp_session::ShouldEndSession;
   use sp_runtime::{traits::IsMember, KeyTypeId};
   use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 
-  use frame_system::pallet_prelude::*;
+  use frame_system::{pallet_prelude::*, RawOrigin};
   use frame_support::{
     pallet_prelude::*,
     traits::{DisabledValidators, KeyOwnerProofSystem},
@@ -89,7 +90,7 @@ pub mod pallet {
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
     + dex_pallet::Config
-    + pallet_babe::Config
+    + pallet_babe::Config<MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET }>>
     + pallet_grandpa::Config
     + TypeInfo
   {
@@ -151,6 +152,18 @@ pub mod pallet {
     NetworkId,
     BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
     OptionQuery,
+  >;
+  // TODO: we don't actually need the NetworkId key and weights here atm. But we might need them
+  // in the future for some reason? WeakBoundedVec types picked just to prevent conversions.
+  /// Participants of the previous session.
+  #[pallet::storage]
+  #[pallet::getter(fn previous_participants)]
+  pub type PreviousParticipants<T: Config> = StorageMap<
+    _,
+    Identity,
+    NetworkId,
+    WeakBoundedVec<(BabeAuthorityId, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
+    ValueQuery,
   >;
   /// The validators selected to be in-set, regardless of if removed, with the ability to perform a
   /// check for presence.
@@ -317,6 +330,18 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
+
+  /// Historical valid Babe offences that were reported.
+  #[pallet::storage]
+  #[pallet::getter(fn babe_offences)]
+  pub type BabeOffences<T: Config> =
+    StorageMap<_, Blake2_128Concat, (Public, u64), (), OptionQuery>;
+
+  /// Historical valid Grandpa offences that were reported.
+  #[pallet::storage]
+  #[pallet::getter(fn grandpa_offences)]
+  pub type GrandpaOffences<T: Config> =
+    StorageMap<_, Blake2_128Concat, (Public, u64, u64), (), OptionQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -703,37 +728,38 @@ pub mod pallet {
     }
 
     fn rotate_session() {
-      let prior_serai_participants = Participants::<T>::get(NetworkId::Serai)
-        .expect("no Serai participants upon rotate_session");
-      let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
+      // get current & next serai validators
+      let current_validators = Babe::<T>::authorities();
+      let next_validators = Self::participants(NetworkId::Serai);
 
-      // TODO: T::SessionHandler::on_before_session_ending() was here.
-      // end the current serai session.
-      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
+      // save & end the current serai session.
+      PreviousParticipants::<T>::set(NetworkId::Serai, current_validators);
+      Self::retire_set(ValidatorSet {
+        network: NetworkId::Serai,
+        session: Self::session(NetworkId::Serai).unwrap(),
+      });
 
       // make a new session and get the next validator set.
       Self::new_session();
 
       // Update Babe and Grandpa
-      let session = prior_serai_session.0 + 1;
-      let validators = prior_serai_participants;
-      let next_validators =
-        Participants::<T>::get(NetworkId::Serai).expect("no Serai participants after new_session");
+      let session = Self::session(NetworkId::Serai).unwrap();
+      let next_next_validators = Self::participants(NetworkId::Serai);
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
-          validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          next_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
           None,
         ),
         WeakBoundedVec::force_from(
-          next_validators.into_iter().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          next_next_validators.into_iter().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
           None,
         ),
-        Some(session),
+        Some(session.0),
       );
       Grandpa::<T>::new_session(
         true,
-        session,
-        validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+        session.0,
+        next_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
       );
     }
 
@@ -768,6 +794,57 @@ pub mod pallet {
         total_required += Self::required_stake(&Balance { coin: *coin, amount: Amount(supply) });
       }
       total_required
+    }
+  }
+
+    // Since babe & grandpa authorities are the same each session, we can check whichever.
+    // Babe also provides convenient function to check for authorities so we just go with that.
+    fn can_slash_serai_validator(validator: &Public) -> bool {
+      Babe::<T>::is_member(&BabeAuthorityId::from(*validator)) ||
+        Self::previous_participants(NetworkId::Serai)
+          .into_iter()
+          .any(|(id, _)| id.into_inner() == *validator)
+    }
+
+    fn slash_serai_validator(validator: &Public) {
+      let network = NetworkId::Serai;
+      let account = *validator;
+      let mut allocation = Self::allocation((network, account)).unwrap();
+
+      // reduce the current allocation to 0.
+      Self::set_allocation(network, account, Amount(0));
+
+      // prevent any future deallocation.
+      let mut to_unlock_on = Self::session(network).unwrap();
+      for i in 0 .. 4 {
+        to_unlock_on.0 += i;
+        let pending = Self::take_deallocatable_amount(network, to_unlock_on, account);
+        if pending.is_some() {
+          allocation = allocation.add(pending.unwrap());
+          PendingDeallocations::<T>::set((network, to_unlock_on, account), None);
+        }
+      }
+
+      // remove from participating the current & future sets.
+      // TODO: how to remove from the current?
+      let mut participants = Self::participants(network);
+      let index = participants.iter().position(|(id, _)| *id == account);
+      if let Some(i) = index {
+        participants.remove(i);
+        Participants::<T>::set(network, participants);
+        InSet::<T>::remove(Self::in_set_key(network, account));
+      }
+
+      // reduce th TotalAllocatedStake for the network
+      let current_staked = Self::total_allocated_stake(network).unwrap();
+      TotalAllocatedStake::<T>::set(network, Some(current_staked.sub(allocation)));
+
+      // burn it from the stake account
+      Coins::<T>::burn(
+        RawOrigin::Signed(account).into(),
+        Balance { coin: Coin::Serai, amount: allocation },
+      )
+      .unwrap();
     }
   }
 
@@ -972,9 +1049,12 @@ pub mod pallet {
 
     fn prove(key: (KeyTypeId, D)) -> Option<Self::Proof> {
       let (_, data) = key;
-      let validator = Public::try_from(data.as_ref()).unwrap();
-      // TODO: check if it is currently a member
-      // TODO: check if it is member of prev session
+      let validator = Public::try_from(data.as_ref()).ok()?;
+
+      // TODO: do we want this check here? this is node that wants to send the proof anyway.
+      if !Self::can_slash_serai_validator(&validator) {
+        return None;
+      }
 
       Some(MembershipProof {
         session: Self::session(NetworkId::Serai).unwrap().0,
@@ -985,12 +1065,18 @@ pub mod pallet {
 
     fn check_proof(key: (KeyTypeId, D), proof: Self::Proof) -> Option<Self::IdentificationTuple> {
       let (_, data) = key;
-      let validator = Public::try_from(data.as_ref()).unwrap();
+      let validator = Public::try_from(data.as_ref()).ok()?;
+
+      // check the offender and the proof offender are the same.
       if validator != proof.key {
         return None;
       }
-      // TODO: check if it is currently a member
-      // TODO: check if it is member of prev session
+
+      // check validator is valid
+      if !Self::can_slash_serai_validator(&validator) {
+        return None;
+      }
+
       Some(validator)
     }
   }
@@ -999,25 +1085,24 @@ pub mod pallet {
     /// Report an `offence` and reward given `reporters`.
     fn report_offence(
       _: Vec<Public>,
-      _: BabeEquivocationOffence<Public>,
+      offence: BabeEquivocationOffence<Public>,
     ) -> Result<(), OffenceError> {
-      Ok(())
       // slash the offender
-      // TODO: remove from the set as well?
+      let offender = offence.offender;
+      Self::slash_serai_validator(&offender);
+
+      // save the offence
+      let key = (offender, u64::from(offence.slot));
+      BabeOffences::<T>::set(key, Some(()));
+      Ok(())
     }
 
-    /// Returns true iff all of the given offenders have been previously reported
-    /// at the given time slot. This function is useful to prevent the sending of
-    /// duplicate offence reports.
     fn is_known_offence(
       offenders: &[Public],
-      _: &<BabeEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
+      slot: &<BabeEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
     ) -> bool {
-      // Check if the offence has already been reported for offender,
-      // and if so then we can discard the report.
-      // TODO: create a BabeEquivocationOffence using the offender & time_slot
-      // and check for it in the map.
-      false
+      let key = (offenders[0], u64::from(*slot));
+      Self::babe_offences(key).is_some()
     }
   }
 
@@ -1025,19 +1110,24 @@ pub mod pallet {
     /// Report an `offence` and reward given `reporters`.
     fn report_offence(
       _: Vec<Public>,
-      _: GrandpaEquivocationOffence<Public>,
+      offence: GrandpaEquivocationOffence<Public>,
     ) -> Result<(), OffenceError> {
+      // slash the offender
+      let offender = offence.offender;
+      Self::slash_serai_validator(&offender);
+
+      // save the offence
+      let key = (offender, offence.time_slot.set_id, offence.time_slot.round);
+      GrandpaOffences::<T>::set(key, Some(()));
       Ok(())
     }
 
-    /// Returns true iff all of the given offenders have been previously reported
-    /// at the given time slot. This function is useful to prevent the sending of
-    /// duplicate offence reports.
     fn is_known_offence(
       offenders: &[Public],
-      _: &<GrandpaEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
+      slot: &<GrandpaEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
     ) -> bool {
-      false
+      let key = (offenders[0], slot.set_id, slot.round);
+      Self::grandpa_offences(key).is_some()
     }
   }
 

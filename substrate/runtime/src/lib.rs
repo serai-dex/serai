@@ -145,8 +145,6 @@ parameter_types! {
       Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-
-  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
   pub ReportLongevity: u64 = 24 * 600; // TODO: get epoch duration from babe.
 }
 
@@ -295,11 +293,14 @@ impl pallet_authorship::Config for Runtime {
   type EventHandler = ();
 }
 
+// Maximum number of authorities per session.
+pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET }>;
+
 impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
-  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+  type EpochChangeTrigger = babe::ExternalTrigger;
   type DisabledValidators = ValidatorSets;
 
   type WeightInfo = ();
