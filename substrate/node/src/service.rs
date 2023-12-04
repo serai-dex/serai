@@ -315,7 +315,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
           gossip_duration: std::time::Duration::from_millis(333),
           // This is the delay between generating justifications for blocks
           // We attemopt to generate a justification for every block
-          justification_generation_period: 0,
+          justification_generation_period: 1,
           name: Some(name),
           observer_enabled: false,
           keystore: if role.is_authority() { Some(keystore) } else { None },
