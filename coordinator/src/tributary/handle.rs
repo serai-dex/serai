@@ -1,6 +1,8 @@
 use core::{ops::Deref, future::Future};
 use std::collections::HashMap;
 
+use rand_core::OsRng;
+
 use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
@@ -26,11 +28,13 @@ use serai_db::{Get, Db};
 use crate::{
   processors::Processors,
   tributary::{
-    Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet, Accumulation,
+    SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet,
+    Accumulation,
     dkg_confirmer::DkgConfirmer,
     dkg_removal::DkgRemoval,
     scanner::{RecognizedIdType, RIDTrait},
-    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, AttemptDb, DataDb,
+    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
+    DataDb,
   },
 };
 
@@ -41,8 +45,11 @@ const DKG_SHARES: &str = "shares";
 const DKG_CONFIRMATION_NONCES: &str = "confirmation_nonces";
 const DKG_CONFIRMATION_SHARES: &str = "confirmation_shares";
 
-// These s/b prefixes between Batch and Sign should be unnecessary, as Batch/Share entries
-// themselves should already be domain separated
+// These d/s/b prefixes between DKG Removal, Batch, and Sign should be unnecessary, as Batch/Share
+// entries themselves should already be domain separated
+const DKG_REMOVAL_PREPROCESS: &str = "d_preprocess";
+const DKG_REMOVAL_SHARE: &str = "d_share";
+
 const BATCH_PREPROCESS: &str = "b_preprocess";
 const BATCH_SHARE: &str = "b_share";
 
@@ -95,9 +102,14 @@ pub fn generated_key_pair<D: Db>(
   DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
 }
 
-pub(super) fn fatal_slash<D: Db>(
+pub(super) async fn fatal_slash<
+  D: Db,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
+>(
   txn: &mut D::Transaction<'_>,
   spec: &TributarySpec,
+  publish_tributary_tx: &PTT,
   our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   slashing: [u8; 32],
   reason: &str,
@@ -114,7 +126,14 @@ pub(super) fn fatal_slash<D: Db>(
   // If during a DKG, remove the participant
   if DkgCompleted::get(txn, genesis).is_none() {
     let preprocess = DkgRemoval::preprocess(spec, our_key, 0);
-    todo!()
+    let mut tx = Transaction::DkgRemovalPreprocess(SignData {
+      plan: slashing,
+      attempt: 0,
+      data: vec![preprocess.to_vec()],
+      signed: Transaction::empty_signed(),
+    });
+    tx.sign(&mut OsRng, genesis, our_key);
+    publish_tributary_tx(tx).await;
   }
 }
 
@@ -122,9 +141,14 @@ pub(super) fn fatal_slash<D: Db>(
 // Tributary post-DKG
 // https://github.com/serai-dex/serai/issues/426
 
-fn fatal_slash_with_participant_index<D: Db>(
-  spec: &TributarySpec,
+async fn fatal_slash_with_participant_index<
+  D: Db,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
+>(
   txn: &mut <D as Db>::Transaction<'_>,
+  spec: &TributarySpec,
+  publish_tributary_tx: &PTT,
   our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   i: Participant,
   reason: &str,
@@ -141,14 +165,18 @@ fn fatal_slash_with_participant_index<D: Db>(
   }
   let validator = validator.unwrap();
 
-  fatal_slash::<D>(txn, spec, our_key, validator.to_bytes(), reason);
+  fatal_slash::<D, _, _>(txn, spec, publish_tributary_tx, our_key, validator.to_bytes(), reason)
+    .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
 >(
@@ -156,6 +184,7 @@ pub(crate) async fn handle_application_tx<
   spec: &TributarySpec,
   processors: &Pro,
   publish_serai_tx: PST,
+  publish_tributary_tx: &PTT,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   recognized_id: RID,
   txn: &mut <D as Db>::Transaction<'_>,
@@ -171,19 +200,28 @@ pub(crate) async fn handle_application_tx<
     }
   }
 
-  let handle = |txn: &mut <D as Db>::Transaction<'_>,
-                data_spec: &DataSpecification,
-                bytes: Vec<u8>,
-                signed: &Signed| {
+  async fn handle<D: Db, FPtt: Future<Output = ()>, PTT: Clone + Fn(Transaction) -> FPtt>(
+    txn: &mut <D as Db>::Transaction<'_>,
+    spec: &TributarySpec,
+    publish_tributary_tx: &PTT,
+    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    data_spec: &DataSpecification,
+    bytes: Vec<u8>,
+    signed: &Signed,
+  ) -> Accumulation {
+    let genesis = spec.genesis();
+
     let Some(curr_attempt) = AttemptDb::attempt(txn, genesis, data_spec.topic) else {
       // Premature publication of a valid ID/publication of an invalid ID
-      fatal_slash::<D>(
+      fatal_slash::<D, _, _>(
         txn,
         spec,
+        publish_tributary_tx,
         key,
         signed.signer.to_bytes(),
         "published data for ID without an attempt",
-      );
+      )
+      .await;
       return Accumulation::NotReady;
     };
 
@@ -191,7 +229,15 @@ pub(crate) async fn handle_application_tx<
     // This shouldn't be reachable since nonces were made inserted by the coordinator, yet it's a
     // cheap check to leave in for safety
     if DataDb::get(txn, genesis, data_spec, &signed.signer.to_bytes()).is_some() {
-      fatal_slash::<D>(txn, spec, key, signed.signer.to_bytes(), "published data multiple times");
+      fatal_slash::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        signed.signer.to_bytes(),
+        "published data multiple times",
+      )
+      .await;
       return Accumulation::NotReady;
     }
 
@@ -202,13 +248,15 @@ pub(crate) async fn handle_application_tx<
     }
     // If the attempt is greater, this is a premature publication, full slash
     if data_spec.attempt > curr_attempt {
-      fatal_slash::<D>(
+      fatal_slash::<D, _, _>(
         txn,
         spec,
+        publish_tributary_tx,
         key,
         signed.signer.to_bytes(),
         "published data with an attempt which hasn't started",
-      );
+      )
+      .await;
       return Accumulation::NotReady;
     }
 
@@ -219,24 +267,31 @@ pub(crate) async fn handle_application_tx<
 
     // Accumulate this data
     DataDb::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
-  };
+  }
 
-  fn check_sign_data_len<D: Db>(
+  async fn check_sign_data_len<
+    D: Db,
+    FPtt: Future<Output = ()>,
+    PTT: Clone + Fn(Transaction) -> FPtt,
+  >(
     txn: &mut D::Transaction<'_>,
     spec: &TributarySpec,
+    publish_tributary_tx: &PTT,
     our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     signer: <Ristretto as Ciphersuite>::G,
     len: usize,
   ) -> Result<(), ()> {
     let signer_i = spec.i(signer).unwrap();
     if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
-      fatal_slash::<D>(
+      fatal_slash::<D, _, _>(
         txn,
         spec,
+        publish_tributary_tx,
         our_key,
         signer.to_bytes(),
         "signer published a distinct amount of sign data than they had shares",
-      );
+      )
+      .await;
       Err(())?;
     }
     Ok(())
@@ -258,18 +313,40 @@ pub(crate) async fn handle_application_tx<
 
   match tx {
     Transaction::RemoveParticipant(i) => {
-      fatal_slash_with_participant_index::<D>(spec, txn, key, i, "RemoveParticipant Provided TX")
+      fatal_slash_with_participant_index::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        i,
+        "RemoveParticipant Provided TX",
+      )
+      .await
     }
     Transaction::DkgCommitments(attempt, commitments, signed) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, signed.signer, commitments.len()) else {
+      let Ok(_) = check_sign_data_len::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        signed.signer,
+        commitments.len(),
+      )
+      .await
+      else {
         return;
       };
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
         commitments.encode(),
         &signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(mut commitments)) => {
           log::info!("got all DkgCommitments for {}", hex::encode(genesis));
           unflatten(spec, &mut commitments);
@@ -297,24 +374,28 @@ pub(crate) async fn handle_application_tx<
       let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
 
       if shares.len() != usize::from(sender_is_len) {
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           txn,
           spec,
+          publish_tributary_tx,
           key,
           signed.signer.to_bytes(),
           "invalid amount of DKG shares by key shares",
-        );
+        )
+        .await;
         return;
       }
       for shares in &shares {
         if shares.len() != (usize::from(spec.n() - sender_is_len)) {
-          fatal_slash::<D>(
+          fatal_slash::<D, _, _>(
             txn,
             spec,
+            publish_tributary_tx,
             key,
             signed.signer.to_bytes(),
             "invalid amount of DKG shares",
-          );
+          )
+          .await;
           return;
         }
       }
@@ -371,18 +452,27 @@ pub(crate) async fn handle_application_tx<
       // Drop shares as it's been mutated into invalidity
       drop(shares);
 
-      let confirmation_nonces = handle(
+      let confirmation_nonces = handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
         confirmation_nonces.to_vec(),
         &signed,
-      );
-      match handle(
+      )
+      .await;
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
         our_shares.encode(),
         &signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(shares)) => {
           log::info!("got all DkgShares for {}", hex::encode(genesis));
 
@@ -440,26 +530,30 @@ pub(crate) async fn handle_application_tx<
       if (u16::from(accuser) < u16::from(range.start)) ||
         (u16::from(range.end) <= u16::from(accuser))
       {
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           txn,
           spec,
+          publish_tributary_tx,
           key,
           signed.signer.to_bytes(),
           "accused with a Participant index which wasn't theirs",
-        );
+        )
+        .await;
         return;
       }
 
       if !((u16::from(range.start) <= u16::from(faulty)) &&
         (u16::from(faulty) < u16::from(range.end)))
       {
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           txn,
           spec,
+          publish_tributary_tx,
           key,
           signed.signer.to_bytes(),
           "accused self of having an InvalidDkgShare",
-        );
+        )
+        .await;
         return;
       }
 
@@ -479,12 +573,17 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::DkgConfirmed(attempt, shares, signed) => {
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_SHARES, attempt },
         shares.to_vec(),
         &signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(shares)) => {
           log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
@@ -499,13 +598,15 @@ pub(crate) async fn handle_application_tx<
             match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
               Err(p) => {
-                fatal_slash_with_participant_index::<D>(
-                  spec,
+                fatal_slash_with_participant_index::<D, _, _>(
                   txn,
+                  spec,
+                  publish_tributary_tx,
                   key,
                   p,
                   "invalid DkgConfirmer share",
-                );
+                )
+                .await;
                 return;
               }
             };
@@ -521,6 +622,111 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::NotParticipating) => {
           panic!("wasn't a participant in DKG confirmination shares")
         }
+        Accumulation::NotReady => {}
+      }
+    }
+
+    Transaction::DkgRemovalPreprocess(data) => {
+      let signer = data.signed.signer;
+      if (data.data.len() != 1) || (data.data[0].len() != 64) {
+        fatal_slash::<D, _, _>(
+          txn,
+          spec,
+          publish_tributary_tx,
+          key,
+          signer.to_bytes(),
+          "non-64-byte DKG removal preprocess",
+        )
+        .await;
+        return;
+      }
+      match handle::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        &DataSpecification {
+          topic: Topic::DkgRemoval(data.plan),
+          label: DKG_REMOVAL_PREPROCESS,
+          attempt: data.attempt,
+        },
+        data.data.encode(),
+        &data.signed,
+      )
+      .await
+      {
+        Accumulation::Ready(DataSet::Participating(preprocesses)) => {
+          RemovalNonces::set(txn, genesis, data.plan, data.attempt, &preprocesses);
+
+          let Ok(share) = DkgRemoval::share(spec, key, data.attempt, preprocesses, data.plan)
+          else {
+            // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+            // slash) and censor transactions (yet don't explicitly ban)
+            return;
+          };
+
+          let mut tx = Transaction::DkgRemovalPreprocess(SignData {
+            plan: data.plan,
+            attempt: data.attempt,
+            data: vec![share.to_vec()],
+            signed: Transaction::empty_signed(),
+          });
+          tx.sign(&mut OsRng, genesis, key);
+          publish_tributary_tx(tx).await;
+        }
+        Accumulation::Ready(DataSet::NotParticipating) => {}
+        Accumulation::NotReady => {}
+      }
+    }
+    Transaction::DkgRemovalShare(data) => {
+      let signer = data.signed.signer;
+      if (data.data.len() != 1) || (data.data[0].len() != 32) {
+        fatal_slash::<D, _, _>(
+          txn,
+          spec,
+          publish_tributary_tx,
+          key,
+          signer.to_bytes(),
+          "non-32-byte DKG removal share",
+        )
+        .await;
+        return;
+      }
+      match handle::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        &DataSpecification {
+          topic: Topic::DkgRemoval(data.plan),
+          label: DKG_REMOVAL_SHARE,
+          attempt: data.attempt,
+        },
+        data.data.encode(),
+        &data.signed,
+      )
+      .await
+      {
+        Accumulation::Ready(DataSet::Participating(shares)) => {
+          let preprocesses = RemovalNonces::get(txn, genesis, data.plan, data.attempt).unwrap();
+
+          let Ok((signers, signature)) =
+            DkgRemoval::complete(spec, key, data.attempt, preprocesses, data.plan, shares)
+          else {
+            // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+            // slash) and censor transactions (yet don't explicitly ban)
+            return;
+          };
+
+          let tx = serai_client::SeraiValidatorSets::remove_participant(
+            spec.set().network,
+            Public(data.plan),
+            signers,
+            Signature(signature),
+          );
+          publish_serai_tx(spec.set(), tx).await;
+        }
+        Accumulation::Ready(DataSet::NotParticipating) => {}
         Accumulation::NotReady => {}
       }
     }
@@ -573,17 +779,37 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::SubstratePreprocess(data) => {
       let signer = data.signed.signer;
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, signer, data.data.len()) else {
+      let Ok(_) = check_sign_data_len::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        signer,
+        data.data.len(),
+      )
+      .await
+      else {
         return;
       };
       for data in &data.data {
         if data.len() != 64 {
-          fatal_slash::<D>(txn, spec, key, signer.to_bytes(), "non-64-byte Substrate preprocess");
+          fatal_slash::<D, _, _>(
+            txn,
+            spec,
+            publish_tributary_tx,
+            key,
+            signer.to_bytes(),
+            "non-64-byte Substrate preprocess",
+          )
+          .await;
           return;
         }
       }
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification {
           topic: Topic::SubstrateSign(data.plan),
           label: BATCH_PREPROCESS,
@@ -591,7 +817,9 @@ pub(crate) async fn handle_application_tx<
         },
         data.data.encode(),
         &data.signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           processors
@@ -616,12 +844,23 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::SubstrateShare(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      let Ok(_) = check_sign_data_len::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        data.signed.signer,
+        data.data.len(),
+      )
+      .await
       else {
         return;
       };
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification {
           topic: Topic::SubstrateSign(data.plan),
           label: BATCH_SHARE,
@@ -629,7 +868,9 @@ pub(crate) async fn handle_application_tx<
         },
         data.data.encode(),
         &data.signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
           processors
@@ -655,12 +896,23 @@ pub(crate) async fn handle_application_tx<
     }
 
     Transaction::SignPreprocess(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      let Ok(_) = check_sign_data_len::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        data.signed.signer,
+        data.data.len(),
+      )
+      .await
       else {
         return;
       };
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
           label: SIGN_PREPROCESS,
@@ -668,7 +920,9 @@ pub(crate) async fn handle_application_tx<
         },
         data.data.encode(),
         &data.signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
           unflatten(spec, &mut preprocesses);
           processors
@@ -686,12 +940,23 @@ pub(crate) async fn handle_application_tx<
       }
     }
     Transaction::SignShare(data) => {
-      let Ok(_) = check_sign_data_len::<D>(txn, spec, key, data.signed.signer, data.data.len())
+      let Ok(_) = check_sign_data_len::<D, _, _>(
+        txn,
+        spec,
+        publish_tributary_tx,
+        key,
+        data.signed.signer,
+        data.data.len(),
+      )
+      .await
       else {
         return;
       };
-      match handle(
+      match handle::<D, _, _>(
         txn,
+        spec,
+        publish_tributary_tx,
+        key,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
           label: SIGN_SHARE,
@@ -699,7 +964,9 @@ pub(crate) async fn handle_application_tx<
         },
         data.data.encode(),
         &data.signed,
-      ) {
+      )
+      .await
+      {
         Accumulation::Ready(DataSet::Participating(mut shares)) => {
           unflatten(spec, &mut shares);
           processors
@@ -724,13 +991,15 @@ pub(crate) async fn handle_application_tx<
       );
 
       if AttemptDb::attempt(txn, genesis, Topic::Sign(plan)).is_none() {
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           txn,
           spec,
+          publish_tributary_tx,
           key,
           first_signer.to_bytes(),
           "claimed an unrecognized plan was completed",
-        );
+        )
+        .await;
         return;
       };
 

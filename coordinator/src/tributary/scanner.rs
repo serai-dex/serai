@@ -13,7 +13,7 @@ use serai_client::{validator_sets::primitives::ValidatorSet, Serai};
 use serai_db::DbTxn;
 
 use tributary::{
-  TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
+  TransactionKind, Transaction as TributaryTransaction, TransactionError, Block, TributaryReader,
   tendermint::{
     tx::{TendermintTx, Evidence, decode_signed_message},
     TendermintNetwork,
@@ -44,11 +44,14 @@ impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> F
 }
 
 // Handle a specific Tributary block
+#[allow(clippy::too_many_arguments)]
 async fn handle_block<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
@@ -58,6 +61,7 @@ async fn handle_block<
   recognized_id: RID,
   processors: &Pro,
   publish_serai_tx: PST,
+  publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   block: Block<Transaction>,
 ) {
@@ -99,20 +103,23 @@ async fn handle_block<
 
         // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           &mut txn,
           spec,
+          publish_tributary_tx,
           key,
           msgs.0.msg.sender,
           &format!("invalid tendermint messages: {:?}", msgs),
-        );
+        )
+        .await;
       }
       TributaryTransaction::Application(tx) => {
-        handle_application_tx::<D, _, _, _, _, _>(
+        handle_application_tx::<D, _, _, _, _, _, _, _>(
           tx,
           spec,
           processors,
           publish_serai_tx.clone(),
+          publish_tributary_tx,
           key,
           recognized_id.clone(),
           &mut txn,
@@ -130,11 +137,14 @@ async fn handle_block<
   // TODO: Trigger any necessary re-attempts
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
@@ -144,6 +154,7 @@ pub(crate) async fn handle_new_blocks<
   recognized_id: RID,
   processors: &Pro,
   publish_serai_tx: PST,
+  publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
 ) {
@@ -165,12 +176,13 @@ pub(crate) async fn handle_new_blocks<
       }
     }
 
-    handle_block::<_, _, _, _, _, _, P>(
+    handle_block::<_, _, _, _, _, _, _, _, P>(
       db,
       key,
       recognized_id.clone(),
       processors,
       publish_serai_tx.clone(),
+      publish_tributary_tx,
       spec,
       block,
     )
@@ -222,7 +234,7 @@ pub(crate) async fn scan_tributaries_task<
               // the next block occurs
               let next_block_notification = tributary.next_block_notification().await;
 
-              handle_new_blocks::<_, _, _, _, _, _, P>(
+              handle_new_blocks::<_, _, _, _, _, _, _, _, P>(
                 &mut tributary_db,
                 &key,
                 recognized_id.clone(),
@@ -274,6 +286,21 @@ pub(crate) async fn scan_tributaries_task<
                           tokio::time::sleep(core::time::Duration::from_secs(10)).await;
                         }
                       }
+                    }
+                  }
+                },
+                &|tx| {
+                  let tributary = tributary.clone();
+                  async move {
+                    match tributary.add_transaction(tx.clone()).await {
+                      Ok(_) => {}
+                      // Can happen as this occurs on a distinct DB TXN
+                      Err(TransactionError::InvalidNonce) => {
+                        log::warn!(
+                          "publishing TX {tx:?} returned InvalidNonce. was it already added?"
+                        )
+                      }
+                      Err(e) => panic!("created an invalid transaction: {e:?}"),
                     }
                   }
                 },

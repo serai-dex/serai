@@ -118,9 +118,32 @@ impl DkgRemoval {
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     attempt: u32,
-    preprocesses: HashMap<<Ristretto as Ciphersuite>::G, Vec<u8>>,
+    mut preprocesses: HashMap<Participant, Vec<u8>>,
     removed: [u8; 32],
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
+    // TODO: Remove this ugly blob
+    let preprocesses = {
+      let mut preprocesses_participants = preprocesses.keys().cloned().collect::<Vec<_>>();
+      preprocesses_participants.sort();
+      let mut actual_keys = vec![];
+      let spec_validators = spec.validators();
+      for participant in &preprocesses_participants {
+        for (validator, _) in &spec_validators {
+          if participant == &spec.i(*validator).unwrap().start {
+            actual_keys.push(*validator);
+          }
+        }
+      }
+
+      let mut new_preprocesses = HashMap::new();
+      for (participant, actual_key) in
+        preprocesses_participants.into_iter().zip(actual_keys.into_iter())
+      {
+        new_preprocesses.insert(actual_key, preprocesses.remove(&participant).unwrap());
+      }
+      new_preprocesses
+    };
+
     let participants = preprocesses.keys().cloned().collect::<Vec<_>>();
     let preprocesses = Self::from_threshold_i_to_musig_i(
       preprocesses.into_iter().map(|(key, preprocess)| (key.to_bytes(), preprocess)).collect(),
@@ -154,7 +177,7 @@ impl DkgRemoval {
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     attempt: u32,
-    preprocesses: HashMap<<Ristretto as Ciphersuite>::G, Vec<u8>>,
+    preprocesses: HashMap<Participant, Vec<u8>>,
     removed: [u8; 32],
   ) -> Result<[u8; 32], Participant> {
     Self::share_internal(spec, key, attempt, preprocesses, removed).map(|(_, share)| share)
@@ -164,10 +187,35 @@ impl DkgRemoval {
     spec: &TributarySpec,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     attempt: u32,
-    preprocesses: HashMap<<Ristretto as Ciphersuite>::G, Vec<u8>>,
+    preprocesses: HashMap<Participant, Vec<u8>>,
     removed: [u8; 32],
-    shares: HashMap<[u8; 32], Vec<u8>>,
-  ) -> Result<[u8; 64], Participant> {
+    mut shares: HashMap<Participant, Vec<u8>>,
+  ) -> Result<(Vec<Public>, [u8; 64]), Participant> {
+    // TODO: Remove this ugly blob
+    let shares = {
+      let mut shares_participants = shares.keys().cloned().collect::<Vec<_>>();
+      shares_participants.sort();
+      let mut actual_keys = vec![];
+      let spec_validators = spec.validators();
+      for participant in &shares_participants {
+        for (validator, _) in &spec_validators {
+          if participant == &spec.i(*validator).unwrap().start {
+            actual_keys.push(*validator);
+          }
+        }
+      }
+
+      let mut new_shares = HashMap::new();
+      for (participant, actual_key) in shares_participants.into_iter().zip(actual_keys.into_iter())
+      {
+        new_shares.insert(actual_key.to_bytes(), shares.remove(&participant).unwrap());
+      }
+      new_shares
+    };
+
+    let mut signers = shares.keys().cloned().map(Public).collect::<Vec<_>>();
+    signers.sort();
+
     let machine = Self::share_internal(spec, key, attempt, preprocesses, removed)
       .expect("trying to complete a machine which failed to preprocess")
       .0;
@@ -188,6 +236,6 @@ impl DkgRemoval {
       FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
     })?;
 
-    Ok(signature.to_bytes())
+    Ok((signers, signature.to_bytes()))
   }
 }
