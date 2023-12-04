@@ -100,7 +100,34 @@ pub mod pallet {
   // before the spammable key.
   #[pallet::storage]
   pub(crate) type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), (), OptionQuery>;
+    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
+
+  // TODO: Merge this with SortedAllocationsIter
+  struct InSetIter<T: Config> {
+    _t: PhantomData<T>,
+    prefix: Vec<u8>,
+    last: Vec<u8>,
+  }
+  impl<T: Config> InSetIter<T> {
+    fn new(network: NetworkId) -> Self {
+      let mut prefix = InSet::<T>::final_prefix().to_vec();
+      prefix.extend(&network.encode());
+      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
+    }
+  }
+  impl<T: Config> Iterator for InSetIter<T> {
+    type Item = u64;
+    fn next(&mut self) -> Option<Self::Item> {
+      let next = sp_io::storage::next_key(&self.last)?;
+      if !next.starts_with(&self.prefix) {
+        return None;
+      }
+      let res = u64::decode(&mut sp_io::storage::get(&next).unwrap().as_ref()).unwrap();
+      self.last = next;
+      Some(res)
+    }
+  }
+
   impl<T: Config> Pallet<T> {
     fn in_set_key(
       network: NetworkId,
@@ -149,6 +176,10 @@ pub mod pallet {
     /// latest information.
     pub fn in_latest_decided_set(network: NetworkId, account: Public) -> bool {
       InSet::<T>::contains_key(Self::in_set_key(network, account))
+    }
+
+    fn shares_in_latest_decided_set(network: NetworkId, account: Public) -> Option<u64> {
+      InSet::<T>::get(Self::in_set_key(network, account))
     }
   }
 
@@ -335,7 +366,7 @@ pub mod pallet {
         let Some((key, amount)) = iter.next() else { break };
 
         let these_key_shares = amount.0 / allocation_per_key_share;
-        InSet::<T>::set(Self::in_set_key(network, key), Some(()));
+        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
         participants.push((key, these_key_shares));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
@@ -745,8 +776,8 @@ pub mod pallet {
     pub fn remove_participant(
       origin: OriginFor<T>,
       network: NetworkId,
-      to_remove: u8,
-      signers: Vec<u8>,
+      to_remove: Public,
+      signers: Vec<Public>,
       signature: Signature,
     ) -> DispatchResult {
       ensure_none(origin)?;
@@ -873,7 +904,6 @@ pub mod pallet {
           // Require signers be sorted to ensure no duplicates are present
           let mut last_signer = None;
           let mut signing_key_shares = 0;
-          let mut signer_keys = vec![];
           for signer in signers {
             if let Some(last_signer) = last_signer {
               if last_signer >= signer {
@@ -882,19 +912,19 @@ pub mod pallet {
             }
             last_signer = Some(signer);
 
-            let Some((participant, shares)) = participants.get(usize::from(*signer)) else {
+            // This does allow removed validators to vote to remove other validators, an
+            // interesting edge case, though not one which breaks the security of the system
+            let Some(shares) = Pallet::<T>::shares_in_latest_decided_set(*network, *signer) else {
               Err(InvalidTransaction::Custom(4))?
             };
-            signer_keys.push(*participant);
             signing_key_shares += shares;
           }
-          let signers = signer_keys;
 
           // Check 67% are participating in this removal
-          // TODO: This doesn't ensure that at least 67% of the original set remain present, yet
-          // solely 67% of the current set
+          // This is done by iterating over InSet, which isn't mutated on removal, and reading the
+          // shares from that
           let mut all_key_shares = 0;
-          for (_, shares) in &participants {
+          for shares in InSetIter::<T>::new(*network) {
             all_key_shares += shares;
           }
           // 2f + 1
@@ -902,13 +932,17 @@ pub mod pallet {
             Err(InvalidTransaction::Custom(5))?;
           }
 
+          // Perform the removal
+          let Some(removal_index) =
+            participants.iter().position(|participant| &participant.0 == to_remove)
+          else {
+            Err(InvalidTransaction::Custom(6))?
+          };
+          participants.remove(removal_index);
+
           // Verify the signature with the MuSig key of the signers
-          let to_remove = usize::from(*to_remove);
-          if to_remove >= participants.len() {
-            Err(InvalidTransaction::Custom(6))?;
-          }
-          let removed = participants.remove(to_remove).0;
-          if !musig_key(set, &signers).verify(&remove_participant_message(&set, removed), signature)
+          if !musig_key(set, signers)
+            .verify(&remove_participant_message(&set, *to_remove), signature)
           {
             Err(InvalidTransaction::BadProof)?;
           }
@@ -927,10 +961,10 @@ pub mod pallet {
           // 2) Not allow parties removed to immediately deallocate, per commentary on deallocation
           //    scheduling (https://github.com/serai-dex/serai/issues/394).
 
-          Pallet::<T>::deposit_event(Event::ParticipantRemoved { set, removed });
+          Pallet::<T>::deposit_event(Event::ParticipantRemoved { set, removed: *to_remove });
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
-            .and_provides((1, set, removed))
+            .and_provides((1, set, to_remove))
             .longevity(u64::MAX)
             .propagate(true)
             .build()
