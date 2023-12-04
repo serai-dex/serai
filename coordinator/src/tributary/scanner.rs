@@ -43,13 +43,19 @@ impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> F
 {
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PstTxType {
+  SetKeys,
+  RemoveParticipant([u8; 32]),
+}
+
 // Handle a specific Tributary block
 #[allow(clippy::too_many_arguments)]
 async fn handle_block<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
   FPtt: Future<Output = ()>,
   PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
@@ -142,7 +148,7 @@ pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
   FPtt: Future<Output = ()>,
   PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
@@ -239,7 +245,7 @@ pub(crate) async fn scan_tributaries_task<
                 &key,
                 recognized_id.clone(),
                 &processors,
-                |set, tx| {
+                |set, tx_type, tx| {
                   let serai = serai.clone();
                   async move {
                     loop {
@@ -254,33 +260,52 @@ pub(crate) async fn scan_tributaries_task<
                         Err(e) => {
                           if let Ok(serai) = serai.as_of_latest_finalized_block().await {
                             let serai = serai.validator_sets();
-                            // Check if this failed because the keys were already set by someone
-                            // else
-                            if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
-                              log::info!("another coordinator set key pair for {:?}", set);
-                              break;
-                            }
 
-                            // The above block may return false if the keys have been pruned from
-                            // the state
-                            // Check if this session is no longer the latest session, meaning it at
-                            // some point did set keys, and we're just operating off very
-                            // historical data
+                            // The following block is irrelevant, and can/likely will fail, if
+                            // we're publishing a TX for an old session
+                            // If we're on a newer session, move on
                             if let Ok(Some(current_session)) =
                               serai.session(spec.set().network).await
                             {
                               if current_session.0 > spec.set().session.0 {
                                 log::warn!(
-                                  "trying to set keys for a set which isn't the latest {:?}",
+                                  "trying to publish a TX relevant to a set {} {:?}",
+                                  "which isn't the latest",
                                   set
                                 );
                                 break;
                               }
                             }
+
+                            // Check if someone else published the TX in question
+                            match tx_type {
+                              PstTxType::SetKeys => {
+                                if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
+                                  log::info!("another coordinator set key pair for {:?}", set);
+                                  break;
+                                }
+                              }
+                              PstTxType::RemoveParticipant(removed) => {
+                                if let Ok(Some(participants)) =
+                                  serai.participants(spec.set().network).await
+                                {
+                                  if !participants
+                                    .iter()
+                                    .any(|(participant, _)| participant.0 == removed)
+                                  {
+                                    log::info!(
+                                      "another coordinator published removal for {:?}",
+                                      hex::encode(removed)
+                                    );
+                                    break;
+                                  }
+                                }
+                              }
+                            }
                           }
 
                           log::error!(
-                            "couldn't connect to Serai node to publish set_keys TX: {:?}",
+                            "couldn't connect to Serai node to publish {tx_type:?} TX: {:?}",
                             e
                           );
                           tokio::time::sleep(core::time::Duration::from_secs(10)).await;

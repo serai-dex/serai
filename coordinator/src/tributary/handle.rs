@@ -32,7 +32,7 @@ use crate::{
     Accumulation,
     dkg_confirmer::DkgConfirmer,
     dkg_removal::DkgRemoval,
-    scanner::{RecognizedIdType, RIDTrait},
+    scanner::{RecognizedIdType, RIDTrait, PstTxType},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
     DataDb,
   },
@@ -174,7 +174,7 @@ pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
   FPtt: Future<Output = ()>,
   PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
@@ -615,6 +615,7 @@ pub(crate) async fn handle_application_tx<
 
           publish_serai_tx(
             spec.set(),
+            PstTxType::SetKeys,
             SeraiValidatorSets::set_keys(spec.set().network, key_pair, Signature(sig)),
           )
           .await;
@@ -628,6 +629,7 @@ pub(crate) async fn handle_application_tx<
 
     Transaction::DkgRemovalPreprocess(data) => {
       let signer = data.signed.signer;
+      // TODO: Only handle this if we're not actively removing this validator
       if (data.data.len() != 1) || (data.data[0].len() != 64) {
         fatal_slash::<D, _, _>(
           txn,
@@ -718,13 +720,25 @@ pub(crate) async fn handle_application_tx<
             return;
           };
 
+          // TODO: Only handle this if we're not actively removing any of the signers
+          // The created Substrate call will fail if a removed validator was one of the signers
+          // Since:
+          // 1) publish_serai_tx will block this task until the TX is published
+          // 2) We won't scan any more TXs/blocks until we handle this TX
+          // The TX *must* be successfully published *before* we start removing any more signers
+          // Accordingly, if the signers aren't currently being removed, they won't be removed
+          // by the time this transaction is successfully published *unless* a malicious 34%
+          // participates with the non-participating 33% to continue operation and produce a
+          // distinct removal (since the non-participating won't block in this block)
+          // This breaks BFT and is accordingly within bounds
+
           let tx = serai_client::SeraiValidatorSets::remove_participant(
             spec.set().network,
             Public(data.plan),
             signers,
             Signature(signature),
           );
-          publish_serai_tx(spec.set(), tx).await;
+          publish_serai_tx(spec.set(), PstTxType::RemoveParticipant(data.plan), tx).await;
         }
         Accumulation::Ready(DataSet::NotParticipating) => {}
         Accumulation::NotReady => {}

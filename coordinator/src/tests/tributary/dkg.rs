@@ -24,7 +24,10 @@ use processor_messages::{
 use tributary::{TransactionTrait, Tributary};
 
 use crate::{
-  tributary::{Transaction, TributarySpec, scanner::handle_new_blocks},
+  tributary::{
+    Transaction, TributarySpec,
+    scanner::{PstTxType, handle_new_blocks},
+  },
   tests::{
     MemProcessors, LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
@@ -92,7 +95,7 @@ async fn dkg_test() {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
-      |_, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      |_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
       &|_| async {
         panic!(
           "test tried to publish a new Tributary TX from handle_application_tx in new_processors"
@@ -123,7 +126,7 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after Commitments"
@@ -207,7 +210,7 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after some shares"
@@ -258,7 +261,7 @@ async fn dkg_test() {
     &keys[0],
     |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX") },
     &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),
@@ -331,7 +334,9 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    |set, tx| {
+    |set, tx_type, tx| {
+      assert_eq!(tx_type, PstTxType::SetKeys);
+
       let spec = spec.clone();
       let key_pair = key_pair.clone();
       async move {
