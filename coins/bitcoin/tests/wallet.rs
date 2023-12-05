@@ -279,6 +279,7 @@ async_sequential! {
       FEE
     ).unwrap();
     let needed_fee = tx.needed_fee();
+    let expected_id = tx.txid();
     let tx = sign(&keys, tx);
 
     assert_eq!(tx.output.len(), 3);
@@ -322,6 +323,7 @@ async_sequential! {
     let mut hash = *tx.txid().as_raw_hash().as_byte_array();
     hash.reverse();
     assert_eq!(tx, rpc.get_transaction(&hash).await.unwrap());
+    assert_eq!(expected_id, hash);
   }
 
   async fn test_data() {

@@ -149,11 +149,11 @@ impl Rpc {
 
   /// Get the hash of a block by the block's number.
   pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
-    let mut hash = *self
+    let mut hash = self
       .rpc_call::<BlockHash>("getblockhash", json!([number]))
       .await?
       .as_raw_hash()
-      .as_byte_array();
+      .to_byte_array();
     // bitcoin stores the inner bytes in reverse order.
     hash.reverse();
     Ok(hash)
