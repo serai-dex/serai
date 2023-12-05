@@ -13,6 +13,7 @@ use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
+  hashes::Hash,
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
@@ -243,6 +244,13 @@ impl SignableTransaction {
       prevouts: inputs.drain(..).map(|input| input.output).collect(),
       needed_fee,
     })
+  }
+
+  /// Returns the TX ID of the transaction this will create.
+  pub fn txid(&self) -> [u8; 32] {
+    let mut res = self.tx.txid().to_byte_array();
+    res.reverse();
+    res
   }
 
   /// Returns the outputs this transaction will create.

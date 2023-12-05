@@ -35,7 +35,7 @@ async fn mint_and_burn_test() {
 
       // Helper to mine a block on each network
       async fn mine_blocks(
-        handles: &Vec<Handles>,
+        handles: &[Handles],
         ops: &DockerOperations,
         producer: &mut usize,
         count: usize,

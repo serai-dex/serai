@@ -21,7 +21,7 @@ use bitcoin_serai::{
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
-    OutPoint, TxOut, Transaction, Block, Network as BNetwork,
+    Transaction, Block, Network as BNetwork,
   },
   wallet::{
     tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
@@ -37,7 +37,7 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Sequence, Script, Witness, TxIn, Amount as BAmount,
+  Amount as BAmount, Sequence, Script, Witness, OutPoint, TxOut, TxIn,
   transaction::Version,
 };
 
@@ -206,32 +206,22 @@ impl TransactionTrait<Bitcoin> for Transaction {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Eventuality {
-  // We need to bind to the plan. While we could bind to the plan ID via an OP_RETURN, plans will
-  // use distinct inputs and this is accordingly valid as a binding to a specific plan.
-  plan_binding_input: OutPoint,
-  outputs: Vec<TxOut>,
-}
+pub struct Eventuality([u8; 32]);
 
 impl EventualityTrait for Eventuality {
   fn lookup(&self) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(32 + 4);
-    self.plan_binding_input.consensus_encode(&mut buf).unwrap();
-    buf
+    self.0.to_vec()
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let plan_binding_input = OutPoint::consensus_decode(reader)
-      .map_err(|_| io::Error::other("couldn't decode outpoint in eventuality"))?;
-    let outputs = Vec::<TxOut>::consensus_decode(reader)
-      .map_err(|_| io::Error::other("couldn't decode outputs in eventuality"))?;
-    Ok(Eventuality { plan_binding_input, outputs })
+    let mut id = [0; 32];
+    reader
+      .read_exact(&mut id)
+      .map_err(|_| io::Error::other("couldn't decode ID in eventuality"))?;
+    Ok(Eventuality(id))
   }
   fn serialize(&self) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(32 + 4 + 4 + (self.outputs.len() * (8 + 32)));
-    self.plan_binding_input.consensus_encode(&mut buf).unwrap();
-    self.outputs.consensus_encode(&mut buf).unwrap();
-    buf
+    self.0.to_vec()
   }
 }
 
@@ -653,23 +643,7 @@ impl Network for Bitcoin {
       res: &mut HashMap<[u8; 32], (usize, Transaction)>,
     ) {
       for tx in &block.txdata[1 ..] {
-        let input = &tx.input[0].previous_output;
-        let mut lookup = Vec::with_capacity(4 + 32);
-        input.consensus_encode(&mut lookup).unwrap();
-        if let Some((plan, eventuality)) = eventualities.map.remove(&lookup) {
-          // Sanity, as this is guaranteed by how the lookup is performed
-          assert_eq!(input, &eventuality.plan_binding_input);
-          // If the multisig is honest, then the Eventuality's outputs should match the outputs of
-          // this transaction
-          // This panic is fine as this multisig being dishonest will require intervention on
-          // Substrate to trigger a slash, and then an update to the processor to handle the exact
-          // adjustments needed
-          // Panicking here is effectively triggering the halt we need to perform anyways
-          assert_eq!(
-            tx.output, eventuality.outputs,
-            "dishonest multisig spent input on distinct set of outputs"
-          );
-
+        if let Some((plan, _)) = eventualities.map.remove(tx.id().as_slice()) {
           res.insert(plan, (eventualities.block_number, tx.clone()));
         }
       }
@@ -744,13 +718,8 @@ impl Network for Bitcoin {
           RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction Transcript");
         transcript.append_message(b"plan", plan_id);
 
-        let plan_binding_input = *inputs[0].output.outpoint();
-        let outputs = signable.outputs().to_vec();
-
-        (
-          SignableTransaction { transcript, actual: signable },
-          Eventuality { plan_binding_input, outputs },
-        )
+        let eventuality = Eventuality(signable.txid());
+        (SignableTransaction { transcript, actual: signable }, eventuality)
       },
     ))
   }
@@ -785,8 +754,7 @@ impl Network for Bitcoin {
   }
 
   fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Transaction) -> bool {
-    (eventuality.plan_binding_input == tx.input[0].previous_output) &&
-      (eventuality.outputs == tx.output)
+    eventuality.0 == tx.id()
   }
 
   #[cfg(test)]
