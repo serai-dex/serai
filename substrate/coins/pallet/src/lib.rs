@@ -157,18 +157,18 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
-      let new_supply = Self::supply(balance.coin)
-        .checked_add(balance.amount.0)
-        .ok_or(Error::<T, I>::AmountOverflowed)?;
-
-      // skip the economics check for lp tokens.
       if !T::AllowMint::is_allowed(&balance) {
         Err(Error::<T, I>::MintNotAllowed)?;
       }
-      Supply::<T, I>::set(balance.coin, new_supply);
 
       // update the balance
       Self::increase_balance_internal(to, balance)?;
+
+      // update the supply
+      let new_supply = Self::supply(balance.coin)
+        .checked_add(balance.amount.0)
+        .ok_or(Error::<T, I>::AmountOverflowed)?;
+      Supply::<T, I>::set(balance.coin, new_supply);
 
       Self::deposit_event(Event::Mint { to, balance });
       Ok(())
