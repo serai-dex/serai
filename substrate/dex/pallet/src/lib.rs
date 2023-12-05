@@ -360,10 +360,10 @@ pub mod pallet {
       for coin in Pools::<T>::iter_keys() {
         // insert the new price to our oracle window
         // The spot price for 1 coin, in atomic units, to SRI is used
-        let pool_id = Self::get_pool_id(coin, Coin::native()).ok().unwrap();
-        let pool_account = Self::get_pool_account(pool_id);
-        let sri_balance = Self::get_balance(&pool_account, Coin::native());
-        let coin_balance = Self::get_balance(&pool_account, coin);
+        let Ok((sri_balance, coin_balance)) = Self::get_reserves(&Coin::native(), &coin) else {
+          continue;
+        };
+
         // We use 1 coin to handle rounding errors which may occur with atomic units
         // If we used atomic units, any coin whose atomic unit is worth less than SRI's atomic unit
         // would cause a 'price' of 0
@@ -754,7 +754,7 @@ pub mod pallet {
     /// Swap coins along a `path`, depositing in `send_to`.
     pub(crate) fn do_swap(
       sender: T::AccountId,
-      amounts: &Vec<SubstrateAmount>,
+      amounts: &[SubstrateAmount],
       path: BoundedVec<Coin, T::MaxSwapPathLength>,
       send_to: T::AccountId,
     ) -> Result<(), DispatchError> {
