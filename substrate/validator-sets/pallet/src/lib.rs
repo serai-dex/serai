@@ -611,16 +611,8 @@ pub mod pallet {
         }
       }
 
-      // If we're not in-set, or this doesn't decrease our key shares, allow immediate deallocation
-      let active = Self::in_set(network, account);
-      if (!active) || (!decreased_key_shares) {
-        if active {
-          // Since it's being immediately deallocated, decrease TotalAllocatedStake
-          TotalAllocatedStake::<T>::set(
-            network,
-            Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 - amount.0)),
-          );
-        }
+      // If we're not in-set, allow immediate deallocation
+      if !Self::in_set(network, account) {
         Self::deposit_event(Event::AllocationDecreased {
           validator: account,
           network,
