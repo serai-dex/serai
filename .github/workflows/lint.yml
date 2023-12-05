@@ -28,6 +28,14 @@ jobs:
       - name: Run Clippy
         run: cargo +${{ steps.nightly.outputs.version }} clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
 
+      # Also verify the lockfile isn't dirty
+      # This happens when someone edits a Cargo.toml yet doesn't do anything
+      # which causes the lockfile to be updated
+      # The above clippy run will cause it to be updated, so checking there's
+      # no differences present now performs the desired check
+      - name: Verify lockfile
+        run: git diff | wc -l | grep -x "0"
+
   deny:
     runs-on: ubuntu-latest
     steps:
