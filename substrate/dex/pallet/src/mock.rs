@@ -78,10 +78,12 @@ impl frame_system::Config for Test {
 
 impl coins::Config for Test {
   type RuntimeEvent = RuntimeEvent;
+  type AllowMint = ();
 }
 
 impl coins::Config<coins::Instance1> for Test {
   type RuntimeEvent = RuntimeEvent;
+  type AllowMint = ();
 }
 
 impl Config for Test {

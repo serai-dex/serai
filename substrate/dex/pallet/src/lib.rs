@@ -88,7 +88,7 @@ pub use pallet::*;
 
 use sp_runtime::{traits::TrailingZeroInput, DispatchError};
 
-use serai_primitives::{Coin, SubstrateAmount};
+use serai_primitives::{NetworkId, Coin, SubstrateAmount};
 
 use sp_std::prelude::*;
 pub use types::*;
@@ -154,11 +154,42 @@ pub mod pallet {
   #[pallet::storage]
   pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<Coin>, OptionQuery>;
 
+  #[pallet::storage]
+  #[pallet::getter(fn spot_price_for_block)]
+  pub type SpotPriceForBlock<T: Config> =
+    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, [u8; 8], ValueQuery>;
+
+  /// Moving window of oracle prices.
+  ///
+  /// The second [u8; 8] key is the amount's big endian bytes, and u16 is the amount of inclusions
+  /// in this multi-set.
+  #[pallet::storage]
+  #[pallet::getter(fn oracle_prices)]
+  pub type OraclePrices<T: Config> =
+    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], u16, OptionQuery>;
+  impl<T: Config> Pallet<T> {
+    // TODO: consider an algorithm which removes outliers? This algorithm might work a good bit
+    // better if we remove the bottom n values (so some value sustained over 90% of blocks instead
+    // of all blocks in the window).
+    /// Get the highest sustained value for this window.
+    /// This is actually the lowest price observed during the windows, as it's the price
+    /// all prices are greater than or equal to.
+    pub fn highest_sustained_price(coin: &Coin) -> Option<Amount> {
+      let mut iter = OraclePrices::<T>::iter_key_prefix(coin);
+      // the first key will be the lowest price due to the keys being lexicographically ordered.
+      iter.next().map(|amount| Amount(u64::from_be_bytes(amount)))
+    }
+  }
+
+  #[pallet::storage]
+  #[pallet::getter(fn oracle_value)]
+  pub type OracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+
   // Pallet's events.
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    /// A successful call of the `CretaPool` extrinsic will create this event.
+    /// A successful call of the `CreatePool` extrinsic will create this event.
     PoolCreated {
       /// The pool id associated with the pool. Note that the order of the coins may not be
       /// the same as the order specified in the create pool extrinsic.
@@ -240,6 +271,13 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      // assert that oracle windows size can fit into u16. Otherwise number of observants
+      // for a price in the `OraclePrices` map can overflow
+      // We don't want to make this const directly a u16 because it is used the block number
+      // calculations (which are done as u32s)
+      u16::try_from(ORACLE_WINDOW_SIZE).unwrap();
+
+      // create the pools
       for coin in &self.pools {
         Pallet::<T>::create_pool(*coin).unwrap();
       }
@@ -311,8 +349,64 @@ pub mod pallet {
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn integrity_test() {
-      assert!(T::MaxSwapPathLength::get() > 1, "the `MaxSwapPathLength` should be greater than 1",);
+    fn on_finalize(n: BlockNumberFor<T>) {
+      // we run this on on_finalize because we want to use the last price of the block for a coin.
+      // This prevents the exploit where a malicious block proposer spikes the price in either
+      // direction, then includes a swap in the other direction (ensuring they don't get arbitraged
+      // against)
+      // Since they'll have to leave the spike present at the end of the block, making the next
+      // block the one to include any arbitrage transactions (which there's no guarantee they'll
+      // produce), this cannot be done in a way without significant risk
+      for coin in Pools::<T>::iter_keys() {
+        // insert the new price to our oracle window
+        // The spot price for 1 coin, in atomic units, to SRI is used
+        let pool_id = Self::get_pool_id(coin, Coin::native()).ok().unwrap();
+        let pool_account = Self::get_pool_account(pool_id);
+        let sri_balance = Self::get_balance(&pool_account, Coin::native());
+        let coin_balance = Self::get_balance(&pool_account, coin);
+        // We use 1 coin to handle rounding errors which may occur with atomic units
+        // If we used atomic units, any coin whose atomic unit is worth less than SRI's atomic unit
+        // would cause a 'price' of 0
+        // If the decimals aren't large enough to provide sufficient buffer, use 10,000
+        let coin_decimals = coin.decimals().max(5);
+        let accuracy_increase =
+          HigherPrecisionBalance::from(SubstrateAmount::pow(10, coin_decimals));
+        let sri_per_coin = u64::try_from(
+          accuracy_increase * HigherPrecisionBalance::from(sri_balance) /
+            HigherPrecisionBalance::from(coin_balance),
+        )
+        .unwrap_or(u64::MAX);
+        let sri_per_coin = sri_per_coin.to_be_bytes();
+
+        SpotPriceForBlock::<T>::set(n, coin, sri_per_coin);
+
+        // Include this spot price into the multiset
+        {
+          let observed = OraclePrices::<T>::get(coin, sri_per_coin).unwrap_or(0);
+          OraclePrices::<T>::set(coin, sri_per_coin, Some(observed + 1));
+        }
+
+        // pop the earliest key from the window once we reach its full size.
+        if n >= ORACLE_WINDOW_SIZE.into() {
+          let start_of_window = n - ORACLE_WINDOW_SIZE.into();
+          let start_spot_price = Self::spot_price_for_block(start_of_window, coin);
+          SpotPriceForBlock::<T>::remove(start_of_window, coin);
+          // Remove this price from the multiset
+          OraclePrices::<T>::mutate_exists(coin, start_spot_price, |v| {
+            *v = Some(v.unwrap() - 1);
+            if *v == Some(0) {
+              *v = None;
+            }
+          });
+        }
+
+        // update the oracle value
+        let highest_sustained = Self::highest_sustained_price(&coin).unwrap_or(Amount(0));
+        let oracle_value = Self::oracle_value(coin).unwrap_or(Amount(0));
+        if highest_sustained > oracle_value {
+          OracleValue::<T>::set(coin, Some(highest_sustained));
+        }
+      }
     }
   }
 
@@ -337,6 +431,14 @@ pub mod pallet {
       Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token: coin });
 
       Ok(())
+    }
+
+    /// A hook to be called whenever a network's session is rotated.
+    pub fn on_new_session(network: NetworkId) {
+      // reset the oracle value
+      for coin in network.coins() {
+        OracleValue::<T>::set(*coin, Self::highest_sustained_price(coin));
+      }
     }
   }
 

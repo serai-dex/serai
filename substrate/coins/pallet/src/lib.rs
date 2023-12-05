@@ -1,7 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use serai_primitives::{Coin, SubstrateAmount, Balance};
+
+pub trait AllowMint {
+  fn is_allowed(balance: &Balance) -> bool;
+}
+
+impl AllowMint for () {
+  fn is_allowed(_: &Balance) -> bool {
+    true
+  }
+}
+
 #[frame_support::pallet]
 pub mod pallet {
+  use super::*;
   use sp_std::{vec::Vec, any::TypeId};
   use sp_core::sr25519::Public;
   use sp_runtime::{
@@ -23,6 +36,7 @@ pub mod pallet {
   #[pallet::config]
   pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
     type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    type AllowMint: AllowMint;
   }
 
   #[pallet::genesis_config]
@@ -43,6 +57,7 @@ pub mod pallet {
     AmountOverflowed,
     NotEnoughCoins,
     BurnWithInstructionNotAllowed,
+    MintNotAllowed,
   }
 
   #[pallet::event]
@@ -142,6 +157,10 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+      if !T::AllowMint::is_allowed(&balance) {
+        Err(Error::<T, I>::MintNotAllowed)?;
+      }
+
       // update the balance
       Self::increase_balance_internal(to, balance)?;
 

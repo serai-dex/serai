@@ -22,7 +22,8 @@ pub mod pallet {
   pub use validator_sets_primitives as primitives;
   use primitives::*;
 
-  use coins_pallet::Pallet as Coins;
+  use coins_pallet::{Pallet as Coins, AllowMint};
+  use dex_pallet::Pallet as Dex;
 
   use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
   use pallet_grandpa::{Pallet as Grandpa, AuthorityId as GrandpaAuthorityId};
@@ -31,6 +32,7 @@ pub mod pallet {
   pub trait Config:
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
+    + dex_pallet::Config
     + pallet_babe::Config
     + pallet_grandpa::Config
     + TypeInfo
@@ -333,6 +335,8 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn new_set(network: NetworkId) {
+      // TODO: prevent new set if it doesn't have enough stake for economic security.
+
       // Update CurrentSession
       let session = {
         let new_session = CurrentSession::<T>::get(network)
@@ -411,6 +415,8 @@ pub mod pallet {
     BadSignature,
     /// Validator wasn't registered or active.
     NonExistentValidator,
+    /// Deallocation would take the stake below what is required.
+    DeallocationWouldRemoveEconomicSecurity,
   }
 
   #[pallet::hooks]
@@ -560,7 +566,16 @@ pub mod pallet {
       account: T::AccountId,
       amount: Amount,
     ) -> Result<bool, DispatchError> {
-      // TODO: Check it's safe to decrease this set's stake by this amount
+      // Check it's safe to decrease this set's stake by this amount
+      let new_total_staked = Self::total_allocated_stake(network)
+        .unwrap()
+        .0
+        .checked_sub(amount.0)
+        .ok_or(Error::<T>::NotEnoughAllocated)?;
+      let required_stake = Self::required_stake_for_network(network);
+      if new_total_staked < required_stake {
+        Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
+      }
 
       let old_allocation =
         Self::allocation((network, account)).ok_or(Error::<T>::NonExistentValidator)?.0;
@@ -680,6 +695,8 @@ pub mod pallet {
         // - The current set was actually established with a completed handover protocol
         if (network == NetworkId::Serai) || Self::handover_completed(network, current_session) {
           Pallet::<T>::new_set(network);
+          // let the Dex know session is rotated.
+          Dex::<T>::on_new_session(network);
         }
       }
     }
@@ -738,6 +755,39 @@ pub mod pallet {
         session,
         validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
       );
+    }
+
+    /// Returns the required stake in terms SRI for a given `Balance`.
+    pub fn required_stake(balance: &Balance) -> SubstrateAmount {
+      use dex_pallet::HigherPrecisionBalance;
+
+      // This is inclusive to an increase in accuracy
+      let sri_per_coin = Dex::<T>::oracle_value(balance.coin).unwrap_or(Amount(0));
+
+      // See dex-pallet for the reasoning on these
+      let coin_decimals = balance.coin.decimals().max(5);
+      let accuracy_increase = HigherPrecisionBalance::from(SubstrateAmount::pow(10, coin_decimals));
+
+      let total_coin_value = u64::try_from(
+        HigherPrecisionBalance::from(balance.amount.0) *
+          HigherPrecisionBalance::from(sri_per_coin.0) /
+          accuracy_increase,
+      )
+      .unwrap_or(u64::MAX);
+
+      // required stake formula (COIN_VALUE * 1.5) + margin(20%)
+      let required_stake = total_coin_value.saturating_mul(3).saturating_div(2);
+      required_stake.saturating_add(total_coin_value.saturating_div(5))
+    }
+
+    /// Returns the current total required stake for a given `network`.
+    pub fn required_stake_for_network(network: NetworkId) -> SubstrateAmount {
+      let mut total_required = 0;
+      for coin in network.coins() {
+        let supply = Coins::<T>::supply(coin);
+        total_required += Self::required_stake(&Balance { coin: *coin, amount: Amount(supply) });
+      }
+      total_required
     }
   }
 
@@ -866,6 +916,7 @@ pub mod pallet {
             Err(Error::DeallocationWouldRemoveFaultTolerance) |
             Err(Error::NonExistentDeallocation) |
             Err(Error::NonExistentValidator) |
+            Err(Error::DeallocationWouldRemoveEconomicSecurity) |
             Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
             Err(Error::__Ignore(_, _)) => unreachable!(),
             Ok(()) => (),
@@ -979,6 +1030,18 @@ pub mod pallet {
     // Explicitly provide a pre-dispatch which calls validate_unsigned
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
+    }
+  }
+
+  impl<T: Config> AllowMint for Pallet<T> {
+    fn is_allowed(balance: &Balance) -> bool {
+      // get the required stake
+      let current_required = Self::required_stake_for_network(balance.coin.network());
+      let new_required = current_required + Self::required_stake(balance);
+
+      // get the total stake for the network & compare.
+      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
+      staked.0 >= new_required
     }
   }
 
