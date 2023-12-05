@@ -5,7 +5,7 @@ use sp_core::{sr25519::Public, Pair};
 use serai_client::{
   primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
-    primitives::{Session, ValidatorSet, musig_key},
+    primitives::{Session, ValidatorSet, KeyPair, musig_key},
     ValidatorSetsEvent,
   },
   Serai,
@@ -28,12 +28,12 @@ serai_test!(
     OsRng.fill_bytes(&mut ristretto_key);
     let mut external_key = vec![0; 33];
     OsRng.fill_bytes(&mut external_key);
-    let key_pair = (Public(ristretto_key), external_key.try_into().unwrap());
+    let key_pair = KeyPair(Public(ristretto_key), external_key.try_into().unwrap());
 
     // Make sure the genesis is as expected
     assert_eq!(
       serai
-        .as_of(serai.block_by_number(0).await.unwrap().unwrap().hash())
+        .as_of(serai.finalized_block_by_number(0).await.unwrap().unwrap().hash())
         .validator_sets()
         .new_set_events()
         .await
@@ -48,7 +48,7 @@ serai_test!(
     );
 
     {
-      let vs_serai = serai.with_current_latest_block().await.unwrap().validator_sets();
+      let vs_serai = serai.as_of_latest_finalized_block().await.unwrap().validator_sets();
       let participants = vs_serai.participants(set.network).await
         .unwrap()
         .unwrap()

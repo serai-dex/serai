@@ -10,10 +10,7 @@ use frost::{Participant, ThresholdParams, tests::clone_without};
 use serai_db::{DbTxn, Db, MemDb};
 
 use sp_application_crypto::sr25519;
-use serai_client::{
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
-};
+use serai_client::validator_sets::primitives::{Session, KeyPair};
 
 use messages::key_gen::*;
 use crate::{
@@ -21,8 +18,7 @@ use crate::{
   key_gen::{KeyConfirmed, KeyGen},
 };
 
-const ID: KeyGenId =
-  KeyGenId { set: ValidatorSet { session: Session(1), network: NetworkId::Monero }, attempt: 3 };
+const ID: KeyGenId = KeyGenId { session: Session(1), attempt: 3 };
 
 pub async fn test_key_gen<N: Network>() {
   let mut entropies = HashMap::new();
@@ -139,7 +135,11 @@ pub async fn test_key_gen<N: Network>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen
-      .confirm(&mut txn, ID.set, (sr25519::Public(res.0), res.1.clone().try_into().unwrap()))
+      .confirm(
+        &mut txn,
+        ID.session,
+        KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
+      )
       .await;
     txn.commit();
 

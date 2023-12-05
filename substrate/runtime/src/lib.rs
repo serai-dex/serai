@@ -259,9 +259,9 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
 impl signals::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   // 1 week
-  type ValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
+  type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
   // 2 weeks
-  type LockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
+  type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 
 impl in_instructions::Config for Runtime {

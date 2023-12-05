@@ -207,10 +207,12 @@ impl BlockTrait<Monero> for Block {
     let b = timestamps[n];
     #[rustfmt::skip] // Enables Ctrl+F'ing for everything after the `= `
     let res = (a/2) + (b/2) + ((a - 2*(a/2)) + (b - 2*(b/2)))/2;
-    // Techniaslly, res may be 1 if all prior blocks had a timestamp by 0, which would break
+    // Technically, res may be 1 if all prior blocks had a timestamp by 0, which would break
     // monotonicity with our above definition of height as time
-    // Ensure monotonicity by increasing this value by the window size
-    res + BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW
+    // Monero also solely requires the block's time not be less than the median, it doesn't ensure
+    // it advances the median forward
+    // Ensure monotonicity despite both these issues by adding the block number to the median time
+    res + u64::try_from(self.number()).unwrap()
   }
 }
 
@@ -692,7 +694,7 @@ impl Network for Monero {
     // https://github.com/serai-dex/serai/issues/198
     sleep(std::time::Duration::from_millis(100)).await;
 
-    #[derive(serde::Deserialize, Debug)]
+    #[derive(Debug, serde::Deserialize)]
     struct EmptyResponse {}
     let _: EmptyResponse = self
       .rpc

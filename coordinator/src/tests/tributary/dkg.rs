@@ -10,6 +10,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
 use sp_runtime::traits::Verify;
+use serai_client::validator_sets::primitives::KeyPair;
 
 use tokio::time::sleep;
 
@@ -23,7 +24,10 @@ use processor_messages::{
 use tributary::{TransactionTrait, Tributary};
 
 use crate::{
-  tributary::{Transaction, TributarySpec, scanner::handle_new_blocks},
+  tributary::{
+    Transaction, TributarySpec,
+    scanner::{PstTxType, handle_new_blocks},
+  },
   tests::{
     MemProcessors, LocalP2p,
     tributary::{new_keys, new_spec, new_tributaries, run_tributaries, wait_for_tx_inclusion},
@@ -49,7 +53,7 @@ async fn dkg_test() {
 
     let mut tx =
       Transaction::DkgCommitments(attempt, vec![commitments], Transaction::empty_signed());
-    tx.sign(&mut OsRng, spec.genesis(), key, 0);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
 
@@ -84,14 +88,19 @@ async fn dkg_test() {
   ) -> (MemDb, MemProcessors) {
     let mut scanner_db = MemDb::new();
     let processors = MemProcessors::new();
-    handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
       &mut scanner_db,
       key,
-      |_, _, _, _, _| async {
+      |_, _, _, _| async {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
-      |_, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      |_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      &|_| async {
+        panic!(
+          "test tried to publish a new Tributary TX from handle_application_tx in new_processors"
+        )
+      },
       spec,
       &tributary.reader(),
     )
@@ -110,14 +119,19 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _, _| async {
+    |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    &|_| async {
+      panic!(
+        "test tried to publish a new Tributary TX from handle_application_tx after Commitments"
+      )
+    },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -131,7 +145,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );
@@ -149,7 +163,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );
@@ -176,7 +190,7 @@ async fn dkg_test() {
       confirmation_nonces: crate::tributary::dkg_confirmation_nonces(key, &spec, 0),
       signed: Transaction::empty_signed(),
     };
-    tx.sign(&mut OsRng, spec.genesis(), key, 1);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
 
@@ -189,14 +203,19 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _, _| async {
+    |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    &|_| async {
+      panic!(
+        "test tried to publish a new Tributary TX from handle_application_tx after some shares"
+      )
+    },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -213,7 +232,7 @@ async fn dkg_test() {
   // Each scanner should emit a distinct shares message
   let shares_for = |i: usize| {
     CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Shares {
-      id: KeyGenId { set: spec.set(), attempt: 0 },
+      id: KeyGenId { session: spec.set().session, attempt: 0 },
       shares: vec![txs
         .iter()
         .enumerate()
@@ -237,12 +256,13 @@ async fn dkg_test() {
   };
 
   // Any scanner which has handled the prior blocks should only emit the new event
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
+    |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
     &processors,
-    |_, _| async { panic!("test tried to publish a new Serai TX") },
+    |_, _, _| async { panic!("test tried to publish a new Serai TX") },
+    &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),
   )
@@ -266,7 +286,7 @@ async fn dkg_test() {
     assert_eq!(
       msgs.pop_front().unwrap(),
       CoordinatorMessage::KeyGen(key_gen::CoordinatorMessage::Commitments {
-        id: KeyGenId { set: spec.set(), attempt: 0 },
+        id: KeyGenId { session: spec.set().session, attempt: 0 },
         commitments: expected_commitments
       })
     );
@@ -279,7 +299,7 @@ async fn dkg_test() {
   OsRng.fill_bytes(&mut substrate_key);
   let mut network_key = vec![0; usize::try_from((OsRng.next_u64() % 32) + 32).unwrap()];
   OsRng.fill_bytes(&mut network_key);
-  let key_pair = (serai_client::Public(substrate_key), network_key.try_into().unwrap());
+  let key_pair = KeyPair(serai_client::Public(substrate_key), network_key.try_into().unwrap());
 
   let mut txs = vec![];
   for (i, key) in keys.iter().enumerate() {
@@ -295,7 +315,7 @@ async fn dkg_test() {
     txn.commit();
 
     let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());
-    tx.sign(&mut OsRng, spec.genesis(), key, 2);
+    tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
   let block_before_tx = tributaries[0].1.tip().await;
@@ -307,26 +327,37 @@ async fn dkg_test() {
   }
 
   // The scanner should successfully try to publish a transaction with a validly signed signature
-  handle_new_blocks::<_, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut scanner_db,
     &keys[0],
-    |_, _, _, _, _| async {
+    |_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    |set, tx| {
+    |set, tx_type, tx| {
+      assert_eq!(tx_type, PstTxType::SetKeys);
+
       let spec = spec.clone();
       let key_pair = key_pair.clone();
       async move {
         // Version, Pallet, Call, Network, Key Pair, Signature
         let expected_len = 1 + 1 + 1 + 1 + 32 + 1 + key_pair.1.len() + 64;
-        assert_eq!(tx.len(), expected_len);
+        // It's length prefixed
+        assert_eq!(tx.len(), 2 + expected_len);
+        let expected_len = u16::try_from(expected_len).unwrap();
+
+        // Check the encoded length
+        // This is the compact encoding from SCALE, specifically the two-byte length encoding case
+        let bottom_six = expected_len & 0b111111;
+        let upper_eight = expected_len >> 6;
+        assert_eq!(u8::try_from((bottom_six << 2) | 1).unwrap(), tx[0]);
+        assert_eq!(u8::try_from(upper_eight).unwrap(), tx[1]);
 
         // Version
-        assert_eq!(tx[0], 4);
+        assert_eq!(tx[2], 4);
 
         // Call
-        let tx = serai_client::runtime::RuntimeCall::decode(&mut &tx[1 ..]).unwrap();
+        let tx = serai_client::runtime::RuntimeCall::decode(&mut &tx[3 ..]).unwrap();
         match tx {
           serai_client::runtime::RuntimeCall::ValidatorSets(
             serai_client::runtime::validator_sets::Call::set_keys {
@@ -358,6 +389,7 @@ async fn dkg_test() {
         }
       }
     },
+    &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),
   )

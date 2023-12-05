@@ -11,6 +11,7 @@ use frost::{
 use log::{info, debug, warn, error};
 
 use scale::Encode;
+use serai_client::validator_sets::primitives::Session;
 use messages::sign::*;
 
 pub use serai_db::*;
@@ -51,7 +52,6 @@ impl CompletedOnChainDb {
         .unwrap_or_default()
         .into_iter()
         .filter(|active| active != id)
-        .flatten()
         .collect::<Vec<_>>(),
     );
   }
@@ -132,6 +132,7 @@ pub struct Signer<N: Network, D: Db> {
 
   network: N,
 
+  session: Session,
   keys: Vec<ThresholdKeys<N::Curve>>,
 
   signable: HashMap<[u8; 32], N::SignableTransaction>,
@@ -173,13 +174,14 @@ impl<N: Network, D: Db> Signer<N, D> {
       tokio::time::sleep(core::time::Duration::from_secs(5 * 60)).await;
     }
   }
-  pub fn new(network: N, keys: Vec<ThresholdKeys<N::Curve>>) -> Signer<N, D> {
+  pub fn new(network: N, session: Session, keys: Vec<ThresholdKeys<N::Curve>>) -> Signer<N, D> {
     assert!(!keys.is_empty());
     Signer {
       db: PhantomData,
 
       network,
 
+      session,
       keys,
 
       signable: HashMap::new(),
@@ -251,11 +253,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     self.signing.remove(&id);
 
     // Emit the event for it
-    ProcessorMessage::Completed {
-      key: self.keys[0].group_key().to_bytes().as_ref().to_vec(),
-      id,
-      tx: tx_id.as_ref().to_vec(),
-    }
+    ProcessorMessage::Completed { session: self.session, id, tx: tx_id.as_ref().to_vec() }
   }
 
   #[must_use]
@@ -372,7 +370,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    let id = SignId { key: self.keys[0].group_key().to_bytes().as_ref().to_vec(), id, attempt };
+    let id = SignId { session: self.session, id, attempt };
 
     info!("signing for {} #{}", hex::encode(id.id), id.attempt);
 
@@ -604,7 +602,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
       CoordinatorMessage::Reattempt { id } => self.attempt(txn, id.id, id.attempt).await,
 
-      CoordinatorMessage::Completed { key: _, id, tx: mut tx_vec } => {
+      CoordinatorMessage::Completed { session: _, id, tx: mut tx_vec } => {
         let mut tx = <N::Transaction as Transaction<N>>::Id::default();
         if tx.as_ref().len() != tx_vec.len() {
           let true_len = tx_vec.len();

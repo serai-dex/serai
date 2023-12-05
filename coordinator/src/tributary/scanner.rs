@@ -13,7 +13,7 @@ use serai_client::{validator_sets::primitives::ValidatorSet, Serai};
 use serai_db::DbTxn;
 
 use tributary::{
-  TransactionKind, Transaction as TributaryTransaction, Block, TributaryReader,
+  TransactionKind, Transaction as TributaryTransaction, TransactionError, Block, TributaryReader,
   tendermint::{
     tx::{TendermintTx, Evidence, decode_signed_message},
     TendermintNetwork,
@@ -35,20 +35,29 @@ pub enum RecognizedIdType {
 }
 
 pub(crate) trait RIDTrait<FRid>:
-  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>, u32) -> FRid
+  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
 {
 }
-impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>, u32) -> FRid>
-  RIDTrait<FRid> for F
+impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid>
+  for F
 {
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PstTxType {
+  SetKeys,
+  RemoveParticipant([u8; 32]),
+}
+
 // Handle a specific Tributary block
+#[allow(clippy::too_many_arguments)]
 async fn handle_block<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
@@ -58,12 +67,12 @@ async fn handle_block<
   recognized_id: RID,
   processors: &Pro,
   publish_serai_tx: PST,
+  publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   block: Block<Transaction>,
 ) {
   log::info!("found block for Tributary {:?}", spec.set());
 
-  let genesis = spec.genesis();
   let hash = block.hash();
 
   let mut event_id = 0;
@@ -100,19 +109,23 @@ async fn handle_block<
 
         // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
         // mark the node as fatally slashed
-        fatal_slash::<D>(
+        fatal_slash::<D, _, _>(
           &mut txn,
-          genesis,
+          spec,
+          publish_tributary_tx,
+          key,
           msgs.0.msg.sender,
           &format!("invalid tendermint messages: {:?}", msgs),
-        );
+        )
+        .await;
       }
       TributaryTransaction::Application(tx) => {
-        handle_application_tx::<D, _, _, _, _, _>(
+        handle_application_tx::<D, _, _, _, _, _, _, _>(
           tx,
           spec,
           processors,
           publish_serai_tx.clone(),
+          publish_tributary_tx,
           key,
           recognized_id.clone(),
           &mut txn,
@@ -130,11 +143,14 @@ async fn handle_block<
   // TODO: Trigger any necessary re-attempts
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
+  FPtt: Future<Output = ()>,
+  PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
@@ -144,6 +160,7 @@ pub(crate) async fn handle_new_blocks<
   recognized_id: RID,
   processors: &Pro,
   publish_serai_tx: PST,
+  publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
 ) {
@@ -165,12 +182,13 @@ pub(crate) async fn handle_new_blocks<
       }
     }
 
-    handle_block::<_, _, _, _, _, _, P>(
+    handle_block::<_, _, _, _, _, _, _, _, P>(
       db,
       key,
       recognized_id.clone(),
       processors,
       publish_serai_tx.clone(),
+      publish_tributary_tx,
       spec,
       block,
     )
@@ -222,12 +240,12 @@ pub(crate) async fn scan_tributaries_task<
               // the next block occurs
               let next_block_notification = tributary.next_block_notification().await;
 
-              handle_new_blocks::<_, _, _, _, _, _, P>(
+              handle_new_blocks::<_, _, _, _, _, _, _, _, P>(
                 &mut tributary_db,
                 &key,
                 recognized_id.clone(),
                 &processors,
-                |set, tx| {
+                |set, tx_type, tx| {
                   let serai = serai.clone();
                   async move {
                     loop {
@@ -240,40 +258,74 @@ pub(crate) async fn scan_tributaries_task<
                         // creation
                         // TODO2: Differentiate connection errors from invariants
                         Err(e) => {
-                          if let Ok(serai) = serai.with_current_latest_block().await {
+                          if let Ok(serai) = serai.as_of_latest_finalized_block().await {
                             let serai = serai.validator_sets();
-                            // Check if this failed because the keys were already set by someone
-                            // else
-                            if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
-                              log::info!("another coordinator set key pair for {:?}", set);
-                              break;
-                            }
 
-                            // The above block may return false if the keys have been pruned from
-                            // the state
-                            // Check if this session is no longer the latest session, meaning it at
-                            // some point did set keys, and we're just operating off very
-                            // historical data
+                            // The following block is irrelevant, and can/likely will fail, if
+                            // we're publishing a TX for an old session
+                            // If we're on a newer session, move on
                             if let Ok(Some(current_session)) =
                               serai.session(spec.set().network).await
                             {
                               if current_session.0 > spec.set().session.0 {
                                 log::warn!(
-                                  "trying to set keys for a set which isn't the latest {:?}",
+                                  "trying to publish a TX relevant to a set {} {:?}",
+                                  "which isn't the latest",
                                   set
                                 );
                                 break;
                               }
                             }
+
+                            // Check if someone else published the TX in question
+                            match tx_type {
+                              PstTxType::SetKeys => {
+                                if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
+                                  log::info!("another coordinator set key pair for {:?}", set);
+                                  break;
+                                }
+                              }
+                              PstTxType::RemoveParticipant(removed) => {
+                                if let Ok(Some(participants)) =
+                                  serai.participants(spec.set().network).await
+                                {
+                                  if !participants
+                                    .iter()
+                                    .any(|(participant, _)| participant.0 == removed)
+                                  {
+                                    log::info!(
+                                      "another coordinator published removal for {:?}",
+                                      hex::encode(removed)
+                                    );
+                                    break;
+                                  }
+                                }
+                              }
+                            }
                           }
 
                           log::error!(
-                            "couldn't connect to Serai node to publish set_keys TX: {:?}",
+                            "couldn't connect to Serai node to publish {tx_type:?} TX: {:?}",
                             e
                           );
                           tokio::time::sleep(core::time::Duration::from_secs(10)).await;
                         }
                       }
+                    }
+                  }
+                },
+                &|tx| {
+                  let tributary = tributary.clone();
+                  async move {
+                    match tributary.add_transaction(tx.clone()).await {
+                      Ok(_) => {}
+                      // Can happen as this occurs on a distinct DB TXN
+                      Err(TransactionError::InvalidNonce) => {
+                        log::warn!(
+                          "publishing TX {tx:?} returned InvalidNonce. was it already added?"
+                        )
+                      }
+                      Err(e) => panic!("created an invalid transaction: {e:?}"),
                     }
                   }
                 },

@@ -156,7 +156,7 @@ fn signed_transaction() {
   let signer = tx.1.signer;
 
   let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[signer]);
-  assert_eq!(blockchain.next_nonce(signer), Some(0));
+  assert_eq!(blockchain.next_nonce(&signer, &[]), Some(0));
 
   let test = |blockchain: &mut Blockchain<MemDb, SignedTransaction>,
               mempool: Vec<Transaction<SignedTransaction>>| {
@@ -165,11 +165,11 @@ fn signed_transaction() {
       let Transaction::Application(tx) = tx else {
         panic!("tendermint tx found");
       };
-      let next_nonce = blockchain.next_nonce(signer).unwrap();
+      let next_nonce = blockchain.next_nonce(&signer, &[]).unwrap();
       blockchain
         .add_transaction::<N>(true, Transaction::Application(tx), validators.clone())
         .unwrap();
-      assert_eq!(next_nonce + 1, blockchain.next_nonce(signer).unwrap());
+      assert_eq!(next_nonce + 1, blockchain.next_nonce(&signer, &[]).unwrap());
     }
     let block = blockchain.build_block::<N>(validators.clone());
     assert_eq!(block, Block::new(blockchain.tip(), vec![], mempool.clone()));
@@ -192,7 +192,7 @@ fn signed_transaction() {
 
   // Test with a single nonce
   test(&mut blockchain, vec![Transaction::Application(tx)]);
-  assert_eq!(blockchain.next_nonce(signer), Some(1));
+  assert_eq!(blockchain.next_nonce(&signer, &[]), Some(1));
 
   // Test with a flood of nonces
   let mut mempool = vec![];
@@ -202,7 +202,7 @@ fn signed_transaction() {
     )));
   }
   test(&mut blockchain, mempool);
-  assert_eq!(blockchain.next_nonce(signer), Some(64));
+  assert_eq!(blockchain.next_nonce(&signer, &[]), Some(64));
 }
 
 #[test]

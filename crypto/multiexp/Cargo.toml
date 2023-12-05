@@ -32,7 +32,7 @@ k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic"
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
-std = ["std-shims/std", "zeroize/std", "ff/std", "rand_core/std"]
+std = ["std-shims/std", "zeroize/std", "ff/std", "rand_core?/std"]
 
 batch = ["rand_core"]
 

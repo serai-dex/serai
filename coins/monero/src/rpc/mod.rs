@@ -60,7 +60,7 @@ pub enum RpcError {
   #[cfg_attr(feature = "std", error("connection error ({0})"))]
   ConnectionError(String),
   #[cfg_attr(feature = "std", error("invalid node ({0})"))]
-  InvalidNode(&'static str),
+  InvalidNode(String),
   #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
   UnsupportedProtocol(usize),
   #[cfg_attr(feature = "std", error("transactions not found"))]
@@ -78,11 +78,11 @@ pub enum RpcError {
 }
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
-  hex::decode(value).map_err(|_| RpcError::InvalidNode("expected hex wasn't hex"))
+  hex::decode(value).map_err(|_| RpcError::InvalidNode("expected hex wasn't hex".to_string()))
 }
 
 fn hash_hex(hash: &str) -> Result<[u8; 32], RpcError> {
-  rpc_hex(hash)?.try_into().map_err(|_| RpcError::InvalidNode("hash wasn't 32-bytes"))
+  rpc_hex(hash)?.try_into().map_err(|_| RpcError::InvalidNode("hash wasn't 32-bytes".to_string()))
 }
 
 fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
@@ -143,9 +143,9 @@ impl<R: RpcConnection> Rpc<R> {
       )
       .await?;
     let res_str = std_shims::str::from_utf8(&res)
-      .map_err(|_| RpcError::InvalidNode("response wasn't utf-8"))?;
+      .map_err(|_| RpcError::InvalidNode("response wasn't utf-8".to_string()))?;
     serde_json::from_str(res_str)
-      .map_err(|_| RpcError::InvalidNode("response wasn't json: {res_str}"))
+      .map_err(|_| RpcError::InvalidNode(format!("response wasn't json: {res_str}")))
   }
 
   /// Perform a JSON-RPC call with the specified method with the provided parameters
@@ -254,7 +254,9 @@ impl<R: RpcConnection> Rpc<R> {
         // This does run a few keccak256 hashes, which is pointless if the node is trusted
         // In exchange, this provides resilience against invalid/malicious nodes
         if tx.hash() != hashes[i] {
-          Err(RpcError::InvalidNode("replied with transaction wasn't the requested transaction"))?;
+          Err(RpcError::InvalidNode(
+            "replied with transaction wasn't the requested transaction".to_string(),
+          ))?;
         }
 
         Ok(tx)
@@ -295,9 +297,9 @@ impl<R: RpcConnection> Rpc<R> {
       self.json_rpc_call("get_block", Some(json!({ "hash": hex::encode(hash) }))).await?;
 
     let block = Block::read::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref())
-      .map_err(|_| RpcError::InvalidNode("invalid block"))?;
+      .map_err(|_| RpcError::InvalidNode("invalid block".to_string()))?;
     if block.hash() != hash {
-      Err(RpcError::InvalidNode("different block than requested (hash)"))?;
+      Err(RpcError::InvalidNode("different block than requested (hash)".to_string()))?;
     }
     Ok(block)
   }
@@ -312,7 +314,7 @@ impl<R: RpcConnection> Rpc<R> {
       self.json_rpc_call("get_block", Some(json!({ "height": number }))).await?;
 
     let block = Block::read::<&[u8]>(&mut rpc_hex(&res.blob)?.as_ref())
-      .map_err(|_| RpcError::InvalidNode("invalid block"))?;
+      .map_err(|_| RpcError::InvalidNode("invalid block".to_string()))?;
 
     // Make sure this is actually the block for this number
     match block.miner_tx.prefix.inputs.first() {
@@ -320,10 +322,12 @@ impl<R: RpcConnection> Rpc<R> {
         if usize::try_from(*actual).unwrap() == number {
           Ok(block)
         } else {
-          Err(RpcError::InvalidNode("different block than requested (number)"))
+          Err(RpcError::InvalidNode("different block than requested (number)".to_string()))
         }
       }
-      _ => Err(RpcError::InvalidNode("block's miner_tx didn't have an input of kind Input::Gen")),
+      _ => Err(RpcError::InvalidNode(
+        "block's miner_tx didn't have an input of kind Input::Gen".to_string(),
+      )),
     }
   }
 
@@ -493,7 +497,7 @@ impl<R: RpcConnection> Rpc<R> {
 
       read_object(&mut indexes)
     })()
-    .map_err(|_| RpcError::InvalidNode("invalid binary response"))
+    .map_err(|_| RpcError::InvalidNode("invalid binary response".to_string()))
   }
 
   /// Get the output distribution, from the specified height to the specified height (both
@@ -582,7 +586,9 @@ impl<R: RpcConnection> Rpc<R> {
         // invalid keys may honestly exist on the blockchain
         // Only a recent hard fork checked output keys were valid points
         let Some(key) = CompressedEdwardsY(
-          rpc_hex(&out.key)?.try_into().map_err(|_| RpcError::InvalidNode("non-32-byte point"))?,
+          rpc_hex(&out.key)?
+            .try_into()
+            .map_err(|_| RpcError::InvalidNode("non-32-byte point".to_string()))?,
         )
         .decompress() else {
           return Ok(None);

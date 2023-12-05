@@ -24,6 +24,7 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../../in-instructions/pallet", default-features = false }
 
 [features]
 std = [
@@ -38,6 +39,7 @@ std = [
 
   "serai-primitives/std",
   "validator-sets-pallet/std",
+  "in-instructions-pallet/std",
 ]
 
 runtime-benchmarks = [

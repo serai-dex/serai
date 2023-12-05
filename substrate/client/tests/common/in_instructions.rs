@@ -10,7 +10,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
-  validator_sets::primitives::{Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
     InInstructionsEvent,
@@ -26,11 +26,11 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   let set = ValidatorSet { session: Session(0), network: batch.network };
   let pair = insecure_pair_from_name(&format!("ValidatorSet {:?}", set));
   let keys = if let Some(keys) =
-    serai.with_current_latest_block().await.unwrap().validator_sets().keys(set).await.unwrap()
+    serai.as_of_latest_finalized_block().await.unwrap().validator_sets().keys(set).await.unwrap()
   {
     keys
   } else {
-    let keys = (pair.public(), vec![].try_into().unwrap());
+    let keys = KeyPair(pair.public(), vec![].try_into().unwrap());
     set_keys(serai, set, keys.clone()).await;
     keys
   };

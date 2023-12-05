@@ -31,7 +31,7 @@ scale = { package = "parity-scale-codec", version = "3" }
 serai-client = { path = "../../substrate/client", features = ["serai"] }
 serai-message-queue = { path = "../../message-queue" }
 
-serde_json = { version = "1", default-features = false }
+borsh = { version = "1", features = ["de_strict_order"] }
 
 tokio = { version = "1", features = ["time"] }
 

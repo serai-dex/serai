@@ -2,24 +2,12 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use scale::Encode;
-
 use sp_io::hashing::blake2_256;
-use sp_runtime::RuntimeDebug;
 
 use serai_primitives::{BlockHash, NetworkId};
 
 pub use in_instructions_primitives as primitives;
 use primitives::*;
-
-#[derive(Clone, Copy, Encode, RuntimeDebug)]
-#[cfg_attr(feature = "std", derive(scale::Decode, thiserror::Error))]
-pub enum PalletError {
-  #[cfg_attr(feature = "std", error("batch for unrecognized network"))]
-  UnrecognizedNetwork,
-  #[cfg_attr(feature = "std", error("invalid signature for batch"))]
-  InvalidSignature,
-}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -55,6 +43,7 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: NetworkId, id: u32, index: u32 },
+    Halt { network: NetworkId },
   }
 
   #[pallet::error]
@@ -69,19 +58,23 @@ pub mod pallet {
   // The ID of the last executed Batch for a network.
   #[pallet::storage]
   #[pallet::getter(fn batches)]
-  pub(crate) type LastBatch<T: Config> = StorageMap<_, Blake2_256, NetworkId, u32, OptionQuery>;
+  pub(crate) type LastBatch<T: Config> = StorageMap<_, Identity, NetworkId, u32, OptionQuery>;
 
   // The last Serai block in which this validator set included a batch
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
   pub(crate) type LastBatchBlock<T: Config> =
-    StorageMap<_, Blake2_256, NetworkId, BlockNumberFor<T>, OptionQuery>;
+    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
+
+  // Halted networks.
+  #[pallet::storage]
+  pub(crate) type Halted<T: Config> = StorageMap<_, Identity, NetworkId, (), OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
   #[pallet::getter(fn latest_network_block)]
   pub(crate) type LatestNetworkBlock<T: Config> =
-    StorageMap<_, Blake2_256, NetworkId, BlockHash, OptionQuery>;
+    StorageMap<_, Identity, NetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
     // Use a dedicated transaction layer when executing this InInstruction
@@ -208,6 +201,12 @@ pub mod pallet {
       }
       Ok(())
     }
+
+    pub fn halt(network: NetworkId) -> Result<(), DispatchError> {
+      Halted::<T>::set(network, Some(()));
+      Self::deposit_event(Event::Halt { network });
+      Ok(())
+    }
   }
 
   fn keys_for_network<T: Config>(
@@ -301,6 +300,10 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
+      if Halted::<T>::contains_key(network) {
+        Err(InvalidTransaction::Custom(1))?;
+      }
+
       // If it wasn't valid by the prior key, meaning it was valid by the current key, the current
       // key is publishing `Batch`s. This should only happen once the current key has verified all
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
@@ -341,7 +344,7 @@ pub mod pallet {
         // Accordingly, there's no value in writing code to fully slash the network, when such an
         // even would require a runtime upgrade to fully resolve anyways
         if instruction.balance.coin.network() != batch.batch.network {
-          Err(InvalidTransaction::Custom(1))?;
+          Err(InvalidTransaction::Custom(2))?;
         }
       }
 

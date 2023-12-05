@@ -1,11 +1,11 @@
-use scale::{Encode, Decode};
-
-pub use serai_db::*;
+use scale::Encode;
 
 use serai_client::{
   primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
+  validator_sets::primitives::{Session, ValidatorSet},
 };
+
+pub use serai_db::*;
 
 create_db! {
   SubstrateDb {
@@ -84,24 +84,6 @@ impl<D: Db> SubstrateDb<D> {
   pub fn handle_event(txn: &mut D::Transaction<'_>, id: [u8; 32], index: u32) {
     assert!(!Self::handled_event(txn, id, index));
     txn.put(Self::event_key(&id, index), []);
-  }
-
-  fn session_key(key: &[u8]) -> Vec<u8> {
-    Self::substrate_key(b"session", key)
-  }
-  pub fn session_for_key<G: Get>(getter: &G, key: &[u8]) -> Option<Session> {
-    getter.get(Self::session_key(key)).map(|bytes| Session::decode(&mut bytes.as_ref()).unwrap())
-  }
-  pub fn save_session_for_keys(txn: &mut D::Transaction<'_>, key_pair: &KeyPair, session: Session) {
-    let session = session.encode();
-    let key_0 = Self::session_key(&key_pair.0);
-    let existing = txn.get(&key_0);
-    // This may trigger if 100% of a DKG are malicious, and they create a key equivalent to a prior
-    // key. Since it requires 100% maliciousness, not just 67% maliciousness, this will only assert
-    // in a modified-to-be-malicious stack, making it safe
-    assert!(existing.is_none() || (existing.as_ref() == Some(&session)));
-    txn.put(key_0, session.clone());
-    txn.put(Self::session_key(&key_pair.1), session);
   }
 
   fn batch_instructions_key(network: NetworkId, id: u32) -> Vec<u8> {

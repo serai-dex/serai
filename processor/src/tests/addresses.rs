@@ -7,6 +7,8 @@ use frost::{Participant, ThresholdKeys};
 
 use tokio::time::timeout;
 
+use serai_client::validator_sets::primitives::Session;
+
 use serai_db::{DbTxn, MemDb};
 
 use crate::{
@@ -50,7 +52,7 @@ async fn spend<N: Network, D: Db>(
       ),
     );
   }
-  sign(network.clone(), keys_txs).await;
+  sign(network.clone(), Session(0), keys_txs).await;
 
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;

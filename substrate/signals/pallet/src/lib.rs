@@ -9,38 +9,74 @@ pub mod pallet {
   use sp_io::hashing::blake2_256;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::pallet_prelude::*;
+  use frame_support::{pallet_prelude::*, sp_runtime};
 
   use serai_primitives::*;
   use validator_sets_pallet::{primitives::ValidatorSet, Config as VsConfig, Pallet as VsPallet};
+  use in_instructions_pallet::{Config as IiConfig, Pallet as InInstructions};
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public> + VsConfig + TypeInfo {
+  pub trait Config:
+    frame_system::Config<AccountId = Public> + VsConfig + IiConfig + TypeInfo
+  {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
 
-    type ValidityDuration: Get<u32>;
-    type LockInDuration: Get<u32>;
+    type RetirementValidityDuration: Get<u32>;
+    type RetirementLockInDuration: Get<u32>;
+  }
+
+  #[pallet::genesis_config]
+  #[derive(Debug, Encode, Decode)]
+  pub struct GenesisConfig<T: Config> {
+    _config: PhantomData<T>,
+  }
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      GenesisConfig { _config: PhantomData }
+    }
+  }
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      // Assert the validity duration is less than the lock-in duration so lock-in periods
+      // automatically invalidate other retirement signals
+      assert!(T::RetirementValidityDuration::get() < T::RetirementLockInDuration::get());
+    }
   }
 
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
-  struct RegisteredSignal<T: Config> {
-    signal: [u8; 32],
+  #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+  pub enum SignalId {
+    Retirement([u8; 32]),
+    Halt(NetworkId),
+  }
+
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+  pub struct RegisteredRetirementSignal<T: Config> {
+    in_favor_of: [u8; 32],
     registrant: T::AccountId,
     registed_at: BlockNumberFor<T>,
   }
 
+  impl<T: Config> RegisteredRetirementSignal<T> {
+    fn id(&self) -> [u8; 32] {
+      let mut preimage = b"Signal".to_vec();
+      preimage.extend(&self.encode());
+      blake2_256(&preimage)
+    }
+  }
+
   #[pallet::storage]
-  type RegisteredSignals<T: Config> =
-    StorageMap<_, Blake2_128Concat, [u8; 32], RegisteredSignal<T>, OptionQuery>;
+  type RegisteredRetirementSignals<T: Config> =
+    StorageMap<_, Blake2_128Concat, [u8; 32], RegisteredRetirementSignal<T>, OptionQuery>;
 
   #[pallet::storage]
   pub type Favors<T: Config> = StorageDoubleMap<
     _,
     Blake2_128Concat,
-    ([u8; 32], NetworkId),
+    (SignalId, NetworkId),
     Blake2_128Concat,
     T::AccountId,
     (),
@@ -49,31 +85,58 @@ pub mod pallet {
 
   #[pallet::storage]
   pub type SetsInFavor<T: Config> =
-    StorageMap<_, Blake2_128Concat, ([u8; 32], ValidatorSet), (), OptionQuery>;
+    StorageMap<_, Blake2_128Concat, (SignalId, ValidatorSet), (), OptionQuery>;
 
   #[pallet::storage]
-  pub type LockedInSignal<T: Config> = StorageValue<_, ([u8; 32], BlockNumberFor<T>), OptionQuery>;
+  pub type LockedInRetirement<T: Config> =
+    StorageValue<_, ([u8; 32], BlockNumberFor<T>), OptionQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
-    SignalRegistered { signal_id: [u8; 32], signal: [u8; 32], registrant: T::AccountId },
-    SignalRevoked { signal_id: [u8; 32] },
-    SignalFavored { signal_id: [u8; 32], by: T::AccountId, for_network: NetworkId },
-    SetInFavor { signal_id: [u8; 32], set: ValidatorSet },
-    SignalLockedIn { signal_id: [u8; 32] },
-    SetNoLongerInFavor { signal_id: [u8; 32], set: ValidatorSet },
-    FavorRevoked { signal_id: [u8; 32], by: T::AccountId, for_network: NetworkId },
-    AgainstSignal { signal_id: [u8; 32], who: T::AccountId, for_network: NetworkId },
+    RetirementSignalRegistered {
+      signal_id: [u8; 32],
+      in_favor_of: [u8; 32],
+      registrant: T::AccountId,
+    },
+    RetirementSignalRevoked {
+      signal_id: [u8; 32],
+    },
+    SignalFavored {
+      signal_id: SignalId,
+      by: T::AccountId,
+      for_network: NetworkId,
+    },
+    SetInFavor {
+      signal_id: SignalId,
+      set: ValidatorSet,
+    },
+    RetirementSignalLockedIn {
+      signal_id: [u8; 32],
+    },
+    SetNoLongerInFavor {
+      signal_id: SignalId,
+      set: ValidatorSet,
+    },
+    FavorRevoked {
+      signal_id: SignalId,
+      by: T::AccountId,
+      for_network: NetworkId,
+    },
+    AgainstSignal {
+      signal_id: SignalId,
+      who: T::AccountId,
+      for_network: NetworkId,
+    },
   }
 
   #[pallet::error]
   pub enum Error<T> {
-    SignalLockedIn,
-    SignalAlreadyRegistered,
-    NotSignalRegistrant,
-    NonExistantSignal,
-    ExpiredSignal,
+    RetirementSignalLockedIn,
+    RetirementSignalAlreadyRegistered,
+    NotRetirementSignalRegistrant,
+    NonExistantRetirementSignal,
+    ExpiredRetirementSignal,
     NotValidator,
     RevokingNonExistantFavor,
   }
@@ -86,7 +149,7 @@ pub mod pallet {
     // Returns true if this network's current set is in favor of the signal.
     //
     // Must only be called for networks which have a set decided.
-    fn tally_for_network(signal_id: [u8; 32], network: NetworkId) -> Result<bool, Error<T>> {
+    fn tally_for_network(signal_id: SignalId, network: NetworkId) -> Result<bool, Error<T>> {
       let this_network_session = VsPallet::<T>::latest_decided_session(network).unwrap();
       let this_set = ValidatorSet { network, session: this_network_session };
 
@@ -145,7 +208,7 @@ pub mod pallet {
       }
     }
 
-    fn tally_for_all_networks(signal_id: [u8; 32]) -> Result<bool, Error<T>> {
+    fn tally_for_all_networks(signal_id: SignalId) -> Result<bool, Error<T>> {
       let mut total_in_favor_stake = 0;
       let mut total_allocated_stake = 0;
       for network in serai_primitives::NETWORKS {
@@ -171,7 +234,7 @@ pub mod pallet {
 
     fn revoke_favor_internal(
       account: T::AccountId,
-      signal_id: [u8; 32],
+      signal_id: SignalId,
       for_network: NetworkId,
     ) -> DispatchResult {
       if !Favors::<T>::contains_key((signal_id, for_network), account) {
@@ -191,11 +254,19 @@ pub mod pallet {
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
+    /// Register a retirement signal, declaring the consensus protocol this signal is in favor of.
+    ///
+    /// Retirement signals are registered so that the proposer, presumably a developer, can revoke
+    /// the signal if there's a fault discovered.
     #[pallet::call_index(0)]
-    #[pallet::weight(0)]
-    pub fn register_signal(origin: OriginFor<T>, signal: [u8; 32]) -> DispatchResult {
-      if LockedInSignal::<T>::exists() {
-        Err::<(), _>(Error::<T>::SignalLockedIn)?;
+    #[pallet::weight(0)] // TODO
+    pub fn register_retirement_signal(
+      origin: OriginFor<T>,
+      in_favor_of: [u8; 32],
+    ) -> DispatchResult {
+      // Don't allow retirement signals to be registered once a retirement has been locked in
+      if LockedInRetirement::<T>::exists() {
+        Err::<(), _>(Error::<T>::RetirementSignalLockedIn)?;
       }
 
       let account = ensure_signed(origin)?;
@@ -203,68 +274,89 @@ pub mod pallet {
       // Bind the signal ID to the proposer
       // This prevents a malicious actor from frontrunning a proposal, causing them to be the
       // registrant, just to cancel it later
-      let mut signal_preimage = account.encode();
-      signal_preimage.extend(signal);
-      let signal_id = blake2_256(&signal_preimage);
+      let signal = RegisteredRetirementSignal {
+        in_favor_of,
+        registrant: account,
+        registed_at: frame_system::Pallet::<T>::block_number(),
+      };
+      let signal_id = signal.id();
 
-      if RegisteredSignals::<T>::get(signal_id).is_some() {
-        Err::<(), _>(Error::<T>::SignalAlreadyRegistered)?;
+      if RegisteredRetirementSignals::<T>::get(signal_id).is_some() {
+        Err::<(), _>(Error::<T>::RetirementSignalAlreadyRegistered)?;
       }
-      RegisteredSignals::<T>::set(
+
+      Self::deposit_event(Event::<T>::RetirementSignalRegistered {
         signal_id,
-        Some(RegisteredSignal {
-          signal,
-          registrant: account,
-          registed_at: frame_system::Pallet::<T>::block_number(),
-        }),
-      );
-      Self::deposit_event(Event::<T>::SignalRegistered { signal_id, signal, registrant: account });
+        in_favor_of,
+        registrant: account,
+      });
+      RegisteredRetirementSignals::<T>::set(signal_id, Some(signal));
       Ok(())
     }
 
     #[pallet::call_index(1)]
-    #[pallet::weight(0)]
-    pub fn revoke_signal(origin: OriginFor<T>, signal_id: [u8; 32]) -> DispatchResult {
+    #[pallet::weight(0)] // TODO
+    pub fn revoke_retirement_signal(
+      origin: OriginFor<T>,
+      retirement_signal_id: [u8; 32],
+    ) -> DispatchResult {
       let account = ensure_signed(origin)?;
-      let Some(registered_signal) = RegisteredSignals::<T>::get(signal_id) else {
-        return Err::<(), _>(Error::<T>::NonExistantSignal.into());
+      let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(retirement_signal_id)
+      else {
+        return Err::<(), _>(Error::<T>::NonExistantRetirementSignal.into());
       };
       if account != registered_signal.registrant {
-        Err::<(), _>(Error::<T>::NotSignalRegistrant)?;
+        Err::<(), _>(Error::<T>::NotRetirementSignalRegistrant)?;
       }
-      RegisteredSignals::<T>::remove(signal_id);
+      RegisteredRetirementSignals::<T>::remove(retirement_signal_id);
 
       // If this signal was locked in, remove it
       // This lets a post-lock-in discovered fault be prevented from going live without
-      // intervention by all node runners
-      if LockedInSignal::<T>::get().map(|(signal_id, _block_number)| signal_id) == Some(signal_id) {
-        LockedInSignal::<T>::kill();
+      // intervention by all validators
+      if LockedInRetirement::<T>::get().map(|(signal_id, _block_number)| signal_id) ==
+        Some(retirement_signal_id)
+      {
+        LockedInRetirement::<T>::kill();
       }
 
-      Self::deposit_event(Event::<T>::SignalRevoked { signal_id });
+      Self::deposit_event(Event::<T>::RetirementSignalRevoked { signal_id: retirement_signal_id });
       Ok(())
     }
 
     #[pallet::call_index(2)]
-    #[pallet::weight(0)]
+    #[pallet::weight(0)] // TODO
     pub fn favor(
       origin: OriginFor<T>,
-      signal_id: [u8; 32],
+      signal_id: SignalId,
       for_network: NetworkId,
     ) -> DispatchResult {
-      if LockedInSignal::<T>::exists() {
-        Err::<(), _>(Error::<T>::SignalLockedIn)?;
-      }
-
       let account = ensure_signed(origin)?;
-      let Some(registered_signal) = RegisteredSignals::<T>::get(signal_id) else {
-        return Err::<(), _>(Error::<T>::NonExistantSignal.into());
-      };
-      // Check the signal isn't out of date
-      if (registered_signal.registed_at + T::ValidityDuration::get().into()) <
-        frame_system::Pallet::<T>::block_number()
-      {
-        Err::<(), _>(Error::<T>::ExpiredSignal)?;
+
+      // If this is a retirement signal, perform the relevant checks
+      if let SignalId::Retirement(signal_id) = signal_id {
+        // Make sure a retirement hasn't already been locked in
+        if LockedInRetirement::<T>::exists() {
+          Err::<(), _>(Error::<T>::RetirementSignalLockedIn)?;
+        }
+
+        // Make sure this is a registered retirement
+        // We don't have to do this for a `Halt` signal as `Halt` doesn't have the registration
+        // process
+        let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(signal_id) else {
+          return Err::<(), _>(Error::<T>::NonExistantRetirementSignal.into());
+        };
+
+        // Check the signal isn't out of date
+        // This isn't truly necessary since we only track votes from the most recent validator
+        // sets, ensuring modern relevancy
+        // The reason to still have it is because locking in a dated runtime may cause a corrupt
+        // blockchain and lead to a failure in system integrity
+        // `Halt`, which doesn't have this check, at worst causes temporary downtime
+        if (registered_signal.registed_at + T::RetirementValidityDuration::get().into()) <
+          frame_system::Pallet::<T>::block_number()
+        {
+          Err::<(), _>(Error::<T>::ExpiredRetirementSignal)?;
+        }
       }
 
       // Check the signer is a validator
@@ -296,11 +388,19 @@ pub mod pallet {
       if network_in_favor {
         // If enough are, lock in the signal
         if Self::tally_for_all_networks(signal_id)? {
-          LockedInSignal::<T>::set(Some((
-            signal_id,
-            frame_system::Pallet::<T>::block_number() + T::LockInDuration::get().into(),
-          )));
-          Self::deposit_event(Event::SignalLockedIn { signal_id });
+          match signal_id {
+            SignalId::Retirement(signal_id) => {
+              LockedInRetirement::<T>::set(Some((
+                signal_id,
+                frame_system::Pallet::<T>::block_number() +
+                  T::RetirementLockInDuration::get().into(),
+              )));
+              Self::deposit_event(Event::RetirementSignalLockedIn { signal_id });
+            }
+            SignalId::Halt(network) => {
+              InInstructions::<T>::halt(network)?;
+            }
+          }
         }
       }
 
@@ -309,14 +409,14 @@ pub mod pallet {
 
     /// Revoke favor into an abstaining position.
     #[pallet::call_index(3)]
-    #[pallet::weight(0)]
+    #[pallet::weight(0)] // TODO
     pub fn revoke_favor(
       origin: OriginFor<T>,
-      signal_id: [u8; 32],
+      signal_id: SignalId,
       for_network: NetworkId,
     ) -> DispatchResult {
-      if LockedInSignal::<T>::exists() {
-        Err::<(), _>(Error::<T>::SignalLockedIn)?;
+      if matches!(&signal_id, SignalId::Retirement(_)) && LockedInRetirement::<T>::exists() {
+        Err::<(), _>(Error::<T>::RetirementSignalLockedIn)?;
       }
 
       // Doesn't check the signal exists due to later checking the favor exists
@@ -332,14 +432,14 @@ pub mod pallet {
     ///
     /// If the origin is currently in favor of the signal, their favor will be revoked.
     #[pallet::call_index(4)]
-    #[pallet::weight(0)]
+    #[pallet::weight(0)] // TODO
     pub fn stand_against(
       origin: OriginFor<T>,
-      signal_id: [u8; 32],
+      signal_id: SignalId,
       for_network: NetworkId,
     ) -> DispatchResult {
-      if LockedInSignal::<T>::exists() {
-        Err::<(), _>(Error::<T>::SignalLockedIn)?;
+      if LockedInRetirement::<T>::exists() {
+        Err::<(), _>(Error::<T>::RetirementSignalLockedIn)?;
       }
 
       let account = ensure_signed(origin)?;
@@ -348,8 +448,10 @@ pub mod pallet {
         Self::revoke_favor_internal(account, signal_id, for_network)?;
       } else {
         // Check this Signal exists (which would've been implied by Favors for it existing)
-        if RegisteredSignals::<T>::get(signal_id).is_none() {
-          Err::<(), _>(Error::<T>::NonExistantSignal)?;
+        if let SignalId::Retirement(signal_id) = signal_id {
+          if RegisteredRetirementSignals::<T>::get(signal_id).is_none() {
+            Err::<(), _>(Error::<T>::NonExistantRetirementSignal)?;
+          }
         }
       }
 
@@ -365,11 +467,11 @@ pub mod pallet {
     fn on_initialize(current_number: BlockNumberFor<T>) -> Weight {
       // If this is the block at which a locked-in signal has been set for long enough, panic
       // This will prevent this block from executing and halt the chain
-      if let Some((signal, block_number)) = LockedInSignal::<T>::get() {
+      if let Some((signal, block_number)) = LockedInRetirement::<T>::get() {
         if block_number == current_number {
           panic!(
             "locked-in signal {} has been set for too long",
-            sp_core::hexdisplay::HexDisplay::from(&signal)
+            sp_core::hexdisplay::HexDisplay::from(&signal),
           );
         }
       }

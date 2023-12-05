@@ -1,17 +1,17 @@
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serde::{Serialize, Deserialize};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::NetworkId;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Service {
   Processor(NetworkId),
   Coordinator,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct QueuedMessage {
   pub from: Service,
   pub id: u64,
@@ -19,11 +19,18 @@ pub struct QueuedMessage {
   pub sig: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Metadata {
   pub from: Service,
   pub to: Service,
   pub intent: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum MessageQueueRequest {
+  Queue { meta: Metadata, msg: Vec<u8>, sig: Vec<u8> },
+  Next { from: Service, to: Service },
+  Ack { from: Service, to: Service, id: u64, sig: Vec<u8> },
 }
 
 pub fn message_challenge(
@@ -36,9 +43,9 @@ pub fn message_challenge(
 ) -> <Ristretto as Ciphersuite>::F {
   let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Message");
   transcript.domain_separate(b"metadata");
-  transcript.append_message(b"from", bincode::serialize(&from).unwrap());
+  transcript.append_message(b"from", borsh::to_vec(&from).unwrap());
   transcript.append_message(b"from_key", from_key.to_bytes());
-  transcript.append_message(b"to", bincode::serialize(&to).unwrap());
+  transcript.append_message(b"to", borsh::to_vec(&to).unwrap());
   transcript.append_message(b"intent", intent);
   transcript.domain_separate(b"message");
   transcript.append_message(b"msg", msg);
@@ -56,9 +63,9 @@ pub fn ack_challenge(
 ) -> <Ristretto as Ciphersuite>::F {
   let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Ackowledgement");
   transcript.domain_separate(b"metadata");
-  transcript.append_message(b"to", bincode::serialize(&to).unwrap());
+  transcript.append_message(b"to", borsh::to_vec(&to).unwrap());
   transcript.append_message(b"to_key", to_key.to_bytes());
-  transcript.append_message(b"from", bincode::serialize(&from).unwrap());
+  transcript.append_message(b"from", borsh::to_vec(&from).unwrap());
   transcript.domain_separate(b"message");
   transcript.append_message(b"id", id.to_le_bytes());
   transcript.domain_separate(b"signature");

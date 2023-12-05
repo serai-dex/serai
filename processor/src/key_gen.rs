@@ -17,7 +17,7 @@ use frost::{
 use log::info;
 
 use scale::Encode;
-use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
+use serai_client::validator_sets::primitives::{Session, KeyPair};
 use messages::key_gen::*;
 
 use crate::{Get, DbTxn, Db, create_db, networks::Network};
@@ -30,16 +30,17 @@ pub struct KeyConfirmed<C: Ciphersuite> {
 
 create_db!(
   KeyGenDb {
-    ParamsDb: (set: &ValidatorSet) -> (ThresholdParams, u16),
+    ParamsDb: (session: &Session) -> (ThresholdParams, u16),
     // Not scoped to the set since that'd have latter attempts overwrite former
     // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
     // Overwriting its commitments would be accordingly poor
     CommitmentsDb: (key: &KeyGenId) -> HashMap<Participant, Vec<u8>>,
-    GeneratedKeysDb: (set: &ValidatorSet, substrate_key: &[u8; 32], network_key: &[u8]) -> Vec<u8>,
+    GeneratedKeysDb: (session: &Session, substrate_key: &[u8; 32], network_key: &[u8]) -> Vec<u8>,
     // These do assume a key is only used once across sets, which holds true so long as a single
     // participant is honest in their execution of the protocol
     KeysDb: (network_key: &[u8]) -> Vec<u8>,
-    NetworkKey: (substrate_key: [u8; 32]) -> Vec<u8>,
+    SessionDb: (network_key: &[u8]) -> Session,
+    NetworkKeyDb: (session: Session) -> Vec<u8>,
   }
 );
 
@@ -76,7 +77,7 @@ impl GeneratedKeysDb {
     }
     txn.put(
       Self::key(
-        &id.set,
+        &id.session,
         &substrate_keys[0].group_key().to_bytes(),
         network_keys[0].group_key().to_bytes().as_ref(),
       ),
@@ -88,12 +89,12 @@ impl GeneratedKeysDb {
 impl KeysDb {
   fn confirm_keys<N: Network>(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    session: Session,
     key_pair: KeyPair,
   ) -> (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>) {
     let (keys_vec, keys) = GeneratedKeysDb::read_keys::<N>(
       txn,
-      &GeneratedKeysDb::key(&set, &key_pair.0 .0, key_pair.1.as_ref()),
+      &GeneratedKeysDb::key(&session, &key_pair.0 .0, key_pair.1.as_ref()),
     )
     .unwrap();
     assert_eq!(key_pair.0 .0, keys.0[0].group_key().to_bytes());
@@ -104,8 +105,9 @@ impl KeysDb {
       },
       keys.1[0].group_key().to_bytes().as_ref(),
     );
-    txn.put(KeysDb::key(keys.1[0].group_key().to_bytes().as_ref()), keys_vec);
-    NetworkKey::set(txn, key_pair.0.into(), &key_pair.1.clone().into_inner());
+    txn.put(Self::key(key_pair.1.as_ref()), keys_vec);
+    NetworkKeyDb::set(txn, session, &key_pair.1.clone().into_inner());
+    SessionDb::set(txn, key_pair.1.as_ref(), &session);
     keys
   }
 
@@ -113,21 +115,19 @@ impl KeysDb {
   fn keys<N: Network>(
     getter: &impl Get,
     network_key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
+  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
     let res =
       GeneratedKeysDb::read_keys::<N>(getter, &Self::key(network_key.to_bytes().as_ref()))?.1;
     assert_eq!(&res.1[0].group_key(), network_key);
-    Some(res)
+    Some((SessionDb::get(getter, network_key.to_bytes().as_ref()).unwrap(), res))
   }
 
-  pub fn substrate_keys_by_substrate_key<N: Network>(
+  pub fn substrate_keys_by_session<N: Network>(
     getter: &impl Get,
-    substrate_key: &[u8; 32],
+    session: Session,
   ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    let network_key = NetworkKey::get(getter, *substrate_key)?;
-    let res = GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1;
-    assert_eq!(&res.0[0].group_key().to_bytes(), substrate_key);
-    Some(res.0)
+    let network_key = NetworkKeyDb::get(getter, session)?;
+    Some(GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1 .0)
   }
 }
 
@@ -140,9 +140,9 @@ pub struct KeyGen<N: Network, D: Db> {
   db: D,
   entropy: Zeroizing<[u8; 32]>,
 
-  active_commit: HashMap<ValidatorSet, (SecretShareMachines<N>, Vec<Vec<u8>>)>,
+  active_commit: HashMap<Session, (SecretShareMachines<N>, Vec<Vec<u8>>)>,
   #[allow(clippy::type_complexity)]
-  active_share: HashMap<ValidatorSet, (KeyMachines<N>, Vec<HashMap<Participant, Vec<u8>>>)>,
+  active_share: HashMap<Session, (KeyMachines<N>, Vec<HashMap<Participant, Vec<u8>>>)>,
 }
 
 impl<N: Network, D: Db> KeyGen<N, D> {
@@ -151,26 +151,26 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeyGen { db, entropy, active_commit: HashMap::new(), active_share: HashMap::new() }
   }
 
-  pub fn in_set(&self, set: &ValidatorSet) -> bool {
-    // We determine if we're in set using if we have the parameters for a set's key generation
-    ParamsDb::get(&self.db, set).is_some()
+  pub fn in_set(&self, session: &Session) -> bool {
+    // We determine if we're in set using if we have the parameters for a session's key generation
+    ParamsDb::get(&self.db, session).is_some()
   }
 
   #[allow(clippy::type_complexity)]
   pub fn keys(
     &self,
     key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>)> {
+  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
     // This is safe, despite not having a txn, since it's a static value
     // It doesn't change over time/in relation to other operations
     KeysDb::keys::<N>(&self.db, key)
   }
 
-  pub fn substrate_keys_by_substrate_key(
+  pub fn substrate_keys_by_session(
     &self,
-    substrate_key: &[u8; 32],
+    session: Session,
   ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    KeysDb::substrate_keys_by_substrate_key::<N>(&self.db, substrate_key)
+    KeysDb::substrate_keys_by_session::<N>(&self.db, session)
   }
 
   pub async fn handle(
@@ -184,7 +184,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       // TODO2: Also embed the chain ID/genesis block
       format!(
         "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}, Key: {}",
-        id.set.session, id.set.network, id.attempt, key,
+        id.session,
+        N::NETWORK,
+        id.attempt,
+        key,
       )
     };
 
@@ -313,15 +316,15 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         info!("Generating new key. ID: {id:?} Params: {params:?} Shares: {shares}");
 
         // Remove old attempts
-        if self.active_commit.remove(&id.set).is_none() &&
-          self.active_share.remove(&id.set).is_none()
+        if self.active_commit.remove(&id.session).is_none() &&
+          self.active_share.remove(&id.session).is_none()
         {
-          // If we haven't handled this set before, save the params
-          ParamsDb::set(txn, &id.set, &(params, shares));
+          // If we haven't handled this session before, save the params
+          ParamsDb::set(txn, &id.session, &(params, shares));
         }
 
         let (machines, commitments) = key_gen_machines(id, params, shares);
-        self.active_commit.insert(id.set, (machines, commitments.clone()));
+        self.active_commit.insert(id.session, (machines, commitments.clone()));
 
         ProcessorMessage::Commitments { id, commitments }
       }
@@ -329,14 +332,14 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Commitments { id, mut commitments } => {
         info!("Received commitments for {:?}", id);
 
-        if self.active_share.contains_key(&id.set) {
+        if self.active_share.contains_key(&id.session) {
           // We should've been told of a new attempt before receiving commitments again
           // The coordinator is either missing messages or repeating itself
           // Either way, it's faulty
           panic!("commitments when already handled commitments");
         }
 
-        let (params, share_quantity) = ParamsDb::get(txn, &id.set).unwrap();
+        let (params, share_quantity) = ParamsDb::get(txn, &id.session).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -345,7 +348,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         // The coordinator is trusted to be proper in this regard
         let (prior, our_commitments) = self
           .active_commit
-          .remove(&id.set)
+          .remove(&id.session)
           .unwrap_or_else(|| key_gen_machines(id, params, share_quantity));
 
         for (i, our_commitments) in our_commitments.into_iter().enumerate() {
@@ -361,7 +364,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
         match secret_share_machines(id, params, prior, commitments) {
           Ok((machines, shares)) => {
-            self.active_share.insert(id.set, (machines, shares.clone()));
+            self.active_share.insert(id.session, (machines, shares.clone()));
             ProcessorMessage::Shares { id, shares }
           }
           Err(e) => e,
@@ -371,10 +374,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let (params, share_quantity) = ParamsDb::get(txn, &id.set).unwrap();
+        let (params, share_quantity) = ParamsDb::get(txn, &id.session).unwrap();
 
         // Same commentary on inconsistency as above exists
-        let (machines, our_shares) = self.active_share.remove(&id.set).unwrap_or_else(|| {
+        let (machines, our_shares) = self.active_share.remove(&id.session).unwrap_or_else(|| {
           let prior = key_gen_machines(id, params, share_quantity).0;
           let (machines, shares) =
             secret_share_machines(id, params, prior, CommitmentsDb::get(txn, &id).unwrap())
@@ -512,7 +515,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       }
 
       CoordinatorMessage::VerifyBlame { id, accuser, accused, share, blame } => {
-        let params = ParamsDb::get(txn, &id.set).unwrap().0;
+        let params = ParamsDb::get(txn, &id.session).unwrap().0;
 
         let mut share_ref = share.as_slice();
         let Ok(substrate_share) = EncryptedMessage::<
@@ -580,17 +583,17 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   pub async fn confirm(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    set: ValidatorSet,
+    session: Session,
     key_pair: KeyPair,
   ) -> KeyConfirmed<N::Curve> {
     info!(
-      "Confirmed key pair {} {} for set {:?}",
+      "Confirmed key pair {} {} for {:?}",
       hex::encode(key_pair.0),
       hex::encode(&key_pair.1),
-      set,
+      session,
     );
 
-    let (substrate_keys, network_keys) = KeysDb::confirm_keys::<N>(txn, set, key_pair);
+    let (substrate_keys, network_keys) = KeysDb::confirm_keys::<N>(txn, session, key_pair);
 
     KeyConfirmed { substrate_keys, network_keys }
   }

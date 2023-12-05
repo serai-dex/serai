@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::group::GroupEncoding;
 use frost::{
   Participant, ThresholdKeys,
   dkg::tests::{key_gen, clone_without},
@@ -10,7 +9,10 @@ use frost::{
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
+use serai_client::{
+  primitives::{NetworkId, Coin, Amount, Balance},
+  validator_sets::primitives::Session,
+};
 
 use messages::sign::*;
 use crate::{
@@ -22,22 +24,17 @@ use crate::{
 #[allow(clippy::type_complexity)]
 pub async fn sign<N: Network>(
   network: N,
+  session: Session,
   mut keys_txs: HashMap<
     Participant,
     (ThresholdKeys<N::Curve>, (N::SignableTransaction, N::Eventuality)),
   >,
 ) -> <N::Transaction as Transaction<N>>::Id {
-  let actual_id = SignId {
-    key: keys_txs[&Participant::new(1).unwrap()].0.group_key().to_bytes().as_ref().to_vec(),
-    id: [0xaa; 32],
-    attempt: 0,
-  };
+  let actual_id = SignId { session, id: [0xaa; 32], attempt: 0 };
 
-  let mut group_key = None;
   let mut keys = HashMap::new();
   let mut txs = HashMap::new();
   for (i, (these_keys, this_tx)) in keys_txs.drain() {
-    group_key = Some(these_keys.group_key());
     keys.insert(i, these_keys);
     txs.insert(i, this_tx);
   }
@@ -49,7 +46,7 @@ pub async fn sign<N: Network>(
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.remove(&i).unwrap();
     t = keys.params().t();
-    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), vec![keys]));
+    signers.insert(i, Signer::<_, MemDb>::new(network.clone(), Session(0), vec![keys]));
     dbs.insert(i, MemDb::new());
   }
   drop(keys);
@@ -130,8 +127,8 @@ pub async fn sign<N: Network>(
       .await
       .unwrap()
     {
-      ProcessorMessage::Completed { key, id, tx } => {
-        assert_eq!(&key, group_key.unwrap().to_bytes().as_ref());
+      ProcessorMessage::Completed { session, id, tx } => {
+        assert_eq!(session, Session(0));
         assert_eq!(id, actual_id.id);
         if tx_id.is_none() {
           tx_id = Some(tx.clone());
@@ -196,7 +193,7 @@ pub async fn test_signer<N: Network>(network: N) {
 
   // The signer may not publish the TX if it has a connection error
   // It doesn't fail in this case
-  let txid = sign(network.clone(), keys_txs).await;
+  let txid = sign(network.clone(), Session(0), keys_txs).await;
   let tx = network.get_transaction(&txid).await.unwrap();
   assert_eq!(tx.id(), txid);
   // Mine a block, and scan it, to ensure that the TX actually made it on chain

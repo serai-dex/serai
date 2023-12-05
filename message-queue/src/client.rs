@@ -9,19 +9,20 @@ use ciphersuite::{
 };
 use schnorr_signatures::SchnorrSignature;
 
-use serde::{Serialize, Deserialize};
-
-use simple_request::{hyper::Request, Client};
+use tokio::{
+  io::{AsyncReadExt, AsyncWriteExt},
+  net::TcpStream,
+};
 
 use serai_env as env;
 
-use crate::{Service, Metadata, QueuedMessage, message_challenge, ack_challenge};
+#[rustfmt::skip]
+use crate::{Service, Metadata, QueuedMessage, MessageQueueRequest, message_challenge, ack_challenge};
 
 pub struct MessageQueue {
   pub service: Service,
   priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub_key: <Ristretto as Ciphersuite>::G,
-  client: Client,
   url: String,
 }
 
@@ -37,17 +38,8 @@ impl MessageQueue {
     if !url.contains(':') {
       url += ":2287";
     }
-    if !url.starts_with("http://") {
-      url = "http://".to_string() + &url;
-    }
 
-    MessageQueue {
-      service,
-      pub_key: Ristretto::generator() * priv_key.deref(),
-      priv_key,
-      client: Client::with_connection_pool(),
-      url,
-    }
+    MessageQueue { service, pub_key: Ristretto::generator() * priv_key.deref(), priv_key, url }
   }
 
   pub fn from_env(service: Service) -> MessageQueue {
@@ -72,60 +64,14 @@ impl MessageQueue {
     Self::new(service, url, priv_key)
   }
 
-  async fn json_call(&self, method: &'static str, params: serde_json::Value) -> serde_json::Value {
-    #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-    struct JsonRpcRequest {
-      jsonrpc: &'static str,
-      method: &'static str,
-      params: serde_json::Value,
-      id: u64,
-    }
-
-    let mut res = loop {
-      // Make the request
-      match self
-        .client
-        .request(
-          Request::post(&self.url)
-            .header("Content-Type", "application/json")
-            .body(
-              serde_json::to_vec(&JsonRpcRequest {
-                jsonrpc: "2.0",
-                method,
-                params: params.clone(),
-                id: 0,
-              })
-              .unwrap()
-              .into(),
-            )
-            .unwrap(),
-        )
-        .await
-      {
-        Ok(req) => {
-          // Get the response
-          match req.body().await {
-            Ok(res) => break res,
-            Err(e) => {
-              dbg!(e);
-            }
-          }
-        }
-        Err(e) => {
-          dbg!(e);
-        }
-      }
-
-      // Sleep for a second before trying again
-      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+  #[must_use]
+  async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> bool {
+    let msg = borsh::to_vec(&msg).unwrap();
+    let Ok(_) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+      return false;
     };
-
-    let json: serde_json::Value =
-      serde_json::from_reader(&mut res).expect("message-queue returned invalid JSON");
-    if json.get("result").is_none() {
-      panic!("call failed: {json}");
-    }
-    json
+    let Ok(_) = socket.write_all(&msg).await else { return false };
+    true
   }
 
   pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) {
@@ -146,30 +92,76 @@ impl MessageQueue {
     )
     .serialize();
 
-    let json = self.json_call("queue", serde_json::json!([metadata, msg, sig])).await;
-    if json.get("result") != Some(&serde_json::Value::Bool(true)) {
-      panic!("failed to queue message: {json}");
+    let msg = MessageQueueRequest::Queue { meta: metadata, msg, sig };
+    let mut first = true;
+    loop {
+      // Sleep, so we don't hammer re-attempts
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+      }
+      first = false;
+
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      if !Self::send(&mut socket, msg.clone()).await {
+        continue;
+      }
+      if socket.read_u8().await.ok() != Some(1) {
+        continue;
+      }
+      break;
     }
   }
 
   pub async fn next(&self, from: Service) -> QueuedMessage {
-    loop {
-      let json = self.json_call("next", serde_json::json!([from, self.service])).await;
+    let msg = MessageQueueRequest::Next { from, to: self.service };
+    let mut first = true;
+    'outer: loop {
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+        continue;
+      }
+      first = false;
 
-      // Convert from a Value to a type via reserialization
-      let msg: Option<QueuedMessage> = serde_json::from_str(
-        &serde_json::to_string(
-          &json.get("result").expect("successful JSON RPC call didn't have result"),
-        )
-        .unwrap(),
-      )
-      .expect("next didn't return an Option<QueuedMessage>");
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
 
-      // If there wasn't a message, check again in 1s
-      let Some(msg) = msg else {
-        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+      loop {
+        if !Self::send(&mut socket, msg.clone()).await {
+          continue 'outer;
+        }
+        let Ok(status) = socket.read_u8().await else {
+          continue 'outer;
+        };
+        // If there wasn't a message, check again in 1s
+        if status == 0 {
+          tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+          continue;
+        }
+        assert_eq!(status, 1);
+        break;
+      }
+
+      // Timeout after 5 seconds in case there's an issue with the length handling
+      let Ok(msg) = tokio::time::timeout(core::time::Duration::from_secs(5), async {
+        // Read the message length
+        let Ok(len) = socket.read_u32_le().await else {
+          return vec![];
+        };
+        let mut buf = vec![0; usize::try_from(len).unwrap()];
+        // Read the message
+        let Ok(_) = socket.read_exact(&mut buf).await else {
+          return vec![];
+        };
+        buf
+      })
+      .await
+      else {
         continue;
       };
+      if msg.is_empty() {
+        continue;
+      }
+
+      let msg: QueuedMessage = borsh::from_slice(msg.as_slice()).unwrap();
 
       // Verify the message
       // Verify the sender is sane
@@ -202,9 +194,22 @@ impl MessageQueue {
     )
     .serialize();
 
-    let json = self.json_call("ack", serde_json::json!([from, self.service, id, sig])).await;
-    if json.get("result") != Some(&serde_json::Value::Bool(true)) {
-      panic!("failed to ack message {id}: {json}");
+    let msg = MessageQueueRequest::Ack { from, to: self.service, id, sig };
+    let mut first = true;
+    loop {
+      if !first {
+        tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+      }
+      first = false;
+
+      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      if !Self::send(&mut socket, msg.clone()).await {
+        continue;
+      }
+      if socket.read_u8().await.ok() != Some(1) {
+        continue;
+      }
+      break;
     }
   }
 }

@@ -224,7 +224,7 @@ impl Coordinator {
           to: Service::Processor(self.network),
           intent: msg.intent(),
         },
-        serde_json::to_string(&msg).unwrap().into_bytes(),
+        borsh::to_vec(&msg).unwrap(),
       )
       .await;
     self.next_send_id += 1;
@@ -233,7 +233,7 @@ impl Coordinator {
   /// Receive a message from a processor as its coordinator.
   pub async fn recv_message(&mut self) -> ProcessorMessage {
     let msg = tokio::time::timeout(
-      core::time::Duration::from_secs(10),
+      core::time::Duration::from_secs(20),
       self.queue.next(Service::Processor(self.network)),
     )
     .await
@@ -242,7 +242,7 @@ impl Coordinator {
     assert_eq!(msg.id, self.next_recv_id);
     self.queue.ack(Service::Processor(self.network), msg.id).await;
     self.next_recv_id += 1;
-    serde_json::from_slice(&msg.msg).unwrap()
+    borsh::from_slice(&msg.msg).unwrap()
   }
 
   pub async fn add_block(&self, ops: &DockerOperations) -> ([u8; 32], Vec<u8>) {

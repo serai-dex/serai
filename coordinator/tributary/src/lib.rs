@@ -254,8 +254,12 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     self.network.blockchain.write().await.provide_transaction(tx)
   }
 
-  pub async fn next_nonce(&self, signer: <Ristretto as Ciphersuite>::G) -> Option<u32> {
-    self.network.blockchain.read().await.next_nonce(signer)
+  pub async fn next_nonce(
+    &self,
+    signer: &<Ristretto as Ciphersuite>::G,
+    order: &[u8],
+  ) -> Option<u32> {
+    self.network.blockchain.read().await.next_nonce(signer, order)
   }
 
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.

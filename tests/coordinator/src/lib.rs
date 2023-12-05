@@ -213,12 +213,12 @@ impl Processor {
 
     // Sleep until the Substrate RPC starts
     let serai_rpc = ops.handle(&handles.0).host_port(9944).unwrap();
-    let serai_rpc = format!("ws://{}:{}", serai_rpc.0, serai_rpc.1);
+    let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = Serai::new(&serai_rpc).await else { continue };
-      if client.latest_block_hash().await.is_err() {
+      let Ok(client) = Serai::new(serai_rpc.clone()).await else { continue };
+      if client.latest_finalized_block_hash().await.is_err() {
         continue;
       }
       break;
@@ -268,7 +268,7 @@ impl Processor {
               assert_eq!(msg.from, Service::Coordinator);
               assert_eq!(msg.id, *next_recv_id);
 
-              let msg_msg = serde_json::from_slice(&msg.msg).unwrap();
+              let msg_msg = borsh::from_slice(&msg.msg).unwrap();
               if !is_cosign_message(&msg_msg) {
                 continue;
               }
@@ -309,7 +309,7 @@ impl Processor {
                 res
                   .send_message(messages::coordinator::ProcessorMessage::CosignPreprocess {
                     id: id.clone(),
-                    preprocesses: vec![vec![raw_i; 64]],
+                    preprocesses: vec![[raw_i; 64]],
                   })
                   .await;
               }
@@ -371,7 +371,7 @@ impl Processor {
   }
 
   pub async fn serai(&self) -> Serai {
-    Serai::new(&self.serai_rpc).await.unwrap()
+    Serai::new(self.serai_rpc.clone()).await.unwrap()
   }
 
   /// Send a message to the coordinator as a processor.
@@ -387,7 +387,7 @@ impl Processor {
           to: Service::Coordinator,
           intent: msg.intent(),
         },
-        serde_json::to_string(&msg).unwrap().into_bytes(),
+        borsh::to_vec(&msg).unwrap(),
       )
       .await;
     *next_send_id += 1;
@@ -408,7 +408,7 @@ impl Processor {
       assert_eq!(msg.id, *next_recv_id);
 
       // If this is a cosign message, let the cosign task handle it
-      let msg_msg = serde_json::from_slice(&msg.msg).unwrap();
+      let msg_msg = borsh::from_slice(&msg.msg).unwrap();
       if is_cosign_message(&msg_msg) {
         continue;
       }

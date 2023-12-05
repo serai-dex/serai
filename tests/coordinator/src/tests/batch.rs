@@ -22,6 +22,7 @@ use serai_client::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
   },
+  validator_sets::primitives::Session,
 };
 use messages::{
   coordinator::{SubstrateSignableId, SubstrateSignId},
@@ -33,16 +34,13 @@ use crate::{*, tests::*};
 pub async fn batch(
   processors: &mut [Processor],
   processor_is: &[u8],
+  session: Session,
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
   let mut id = [0; 5];
   OsRng.fill_bytes(&mut id);
-  let id = SubstrateSignId {
-    key: (<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes(),
-    id: SubstrateSignableId::Batch(id),
-    attempt: 0,
-  };
+  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(id), attempt: 0 };
 
   for processor in processors.iter_mut() {
     processor
@@ -63,7 +61,7 @@ pub async fn batch(
       .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
         id: id.clone(),
         block: batch.block,
-        preprocesses: vec![[processor_is[i]; 64].to_vec()],
+        preprocesses: vec![[processor_is[i]; 64]],
       })
       .await;
   }
@@ -77,7 +75,7 @@ pub async fn batch(
     .send_message(messages::coordinator::ProcessorMessage::BatchPreprocess {
       id: id.clone(),
       block: batch.block,
-      preprocesses: vec![[processor_is[excluded_signer]; 64].to_vec()],
+      preprocesses: vec![[processor_is[excluded_signer]; 64]],
     })
     .await;
 
@@ -98,7 +96,7 @@ pub async fn batch(
 
       let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
-        assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 64]);
+        assert_eq!(preprocess, [u8::try_from(u16::from(p)).unwrap(); 64]);
       }
       participants.insert(known_signer_i);
       participants
@@ -116,7 +114,7 @@ pub async fn batch(
     let mut preprocesses = participants
       .clone()
       .into_iter()
-      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64].to_vec()))
+      .map(|i| (i, [u8::try_from(u16::from(i)).unwrap(); 64]))
       .collect::<HashMap<_, _>>();
     preprocesses.remove(&i);
 
@@ -178,7 +176,7 @@ pub async fn batch(
   let batch = SignedBatch { batch, signature };
 
   let serai = processors[0].serai().await;
-  let mut last_serai_block = serai.latest_block().await.unwrap().number();
+  let mut last_serai_block = serai.latest_finalized_block().await.unwrap().number();
 
   for (i, processor) in processors.iter_mut().enumerate() {
     if i == excluded_signer {
@@ -196,9 +194,9 @@ pub async fn batch(
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
 
-    while last_serai_block <= serai.latest_block().await.unwrap().number() {
+    while last_serai_block <= serai.latest_finalized_block().await.unwrap().number() {
       let batch_events = serai
-        .as_of(serai.block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+        .as_of(serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
         .in_instructions()
         .batch_events()
         .await
@@ -222,7 +220,7 @@ pub async fn batch(
   }
 
   // Verify the coordinator sends SubstrateBlock to all processors
-  let last_block = serai.block_by_number(last_serai_block).await.unwrap().unwrap();
+  let last_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
   for processor in processors {
     assert_eq!(
       processor.recv_message().await,
@@ -232,7 +230,6 @@ pub async fn batch(
             serai_time: last_block.time().unwrap() / 1000,
             network_latest_finalized_block: batch.batch.block,
           },
-          network: batch.batch.network,
           block: last_serai_block,
           burns: vec![],
           batches: vec![batch.batch.id],
@@ -244,7 +241,6 @@ pub async fn batch(
     processor
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-          network: batch.batch.network,
           block: last_serai_block,
           plans: vec![],
         },
@@ -283,6 +279,7 @@ async fn batch_test() {
       batch(
         &mut processors,
         &processor_is,
+        Session(0),
         &substrate_key,
         Batch {
           network: NetworkId::Bitcoin,

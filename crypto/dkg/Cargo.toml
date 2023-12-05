@@ -22,7 +22,8 @@ zeroize = { version = "^1.5", default-features = false, features = ["zeroize_der
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false }
 
-serde = { version = "1", features = ["derive"], optional = true }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
 chacha20 = { version = "0.9", default-features = false, features = ["zeroize"] }
@@ -45,7 +46,8 @@ std = [
 
   "std-shims/std",
 
-  "serde/std",
+  "borsh?/std",
+  "serde?/std",
 
   "transcript/std",
   "chacha20/std",
@@ -58,6 +60,7 @@ std = [
   "dleq/std",
   "dleq/serialize"
 ]
+borsh = ["dep:borsh"]
 serde = ["dep:serde"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

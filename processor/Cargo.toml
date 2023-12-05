@@ -16,7 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # Macros
 async-trait = { version = "0.1", default-features = false }
-once_cell = { version = "1", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 thiserror = { version = "1", default-features = false }
 serde = { version = "1", default-features = false, features = ["std", "derive"] }
@@ -28,7 +27,7 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 # Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 # Cryptography
@@ -49,20 +48,19 @@ monero-serai = { path = "../coins/monero", default-features = false, features = 
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"], optional = true }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"] }
-serai-env = { path = "../common/env" }
+serai-db = { path = "../common/db", optional = true }
+serai-env = { path = "../common/env", optional = true }
+# TODO: Replace with direct usage of primitives
 serai-client = { path = "../substrate/client", default-features = false }
 
-messages = { package = "serai-processor-messages", path = "./messages" }
+messages = { package = "serai-processor-messages", path = "./messages", optional = true }
 
-message-queue = { package = "serai-message-queue", path = "../message-queue" }
+message-queue = { package = "serai-message-queue", path = "../message-queue", optional = true }
 
 [dev-dependencies]
-futures = { version = "0.3", default-features = false }
-
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
 
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
@@ -76,3 +74,7 @@ bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
+
+binaries = ["env_logger", "serai-env", "messages", "message-queue"]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

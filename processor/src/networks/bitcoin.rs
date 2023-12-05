@@ -1,7 +1,6 @@
-use std::{time::Duration, io, collections::HashMap};
+use std::{sync::OnceLock, time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
-use once_cell::sync::Lazy;
 
 use scale::{Encode, Decode};
 
@@ -297,9 +296,9 @@ impl BlockTrait<Bitcoin> for Block {
 }
 
 const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
-static BRANCH_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"branch"));
-static CHANGE_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"change"));
-static FORWARD_OFFSET: Lazy<Scalar> = Lazy::new(|| Secp256k1::hash_to_F(KEY_DST, b"forward"));
+static BRANCH_OFFSET: OnceLock<Scalar> = OnceLock::new();
+static CHANGE_OFFSET: OnceLock<Scalar> = OnceLock::new();
+static FORWARD_OFFSET: OnceLock<Scalar> = OnceLock::new();
 
 // Always construct the full scanner in order to ensure there's no collisions
 fn scanner(
@@ -321,9 +320,18 @@ fn scanner(
     kinds.insert(offset_ref.to_vec(), kind);
   };
 
-  register(OutputType::Branch, *BRANCH_OFFSET);
-  register(OutputType::Change, *CHANGE_OFFSET);
-  register(OutputType::Forwarded, *FORWARD_OFFSET);
+  register(
+    OutputType::Branch,
+    *BRANCH_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"branch")),
+  );
+  register(
+    OutputType::Change,
+    *CHANGE_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"change")),
+  );
+  register(
+    OutputType::Forwarded,
+    *FORWARD_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"forward")),
+  );
 
   (scanner, offsets, kinds)
 }

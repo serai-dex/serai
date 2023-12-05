@@ -8,7 +8,10 @@ use tokio::time::timeout;
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
+use serai_client::{
+  primitives::{NetworkId, Coin, Amount, Balance},
+  validator_sets::primitives::Session,
+};
 
 use crate::{
   Payment, Plan,
@@ -140,7 +143,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  let txid = sign(network.clone(), keys_txs).await;
+  let txid = sign(network.clone(), Session(0), keys_txs).await;
   let tx = network.get_transaction(&txid).await.unwrap();
   network.mine_block().await;
   let block_number = network.get_latest_block_number().await.unwrap();

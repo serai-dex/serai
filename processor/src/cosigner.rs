@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
-use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   ThresholdKeys, FrostError,
@@ -18,6 +17,7 @@ use frost_schnorrkel::Schnorrkel;
 use log::{info, warn};
 
 use scale::Encode;
+use serai_client::validator_sets::primitives::Session;
 
 use messages::coordinator::*;
 use crate::{Get, DbTxn, create_db};
@@ -35,7 +35,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
 >>::SignatureShare;
 
 pub struct Cosigner {
-  #[allow(dead_code)] // False positive
+  session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
   block_number: u64,
@@ -51,6 +51,7 @@ impl fmt::Debug for Cosigner {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("Cosigner")
+      .field("session", &self.session)
       .field("block_number", &self.block_number)
       .field("id", &self.id)
       .field("attempt", &self.attempt)
@@ -63,6 +64,7 @@ impl fmt::Debug for Cosigner {
 impl Cosigner {
   pub fn new(
     txn: &mut impl DbTxn,
+    session: Session,
     keys: Vec<ThresholdKeys<Ristretto>>,
     block_number: u64,
     id: [u8; 32],
@@ -95,19 +97,16 @@ impl Cosigner {
 
       let (machine, preprocess) = machine.preprocess(&mut OsRng);
       machines.push(machine);
-      serialized_preprocesses.push(preprocess.serialize());
+      serialized_preprocesses.push(preprocess.serialize().try_into().unwrap());
       preprocesses.push(preprocess);
     }
     let preprocessing = Some((machines, preprocesses));
 
-    let substrate_sign_id = SubstrateSignId {
-      key: keys[0].group_key().to_bytes(),
-      id: SubstrateSignableId::CosigningSubstrateBlock(id),
-      attempt,
-    };
+    let substrate_sign_id =
+      SubstrateSignId { session, id: SubstrateSignableId::CosigningSubstrateBlock(id), attempt };
 
     Some((
-      Cosigner { keys, block_number, id, attempt, preprocessing, signing: None },
+      Cosigner { session, keys, block_number, id, attempt, preprocessing, signing: None },
       ProcessorMessage::CosignPreprocess {
         id: substrate_sign_id,
         preprocesses: serialized_preprocesses,
@@ -127,7 +126,7 @@ impl Cosigner {
       }
 
       CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
-        assert_eq!(id.key, self.keys[0].group_key().to_bytes());
+        assert_eq!(id.session, self.session);
         let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
           panic!("cosigner passed Batch")
         };
@@ -212,7 +211,7 @@ impl Cosigner {
       }
 
       CoordinatorMessage::SubstrateShares { id, shares } => {
-        assert_eq!(id.key, self.keys[0].group_key().to_bytes());
+        assert_eq!(id.session, self.session);
         let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
           panic!("cosigner passed Batch")
         };

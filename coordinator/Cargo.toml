@@ -30,7 +30,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 
-serai-db = { path = "../common/db", features = ["rocksdb"] }
+serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env" }
 
 processor-messages = { package = "serai-processor-messages", path = "../processor/messages" }
@@ -41,9 +41,7 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
-serde = "1"
-serde_json = { version = "1", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
@@ -57,3 +55,7 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+
+[features]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

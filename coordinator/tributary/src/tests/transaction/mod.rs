@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std::{sync::Arc, io, collections::HashMap};
+use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, rngs::OsRng};
@@ -40,6 +40,12 @@ pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
       s: <Ristretto as Ciphersuite>::F::random(rng),
     },
   }
+}
+
+pub fn random_signed_with_nonce<R: RngCore + CryptoRng>(rng: &mut R, nonce: u32) -> Signed {
+  let mut signed = random_signed(rng);
+  signed.nonce = nonce;
+  signed
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -114,7 +120,7 @@ impl ReadWrite for SignedTransaction {
 
 impl Transaction for SignedTransaction {
   fn kind(&self) -> TransactionKind<'_> {
-    TransactionKind::Signed(&self.1)
+    TransactionKind::Signed(vec![], &self.1)
   }
 
   fn hash(&self) -> [u8; 32] {
@@ -145,9 +151,7 @@ pub fn signed_transaction<R: RngCore + CryptoRng>(
   tx.1.signature.R = Ristretto::generator() * sig_nonce.deref();
   tx.1.signature = SchnorrSignature::sign(key, sig_nonce, tx.sig_hash(genesis));
 
-  let mut nonces = HashMap::from([(signer, nonce)]);
-  verify_transaction(&tx, genesis, &mut nonces).unwrap();
-  assert_eq!(nonces, HashMap::from([(tx.1.signer, tx.1.nonce.wrapping_add(1))]));
+  verify_transaction(&tx, genesis, &mut |_, _| Some(tx.1.nonce)).unwrap();
 
   tx
 }

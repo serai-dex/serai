@@ -24,13 +24,12 @@ use serai_db::DbTxn;
 
 use processor_messages::SubstrateContext;
 
-use futures::stream::StreamExt;
 use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
   Db,
   processors::Processors,
-  tributary::{TributarySpec, SeraiBlockNumber, KeyPairDb},
+  tributary::{TributarySpec, SeraiBlockNumber},
 };
 
 mod db;
@@ -81,7 +80,7 @@ async fn handle_new_set<D: Db>(
       assert_eq!(block.number(), 0);
       // Use the next block's time
       loop {
-        let Ok(Some(res)) = serai.block_by_number(1).await else {
+        let Ok(Some(res)) = serai.finalized_block_by_number(1).await else {
           sleep(Duration::from_secs(5)).await;
           continue;
         };
@@ -116,19 +115,13 @@ async fn handle_new_set<D: Db>(
   Ok(())
 }
 
-async fn handle_key_gen<D: Db, Pro: Processors>(
-  db: &mut D,
+async fn handle_key_gen<Pro: Processors>(
   processors: &Pro,
   serai: &Serai,
   block: &Block,
   set: ValidatorSet,
   key_pair: KeyPair,
 ) -> Result<(), SeraiError> {
-  // This has to be saved *before* we send ConfirmKeyPair
-  let mut txn = db.txn();
-  SubstrateDb::<D>::save_session_for_keys(&mut txn, &key_pair, set.session);
-  txn.commit();
-
   processors
     .send(
       set.network,
@@ -144,7 +137,7 @@ async fn handle_key_gen<D: Db, Pro: Processors>(
             // block which has a time greater than or equal to the Serai time
             .unwrap_or(BlockHash([0; 32])),
         },
-        set,
+        session: set.session,
         key_pair,
       },
     )
@@ -232,7 +225,6 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
             serai_time: block.time().unwrap() / 1000,
             network_latest_finalized_block,
           },
-          network,
           block: block.number(),
           burns: burns.remove(&network).unwrap(),
           batches: batches.remove(&network).unwrap(),
@@ -291,13 +283,7 @@ async fn handle_block<D: Db, Pro: Processors>(
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
-        // Immediately ensure this key pair is accessible to the tributary, before we fire any
-        // events off of it
-        let mut txn = db.0.txn();
-        KeyPairDb::set(&mut txn, set, &key_pair);
-        txn.commit();
-
-        handle_key_gen(&mut db.0, processors, serai, &block, set, key_pair).await?;
+        handle_key_gen(processors, serai, &block, set, key_pair).await?;
       } else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
@@ -353,7 +339,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   next_block: &mut u64,
 ) -> Result<(), SeraiError> {
   // Check if there's been a new Substrate block
-  let latest_number = serai.latest_block().await?.number();
+  let latest_number = serai.latest_finalized_block().await?.number();
 
   // TODO: If this block directly builds off a cosigned block *and* doesn't contain events, mark
   // cosigned,
@@ -382,7 +368,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
         None => {
           let serai = serai.as_of(
             serai
-              .block_by_number(block)
+              .finalized_block_by_number(block)
               .await?
               .expect("couldn't get block which should've been finalized")
               .hash(),
@@ -445,7 +431,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
     for block in (last_intended_to_cosign_block + 1) ..= latest_number {
       let actual_block = serai
-        .block_by_number(block)
+        .finalized_block_by_number(block)
         .await?
         .expect("couldn't get block which should've been finalized");
       SeraiBlockNumber::set(&mut txn, actual_block.hash(), &block);
@@ -548,7 +534,7 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       processors,
       serai,
       serai
-        .block_by_number(b)
+        .finalized_block_by_number(b)
         .await?
         .expect("couldn't get block before the latest finalized block"),
     )
@@ -574,6 +560,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   let mut db = SubstrateDb::new(db);
   let mut next_substrate_block = db.next_block();
 
+  /*
   let new_substrate_block_notifier = {
     let serai = &serai;
     move || async move {
@@ -588,31 +575,55 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       }
     }
   };
-  let mut substrate_block_notifier = new_substrate_block_notifier().await;
+  */
+  // TODO: Restore the above subscription-based system
+  let new_substrate_block_notifier = {
+    let serai = &serai;
+    move |next_substrate_block| async move {
+      loop {
+        match serai.latest_finalized_block().await {
+          Ok(latest) => {
+            if latest.header().number >= next_substrate_block {
+              return latest;
+            } else {
+              sleep(Duration::from_secs(3)).await;
+            }
+          }
+          Err(e) => {
+            log::error!("couldn't communicate with serai node: {e}");
+            sleep(Duration::from_secs(5)).await;
+          }
+        }
+      }
+    }
+  };
 
   loop {
     // await the next block, yet if our notifier had an error, re-create it
     {
-      let Ok(next_block) =
-        tokio::time::timeout(Duration::from_secs(60), substrate_block_notifier.next()).await
+      let Ok(_) = tokio::time::timeout(
+        Duration::from_secs(60),
+        new_substrate_block_notifier(next_substrate_block),
+      )
+      .await
       else {
         // Timed out, which may be because Serai isn't finalizing or may be some issue with the
         // notifier
-        if serai.latest_block().await.map(|block| block.number()).ok() ==
+        if serai.latest_finalized_block().await.map(|block| block.number()).ok() ==
           Some(next_substrate_block.saturating_sub(1))
         {
           log::info!("serai hasn't finalized a block in the last 60s...");
-        } else {
-          substrate_block_notifier = new_substrate_block_notifier().await;
         }
         continue;
       };
 
+      /*
       // next_block is a Option<Result>
       if next_block.and_then(Result::ok).is_none() {
-        substrate_block_notifier = new_substrate_block_notifier().await;
+        substrate_block_notifier = new_substrate_block_notifier(next_substrate_block);
         continue;
       }
+      */
     }
 
     match handle_new_blocks(
@@ -645,12 +656,10 @@ pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -
     }
     first = false;
 
-    let Ok(latest_block) = serai.latest_block().await else {
+    let Ok(serai) = serai.as_of_latest_finalized_block().await else {
       continue;
     };
-    let Ok(last) =
-      serai.as_of(latest_block.hash()).in_instructions().last_batch_for_network(network).await
-    else {
+    let Ok(last) = serai.in_instructions().last_batch_for_network(network).await else {
       continue;
     };
     break if let Some(last) = last { last + 1 } else { 0 };

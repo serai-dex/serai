@@ -7,6 +7,10 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
+
+#[cfg(feature = "borsh")]
+use borsh::{BorshSerialize, BorshDeserialize};
+#[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, sr25519::Public, bounded::BoundedVec};
@@ -22,39 +26,18 @@ pub const MAX_KEY_LEN: u32 = 96;
 
 /// The type used to identify a specific session of validators.
 #[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  Hash,
-  Debug,
-  Serialize,
-  Deserialize,
-  Encode,
-  Decode,
-  TypeInfo,
-  MaxEncodedLen,
-  Default,
+  Clone, Copy, PartialEq, Eq, Hash, Default, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  Hash,
-  Debug,
-  Serialize,
-  Deserialize,
-  Encode,
-  Decode,
-  TypeInfo,
-  MaxEncodedLen,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,
@@ -67,7 +50,34 @@ pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for signing Batches, and their key on the external network.
-pub type KeyPair = (Public, ExternalKey);
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct KeyPair(
+  #[cfg_attr(
+    feature = "borsh",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_public",
+      deserialize_with = "serai_primitives::borsh_deserialize_public"
+    )
+  )]
+  pub Public,
+  #[cfg_attr(
+    feature = "borsh",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_bounded_vec",
+      deserialize_with = "serai_primitives::borsh_deserialize_bounded_vec"
+    )
+  )]
+  pub ExternalKey,
+);
+#[cfg(feature = "std")]
+impl Zeroize for KeyPair {
+  fn zeroize(&mut self) {
+    self.0 .0.zeroize();
+    self.1.as_mut().zeroize();
+  }
+}
 
 /// The MuSig context for a validator set.
 pub fn musig_context(set: ValidatorSet) -> Vec<u8> {
@@ -88,9 +98,14 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
   Public(dkg::musig::musig_key::<Ristretto>(&musig_context(set), &keys).unwrap().to_bytes())
 }
 
+/// The message for the remove_participant signature.
+pub fn remove_participant_message(set: &ValidatorSet, removed: Public) -> Vec<u8> {
+  (b"ValidatorSets-remove_participant", set, removed).encode()
+}
+
 /// The message for the set_keys signature.
 pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
-  [b"ValidatorSets-key_pair".as_ref(), &(set, key_pair).encode()].concat()
+  (b"ValidatorSets-set_keys", set, key_pair).encode()
 }
 
 /// For a set of validators whose key shares may exceed the maximum, reduce until they equal the

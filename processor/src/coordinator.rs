@@ -20,9 +20,9 @@ impl Coordinator for MessageQueue {
   async fn send(&mut self, msg: impl Send + Into<ProcessorMessage>) {
     let msg: ProcessorMessage = msg.into();
     let metadata = Metadata { from: self.service, to: Service::Coordinator, intent: msg.intent() };
-    let msg = serde_json::to_string(&msg).unwrap();
+    let msg = borsh::to_vec(&msg).unwrap();
 
-    self.queue(metadata, msg.into_bytes()).await;
+    self.queue(metadata, msg).await;
   }
 
   async fn recv(&mut self) -> Message {
@@ -32,7 +32,7 @@ impl Coordinator for MessageQueue {
 
     // Deserialize it into a CoordinatorMessage
     let msg: CoordinatorMessage =
-      serde_json::from_slice(&msg.msg).expect("message wasn't a JSON-encoded CoordinatorMessage");
+      borsh::from_slice(&msg.msg).expect("message wasn't a borsh-encoded CoordinatorMessage");
 
     return Message { id, msg };
   }

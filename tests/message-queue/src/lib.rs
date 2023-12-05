@@ -70,92 +70,96 @@ fn basic_functionality() {
   let (coord_key, priv_keys, composition) = instance();
   test.provide_container(composition);
   test.run(|ops| async move {
-    // Sleep for a second for the message-queue to boot
-    // It isn't an error to start immediately, it just silences an error
-    tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+    tokio::time::timeout(core::time::Duration::from_secs(60), async move {
+      // Sleep for a second for the message-queue to boot
+      // It isn't an error to start immediately, it just silences an error
+      tokio::time::sleep(core::time::Duration::from_secs(1)).await;
 
-    let rpc = ops.handle("serai-dev-message-queue").host_port(2287).unwrap();
-    let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
+      let rpc = ops.handle("serai-dev-message-queue").host_port(2287).unwrap();
+      let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
 
-    // Queue some messages
-    let coordinator =
-      MessageQueue::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
-    coordinator
-      .queue(
-        Metadata {
-          from: Service::Coordinator,
-          to: Service::Processor(NetworkId::Bitcoin),
-          intent: b"intent".to_vec(),
-        },
-        b"Hello, World!".to_vec(),
-      )
-      .await;
-
-    // Queue this twice, which message-queue should de-duplicate
-    for _ in 0 .. 2 {
+      // Queue some messages
+      let coordinator =
+        MessageQueue::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
       coordinator
         .queue(
           Metadata {
             from: Service::Coordinator,
             to: Service::Processor(NetworkId::Bitcoin),
-            intent: b"intent 2".to_vec(),
+            intent: b"intent".to_vec(),
           },
-          b"Hello, World, again!".to_vec(),
+          b"Hello, World!".to_vec(),
         )
         .await;
-    }
 
-    // Successfully get it
-    let bitcoin = MessageQueue::new(
-      Service::Processor(NetworkId::Bitcoin),
-      rpc.clone(),
-      Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
-    );
-    let msg = bitcoin.next(Service::Coordinator).await;
-    assert_eq!(msg.from, Service::Coordinator);
-    assert_eq!(msg.id, 0);
-    assert_eq!(&msg.msg, b"Hello, World!");
+      // Queue this twice, which message-queue should de-duplicate
+      for _ in 0 .. 2 {
+        coordinator
+          .queue(
+            Metadata {
+              from: Service::Coordinator,
+              to: Service::Processor(NetworkId::Bitcoin),
+              intent: b"intent 2".to_vec(),
+            },
+            b"Hello, World, again!".to_vec(),
+          )
+          .await;
+      }
 
-    // If we don't ack it, it should continue to be returned
-    assert_eq!(msg, bitcoin.next(Service::Coordinator).await);
+      // Successfully get it
+      let bitcoin = MessageQueue::new(
+        Service::Processor(NetworkId::Bitcoin),
+        rpc.clone(),
+        Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
+      );
+      let msg = bitcoin.next(Service::Coordinator).await;
+      assert_eq!(msg.from, Service::Coordinator);
+      assert_eq!(msg.id, 0);
+      assert_eq!(&msg.msg, b"Hello, World!");
 
-    // Acknowledging it should yield the next message
-    bitcoin.ack(Service::Coordinator, 0).await;
+      // If we don't ack it, it should continue to be returned
+      assert_eq!(msg, bitcoin.next(Service::Coordinator).await);
 
-    let next_msg = bitcoin.next(Service::Coordinator).await;
-    assert!(msg != next_msg);
-    assert_eq!(next_msg.from, Service::Coordinator);
-    assert_eq!(next_msg.id, 1);
-    assert_eq!(&next_msg.msg, b"Hello, World, again!");
-    bitcoin.ack(Service::Coordinator, 1).await;
+      // Acknowledging it should yield the next message
+      bitcoin.ack(Service::Coordinator, 0).await;
 
-    // No further messages should be available
-    tokio::time::timeout(core::time::Duration::from_secs(10), bitcoin.next(Service::Coordinator))
-      .await
-      .unwrap_err();
+      let next_msg = bitcoin.next(Service::Coordinator).await;
+      assert!(msg != next_msg);
+      assert_eq!(next_msg.from, Service::Coordinator);
+      assert_eq!(next_msg.id, 1);
+      assert_eq!(&next_msg.msg, b"Hello, World, again!");
+      bitcoin.ack(Service::Coordinator, 1).await;
 
-    // Queueing to a distinct processor should work, with a unique ID
-    coordinator
-      .queue(
-        Metadata {
-          from: Service::Coordinator,
-          to: Service::Processor(NetworkId::Monero),
-          // Intents should be per-from-to, making this valid
-          intent: b"intent".to_vec(),
-        },
-        b"Hello, World!".to_vec(),
-      )
-      .await;
+      // No further messages should be available
+      tokio::time::timeout(core::time::Duration::from_secs(10), bitcoin.next(Service::Coordinator))
+        .await
+        .unwrap_err();
 
-    let monero = MessageQueue::new(
-      Service::Processor(NetworkId::Monero),
-      rpc,
-      Zeroizing::new(priv_keys[&NetworkId::Monero]),
-    );
-    assert_eq!(monero.next(Service::Coordinator).await.id, 0);
-    monero.ack(Service::Coordinator, 0).await;
-    tokio::time::timeout(core::time::Duration::from_secs(10), monero.next(Service::Coordinator))
-      .await
-      .unwrap_err();
+      // Queueing to a distinct processor should work, with a unique ID
+      coordinator
+        .queue(
+          Metadata {
+            from: Service::Coordinator,
+            to: Service::Processor(NetworkId::Monero),
+            // Intents should be per-from-to, making this valid
+            intent: b"intent".to_vec(),
+          },
+          b"Hello, World!".to_vec(),
+        )
+        .await;
+
+      let monero = MessageQueue::new(
+        Service::Processor(NetworkId::Monero),
+        rpc,
+        Zeroizing::new(priv_keys[&NetworkId::Monero]),
+      );
+      assert_eq!(monero.next(Service::Coordinator).await.id, 0);
+      monero.ack(Service::Coordinator, 0).await;
+      tokio::time::timeout(core::time::Duration::from_secs(10), monero.next(Service::Coordinator))
+        .await
+        .unwrap_err();
+    })
+    .await
+    .unwrap();
   });
 }

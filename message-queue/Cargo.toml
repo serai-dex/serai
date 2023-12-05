@@ -16,12 +16,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # Macros
 once_cell = { version = "1", default-features = false }
-serde = { version = "1", default-features = false, features = ["std", "derive"] }
 
 # Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
-bincode = { version = "1", default-features = false }
-serde_json = { version = "1", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 # Libs
 zeroize = { version = "1", default-features = false, features = ["std"] }
@@ -37,16 +35,14 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 
 # Uses a single threaded runtime since this shouldn't ever be CPU-bound
-tokio = { version = "1", default-features = false, features = ["rt", "time", "macros"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
 serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
-serai-primitives = { path = "../substrate/primitives" }
-
-jsonrpsee = { version = "0.16", default-features = false, features = ["server"], optional = true }
-simple-request = { path = "../common/request", default-features = false }
+serai-primitives = { path = "../substrate/primitives", features = ["borsh"] }
 
 [features]
-binaries = ["serai-db", "serai-db/rocksdb", "jsonrpsee"]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

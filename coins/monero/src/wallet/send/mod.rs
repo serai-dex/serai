@@ -314,6 +314,7 @@ pub struct SignableTransaction {
   protocol: Protocol,
   r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<(SpendableOutput, Decoys)>,
+  has_change: bool,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee: u64,
@@ -385,7 +386,7 @@ fn need_additional(payments: &[InternalPayment]) -> (bool, bool) {
   (subaddresses, additional)
 }
 
-fn sanity_check_change_payment(payments: &[InternalPayment], has_change_address: bool) {
+fn sanity_check_change_payment_quantity(payments: &[InternalPayment], has_change_address: bool) {
   debug_assert_eq!(
     payments
       .iter()
@@ -516,7 +517,7 @@ impl SignableTransaction {
     }
 
     // Sanity check we have the expected number of change outputs
-    sanity_check_change_payment(&payments, change_address.is_some());
+    sanity_check_change_payment_quantity(&payments, change_address.is_some());
 
     // Modify the amount of the change output
     if change_address.is_some() {
@@ -527,23 +528,34 @@ impl SignableTransaction {
     }
 
     // Sanity check the change again after modifying
-    sanity_check_change_payment(&payments, change_address.is_some());
+    sanity_check_change_payment_quantity(&payments, change_address.is_some());
 
     // Sanity check outgoing amount + fee == incoming amount
-    debug_assert_eq!(
-      payments
-        .iter()
-        .map(|payment| match *payment {
-          InternalPayment::Payment(payment) => payment.1,
-          InternalPayment::Change(_, amount) => amount,
-        })
-        .sum::<u64>() +
-        fee,
-      in_amount,
-      "Outgoing amount + fee != incoming amount"
-    );
+    if change_address.is_some() {
+      debug_assert_eq!(
+        payments
+          .iter()
+          .map(|payment| match *payment {
+            InternalPayment::Payment(payment) => payment.1,
+            InternalPayment::Change(_, amount) => amount,
+          })
+          .sum::<u64>() +
+          fee,
+        in_amount,
+        "Outgoing amount + fee != incoming amount"
+      );
+    }
 
-    Ok(SignableTransaction { protocol, r_seed, inputs, payments, data, fee, fee_rate })
+    Ok(SignableTransaction {
+      protocol,
+      r_seed,
+      inputs,
+      payments,
+      has_change: change_address.is_some(),
+      data,
+      fee,
+      fee_rate,
+    })
   }
 
   pub fn fee(&self) -> u64 {
@@ -778,7 +790,9 @@ impl SignableTransaction {
       });
       encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
     }
-    debug_assert_eq!(self.fee, fee, "transaction will use an unexpected fee");
+    if self.has_change {
+      debug_assert_eq!(self.fee, fee, "transaction will use an unexpected fee");
+    }
 
     (
       Transaction {
@@ -844,11 +858,13 @@ impl SignableTransaction {
       _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
     }
 
-    debug_assert_eq!(
-      self.fee_rate.calculate_fee_from_weight(tx.weight()),
-      tx.rct_signatures.base.fee,
-      "transaction used unexpected fee",
-    );
+    if self.has_change {
+      debug_assert_eq!(
+        self.fee_rate.calculate_fee_from_weight(tx.weight()),
+        tx.rct_signatures.base.fee,
+        "transaction used unexpected fee",
+      );
+    }
 
     Ok(tx)
   }
