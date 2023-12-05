@@ -360,22 +360,23 @@ pub mod pallet {
       for coin in Pools::<T>::iter_keys() {
         // insert the new price to our oracle window
         // The spot price for 1 coin, in atomic units, to SRI is used
-        let Ok((sri_balance, coin_balance)) = Self::get_reserves(&Coin::native(), &coin) else {
-          continue;
-        };
-
-        // We use 1 coin to handle rounding errors which may occur with atomic units
-        // If we used atomic units, any coin whose atomic unit is worth less than SRI's atomic unit
-        // would cause a 'price' of 0
-        // If the decimals aren't large enough to provide sufficient buffer, use 10,000
-        let coin_decimals = coin.decimals().max(5);
-        let accuracy_increase =
-          HigherPrecisionBalance::from(SubstrateAmount::pow(10, coin_decimals));
-        let sri_per_coin = u64::try_from(
-          accuracy_increase * HigherPrecisionBalance::from(sri_balance) /
-            HigherPrecisionBalance::from(coin_balance),
-        )
-        .unwrap_or(u64::MAX);
+        let sri_per_coin =
+          if let Ok((sri_balance, coin_balance)) = Self::get_reserves(&Coin::native(), &coin) {
+            // We use 1 coin to handle rounding errors which may occur with atomic units
+            // If we used atomic units, any coin whose atomic unit is worth less than SRI's atomic
+            // unit would cause a 'price' of 0
+            // If the decimals aren't large enough to provide sufficient buffer, use 10,000
+            let coin_decimals = coin.decimals().max(5);
+            let accuracy_increase =
+              HigherPrecisionBalance::from(SubstrateAmount::pow(10, coin_decimals));
+            u64::try_from(
+              accuracy_increase * HigherPrecisionBalance::from(sri_balance) /
+                HigherPrecisionBalance::from(coin_balance),
+            )
+            .unwrap_or(u64::MAX)
+          } else {
+            0
+          };
         let sri_per_coin = sri_per_coin.to_be_bytes();
 
         SpotPriceForBlock::<T>::set(n, coin, sri_per_coin);
@@ -393,7 +394,7 @@ pub mod pallet {
           SpotPriceForBlock::<T>::remove(start_of_window, coin);
           // Remove this price from the multiset
           OraclePrices::<T>::mutate_exists(coin, start_spot_price, |v| {
-            *v = Some(v.unwrap() - 1);
+            *v = Some(v.unwrap_or(1) - 1);
             if *v == Some(0) {
               *v = None;
             }
