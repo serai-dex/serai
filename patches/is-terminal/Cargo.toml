@@ -1,0 +1,14 @@
+[package]
+name = "is-terminal"
+version = "0.4.10"
+description = "is-terminal written around std::io::IsTerminal"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/is-terminal"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.70"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

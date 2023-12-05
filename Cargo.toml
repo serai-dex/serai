@@ -68,6 +68,7 @@ members = [
   "tests/full-stack",
   "tests/reproducible-runtime",
 
+  "patches/is-terminal",
   "patches/option-ext",
   "patches/directories-next",
 ]
@@ -98,6 +99,9 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 
 # Needed due to dockertest's usage of `Rc`s when we need `Arc`s
 dockertest = { git = "https://github.com/kayabaNerve/dockertest-rs", branch = "arc" }
+
+# is-terminal now has an std-based solution with an equivalent API
+is-terminal = { path = "patches/is-terminal" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
