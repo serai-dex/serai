@@ -3,6 +3,7 @@ FROM debian:bookworm-slim as mimalloc
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
   cd mimalloc && \
+  git checkout 43ce4bd7fd34bcc730c1c7471c99995597415488 && \
   mkdir -p out/secure && \
   cd out/secure && \
   cmake -DMI_SECURE=ON ../.. && \
