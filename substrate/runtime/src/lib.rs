@@ -229,7 +229,7 @@ impl coins::Config for Runtime {
 
 impl coins::Config<coins::Instance1> for Runtime {
   type RuntimeEvent = RuntimeEvent;
-  type AllowMint = ValidatorSets;
+  type AllowMint = ();
 }
 
 impl dex::Config for Runtime {

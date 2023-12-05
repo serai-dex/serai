@@ -30,6 +30,16 @@ pub enum NetworkId {
   Ethereum,
   Monero,
 }
+impl NetworkId {
+  pub fn coins(&self) -> &'static [Coin] {
+    match self {
+      Self::Serai => &[Coin::Serai],
+      Self::Bitcoin => &[Coin::Bitcoin],
+      Self::Ethereum => &[Coin::Ether, Coin::Dai],
+      Self::Monero => &[Coin::Monero],
+    }
+  }
+}
 
 pub const NETWORKS: [NetworkId; 4] =
   [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];

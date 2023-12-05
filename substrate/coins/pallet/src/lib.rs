@@ -3,11 +3,11 @@
 use serai_primitives::{Coin, SubstrateAmount, Balance};
 
 pub trait AllowMint {
-  fn allow(balance: &Balance) -> bool;
+  fn is_allowed(balance: &Balance) -> bool;
 }
 
 impl AllowMint for () {
-  fn allow(_: &Balance) -> bool {
+  fn is_allowed(_: &Balance) -> bool {
     true
   }
 }
@@ -57,7 +57,7 @@ pub mod pallet {
     AmountOverflowed,
     NotEnoughCoins,
     BurnWithInstructionNotAllowed,
-    NotEnoughStake,
+    MintNotAllowed,
   }
 
   #[pallet::event]
@@ -162,10 +162,8 @@ pub mod pallet {
         .ok_or(Error::<T, I>::AmountOverflowed)?;
 
       // skip the economics check for lp tokens.
-      if TypeId::of::<I>() != TypeId::of::<LiquidityTokensInstance>() &&
-        !T::AllowMint::allow(&balance)
-      {
-        Err(Error::<T, I>::NotEnoughStake)?;
+      if !T::AllowMint::is_allowed(&balance) {
+        Err(Error::<T, I>::MintNotAllowed)?;
       }
       Supply::<T, I>::set(balance.coin, new_supply);
 

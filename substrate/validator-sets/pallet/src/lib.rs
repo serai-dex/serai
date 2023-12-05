@@ -382,7 +382,7 @@ pub mod pallet {
     /// Validator wasn't registered or active.
     NonExistentValidator,
     /// Deallocation would take the stake below what is required.
-    NotEnoughStake,
+    DeallocationWouldRemoveEconomicSecurity,
   }
 
   #[pallet::hooks]
@@ -540,7 +540,7 @@ pub mod pallet {
         .ok_or(Error::<T>::NotEnoughAllocated)?;
       let required_stake = Self::required_stake_for_network(network);
       if new_total_staked < required_stake {
-        Err(Error::<T>::NotEnoughStake)?;
+        Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
       }
 
       let old_allocation =
@@ -723,11 +723,12 @@ pub mod pallet {
 
     /// Returns the required stake in terms SRI for a given `Balance`.
     pub fn required_stake(balance: &Balance) -> SubstrateAmount {
-      // TODO: unwrap_or? We will always have an oracle value except the first block
-      // of each session since we have to wait for that block to end to update the window and
-      // the oracle value accordingly.
       let price = Dex::<T>::oracle_value(balance.coin).unwrap_or(Amount(0));
-      let mut total_coin_value = balance.amount.0.saturating_mul(price.0);
+      let mut total_coin_value = balance
+        .amount
+        .0
+        .saturating_mul(price.0)
+        .saturating_div(u64::pow(10, balance.coin.decimals()));
 
       // required stake formula (COIN_VALUE * 1.5) + margin(20%)
       total_coin_value = total_coin_value.saturating_mul(3).saturating_div(2);
@@ -737,9 +738,7 @@ pub mod pallet {
     /// Returns the current total required stake for a given `network`.
     pub fn required_stake_for_network(network: NetworkId) -> SubstrateAmount {
       let mut total_required: SubstrateAmount = 0;
-      // TODO: have network.coins() instead of this?
-      let coins = COINS.iter().filter(|c| c.network() == network).collect::<Vec<&Coin>>();
-      for coin in coins {
+      for coin in network.coins() {
         let supply = Coins::<T>::supply(coin);
         total_required = total_required
           .saturating_add(Self::required_stake(&Balance { coin: *coin, amount: Amount(supply) }));
@@ -859,7 +858,7 @@ pub mod pallet {
         Err(Error::DeallocationWouldRemoveFaultTolerance) |
         Err(Error::NonExistentDeallocation) |
         Err(Error::NonExistentValidator) |
-        Err(Error::NotEnoughStake) |
+        Err(Error::DeallocationWouldRemoveEconomicSecurity) |
         Err(Error::BadSignature) => Err(InvalidTransaction::BadProof)?,
         Err(Error::__Ignore(_, _)) => unreachable!(),
         Ok(()) => (),
@@ -880,7 +879,7 @@ pub mod pallet {
   }
 
   impl<T: Config> AllowMint for Pallet<T> {
-    fn allow(balance: &Balance) -> bool {
+    fn is_allowed(balance: &Balance) -> bool {
       // get the required stake
       let current_required = Self::required_stake_for_network(balance.coin.network());
       let new_required = current_required.saturating_add(Self::required_stake(balance));

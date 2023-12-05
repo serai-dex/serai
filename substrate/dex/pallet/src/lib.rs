@@ -160,16 +160,23 @@ pub mod pallet {
     StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, [u8; 8], ValueQuery>;
 
   /// Moving window of oracle prices.
+  /// The second [u8; 8] key is the amount's big endian bytes, and u16 is the amount of inclusions
+  /// in this multi-set.
   #[pallet::storage]
   #[pallet::getter(fn oracle_prices)]
-  pub type OraclePrices<T: Config> = StorageMap<_, Identity, [u8; 8], u16, OptionQuery>;
+  pub type OraclePrices<T: Config> =
+    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], u16, OptionQuery>;
   impl<T: Config> Pallet<T> {
-    /// Get the highest sustained(lowest) value of the window
-    pub fn highest_sustained_price() -> Amount {
-      let mut iter = OraclePrices::<T>::iter_keys();
-      // we can unwrap because we will always have at least 1 key in this map
-      // before this function is called.
-      Amount(u64::from_be_bytes(iter.next().unwrap()))
+    // TODO: consider an algorithm which removes outliers? This algorithm might work a good bit
+    // better if we remove the bottom n values (so some value sustained over 90% of blocks instead
+    // of all blocks in the window).
+    /// Get the highest sustained value for this window.
+    /// This is actually the lowest price observed during the windows, as it's the price
+    /// all prices are greater than or equal to.
+    pub fn highest_sustained_price(coin: &Coin) -> Option<Amount> {
+      let mut iter = OraclePrices::<T>::iter_key_prefix(coin);
+      // the firs key lowest price due to the keys being lexicographically ordered.
+      iter.next().map(|amount| Amount(u64::from_be_bytes(amount)))
     }
   }
 
@@ -263,6 +270,12 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      // assert that oracle windows size can fit into u16. Otherwise number of observants
+      // for a price in the `OraclePrices` map can overflow. And we don't want to make the this
+      // const directly a u16 because it is used the block number calculations.
+      u16::try_from(ORACLE_WINDOW_SIZE).unwrap();
+
+      // create the pools
       for coin in &self.pools {
         Pallet::<T>::create_pool(*coin).unwrap();
       }
@@ -335,20 +348,30 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
+      // we run this on on_finalize because we want to use the last price of the block for a coin.
+      // That is to prevent mid-block spikes a malicious block proposer can exploit without
+      // risk of being arbitraged against, since there is no guarantee they will be the producer
+      // for the next block as well.
       for coin in Pools::<T>::iter_keys() {
         // insert the new price to our oracle window
-        let last = Self::quote_price_exact_tokens_for_tokens(coin, Coin::native(), 1, false)
-          .unwrap_or(0)
-          .to_be_bytes();
+        // price is how much SRI we can get for 1 coin. 1 as in literal sense and not atomic 1.
+        let last = Self::quote_price_exact_tokens_for_tokens(
+          coin,
+          Coin::native(),
+          u64::pow(10, coin.decimals()),
+          false,
+        )
+        .unwrap_or(0)
+        .to_be_bytes();
         LastQuoteForBlock::<T>::set(n, coin, last);
-        let observed = OraclePrices::<T>::get(last).unwrap_or(0);
-        OraclePrices::<T>::set(last, Some(observed + 1));
+        let observed = Self::oracle_prices(coin, last).unwrap_or(0);
+        OraclePrices::<T>::set(coin, last, Some(observed + 1));
 
         // pop the earliest key from the window once we reach its full size.
         if n >= ORACLE_WINDOW_SIZE.into() {
           let begin_amount = Self::last_quote_for_block(n - ORACLE_WINDOW_SIZE.into(), coin);
-          // delete the amount if # of observant for this price is now 0.
-          OraclePrices::<T>::mutate_exists(begin_amount, |v| {
+          // delete the amount if # of observants for this price is now 0.
+          OraclePrices::<T>::mutate_exists(coin, begin_amount, |v| {
             *v = Some(v.unwrap() - 1);
             if *v == Some(0) {
               *v = None;
@@ -358,8 +381,8 @@ pub mod pallet {
         }
 
         // update the oracle value
-        let highest_sustained = Self::highest_sustained_price();
-        let oracle_value = OracleValue::<T>::get(coin).unwrap_or(Amount(0));
+        let highest_sustained = Self::highest_sustained_price(&coin).unwrap_or(Amount(0));
+        let oracle_value = Self::oracle_value(coin).unwrap_or(Amount(0));
         if highest_sustained > oracle_value {
           OracleValue::<T>::set(coin, Some(highest_sustained));
         }
