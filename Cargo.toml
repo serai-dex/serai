@@ -36,6 +36,7 @@ members = [
   "coordinator/tributary",
   "coordinator",
 
+  "substrate/tree-cleanup/is-terminal",
   "substrate/tree-cleanup/option-ext",
   "substrate/tree-cleanup/directories-next",
   "substrate/tree-cleanup/bandersnatch_vrfs",
@@ -101,6 +102,9 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 # subxt *can* pull these off crates.io yet there's no benefit to this
 sp-core-hashing = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+
+# is-terminal now has an std-based solution with an equivalent API
+is-terminal = { path = "substrate/tree-cleanup/is-terminal" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
