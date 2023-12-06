@@ -289,7 +289,7 @@ where
 
 // for validating equivocation evidences.
 impl pallet_authorship::Config for Runtime {
-  type FindAuthor = validator_sets::FindAccountFromAuthorIndex<Self, Babe>;
+  type FindAuthor = ValidatorSets;
   type EventHandler = ();
 }
 

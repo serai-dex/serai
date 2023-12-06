@@ -2,7 +2,6 @@
 
 use frame_support::traits::FindAuthor;
 
-use serai_primitives::NetworkId;
 use sp_core::sr25519::Public;
 use sp_session::{GetSessionNumber, GetValidatorCount};
 use sp_runtime::ConsensusEngineId;
@@ -29,6 +28,7 @@ impl GetValidatorCount for MembershipProof {
   }
 }
 
+<<<<<<< HEAD
 // TODO: check if you can simplify this(taken from pallet session).
 pub struct FindAccountFromAuthorIndex<T, Inner>(sp_std::marker::PhantomData<(T, Inner)>);
 
@@ -45,6 +45,8 @@ impl<T: Config, Inner: FindAuthor<u32>> FindAuthor<T::AccountId>
   }
 }
 
+=======
+>>>>>>> 44daae1f (bug fixes)
 #[allow(deprecated, clippy::let_unit_value)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
@@ -795,7 +797,6 @@ pub mod pallet {
       }
       total_required
     }
-  }
 
     // Since babe & grandpa authorities are the same each session, we can check whichever.
     // Babe also provides convenient function to check for authorities so we just go with that.
@@ -816,6 +817,8 @@ pub mod pallet {
 
       // prevent any future deallocation.
       let mut to_unlock_on = Self::session(network).unwrap();
+      // TODO: we don't know in which block the it might be deallocating, so we go through all
+      // but this is ugly.
       for i in 0 .. 4 {
         to_unlock_on.0 += i;
         let pending = Self::take_deallocatable_amount(network, to_unlock_on, account);
@@ -825,13 +828,14 @@ pub mod pallet {
         }
       }
 
-      // remove from participating the current & future sets.
+      // remove from the current & future sets.
       // TODO: how to remove from the current?
-      let mut participants = Self::participants(network);
+      let mut participants =
+        Participants::<T>::get(network).expect("no Serai participants on slash");
       let index = participants.iter().position(|(id, _)| *id == account);
       if let Some(i) = index {
         participants.remove(i);
-        Participants::<T>::set(network, participants);
+        Participants::<T>::set(network, Some(participants));
         InSet::<T>::remove(Self::in_set_key(network, account));
       }
 
@@ -841,7 +845,7 @@ pub mod pallet {
 
       // burn it from the stake account
       Coins::<T>::burn(
-        RawOrigin::Signed(account).into(),
+        RawOrigin::Signed(Self::account()).into(),
         Balance { coin: Coin::Serai, amount: allocation },
       )
       .unwrap();
@@ -1131,6 +1135,31 @@ pub mod pallet {
     }
   }
 
+<<<<<<< HEAD
+=======
+  impl<T: Config> AllowMint for Pallet<T> {
+    fn is_allowed(balance: &Balance) -> bool {
+      // get the required stake
+      let current_required = Self::required_stake_for_network(balance.coin.network());
+      let new_required = current_required + Self::required_stake(balance);
+
+      // get the total stake for the network & compare.
+      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
+      staked.0 >= new_required
+    }
+  }
+
+  impl<T: Config> FindAuthor<Public> for Pallet<T> {
+    fn find_author<'a, I>(digests: I) -> Option<Public>
+    where
+      I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
+    {
+      let i = Babe::<T>::find_author(digests)?;
+      Some(Babe::<T>::authorities()[i as usize].0.clone().into())
+    }
+  }
+
+>>>>>>> 44daae1f (bug fixes)
   impl<T: Config> DisabledValidators for Pallet<T> {
     fn is_disabled(_: u32) -> bool {
       // TODO
