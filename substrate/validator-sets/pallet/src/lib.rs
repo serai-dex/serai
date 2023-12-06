@@ -98,46 +98,12 @@ pub mod pallet {
   >;
   /// The validators selected to be in-set, regardless of if removed, with the ability to perform a
   /// check for presence.
-  // Uses Identity so we can call clear_prefix over network, manually inserting a Blake2 hash
-  // before the spammable key.
+  // Uses Identity for NetworkId to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
   pub(crate) type InSet<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 16], Public), u64, OptionQuery>;
-
-  // TODO: Merge this with SortedAllocationsIter
-  struct InSetIter<T: Config> {
-    _t: PhantomData<T>,
-    prefix: Vec<u8>,
-    last: Vec<u8>,
-  }
-  impl<T: Config> InSetIter<T> {
-    fn new(network: NetworkId) -> Self {
-      let mut prefix = InSet::<T>::final_prefix().to_vec();
-      prefix.extend(&network.encode());
-      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
-    }
-  }
-  impl<T: Config> Iterator for InSetIter<T> {
-    type Item = u64;
-    fn next(&mut self) -> Option<Self::Item> {
-      let next = sp_io::storage::next_key(&self.last)?;
-      if !next.starts_with(&self.prefix) {
-        return None;
-      }
-      let res = u64::decode(&mut sp_io::storage::get(&next).unwrap().as_ref()).unwrap();
-      self.last = next;
-      Some(res)
-    }
-  }
+    StorageDoubleMap<_, Identity, NetworkId, Blake2_128Concat, Public, u64, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
-    fn in_set_key(
-      network: NetworkId,
-      account: T::AccountId,
-    ) -> (NetworkId, [u8; 16], T::AccountId) {
-      (network, sp_io::hashing::blake2_128(&(network, account).encode()), account)
-    }
-
     // This exists as InSet, for Serai, is the validators set for the next session, *not* the
     // current set's validators
     #[inline]
@@ -153,7 +119,7 @@ pub mod pallet {
       if network == NetworkId::Serai {
         Self::in_active_serai_set(account)
       } else {
-        InSet::<T>::contains_key(Self::in_set_key(network, account))
+        InSet::<T>::contains_key(network, account)
       }
     }
 
@@ -161,7 +127,7 @@ pub mod pallet {
     ///
     /// This will still include participants which were removed from the DKG.
     pub fn in_set(network: NetworkId, account: Public) -> bool {
-      if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
+      if InSet::<T>::contains_key(network, account) {
         return true;
       }
 
@@ -177,7 +143,7 @@ pub mod pallet {
     /// This is useful when working with `allocation` and `total_allocated_stake`, which return the
     /// latest information.
     pub fn in_latest_decided_set(network: NetworkId, account: Public) -> bool {
-      InSet::<T>::contains_key(Self::in_set_key(network, account))
+      InSet::<T>::contains_key(network, account)
     }
   }
 
@@ -258,6 +224,8 @@ pub mod pallet {
     }
   }
 
+  // Doesn't use PrefixIterator as we need to yield the keys *and* values
+  // PrefixIterator only yields the values
   struct SortedAllocationsIter<T: Config> {
     _t: PhantomData<T>,
     prefix: Vec<u8>,
@@ -347,14 +315,10 @@ pub mod pallet {
       };
 
       // Clear the current InSet
-      {
-        let mut in_set_key = InSet::<T>::final_prefix().to_vec();
-        in_set_key.extend(network.encode());
-        assert!(matches!(
-          sp_io::storage::clear_prefix(&in_set_key, Some(MAX_KEY_SHARES_PER_SET)),
-          sp_io::KillStorageResult::AllRemoved(_)
-        ));
-      }
+      assert_eq!(
+        InSet::<T>::clear_prefix(network, MAX_KEY_SHARES_PER_SET, None).maybe_cursor,
+        None
+      );
 
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
@@ -366,7 +330,7 @@ pub mod pallet {
         let Some((key, amount)) = iter.next() else { break };
 
         let these_key_shares = amount.0 / allocation_per_key_share;
-        InSet::<T>::set(Self::in_set_key(network, key), Some(these_key_shares));
+        InSet::<T>::set(network, key, Some(these_key_shares));
         participants.push((key, these_key_shares));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
@@ -540,7 +504,7 @@ pub mod pallet {
         Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
       }
 
-      if InSet::<T>::contains_key(Self::in_set_key(network, account)) {
+      if InSet::<T>::contains_key(network, account) {
         TotalAllocatedStake::<T>::set(
           network,
           Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
@@ -967,7 +931,7 @@ pub mod pallet {
           // This is done by iterating over InSet, which isn't mutated on removal, and reading the
           // shares from that
           let mut all_key_shares = 0;
-          for shares in InSetIter::<T>::new(*network) {
+          for shares in InSet::<T>::iter_prefix_values(network) {
             all_key_shares += shares;
           }
           // 2f + 1
