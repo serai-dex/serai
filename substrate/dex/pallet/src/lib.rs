@@ -236,6 +236,7 @@ pub mod pallet {
       /// The amount of lp tokens that were burned of that id.
       lp_token_burned: SubstrateAmount,
     },
+
     /// Coins have been converted from one to another. Both `SwapExactTokenForToken`
     /// and `SwapTokenForExactToken` will generate this event.
     SwapExecuted {

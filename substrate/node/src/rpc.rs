@@ -8,8 +8,7 @@ use sp_api::ProvideRuntimeApi;
 
 use serai_runtime::{
   primitives::{SubstrateAmount, PublicKey},
-  opaque::Block,
-  Nonce,
+  Nonce, Block,
 };
 
 pub use sc_rpc_api::DenyUnsafe;

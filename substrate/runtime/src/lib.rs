@@ -8,6 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 // Re-export all components
 pub use serai_primitives as primitives;
+pub use primitives::{BlockNumber, Header};
 
 pub use frame_system as system;
 pub use frame_support as support;
@@ -40,7 +41,7 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  ApplyExtrinsicResult, Perbill,
+  Perbill, ApplyExtrinsicResult,
 };
 
 use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
@@ -58,23 +59,30 @@ use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
-/// An index to a block.
-pub type BlockNumber = u64;
-
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
 
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
+pub type SignedExtra = (
+  system::CheckNonZeroSender<Runtime>,
+  system::CheckSpecVersion<Runtime>,
+  system::CheckTxVersion<Runtime>,
+  system::CheckGenesis<Runtime>,
+  system::CheckEra<Runtime>,
+  system::CheckNonce<Runtime>,
+  system::CheckWeight<Runtime>,
+  transaction_payment::ChargeTransactionPayment<Runtime>,
+);
+pub type UncheckedExtrinsic =
+  generic::UncheckedExtrinsic<SeraiAddress, RuntimeCall, Signature, SignedExtra>;
+
+pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+pub type BlockId = generic::BlockId<Block>;
+
 pub mod opaque {
   use super::*;
-
-  use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
-
-  pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
-  pub type Block = generic::Block<Header, UncheckedExtrinsic>;
-  pub type BlockId = generic::BlockId<Block>;
 
   impl_opaque_keys! {
     pub struct SessionKeys {
@@ -296,21 +304,6 @@ impl grandpa::Config for Runtime {
   type EquivocationReportSystem = ();
 }
 
-pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
-pub type Block = generic::Block<Header, UncheckedExtrinsic>;
-pub type SignedExtra = (
-  system::CheckNonZeroSender<Runtime>,
-  system::CheckSpecVersion<Runtime>,
-  system::CheckTxVersion<Runtime>,
-  system::CheckGenesis<Runtime>,
-  system::CheckEra<Runtime>,
-  system::CheckNonce<Runtime>,
-  system::CheckWeight<Runtime>,
-  transaction_payment::ChargeTransactionPayment<Runtime>,
-);
-pub type UncheckedExtrinsic =
-  generic::UncheckedExtrinsic<SeraiAddress, RuntimeCall, Signature, SignedExtra>;
-pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 pub type Executive = frame_executive::Executive<
   Runtime,
   Block,
@@ -372,7 +365,7 @@ sp_api::impl_runtime_apis! {
       Executive::execute_block(block);
     }
 
-    fn initialize_block(header: &<Block as BlockT>::Header) {
+    fn initialize_block(header: &Header) {
       Executive::initialize_block(header)
     }
   }
@@ -396,7 +389,7 @@ sp_api::impl_runtime_apis! {
       Executive::apply_extrinsic(extrinsic)
     }
 
-    fn finalize_block() -> <Block as BlockT>::Header {
+    fn finalize_block() -> Header {
       Executive::finalize_block()
     }
 
@@ -423,7 +416,7 @@ sp_api::impl_runtime_apis! {
   }
 
   impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
-    fn offchain_worker(header: &<Block as BlockT>::Header) {
+    fn offchain_worker(header: &Header) {
       Executive::offchain_worker(header)
     }
   }
@@ -475,7 +468,7 @@ sp_api::impl_runtime_apis! {
     }
 
     fn submit_report_equivocation_unsigned_extrinsic(
-      _: sp_consensus_babe::EquivocationProof<<Block as BlockT>::Header>,
+      _: sp_consensus_babe::EquivocationProof<Header>,
       _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
       None

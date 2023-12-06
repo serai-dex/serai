@@ -12,6 +12,7 @@ pub mod pallet {
   use frame_support::{pallet_prelude::*, sp_runtime};
 
   use serai_primitives::*;
+  use serai_signals_primitives::SignalId;
   use validator_sets_pallet::{primitives::ValidatorSet, Config as VsConfig, Pallet as VsPallet};
   use in_instructions_pallet::{Config as IiConfig, Pallet as InInstructions};
 
@@ -46,12 +47,6 @@ pub mod pallet {
 
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
-
-  #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-  pub enum SignalId {
-    Retirement([u8; 32]),
-    Halt(NetworkId),
-  }
 
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
   pub struct RegisteredRetirementSignal<T: Config> {

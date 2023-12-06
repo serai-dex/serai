@@ -139,3 +139,6 @@ impl AsRef<[u8]> for Data {
     self.0.as_ref()
   }
 }
+
+pub type BlockNumber = u64;
+pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;

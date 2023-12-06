@@ -1,0 +1,42 @@
+[package]
+name = "serai-signals-primitives"
+version = "0.1.0"
+description = "Signals primitives"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/signals/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.74"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+zeroize = { version = "^1.5", features = ["derive"], optional = true }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
+
+serai-primitives = { path = "../../primitives", version = "0.1", default-features = false }
+
+[features]
+std = [
+  "zeroize",
+
+  "scale/std",
+  "scale-info/std",
+
+  "borsh?/std",
+  "serde?/std",
+
+  "serai-primitives/std",
+]
+
+borsh = ["dep:borsh"]
+serde = ["dep:serde"]
+
+default = ["std"]
