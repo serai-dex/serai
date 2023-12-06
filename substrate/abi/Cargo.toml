@@ -1,0 +1,38 @@
+[package]
+name = "serai-abi"
+version = "0.1.0"
+description = "ABI for the Serai runtime"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/abi"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.69"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
+
+borsh = { version = "1", features = ["derive", "de_strict_order"], optional = true }
+serde = { version = "1", features = ["derive", "alloc"], optional = true }
+
+sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
+
+serai-primitives = { path = "../primitives", version = "0.1" }
+serai-coins-primitives = { path = "../coins/primitives", version = "0.1" }
+serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1" }
+serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1" }
+serai-signals-primitives = { path = "../signals/primitives", version = "0.1" }
+
+frame-support = { git = "https://github.com/serai-dex/substrate" }
+
+[features]
+borsh = ["dep:borsh"]
+serde = ["dep:serde"]

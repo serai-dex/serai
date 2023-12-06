@@ -50,6 +50,8 @@ members = [
   "substrate/signals/primitives",
   "substrate/signals/pallet",
 
+  "substrate/abi",
+
   "substrate/runtime",
   "substrate/node",
 
