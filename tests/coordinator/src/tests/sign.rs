@@ -207,7 +207,7 @@ async fn sign_test() {
         serai
           .publish(&serai.sign(
             &insecure_pair_from_name("Ferdie"),
-            &SeraiCoins::transfer(address, balance),
+            SeraiCoins::transfer(address, balance),
             0,
             Default::default(),
           ))
@@ -252,7 +252,7 @@ async fn sign_test() {
         // Verify the mint occurred as expected
         assert_eq!(
           serai.mint_events().await.unwrap(),
-          vec![CoinsEvent::Mint { to: serai_addr.into(), balance }]
+          vec![CoinsEvent::Mint { to: serai_addr, balance }]
         );
         assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), amount);
         assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
@@ -269,7 +269,7 @@ async fn sign_test() {
       serai
         .publish(&serai.sign(
           &serai_pair,
-          &SeraiCoins::burn_with_instruction(out_instruction.clone()),
+          SeraiCoins::burn_with_instruction(out_instruction.clone()),
           0,
           Default::default(),
         ))
@@ -297,7 +297,7 @@ async fn sign_test() {
             assert_eq!(
               burn_events[0],
               CoinsEvent::BurnWithInstruction {
-                from: serai_addr.into(),
+                from: serai_addr,
                 instruction: out_instruction.clone()
               }
             );

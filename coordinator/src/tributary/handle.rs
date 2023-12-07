@@ -10,7 +10,7 @@ use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
 use serai_client::{
-  Public, Signature,
+  Public, SeraiAddress, Signature,
   validator_sets::primitives::{ValidatorSet, KeyPair},
   SeraiValidatorSets,
 };
@@ -174,7 +174,7 @@ pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, Vec<u8>) -> FPst,
+  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
   FPtt: Future<Output = ()>,
   PTT: Clone + Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
@@ -734,7 +734,7 @@ pub(crate) async fn handle_application_tx<
 
           let tx = serai_client::SeraiValidatorSets::remove_participant(
             spec.set().network,
-            Public(data.plan),
+            SeraiAddress(data.plan),
             signers,
             Signature(signature),
           );

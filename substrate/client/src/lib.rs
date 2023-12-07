@@ -6,19 +6,18 @@ mod serai;
 #[cfg(feature = "serai")]
 pub use serai::*;
 
-// If we aren't exposing the Serai client (subxt), still expose all primitives
 #[cfg(not(feature = "serai"))]
-pub use serai_runtime::primitives;
+pub use serai_abi::primitives;
 #[cfg(not(feature = "serai"))]
 mod other_primitives {
-  pub mod in_instructions {
-    pub use serai_runtime::in_instructions::primitives;
-  }
   pub mod coins {
-    pub use serai_runtime::coins::primitives;
+    pub use serai_abi::coins::primitives;
   }
   pub mod validator_sets {
-    pub use serai_runtime::validator_sets::primitives;
+    pub use serai_abi::validator_sets::primitives;
+  }
+  pub mod in_instructions {
+    pub use serai_abi::in_instructions::primitives;
   }
 }
 #[cfg(not(feature = "serai"))]

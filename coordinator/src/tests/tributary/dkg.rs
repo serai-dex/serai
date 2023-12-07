@@ -4,8 +4,6 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use scale::Decode;
-
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
@@ -340,27 +338,10 @@ async fn dkg_test() {
       let spec = spec.clone();
       let key_pair = key_pair.clone();
       async move {
-        // Version, Pallet, Call, Network, Key Pair, Signature
-        let expected_len = 1 + 1 + 1 + 1 + 32 + 1 + key_pair.1.len() + 64;
-        // It's length prefixed
-        assert_eq!(tx.len(), 2 + expected_len);
-        let expected_len = u16::try_from(expected_len).unwrap();
-
-        // Check the encoded length
-        // This is the compact encoding from SCALE, specifically the two-byte length encoding case
-        let bottom_six = expected_len & 0b111111;
-        let upper_eight = expected_len >> 6;
-        assert_eq!(u8::try_from((bottom_six << 2) | 1).unwrap(), tx[0]);
-        assert_eq!(u8::try_from(upper_eight).unwrap(), tx[1]);
-
-        // Version
-        assert_eq!(tx[2], 4);
-
-        // Call
-        let tx = serai_client::runtime::RuntimeCall::decode(&mut &tx[3 ..]).unwrap();
-        match tx {
-          serai_client::runtime::RuntimeCall::ValidatorSets(
-            serai_client::runtime::validator_sets::Call::set_keys {
+        assert_eq!(tx.signature, None);
+        match tx.call {
+          serai_client::abi::Call::ValidatorSets(
+            serai_client::abi::validator_sets::Call::set_keys {
               network,
               key_pair: set_key_pair,
               signature,

@@ -1,12 +1,9 @@
 use sp_core::bounded_vec::BoundedVec;
-use serai_runtime::{
-  primitives::{SeraiAddress, Amount, Coin},
-  dex, Runtime,
-};
+use serai_abi::primitives::{SeraiAddress, Amount, Coin};
 
 use crate::{SeraiError, TemporalSerai};
 
-pub type DexEvent = dex::Event<Runtime>;
+pub type DexEvent = serai_abi::dex::Event;
 
 #[derive(Clone, Copy)]
 pub struct SeraiDex<'a>(pub(crate) TemporalSerai<'a>);
@@ -14,15 +11,7 @@ impl<'a> SeraiDex<'a> {
   pub async fn events(&self) -> Result<Vec<DexEvent>, SeraiError> {
     self
       .0
-      .events(
-        |event| {
-          if let serai_runtime::RuntimeEvent::Dex(event) = event {
-            Some(event)
-          } else {
-            None
-          }
-        },
-      )
+      .events(|event| if let serai_abi::Event::Dex(event) = event { Some(event) } else { None })
       .await
   }
 
@@ -33,14 +22,14 @@ impl<'a> SeraiDex<'a> {
     min_coin_amount: Amount,
     min_sri_amount: Amount,
     address: SeraiAddress,
-  ) -> serai_runtime::RuntimeCall {
-    serai_runtime::RuntimeCall::Dex(dex::Call::<Runtime>::add_liquidity {
+  ) -> serai_abi::Call {
+    serai_abi::Call::Dex(serai_abi::dex::Call::add_liquidity {
       coin,
       coin_desired: coin_amount.0,
       sri_desired: sri_amount.0,
       coin_min: min_coin_amount.0,
       sri_min: min_sri_amount.0,
-      mint_to: address.into(),
+      mint_to: address,
     })
   }
 
@@ -50,7 +39,7 @@ impl<'a> SeraiDex<'a> {
     amount_in: Amount,
     amount_out_min: Amount,
     address: SeraiAddress,
-  ) -> serai_runtime::RuntimeCall {
+  ) -> serai_abi::Call {
     let path = if to_coin.is_native() {
       BoundedVec::try_from(vec![from_coin, Coin::Serai]).unwrap()
     } else if from_coin.is_native() {
@@ -59,11 +48,11 @@ impl<'a> SeraiDex<'a> {
       BoundedVec::try_from(vec![from_coin, Coin::Serai, to_coin]).unwrap()
     };
 
-    serai_runtime::RuntimeCall::Dex(dex::Call::<Runtime>::swap_exact_tokens_for_tokens {
+    serai_abi::Call::Dex(serai_abi::dex::Call::swap_exact_tokens_for_tokens {
       path,
       amount_in: amount_in.0,
       amount_out_min: amount_out_min.0,
-      send_to: address.into(),
+      send_to: address,
     })
   }
 }

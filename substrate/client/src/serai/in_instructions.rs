@@ -1,13 +1,12 @@
-use serai_runtime::{in_instructions, Runtime};
-pub use in_instructions::primitives;
+pub use serai_abi::in_instructions::primitives;
 use primitives::SignedBatch;
 
 use crate::{
   primitives::{BlockHash, NetworkId},
-  SeraiError, Serai, TemporalSerai,
+  Transaction, SeraiError, Serai, TemporalSerai,
 };
 
-pub type InInstructionsEvent = in_instructions::Event<Runtime>;
+pub type InInstructionsEvent = serai_abi::in_instructions::Event;
 
 const PALLET: &str = "InInstructions";
 
@@ -36,7 +35,7 @@ impl<'a> SeraiInInstructions<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::InInstructions(event) = event {
+        if let serai_abi::Event::InInstructions(event) = event {
           Some(event).filter(|event| matches!(event, InInstructionsEvent::Batch { .. }))
         } else {
           None
@@ -45,9 +44,9 @@ impl<'a> SeraiInInstructions<'a> {
       .await
   }
 
-  pub fn execute_batch(batch: SignedBatch) -> Vec<u8> {
-    Serai::unsigned(&serai_runtime::RuntimeCall::InInstructions(
-      in_instructions::Call::<Runtime>::execute_batch { batch },
+  pub fn execute_batch(batch: SignedBatch) -> Transaction {
+    Serai::unsigned(serai_abi::Call::InInstructions(
+      serai_abi::in_instructions::Call::execute_batch { batch },
     ))
   }
 }

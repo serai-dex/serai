@@ -3,7 +3,7 @@ use scale::Encode;
 
 use sp_core::{Pair as PairTrait, bounded_vec::BoundedVec, hashing::blake2_256};
 
-use serai_runtime::in_instructions::primitives::DexCall;
+use serai_abi::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
@@ -37,22 +37,22 @@ serai_test!(
       vec![
         DexEvent::PoolCreated {
           pool_id: Coin::Bitcoin,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Bitcoin.encode())),
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Bitcoin.encode())).into(),
           lp_token: Coin::Bitcoin,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Ether,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Ether.encode())),
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Ether.encode())).into(),
           lp_token: Coin::Ether,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Dai,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Dai.encode())),
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Dai.encode())).into(),
           lp_token: Coin::Dai,
         },
         DexEvent::PoolCreated {
           pool_id: Coin::Monero,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Monero.encode())),
+          pool_account: PublicKey::from_raw(blake2_256(&Coin::Monero.encode())).into(),
           lp_token: Coin::Monero,
         },
       ]
@@ -91,8 +91,8 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::LiquidityAdded {
-        who: pair.public(),
-        mint_to: pair.public(),
+        who: pair.public().into(),
+        mint_to: pair.public().into(),
         pool_id: Coin::Monero,
         coin_amount: coin_amount.0,
         sri_amount: sri_amount.0,
@@ -140,8 +140,8 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
-        who: pair.clone().public(),
-        send_to: pair.public(),
+        who: pair.clone().public().into(),
+        send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
         amount_out: 16633299966633
@@ -160,8 +160,8 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
-        who: pair.clone().public(),
-        send_to: pair.public(),
+        who: pair.clone().public().into(),
+        send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
         amount_out: 17254428681101
@@ -220,8 +220,8 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
-        who: pair.clone().public(),
-        send_to: pair.public(),
+        who: pair.clone().public().into(),
+        send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
         amount_out: 12453103964435,
@@ -275,8 +275,8 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::LiquidityAdded {
-        who: IN_INSTRUCTION_EXECUTOR.into(),
-        mint_to: pair.public(),
+        who: IN_INSTRUCTION_EXECUTOR,
+        mint_to: pair.public().into(),
         pool_id: Coin::Bitcoin,
         coin_amount: 10_000_000_000_000, // half of sent amount
         sri_amount: 6_947_918_403_646,
@@ -363,8 +363,8 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR.into(),
-          send_to: IN_INSTRUCTION_EXECUTOR.into(),
+          who: IN_INSTRUCTION_EXECUTOR,
+          send_to: IN_INSTRUCTION_EXECUTOR,
           path,
           amount_in: 20_000_000_000_000,
           amount_out: 11066655622377
@@ -402,8 +402,8 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR.into(),
-          send_to: out_address.as_native().unwrap().into(),
+          who: IN_INSTRUCTION_EXECUTOR,
+          send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 20_000_000_000_000,
           amount_out: 26440798801319
@@ -440,8 +440,8 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR.into(),
-          send_to: out_address.as_native().unwrap().into(),
+          who: IN_INSTRUCTION_EXECUTOR,
+          send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 10_000_000_000_000,
           amount_out: 10711005507065

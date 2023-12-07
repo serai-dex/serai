@@ -1,17 +1,14 @@
 use scale::Encode;
 
-use serai_runtime::{
-  primitives::{SeraiAddress, Amount, Coin, Balance},
-  coins, Runtime,
-};
-pub use coins::primitives;
+use serai_abi::primitives::{SeraiAddress, Amount, Coin, Balance};
+pub use serai_abi::coins::primitives;
 use primitives::OutInstructionWithBalance;
 
 use crate::{TemporalSerai, SeraiError};
 
 const PALLET: &str = "Coins";
 
-pub type CoinsEvent = coins::Event<Runtime>;
+pub type CoinsEvent = serai_abi::coins::Event;
 
 #[derive(Clone, Copy)]
 pub struct SeraiCoins<'a>(pub(crate) TemporalSerai<'a>);
@@ -24,7 +21,7 @@ impl<'a> SeraiCoins<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::Coins(event) = event {
+        if let serai_abi::Event::Coins(event) = event {
           Some(event).filter(|event| matches!(event, CoinsEvent::Mint { .. }))
         } else {
           None
@@ -37,7 +34,7 @@ impl<'a> SeraiCoins<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::Coins(event) = event {
+        if let serai_abi::Event::Coins(event) = event {
           Some(event).filter(|event| matches!(event, CoinsEvent::BurnWithInstruction { .. }))
         } else {
           None
@@ -68,22 +65,15 @@ impl<'a> SeraiCoins<'a> {
     )
   }
 
-  pub fn transfer(to: SeraiAddress, balance: Balance) -> serai_runtime::RuntimeCall {
-    serai_runtime::RuntimeCall::Coins(serai_runtime::coins::Call::<Runtime>::transfer {
-      to: to.into(),
-      balance,
-    })
+  pub fn transfer(to: SeraiAddress, balance: Balance) -> serai_abi::Call {
+    serai_abi::Call::Coins(serai_abi::coins::Call::transfer { to, balance })
   }
 
-  pub fn burn(balance: Balance) -> serai_runtime::RuntimeCall {
-    serai_runtime::RuntimeCall::Coins(serai_runtime::coins::Call::<Runtime>::burn { balance })
+  pub fn burn(balance: Balance) -> serai_abi::Call {
+    serai_abi::Call::Coins(serai_abi::coins::Call::burn { balance })
   }
 
-  pub fn burn_with_instruction(
-    instruction: OutInstructionWithBalance,
-  ) -> serai_runtime::RuntimeCall {
-    serai_runtime::RuntimeCall::Coins(
-      serai_runtime::coins::Call::<Runtime>::burn_with_instruction { instruction },
-    )
+  pub fn burn_with_instruction(instruction: OutInstructionWithBalance) -> serai_abi::Call {
+    serai_abi::Call::Coins(serai_abi::coins::Call::burn_with_instruction { instruction })
   }
 }

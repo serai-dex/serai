@@ -6,7 +6,7 @@ type PoolId = Coin;
 type PoolCoinId = Coin;
 type MaxSwapPathLength = sp_core::ConstU32<3>;
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Call {
   add_liquidity {
@@ -38,7 +38,7 @@ pub enum Call {
   },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Event {
   PoolCreated {

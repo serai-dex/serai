@@ -2,7 +2,7 @@
 name = "serai-client"
 version = "0.1.0"
 description = "Client library for the Serai network"
-license = "AGPL-3.0-only"
+license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai"]
@@ -19,13 +19,16 @@ thiserror = { version = "1", optional = true }
 
 hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
-serai-runtime = { path = "../runtime", version = "0.1" }
-simple-request = { path = "../../common/request", version = "0.1" }
+serai-abi = { path = "../abi", version = "0.1" }
+
+sp-core = { git = "https://github.com/serai-dex/substrate", optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", optional = true }
+frame-system = { git = "https://github.com/serai-dex/substrate", optional = true }
+
+simple-request = { path = "../../common/request", version = "0.1", optional = true }
 
 bitcoin = { version = "0.31", optional = true }
 
@@ -48,7 +51,7 @@ dockertest = "0.4"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
-serai = ["thiserror"]
+serai = ["thiserror", "serde", "serde_json", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]

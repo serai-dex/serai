@@ -7,7 +7,7 @@ use blake2::{
 
 use scale::Encode;
 
-use serai_runtime::coins::primitives::OutInstructionWithBalance;
+use serai_abi::coins::primitives::OutInstructionWithBalance;
 use sp_core::Pair;
 
 use serai_client::{
@@ -68,7 +68,7 @@ serai_test!(
 
     assert_eq!(
       serai.coins().mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { to: address.into(), balance }]
+      vec![CoinsEvent::Mint { to: address, balance }]
     );
     assert_eq!(serai.coins().coin_supply(coin).await.unwrap(), amount);
     assert_eq!(serai.coins().coin_balance(coin, address).await.unwrap(), amount);
@@ -86,22 +86,17 @@ serai_test!(
       balance,
       instruction: OutInstruction { address: external_address, data: Some(data) },
     };
+
     let serai = serai.into_inner();
     let block = publish_tx(
       serai,
-      &serai
-        .sign(
-          &pair,
-          &SeraiCoins::burn_with_instruction(instruction.clone()),
-          0,
-          0,
-        )
+      &serai.sign(&pair, SeraiCoins::burn_with_instruction(instruction.clone()), 0, 0),
     )
     .await;
 
     let serai = serai.as_of(block).coins();
     let events = serai.burn_with_instruction_events().await.unwrap();
-    assert_eq!(events, vec![CoinsEvent::BurnWithInstruction { from: address.into(), instruction }]);
+    assert_eq!(events, vec![CoinsEvent::BurnWithInstruction { from: address, instruction }]);
     assert_eq!(serai.coin_supply(coin).await.unwrap(), Amount(0));
     assert_eq!(serai.coin_balance(coin, address).await.unwrap(), Amount(0));
   })

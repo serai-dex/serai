@@ -151,7 +151,7 @@ impl<D: Db> CosignEvaluator<D> {
     // included the set_keys and one didn't
     // Because set_keys will force a cosign, it will force detection of distinct blocks
     // re: set_keys using keys prior to set_keys (assumed amenable to all)
-    let serai = self.serai.as_of(block.header().parent_hash.into());
+    let serai = self.serai.as_of(block.header.parent_hash.into());
 
     let Some(set_with_keys) = set_with_keys_fn(&serai, cosign.network).await? else {
       return Ok(());

@@ -250,7 +250,7 @@ async fn mint_and_burn_test() {
         serai
           .publish(&serai.sign(
             &insecure_pair_from_name("Ferdie"),
-            &SeraiCoins::transfer(address, balance),
+            SeraiCoins::transfer(address, balance),
             0,
             Default::default(),
           ))
@@ -504,7 +504,7 @@ async fn mint_and_burn_test() {
             serai
               .publish(&serai.sign(
                 serai_pair,
-                &SeraiCoins::burn_with_instruction(out_instruction),
+                SeraiCoins::burn_with_instruction(out_instruction),
                 nonce,
                 Default::default(),
               ))

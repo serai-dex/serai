@@ -44,7 +44,7 @@ use sp_runtime::{
   Perbill, ApplyExtrinsicResult,
 };
 
-use primitives::{PublicKey, SeraiAddress, AccountLookup, Signature, SubstrateAmount};
+use primitives::{PublicKey, AccountLookup, SubstrateAmount};
 
 use support::{
   traits::{ConstU8, ConstU32, ConstU64, Contains},
@@ -75,10 +75,9 @@ pub type SignedExtra = (
   system::CheckWeight<Runtime>,
   transaction_payment::ChargeTransactionPayment<Runtime>,
 );
-pub type UncheckedExtrinsic =
-  generic::UncheckedExtrinsic<SeraiAddress, RuntimeCall, Signature, SignedExtra>;
 
-pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+pub type Transaction = serai_primitives::Transaction<RuntimeCall, SignedExtra>;
+pub type Block = generic::Block<Header, Transaction>;
 pub type BlockId = generic::BlockId<Block>;
 
 pub mod opaque {

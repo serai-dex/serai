@@ -19,7 +19,7 @@ use frost::{
 use frost_schnorrkel::Schnorrkel;
 
 use serai_client::{
-  Public,
+  Public, SeraiAddress,
   validator_sets::primitives::{musig_context, remove_participant_message},
 };
 
@@ -190,7 +190,7 @@ impl DkgRemoval {
     preprocesses: HashMap<Participant, Vec<u8>>,
     removed: [u8; 32],
     mut shares: HashMap<Participant, Vec<u8>>,
-  ) -> Result<(Vec<Public>, [u8; 64]), Participant> {
+  ) -> Result<(Vec<SeraiAddress>, [u8; 64]), Participant> {
     // TODO: Remove this ugly blob
     let shares = {
       let mut shares_participants = shares.keys().cloned().collect::<Vec<_>>();
@@ -213,7 +213,7 @@ impl DkgRemoval {
       new_shares
     };
 
-    let mut signers = shares.keys().cloned().map(Public).collect::<Vec<_>>();
+    let mut signers = shares.keys().cloned().map(SeraiAddress).collect::<Vec<_>>();
     signers.sort();
 
     let machine = Self::share_internal(spec, key, attempt, preprocesses, removed)

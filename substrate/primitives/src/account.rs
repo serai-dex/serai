@@ -50,6 +50,7 @@ pub fn borsh_deserialize_signature<R: borsh::io::Read>(
   Ok(Signature(signature))
 }
 
+// TODO: Remove this for solely Public?
 #[derive(
   Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]

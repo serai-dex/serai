@@ -14,11 +14,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
+scale-info = { version = "2", features = ["derive"] }
 
 borsh = { version = "1", features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", features = ["derive", "alloc"], optional = true }
 
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate" }
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-runtime = { git = "https://github.com/serai-dex/substrate" }
 

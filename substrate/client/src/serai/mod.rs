@@ -10,11 +10,12 @@ pub use sp_core::{
   sr25519::{Public, Pair},
 };
 
-pub use serai_runtime::primitives;
-pub use primitives::{SeraiAddress, Signature, Amount};
+pub use serai_abi as abi;
+pub use abi::{primitives, Transaction};
+use abi::*;
 
-pub use serai_runtime as runtime;
-use serai_runtime::{Header, Block as SeraiBlock};
+pub use primitives::{SeraiAddress, Signature, Amount};
+use primitives::Header;
 
 pub mod coins;
 pub use coins::SeraiCoins;
@@ -25,35 +26,27 @@ pub use in_instructions::SeraiInInstructions;
 pub mod validator_sets;
 pub use validator_sets::SeraiValidatorSets;
 
-pub type Transaction = serai_runtime::UncheckedExtrinsic;
-
-#[derive(Clone, Debug)]
-pub struct Block(SeraiBlock);
+#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
+pub struct Block {
+  pub header: Header,
+  pub transactions: Vec<Transaction>,
+}
 impl Block {
   pub fn hash(&self) -> [u8; 32] {
-    self.0.header.hash().into()
+    self.header.hash().into()
   }
   pub fn number(&self) -> u64 {
-    self.0.header.number
+    self.header.number
   }
 
   /// Returns the time of this block, set by its producer, in milliseconds since the epoch.
   pub fn time(&self) -> Result<u64, SeraiError> {
-    for extrinsic in &self.0.extrinsics {
-      if let serai_runtime::RuntimeCall::Timestamp(serai_runtime::timestamp::Call::set { now }) =
-        &extrinsic.function
-      {
-        return Ok(*now);
+    for transaction in &self.transactions {
+      if let Call::Timestamp(timestamp::Call::set { now }) = &transaction.call {
+        return Ok(u64::from(*now));
       }
     }
     Err(SeraiError::InvalidNode("no time was present in block".to_string()))
-  }
-
-  pub fn header(&self) -> &Header {
-    &self.0.header
-  }
-  pub fn transactions(&self) -> &[Transaction] {
-    &self.0.extrinsics
   }
 }
 
@@ -158,54 +151,37 @@ impl Serai {
     Ok(res)
   }
 
-  fn unsigned(call: &serai_runtime::RuntimeCall) -> Vec<u8> {
-    // TODO: Should Serai purge the old transaction code AND set this to 0/1?
-    const EXTRINSIC_FORMAT_VERSION: u8 = 4;
-
-    let mut tx = vec![EXTRINSIC_FORMAT_VERSION];
-    tx.extend(call.encode());
-
-    let mut length_prefixed = Compact(u32::try_from(tx.len()).unwrap()).encode();
-    length_prefixed.extend(tx);
-    length_prefixed
+  fn unsigned(call: Call) -> Transaction {
+    Transaction { call, signature: None }
   }
 
-  pub fn sign(
-    &self,
-    signer: &Pair,
-    call: &serai_runtime::RuntimeCall,
-    nonce: u32,
-    tip: u64,
-  ) -> Vec<u8> {
+  pub fn sign(&self, signer: &Pair, call: Call, nonce: u32, tip: u64) -> Transaction {
     const SPEC_VERSION: u32 = 1;
     const TX_VERSION: u32 = 1;
-    const EXTRINSIC_FORMAT_VERSION: u8 = 4;
 
-    let era = sp_runtime::generic::Era::Immortal;
-    let extra = (era, Compact(nonce), Compact(tip));
-    let genesis = self.genesis;
-    let mortality_checkpoint = genesis;
-    let mut signature_payload =
-      (call, extra, SPEC_VERSION, TX_VERSION, genesis, mortality_checkpoint).encode();
-    if signature_payload.len() > 256 {
-      signature_payload = sp_core::blake2_256(&signature_payload).to_vec();
-    }
+    let extra =
+      Extra { era: sp_runtime::generic::Era::Immortal, nonce: Compact(nonce), tip: Compact(tip) };
+    let signature_payload = (
+      &call,
+      &extra,
+      SignedPayloadExtra {
+        spec_version: SPEC_VERSION,
+        tx_version: TX_VERSION,
+        genesis: self.genesis,
+        mortality_checkpoint: self.genesis,
+      },
+    )
+      .encode();
     let signature = signer.sign(&signature_payload);
 
-    let signed = 1 << 7;
-    let tx = (signed + EXTRINSIC_FORMAT_VERSION, signer.public(), signature, extra, call).encode();
-
-    let mut length_prefixed = Compact(u32::try_from(tx.len()).unwrap()).encode();
-    length_prefixed.extend(tx);
-    length_prefixed
+    Transaction { call, signature: Some((signer.public().into(), signature, extra)) }
   }
 
-  // TODO: Move this to take in Transaction
-  pub async fn publish(&self, tx: &[u8]) -> Result<(), SeraiError> {
+  pub async fn publish(&self, tx: &Transaction) -> Result<(), SeraiError> {
     // Drop the returned hash, which is the hash of the raw extrinsic, as extrinsics are allowed
     // to share hashes and this hash is accordingly useless/unsafe
     // If we are to return something, it should be block included in and position within block
-    let _: String = self.call("author_submitExtrinsic", [hex::encode(tx)]).await?;
+    let _: String = self.call("author_submitExtrinsic", [hex::encode(tx.encode())]).await?;
     Ok(())
   }
 
@@ -221,14 +197,15 @@ impl Serai {
   }
 
   pub async fn block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
-    // TODO: Remove this wrapping from Serai?
-    #[derive(Deserialize)]
-    struct WrappedBlock {
-      block: SeraiBlock,
-    }
-    let block: Option<WrappedBlock> = self.call("chain_getBlock", [hex::encode(hash)]).await?;
+    let block: Option<String> = self.call("chain_getBlockBin", [hex::encode(hash)]).await?;
     let Some(block) = block else { return Ok(None) };
-    Ok(Some(Block(block.block)))
+    let Ok(bytes) = Self::hex_decode(block) else {
+      Err(SeraiError::InvalidNode("didn't return a hex-encoded block".to_string()))?
+    };
+    let Ok(block) = Block::decode(&mut bytes.as_slice()) else {
+      Err(SeraiError::InvalidNode("didn't return a block".to_string()))?
+    };
+    Ok(Some(block))
   }
 
   pub async fn latest_finalized_block(&self) -> Result<Block, SeraiError> {
@@ -276,7 +253,7 @@ impl Serai {
     let hash = self.block_hash(number).await?;
     let Some(hash) = hash else { return Ok(None) };
     let Some(block) = self.block(hash).await? else { return Ok(None) };
-    if !self.is_finalized(&block.0.header).await? {
+    if !self.is_finalized(&block.header).await? {
       return Ok(None);
     }
     Ok(Some(block))
@@ -326,14 +303,10 @@ impl<'a> TemporalSerai<'a> {
     self.0
   }
 
-  async fn events<E>(
-    &self,
-    filter_map: impl Fn(serai_runtime::RuntimeEvent) -> Option<E>,
-  ) -> Result<Vec<E>, SeraiError> {
+  async fn events<E>(&self, filter_map: impl Fn(Event) -> Option<E>) -> Result<Vec<E>, SeraiError> {
     let mut res = vec![];
-    let all_events: Option<
-      Vec<serai_runtime::system::EventRecord<serai_runtime::RuntimeEvent, [u8; 32]>>,
-    > = self.storage("System", "Events", ()).await?;
+    let all_events: Option<Vec<frame_system::EventRecord<Event, [u8; 32]>>> =
+      self.storage("System", "Events", ()).await?;
     #[allow(clippy::unwrap_or_default)]
     for event in all_events.unwrap_or(vec![]) {
       if let Some(event) = filter_map(event.event) {

@@ -2,12 +2,10 @@ use core::time::Duration;
 
 use tokio::time::sleep;
 
-use scale::Encode;
-
-use serai_client::Serai;
+use serai_client::{Transaction, Serai};
 
 #[allow(dead_code)]
-pub async fn publish_tx(serai: &Serai, tx: &[u8]) -> [u8; 32] {
+pub async fn publish_tx(serai: &Serai, tx: &Transaction) -> [u8; 32] {
   let mut latest = serai
     .block(serai.latest_finalized_block_hash().await.unwrap())
     .await
@@ -39,8 +37,8 @@ pub async fn publish_tx(serai: &Serai, tx: &[u8]) -> [u8; 32] {
       block.unwrap()
     };
 
-    for transaction in block.transactions() {
-      if transaction.encode() == tx {
+    for transaction in &block.transactions {
+      if transaction == tx {
         return block.hash();
       }
     }

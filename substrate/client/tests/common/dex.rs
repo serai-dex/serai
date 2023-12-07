@@ -1,4 +1,4 @@
-use serai_runtime::primitives::{Coin, Amount};
+use serai_abi::primitives::{Coin, Amount};
 
 use serai_client::{Serai, SeraiDex};
 use sp_core::{sr25519::Pair, Pair as PairTrait};
@@ -18,7 +18,7 @@ pub async fn add_liquidity(
 
   let tx = serai.sign(
     &pair,
-    &SeraiDex::add_liquidity(coin, coin_amount, sri_amount, Amount(1), Amount(1), address.into()),
+    SeraiDex::add_liquidity(coin, coin_amount, sri_amount, Amount(1), Amount(1), address.into()),
     nonce,
     0,
   );
@@ -40,7 +40,7 @@ pub async fn swap(
 
   let tx = serai.sign(
     &pair,
-    &SeraiDex::swap(from_coin, to_coin, amount_in, amount_out_min, address.into()),
+    SeraiDex::swap(from_coin, to_coin, amount_in, amount_out_min, address.into()),
     nonce,
     Default::default(),
   );

@@ -32,6 +32,9 @@ pub use balance::*;
 mod account;
 pub use account::*;
 
+mod tx;
+pub use tx::*;
+
 #[cfg(feature = "borsh")]
 pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const B: u32>(
   bounded: &BoundedVec<T, ConstU32<B>>,

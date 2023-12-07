@@ -67,7 +67,7 @@ serai_test!(
     let serai = serai.coins();
     assert_eq!(
       serai.mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { to: address.into(), balance }]
+      vec![CoinsEvent::Mint { to: address, balance }]
     );
     assert_eq!(serai.coin_supply(coin).await.unwrap(), amount);
     assert_eq!(serai.coin_balance(coin, address).await.unwrap(), amount);

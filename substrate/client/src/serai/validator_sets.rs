@@ -2,15 +2,18 @@ use scale::Encode;
 
 use sp_core::sr25519::{Public, Signature};
 
-use serai_runtime::{primitives::Amount, validator_sets, Runtime};
-pub use validator_sets::primitives;
+use serai_abi::primitives::Amount;
+pub use serai_abi::validator_sets::primitives;
 use primitives::{Session, ValidatorSet, KeyPair};
 
-use crate::{primitives::NetworkId, Serai, TemporalSerai, SeraiError};
+use crate::{
+  primitives::{NetworkId, SeraiAddress},
+  Transaction, Serai, TemporalSerai, SeraiError,
+};
 
 const PALLET: &str = "ValidatorSets";
 
-pub type ValidatorSetsEvent = validator_sets::Event<Runtime>;
+pub type ValidatorSetsEvent = serai_abi::validator_sets::Event;
 
 #[derive(Clone, Copy)]
 pub struct SeraiValidatorSets<'a>(pub(crate) TemporalSerai<'a>);
@@ -23,7 +26,7 @@ impl<'a> SeraiValidatorSets<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::ValidatorSets(event) = event {
+        if let serai_abi::Event::ValidatorSets(event) = event {
           Some(event).filter(|event| matches!(event, ValidatorSetsEvent::NewSet { .. }))
         } else {
           None
@@ -36,7 +39,7 @@ impl<'a> SeraiValidatorSets<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::ValidatorSets(event) = event {
+        if let serai_abi::Event::ValidatorSets(event) = event {
           Some(event).filter(|event| matches!(event, ValidatorSetsEvent::KeyGen { .. }))
         } else {
           None
@@ -49,7 +52,7 @@ impl<'a> SeraiValidatorSets<'a> {
     self
       .0
       .events(|event| {
-        if let serai_runtime::RuntimeEvent::ValidatorSets(event) = event {
+        if let serai_abi::Event::ValidatorSets(event) = event {
           Some(event).filter(|event| matches!(event, ValidatorSetsEvent::SetRetired { .. }))
         } else {
           None
@@ -107,20 +110,22 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
   }
 
-  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Vec<u8> {
-    Serai::unsigned(&serai_runtime::RuntimeCall::ValidatorSets(
-      validator_sets::Call::<Runtime>::set_keys { network, key_pair, signature },
-    ))
+  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Transaction {
+    Serai::unsigned(serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::set_keys {
+      network,
+      key_pair,
+      signature,
+    }))
   }
 
   pub fn remove_participant(
     network: NetworkId,
-    to_remove: Public,
-    signers: Vec<Public>,
+    to_remove: SeraiAddress,
+    signers: Vec<SeraiAddress>,
     signature: Signature,
-  ) -> Vec<u8> {
-    Serai::unsigned(&serai_runtime::RuntimeCall::ValidatorSets(
-      validator_sets::Call::<Runtime>::remove_participant {
+  ) -> Transaction {
+    Serai::unsigned(serai_abi::Call::ValidatorSets(
+      serai_abi::validator_sets::Call::remove_participant {
         network,
         to_remove,
         signers,
