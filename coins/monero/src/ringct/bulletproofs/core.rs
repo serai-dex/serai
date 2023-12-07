@@ -78,10 +78,8 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
 
   for j in 0 .. M {
     for i in (0 .. N).rev() {
-      let mut bit = Choice::from(0);
-      if j < sv.len() {
-        bit = Choice::from((sv[j][i / 8] >> (i % 8)) & 1);
-      }
+      let bit =
+        if j < sv.len() { Choice::from((sv[j][i / 8] >> (i % 8)) & 1) } else { Choice::from(0) };
       aL.0[(j * N) + i] = Scalar::conditional_select(&Scalar::ZERO, &Scalar::ONE, bit);
       aR.0[(j * N) + i] = Scalar::conditional_select(&-Scalar::ONE, &Scalar::ZERO, bit);
     }
