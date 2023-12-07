@@ -105,7 +105,7 @@ async fn handle_new_set<D: Db>(
     // If this txn doesn't finish, this will be re-fired
     // If we waited to save to the DB, this txn may be finished, preventing re-firing, yet the
     // prior fired event may have not been received yet
-    crate::MainDb::<D>::add_participating_in_tributary(txn, &spec);
+    crate::ActiveTributaryDb::add_participating_in_tributary(txn, &spec);
 
     new_tributary_spec.send(spec).unwrap();
   } else {
@@ -306,7 +306,7 @@ async fn handle_block<D: Db, Pro: Processors>(
     if !SubstrateDb::<D>::handled_event(&db.0, hash, event_id) {
       log::info!("found fresh set retired event {:?}", retired_set);
       let mut txn = db.0.txn();
-      crate::MainDb::<D>::retire_tributary(&mut txn, set);
+      crate::ActiveTributaryDb::retire_tributary(&mut txn, set);
       tributary_retired.send(set).unwrap();
       SubstrateDb::<D>::handle_event(&mut txn, hash, event_id);
       txn.commit();
@@ -678,12 +678,12 @@ pub(crate) async fn verify_published_batches<D: Db>(
   optimistic_up_to: u32,
 ) -> Option<u32> {
   // TODO: Localize from MainDb to SubstrateDb
-  let last = crate::MainDb::<D>::last_verified_batch(txn, network);
+  let last = crate::LastVerifiedBatchDb::get(txn, network);
   for id in last.map(|last| last + 1).unwrap_or(0) ..= optimistic_up_to {
     let Some(on_chain) = SubstrateDb::<D>::batch_instructions_hash(txn, network, id) else {
       break;
     };
-    let off_chain = crate::MainDb::<D>::expected_batch(txn, network, id).unwrap();
+    let off_chain = crate::ExpectedBatchDb::get(txn, network, id).unwrap();
     if on_chain != off_chain {
       // Halt operations on this network and spin, as this is a critical fault
       loop {
@@ -698,8 +698,8 @@ pub(crate) async fn verify_published_batches<D: Db>(
         sleep(Duration::from_secs(60)).await;
       }
     }
-    crate::MainDb::<D>::save_last_verified_batch(txn, network, id);
+    crate::LastVerifiedBatchDb::set(txn, network, &id);
   }
 
-  crate::MainDb::<D>::last_verified_batch(txn, network)
+  crate::LastVerifiedBatchDb::get(txn, network)
 }

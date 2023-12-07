@@ -232,7 +232,7 @@ pub(crate) async fn scan_tributaries_task<
             let mut tributary_db = raw_db.clone();
             loop {
               // Check if the set was retired, and if so, don't further operate
-              if crate::MainDb::<D>::is_tributary_retired(&raw_db, spec.set()) {
+              if crate::db::RetiredTributaryDb::get(&raw_db, spec.set()).is_some() {
                 break;
               }
 
