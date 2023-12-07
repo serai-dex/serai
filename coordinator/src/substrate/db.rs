@@ -13,10 +13,9 @@ create_db!(
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
     LatestCosignedBlock: () -> u64,
-    BlockDb: () -> u64,
-    EventDb: (id: &[u8], index: u32) -> (),
     NextBlock: () -> u64,
-    BatchDb: (network: NetworkId, id: u32) -> [u8; 32]
+    EventDb: (id: &[u8], index: u32) -> (),
+    BatchInstructionsHashDb: (network: NetworkId, id: u32) -> [u8; 32]
   }
 );
 

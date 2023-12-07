@@ -178,7 +178,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
       network_had_event(&mut burns, &mut batches, network);
 
       let mut txn = db.txn();
-      BatchDb::set(&mut txn, network, id, &instructions_hash);
+      BatchInstructionsHashDb::set(&mut txn, network, id, &instructions_hash);
       txn.commit();
 
       // Make sure this is the only Batch event for this network in this Block
@@ -680,7 +680,7 @@ pub(crate) async fn verify_published_batches<D: Db>(
   // TODO: Localize from MainDb to SubstrateDb
   let last = crate::LastVerifiedBatchDb::get(txn, network);
   for id in last.map(|last| last + 1).unwrap_or(0) ..= optimistic_up_to {
-    let Some(on_chain) = BatchDb::get(txn, network, id) else {
+    let Some(on_chain) = BatchInstructionsHashDb::get(txn, network, id) else {
       break;
     };
     let off_chain = crate::ExpectedBatchDb::get(txn, network, id).unwrap();
