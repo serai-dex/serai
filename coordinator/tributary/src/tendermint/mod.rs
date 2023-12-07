@@ -365,7 +365,10 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       .verify_block::<Self>(&block, self.signature_scheme(), false)
       .map_err(|e| match e {
         BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
-        _ => TendermintBlockError::Fatal,
+        _ => {
+          log::warn!("Tributary Tendermint validate returning BlockError::Fatal due to {e:?}");
+          TendermintBlockError::Fatal
+        }
       })
   }
 

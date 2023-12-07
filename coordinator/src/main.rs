@@ -189,6 +189,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
     if already_handled == msg.id {
       return true;
     }
+  } else {
+    assert_eq!(msg.id, 0);
   }
 
   let _hvq_lock = HANDOVER_VERIFY_QUEUE_LOCK.get_or_init(|| Mutex::new(())).lock().await;
