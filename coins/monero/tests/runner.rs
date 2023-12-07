@@ -299,7 +299,8 @@ macro_rules! test {
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             if stringify!($name) != "spend_one_input_to_two_outputs_no_change" {
-              // Skip weight and fee check for the above test
+              // Skip weight and fee check for the above test because when there is no change,
+              // the change is added to the fee
               check_weight_and_fee(&tx, fee_rate);
             }
             #[allow(unused_assignments)]

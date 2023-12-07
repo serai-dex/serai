@@ -125,9 +125,8 @@ impl SignableTransaction {
           transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
         }
         InternalPayment::Change(change, amount) => {
-          transcript
-            .append_message(b"change_address", change.address.unwrap().to_string().as_bytes());
-          if let Some(view) = change.view.as_ref() {
+          transcript.append_message(b"change_address", change.0.to_string().as_bytes());
+          if let Some(view) = change.1.as_ref() {
             transcript.append_message(b"change_view_key", Zeroizing::new(view.to_bytes()));
           }
           transcript.append_message(b"change_amount", amount.to_le_bytes());

@@ -292,7 +292,7 @@ impl FeePriority {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum InternalPayment {
   Payment((MoneroAddress, u64)),
-  Change(Change, u64),
+  Change((MoneroAddress, Option<Zeroizing<Scalar>>), u64),
 }
 
 /// The eventual output of a SignableTransaction.
@@ -364,17 +364,13 @@ fn need_additional(payments: &[InternalPayment]) -> (bool, bool) {
     .filter(|payment| match *payment {
       InternalPayment::Payment(payment) => payment.0.is_subaddress(),
       InternalPayment::Change(change, _) => {
-        if let Some(change_address) = change.address.as_ref() {
-          if change.view.is_some() {
-            has_change_view = true;
-            // It should not be possible to construct a change specification to a subaddress with a
-            // view key
-            debug_assert!(!change_address.is_subaddress());
-          }
-          change_address.is_subaddress()
-        } else {
-          false
+        if change.1.is_some() {
+          has_change_view = true;
+          // It should not be possible to construct a change specification to a subaddress with a
+          // view key
+          debug_assert!(!change.0.is_subaddress());
         }
+        change.0.is_subaddress()
       }
     })
     .count() !=
@@ -477,10 +473,10 @@ impl SignableTransaction {
 
     // Collect payments in a container that includes a change output if a change address is provided
     let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
-    if change.address.is_some() {
+    if let Some(change_address) = change.address.as_ref() {
       // Push a 0 amount change output that we'll use to do fee calculations.
       // We'll modify the change amount after calculating the fee
-      payments.push(InternalPayment::Change(change.clone(), 0));
+      payments.push(InternalPayment::Change((*change_address, change.view.clone()), 0));
     }
 
     // Determine if we'll need additional pub keys in tx extra
@@ -524,10 +520,13 @@ impl SignableTransaction {
     sanity_check_change_payment_quantity(&payments, change.address.is_some());
 
     // Modify the amount of the change output
-    if change.address.is_some() {
+    if let Some(change_address) = change.address.as_ref() {
       let change_payment = payments.last_mut().unwrap();
       debug_assert!(matches!(change_payment, InternalPayment::Change(_, _)));
-      *change_payment = InternalPayment::Change(change.clone(), in_amount - out_amount - fee);
+      *change_payment = InternalPayment::Change(
+        (*change_address, change.view.clone()),
+        in_amount - out_amount - fee,
+      );
     }
 
     // Sanity check the change again after modifying
@@ -627,7 +626,7 @@ impl SignableTransaction {
       // regarding it's view key
       payment = if !modified_change_ecdh {
         if let InternalPayment::Change(change, amount) = &payment {
-          InternalPayment::Payment((change.address.unwrap(), *amount))
+          InternalPayment::Payment((change.0, *amount))
         } else {
           payment
         }
@@ -659,8 +658,8 @@ impl SignableTransaction {
         InternalPayment::Change(change, amount) => {
           // Instead of rA, use Ra, where R is r * subaddress_spend_key
           // change.view must be Some as if it's None, this payment would've been downcast
-          let ecdh = tx_public_key * change.view.unwrap().deref();
-          SendOutput::change(ecdh, uniqueness, (o, (change.address.unwrap(), amount)))
+          let ecdh = tx_public_key * change.1.unwrap().deref();
+          SendOutput::change(ecdh, uniqueness, (o, (change.0, amount)))
         }
       };
 
@@ -957,8 +956,8 @@ impl Eventuality {
         }
         InternalPayment::Change(change, amount) => {
           w.write_all(&[1])?;
-          write_vec(write_byte, change.address.unwrap().to_string().as_bytes(), w)?;
-          if let Some(view) = change.view.as_ref() {
+          write_vec(write_byte, change.0.to_string().as_bytes(), w)?;
+          if let Some(view) = change.1.as_ref() {
             w.write_all(&[1])?;
             write_scalar(view, w)?;
           } else {
@@ -991,14 +990,14 @@ impl Eventuality {
       Ok(match read_byte(r)? {
         0 => InternalPayment::Payment((read_address(r)?, read_u64(r)?)),
         1 => InternalPayment::Change(
-          Change {
-            address: Some(read_address(r)?),
-            view: match read_byte(r)? {
+          (
+            read_address(r)?,
+            match read_byte(r)? {
               0 => None,
               1 => Some(Zeroizing::new(read_scalar(r)?)),
               _ => Err(io::Error::other("invalid change payment"))?,
             },
-          },
+          ),
           read_u64(r)?,
         ),
         _ => Err(io::Error::other("invalid payment"))?,

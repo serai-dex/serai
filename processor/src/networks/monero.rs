@@ -376,12 +376,6 @@ impl Monero {
       })
       .collect::<Vec<_>>();
 
-    let change = Change::fingerprintable(if change.is_some() {
-      Some(change.clone().unwrap().into())
-    } else {
-      None
-    });
-
     match MSignableTransaction::new(
       protocol,
       // Use the plan ID as the r_seed
@@ -390,7 +384,7 @@ impl Monero {
       Some(Zeroizing::new(*plan_id)),
       inputs.clone(),
       payments,
-      change,
+      Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
       vec![],
       fee_rate,
     ) {
