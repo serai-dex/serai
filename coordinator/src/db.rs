@@ -1,11 +1,9 @@
-use core::marker::PhantomData;
-
 use blake2::{
   digest::{consts::U32, Digest},
   Blake2b,
 };
 
-use scale::{Encode, Decode};
+use scale::Encode;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
@@ -17,31 +15,28 @@ pub use serai_db::*;
 use ::tributary::ReadWrite;
 use crate::tributary::{TributarySpec, Transaction, scanner::RecognizedIdType};
 
-#[derive(Debug)]
-pub struct MainDb<D: Db>(PhantomData<D>);
-impl<D: Db> MainDb<D> {
-  fn main_key(dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    D::key(b"coordinator_main", dst, key)
+create_db!(
+  MainDb {
+    HandledMessageDb: (network: NetworkId, id: u64) -> Vec<u8>,
+    InTributaryDb: (set: ValidatorSet) -> Vec<u8>,
+    ActiveTributaryDb: () -> Vec<u8>,
+    RetiredTributaryDb: (set: ValidatorSet) -> Vec<u8>,
+    SignedTransactionDb: (key: u32) -> Vec<u8>,
+    FirstPreprocessDb:
+      (network: NetworkId, id_type: RecognizedIdType, id: &Vec<u8>) -> Vec<Vec<u8>>,
+    LastRecievedBatchDb: (network: NetworkId) -> u32,
+    ExpectedBatchDb: (network: NetworkId, id: u32) -> [u8; 32],
+    BatchDb: (network: NetworkId, id: u32)  -> SignedBatch,
+    LastVerifiedBatchDb: (network: NetworkId) -> u32,
+    HandoverBatchDb: (set: ValidatorSet) -> u32,
+    LookupHandoverBatchDb: (network: NetworkId, batch: u32) -> Session,
+    QueuedBatchesDb: (set: ValidatorSet) -> Vec<u8>
   }
+);
 
-  fn handled_message_key(network: NetworkId, id: u64) -> Vec<u8> {
-    Self::main_key(b"handled_message", (network, id).encode())
-  }
-  pub fn save_handled_message(txn: &mut D::Transaction<'_>, network: NetworkId, id: u64) {
-    txn.put(Self::handled_message_key(network, id), []);
-  }
-  pub fn handled_message<G: Get>(getter: &G, network: NetworkId, id: u64) -> bool {
-    getter.get(Self::handled_message_key(network, id)).is_some()
-  }
-
-  fn active_tributaries_key() -> Vec<u8> {
-    Self::main_key(b"active_tributaries", [])
-  }
-  fn retired_tributary_key(set: ValidatorSet) -> Vec<u8> {
-    Self::main_key(b"retired_tributary", set.encode())
-  }
+impl ActiveTributaryDb {
   pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
-    let bytes = getter.get(Self::active_tributaries_key()).unwrap_or(vec![]);
+    let bytes = getter.get(Self::key()).unwrap_or_default();
     let mut bytes_ref: &[u8] = bytes.as_ref();
 
     let mut tributaries = vec![];
@@ -51,19 +46,8 @@ impl<D: Db> MainDb<D> {
 
     (bytes, tributaries)
   }
-  pub fn add_participating_in_tributary(txn: &mut D::Transaction<'_>, spec: &TributarySpec) {
-    let key = Self::active_tributaries_key();
-    let (mut existing_bytes, existing) = Self::active_tributaries(txn);
-    for tributary in &existing {
-      if tributary == spec {
-        return;
-      }
-    }
 
-    spec.write(&mut existing_bytes).unwrap();
-    txn.put(key, existing_bytes);
-  }
-  pub fn retire_tributary(txn: &mut D::Transaction<'_>, set: ValidatorSet) {
+  pub fn retire_tributary(txn: &mut impl DbTxn, set: ValidatorSet) {
     let mut active = Self::active_tributaries(txn).1;
     for i in 0 .. active.len() {
       if active[i].set() == set {
@@ -76,139 +60,77 @@ impl<D: Db> MainDb<D> {
     for active in active {
       active.write(&mut bytes).unwrap();
     }
-    txn.put(Self::active_tributaries_key(), bytes);
-    txn.put(Self::retired_tributary_key(set), []);
+    txn.put(Self::key(), bytes);
+    txn.put(RetiredTributaryDb::key(set), []);
   }
-  pub fn is_tributary_retired<G: Get>(getter: &G, set: ValidatorSet) -> bool {
-    getter.get(Self::retired_tributary_key(set)).is_some()
+}
+
+pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec) {
+  txn.put(InTributaryDb::key(spec.set()), []);
+
+  let key = ActiveTributaryDb::key();
+  let (mut existing_bytes, existing) = ActiveTributaryDb::active_tributaries(txn);
+  for tributary in &existing {
+    if tributary == spec {
+      return;
+    }
   }
 
-  fn signed_transaction_key(nonce: u32) -> Vec<u8> {
-    Self::main_key(b"signed_transaction", nonce.to_le_bytes())
-  }
-  pub fn save_signed_transaction(txn: &mut D::Transaction<'_>, nonce: u32, tx: Transaction) {
-    txn.put(Self::signed_transaction_key(nonce), tx.serialize());
-  }
-  pub fn take_signed_transaction(txn: &mut D::Transaction<'_>, nonce: u32) -> Option<Transaction> {
-    let key = Self::signed_transaction_key(nonce);
+  spec.write(&mut existing_bytes).unwrap();
+  txn.put(key, existing_bytes);
+}
+
+impl SignedTransactionDb {
+  pub fn take_signed_transaction(txn: &mut impl DbTxn, nonce: u32) -> Option<Transaction> {
+    let key = Self::key(nonce);
     let res = txn.get(&key).map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
     if res.is_some() {
       txn.del(&key);
     }
     res
   }
+}
 
-  fn first_preprocess_key(network: NetworkId, id_type: RecognizedIdType, id: &[u8]) -> Vec<u8> {
-    Self::main_key(b"first_preprocess", (network, id_type, id).encode())
-  }
+impl FirstPreprocessDb {
   pub fn save_first_preprocess(
-    txn: &mut D::Transaction<'_>,
+    txn: &mut impl DbTxn,
     network: NetworkId,
     id_type: RecognizedIdType,
     id: &[u8],
     preprocess: Vec<Vec<u8>>,
   ) {
-    let preprocess = preprocess.encode();
-    let key = Self::first_preprocess_key(network, id_type, id);
-    if let Some(existing) = txn.get(&key) {
+    if let Some(existing) = FirstPreprocessDb::get(txn, network, id_type, &id.to_vec()) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
       return;
     }
-    txn.put(key, preprocess);
+    FirstPreprocessDb::set(txn, network, id_type, &id.to_vec(), &preprocess);
   }
-  pub fn first_preprocess<G: Get>(
-    getter: &G,
-    network: NetworkId,
-    id_type: RecognizedIdType,
-    id: &[u8],
-  ) -> Option<Vec<Vec<u8>>> {
-    getter
-      .get(Self::first_preprocess_key(network, id_type, id))
-      .map(|bytes| Vec::<_>::decode(&mut bytes.as_slice()).unwrap())
-  }
+}
 
-  fn last_received_batch_key(network: NetworkId) -> Vec<u8> {
-    Self::main_key(b"last_received_batch", network.encode())
+impl ExpectedBatchDb {
+  pub fn save_expected_batch(txn: &mut impl DbTxn, batch: &Batch) {
+    LastRecievedBatchDb::set(txn, batch.network, &batch.id);
+    let hash: [u8; 32] = Blake2b::<U32>::digest(batch.instructions.encode()).into();
+    Self::set(txn, batch.network, batch.id, &hash);
   }
-  fn expected_batch_key(network: NetworkId, id: u32) -> Vec<u8> {
-    Self::main_key(b"expected_batch", (network, id).encode())
-  }
-  pub fn save_expected_batch(txn: &mut D::Transaction<'_>, batch: &Batch) {
-    txn.put(Self::last_received_batch_key(batch.network), batch.id.to_le_bytes());
-    txn.put(
-      Self::expected_batch_key(batch.network, batch.id),
-      Blake2b::<U32>::digest(batch.instructions.encode()),
-    );
-  }
-  pub fn last_received_batch<G: Get>(getter: &G, network: NetworkId) -> Option<u32> {
-    getter
-      .get(Self::last_received_batch_key(network))
-      .map(|id| u32::from_le_bytes(id.try_into().unwrap()))
-  }
-  pub fn expected_batch<G: Get>(getter: &G, network: NetworkId, id: u32) -> Option<[u8; 32]> {
-    getter.get(Self::expected_batch_key(network, id)).map(|batch| batch.try_into().unwrap())
-  }
+}
 
-  fn batch_key(network: NetworkId, id: u32) -> Vec<u8> {
-    Self::main_key(b"batch", (network, id).encode())
+impl HandoverBatchDb {
+  pub fn set_handover_batch(txn: &mut impl DbTxn, set: ValidatorSet, batch: u32) {
+    Self::set(txn, set, &batch);
+    LookupHandoverBatchDb::set(txn, set.network, batch, &set.session);
   }
-  pub fn save_batch(txn: &mut D::Transaction<'_>, batch: SignedBatch) {
-    txn.put(Self::batch_key(batch.batch.network, batch.batch.id), batch.encode());
-  }
-  pub fn batch<G: Get>(getter: &G, network: NetworkId, id: u32) -> Option<SignedBatch> {
-    getter
-      .get(Self::batch_key(network, id))
-      .map(|batch| SignedBatch::decode(&mut batch.as_ref()).unwrap())
-  }
-
-  fn last_verified_batch_key(network: NetworkId) -> Vec<u8> {
-    Self::main_key(b"last_verified_batch", network.encode())
-  }
-  pub fn save_last_verified_batch(txn: &mut D::Transaction<'_>, network: NetworkId, id: u32) {
-    txn.put(Self::last_verified_batch_key(network), id.to_le_bytes());
-  }
-  pub fn last_verified_batch<G: Get>(getter: &G, network: NetworkId) -> Option<u32> {
-    getter
-      .get(Self::last_verified_batch_key(network))
-      .map(|id| u32::from_le_bytes(id.try_into().unwrap()))
-  }
-
-  fn handover_batch_key(set: ValidatorSet) -> Vec<u8> {
-    Self::main_key(b"handover_batch", set.encode())
-  }
-  fn lookup_handover_batch_key(network: NetworkId, batch: u32) -> Vec<u8> {
-    Self::main_key(b"lookup_handover_batch", (network, batch).encode())
-  }
-  pub fn set_handover_batch(txn: &mut D::Transaction<'_>, set: ValidatorSet, batch: u32) {
-    txn.put(Self::handover_batch_key(set), batch.to_le_bytes());
-    txn.put(Self::lookup_handover_batch_key(set.network, batch), set.session.0.to_le_bytes());
-  }
-  pub fn handover_batch<G: Get>(getter: &G, set: ValidatorSet) -> Option<u32> {
-    getter.get(Self::handover_batch_key(set)).map(|id| u32::from_le_bytes(id.try_into().unwrap()))
-  }
-  pub fn is_handover_batch<G: Get>(
-    getter: &G,
-    network: NetworkId,
-    batch: u32,
-  ) -> Option<ValidatorSet> {
-    getter.get(Self::lookup_handover_batch_key(network, batch)).map(|session| ValidatorSet {
-      network,
-      session: Session(u32::from_le_bytes(session.try_into().unwrap())),
-    })
-  }
-
-  fn queued_batches_key(set: ValidatorSet) -> Vec<u8> {
-    Self::main_key(b"queued_batches", set.encode())
-  }
-  pub fn queue_batch(txn: &mut D::Transaction<'_>, set: ValidatorSet, batch: Transaction) {
-    let key = Self::queued_batches_key(set);
-    let mut batches = txn.get(&key).unwrap_or(vec![]);
+}
+impl QueuedBatchesDb {
+  pub fn queue(txn: &mut impl DbTxn, set: ValidatorSet, batch: Transaction) {
+    let key = Self::key(set);
+    let mut batches = txn.get(&key).unwrap_or_default();
     batches.extend(batch.serialize());
     txn.put(&key, batches);
   }
-  pub fn take_queued_batches(txn: &mut D::Transaction<'_>, set: ValidatorSet) -> Vec<Transaction> {
-    let key = Self::queued_batches_key(set);
-    let batches_vec = txn.get(&key).unwrap_or(vec![]);
+  pub fn take(txn: &mut impl DbTxn, set: ValidatorSet) -> Vec<Transaction> {
+    let key = Self::key(set);
+    let batches_vec = txn.get(&key).unwrap_or_default();
     txn.del(&key);
     let mut batches: &[u8] = &batches_vec;
 
