@@ -8,14 +8,14 @@ use serai_client::{
 pub use serai_db::*;
 
 create_db!(
-  CoordinatorSubstrateDb {
+  SubstrateDb {
     CosignTriggered: () -> (),
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> u8,
     LatestCosignedBlock: () -> u64,
-    NextBlock: () -> u64,
+    BlockDb: () -> u64,
     EventDb: (id: &[u8], index: u32) -> (),
-    SessionDb: (key: &[u8]) -> Session,
+    NextBlock: () -> u64,
     BatchDb: (network: NetworkId, id: u32) -> [u8; 32]
   }
 );
@@ -44,12 +44,12 @@ impl EventDb {
 
   pub fn handle_event(txn: &mut impl DbTxn, id: &[u8], index: u32) {
     assert!(Self::is_unhandled(txn, id, index));
-    Self::set(txn, id, index, &[0u8; 0]);
+    Self::set(txn, id, index, &());
   }
 }
 
 db_channel! {
-  SubstrateDb {
+  SubstrateDbChannels {
     CosignTransactions: (network: NetworkId) -> (Session, u64, [u8; 32]),
   }
 }
