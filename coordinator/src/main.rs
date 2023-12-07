@@ -138,7 +138,7 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
 
     // Safe as we should deterministically create transactions, meaning if this is already on-disk,
     // it's what we're saving now
-    SignedTransactionDb::set(txn, signed.nonce, &tx.serialize());
+    SignedTransactionDb::set(txn, &order, signed.nonce, &tx.serialize());
 
     (order, signer)
   } else {
@@ -149,6 +149,7 @@ async fn publish_signed_transaction<D: Db, P: P2p>(
   // publication until the point in time we publish 4
   while let Some(tx) = SignedTransactionDb::take_signed_transaction(
     txn,
+    &order,
     tributary
       .next_nonce(&signer, &order)
       .await
@@ -181,8 +182,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
   network: NetworkId,
   msg: &processors::Message,
 ) -> bool {
-  if HandledMessageDb::get(db, msg.network, msg.id).is_some() {
-    return true;
+  #[allow(clippy::nonminimal_bool)]
+  if let Some(already_handled) = HandledMessageDb::get(db, msg.network) {
+    assert!(!(already_handled > msg.id));
+    assert!((already_handled == msg.id) || (already_handled == msg.id - 1));
+    if already_handled == msg.id {
+      return true;
+    }
   }
 
   let _hvq_lock = HANDOVER_VERIFY_QUEUE_LOCK.get_or_init(|| Mutex::new(())).lock().await;
@@ -590,7 +596,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             // all prior published `Batch`s
             // TODO: This assumes BatchPreprocess is immediately after Batch
             // Ensure that assumption
-            let last_received = LastRecievedBatchDb::get(&txn, msg.network).unwrap();
+            let last_received = LastReceivedBatchDb::get(&txn, msg.network).unwrap();
             let handover_batch = HandoverBatchDb::get(&txn, spec.set());
             let mut queue = false;
             if let Some(handover_batch) = handover_batch {
@@ -704,7 +710,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
     }
   }
 
-  HandledMessageDb::set(&mut txn, msg.network, msg.id, &vec![] as &Vec<u8>);
+  HandledMessageDb::set(&mut txn, msg.network, &msg.id);
   txn.commit();
 
   true
