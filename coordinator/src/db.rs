@@ -25,7 +25,7 @@ create_db!(
     FirstPreprocessDb: (
       network: NetworkId,
       id_type: RecognizedIdType,
-      id: &[u8],
+      id: &[u8]
     ) -> Vec<Vec<u8>>,
     LastRecievedBatchDb: (network: NetworkId) -> u32,
     ExpectedBatchDb: (network: NetworkId, id: u32) -> [u8; 32],
@@ -39,7 +39,7 @@ create_db!(
 
 impl ActiveTributaryDb {
   pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
-    let bytes =Self::get(getter).unwrap_or_default();
+    let bytes = Self::get(getter).unwrap_or_default();
     let mut bytes_ref: &[u8] = bytes.as_ref();
 
     let mut tributaries = vec![];
@@ -69,7 +69,7 @@ impl ActiveTributaryDb {
 }
 
 pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec) {
-  InTributaryDb::set(txn,  spec.set(), &vec![] as &Vec<u8>);
+  InTributaryDb::set(txn, spec.set(), &vec![] as &Vec<u8>);
 
   let (mut existing_bytes, existing) = ActiveTributaryDb::active_tributaries(txn);
   for tributary in &existing {
@@ -84,7 +84,8 @@ pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec
 
 impl SignedTransactionDb {
   pub fn take_signed_transaction(txn: &mut impl DbTxn, nonce: u32) -> Option<Transaction> {
-    let res = SignedTransactionDb::get(txn, nonce).map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
+    let res = SignedTransactionDb::get(txn, nonce)
+      .map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
     if res.is_some() {
       txn.del(Self::key(nonce));
     }
@@ -100,11 +101,11 @@ impl FirstPreprocessDb {
     id: &[u8],
     preprocess: Vec<Vec<u8>>,
   ) {
-    if let Some(existing) = FirstPreprocessDb::get(txn, network, id_type, &id.to_vec()) {
+    if let Some(existing) = FirstPreprocessDb::get(txn, network, id_type, id) {
       assert_eq!(existing, preprocess, "saved a distinct first preprocess");
       return;
     }
-    FirstPreprocessDb::set(txn, network, id_type, &id.to_vec(), &preprocess);
+    FirstPreprocessDb::set(txn, network, id_type, id, &preprocess);
   }
 }
 
