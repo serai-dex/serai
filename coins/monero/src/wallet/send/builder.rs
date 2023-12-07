@@ -18,14 +18,14 @@ struct SignableTransactionBuilderInternal {
   r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<(SpendableOutput, Decoys)>,
   payments: Vec<(MoneroAddress, u64)>,
-  change_address: Option<Change>,
+  change_address: Change,
   data: Vec<Vec<u8>>,
 }
 
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  fn new(protocol: Protocol, fee_rate: Fee, change_address: Option<Change>) -> Self {
+  fn new(protocol: Protocol, fee_rate: Fee, change_address: Change) -> Self {
     Self {
       protocol,
       fee_rate,
@@ -90,7 +90,7 @@ impl SignableTransactionBuilder {
     Self(self.0.clone())
   }
 
-  pub fn new(protocol: Protocol, fee_rate: Fee, change_address: Option<Change>) -> Self {
+  pub fn new(protocol: Protocol, fee_rate: Fee, change_address: Change) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,
       fee_rate,

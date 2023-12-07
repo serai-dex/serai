@@ -111,7 +111,7 @@ test!(
       let mut builder = SignableTransactionBuilder::new(
         protocol,
         rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
-        Some(Change::new(&change_view, false)),
+        Change::new(&change_view, false),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
 
@@ -270,6 +270,47 @@ test!(
 
         output_amounts_by_subaddress.remove(&amount);
       }
+    },
+  ),
+);
+
+test!(
+  spend_one_input_to_two_outputs_no_change,
+  (
+    |_, mut builder: Builder, addr| async move {
+      builder.add_payment(addr, 1000000000000);
+      (builder.build().unwrap(), ())
+    },
+    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+      let mut outputs = scanner.scan_transaction(&tx).not_locked();
+      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+      assert_eq!(outputs[0].commitment().amount, 1000000000000);
+      outputs
+    },
+  ),
+  (
+    |protocol, rpc: Rpc<_>, _, addr, outputs: Vec<ReceivedOutput>| async move {
+      use monero_serai::wallet::FeePriority;
+
+      let mut builder = SignableTransactionBuilder::new(
+        protocol,
+        rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+        Change::fingerprintable(None),
+      );
+      add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
+      builder.add_payment(addr, 10000);
+      builder.add_payment(addr, 50000);
+
+      (builder.build().unwrap(), ())
+    },
+    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+      let mut outputs = scanner.scan_transaction(&tx).not_locked();
+      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+      assert_eq!(outputs[0].commitment().amount, 10000);
+      assert_eq!(outputs[1].commitment().amount, 50000);
+
+      // The remainder should get shunted to fee, which is fingerprintable
+      assert_eq!(tx.rct_signatures.base.fee, 1000000000000 - 10000 - 50000);
     },
   ),
 );
