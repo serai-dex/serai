@@ -7343,7 +7343,6 @@ dependencies = [
  "log",
  "modular-frost",
  "parity-scale-codec",
- "rand_chacha",
  "rand_core",
  "schnorr-signatures",
  "serai-client",

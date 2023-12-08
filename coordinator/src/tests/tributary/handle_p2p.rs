@@ -27,7 +27,11 @@ async fn handle_p2p_test() {
   let keys = new_keys(&mut OsRng);
   let spec = new_spec(&mut OsRng, &keys);
 
-  let mut tributaries = new_tributaries(&keys, &spec).await;
+  let mut tributaries = new_tributaries(&keys, &spec)
+    .await
+    .into_iter()
+    .map(|(_, p2p, tributary)| (p2p, tributary))
+    .collect::<Vec<_>>();
 
   let mut tributary_senders = vec![];
   let mut tributary_arcs = vec![];

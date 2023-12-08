@@ -23,7 +23,7 @@ use processor_messages::{
   sign::{self, SignId},
 };
 
-use serai_db::{Get, Db};
+use serai_db::*;
 
 use crate::{
   processors::Processors,
@@ -59,9 +59,10 @@ const SIGN_SHARE: &str = "s_share";
 pub fn dkg_confirmation_nonces(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
+  txn: &mut impl DbTxn,
   attempt: u32,
 ) -> [u8; 64] {
-  DkgConfirmer::preprocess(spec, key, attempt)
+  (DkgConfirmer { key, spec, txn, attempt }).preprocess()
 }
 
 // If there's an error generating a key pair, return any errors which would've occured when
@@ -69,18 +70,18 @@ pub fn dkg_confirmation_nonces(
 //
 // The caller must ensure only error_generating_key_pair or generated_key_pair is called for a
 // given attempt.
-pub fn error_generating_key_pair<G: Get>(
-  getter: &G,
+pub fn error_generating_key_pair(
+  txn: &mut impl DbTxn,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &TributarySpec,
   attempt: u32,
 ) -> Option<Participant> {
-  let preprocesses = ConfirmationNonces::get(getter, spec.genesis(), attempt).unwrap();
+  let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
 
   // Sign a key pair which can't be valid
   // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
   let key_pair = KeyPair(Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
-  match DkgConfirmer::share(spec, key, attempt, preprocesses, &key_pair) {
+  match (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, &key_pair) {
     Ok(mut share) => {
       // Zeroize the share to ensure it's not accessed
       share.zeroize();
@@ -99,7 +100,7 @@ pub fn generated_key_pair<D: Db>(
 ) -> Result<[u8; 32], Participant> {
   CurrentlyCompletingKeyPair::set(txn, spec.genesis(), key_pair);
   let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
-  DkgConfirmer::share(spec, key, attempt, preprocesses, key_pair)
+  (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, key_pair)
 }
 
 pub(super) async fn fatal_slash<
@@ -125,7 +126,8 @@ pub(super) async fn fatal_slash<
 
   // If during a DKG, remove the participant
   if DkgCompleted::get(txn, genesis).is_none() {
-    let preprocess = DkgRemoval::preprocess(spec, our_key, 0);
+    let preprocess =
+      (DkgRemoval { spec, key: our_key, txn, removing: slashing, attempt: 0 }).preprocess();
     let mut tx = Transaction::DkgRemovalPreprocess(SignData {
       plan: slashing,
       attempt: 0,
@@ -594,22 +596,25 @@ pub(crate) async fn handle_application_tx<
             "in DkgConfirmed handling, which happens after everyone \
               (including us) fires DkgConfirmed, yet no confirming key pair",
           );
-          let sig =
-            match DkgConfirmer::complete(spec, key, attempt, preprocesses, &key_pair, shares) {
-              Ok(sig) => sig,
-              Err(p) => {
-                fatal_slash_with_participant_index::<D, _, _>(
-                  txn,
-                  spec,
-                  publish_tributary_tx,
-                  key,
-                  p,
-                  "invalid DkgConfirmer share",
-                )
-                .await;
-                return;
-              }
-            };
+          let sig = match (DkgConfirmer { spec, key, txn, attempt }).complete(
+            preprocesses,
+            &key_pair,
+            shares,
+          ) {
+            Ok(sig) => sig,
+            Err(p) => {
+              fatal_slash_with_participant_index::<D, _, _>(
+                txn,
+                spec,
+                publish_tributary_tx,
+                key,
+                p,
+                "invalid DkgConfirmer share",
+              )
+              .await;
+              return;
+            }
+          };
 
           DkgCompleted::set(txn, genesis, &());
 
@@ -660,7 +665,9 @@ pub(crate) async fn handle_application_tx<
         Accumulation::Ready(DataSet::Participating(preprocesses)) => {
           RemovalNonces::set(txn, genesis, data.plan, data.attempt, &preprocesses);
 
-          let Ok(share) = DkgRemoval::share(spec, key, data.attempt, preprocesses, data.plan)
+          let Ok(share) =
+            (DkgRemoval { spec, key, txn, removing: data.plan, attempt: data.attempt })
+              .share(preprocesses)
           else {
             // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
             // slash) and censor transactions (yet don't explicitly ban)
@@ -713,7 +720,8 @@ pub(crate) async fn handle_application_tx<
           let preprocesses = RemovalNonces::get(txn, genesis, data.plan, data.attempt).unwrap();
 
           let Ok((signers, signature)) =
-            DkgRemoval::complete(spec, key, data.attempt, preprocesses, data.plan, shares)
+            (DkgRemoval { spec, key, txn, removing: data.plan, attempt: data.attempt })
+              .complete(preprocesses, shares)
           else {
             // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
             // slash) and censor transactions (yet don't explicitly ban)

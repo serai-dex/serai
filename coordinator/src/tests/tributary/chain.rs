@@ -65,14 +65,16 @@ pub fn new_spec<R: RngCore + CryptoRng>(
 pub async fn new_tributaries(
   keys: &[Zeroizing<<Ristretto as Ciphersuite>::F>],
   spec: &TributarySpec,
-) -> Vec<(LocalP2p, Tributary<MemDb, Transaction, LocalP2p>)> {
+) -> Vec<(MemDb, LocalP2p, Tributary<MemDb, Transaction, LocalP2p>)> {
   let p2p = LocalP2p::new(keys.len());
   let mut res = vec![];
   for (i, key) in keys.iter().enumerate() {
+    let db = MemDb::new();
     res.push((
+      db.clone(),
       p2p[i].clone(),
       Tributary::<_, Transaction, _>::new(
-        MemDb::new(),
+        db,
         spec.genesis(),
         spec.start_time(),
         key.clone(),
@@ -152,7 +154,11 @@ async fn tributary_test() {
   let keys = new_keys(&mut OsRng);
   let spec = new_spec(&mut OsRng, &keys);
 
-  let mut tributaries = new_tributaries(&keys, &spec).await;
+  let mut tributaries = new_tributaries(&keys, &spec)
+    .await
+    .into_iter()
+    .map(|(_, p2p, tributary)| (p2p, tributary))
+    .collect::<Vec<_>>();
 
   let mut blocks = 0;
   let mut last_block = spec.genesis();

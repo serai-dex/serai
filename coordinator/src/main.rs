@@ -416,7 +416,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
-          let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
+          let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, &mut txn, id.attempt);
 
           let our_i = spec
             .i(pub_key)
@@ -454,7 +454,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // As for the safety of calling error_generating_key_pair, the processor is presumed
           // to only send InvalidShare or GeneratedKeyPair for a given attempt
           let mut txs = if let Some(faulty) =
-            crate::tributary::error_generating_key_pair::<_>(&txn, key, spec, id.attempt)
+            crate::tributary::error_generating_key_pair(&mut txn, key, spec, id.attempt)
           {
             vec![Transaction::RemoveParticipant(faulty)]
           } else {

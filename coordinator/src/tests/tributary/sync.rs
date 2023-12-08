@@ -31,7 +31,11 @@ async fn sync_test() {
   // Ensure this can have a node fail
   assert!(spec.n() > spec.t());
 
-  let mut tributaries = new_tributaries(&keys, &spec).await;
+  let mut tributaries = new_tributaries(&keys, &spec)
+    .await
+    .into_iter()
+    .map(|(_, p2p, tributary)| (p2p, tributary))
+    .collect::<Vec<_>>();
 
   // Keep a Tributary back, effectively having it offline
   let syncer_key = keys.pop().unwrap();

@@ -183,7 +183,7 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
           let cache = machines.remove(&i).unwrap().cache();
           machines.insert(
             i,
-            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).unwrap(),
+            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).0,
           );
         }
       }

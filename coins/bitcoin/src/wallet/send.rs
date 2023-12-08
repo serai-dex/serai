@@ -358,7 +358,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     _: (),
     _: ThresholdKeys<Secp256k1>,
     _: CachedPreprocess,
-  ) -> Result<Self, FrostError> {
+  ) -> (Self, Self::Preprocess) {
     unimplemented!(
       "Bitcoin transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"
