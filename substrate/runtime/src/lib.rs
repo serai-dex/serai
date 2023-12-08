@@ -84,6 +84,9 @@ pub type Transaction = serai_primitives::Transaction<RuntimeCall, SignedExtra>;
 pub type Block = generic::Block<Header, Transaction>;
 pub type BlockId = generic::BlockId<Block>;
 
+/// Longevity of an offence report.
+pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
+
 pub mod opaque {
   use super::*;
 
@@ -145,7 +148,6 @@ parameter_types! {
       Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-  pub ReportLongevity: u64 = 24 * 600; // TODO: get epoch duration from babe.
 }
 
 pub struct CallFilter;
@@ -306,7 +308,7 @@ impl babe::Config for Runtime {
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
 
-  type KeyOwnerProof = MembershipProof;
+  type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
     babe::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
@@ -318,7 +320,7 @@ impl grandpa::Config for Runtime {
   type MaxAuthorities = MaxAuthorities;
 
   type MaxSetIdSessionEntries = ConstU64<0>;
-  type KeyOwnerProof = MembershipProof;
+  type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
     grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }

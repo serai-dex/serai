@@ -1,52 +1,36 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::traits::FindAuthor;
-
 use sp_core::sr25519::Public;
 use sp_session::{GetSessionNumber, GetValidatorCount};
-use sp_runtime::ConsensusEngineId;
+use sp_runtime::{ConsensusEngineId, traits::IsMember};
+use sp_std::marker::PhantomData;
+
+use pallet_babe::{Pallet as Babe, AuthorityId as BabeAuthorityId};
 
 use scale::{Encode, Decode};
 use scale_info::TypeInfo;
 
-// `session` and `validator_count` is only there to satisfy the `GetSessionNumber`
-// and `GetValidatorCount` traits.
+use serai_primitives::NetworkId;
+
 #[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
-pub struct MembershipProof {
-  pub session: u32,
-  pub validator_count: u32,
-  pub key: Public,
-}
-impl GetSessionNumber for MembershipProof {
+pub struct MembershipProof<T: pallet::Config>(pub Public, PhantomData<T>);
+impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
   fn session(&self) -> u32 {
-    self.session
+    let current = Pallet::<T>::session(NetworkId::Serai).unwrap().0;
+    if Babe::<T>::is_member(&BabeAuthorityId::from(self.0)) {
+      current
+    } else {
+      // if it isn't in the current session, it should have been in the previous one.
+      current - 1
+    }
   }
 }
-impl GetValidatorCount for MembershipProof {
+impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
   fn validator_count(&self) -> u32 {
-    self.validator_count
+    Babe::<T>::authorities().len() as u32
   }
 }
 
-<<<<<<< HEAD
-// TODO: check if you can simplify this(taken from pallet session).
-pub struct FindAccountFromAuthorIndex<T, Inner>(sp_std::marker::PhantomData<(T, Inner)>);
-
-impl<T: Config, Inner: FindAuthor<u32>> FindAuthor<T::AccountId>
-  for FindAccountFromAuthorIndex<T, Inner>
-{
-  fn find_author<'a, I>(digests: I) -> Option<T::AccountId>
-  where
-    I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
-  {
-    let i = Inner::find_author(digests)?;
-    let v = <Pallet<T>>::participants(NetworkId::Serai)[i as usize];
-    Some(v.0)
-  }
-}
-
-=======
->>>>>>> 44daae1f (bug fixes)
 #[allow(deprecated, clippy::let_unit_value)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
@@ -68,7 +52,7 @@ pub mod pallet {
   use frame_system::{pallet_prelude::*, RawOrigin};
   use frame_support::{
     pallet_prelude::*,
-    traits::{DisabledValidators, KeyOwnerProofSystem},
+    traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
     BoundedVec, WeakBoundedVec, StoragePrefixedMap,
   };
 
@@ -154,18 +138,6 @@ pub mod pallet {
     NetworkId,
     BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
     OptionQuery,
-  >;
-  // TODO: we don't actually need the NetworkId key and weights here atm. But we might need them
-  // in the future for some reason? WeakBoundedVec types picked just to prevent conversions.
-  /// Participants of the previous session.
-  #[pallet::storage]
-  #[pallet::getter(fn previous_participants)]
-  pub type PreviousParticipants<T: Config> = StorageMap<
-    _,
-    Identity,
-    NetworkId,
-    WeakBoundedVec<(BabeAuthorityId, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
-    ValueQuery,
   >;
   /// The validators selected to be in-set, regardless of if removed, with the ability to perform a
   /// check for presence.
@@ -325,8 +297,15 @@ pub mod pallet {
 
   /// Pending deallocations, keyed by the Session they become unlocked on.
   #[pallet::storage]
-  type PendingDeallocations<T: Config> =
-    StorageMap<_, Blake2_128Concat, (NetworkId, Session, Public), Amount, OptionQuery>;
+  type PendingDeallocations<T: Config> = StorageDoubleMap<
+    _,
+    Blake2_128Concat,
+    (NetworkId, Public),
+    Identity,
+    Session,
+    Amount,
+    OptionQuery,
+  >;
 
   /// The generated key pair for a given validator set instance.
   #[pallet::storage]
@@ -344,6 +323,12 @@ pub mod pallet {
   #[pallet::getter(fn grandpa_offences)]
   pub type GrandpaOffences<T: Config> =
     StorageMap<_, Blake2_128Concat, (Public, u64, u64), (), OptionQuery>;
+
+  /// Disabled validators.
+  #[pallet::storage]
+  #[pallet::getter(fn disabled_indices)]
+  pub type DisabledIndices<T: Config> =
+    StorageDoubleMap<_, Identity, Session, Identity, u32, (), OptionQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -648,12 +633,13 @@ pub mod pallet {
       } else {
         to_unlock_on.0 += 1;
       }
-      // Increase the session by one, creating a cool down period
+      // Increase the session by one, creating a cooldown period
       to_unlock_on.0 += 1;
       let existing =
-        PendingDeallocations::<T>::get((network, to_unlock_on, account)).unwrap_or(Amount(0));
+        PendingDeallocations::<T>::get((network, account), to_unlock_on).unwrap_or(Amount(0));
       PendingDeallocations::<T>::set(
-        (network, to_unlock_on, account),
+        (network, account),
+        to_unlock_on,
         Some(Amount(existing.0 + amount.0)),
       );
 
@@ -726,16 +712,15 @@ pub mod pallet {
       if !Self::handover_completed(network, session) {
         return None;
       }
-      PendingDeallocations::<T>::take((network, session, key))
+      PendingDeallocations::<T>::take((network, key), session)
     }
 
     fn rotate_session() {
-      // get current & next serai validators
-      let current_validators = Babe::<T>::authorities();
-      let next_validators = Self::participants(NetworkId::Serai);
+      // next serai validators that is in the queue.
+      let next_validators = Participants::<T>::get(NetworkId::Serai)
+        .expect("no Serai participants upon rotate_session");
 
-      // save & end the current serai session.
-      PreviousParticipants::<T>::set(NetworkId::Serai, current_validators);
+      // end the current serai session.
       Self::retire_set(ValidatorSet {
         network: NetworkId::Serai,
         session: Self::session(NetworkId::Serai).unwrap(),
@@ -802,9 +787,7 @@ pub mod pallet {
     // Babe also provides convenient function to check for authorities so we just go with that.
     fn can_slash_serai_validator(validator: &Public) -> bool {
       Babe::<T>::is_member(&BabeAuthorityId::from(*validator)) ||
-        Self::previous_participants(NetworkId::Serai)
-          .into_iter()
-          .any(|(id, _)| id.into_inner() == *validator)
+        PendingDeallocations::<T>::iter_prefix((NetworkId::Serai, validator)).next().is_some()
     }
 
     fn slash_serai_validator(validator: &Public) {
@@ -816,20 +799,11 @@ pub mod pallet {
       Self::set_allocation(network, account, Amount(0));
 
       // prevent any future deallocation.
-      let mut to_unlock_on = Self::session(network).unwrap();
-      // TODO: we don't know in which block the it might be deallocating, so we go through all
-      // but this is ugly.
-      for i in 0 .. 4 {
-        to_unlock_on.0 += i;
-        let pending = Self::take_deallocatable_amount(network, to_unlock_on, account);
-        if pending.is_some() {
-          allocation = allocation.add(pending.unwrap());
-          PendingDeallocations::<T>::set((network, to_unlock_on, account), None);
-        }
+      for (_, pending) in PendingDeallocations::<T>::drain_prefix((network, account)) {
+        allocation = allocation.add(pending);
       }
 
-      // remove from the current & future sets.
-      // TODO: how to remove from the current?
+      // remove from the future sets.
       let mut participants =
         Participants::<T>::get(network).expect("no Serai participants on slash");
       let index = participants.iter().position(|(id, _)| *id == account);
@@ -849,6 +823,19 @@ pub mod pallet {
         Balance { coin: Coin::Serai, amount: allocation },
       )
       .unwrap();
+    }
+
+    fn disable_serai_validator(validator: &Public) {
+      // if we can't find the validator just means they already left.
+      if let Some(index) =
+        Babe::<T>::authorities().into_iter().position(|(id, _)| id.into_inner() == *validator)
+      {
+        DisabledIndices::<T>::set(
+          Self::session(NetworkId::Serai).unwrap(),
+          u32::try_from(index).unwrap(),
+          Some(()),
+        );
+      }
     }
   }
 
@@ -1048,23 +1035,14 @@ pub mod pallet {
   }
 
   impl<T: Config, D: AsRef<[u8]>> KeyOwnerProofSystem<(KeyTypeId, D)> for Pallet<T> {
-    type Proof = MembershipProof;
+    type Proof = MembershipProof<T>;
     type IdentificationTuple = Public;
 
     fn prove(key: (KeyTypeId, D)) -> Option<Self::Proof> {
       let (_, data) = key;
       let validator = Public::try_from(data.as_ref()).ok()?;
 
-      // TODO: do we want this check here? this is node that wants to send the proof anyway.
-      if !Self::can_slash_serai_validator(&validator) {
-        return None;
-      }
-
-      Some(MembershipProof {
-        session: Self::session(NetworkId::Serai).unwrap().0,
-        validator_count: Self::participants(NetworkId::Serai).len() as u32,
-        key: validator,
-      })
+      Some(MembershipProof::<T>(validator, Default::default()))
     }
 
     fn check_proof(key: (KeyTypeId, D), proof: Self::Proof) -> Option<Self::IdentificationTuple> {
@@ -1072,7 +1050,7 @@ pub mod pallet {
       let validator = Public::try_from(data.as_ref()).ok()?;
 
       // check the offender and the proof offender are the same.
-      if validator != proof.key {
+      if validator != proof.0 {
         return None;
       }
 
@@ -1094,6 +1072,9 @@ pub mod pallet {
       // slash the offender
       let offender = offence.offender;
       Self::slash_serai_validator(&offender);
+
+      // disable it
+      Self::disable_serai_validator(&offender);
 
       // save the offence
       let key = (offender, u64::from(offence.slot));
@@ -1120,6 +1101,9 @@ pub mod pallet {
       let offender = offence.offender;
       Self::slash_serai_validator(&offender);
 
+      // disable it
+      Self::disable_serai_validator(&offender);
+
       // save the offence
       let key = (offender, offence.time_slot.set_id, offence.time_slot.round);
       GrandpaOffences::<T>::set(key, Some(()));
@@ -1135,20 +1119,6 @@ pub mod pallet {
     }
   }
 
-<<<<<<< HEAD
-=======
-  impl<T: Config> AllowMint for Pallet<T> {
-    fn is_allowed(balance: &Balance) -> bool {
-      // get the required stake
-      let current_required = Self::required_stake_for_network(balance.coin.network());
-      let new_required = current_required + Self::required_stake(balance);
-
-      // get the total stake for the network & compare.
-      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
-      staked.0 >= new_required
-    }
-  }
-
   impl<T: Config> FindAuthor<Public> for Pallet<T> {
     fn find_author<'a, I>(digests: I) -> Option<Public>
     where
@@ -1159,11 +1129,10 @@ pub mod pallet {
     }
   }
 
->>>>>>> 44daae1f (bug fixes)
   impl<T: Config> DisabledValidators for Pallet<T> {
-    fn is_disabled(_: u32) -> bool {
-      // TODO
-      false
+    fn is_disabled(index: u32) -> bool {
+      let session = Self::session(NetworkId::Serai).unwrap();
+      Self::disabled_indices(session, index).is_some()
     }
   }
 }
