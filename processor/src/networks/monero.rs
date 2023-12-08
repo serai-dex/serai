@@ -384,7 +384,7 @@ impl Monero {
       Some(Zeroizing::new(*plan_id)),
       inputs.clone(),
       payments,
-      change.clone().map(|change| Change::fingerprintable(change.into())),
+      Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
       vec![],
       fee_rate,
     ) {
@@ -753,7 +753,7 @@ impl Network for Monero {
       None,
       inputs,
       vec![(address.into(), amount - fee)],
-      Some(Change::fingerprintable(Self::test_address().into())),
+      Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
       self.rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
     )

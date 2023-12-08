@@ -213,13 +213,13 @@ macro_rules! test {
           let builder = SignableTransactionBuilder::new(
             protocol,
             rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
-            Some(Change::new(
+            Change::new(
               &ViewPair::new(
                 &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
                 Zeroizing::new(random_scalar(&mut OsRng))
               ),
               false
-            )),
+            ),
           );
 
           let sign = |tx: SignableTransaction| {
@@ -298,7 +298,11 @@ macro_rules! test {
             rpc.publish_transaction(&signed).await.unwrap();
             mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
-            check_weight_and_fee(&tx, fee_rate);
+            if stringify!($name) != "spend_one_input_to_two_outputs_no_change" {
+              // Skip weight and fee check for the above test because when there is no change,
+              // the change is added to the fee
+              check_weight_and_fee(&tx, fee_rate);
+            }
             #[allow(unused_assignments)]
             {
               let scanner =
