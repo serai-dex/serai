@@ -22,8 +22,6 @@ use libp2p::{
   futures::StreamExt,
   identity::Keypair,
   PeerId,
-  tcp::Config as TcpConfig,
-  noise, yamux,
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
     IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
@@ -275,21 +273,23 @@ impl LibP2p {
     // TODO: Relay client?
     let mut swarm = SwarmBuilder::with_existing_identity(throwaway_key_pair)
       .with_tokio()
-      .with_tcp(TcpConfig::default().nodelay(true), noise::Config::new, || {
-        let mut config = yamux::Config::default();
-        // 1 MiB default + max message size
-        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_MESSAGE_SIZE);
-        // 256 KiB default + max message size
-        config
-          .set_receive_window_size(((256 * 1024) + MAX_LIBP2P_MESSAGE_SIZE).try_into().unwrap());
-        config
+      .with_quic()
+      /*
+      .with_quic_config(|mut config| {
+        config.max_idle_timeout = 85;
+        // We send KeepAlive after 80, so this isn't needed
+        config.keep_alive_interval = Duration::from_secs(config.max_idle_timeout.into() + 1);
+        // 1 MiB + max message size
+        config.max_stream_data = (1024 * 1024) + u32::try_from(MAX_LIBP2P_MESSAGE_SIZE).unwrap();
+        // Support 10 maxed out streams
+        config.max_connection_data = 10 * config.max_stream_data;
       })
-      .unwrap()
+      */
       .with_behaviour(|_| behavior)
       .unwrap()
       .build();
     const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
-    swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
+    swarm.listen_on(format!("/ip4/0.0.0.0/udp/{PORT}/quic-v1").parse().unwrap()).unwrap();
 
     let (broadcast_send, mut broadcast_recv) = mpsc::unbounded_channel();
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
@@ -375,8 +375,8 @@ impl LibP2p {
                   libp2p::mdns::Event::Discovered(list),
                 ))) => {
                   for (peer, mut addr) in list {
-                    // Check the port is as expected to prevent trying to peer with Substrate nodes
-                    if addr.pop() == Some(libp2p::multiaddr::Protocol::Tcp(PORT)) {
+                    // Only peer with Quic, effectively preventing connecting to Substrate nodes
+                    if addr.pop() == Some(libp2p::multiaddr::Protocol::QuicV1) {
                       log::info!("found peer via mdns");
                       swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer);
                     }
