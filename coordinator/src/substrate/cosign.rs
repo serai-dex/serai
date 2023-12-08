@@ -12,39 +12,20 @@
   ensure any block needing cosigned is consigned within a reasonable amount of time.
 */
 
-use core::{ops::Deref, time::Duration};
-use std::{
-  sync::Arc,
-  collections::{HashSet, HashMap},
-};
-
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use ciphersuite::{Ciphersuite, Ristretto};
 
 use scale::{Encode, Decode};
 use serai_client::{
-  SeraiError, Block, Serai, TemporalSerai,
-  primitives::{BlockHash, NetworkId},
-  validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair, amortize_excess_key_shares},
-    ValidatorSetsEvent,
-  },
-  in_instructions::InInstructionsEvent,
-  coins::CoinsEvent,
+  SeraiError, Serai,
+  primitives::NetworkId,
+  validator_sets::primitives::{Session, ValidatorSet},
 };
 
 use serai_db::*;
 
-use processor_messages::SubstrateContext;
-
-use tokio::{sync::mpsc, time::sleep};
-
-use crate::{
-  Db,
-  processors::Processors,
-  tributary::{TributarySpec, SeraiBlockNumber},
-};
+use crate::{Db, substrate::in_set};
 
 // 5 minutes, expressed in blocks
 // TODO: Pull a constant for block time
@@ -60,9 +41,12 @@ create_db!(
 );
 
 impl IntendedCosign {
+  // Sets the intended to cosign block, clearing the prior value entirely.
   pub fn set_intended_cosign(txn: &mut impl DbTxn, intended: u64) {
     Self::set(txn, &(intended, None::<u64>));
   }
+
+  // Sets the cosign skipped since the last intended to cosign block.
   pub fn set_skipped_cosign(txn: &mut impl DbTxn, skipped: u64) {
     let (intended, prior_skipped) = Self::get(txn).unwrap();
     assert!(prior_skipped.is_none());
@@ -131,134 +115,183 @@ async fn block_has_events(
   }
 }
 
+async fn potentially_cosign_block(
+  txn: &mut impl DbTxn,
+  serai: &Serai,
+  block: u64,
+  skipped_block: Option<u64>,
+  window_end_exclusive: u64,
+) -> Result<bool, SeraiError> {
+  // The following code regarding marking cosigned if prior block is cosigned expects this block to
+  // not be zero
+  // While we could perform this check there, there's no reason not to optimize the entire function
+  // as such
+  if block == 0 {
+    return Ok(false);
+  }
+
+  let block_has_events = block_has_events(txn, serai, block).await?;
+
+  // If this block had no events and immediately follows a cosigned block, mark it as cosigned
+  if (block_has_events == HasEvents::No) &&
+    (LatestCosignedBlock::latest_cosigned_block(txn) == (block - 1))
+  {
+    LatestCosignedBlock::set(txn, &block);
+  }
+
+  // If we skipped a block, we're supposed to sign it plus the COSIGN_DISTANCE if no other blocks
+  // trigger a cosigning protocol covering it
+  // This means there will be the maximum delay allowed from a block needing cosigning occuring
+  // and a cosign for it triggering
+  let maximally_latent_cosign_block =
+    skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
+
+  // If this block is within the window,
+  if block < window_end_exclusive {
+    // and set a key, cosign it
+    if block_has_events == HasEvents::KeyGen {
+      IntendedCosign::set_intended_cosign(txn, block);
+      // Carry skipped if it isn't included by cosigning this block
+      if let Some(skipped) = skipped_block {
+        if skipped > block {
+          IntendedCosign::set_skipped_cosign(txn, block);
+        }
+      }
+      return Ok(true);
+    }
+  } else if (Some(block) == maximally_latent_cosign_block) || (block_has_events != HasEvents::No) {
+    // Since this block was outside the window and had events/was maximally latent, cosign it
+    IntendedCosign::set_intended_cosign(txn, block);
+    return Ok(true);
+  }
+  Ok(false)
+}
+
 /*
   Advances the cosign protocol as should be done per the latest block.
 
   A block is considered cosigned if:
     A) It was cosigned
     B) It's the parent of a cosigned block
-    C) It immediately follows a cosigned block and has no events requiring cosigning (TODO)
+    C) It immediately follows a cosigned block and has no events requiring cosigning
+
+  This only actually performs advancement within a limited bound (generally until it finds a block
+  which should be cosigned). Accordingly, it is necessary to call multiple times even if
+  `latest_number` doesn't change.
 */
-async fn advance_cosign_protocol(db: &mut impl Db, serai: &Serai, latest_number: u64) -> Result<(), ()> {
-  let Some((last_intended_to_cosign_block, mut skipped_block)) = IntendedCosign::get(&txn) else {
-    let mut txn = db.txn();
-    IntendedCosign::set_intended_cosign(&mut txn, 1);
-    txn.commit();
-    return Ok(());
+pub async fn advance_cosign_protocol(
+  db: &mut impl Db,
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai: &Serai,
+  latest_number: u64,
+) -> Result<(), SeraiError> {
+  let mut txn = db.txn();
+
+  let (last_intended_to_cosign_block, mut skipped_block) = {
+    let intended_cosign = IntendedCosign::get(&txn);
+    // If we haven't prior intended to cosign a block, set the intended cosign to 1
+    if let Some(intended_cosign) = intended_cosign {
+      intended_cosign
+    } else {
+      IntendedCosign::set_intended_cosign(&mut txn, 1);
+      IntendedCosign::get(&txn).unwrap()
+    }
   };
-}
 
-// If we haven't flagged skipped, and a block within the distance had events, flag the first
-// such block as skipped
-let mut distance_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
-// If we've never triggered a cosign, don't skip any cosigns
-if CosignTriggered::get(&txn).is_none() {
-  distance_end_exclusive = 0;
-}
-if skipped_block.is_none() {
-  for b in (last_intended_to_cosign_block + 1) .. distance_end_exclusive {
-    if b > latest_number {
-      break;
+  // "windows" refers to the window of blocks where even if there's a block which should be
+  // cosigned, it won't be due to proximity due to the prior cosign
+  let mut window_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
+  // If we've never triggered a cosign, don't skip any cosigns based on proximity
+  if CosignTriggered::get(&txn).is_none() {
+    window_end_exclusive = 0;
+  }
+
+  // Check all blocks within the window to see if they should be cosigned
+  // If so, we're skipping them and need to flag them as skipped so that once the window closes, we
+  // do cosign them
+  // We only perform this check if we haven't already marked a block as skipped since the cosign
+  // the skipped block will cause will cosign all other blocks within this window
+  if skipped_block.is_none() {
+    for b in (last_intended_to_cosign_block + 1) .. window_end_exclusive.min(latest_number) {
+      if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
+        skipped_block = Some(b);
+        log::debug!("skipping cosigning {b} due to proximity to prior cosign");
+        IntendedCosign::set_skipped_cosign(&mut txn, b);
+        break;
+      }
     }
+  }
 
-    if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
-      skipped_block = Some(b);
-      log::debug!("skipping cosigning {b} due to proximity to prior cosign");
-      IntendedCosign::set_skipped_cosign(&mut txn, b);
+  // A block which should be cosigned
+  let mut to_cosign = None;
+  // A list of sets which are cosigning, along with a boolean of if we're in the set
+  let mut cosigning = vec![];
+
+  for block in (last_intended_to_cosign_block + 1) ..= latest_number {
+    let actual_block = serai
+      .finalized_block_by_number(block)
+      .await?
+      .expect("couldn't get block which should've been finalized");
+
+    if potentially_cosign_block(&mut txn, serai, block, skipped_block, window_end_exclusive).await?
+    {
+      to_cosign = Some((block, actual_block.hash()));
+
+      // Get the keys as of the prior block
+      // If this key sets new keys, the coordinator won't acknowledge so until we process this
+      // block
+      // We won't process this block until its co-signed
+      // Using the keys of the prior block ensures this deadlock isn't reached
+      let serai = serai.as_of(actual_block.header.parent_hash.into());
+
+      for network in serai_client::primitives::NETWORKS {
+        // Get the latest session to have set keys
+        let set_with_keys = {
+          let Some(latest_session) = serai.validator_sets().session(network).await? else {
+            continue;
+          };
+          let prior_session = Session(latest_session.0.saturating_sub(1));
+          if serai
+            .validator_sets()
+            .keys(ValidatorSet { network, session: prior_session })
+            .await?
+            .is_some()
+          {
+            ValidatorSet { network, session: prior_session }
+          } else {
+            let set = ValidatorSet { network, session: latest_session };
+            if serai.validator_sets().keys(set).await?.is_none() {
+              continue;
+            }
+            set
+          }
+        };
+
+        log::debug!("{:?} will be cosigning {block}", set_with_keys.network);
+        cosigning.push((set_with_keys, in_set(key, &serai, set_with_keys).await?.unwrap()));
+      }
+
       break;
     }
   }
-}
 
-let mut has_no_cosigners = None;
-let mut cosign = vec![];
-
-// Block we should cosign no matter what if no prior blocks qualified for cosigning
-let maximally_latent_cosign_block =
-  skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);
-for block in (last_intended_to_cosign_block + 1) ..= latest_number {
-  let actual_block = serai
-    .finalized_block_by_number(block)
-    .await?
-    .expect("couldn't get block which should've been finalized");
-  SeraiBlockNumber::set(&mut txn, actual_block.hash(), &block);
-
-  let mut set = false;
-
-  let block_has_events = block_has_events(&mut txn, serai, block).await?;
-  // If this block is within the distance,
-  if block < distance_end_exclusive {
-    // and set a key, cosign it
-    if block_has_events == HasEvents::KeyGen {
-      IntendedCosign::set_intended_cosign(&mut txn, block);
-      set = true;
-      // Carry skipped if it isn't included by cosigning this block
-      if let Some(skipped) = skipped_block {
-        if skipped > block {
-          IntendedCosign::set_skipped_cosign(&mut txn, block);
+  if let Some((number, hash)) = to_cosign {
+    // If this block doesn't have cosigners, yet does have events, automatically mark it as
+    // cosigned
+    if cosigning.is_empty() {
+      log::debug!("{} had no cosigners available, marking as cosigned", number);
+      LatestCosignedBlock::set(&mut txn, &number);
+    } else {
+      CosignTriggered::set(&mut txn, &());
+      for (set, in_set) in cosigning {
+        if in_set {
+          log::debug!("cosigning {number} with {:?} {:?}", set.network, set.session);
+          CosignTransactions::append_cosign(&mut txn, set, number, hash);
         }
       }
     }
-  } else if (Some(block) == maximally_latent_cosign_block) ||
-    (block_has_events != HasEvents::No)
-  {
-    // Since this block was outside the distance and had events/was maximally latent, cosign it
-    IntendedCosign::set_intended_cosign(&mut txn, block);
-    set = true;
   }
+  txn.commit();
 
-  if set {
-    // Get the keys as of the prior block
-    // That means if this block is setting new keys (which won't lock in until we process this
-    // block), we won't freeze up waiting for the yet-to-be-processed keys to sign this block
-    let serai = serai.as_of(actual_block.header.parent_hash.into());
-
-    has_no_cosigners = Some(actual_block.clone());
-
-    for network in serai_client::primitives::NETWORKS {
-      // Get the latest session to have set keys
-      let Some(latest_session) = serai.validator_sets().session(network).await? else {
-        continue;
-      };
-      let prior_session = Session(latest_session.0.saturating_sub(1));
-      let set_with_keys = if serai
-        .validator_sets()
-        .keys(ValidatorSet { network, session: prior_session })
-        .await?
-        .is_some()
-      {
-        ValidatorSet { network, session: prior_session }
-      } else {
-        let set = ValidatorSet { network, session: latest_session };
-        if serai.validator_sets().keys(set).await?.is_none() {
-          continue;
-        }
-        set
-      };
-
-      // Since this is a valid cosigner, don't flag this block as having no cosigners
-      has_no_cosigners = None;
-      log::debug!("{:?} will be cosigning {block}", set_with_keys.network);
-
-      if in_set(key, &serai, set_with_keys).await?.unwrap() {
-        cosign.push((set_with_keys, block, actual_block.hash()));
-      }
-    }
-
-    break;
-  }
+  Ok(())
 }
-
-// If this block doesn't have cosigners, yet does have events, automatically mark it as
-// cosigned
-if let Some(has_no_cosigners) = has_no_cosigners {
-  log::debug!("{} had no cosigners available, marking as cosigned", has_no_cosigners.number());
-  LatestCosignedBlock::set(&mut txn, &has_no_cosigners.number());
-} else {
-  CosignTriggered::set(&mut txn, &());
-  for (set, block, hash) in cosign {
-    log::debug!("cosigning {block} with {:?} {:?}", set.network, set.session);
-    CosignTransactions::append_cosign(&mut txn, set, block, hash);
-  }
-}
-txn.commit();
