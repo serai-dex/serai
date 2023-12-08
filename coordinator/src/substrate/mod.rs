@@ -112,7 +112,7 @@ async fn handle_new_set<D: Db>(
 
     new_tributary_spec.send(spec).unwrap();
   } else {
-    log::info!("not present in set {:?}", set);
+    log::info!("not present in new set {:?}", set);
   }
 
   Ok(())
@@ -149,8 +149,8 @@ async fn handle_key_gen<Pro: Processors>(
   Ok(())
 }
 
-async fn handle_batch_and_burns<D: Db, Pro: Processors>(
-  db: &mut D,
+async fn handle_batch_and_burns<Pro: Processors>(
+  txn: &mut impl DbTxn,
   processors: &Pro,
   serai: &Serai,
   block: &Block,
@@ -180,9 +180,7 @@ async fn handle_batch_and_burns<D: Db, Pro: Processors>(
     {
       network_had_event(&mut burns, &mut batches, network);
 
-      let mut txn = db.txn();
-      BatchInstructionsHashDb::set(&mut txn, network, id, &instructions_hash);
-      txn.commit();
+      BatchInstructionsHashDb::set(txn, network, id, &instructions_hash);
 
       // Make sure this is the only Batch event for this network in this Block
       assert!(batch_block.insert(network, network_block).is_none());
@@ -259,8 +257,8 @@ async fn handle_block<D: Db, Pro: Processors>(
   for new_set in serai.as_of(hash).validator_sets().new_set_events().await? {
     // Individually mark each event as handled so on reboot, we minimize duplicates
     // Additionally, if the Serai connection also fails 1/100 times, this means a block with 1000
-    // events will successfully be incrementally handled (though the Serai connection should be
-    // stable)
+    // events will successfully be incrementally handled
+    // (though the Serai connection should be stable, making this unnecessary)
     let ValidatorSetsEvent::NewSet { set } = new_set else {
       panic!("NewSet event wasn't NewSet: {new_set:?}");
     };
@@ -318,16 +316,14 @@ async fn handle_block<D: Db, Pro: Processors>(
   }
 
   // Finally, tell the processor of acknowledged blocks/burns
-  // This uses a single event as. unlike prior events which individually executed code, all
+  // This uses a single event as unlike prior events which individually executed code, all
   // following events share data collection
-  // This does break the uniqueness of (hash, event_id) -> one event, yet
-  // (network, (hash, event_id)) remains valid as a unique ID for an event
   if EventDb::is_unhandled(db, &hash, event_id) {
-    handle_batch_and_burns(db, processors, serai, &block).await?;
+    let mut txn = db.txn();
+    handle_batch_and_burns(&mut txn, processors, serai, &block).await?;
+    EventDb::handle_event(&mut txn, &hash, event_id);
+    txn.commit();
   }
-  let mut txn = db.txn();
-  EventDb::handle_event(&mut txn, &hash, event_id);
-  txn.commit();
 
   Ok(())
 }
@@ -369,9 +365,11 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
     log::info!("handling substrate block {b}");
     handle_block(db, key, new_tributary_spec, tributary_retired, processors, serai, block).await?;
     *next_block += 1;
+
     let mut txn = db.txn();
     NextBlock::set(&mut txn, next_block);
     txn.commit();
+
     log::info!("handled substrate block {b}");
   }
 
@@ -406,6 +404,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   };
   */
   // TODO: Restore the above subscription-based system
+  // That would require moving serai-client from HTTP to websockets
   let new_substrate_block_notifier = {
     let serai = &serai;
     move |next_substrate_block| async move {
@@ -476,22 +475,25 @@ pub async fn scan_task<D: Db, Pro: Processors>(
 }
 
 /// Gets the expected ID for the next Batch.
-pub(crate) async fn get_expected_next_batch(serai: &Serai, network: NetworkId) -> u32 {
-  let mut first = true;
-  loop {
-    if !first {
-      log::error!("{} {network:?}", "couldn't connect to Serai node to get the next batch ID for",);
-      sleep(Duration::from_secs(5)).await;
+///
+/// Will log an error and apply a slight sleep on error, letting the caller simply immediately
+/// retry.
+pub(crate) async fn expected_next_batch(
+  serai: &Serai,
+  network: NetworkId,
+) -> Result<u32, SeraiError> {
+  async fn expected_next_batch_inner(serai: &Serai, network: NetworkId) -> Result<u32, SeraiError> {
+    let serai = serai.as_of_latest_finalized_block().await?;
+    let last = serai.in_instructions().last_batch_for_network(network).await?;
+    Ok(if let Some(last) = last { last + 1 } else { 0 })
+  }
+  match expected_next_batch_inner(serai, network).await {
+    Ok(next) => Ok(next),
+    Err(e) => {
+      log::error!("couldn't get the expected next batch from substrate: {e:?}");
+      sleep(Duration::from_millis(100)).await;
+      Err(e)
     }
-    first = false;
-
-    let Ok(serai) = serai.as_of_latest_finalized_block().await else {
-      continue;
-    };
-    let Ok(last) = serai.in_instructions().last_batch_for_network(network).await else {
-      continue;
-    };
-    break if let Some(last) = last { last + 1 } else { 0 };
   }
 }
 

@@ -317,7 +317,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
         BatchDb::set(&mut txn, batch.batch.network, batch.batch.id, &batch.clone());
 
         // Get the next-to-execute batch ID
-        let mut next = substrate::get_expected_next_batch(serai, network).await;
+        let Ok(mut next) = substrate::expected_next_batch(serai, network).await else {
+          return false;
+        };
 
         // Since we have a new batch, publish all batches yet to be published to Serai
         // This handles the edge-case where batch n+1 is signed before batch n is
@@ -329,7 +331,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
         while let Some(batch) = batches.pop_front() {
           // If this Batch should no longer be published, continue
-          if substrate::get_expected_next_batch(serai, network).await > batch.batch.id {
+          let Ok(expected_next_batch) = substrate::expected_next_batch(serai, network).await else {
+            return false;
+          };
+          if expected_next_batch > batch.batch.id {
             continue;
           }
 
