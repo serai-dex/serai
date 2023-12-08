@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use async_lock::RwLock;
 use simple_request::{hyper, Request, Client};
 
 use scale::{Encode, Decode, Compact};
@@ -69,8 +70,17 @@ pub struct Serai {
   genesis: [u8; 32],
 }
 
-#[derive(Clone, Copy)]
-pub struct TemporalSerai<'a>(pub(crate) &'a Serai, pub(crate) [u8; 32]);
+type EventsInBlock = Vec<frame_system::EventRecord<Event, [u8; 32]>>;
+pub struct TemporalSerai<'a> {
+  serai: &'a Serai,
+  block: [u8; 32],
+  events: RwLock<Option<EventsInBlock>>,
+}
+impl<'a> Clone for TemporalSerai<'a> {
+  fn clone(&self) -> Self {
+    Self { serai: self.serai, block: self.block, events: RwLock::new(None) }
+  }
+}
 
 impl Serai {
   pub async fn call<Req: Serialize, Res: DeserializeOwned>(
@@ -289,27 +299,35 @@ impl Serai {
   /// itself.
   pub async fn as_of_latest_finalized_block(&self) -> Result<TemporalSerai, SeraiError> {
     let latest = self.latest_finalized_block_hash().await?;
-    Ok(TemporalSerai(self, latest))
+    Ok(TemporalSerai { serai: self, block: latest, events: RwLock::new(None) })
   }
 
   /// Returns a TemporalSerai able to retrieve state as of the specified block.
   pub fn as_of(&self, block: [u8; 32]) -> TemporalSerai {
-    TemporalSerai(self, block)
+    TemporalSerai { serai: self, block, events: RwLock::new(None) }
   }
 }
 
 impl<'a> TemporalSerai<'a> {
-  pub fn into_inner(&self) -> &Serai {
-    self.0
-  }
+  async fn events<E>(
+    &self,
+    filter_map: impl Fn(&Event) -> Option<E>,
+  ) -> Result<Vec<E>, SeraiError> {
+    let mut events = self.events.read().await;
+    if events.is_none() {
+      drop(events);
+      let mut events_write = self.events.write().await;
+      #[allow(clippy::unwrap_or_default)]
+      if events_write.is_none() {
+        *events_write = Some(self.storage("System", "Events", ()).await?.unwrap_or(vec![]));
+      }
+      drop(events_write);
+      events = self.events.read().await;
+    }
 
-  async fn events<E>(&self, filter_map: impl Fn(Event) -> Option<E>) -> Result<Vec<E>, SeraiError> {
     let mut res = vec![];
-    let all_events: Option<Vec<frame_system::EventRecord<Event, [u8; 32]>>> =
-      self.storage("System", "Events", ()).await?;
-    #[allow(clippy::unwrap_or_default)]
-    for event in all_events.unwrap_or(vec![]) {
-      if let Some(event) = filter_map(event.event) {
+    for event in events.as_ref().unwrap() {
+      if let Some(event) = filter_map(&event.event) {
         res.push(event);
       }
     }
@@ -328,7 +346,7 @@ impl<'a> TemporalSerai<'a> {
     full_key.extend(key.encode());
 
     let res: Option<String> =
-      self.0.call("state_getStorage", [hex::encode(full_key), hex::encode(self.1)]).await?;
+      self.serai.call("state_getStorage", [hex::encode(full_key), hex::encode(self.block)]).await?;
     let Some(res) = res else { return Ok(None) };
     let res = Serai::hex_decode(res)?;
     Ok(Some(R::decode(&mut res.as_slice()).map_err(|_| {
@@ -336,19 +354,19 @@ impl<'a> TemporalSerai<'a> {
     })?))
   }
 
-  pub fn coins(self) -> SeraiCoins<'a> {
+  pub fn coins(&'a self) -> SeraiCoins<'a> {
     SeraiCoins(self)
   }
 
-  pub fn dex(self) -> SeraiDex<'a> {
+  pub fn dex(&'a self) -> SeraiDex<'a> {
     SeraiDex(self)
   }
 
-  pub fn in_instructions(self) -> SeraiInInstructions<'a> {
+  pub fn in_instructions(&'a self) -> SeraiInInstructions<'a> {
     SeraiInInstructions(self)
   }
 
-  pub fn validator_sets(self) -> SeraiValidatorSets<'a> {
+  pub fn validator_sets(&'a self) -> SeraiValidatorSets<'a> {
     SeraiValidatorSets(self)
   }
 }

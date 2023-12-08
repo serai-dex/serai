@@ -243,7 +243,8 @@ async fn sign_test() {
         let block_included_in_hash =
           serai.finalized_block_by_number(block_included_in).await.unwrap().unwrap().hash();
 
-        let serai = serai.as_of(block_included_in_hash).coins();
+        let serai = serai.as_of(block_included_in_hash);
+        let serai = serai.coins();
         assert_eq!(
           serai.coin_balance(Coin::Serai, serai_addr).await.unwrap(),
           Amount(1_000_000_000)
@@ -310,7 +311,8 @@ async fn sign_test() {
       let last_serai_block =
         serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
       let last_serai_block_hash = last_serai_block.hash();
-      let serai = serai.as_of(last_serai_block_hash).coins();
+      let serai = serai.as_of(last_serai_block_hash);
+      let serai = serai.coins();
       assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
       assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
 

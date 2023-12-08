@@ -62,7 +62,8 @@ async fn handle_new_set<D: Db>(
     log::info!("present in set {:?}", set);
 
     let set_data = {
-      let serai = serai.as_of(block.hash()).validator_sets();
+      let serai = serai.as_of(block.hash());
+      let serai = serai.validator_sets();
       let set_participants =
         serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 

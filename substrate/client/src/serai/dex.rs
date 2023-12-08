@@ -6,12 +6,14 @@ use crate::{SeraiError, TemporalSerai};
 pub type DexEvent = serai_abi::dex::Event;
 
 #[derive(Clone, Copy)]
-pub struct SeraiDex<'a>(pub(crate) TemporalSerai<'a>);
+pub struct SeraiDex<'a>(pub(crate) &'a TemporalSerai<'a>);
 impl<'a> SeraiDex<'a> {
   pub async fn events(&self) -> Result<Vec<DexEvent>, SeraiError> {
     self
       .0
-      .events(|event| if let serai_abi::Event::Dex(event) = event { Some(event) } else { None })
+      .events(
+        |event| if let serai_abi::Event::Dex(event) = event { Some(event.clone()) } else { None },
+      )
       .await
   }
 

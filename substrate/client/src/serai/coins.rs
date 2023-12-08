@@ -11,18 +11,18 @@ const PALLET: &str = "Coins";
 pub type CoinsEvent = serai_abi::coins::Event;
 
 #[derive(Clone, Copy)]
-pub struct SeraiCoins<'a>(pub(crate) TemporalSerai<'a>);
+pub struct SeraiCoins<'a>(pub(crate) &'a TemporalSerai<'a>);
 impl<'a> SeraiCoins<'a> {
-  pub fn into_inner(self) -> TemporalSerai<'a> {
-    self.0
-  }
-
   pub async fn mint_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
     self
       .0
       .events(|event| {
         if let serai_abi::Event::Coins(event) = event {
-          Some(event).filter(|event| matches!(event, CoinsEvent::Mint { .. }))
+          if matches!(event, CoinsEvent::Mint { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }
@@ -35,7 +35,11 @@ impl<'a> SeraiCoins<'a> {
       .0
       .events(|event| {
         if let serai_abi::Event::Coins(event) = event {
-          Some(event).filter(|event| matches!(event, CoinsEvent::BurnWithInstruction { .. }))
+          if matches!(event, CoinsEvent::BurnWithInstruction { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }

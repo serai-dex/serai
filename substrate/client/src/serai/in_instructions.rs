@@ -11,12 +11,8 @@ pub type InInstructionsEvent = serai_abi::in_instructions::Event;
 const PALLET: &str = "InInstructions";
 
 #[derive(Clone, Copy)]
-pub struct SeraiInInstructions<'a>(pub(crate) TemporalSerai<'a>);
+pub struct SeraiInInstructions<'a>(pub(crate) &'a TemporalSerai<'a>);
 impl<'a> SeraiInInstructions<'a> {
-  pub fn into_inner(self) -> TemporalSerai<'a> {
-    self.0
-  }
-
   pub async fn latest_block_for_network(
     &self,
     network: NetworkId,
@@ -36,7 +32,11 @@ impl<'a> SeraiInInstructions<'a> {
       .0
       .events(|event| {
         if let serai_abi::Event::InInstructions(event) = event {
-          Some(event).filter(|event| matches!(event, InInstructionsEvent::Batch { .. }))
+          if matches!(event, InInstructionsEvent::Batch { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }

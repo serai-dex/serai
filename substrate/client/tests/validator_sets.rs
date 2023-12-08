@@ -48,7 +48,8 @@ serai_test!(
     );
 
     {
-      let vs_serai = serai.as_of_latest_finalized_block().await.unwrap().validator_sets();
+      let vs_serai = serai.as_of_latest_finalized_block().await.unwrap();
+      let vs_serai = vs_serai.validator_sets();
       let participants = vs_serai.participants(set.network).await
         .unwrap()
         .unwrap()
@@ -64,7 +65,8 @@ serai_test!(
 
     // While the set_keys function should handle this, it's beneficial to
     // independently test it
-    let serai = serai.as_of(block).validator_sets();
+    let serai = serai.as_of(block);
+    let serai = serai.validator_sets();
     assert_eq!(
       serai.key_gen_events().await.unwrap(),
       vec![ValidatorSetsEvent::KeyGen { set, key_pair: key_pair.clone() }]

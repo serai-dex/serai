@@ -16,18 +16,18 @@ const PALLET: &str = "ValidatorSets";
 pub type ValidatorSetsEvent = serai_abi::validator_sets::Event;
 
 #[derive(Clone, Copy)]
-pub struct SeraiValidatorSets<'a>(pub(crate) TemporalSerai<'a>);
+pub struct SeraiValidatorSets<'a>(pub(crate) &'a TemporalSerai<'a>);
 impl<'a> SeraiValidatorSets<'a> {
-  pub fn into_inner(self) -> TemporalSerai<'a> {
-    self.0
-  }
-
   pub async fn new_set_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0
       .events(|event| {
         if let serai_abi::Event::ValidatorSets(event) = event {
-          Some(event).filter(|event| matches!(event, ValidatorSetsEvent::NewSet { .. }))
+          if matches!(event, ValidatorSetsEvent::NewSet { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }
@@ -40,7 +40,11 @@ impl<'a> SeraiValidatorSets<'a> {
       .0
       .events(|event| {
         if let serai_abi::Event::ValidatorSets(event) = event {
-          Some(event).filter(|event| matches!(event, ValidatorSetsEvent::KeyGen { .. }))
+          if matches!(event, ValidatorSetsEvent::KeyGen { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }
@@ -53,7 +57,11 @@ impl<'a> SeraiValidatorSets<'a> {
       .0
       .events(|event| {
         if let serai_abi::Event::ValidatorSets(event) = event {
-          Some(event).filter(|event| matches!(event, ValidatorSetsEvent::SetRetired { .. }))
+          if matches!(event, ValidatorSetsEvent::SetRetired { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
         } else {
           None
         }

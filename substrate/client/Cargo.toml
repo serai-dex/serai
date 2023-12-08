@@ -28,6 +28,8 @@ sp-core = { git = "https://github.com/serai-dex/substrate", optional = true }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", optional = true }
 frame-system = { git = "https://github.com/serai-dex/substrate", optional = true }
 
+async-lock = "3"
+
 simple-request = { path = "../../common/request", version = "0.1", optional = true }
 
 bitcoin = { version = "0.31", optional = true }

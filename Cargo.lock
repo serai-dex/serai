@@ -7273,6 +7273,7 @@ dependencies = [
 name = "serai-client"
 version = "0.1.0"
 dependencies = [
+ "async-lock",
  "bitcoin",
  "blake2",
  "ciphersuite",

@@ -54,6 +54,7 @@ serai_test!(
 
     let block = provide_batch(&serai, batch.clone()).await;
 
+    let instruction = {
     let serai = serai.as_of(block);
     let batches = serai.in_instructions().batch_events().await.unwrap();
     assert_eq!(
@@ -82,19 +83,20 @@ serai_test!(
     OsRng.fill_bytes(&mut rand_bytes);
     let data = Data::new(rand_bytes).unwrap();
 
-    let instruction = OutInstructionWithBalance {
+    OutInstructionWithBalance {
       balance,
       instruction: OutInstruction { address: external_address, data: Some(data) },
-    };
+    }
+};
 
-    let serai = serai.into_inner();
     let block = publish_tx(
-      serai,
+      &serai,
       &serai.sign(&pair, SeraiCoins::burn_with_instruction(instruction.clone()), 0, 0),
     )
     .await;
 
-    let serai = serai.as_of(block).coins();
+    let serai = serai.as_of(block);
+    let serai = serai.coins();
     let events = serai.burn_with_instruction_events().await.unwrap();
     assert_eq!(events, vec![CoinsEvent::BurnWithInstruction { from: address, instruction }]);
     assert_eq!(serai.coin_supply(coin).await.unwrap(), Amount(0));
