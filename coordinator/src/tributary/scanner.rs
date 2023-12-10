@@ -39,11 +39,32 @@ pub enum RecognizedIdType {
   Plan,
 }
 
-pub(crate) trait RIDTrait<FRid>:
-  Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
-{
+#[async_trait::async_trait]
+pub trait RIDTrait {
+  async fn recognized_id(
+    &self,
+    set: ValidatorSet,
+    genesis: [u8; 32],
+    kind: RecognizedIdType,
+    id: Vec<u8>,
+  );
 }
-impl<FRid, F: Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid> for F {}
+#[async_trait::async_trait]
+impl<
+    FRid: Send + Future<Output = ()>,
+    F: Sync + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid,
+  > RIDTrait for F
+{
+  async fn recognized_id(
+    &self,
+    set: ValidatorSet,
+    genesis: [u8; 32],
+    kind: RecognizedIdType,
+    id: Vec<u8>,
+  ) {
+    (self)(set, genesis, kind, id).await
+  }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PstTxType {
@@ -51,16 +72,49 @@ pub enum PstTxType {
   RemoveParticipant([u8; 32]),
 }
 
+#[async_trait::async_trait]
+pub trait PSTTrait {
+  async fn publish_serai_tx(
+    &self,
+    set: ValidatorSet,
+    kind: PstTxType,
+    tx: serai_client::Transaction,
+  );
+}
+#[async_trait::async_trait]
+impl<
+    FPst: Send + Future<Output = ()>,
+    F: Sync + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+  > PSTTrait for F
+{
+  async fn publish_serai_tx(
+    &self,
+    set: ValidatorSet,
+    kind: PstTxType,
+    tx: serai_client::Transaction,
+  ) {
+    (self)(set, kind, tx).await
+  }
+}
+
+#[async_trait::async_trait]
+pub trait PTTTrait {
+  async fn publish_tributary_tx(&self, tx: Transaction);
+}
+#[async_trait::async_trait]
+impl<FPtt: Send + Future<Output = ()>, F: Sync + Fn(Transaction) -> FPtt> PTTTrait for F {
+  async fn publish_tributary_tx(&self, tx: Transaction) {
+    (self)(tx).await
+  }
+}
+
 pub struct TributaryBlockHandler<
   'a,
   T: DbTxn,
   Pro: Processors,
-  FPst: Future<Output = ()>,
-  PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-  FPtt: Future<Output = ()>,
-  PTT: Fn(Transaction) -> FPtt,
-  FRid: Future<Output = ()>,
-  RID: RIDTrait<FRid>,
+  PST: PSTTrait,
+  PTT: PTTTrait,
+  RID: RIDTrait,
   P: P2p,
 > {
   pub txn: &'a mut T,
@@ -71,21 +125,11 @@ pub struct TributaryBlockHandler<
   pub publish_tributary_tx: &'a PTT,
   pub spec: &'a TributarySpec,
   block: Block<Transaction>,
-  _frid: PhantomData<FRid>,
   _p2p: PhantomData<P>,
 }
 
-impl<
-    T: DbTxn,
-    Pro: Processors,
-    FPst: Future<Output = ()>,
-    PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-    FPtt: Future<Output = ()>,
-    PTT: Fn(Transaction) -> FPtt,
-    FRid: Future<Output = ()>,
-    RID: RIDTrait<FRid>,
-    P: P2p,
-  > TributaryBlockHandler<'_, T, Pro, FPst, PST, FPtt, PTT, FRid, RID, P>
+impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
+  TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
     let genesis = self.spec.genesis();
@@ -116,7 +160,7 @@ impl<
         signed: Transaction::empty_signed(),
       });
       tx.sign(&mut OsRng, genesis, self.our_key);
-      (self.publish_tributary_tx)(tx).await;
+      self.publish_tributary_tx.publish_tributary_tx(tx).await;
     }
   }
 
@@ -187,12 +231,9 @@ impl<
 pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
-  FPst: Future<Output = ()>,
-  PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-  FPtt: Future<Output = ()>,
-  PTT: Fn(Transaction) -> FPtt,
-  FRid: Future<Output = ()>,
-  RID: RIDTrait<FRid>,
+  PST: PSTTrait,
+  PTT: PTTTrait,
+  RID: RIDTrait,
   P: P2p,
 >(
   db: &mut D,
@@ -232,7 +273,6 @@ pub(crate) async fn handle_new_blocks<
       publish_serai_tx,
       publish_tributary_tx,
       block,
-      _frid: PhantomData::<_>,
       _p2p: PhantomData::<P>,
     })
     .handle::<D>()
@@ -247,8 +287,7 @@ pub(crate) async fn scan_tributaries_task<
   D: Db,
   Pro: Processors,
   P: P2p,
-  FRid: Send + Future<Output = ()>,
-  RID: 'static + Send + Sync + Clone + RIDTrait<FRid>,
+  RID: 'static + Send + Sync + Clone + RIDTrait,
 >(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -283,7 +322,7 @@ pub(crate) async fn scan_tributaries_task<
               // the next block occurs
               let next_block_notification = tributary.next_block_notification().await;
 
-              handle_new_blocks::<_, _, _, _, _, _, _, _, P>(
+              handle_new_blocks::<_, _, _, _, _, P>(
                 &mut tributary_db,
                 &key,
                 &recognized_id,
@@ -357,7 +396,7 @@ pub(crate) async fn scan_tributaries_task<
                     }
                   }
                 },
-                &|tx| {
+                &|tx: Transaction| {
                   let tributary = tributary.clone();
                   async move {
                     match tributary.add_transaction(tx.clone()).await {

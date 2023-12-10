@@ -8,7 +8,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
 use sp_runtime::traits::Verify;
-use serai_client::validator_sets::primitives::KeyPair;
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
 
 use tokio::time::sleep;
 
@@ -97,7 +97,7 @@ async fn dkg_test() {
     tributary: &Tributary<MemDb, Transaction, LocalP2p>,
   ) -> MemProcessors {
     let processors = MemProcessors::new();
-    handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, _, LocalP2p>(
       db,
       key,
       &|_, _, _, _| async {
@@ -128,7 +128,7 @@ async fn dkg_test() {
   sleep(Duration::from_secs(Tributary::<MemDb, Transaction, LocalP2p>::block_time().into())).await;
 
   // Verify the scanner emits a KeyGen::Commitments message
-  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
     &|_, _, _, _| async {
@@ -214,7 +214,7 @@ async fn dkg_test() {
   }
 
   // With just 4 sets of shares, nothing should happen yet
-  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
     &|_, _, _, _| async {
@@ -268,7 +268,7 @@ async fn dkg_test() {
 
   // Any scanner which has handled the prior blocks should only emit the new event
   for (i, key) in keys.iter().enumerate() {
-    handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
+    handle_new_blocks::<_, _, _, _, _, LocalP2p>(
       &mut dbs[i],
       key,
       &|_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
@@ -339,14 +339,14 @@ async fn dkg_test() {
   }
 
   // The scanner should successfully try to publish a transaction with a validly signed signature
-  handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
+  handle_new_blocks::<_, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
     &|_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    &|set, tx_type, tx| {
+    &|set: ValidatorSet, tx_type, tx: serai_client::Transaction| {
       assert_eq!(tx_type, PstTxType::SetKeys);
 
       let spec = spec.clone();

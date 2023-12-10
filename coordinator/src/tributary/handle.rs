@@ -1,4 +1,4 @@
-use core::{ops::Deref, future::Future};
+use core::ops::Deref;
 use std::collections::HashMap;
 
 use rand_core::OsRng;
@@ -10,9 +10,7 @@ use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
 use serai_client::{
-  Public, SeraiAddress, Signature,
-  validator_sets::primitives::{ValidatorSet, KeyPair},
-  SeraiValidatorSets,
+  Public, SeraiAddress, Signature, validator_sets::primitives::KeyPair, SeraiValidatorSets,
 };
 
 use tributary::{Signed, TransactionKind, TransactionTrait};
@@ -31,7 +29,7 @@ use crate::{
     SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, Label, DataSpecification,
     DataSet, Accumulation,
     signing_protocol::{DkgConfirmer, DkgRemoval},
-    scanner::{RecognizedIdType, RIDTrait, PstTxType, TributaryBlockHandler},
+    scanner::{RecognizedIdType, RIDTrait, PstTxType, PSTTrait, PTTTrait, TributaryBlockHandler},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, DkgKeyPair,
     AttemptDb, DataReceived, DataDb,
   },
@@ -99,17 +97,8 @@ fn unflatten(spec: &TributarySpec, data: &mut HashMap<Participant, Vec<u8>>) {
   }
 }
 
-impl<
-    T: DbTxn,
-    Pro: Processors,
-    FPst: Future<Output = ()>,
-    PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-    FPtt: Future<Output = ()>,
-    PTT: Fn(Transaction) -> FPtt,
-    FRid: Future<Output = ()>,
-    RID: RIDTrait<FRid>,
-    P: P2p,
-  > TributaryBlockHandler<'_, T, Pro, FPst, PST, FPtt, PTT, FRid, RID, P>
+impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
+  TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   fn accumulate(
     &mut self,
@@ -483,12 +472,14 @@ impl<
 
             DkgCompleted::set(self.txn, genesis, &());
 
-            (self.publish_serai_tx)(
-              self.spec.set(),
-              PstTxType::SetKeys,
-              SeraiValidatorSets::set_keys(self.spec.set().network, key_pair, Signature(sig)),
-            )
-            .await;
+            self
+              .publish_serai_tx
+              .publish_serai_tx(
+                self.spec.set(),
+                PstTxType::SetKeys,
+                SeraiValidatorSets::set_keys(self.spec.set().network, key_pair, Signature(sig)),
+              )
+              .await;
           }
           Accumulation::Ready(DataSet::NotParticipating) => {
             panic!("wasn't a participant in DKG confirmination shares")
@@ -537,7 +528,7 @@ impl<
               signed: Transaction::empty_signed(),
             });
             tx.sign(&mut OsRng, genesis, self.our_key);
-            (self.publish_tributary_tx)(tx).await;
+            self.publish_tributary_tx.publish_tributary_tx(tx).await;
           }
           Label::Share => {
             let preprocesses =
@@ -569,7 +560,9 @@ impl<
               signers,
               Signature(signature),
             );
-            (self.publish_serai_tx)(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
+            self
+              .publish_serai_tx
+              .publish_serai_tx(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
               .await;
           }
         }
@@ -602,7 +595,9 @@ impl<
           genesis,
           Topic::SubstrateSign(SubstrateSignableId::Batch(batch)),
         );
-        (self.recognized_id)(self.spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec())
+        self
+          .recognized_id
+          .recognized_id(self.spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec())
           .await;
       }
 
@@ -614,7 +609,10 @@ impl<
 
         for id in plan_ids.into_iter() {
           AttemptDb::recognize_topic(self.txn, genesis, Topic::Sign(id));
-          (self.recognized_id)(self.spec.set(), genesis, RecognizedIdType::Plan, id.to_vec()).await;
+          self
+            .recognized_id
+            .recognized_id(self.spec.set(), genesis, RecognizedIdType::Plan, id.to_vec())
+            .await;
         }
       }
 
