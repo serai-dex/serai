@@ -198,9 +198,8 @@ impl<
       return Accumulation::NotReady;
     }
 
-    // If the attempt is lesser than the blockchain's, slash
+    // If the attempt is lesser than the blockchain's, return
     if data_spec.attempt < curr_attempt {
-      // TODO: Slash for being late
       return Accumulation::NotReady;
     }
     // If the attempt is greater, this is a premature publication, full slash
@@ -241,10 +240,102 @@ impl<
     Ok(())
   }
 
+  async fn handle_dkg_removal(
+    &mut self,
+    data: &SignData<[u8; 32]>,
+    label: Label,
+  ) -> Option<HashMap<Participant, Vec<u8>>> {
+    let signer = data.signed.signer;
+    let expected_len = match label {
+      Label::Preprocess => 64,
+      Label::Share => 32,
+    };
+    if (data.data.len() != 1) || (data.data[0].len() != expected_len) {
+      self.fatal_slash(signer.to_bytes(), "unexpected length data for dkg removal").await;
+      return None;
+    }
+
+    if let Accumulation::Ready(DataSet::Participating(results)) = self
+      .handle_data(
+        &DataSpecification { topic: Topic::DkgRemoval(data.plan), label, attempt: data.attempt },
+        data.data.encode(),
+        &data.signed,
+      )
+      .await
+    {
+      Some(results)
+    } else {
+      None
+    }
+  }
+
+  async fn handle_substrate_sign<
+    F: Fn(SubstrateSignId, HashMap<Participant, Vec<u8>>) -> coordinator::CoordinatorMessage,
+  >(
+    &mut self,
+    data: &SignData<SubstrateSignableId>,
+    label: Label,
+    msg: F,
+  ) {
+    let signer = data.signed.signer;
+    let Ok(_) = self.check_sign_data_len(signer, data.data.len()).await else {
+      return;
+    };
+    let expected_len = match label {
+      Label::Preprocess => 64,
+      Label::Share => 32,
+    };
+    for data in &data.data {
+      if data.len() != expected_len {
+        self
+          .fatal_slash(signer.to_bytes(), "unexpected length data for substrate signing protocol")
+          .await;
+      }
+    }
+
+    if let Accumulation::Ready(DataSet::Participating(mut results)) = self
+      .handle_data(
+        &DataSpecification { topic: Topic::SubstrateSign(data.plan), label, attempt: data.attempt },
+        data.data.encode(),
+        &data.signed,
+      )
+      .await
+    {
+      unflatten(self.spec, &mut results);
+      let id =
+        SubstrateSignId { session: self.spec.set().session, id: data.plan, attempt: data.attempt };
+      self.processors.send(self.spec.set().network, msg(id, results)).await;
+    }
+  }
+
+  async fn handle_sign<F: Fn(SignId, HashMap<Participant, Vec<u8>>) -> sign::CoordinatorMessage>(
+    &mut self,
+    data: &SignData<[u8; 32]>,
+    label: Label,
+    msg: F,
+  ) {
+    let Ok(_) = self.check_sign_data_len(data.signed.signer, data.data.len()).await else {
+      return;
+    };
+    if let Accumulation::Ready(DataSet::Participating(mut results)) = self
+      .handle_data(
+        &DataSpecification { topic: Topic::Sign(data.plan), label, attempt: data.attempt },
+        data.data.encode(),
+        &data.signed,
+      )
+      .await
+    {
+      unflatten(self.spec, &mut results);
+      let id = SignId { session: self.spec.set().session, id: data.plan, attempt: data.attempt };
+      self.processors.send(self.spec.set().network, msg(id, results)).await;
+    }
+  }
+
   pub(crate) async fn handle_application_tx(&mut self, tx: Transaction) {
     let genesis = self.spec.genesis();
 
     // Don't handle transactions from fatally slashed participants
+    // This prevents removed participants from sabotaging the removal signing sessions and so on
     // TODO: Because fatally slashed participants can still publish onto the blockchain, they have
     // a notable DoS ability
     if let TransactionKind::Signed(_, signed) = tx.kind() {
@@ -257,6 +348,7 @@ impl<
       Transaction::RemoveParticipant(i) => {
         self.fatal_slash_with_participant_index(i, "RemoveParticipant Provided TX").await
       }
+
       Transaction::DkgCommitments(attempt, commitments, signed) => {
         let Ok(_) = self.check_sign_data_len(signed.signer, commitments.len()).await else {
           return;
@@ -291,18 +383,15 @@ impl<
       }
 
       Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
+        let Ok(_) = self.check_sign_data_len(signed.signer, shares.len()).await else {
+          return;
+        };
+
         let sender_i = self
           .spec
           .i(signed.signer)
           .expect("transaction added to tributary by signer who isn't a participant");
         let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
-
-        if shares.len() != usize::from(sender_is_len) {
-          self
-            .fatal_slash(signed.signer.to_bytes(), "invalid amount of DKG shares by key shares")
-            .await;
-          return;
-        }
         for shares in &shares {
           if shares.len() != (usize::from(self.spec.n() - sender_is_len)) {
             self.fatal_slash(signed.signer.to_bytes(), "invalid amount of DKG shares").await;
@@ -427,12 +516,9 @@ impl<
         }
       }
 
-      // TODO: Ban self-accusals
       Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
         let range = self.spec.i(signed.signer).unwrap();
-        if (u16::from(accuser) < u16::from(range.start)) ||
-          (u16::from(range.end) <= u16::from(accuser))
-        {
+        if !range.contains(&accuser) {
           self
             .fatal_slash(
               signed.signer.to_bytes(),
@@ -441,10 +527,7 @@ impl<
             .await;
           return;
         }
-
-        if !((u16::from(range.start) <= u16::from(faulty)) &&
-          (u16::from(faulty) < u16::from(range.end)))
-        {
+        if range.contains(&faulty) {
           self
             .fatal_slash(signed.signer.to_bytes(), "accused self of having an InvalidDkgShare")
             .await;
@@ -514,111 +597,71 @@ impl<
       }
 
       Transaction::DkgRemovalPreprocess(data) => {
-        let signer = data.signed.signer;
-        // TODO: Only handle this if we're not actively removing this validator
-        if (data.data.len() != 1) || (data.data[0].len() != 64) {
-          self.fatal_slash(signer.to_bytes(), "non-64-byte DKG removal preprocess").await;
-          return;
-        }
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::DkgRemoval(data.plan),
-              label: Label::Preprocess,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
-          .await
-        {
-          Accumulation::Ready(DataSet::Participating(preprocesses)) => {
-            RemovalNonces::set(self.txn, genesis, data.plan, data.attempt, &preprocesses);
+        if let Some(preprocesses) = self.handle_dkg_removal(&data, Label::Preprocess).await {
+          RemovalNonces::set(self.txn, genesis, data.plan, data.attempt, &preprocesses);
 
-            let Ok(share) = (DkgRemoval {
-              spec: self.spec,
-              key: self.our_key,
-              txn: self.txn,
-              removing: data.plan,
-              attempt: data.attempt,
-            })
-            .share(preprocesses) else {
-              // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
-              // slash) and censor transactions (yet don't explicitly ban)
-              return;
-            };
+          let Ok(share) = (DkgRemoval {
+            spec: self.spec,
+            key: self.our_key,
+            txn: self.txn,
+            removing: data.plan,
+            attempt: data.attempt,
+          })
+          .share(preprocesses) else {
+            // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+            // slash) and censor transactions (yet don't explicitly ban)
+            return;
+          };
 
-            let mut tx = Transaction::DkgRemovalPreprocess(SignData {
-              plan: data.plan,
-              attempt: data.attempt,
-              data: vec![share.to_vec()],
-              signed: Transaction::empty_signed(),
-            });
-            tx.sign(&mut OsRng, genesis, self.our_key);
-            (self.publish_tributary_tx)(tx).await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
+          let mut tx = Transaction::DkgRemovalPreprocess(SignData {
+            plan: data.plan,
+            attempt: data.attempt,
+            data: vec![share.to_vec()],
+            signed: Transaction::empty_signed(),
+          });
+          tx.sign(&mut OsRng, genesis, self.our_key);
+          (self.publish_tributary_tx)(tx).await;
         }
       }
+
       Transaction::DkgRemovalShare(data) => {
-        let signer = data.signed.signer;
-        if (data.data.len() != 1) || (data.data[0].len() != 32) {
-          self.fatal_slash(signer.to_bytes(), "non-32-byte DKG removal share").await;
-          return;
-        }
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::DkgRemoval(data.plan),
-              label: Label::Share,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
-          .await
-        {
-          Accumulation::Ready(DataSet::Participating(shares)) => {
-            let preprocesses =
-              RemovalNonces::get(self.txn, genesis, data.plan, data.attempt).unwrap();
+        if let Some(shares) = self.handle_dkg_removal(&data, Label::Share).await {
+          let preprocesses =
+            RemovalNonces::get(self.txn, genesis, data.plan, data.attempt).unwrap();
 
-            let Ok((signers, signature)) = (DkgRemoval {
-              spec: self.spec,
-              key: self.our_key,
-              txn: self.txn,
-              removing: data.plan,
-              attempt: data.attempt,
-            })
-            .complete(preprocesses, shares) else {
-              // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
-              // slash) and censor transactions (yet don't explicitly ban)
-              return;
-            };
+          let Ok((signers, signature)) = (DkgRemoval {
+            spec: self.spec,
+            key: self.our_key,
+            txn: self.txn,
+            removing: data.plan,
+            attempt: data.attempt,
+          })
+          .complete(preprocesses, shares) else {
+            // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
+            // slash) and censor transactions (yet don't explicitly ban)
+            return;
+          };
 
-            // TODO: Only handle this if we're not actively removing any of the signers
-            // The created Substrate call will fail if a removed validator was one of the signers
-            // Since:
-            // 1) publish_serai_tx will block this task until the TX is published
-            // 2) We won't scan any more TXs/blocks until we handle this TX
-            // The TX *must* be successfully published *before* we start removing any more signers
-            // Accordingly, if the signers aren't currently being removed, they won't be removed
-            // by the time this transaction is successfully published *unless* a malicious 34%
-            // participates with the non-participating 33% to continue operation and produce a
-            // distinct removal (since the non-participating won't block in this block)
-            // This breaks BFT and is accordingly within bounds
+          // TODO: Only handle this if we're not actively removing any of the signers
+          // The created Substrate call will fail if a removed validator was one of the signers
+          // Since:
+          // 1) publish_serai_tx will block this task until the TX is published
+          // 2) We won't scan any more TXs/blocks until we handle this TX
+          // The TX *must* be successfully published *before* we start removing any more signers
+          // Accordingly, if the signers aren't currently being removed, they won't be removed
+          // by the time this transaction is successfully published *unless* a malicious 34%
+          // participates with the non-participating 33% to continue operation and produce a
+          // distinct removal (since the non-participating won't block in this block)
+          // This breaks BFT and is accordingly within bounds
 
-            let tx = serai_client::SeraiValidatorSets::remove_participant(
-              self.spec.set().network,
-              SeraiAddress(data.plan),
-              signers,
-              Signature(signature),
-            );
-            (self.publish_serai_tx)(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
-              .await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
+          let tx = serai_client::SeraiValidatorSets::remove_participant(
+            self.spec.set().network,
+            SeraiAddress(data.plan),
+            signers,
+            Signature(signature),
+          );
+          (self.publish_serai_tx)(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
+            .await;
         }
       }
 
@@ -671,167 +714,48 @@ impl<
       }
 
       Transaction::SubstratePreprocess(data) => {
-        let signer = data.signed.signer;
-        let Ok(_) = self.check_sign_data_len(signer, data.data.len()).await else {
-          return;
-        };
-        for data in &data.data {
-          if data.len() != 64 {
-            self.fatal_slash(signer.to_bytes(), "non-64-byte Substrate preprocess").await;
-            return;
-          }
-        }
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::SubstrateSign(data.plan),
-              label: Label::Preprocess,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
+        self
+          .handle_substrate_sign(&data, Label::Preprocess, |id, preprocesses| {
+            coordinator::CoordinatorMessage::SubstratePreprocesses {
+              id,
+              preprocesses: preprocesses
+                .into_iter()
+                .map(|(k, v)| (k, v.try_into().unwrap()))
+                .collect(),
+            }
+          })
           .await
-        {
-          Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
-            unflatten(self.spec, &mut preprocesses);
-            self
-              .processors
-              .send(
-                self.spec.set().network,
-                coordinator::CoordinatorMessage::SubstratePreprocesses {
-                  id: SubstrateSignId {
-                    session: self.spec.set().session,
-                    id: data.plan,
-                    attempt: data.attempt,
-                  },
-                  preprocesses: preprocesses
-                    .into_iter()
-                    .map(|(k, v)| (k, v.try_into().unwrap()))
-                    .collect(),
-                },
-              )
-              .await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
-        }
       }
       Transaction::SubstrateShare(data) => {
-        let Ok(_) = self.check_sign_data_len(data.signed.signer, data.data.len()).await else {
-          return;
-        };
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::SubstrateSign(data.plan),
-              label: Label::Share,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
+        self
+          .handle_substrate_sign(&data, Label::Preprocess, |id, shares| {
+            coordinator::CoordinatorMessage::SubstrateShares {
+              id,
+              shares: shares
+                .into_iter()
+                .map(|(validator, share)| (validator, share.try_into().unwrap()))
+                .collect(),
+            }
+          })
           .await
-        {
-          Accumulation::Ready(DataSet::Participating(mut shares)) => {
-            unflatten(self.spec, &mut shares);
-            self
-              .processors
-              .send(
-                self.spec.set().network,
-                coordinator::CoordinatorMessage::SubstrateShares {
-                  id: SubstrateSignId {
-                    session: self.spec.set().session,
-                    id: data.plan,
-                    attempt: data.attempt,
-                  },
-                  shares: shares
-                    .into_iter()
-                    .map(|(validator, share)| (validator, share.try_into().unwrap()))
-                    .collect(),
-                },
-              )
-              .await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
-        }
       }
 
       Transaction::SignPreprocess(data) => {
-        let Ok(_) = self.check_sign_data_len(data.signed.signer, data.data.len()).await else {
-          return;
-        };
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::Sign(data.plan),
-              label: Label::Preprocess,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
+        self
+          .handle_sign(&data, Label::Preprocess, |id, preprocesses| {
+            sign::CoordinatorMessage::Preprocesses { id, preprocesses }
+          })
           .await
-        {
-          Accumulation::Ready(DataSet::Participating(mut preprocesses)) => {
-            unflatten(self.spec, &mut preprocesses);
-            self
-              .processors
-              .send(
-                self.spec.set().network,
-                sign::CoordinatorMessage::Preprocesses {
-                  id: SignId {
-                    session: self.spec.set().session,
-                    id: data.plan,
-                    attempt: data.attempt,
-                  },
-                  preprocesses,
-                },
-              )
-              .await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
-        }
       }
       Transaction::SignShare(data) => {
-        let Ok(_) = self.check_sign_data_len(data.signed.signer, data.data.len()).await else {
-          return;
-        };
-        match self
-          .handle_data(
-            &DataSpecification {
-              topic: Topic::Sign(data.plan),
-              label: Label::Share,
-              attempt: data.attempt,
-            },
-            data.data.encode(),
-            &data.signed,
-          )
+        self
+          .handle_sign(&data, Label::Share, |id, shares| sign::CoordinatorMessage::Shares {
+            id,
+            shares,
+          })
           .await
-        {
-          Accumulation::Ready(DataSet::Participating(mut shares)) => {
-            unflatten(self.spec, &mut shares);
-            self
-              .processors
-              .send(
-                self.spec.set().network,
-                sign::CoordinatorMessage::Shares {
-                  id: SignId {
-                    session: self.spec.set().session,
-                    id: data.plan,
-                    attempt: data.attempt,
-                  },
-                  shares,
-                },
-              )
-              .await;
-          }
-          Accumulation::Ready(DataSet::NotParticipating) => {}
-          Accumulation::NotReady => {}
-        }
       }
+
       Transaction::SignCompleted { plan, tx_hash, first_signer, signature: _ } => {
         log::info!(
           "on-chain SignCompleted claims {} completes {}",
