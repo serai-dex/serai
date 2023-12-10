@@ -1,9 +1,12 @@
-use core::{future::Future, time::Duration};
+use core::{marker::PhantomData, future::Future, time::Duration};
 use std::sync::Arc;
+
+use rand_core::OsRng;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use frost::Participant;
 
 use tokio::sync::broadcast;
 
@@ -22,9 +25,11 @@ use tributary::{
 
 use crate::{
   Db,
-  tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributarySpec, Transaction, LastHandledBlock},
+  tributary::{
+    TributarySpec, SignData, Transaction, Topic, AttemptDb, LastHandledBlock, FatallySlashed,
+    DkgCompleted, signing_protocol::DkgRemoval,
+  },
   P2p,
 };
 
@@ -46,10 +51,9 @@ pub enum PstTxType {
   RemoveParticipant([u8; 32]),
 }
 
-// Handle a specific Tributary block
-#[allow(clippy::too_many_arguments)]
-async fn handle_block<
-  D: Db,
+pub struct TributaryBlockHandler<
+  'a,
+  T: DbTxn,
   Pro: Processors,
   FPst: Future<Output = ()>,
   PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
@@ -58,72 +62,124 @@ async fn handle_block<
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
->(
-  db: &mut D,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: &RID,
-  processors: &Pro,
-  publish_serai_tx: &PST,
-  publish_tributary_tx: &PTT,
-  spec: &TributarySpec,
+> {
+  pub txn: &'a mut T,
+  pub our_key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+  pub recognized_id: &'a RID,
+  pub processors: &'a Pro,
+  pub publish_serai_tx: &'a PST,
+  pub publish_tributary_tx: &'a PTT,
+  pub spec: &'a TributarySpec,
   block: Block<Transaction>,
-) {
-  log::info!("found block for Tributary {:?}", spec.set());
+  _frid: PhantomData<FRid>,
+  _p2p: PhantomData<P>,
+}
 
-  let mut txn = db.txn();
-  for tx in block.transactions {
-    match tx {
-      TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
-        // Since the evidence is on the chain, it should already have been validated
-        // We can just punish the signer
-        let data = match ev {
-          Evidence::ConflictingMessages(first, second) => (first, Some(second)),
-          Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
-          Evidence::InvalidPrecommit(first) => (first, None),
-          Evidence::InvalidValidRound(first) => (first, None),
-        };
-        let msgs = (
-          decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
-          if data.1.is_some() {
-            Some(
-              decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.1.unwrap())
-                .unwrap(),
-            )
-          } else {
-            None
-          },
-        );
+impl<
+    T: DbTxn,
+    Pro: Processors,
+    FPst: Future<Output = ()>,
+    PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+    FPtt: Future<Output = ()>,
+    PTT: Fn(Transaction) -> FPtt,
+    FRid: Future<Output = ()>,
+    RID: RIDTrait<FRid>,
+    P: P2p,
+  > TributaryBlockHandler<'_, T, Pro, FPst, PST, FPtt, PTT, FRid, RID, P>
+{
+  pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
+    let genesis = self.spec.genesis();
 
-        // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
-        // mark the node as fatally slashed
-        fatal_slash::<D, _, _>(
-          &mut txn,
-          spec,
-          publish_tributary_tx,
-          key,
-          msgs.0.msg.sender,
-          &format!("invalid tendermint messages: {:?}", msgs),
-        )
-        .await;
-      }
-      TributaryTransaction::Application(tx) => {
-        handle_application_tx::<D, _, _, _, _, _, _, _>(
-          tx,
-          spec,
-          processors,
-          &publish_serai_tx,
-          publish_tributary_tx,
-          key,
-          recognized_id,
-          &mut txn,
-        )
-        .await;
-      }
+    log::warn!("fatally slashing {}. reason: {}", hex::encode(slashing), reason);
+    FatallySlashed::set_fatally_slashed(self.txn, genesis, slashing);
+    // TODO: disconnect the node from network/ban from further participation in all Tributaries
+
+    // TODO: If during DKG, trigger a re-attempt
+    // Despite triggering a re-attempt, this DKG may still complete and may become in-use
+
+    // If during a DKG, remove the participant
+    if DkgCompleted::get(self.txn, genesis).is_none() {
+      AttemptDb::recognize_topic(self.txn, genesis, Topic::DkgRemoval(slashing));
+      let preprocess = (DkgRemoval {
+        spec: self.spec,
+        key: self.our_key,
+        txn: self.txn,
+        removing: slashing,
+        attempt: 0,
+      })
+      .preprocess();
+      let mut tx = Transaction::DkgRemovalPreprocess(SignData {
+        plan: slashing,
+        attempt: 0,
+        data: vec![preprocess.to_vec()],
+        signed: Transaction::empty_signed(),
+      });
+      tx.sign(&mut OsRng, genesis, self.our_key);
+      (self.publish_tributary_tx)(tx).await;
     }
   }
-  txn.commit();
 
-  // TODO: Trigger any necessary re-attempts
+  // TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
+  // Tributary post-DKG
+  // https://github.com/serai-dex/serai/issues/426
+
+  pub async fn fatal_slash_with_participant_index(&mut self, i: Participant, reason: &str) {
+    // Resolve from Participant to <Ristretto as Ciphersuite>::G
+    let i = u16::from(i);
+    let mut validator = None;
+    for (potential, _) in self.spec.validators() {
+      let v_i = self.spec.i(potential).unwrap();
+      if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
+        validator = Some(potential);
+        break;
+      }
+    }
+    let validator = validator.unwrap();
+
+    self.fatal_slash(validator.to_bytes(), reason).await;
+  }
+
+  async fn handle<D: Db>(mut self) {
+    log::info!("found block for Tributary {:?}", self.spec.set());
+
+    let transactions = self.block.transactions.clone();
+    for tx in transactions {
+      match tx {
+        TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
+          // Since the evidence is on the chain, it should already have been validated
+          // We can just punish the signer
+          let data = match ev {
+            Evidence::ConflictingMessages(first, second) => (first, Some(second)),
+            Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
+            Evidence::InvalidPrecommit(first) => (first, None),
+            Evidence::InvalidValidRound(first) => (first, None),
+          };
+          let msgs = (
+            decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
+            if data.1.is_some() {
+              Some(
+                decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.1.unwrap())
+                  .unwrap(),
+              )
+            } else {
+              None
+            },
+          );
+
+          // Since anything with evidence is fundamentally faulty behavior, not just temporal
+          // errors, mark the node as fatally slashed
+          self
+            .fatal_slash(msgs.0.msg.sender, &format!("invalid tendermint messages: {:?}", msgs))
+            .await;
+        }
+        TributaryTransaction::Application(tx) => {
+          self.handle_application_tx(tx).await;
+        }
+      }
+    }
+
+    // TODO: Trigger any necessary re-attempts
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -165,19 +221,22 @@ pub(crate) async fn handle_new_blocks<
       }
     }
 
-    handle_block::<_, _, _, _, _, _, _, _, P>(
-      db,
-      key,
+    let mut txn = db.txn();
+    (TributaryBlockHandler {
+      txn: &mut txn,
+      spec,
+      our_key: key,
       recognized_id,
       processors,
       publish_serai_tx,
       publish_tributary_tx,
-      spec,
       block,
-    )
+      _frid: PhantomData::<_>,
+      _p2p: PhantomData::<P>,
+    })
+    .handle::<D>()
     .await;
     last_block = next;
-    let mut txn = db.txn();
     LastHandledBlock::set(&mut txn, genesis, &next);
     txn.commit();
   }
