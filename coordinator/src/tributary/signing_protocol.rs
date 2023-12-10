@@ -217,9 +217,15 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
 // index the validators in the order they've been defined.
 fn threshold_i_map_to_keys_and_musig_i_map(
   spec: &TributarySpec,
+  our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   mut map: HashMap<Participant, Vec<u8>>,
   sort_by_keys: bool,
 ) -> (Vec<<Ristretto as Ciphersuite>::G>, HashMap<Participant, Vec<u8>>) {
+  // Insert our own index so calculations aren't offset
+  let our_threshold_i =
+    spec.i(<Ristretto as Ciphersuite>::generator() * our_key.deref()).unwrap().start;
+  assert!(map.insert(our_threshold_i, vec![]).is_none());
+
   let spec_validators = spec.validators();
   let key_from_threshold_i = |threshold_i| {
     for (key, _) in &spec_validators {
@@ -249,6 +255,8 @@ fn threshold_i_map_to_keys_and_musig_i_map(
     participants.push(key);
     map.insert(Participant::new(musig_i).unwrap(), share);
   }
+
+  map.remove(&our_threshold_i).unwrap();
 
   (participants, map)
 }
@@ -281,7 +289,8 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
     let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-    let preprocesses = threshold_i_map_to_keys_and_musig_i_map(self.spec, preprocesses, false).1;
+    let preprocesses =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses, false).1;
     let msg = set_keys_message(&self.spec.set(), key_pair);
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
@@ -300,7 +309,7 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
-    let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, shares, false).1;
+    let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares, false).1;
 
     let machine = self
       .share_internal(preprocesses, key_pair)
@@ -354,7 +363,7 @@ impl<T: DbTxn> DkgRemoval<'_, T> {
     preprocesses: HashMap<Participant, Vec<u8>>,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
     let (participants, preprocesses) =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, preprocesses, true);
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses, true);
     let msg = remove_participant_message(&self.spec.set(), Public(self.removing));
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
@@ -371,7 +380,8 @@ impl<T: DbTxn> DkgRemoval<'_, T> {
     preprocesses: HashMap<Participant, Vec<u8>>,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<(Vec<SeraiAddress>, [u8; 64]), Participant> {
-    let (participants, shares) = threshold_i_map_to_keys_and_musig_i_map(self.spec, shares, true);
+    let (participants, shares) =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares, true);
     let signers = participants.iter().map(|key| SeraiAddress(key.to_bytes())).collect::<Vec<_>>();
 
     let machine = self
