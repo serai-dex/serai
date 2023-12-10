@@ -28,8 +28,8 @@ use serai_db::*;
 use crate::{
   processors::Processors,
   tributary::{
-    SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet,
-    Accumulation,
+    SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, Label, DataSpecification,
+    DataSet, Accumulation,
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
@@ -38,22 +38,6 @@ use crate::{
 };
 
 use super::CurrentlyCompletingKeyPair;
-
-const DKG_COMMITMENTS: &str = "commitments";
-const DKG_SHARES: &str = "shares";
-const DKG_CONFIRMATION_NONCES: &str = "confirmation_nonces";
-const DKG_CONFIRMATION_SHARES: &str = "confirmation_shares";
-
-// These d/s/b prefixes between DKG Removal, Batch, and Sign should be unnecessary, as Batch/Share
-// entries themselves should already be domain separated
-const DKG_REMOVAL_PREPROCESS: &str = "d_preprocess";
-const DKG_REMOVAL_SHARE: &str = "d_share";
-
-const BATCH_PREPROCESS: &str = "b_preprocess";
-const BATCH_SHARE: &str = "b_share";
-
-const SIGN_PREPROCESS: &str = "s_preprocess";
-const SIGN_SHARE: &str = "s_share";
 
 pub fn dkg_confirmation_nonces(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -121,6 +105,7 @@ pub(super) async fn fatal_slash<D: Db, FPtt: Future<Output = ()>, PTT: Fn(Transa
 
   // If during a DKG, remove the participant
   if DkgCompleted::get(txn, genesis).is_none() {
+    AttemptDb::recognize_topic(txn, genesis, Topic::DkgRemoval(slashing));
     let preprocess =
       (DkgRemoval { spec, key: our_key, txn, removing: slashing, attempt: 0 }).preprocess();
     let mut tx = Transaction::DkgRemovalPreprocess(SignData {
@@ -334,7 +319,7 @@ pub(crate) async fn handle_application_tx<
         spec,
         publish_tributary_tx,
         key,
-        &DataSpecification { topic: Topic::Dkg, label: DKG_COMMITMENTS, attempt },
+        &DataSpecification { topic: Topic::Dkg, label: Label::Preprocess, attempt },
         commitments.encode(),
         &signed,
       )
@@ -450,7 +435,7 @@ pub(crate) async fn handle_application_tx<
         spec,
         publish_tributary_tx,
         key,
-        &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_NONCES, attempt },
+        &DataSpecification { topic: Topic::DkgConfirmation, label: Label::Preprocess, attempt },
         confirmation_nonces.to_vec(),
         &signed,
       )
@@ -460,7 +445,7 @@ pub(crate) async fn handle_application_tx<
         spec,
         publish_tributary_tx,
         key,
-        &DataSpecification { topic: Topic::Dkg, label: DKG_SHARES, attempt },
+        &DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt },
         our_shares.encode(),
         &signed,
       )
@@ -571,7 +556,7 @@ pub(crate) async fn handle_application_tx<
         spec,
         publish_tributary_tx,
         key,
-        &DataSpecification { topic: Topic::Dkg, label: DKG_CONFIRMATION_SHARES, attempt },
+        &DataSpecification { topic: Topic::DkgConfirmation, label: Label::Share, attempt },
         shares.to_vec(),
         &signed,
       )
@@ -645,7 +630,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::DkgRemoval(data.plan),
-          label: DKG_REMOVAL_PREPROCESS,
+          label: Label::Preprocess,
           attempt: data.attempt,
         },
         data.data.encode(),
@@ -699,7 +684,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::DkgRemoval(data.plan),
-          label: DKG_REMOVAL_SHARE,
+          label: Label::Share,
           attempt: data.attempt,
         },
         data.data.encode(),
@@ -825,7 +810,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::SubstrateSign(data.plan),
-          label: BATCH_PREPROCESS,
+          label: Label::Preprocess,
           attempt: data.attempt,
         },
         data.data.encode(),
@@ -876,7 +861,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::SubstrateSign(data.plan),
-          label: BATCH_SHARE,
+          label: Label::Share,
           attempt: data.attempt,
         },
         data.data.encode(),
@@ -928,7 +913,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
-          label: SIGN_PREPROCESS,
+          label: Label::Preprocess,
           attempt: data.attempt,
         },
         data.data.encode(),
@@ -972,7 +957,7 @@ pub(crate) async fn handle_application_tx<
         key,
         &DataSpecification {
           topic: Topic::Sign(data.plan),
-          label: SIGN_SHARE,
+          label: Label::Share,
           attempt: data.attempt,
         },
         data.data.encode(),

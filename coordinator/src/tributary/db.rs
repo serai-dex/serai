@@ -9,15 +9,22 @@ use serai_client::validator_sets::primitives::KeyPair;
 
 use processor_messages::coordinator::SubstrateSignableId;
 
-use scale::{Encode, Decode};
+use scale::Encode;
 
 pub use serai_db::*;
 
 use crate::tributary::TributarySpec;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
+pub enum Label {
+  Preprocess,
+  Share,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
 pub enum Topic {
   Dkg,
+  DkgConfirmation,
   DkgRemoval([u8; 32]),
   SubstrateSign(SubstrateSignableId),
   Sign([u8; 32]),
@@ -27,7 +34,7 @@ pub enum Topic {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
 pub struct DataSpecification {
   pub topic: Topic,
-  pub label: &'static str,
+  pub label: Label,
   pub attempt: u32,
 }
 
@@ -83,7 +90,7 @@ impl AttemptDb {
   pub fn attempt(getter: &impl Get, genesis: [u8; 32], topic: Topic) -> Option<u32> {
     let attempt = Self::get(getter, genesis, &topic);
     // Don't require explicit recognition of the Dkg topic as it starts when the chain does
-    if attempt.is_none() && (topic == Topic::Dkg) {
+    if attempt.is_none() && ((topic == Topic::Dkg) || (topic == Topic::DkgConfirmation)) {
       return Some(0);
     }
     attempt
