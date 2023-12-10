@@ -21,7 +21,6 @@ create_db!(
     HandledMessageDb: (network: NetworkId) -> u64,
     ActiveTributaryDb: () -> Vec<u8>,
     RetiredTributaryDb: (set: ValidatorSet) -> (),
-    SignedTransactionDb: (order: &[u8], nonce: u32) -> Vec<u8>,
     FirstPreprocessDb: (
       network: NetworkId,
       id_type: RecognizedIdType,
@@ -77,21 +76,6 @@ impl ActiveTributaryDb {
     }
     Self::set(txn, &bytes);
     RetiredTributaryDb::set(txn, set, &());
-  }
-}
-
-impl SignedTransactionDb {
-  pub fn take_signed_transaction(
-    txn: &mut impl DbTxn,
-    order: &[u8],
-    nonce: u32,
-  ) -> Option<Transaction> {
-    let res = SignedTransactionDb::get(txn, order, nonce)
-      .map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
-    if res.is_some() {
-      Self::del(txn, order, nonce);
-    }
-    res
   }
 }
 

@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 
+use scale::Encode;
+
 use frost::Participant;
 
 use serai_client::validator_sets::primitives::KeyPair;
 
 use processor_messages::coordinator::SubstrateSignableId;
 
-use scale::Encode;
-
 pub use serai_db::*;
 
-use crate::tributary::Label;
+use tributary::ReadWrite;
+
+use crate::tributary::{Label, Transaction};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
 pub enum Topic {
@@ -55,6 +57,8 @@ create_db!(
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
     DataDb: (genesis: [u8; 32], data_spec: &DataSpecification, signer_bytes: &[u8; 32]) -> Vec<u8>,
+
+    SignedTransactionDb: (order: &[u8], nonce: u32) -> Vec<u8>,
   }
 );
 
@@ -85,5 +89,20 @@ impl AttemptDb {
       return Some(0);
     }
     attempt
+  }
+}
+
+impl SignedTransactionDb {
+  pub fn take_signed_transaction(
+    txn: &mut impl DbTxn,
+    order: &[u8],
+    nonce: u32,
+  ) -> Option<Transaction> {
+    let res = SignedTransactionDb::get(txn, order, nonce)
+      .map(|bytes| Transaction::read(&mut bytes.as_slice()).unwrap());
+    if res.is_some() {
+      Self::del(txn, order, nonce);
+    }
+    res
   }
 }
