@@ -36,8 +36,6 @@ mod db;
 pub use db::*;
 
 mod signing_protocol;
-mod dkg_confirmer;
-mod dkg_removal;
 
 mod handle;
 pub use handle::*;

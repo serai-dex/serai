@@ -44,7 +44,7 @@ pub enum Accumulation {
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
-    LastBlock: (genesis: [u8; 32]) -> [u8; 32],
+    LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
     DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,

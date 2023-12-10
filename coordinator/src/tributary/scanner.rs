@@ -24,7 +24,7 @@ use crate::{
   Db,
   tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributarySpec, Transaction, LastBlock},
+  tributary::{TributarySpec, Transaction, LastHandledBlock},
   P2p,
 };
 
@@ -148,7 +148,7 @@ pub(crate) async fn handle_new_blocks<
   tributary: &TributaryReader<D, Transaction>,
 ) {
   let genesis = tributary.genesis();
-  let mut last_block = LastBlock::get(db, genesis).unwrap_or(genesis);
+  let mut last_block = LastHandledBlock::get(db, genesis).unwrap_or(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
 
@@ -178,7 +178,7 @@ pub(crate) async fn handle_new_blocks<
     .await;
     last_block = next;
     let mut txn = db.txn();
-    LastBlock::set(&mut txn, genesis, &next);
+    LastHandledBlock::set(&mut txn, genesis, &next);
     txn.commit();
   }
 }

@@ -30,8 +30,7 @@ use crate::{
   tributary::{
     SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, DataSpecification, DataSet,
     Accumulation,
-    dkg_confirmer::DkgConfirmer,
-    dkg_removal::DkgRemoval,
+    signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
     DataDb,

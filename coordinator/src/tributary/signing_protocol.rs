@@ -64,7 +64,10 @@ use rand_core::OsRng;
 
 use blake2::{Digest, Blake2s256};
 
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::{ff::PrimeField, Group, GroupEncoding},
+  Ciphersuite, Ristretto,
+};
 use frost::{
   FrostError,
   dkg::{Participant, musig::musig},
@@ -75,7 +78,12 @@ use frost_schnorrkel::Schnorrkel;
 
 use scale::Encode;
 
-use serai_client::validator_sets::primitives::musig_context;
+use serai_client::{
+  Public, SeraiAddress,
+  validator_sets::primitives::{
+    KeyPair, musig_context, set_keys_message, remove_participant_message,
+  },
+};
 
 use serai_db::*;
 
@@ -87,7 +95,7 @@ create_db!(
   }
 );
 
-pub struct SigningProtocol<'a, T: DbTxn, C: Encode> {
+struct SigningProtocol<'a, T: DbTxn, C: Encode> {
   pub(crate) key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub(crate) spec: &'a TributarySpec,
   pub(crate) txn: &'a mut T,
@@ -95,7 +103,7 @@ pub struct SigningProtocol<'a, T: DbTxn, C: Encode> {
 }
 
 impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
-  pub fn preprocess_internal(
+  fn preprocess_internal(
     &mut self,
     participants: &[<Ristretto as Ciphersuite>::G],
   ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
@@ -145,7 +153,7 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
     (machine, preprocess.serialize().try_into().unwrap())
   }
 
-  pub fn share_internal(
+  fn share_internal(
     &mut self,
     participants: &[<Ristretto as Ciphersuite>::G],
     mut serialized_preprocesses: HashMap<Participant, Vec<u8>>,
@@ -178,7 +186,7 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
     Ok((machine, share.serialize().try_into().unwrap()))
   }
 
-  pub fn complete_internal(
+  fn complete_internal(
     &mut self,
     machine: AlgorithmSignatureMachine<Ristretto, Schnorrkel>,
     shares: HashMap<Participant, Vec<u8>>,
@@ -199,5 +207,179 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
       FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
     })?;
     Ok(signature.to_bytes())
+  }
+}
+
+// Get the keys of the participants, noted by their threshold is, and return a new map indexed by
+// the MuSig is.
+//
+// If sort_by_keys = true, the MuSig is will index the keys once sorted. Else, the MuSig is will
+// index the validators in the order they've been defined.
+fn threshold_i_map_to_keys_and_musig_i_map(
+  spec: &TributarySpec,
+  mut map: HashMap<Participant, Vec<u8>>,
+  sort_by_keys: bool,
+) -> (Vec<<Ristretto as Ciphersuite>::G>, HashMap<Participant, Vec<u8>>) {
+  let spec_validators = spec.validators();
+  let key_from_threshold_i = |threshold_i| {
+    for (key, _) in &spec_validators {
+      if threshold_i == spec.i(*key).unwrap().start {
+        return *key;
+      }
+    }
+    panic!("requested info for threshold i which doesn't exist")
+  };
+
+  let mut sorted = vec![];
+  let mut threshold_is = map.keys().cloned().collect::<Vec<_>>();
+  threshold_is.sort();
+  for threshold_i in threshold_is {
+    sorted.push((key_from_threshold_i(threshold_i), map.remove(&threshold_i).unwrap()));
+  }
+  if sort_by_keys {
+    // Substrate expects these signers to be sorted by key
+    sorted.sort_by(|(key1, _), (key2, _)| key1.to_bytes().cmp(&key2.to_bytes()));
+  }
+
+  // Now that signers are sorted, with their shares, create a map with the is needed for MuSig
+  let mut participants = vec![];
+  let mut map = HashMap::new();
+  for (raw_i, (key, share)) in sorted.into_iter().enumerate() {
+    let musig_i = u16::try_from(raw_i).unwrap() + 1;
+    participants.push(key);
+    map.insert(Participant::new(musig_i).unwrap(), share);
+  }
+
+  (participants, map)
+}
+
+pub(crate) struct DkgConfirmer<'a, T: DbTxn> {
+  pub(crate) key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+  pub(crate) spec: &'a TributarySpec,
+  pub(crate) txn: &'a mut T,
+  pub(crate) attempt: u32,
+}
+
+impl<T: DbTxn> DkgConfirmer<'_, T> {
+  fn signing_protocol(&mut self) -> SigningProtocol<'_, T, (&'static [u8; 12], u32)> {
+    let context = (b"DkgConfirmer", self.attempt);
+    SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
+  }
+
+  fn preprocess_internal(&mut self) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
+    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
+    self.signing_protocol().preprocess_internal(&participants)
+  }
+  // Get the preprocess for this confirmation.
+  pub(crate) fn preprocess(&mut self) -> [u8; 64] {
+    self.preprocess_internal().1
+  }
+
+  fn share_internal(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+    key_pair: &KeyPair,
+  ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
+    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
+    let preprocesses = threshold_i_map_to_keys_and_musig_i_map(self.spec, preprocesses, false).1;
+    let msg = set_keys_message(&self.spec.set(), key_pair);
+    self.signing_protocol().share_internal(&participants, preprocesses, &msg)
+  }
+  // Get the share for this confirmation, if the preprocesses are valid.
+  pub(crate) fn share(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+    key_pair: &KeyPair,
+  ) -> Result<[u8; 32], Participant> {
+    self.share_internal(preprocesses, key_pair).map(|(_, share)| share)
+  }
+
+  pub(crate) fn complete(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+    key_pair: &KeyPair,
+    shares: HashMap<Participant, Vec<u8>>,
+  ) -> Result<[u8; 64], Participant> {
+    let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, shares, false).1;
+
+    let machine = self
+      .share_internal(preprocesses, key_pair)
+      .expect("trying to complete a machine which failed to preprocess")
+      .0;
+
+    self.signing_protocol().complete_internal(machine, shares)
+  }
+}
+
+pub(crate) struct DkgRemoval<'a, T: DbTxn> {
+  pub(crate) key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+  pub(crate) spec: &'a TributarySpec,
+  pub(crate) txn: &'a mut T,
+  pub(crate) removing: [u8; 32],
+  pub(crate) attempt: u32,
+}
+
+impl<T: DbTxn> DkgRemoval<'_, T> {
+  fn signing_protocol(&mut self) -> SigningProtocol<'_, T, (&'static [u8; 10], [u8; 32], u32)> {
+    let context = (b"DkgRemoval", self.removing, self.attempt);
+    SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
+  }
+
+  fn preprocess_internal(
+    &mut self,
+    participants: Option<&[<Ristretto as Ciphersuite>::G]>,
+  ) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
+    // We won't know the participants when we first preprocess
+    // If we don't, we use our key alone as the participant
+    let just_us = [<Ristretto as Ciphersuite>::G::generator() * self.key.deref()];
+    let to_musig = if let Some(participants) = participants { participants } else { &just_us };
+
+    let (machine, preprocess) = self.signing_protocol().preprocess_internal(to_musig);
+
+    // If we're now specifying participants, confirm the commitments were the same
+    if participants.is_some() {
+      let (_, theoretical_preprocess) = self.signing_protocol().preprocess_internal(&just_us);
+      assert_eq!(theoretical_preprocess, preprocess);
+    }
+
+    (machine, preprocess)
+  }
+  // Get the preprocess for this confirmation.
+  pub(crate) fn preprocess(&mut self) -> [u8; 64] {
+    self.preprocess_internal(None).1
+  }
+
+  fn share_internal(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+  ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
+    let (participants, preprocesses) =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, preprocesses, true);
+    let msg = remove_participant_message(&self.spec.set(), Public(self.removing));
+    self.signing_protocol().share_internal(&participants, preprocesses, &msg)
+  }
+  // Get the share for this confirmation, if the preprocesses are valid.
+  pub(crate) fn share(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+  ) -> Result<[u8; 32], Participant> {
+    self.share_internal(preprocesses).map(|(_, share)| share)
+  }
+
+  pub(crate) fn complete(
+    &mut self,
+    preprocesses: HashMap<Participant, Vec<u8>>,
+    shares: HashMap<Participant, Vec<u8>>,
+  ) -> Result<(Vec<SeraiAddress>, [u8; 64]), Participant> {
+    let (participants, shares) = threshold_i_map_to_keys_and_musig_i_map(self.spec, shares, true);
+    let signers = participants.iter().map(|key| SeraiAddress(key.to_bytes())).collect::<Vec<_>>();
+
+    let machine = self
+      .share_internal(preprocesses)
+      .expect("trying to complete a machine which failed to preprocess")
+      .0;
+
+    let signature = self.signing_protocol().complete_internal(machine, shares)?;
+    Ok((signers, signature))
   }
 }
