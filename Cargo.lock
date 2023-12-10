@@ -1571,7 +1571,6 @@ dependencies = [
  "multiexp",
  "rand_core",
  "schnorr-signatures",
- "serde",
  "std-shims",
  "thiserror",
  "zeroize",
