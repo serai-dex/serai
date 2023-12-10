@@ -36,7 +36,9 @@ use ::tributary::{
 };
 
 mod tributary;
-use crate::tributary::{TributarySpec, SignData, Transaction, scanner::RecognizedIdType, PlanIds};
+use crate::tributary::{
+  TributarySpec, Label, SignData, Transaction, scanner::RecognizedIdType, PlanIds,
+};
 
 mod db;
 use db::*;
@@ -516,18 +518,20 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
             vec![]
           } else {
-            vec![Transaction::SignPreprocess(SignData {
+            vec![Transaction::Sign(SignData {
               plan: id.id,
               attempt: id.attempt,
+              label: Label::Preprocess,
               data: preprocesses,
               signed: Transaction::empty_signed(),
             })]
           }
         }
         sign::ProcessorMessage::Share { id, shares } => {
-          vec![Transaction::SignShare(SignData {
+          vec![Transaction::Sign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Share,
             data: shares,
             signed: Transaction::empty_signed(),
           })]
@@ -560,9 +564,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
           vec![]
         }
         coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } => {
-          vec![Transaction::SubstratePreprocess(SignData {
+          vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Preprocess,
             data: preprocesses.into_iter().map(Into::into).collect(),
             signed: Transaction::empty_signed(),
           })]
@@ -654,18 +659,20 @@ async fn handle_processor_message<D: Db, P: P2p>(
               res
             }
           } else {
-            vec![Transaction::SubstratePreprocess(SignData {
+            vec![Transaction::SubstrateSign(SignData {
               plan: id.id,
               attempt: id.attempt,
+              label: Label::Preprocess,
               data: preprocesses.into_iter().map(Into::into).collect(),
               signed: Transaction::empty_signed(),
             })]
           }
         }
         coordinator::ProcessorMessage::SubstrateShare { id, shares } => {
-          vec![Transaction::SubstrateShare(SignData {
+          vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Share,
             data: shares.into_iter().map(|share| share.to_vec()).collect(),
             signed: Transaction::empty_signed(),
           })]
@@ -1084,16 +1091,18 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         };
 
         let mut tx = match id_type {
-          RecognizedIdType::Batch => Transaction::SubstratePreprocess(SignData {
+          RecognizedIdType::Batch => Transaction::SubstrateSign(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
             plan: SubstrateSignableId::Batch(id.as_slice().try_into().unwrap()),
+            label: Label::Preprocess,
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),
 
-          RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+          RecognizedIdType::Plan => Transaction::Sign(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
             plan: id.try_into().unwrap(),
+            label: Label::Preprocess,
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),

@@ -7,7 +7,7 @@ use processor_messages::coordinator::SubstrateSignableId;
 
 use tributary::{ReadWrite, tests::random_signed_with_nonce};
 
-use crate::tributary::{SignData, Transaction};
+use crate::tributary::{Label, SignData, Transaction};
 
 mod chain;
 pub use chain::*;
@@ -34,11 +34,12 @@ fn random_vec<R: RngCore>(rng: &mut R, limit: usize) -> Vec<u8> {
 fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + Decode>(
   rng: &mut R,
   plan: Id,
-  nonce: u32,
+  label: Label,
 ) -> SignData<Id> {
   SignData {
     plan,
     attempt: random_u32(&mut OsRng),
+    label,
 
     data: {
       let mut res = vec![];
@@ -48,7 +49,7 @@ fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + De
       res
     },
 
-    signed: random_signed_with_nonce(&mut OsRng, nonce),
+    signed: random_signed_with_nonce(&mut OsRng, label.nonce()),
   }
 }
 
@@ -87,7 +88,7 @@ fn serialize_sign_data() {
   fn test_read_write<Id: Clone + PartialEq + Eq + Debug + Encode + Decode>(value: SignData<Id>) {
     let mut buf = vec![];
     value.write(&mut buf).unwrap();
-    assert_eq!(value, SignData::read(&mut buf.as_slice(), value.signed.nonce).unwrap())
+    assert_eq!(value, SignData::read(&mut buf.as_slice()).unwrap())
   }
 
   let mut plan = [0; 3];
@@ -95,28 +96,28 @@ fn serialize_sign_data() {
   test_read_write(random_sign_data::<_, _>(
     &mut OsRng,
     plan,
-    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+    if (OsRng.next_u64() % 2) == 0 { Label::Preprocess } else { Label::Share },
   ));
   let mut plan = [0; 5];
   OsRng.fill_bytes(&mut plan);
   test_read_write(random_sign_data::<_, _>(
     &mut OsRng,
     plan,
-    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+    if (OsRng.next_u64() % 2) == 0 { Label::Preprocess } else { Label::Share },
   ));
   let mut plan = [0; 8];
   OsRng.fill_bytes(&mut plan);
   test_read_write(random_sign_data::<_, _>(
     &mut OsRng,
     plan,
-    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+    if (OsRng.next_u64() % 2) == 0 { Label::Preprocess } else { Label::Share },
   ));
   let mut plan = [0; 24];
   OsRng.fill_bytes(&mut plan);
   test_read_write(random_sign_data::<_, _>(
     &mut OsRng,
     plan,
-    u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+    if (OsRng.next_u64() % 2) == 0 { Label::Preprocess } else { Label::Share },
   ));
 }
 
@@ -205,12 +206,12 @@ fn serialize_transaction() {
   {
     let mut key = [0; 32];
     OsRng.fill_bytes(&mut key);
-    test_read_write(Transaction::DkgRemovalPreprocess(random_sign_data(&mut OsRng, key, 0)));
+    test_read_write(Transaction::DkgRemoval(random_sign_data(&mut OsRng, key, Label::Preprocess)));
   }
   {
     let mut key = [0; 32];
     OsRng.fill_bytes(&mut key);
-    test_read_write(Transaction::DkgRemovalShare(random_sign_data(&mut OsRng, key, 1)));
+    test_read_write(Transaction::DkgRemoval(random_sign_data(&mut OsRng, key, Label::Share)));
   }
 
   {
@@ -231,31 +232,31 @@ fn serialize_transaction() {
   {
     let mut plan = [0; 5];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SubstratePreprocess(random_sign_data(
+    test_read_write(Transaction::SubstrateSign(random_sign_data(
       &mut OsRng,
       SubstrateSignableId::Batch(plan),
-      0,
+      Label::Preprocess,
     )));
   }
   {
     let mut plan = [0; 5];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SubstrateShare(random_sign_data(
+    test_read_write(Transaction::SubstrateSign(random_sign_data(
       &mut OsRng,
       SubstrateSignableId::Batch(plan),
-      1,
+      Label::Share,
     )));
   }
 
   {
     let mut plan = [0; 32];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SignPreprocess(random_sign_data(&mut OsRng, plan, 0)));
+    test_read_write(Transaction::Sign(random_sign_data(&mut OsRng, plan, Label::Preprocess)));
   }
   {
     let mut plan = [0; 32];
     OsRng.fill_bytes(&mut plan);
-    test_read_write(Transaction::SignShare(random_sign_data(&mut OsRng, plan, 1)));
+    test_read_write(Transaction::Sign(random_sign_data(&mut OsRng, plan, Label::Share)));
   }
 
   {

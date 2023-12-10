@@ -10,11 +10,7 @@ use scale::Encode;
 
 pub use serai_db::*;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
-pub enum Label {
-  Preprocess,
-  Share,
-}
+use crate::tributary::Label;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
 pub enum Topic {

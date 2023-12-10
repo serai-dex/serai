@@ -27,8 +27,8 @@ use crate::{
   Db,
   processors::Processors,
   tributary::{
-    TributarySpec, SignData, Transaction, Topic, AttemptDb, LastHandledBlock, FatallySlashed,
-    DkgCompleted, signing_protocol::DkgRemoval,
+    TributarySpec, Label, SignData, Transaction, Topic, AttemptDb, LastHandledBlock,
+    FatallySlashed, DkgCompleted, signing_protocol::DkgRemoval,
   },
   P2p,
 };
@@ -108,9 +108,10 @@ impl<
         attempt: 0,
       })
       .preprocess();
-      let mut tx = Transaction::DkgRemovalPreprocess(SignData {
+      let mut tx = Transaction::DkgRemoval(SignData {
         plan: slashing,
         attempt: 0,
+        label: Label::Preprocess,
         data: vec![preprocess.to_vec()],
         signed: Transaction::empty_signed(),
       });
