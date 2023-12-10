@@ -33,7 +33,7 @@ use crate::{
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType, TributaryBlockHandler},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
-    DataDb,
+    DataReceived, DataDb,
   },
   P2p,
 };
@@ -113,6 +113,69 @@ impl<
     P: P2p,
   > TributaryBlockHandler<'_, T, Pro, FPst, PST, FPtt, PTT, FRid, RID, P>
 {
+  fn accumulate(
+    &mut self,
+    data_spec: &DataSpecification,
+    signer: <Ristretto as Ciphersuite>::G,
+    data: &Vec<u8>,
+  ) -> Accumulation {
+    let genesis = self.spec.genesis();
+    if DataDb::get(self.txn, genesis, data_spec, &signer.to_bytes()).is_some() {
+      panic!("accumulating data for a participant multiple times");
+    }
+    let signer_shares = {
+      let signer_i =
+        self.spec.i(signer).expect("transaction signed by a non-validator for this tributary");
+      u16::from(signer_i.end) - u16::from(signer_i.start)
+    };
+
+    let prior_received = DataReceived::get(self.txn, genesis, data_spec).unwrap_or_default();
+    let now_received = prior_received + signer_shares;
+    DataReceived::set(self.txn, genesis, data_spec, &now_received);
+    DataDb::set(self.txn, genesis, data_spec, &signer.to_bytes(), data);
+
+    // If we have all the needed commitments/preprocesses/shares, tell the processor
+    let needed = if (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation) {
+      self.spec.n()
+    } else {
+      self.spec.t()
+    };
+    if (prior_received < needed) && (now_received >= needed) {
+      return Accumulation::Ready({
+        let mut data = HashMap::new();
+        for validator in self.spec.validators().iter().map(|validator| validator.0) {
+          data.insert(
+            self.spec.i(validator).unwrap().start,
+            if let Some(data) = DataDb::get(self.txn, genesis, data_spec, &validator.to_bytes()) {
+              data
+            } else {
+              continue;
+            },
+          );
+        }
+
+        assert_eq!(data.len(), usize::from(needed));
+
+        // Remove our own piece of data, if we were involved
+        if data
+          .remove(
+            &self
+              .spec
+              .i(Ristretto::generator() * self.our_key.deref())
+              .expect("handling a message for a Tributary we aren't part of")
+              .start,
+          )
+          .is_some()
+        {
+          DataSet::Participating(data)
+        } else {
+          DataSet::NotParticipating
+        }
+      });
+    }
+    Accumulation::NotReady
+  }
+
   async fn handle_data(
     &mut self,
     data_spec: &DataSpecification,
@@ -157,7 +220,7 @@ impl<
     // TODO: If this is shares, we need to check they are part of the selected signing set
 
     // Accumulate this data
-    DataDb::accumulate(self.txn, self.our_key, self.spec, data_spec, signed.signer, &bytes)
+    self.accumulate(data_spec, signed.signer, &bytes)
   }
 
   async fn check_sign_data_len(
@@ -300,29 +363,26 @@ impl<
         // Drop shares as it's been mutated into invalidity
         drop(shares);
 
-        let confirmation_nonces = self
-          .handle_data(
-            &DataSpecification { topic: Topic::DkgConfirmation, label: Label::Preprocess, attempt },
-            confirmation_nonces.to_vec(),
-            &signed,
-          )
-          .await;
         match self
           .handle_data(
             &DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt },
-            our_shares.encode(),
+            (confirmation_nonces.to_vec(), our_shares.encode()).encode(),
             &signed,
           )
           .await
         {
-          Accumulation::Ready(DataSet::Participating(shares)) => {
+          Accumulation::Ready(DataSet::Participating(confirmation_nonces_and_shares)) => {
             log::info!("got all DkgShares for {}", hex::encode(genesis));
 
-            let Accumulation::Ready(DataSet::Participating(confirmation_nonces)) =
-              confirmation_nonces
-            else {
-              panic!("got all DKG shares yet confirmation nonces aren't Ready(Participating(_))");
-            };
+            let mut confirmation_nonces = HashMap::new();
+            let mut shares = HashMap::new();
+            for (participant, confirmation_nonces_and_shares) in confirmation_nonces_and_shares {
+              let (these_confirmation_nonces, these_shares) =
+                <(Vec<u8>, Vec<u8>)>::decode(&mut confirmation_nonces_and_shares.as_slice())
+                  .unwrap();
+              confirmation_nonces.insert(participant, these_confirmation_nonces);
+              shares.insert(participant, these_shares);
+            }
             ConfirmationNonces::set(self.txn, genesis, attempt, &confirmation_nonces);
 
             // shares is a HashMap<Participant, Vec<Vec<Vec<u8>>>>, with the values representing:
@@ -363,7 +423,7 @@ impl<
           Accumulation::Ready(DataSet::NotParticipating) => {
             panic!("wasn't a participant in DKG shares")
           }
-          Accumulation::NotReady => assert!(matches!(confirmation_nonces, Accumulation::NotReady)),
+          Accumulation::NotReady => {}
         }
       }
 

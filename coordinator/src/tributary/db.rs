@@ -1,8 +1,5 @@
-use core::ops::Deref;
 use std::collections::HashMap;
 
-use zeroize::Zeroizing;
-use ciphersuite::{Ciphersuite, Ristretto, group::GroupEncoding};
 use frost::Participant;
 
 use serai_client::validator_sets::primitives::KeyPair;
@@ -12,8 +9,6 @@ use processor_messages::coordinator::SubstrateSignableId;
 use scale::Encode;
 
 pub use serai_db::*;
-
-use crate::tributary::TributarySpec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode)]
 pub enum Label {
@@ -94,67 +89,5 @@ impl AttemptDb {
       return Some(0);
     }
     attempt
-  }
-}
-
-impl DataDb {
-  pub fn accumulate(
-    txn: &mut impl DbTxn,
-    our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-    spec: &TributarySpec,
-    data_spec: &DataSpecification,
-    signer: <Ristretto as Ciphersuite>::G,
-    data: &Vec<u8>,
-  ) -> Accumulation {
-    let genesis = spec.genesis();
-    if Self::get(txn, genesis, data_spec, &signer.to_bytes()).is_some() {
-      panic!("accumulating data for a participant multiple times");
-    }
-    let signer_shares = {
-      let signer_i =
-        spec.i(signer).expect("transaction signed by a non-validator for this tributary");
-      u16::from(signer_i.end) - u16::from(signer_i.start)
-    };
-
-    let prior_received = DataReceived::get(txn, genesis, data_spec).unwrap_or_default();
-    let now_received = prior_received + signer_shares;
-    DataReceived::set(txn, genesis, data_spec, &now_received);
-    DataDb::set(txn, genesis, data_spec, &signer.to_bytes(), data);
-
-    // If we have all the needed commitments/preprocesses/shares, tell the processor
-    let needed = if data_spec.topic == Topic::Dkg { spec.n() } else { spec.t() };
-    if (prior_received < needed) && (now_received >= needed) {
-      return Accumulation::Ready({
-        let mut data = HashMap::new();
-        for validator in spec.validators().iter().map(|validator| validator.0) {
-          data.insert(
-            spec.i(validator).unwrap().start,
-            if let Some(data) = Self::get(txn, genesis, data_spec, &validator.to_bytes()) {
-              data
-            } else {
-              continue;
-            },
-          );
-        }
-
-        assert_eq!(data.len(), usize::from(needed));
-
-        // Remove our own piece of data, if we were involved
-        if data
-          .remove(
-            &spec
-              .i(Ristretto::generator() * our_key.deref())
-              .expect("handling a message for a Tributary we aren't part of")
-              .start,
-          )
-          .is_some()
-        {
-          DataSet::Participating(data)
-        } else {
-          DataSet::NotParticipating
-        }
-      });
-    }
-    Accumulation::NotReady
   }
 }
