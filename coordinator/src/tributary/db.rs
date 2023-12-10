@@ -42,7 +42,7 @@ pub enum Accumulation {
 }
 
 create_db!(
-  NewTributary {
+  Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
     LastBlock: (genesis: [u8; 32]) -> [u8; 32],
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
@@ -57,7 +57,6 @@ create_db!(
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
     DataDb: (genesis: [u8; 32], data_spec: &DataSpecification, signer_bytes: &[u8; 32]) -> Vec<u8>,
-    EventDb: (id: [u8; 32], index: u32) -> (),
   }
 );
 
@@ -150,12 +149,5 @@ impl DataDb {
       });
     }
     Accumulation::NotReady
-  }
-}
-
-impl EventDb {
-  pub fn handle_event(txn: &mut impl DbTxn, id: [u8; 32], index: u32) {
-    assert!(Self::get(txn, id, index).is_none());
-    Self::set(txn, id, index, &());
   }
 }

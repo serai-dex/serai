@@ -24,7 +24,7 @@ use crate::{
   Db,
   tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributarySpec, Transaction, LastBlock, EventDb},
+  tributary::{TributarySpec, Transaction, LastBlock},
   P2p,
 };
 
@@ -70,18 +70,8 @@ async fn handle_block<
 ) {
   log::info!("found block for Tributary {:?}", spec.set());
 
-  let hash = block.hash();
-
-  let mut event_id = 0;
-  #[allow(clippy::explicit_counter_loop)] // event_id isn't TX index. It just currently lines up
+  let mut txn = db.txn();
   for tx in block.transactions {
-    if EventDb::get(db, hash, event_id).is_some() {
-      event_id += 1;
-      continue;
-    }
-
-    let mut txn = db.txn();
-
     match tx {
       TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
         // Since the evidence is on the chain, it should already have been validated
@@ -130,12 +120,8 @@ async fn handle_block<
         .await;
       }
     }
-
-    EventDb::handle_event(&mut txn, hash, event_id);
-    txn.commit();
-
-    event_id += 1;
   }
+  txn.commit();
 
   // TODO: Trigger any necessary re-attempts
 }
