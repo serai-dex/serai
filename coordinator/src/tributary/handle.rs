@@ -266,7 +266,7 @@ impl<
         self.fatal_slash_with_participant_index(i, "RemoveParticipant Provided TX").await
       }
 
-      Transaction::DkgCommitments(attempt, commitments, signed) => {
+      Transaction::DkgCommitments { attempt, commitments, signed } => {
         let Ok(_) = self.check_sign_data_len(signed.signer, commitments.len()).await else {
           return;
         };
@@ -456,10 +456,10 @@ impl<
           .await;
       }
 
-      Transaction::DkgConfirmed(attempt, shares, signed) => {
+      Transaction::DkgConfirmed { attempt, confirmation_share, signed } => {
         let data_spec =
           DataSpecification { topic: Topic::DkgConfirmation, label: Label::Share, attempt };
-        match self.handle_data(&data_spec, shares.to_vec(), &signed).await {
+        match self.handle_data(&data_spec, confirmation_share.to_vec(), &signed).await {
           Accumulation::Ready(DataSet::Participating(shares)) => {
             log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
@@ -595,7 +595,7 @@ impl<
         self.processors.send(self.spec.set().network, msg).await;
       }
 
-      Transaction::Batch(_, batch) => {
+      Transaction::Batch { block: _, batch } => {
         // Because this Batch has achieved synchrony, its batch ID should be authorized
         AttemptDb::recognize_topic(
           self.txn,

@@ -57,8 +57,11 @@ async fn dkg_test() {
     let mut commitments = vec![0; 256];
     OsRng.fill_bytes(&mut commitments);
 
-    let mut tx =
-      Transaction::DkgCommitments(attempt, vec![commitments], Transaction::empty_signed());
+    let mut tx = Transaction::DkgCommitments {
+      attempt,
+      commitments: vec![commitments],
+      signed: Transaction::empty_signed(),
+    };
     tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }
@@ -79,7 +82,7 @@ async fn dkg_test() {
     .iter()
     .enumerate()
     .map(|(i, tx)| {
-      if let Transaction::DkgCommitments(_, commitments, _) = tx {
+      if let Transaction::DkgCommitments { commitments, .. } = tx {
         (Participant::new((i + 1).try_into().unwrap()).unwrap(), commitments[0].clone())
       } else {
         panic!("txs had non-commitments");
@@ -319,7 +322,11 @@ async fn dkg_test() {
       crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
     txn.commit();
 
-    let mut tx = Transaction::DkgConfirmed(attempt, share, Transaction::empty_signed());
+    let mut tx = Transaction::DkgConfirmed {
+      attempt,
+      confirmation_share: share,
+      signed: Transaction::empty_signed(),
+    };
     tx.sign(&mut OsRng, spec.genesis(), key);
     txs.push(tx);
   }

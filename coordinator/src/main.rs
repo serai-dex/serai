@@ -405,7 +405,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
     let txs = match msg.msg.clone() {
       ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
-          vec![Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed())]
+          vec![Transaction::DkgCommitments {
+            attempt: id.attempt,
+            commitments,
+            signed: Transaction::empty_signed(),
+          }]
         }
         key_gen::ProcessorMessage::InvalidCommitments { id: _, faulty } => {
           // This doesn't need the ID since it's a Provided transaction which everyone will provide
@@ -487,7 +491,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
           match share {
             Ok(share) => {
-              vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
+              vec![Transaction::DkgConfirmed {
+                attempt: id.attempt,
+                confirmation_share: share,
+                signed: Transaction::empty_signed(),
+              }]
             }
             Err(p) => {
               vec![Transaction::RemoveParticipant(p)]
@@ -596,13 +604,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
               preprocesses.into_iter().map(Into::into).collect(),
             );
 
-            let intended = Transaction::Batch(
-              block.0,
-              match id.id {
+            let intended = Transaction::Batch {
+              block: block.0,
+              batch: match id.id {
                 SubstrateSignableId::Batch(id) => id,
                 _ => panic!("BatchPreprocess did not contain Batch ID"),
               },
-            );
+            };
 
             // If this is the new key's first Batch, only create this TX once we verify all
             // all prior published `Batch`s

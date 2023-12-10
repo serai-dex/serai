@@ -254,7 +254,11 @@ pub enum Transaction {
   RemoveParticipant(Participant),
 
   // Once this completes successfully, no more instances should be created.
-  DkgCommitments(u32, Vec<Vec<u8>>, Signed),
+  DkgCommitments {
+    attempt: u32,
+    commitments: Vec<Vec<u8>>,
+    signed: Signed,
+  },
   DkgShares {
     attempt: u32,
     // Sending Participant, Receiving Participant, Share
@@ -269,7 +273,11 @@ pub enum Transaction {
     blame: Option<Vec<u8>>,
     signed: Signed,
   },
-  DkgConfirmed(u32, [u8; 32], Signed),
+  DkgConfirmed {
+    attempt: u32,
+    confirmation_share: [u8; 32],
+    signed: Signed,
+  },
 
   DkgRemoval(SignData<[u8; 32]>),
 
@@ -281,7 +289,10 @@ pub enum Transaction {
   // which would be binding over the block hash and automatically achieve synchrony on all
   // relevant batches. ExternalBlock was removed for this due to complexity around the pipeline
   // with the current processor, yet it would still be an improvement.
-  Batch([u8; 32], [u8; 5]),
+  Batch {
+    block: [u8; 32],
+    batch: [u8; 5],
+  },
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
   SubstrateBlock(u64),
@@ -309,7 +320,7 @@ impl Debug for Transaction {
         .debug_struct("Transaction::RemoveParticipant")
         .field("participant", participant)
         .finish(),
-      Transaction::DkgCommitments(attempt, _, signed) => fmt
+      Transaction::DkgCommitments { attempt, commitments: _, signed } => fmt
         .debug_struct("Transaction::DkgCommitments")
         .field("attempt", attempt)
         .field("signer", &hex::encode(signed.signer.to_bytes()))
@@ -325,7 +336,7 @@ impl Debug for Transaction {
         .field("accuser", accuser)
         .field("faulty", faulty)
         .finish_non_exhaustive(),
-      Transaction::DkgConfirmed(attempt, _, signed) => fmt
+      Transaction::DkgConfirmed { attempt, confirmation_share: _, signed } => fmt
         .debug_struct("Transaction::DkgConfirmed")
         .field("attempt", attempt)
         .field("signer", &hex::encode(signed.signer.to_bytes()))
@@ -337,7 +348,7 @@ impl Debug for Transaction {
         .debug_struct("Transaction::CosignSubstrateBlock")
         .field("block", &hex::encode(block))
         .finish(),
-      Transaction::Batch(block, batch) => fmt
+      Transaction::Batch { block, batch } => fmt
         .debug_struct("Transaction::Batch")
         .field("block", &hex::encode(block))
         .field("batch", &hex::encode(batch))
@@ -404,7 +415,7 @@ impl ReadWrite for Transaction {
 
         let signed = Signed::read_without_nonce(reader, 0)?;
 
-        Ok(Transaction::DkgCommitments(attempt, commitments, signed))
+        Ok(Transaction::DkgCommitments { attempt, commitments, signed })
       }
 
       2 => {
@@ -486,7 +497,7 @@ impl ReadWrite for Transaction {
 
         let signed = Signed::read_without_nonce(reader, 2)?;
 
-        Ok(Transaction::DkgConfirmed(attempt, confirmation_share, signed))
+        Ok(Transaction::DkgConfirmed { attempt, confirmation_share, signed })
       }
 
       5 => SignData::read(reader).map(Transaction::DkgRemoval),
@@ -502,7 +513,7 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut block)?;
         let mut batch = [0; 5];
         reader.read_exact(&mut batch)?;
-        Ok(Transaction::Batch(block, batch))
+        Ok(Transaction::Batch { block, batch })
       }
 
       8 => {
@@ -540,7 +551,7 @@ impl ReadWrite for Transaction {
         writer.write_all(&u16::from(*i).to_le_bytes())
       }
 
-      Transaction::DkgCommitments(attempt, commitments, signed) => {
+      Transaction::DkgCommitments { attempt, commitments, signed } => {
         writer.write_all(&[1])?;
         writer.write_all(&attempt.to_le_bytes())?;
         if commitments.is_empty() {
@@ -604,10 +615,10 @@ impl ReadWrite for Transaction {
         signed.write_without_nonce(writer)
       }
 
-      Transaction::DkgConfirmed(attempt, share, signed) => {
+      Transaction::DkgConfirmed { attempt, confirmation_share, signed } => {
         writer.write_all(&[4])?;
         writer.write_all(&attempt.to_le_bytes())?;
-        writer.write_all(share)?;
+        writer.write_all(confirmation_share)?;
         signed.write_without_nonce(writer)
       }
 
@@ -621,7 +632,7 @@ impl ReadWrite for Transaction {
         writer.write_all(block)
       }
 
-      Transaction::Batch(block, batch) => {
+      Transaction::Batch { block, batch } => {
         writer.write_all(&[7])?;
         writer.write_all(block)?;
         writer.write_all(batch)
@@ -658,7 +669,7 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipant(_) => TransactionKind::Provided("remove"),
 
-      Transaction::DkgCommitments(attempt, _, signed) => {
+      Transaction::DkgCommitments { attempt, commitments: _, signed } => {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
       }
       Transaction::DkgShares { attempt, signed, .. } => {
@@ -667,7 +678,7 @@ impl TransactionTrait for Transaction {
       Transaction::InvalidDkgShare { attempt, signed, .. } => {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
       }
-      Transaction::DkgConfirmed(attempt, _, signed) => {
+      Transaction::DkgConfirmed { attempt, signed, .. } => {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
       }
 
@@ -677,7 +688,7 @@ impl TransactionTrait for Transaction {
 
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
 
-      Transaction::Batch(_, _) => TransactionKind::Provided("batch"),
+      Transaction::Batch { .. } => TransactionKind::Provided("batch"),
       Transaction::SubstrateBlock(_) => TransactionKind::Provided("serai"),
 
       Transaction::SubstrateSign(data) => {
@@ -736,16 +747,16 @@ impl Transaction {
       let nonce = match tx {
         Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
 
-        Transaction::DkgCommitments(_, _, _) => 0,
+        Transaction::DkgCommitments { .. } => 0,
         Transaction::DkgShares { .. } => 1,
         Transaction::InvalidDkgShare { .. } => 2,
-        Transaction::DkgConfirmed(_, _, _) => 2,
+        Transaction::DkgConfirmed { .. } => 2,
 
         Transaction::DkgRemoval(data) => data.label.nonce(),
 
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
-        Transaction::Batch(_, _) => panic!("signing Batch"),
+        Transaction::Batch { .. } => panic!("signing Batch"),
         Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
         Transaction::SubstrateSign(data) => data.label.nonce(),
@@ -758,16 +769,16 @@ impl Transaction {
         match tx {
           Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
 
-          Transaction::DkgCommitments(_, _, ref mut signed) => signed,
+          Transaction::DkgCommitments { ref mut signed, .. } => signed,
           Transaction::DkgShares { ref mut signed, .. } => signed,
           Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
-          Transaction::DkgConfirmed(_, _, ref mut signed) => signed,
+          Transaction::DkgConfirmed { ref mut signed, .. } => signed,
 
           Transaction::DkgRemoval(ref mut data) => &mut data.signed,
 
           Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
-          Transaction::Batch(_, _) => panic!("signing Batch"),
+          Transaction::Batch { .. } => panic!("signing Batch"),
           Transaction::SubstrateBlock(_) => panic!("signing SubstrateBlock"),
 
           Transaction::SubstrateSign(ref mut data) => &mut data.signed,

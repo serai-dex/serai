@@ -135,11 +135,11 @@ fn serialize_transaction() {
       OsRng.fill_bytes(&mut temp);
       commitments.push(temp);
     }
-    test_read_write(Transaction::DkgCommitments(
-      random_u32(&mut OsRng),
+    test_read_write(Transaction::DkgCommitments {
+      attempt: random_u32(&mut OsRng),
       commitments,
-      random_signed_with_nonce(&mut OsRng, 0),
-    ));
+      signed: random_signed_with_nonce(&mut OsRng, 0),
+    });
   }
 
   {
@@ -193,15 +193,15 @@ fn serialize_transaction() {
     });
   }
 
-  test_read_write(Transaction::DkgConfirmed(
-    random_u32(&mut OsRng),
-    {
+  test_read_write(Transaction::DkgConfirmed {
+    attempt: random_u32(&mut OsRng),
+    confirmation_share: {
       let mut share = [0; 32];
       OsRng.fill_bytes(&mut share);
       share
     },
-    random_signed_with_nonce(&mut OsRng, 2),
-  ));
+    signed: random_signed_with_nonce(&mut OsRng, 2),
+  });
 
   {
     let mut key = [0; 32];
@@ -225,7 +225,7 @@ fn serialize_transaction() {
     OsRng.fill_bytes(&mut block);
     let mut batch = [0; 5];
     OsRng.fill_bytes(&mut batch);
-    test_read_write(Transaction::Batch(block, batch));
+    test_read_write(Transaction::Batch { block, batch });
   }
   test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 
