@@ -16,7 +16,8 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
 
-use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
+
 use serai_client::{
   SeraiError, Serai,
   primitives::NetworkId,
@@ -31,11 +32,17 @@ use crate::{Db, substrate::in_set, tributary::SeraiBlockNumber};
 // TODO: Pull a constant for block time
 const COSIGN_DISTANCE: u64 = 5 * 60 / 6;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+enum HasEvents {
+  KeyGen,
+  Yes,
+  No,
+}
+
 create_db!(
   SubstrateCosignDb {
-    CosignTriggered: () -> (),
     IntendedCosign: () -> (u64, Option<u64>),
-    BlockHasEvents: (block: u64) -> u8,
+    BlockHasEvents: (block: u64) -> HasEvents,
     LatestCosignedBlock: () -> u64,
   }
 );
@@ -73,12 +80,6 @@ impl CosignTransactions {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
-enum HasEvents {
-  KeyGen,
-  Yes,
-  No,
-}
 async fn block_has_events(
   txn: &mut impl DbTxn,
   serai: &Serai,
@@ -106,12 +107,10 @@ async fn block_has_events(
 
       let has_events = if has_no_events { HasEvents::No } else { HasEvents::Yes };
 
-      let has_events = has_events.encode();
-      assert_eq!(has_events.len(), 1);
-      BlockHasEvents::set(txn, block, &has_events[0]);
+      BlockHasEvents::set(txn, block, &has_events);
       Ok(HasEvents::Yes)
     }
-    Some(code) => Ok(HasEvents::decode(&mut [code].as_slice()).unwrap()),
+    Some(code) => Ok(code),
   }
 }
 
@@ -187,13 +186,14 @@ pub async fn advance_cosign_protocol(
 ) -> Result<(), SeraiError> {
   let mut txn = db.txn();
 
+  const INITIAL_INTENDED_COSIGN: u64 = 1;
   let (last_intended_to_cosign_block, mut skipped_block) = {
     let intended_cosign = IntendedCosign::get(&txn);
     // If we haven't prior intended to cosign a block, set the intended cosign to 1
     if let Some(intended_cosign) = intended_cosign {
       intended_cosign
     } else {
-      IntendedCosign::set_intended_cosign(&mut txn, 1);
+      IntendedCosign::set_intended_cosign(&mut txn, INITIAL_INTENDED_COSIGN);
       IntendedCosign::get(&txn).unwrap()
     }
   };
@@ -202,7 +202,7 @@ pub async fn advance_cosign_protocol(
   // cosigned, it won't be due to proximity due to the prior cosign
   let mut window_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
   // If we've never triggered a cosign, don't skip any cosigns based on proximity
-  if CosignTriggered::get(&txn).is_none() {
+  if last_intended_to_cosign_block == INITIAL_INTENDED_COSIGN {
     window_end_exclusive = 0;
   }
 
@@ -285,7 +285,6 @@ pub async fn advance_cosign_protocol(
       log::debug!("{} had no cosigners available, marking as cosigned", number);
       LatestCosignedBlock::set(&mut txn, &number);
     } else {
-      CosignTriggered::set(&mut txn, &());
       for (set, in_set) in cosigning {
         if in_set {
           log::debug!("cosigning {number} with {:?} {:?}", set.network, set.session);

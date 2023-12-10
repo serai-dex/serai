@@ -265,11 +265,11 @@ async fn handle_block<D: Db, Pro: Processors>(
       continue;
     }
 
-    if EventDb::is_unhandled(db, &hash, event_id) {
+    if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
       let mut txn = db.txn();
       handle_new_set::<D>(&mut txn, key, new_tributary_spec, serai, &block, set).await?;
-      EventDb::handle_event(&mut txn, &hash, event_id);
+      HandledEvent::handle_event(&mut txn, hash, event_id);
       txn.commit();
     }
     event_id += 1;
@@ -277,7 +277,7 @@ async fn handle_block<D: Db, Pro: Processors>(
 
   // If a key pair was confirmed, inform the processor
   for key_gen in serai.as_of(hash).validator_sets().key_gen_events().await? {
-    if EventDb::is_unhandled(db, &hash, event_id) {
+    if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
       if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
         handle_key_gen(processors, serai, &block, set, key_pair).await?;
@@ -285,7 +285,7 @@ async fn handle_block<D: Db, Pro: Processors>(
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       }
       let mut txn = db.txn();
-      EventDb::handle_event(&mut txn, &hash, event_id);
+      HandledEvent::handle_event(&mut txn, hash, event_id);
       txn.commit();
     }
     event_id += 1;
@@ -300,12 +300,12 @@ async fn handle_block<D: Db, Pro: Processors>(
       continue;
     }
 
-    if EventDb::is_unhandled(db, &hash, event_id) {
+    if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh set retired event {:?}", retired_set);
       let mut txn = db.txn();
       crate::ActiveTributaryDb::retire_tributary(&mut txn, set);
       tributary_retired.send(set).unwrap();
-      EventDb::handle_event(&mut txn, &hash, event_id);
+      HandledEvent::handle_event(&mut txn, hash, event_id);
       txn.commit();
     }
     event_id += 1;
@@ -314,10 +314,10 @@ async fn handle_block<D: Db, Pro: Processors>(
   // Finally, tell the processor of acknowledged blocks/burns
   // This uses a single event as unlike prior events which individually executed code, all
   // following events share data collection
-  if EventDb::is_unhandled(db, &hash, event_id) {
+  if HandledEvent::is_unhandled(db, hash, event_id) {
     let mut txn = db.txn();
     handle_batch_and_burns(&mut txn, processors, serai, &block).await?;
-    EventDb::handle_event(&mut txn, &hash, event_id);
+    HandledEvent::handle_event(&mut txn, hash, event_id);
     txn.commit();
   }
 

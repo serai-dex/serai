@@ -45,6 +45,7 @@ macro_rules! create_db {
       pub struct $field_name;
       impl $field_name {
         pub fn key($($arg: $arg_type),*) -> Vec<u8> {
+          use scale::Encode;
           $crate::serai_db_key(
             stringify!($db_name).as_bytes(),
             stringify!($field_name).as_bytes(),

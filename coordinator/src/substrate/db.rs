@@ -1,24 +1,32 @@
-use scale::Encode;
-
 use serai_client::primitives::NetworkId;
 
 pub use serai_db::*;
 
-create_db!(
-  SubstrateDb {
-    NextBlock: () -> u64,
-    EventDb: (id: &[u8], index: u32) -> (),
-    BatchInstructionsHashDb: (network: NetworkId, id: u32) -> [u8; 32]
-  }
-);
+mod inner_db {
+  use super::*;
 
-impl EventDb {
-  pub fn is_unhandled(getter: &impl Get, id: &[u8], index: u32) -> bool {
-    Self::get(getter, id, index).is_none()
-  }
+  create_db!(
+    SubstrateDb {
+      NextBlock: () -> u64,
+      HandledEvent: (block: [u8; 32]) -> u32,
+      BatchInstructionsHashDb: (network: NetworkId, id: u32) -> [u8; 32]
+    }
+  );
+}
+pub use inner_db::{NextBlock, BatchInstructionsHashDb};
 
-  pub fn handle_event(txn: &mut impl DbTxn, id: &[u8], index: u32) {
-    assert!(Self::is_unhandled(txn, id, index));
-    Self::set(txn, id, index, &());
+pub struct HandledEvent;
+impl HandledEvent {
+  fn next_to_handle_event(getter: &impl Get, block: [u8; 32]) -> u32 {
+    inner_db::HandledEvent::get(getter, block).map(|last| last + 1).unwrap_or(0)
+  }
+  pub fn is_unhandled(getter: &impl Get, block: [u8; 32], event_id: u32) -> bool {
+    let next = Self::next_to_handle_event(getter, block);
+    assert!(next >= event_id);
+    next == event_id
+  }
+  pub fn handle_event(txn: &mut impl DbTxn, block: [u8; 32], index: u32) {
+    assert!(Self::next_to_handle_event(txn, block) == index);
+    inner_db::HandledEvent::set(txn, block, &index);
   }
 }
