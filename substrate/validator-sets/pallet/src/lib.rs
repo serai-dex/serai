@@ -733,7 +733,7 @@ pub mod pallet {
 
       // Update Babe and Grandpa
       let session = Self::session(NetworkId::Serai).unwrap();
-      let next_next_validators = Self::participants(NetworkId::Serai);
+      let next_next_validators = Participants::<T>::get(NetworkId::Serai).unwrap();
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
           next_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
@@ -812,10 +812,10 @@ pub mod pallet {
       if let Some(i) = index {
         participants.remove(i);
         Participants::<T>::set(network, Some(participants));
-        InSet::<T>::remove(Self::in_set_key(network, account));
+        InSet::<T>::remove(network, account);
       }
 
-      // reduce th TotalAllocatedStake for the network
+      // reduce the TotalAllocatedStake for the network
       let current_staked = Self::total_allocated_stake(network).unwrap();
       TotalAllocatedStake::<T>::set(network, Some(current_staked.sub(allocation)));
 

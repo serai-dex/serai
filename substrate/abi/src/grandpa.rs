@@ -5,7 +5,7 @@ use serai_primitives::{BlockNumber, SeraiAddress};
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 pub struct ReportEquivocation {
   pub equivocation_proof: Box<EquivocationProof<[u8; 32], BlockNumber>>,
-  pub key_owner_proof: (),
+  pub key_owner_proof: SeraiAddress,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
