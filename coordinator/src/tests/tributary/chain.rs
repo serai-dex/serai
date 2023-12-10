@@ -13,7 +13,7 @@ use ciphersuite::{
 };
 
 use sp_application_crypto::sr25519;
-
+use borsh::BorshDeserialize;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
@@ -58,7 +58,10 @@ pub fn new_spec<R: RngCore + CryptoRng>(
     .collect::<Vec<_>>();
 
   let res = TributarySpec::new(serai_block, start_time, set, set_participants);
-  assert_eq!(TributarySpec::read::<&[u8]>(&mut res.serialize().as_ref()).unwrap(), res);
+  assert_eq!(
+    TributarySpec::deserialize_reader(&mut borsh::to_vec(&res).unwrap().as_slice()).unwrap(),
+    res,
+  );
   res
 }
 

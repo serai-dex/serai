@@ -2,7 +2,7 @@ use core::{
   ops::{Deref, Range},
   fmt::Debug,
 };
-use std::io::{self, Read, Write};
+use std::io;
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -18,12 +18,10 @@ use schnorr::SchnorrSignature;
 use frost::Participant;
 
 use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 use processor_messages::coordinator::SubstrateSignableId;
 
-use serai_client::{
-  primitives::{NetworkId, PublicKey},
-  validator_sets::primitives::{Session, ValidatorSet},
-};
+use serai_client::{primitives::PublicKey, validator_sets::primitives::ValidatorSet};
 
 use tributary::{
   ReadWrite,
@@ -41,11 +39,43 @@ pub use handle::*;
 
 pub mod scanner;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+fn borsh_serialize_validators<W: io::Write>(
+  validators: &Vec<(<Ristretto as Ciphersuite>::G, u16)>,
+  writer: &mut W,
+) -> Result<(), io::Error> {
+  let len = u16::try_from(validators.len()).unwrap();
+  BorshSerialize::serialize(&len, writer)?;
+  for validator in validators {
+    BorshSerialize::serialize(&validator.0.to_bytes(), writer)?;
+    BorshSerialize::serialize(&validator.1, writer)?;
+  }
+  Ok(())
+}
+
+fn borsh_deserialize_validators<R: io::Read>(
+  reader: &mut R,
+) -> Result<Vec<(<Ristretto as Ciphersuite>::G, u16)>, io::Error> {
+  let len: u16 = BorshDeserialize::deserialize_reader(reader)?;
+  let mut res = vec![];
+  for _ in 0 .. len {
+    let compressed: [u8; 32] = BorshDeserialize::deserialize_reader(reader)?;
+    let point = Option::from(<Ristretto as Ciphersuite>::G::from_bytes(&compressed))
+      .ok_or_else(|| io::Error::other("invalid point for validator"))?;
+    let weight: u16 = BorshDeserialize::deserialize_reader(reader)?;
+    res.push((point, weight));
+  }
+  Ok(res)
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TributarySpec {
   serai_block: [u8; 32],
   start_time: u64,
   set: ValidatorSet,
+  #[borsh(
+    serialize_with = "borsh_serialize_validators",
+    deserialize_with = "borsh_deserialize_validators"
+  )]
   validators: Vec<(<Ristretto as Ciphersuite>::G, u16)>,
 }
 
@@ -110,59 +140,6 @@ impl TributarySpec {
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
     self.validators.iter().map(|(validator, weight)| (*validator, u64::from(*weight))).collect()
-  }
-
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&self.serai_block)?;
-    writer.write_all(&self.start_time.to_le_bytes())?;
-    writer.write_all(&self.set.session.0.to_le_bytes())?;
-    let network_encoded = self.set.network.encode();
-    assert_eq!(network_encoded.len(), 1);
-    writer.write_all(&network_encoded)?;
-    writer.write_all(&u32::try_from(self.validators.len()).unwrap().to_le_bytes())?;
-    for validator in &self.validators {
-      writer.write_all(&validator.0.to_bytes())?;
-      writer.write_all(&validator.1.to_le_bytes())?;
-    }
-    Ok(())
-  }
-
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = vec![];
-    self.write(&mut res).unwrap();
-    res
-  }
-
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
-    let mut serai_block = [0; 32];
-    reader.read_exact(&mut serai_block)?;
-
-    let mut start_time = [0; 8];
-    reader.read_exact(&mut start_time)?;
-    let start_time = u64::from_le_bytes(start_time);
-
-    let mut session = [0; 4];
-    reader.read_exact(&mut session)?;
-    let session = Session(u32::from_le_bytes(session));
-
-    let mut network = [0; 1];
-    reader.read_exact(&mut network)?;
-    let network =
-      NetworkId::decode(&mut &network[..]).map_err(|_| io::Error::other("invalid network"))?;
-
-    let mut validators_len = [0; 4];
-    reader.read_exact(&mut validators_len)?;
-    let validators_len = usize::try_from(u32::from_le_bytes(validators_len)).unwrap();
-
-    let mut validators = Vec::with_capacity(validators_len);
-    for _ in 0 .. validators_len {
-      let key = Ristretto::read_G(reader)?;
-      let mut weight = [0; 2];
-      reader.read_exact(&mut weight)?;
-      validators.push((key, u16::from_le_bytes(weight)));
-    }
-
-    Ok(Self { serai_block, start_time, set: ValidatorSet { session, network }, validators })
   }
 }
 

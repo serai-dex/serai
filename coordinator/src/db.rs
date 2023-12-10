@@ -4,6 +4,7 @@ use blake2::{
 };
 
 use scale::Encode;
+use borsh::{BorshSerialize, BorshDeserialize};
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet},
@@ -43,7 +44,7 @@ impl ActiveTributaryDb {
 
     let mut tributaries = vec![];
     while !bytes_ref.is_empty() {
-      tributaries.push(TributarySpec::read(&mut bytes_ref).unwrap());
+      tributaries.push(TributarySpec::deserialize_reader(&mut bytes_ref).unwrap());
     }
 
     (bytes, tributaries)
@@ -57,7 +58,7 @@ impl ActiveTributaryDb {
       }
     }
 
-    spec.write(&mut existing_bytes).unwrap();
+    spec.serialize(&mut existing_bytes).unwrap();
     ActiveTributaryDb::set(txn, &existing_bytes);
   }
 
@@ -72,7 +73,7 @@ impl ActiveTributaryDb {
 
     let mut bytes = vec![];
     for active in active {
-      active.write(&mut bytes).unwrap();
+      active.serialize(&mut bytes).unwrap();
     }
     Self::set(txn, &bytes);
     RetiredTributaryDb::set(txn, set, &());
