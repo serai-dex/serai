@@ -84,9 +84,6 @@ pub type Transaction = serai_primitives::Transaction<RuntimeCall, SignedExtra>;
 pub type Block = generic::Block<Header, Transaction>;
 pub type BlockId = generic::BlockId<Block>;
 
-/// Longevity of an offence report.
-pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
-
 pub mod opaque {
   use super::*;
 
@@ -297,6 +294,9 @@ impl pallet_authorship::Config for Runtime {
 
 // Maximum number of authorities per session.
 pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET }>;
+
+/// Longevity of an offence report.
+pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]

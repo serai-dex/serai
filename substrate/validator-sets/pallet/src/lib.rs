@@ -26,6 +26,8 @@ impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
   }
 }
 impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
+  // We only implement and this interface to satisfy the type. Although this might return wrong
+  // count if the offender was in the previous set, we don't really care since we don't use it.
   fn validator_count(&self) -> u32 {
     Babe::<T>::authorities().len() as u32
   }
@@ -76,7 +78,7 @@ pub mod pallet {
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
     + dex_pallet::Config
-    + pallet_babe::Config<MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET }>>
+    + pallet_babe::Config
     + pallet_grandpa::Config
     + TypeInfo
   {
