@@ -97,11 +97,11 @@ async fn dkg_test() {
     handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
       db,
       key,
-      |_, _, _, _| async {
+      &|_, _, _, _| async {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
-      |_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      &|_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
       &|_| async {
         panic!(
           "test tried to publish a new Tributary TX from handle_application_tx in new_processors"
@@ -128,11 +128,11 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
-    |_, _, _, _| async {
+    &|_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
-    |_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    &|_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after Commitments"
@@ -214,11 +214,11 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
-    |_, _, _, _| async {
+    &|_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
-    |_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    &|_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after some shares"
@@ -268,9 +268,9 @@ async fn dkg_test() {
     handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
       &mut dbs[i],
       key,
-      |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
+      &|_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
       &processors,
-      |_, _, _| async { panic!("test tried to publish a new Serai TX") },
+      &|_, _, _| async { panic!("test tried to publish a new Serai TX") },
       &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
       &spec,
       &tributaries[i].1.reader(),
@@ -335,11 +335,11 @@ async fn dkg_test() {
   handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
     &mut dbs[0],
     &keys[0],
-    |_, _, _, _| async {
+    &|_, _, _, _| async {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    |set, tx_type, tx| {
+    &|set, tx_type, tx| {
       assert_eq!(tx_type, PstTxType::SetKeys);
 
       let spec = spec.clone();

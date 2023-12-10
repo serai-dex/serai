@@ -103,11 +103,7 @@ pub fn generated_key_pair<D: Db>(
   (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, key_pair)
 }
 
-pub(super) async fn fatal_slash<
-  D: Db,
-  FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
->(
+pub(super) async fn fatal_slash<D: Db, FPtt: Future<Output = ()>, PTT: Fn(Transaction) -> FPtt>(
   txn: &mut D::Transaction<'_>,
   spec: &TributarySpec,
   publish_tributary_tx: &PTT,
@@ -146,7 +142,7 @@ pub(super) async fn fatal_slash<
 async fn fatal_slash_with_participant_index<
   D: Db,
   FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
+  PTT: Fn(Transaction) -> FPtt,
 >(
   txn: &mut <D as Db>::Transaction<'_>,
   spec: &TributarySpec,
@@ -176,9 +172,9 @@ pub(crate) async fn handle_application_tx<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+  PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
   FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
+  PTT: Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
 >(
@@ -202,7 +198,7 @@ pub(crate) async fn handle_application_tx<
     }
   }
 
-  async fn handle<D: Db, FPtt: Future<Output = ()>, PTT: Clone + Fn(Transaction) -> FPtt>(
+  async fn handle<D: Db, FPtt: Future<Output = ()>, PTT: Fn(Transaction) -> FPtt>(
     txn: &mut <D as Db>::Transaction<'_>,
     spec: &TributarySpec,
     publish_tributary_tx: &PTT,
@@ -271,11 +267,7 @@ pub(crate) async fn handle_application_tx<
     DataDb::accumulate(txn, key, spec, data_spec, signed.signer, &bytes)
   }
 
-  async fn check_sign_data_len<
-    D: Db,
-    FPtt: Future<Output = ()>,
-    PTT: Clone + Fn(Transaction) -> FPtt,
-  >(
+  async fn check_sign_data_len<D: Db, FPtt: Future<Output = ()>, PTT: Fn(Transaction) -> FPtt>(
     txn: &mut D::Transaction<'_>,
     spec: &TributarySpec,
     publish_tributary_tx: &PTT,

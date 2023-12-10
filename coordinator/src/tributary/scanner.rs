@@ -35,13 +35,10 @@ pub enum RecognizedIdType {
 }
 
 pub(crate) trait RIDTrait<FRid>:
-  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
+  Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
 {
 }
-impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid>
-  for F
-{
-}
+impl<FRid, F: Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid> for F {}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PstTxType {
@@ -55,18 +52,18 @@ async fn handle_block<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+  PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
   FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
+  PTT: Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: RID,
+  recognized_id: &RID,
   processors: &Pro,
-  publish_serai_tx: PST,
+  publish_serai_tx: &PST,
   publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   block: Block<Transaction>,
@@ -124,10 +121,10 @@ async fn handle_block<
           tx,
           spec,
           processors,
-          publish_serai_tx.clone(),
+          &publish_serai_tx,
           publish_tributary_tx,
           key,
-          recognized_id.clone(),
+          recognized_id,
           &mut txn,
         )
         .await;
@@ -148,18 +145,18 @@ pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
   FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+  PST: Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
   FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
+  PTT: Fn(Transaction) -> FPtt,
   FRid: Future<Output = ()>,
   RID: RIDTrait<FRid>,
   P: P2p,
 >(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: RID,
+  recognized_id: &RID,
   processors: &Pro,
-  publish_serai_tx: PST,
+  publish_serai_tx: &PST,
   publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
@@ -185,9 +182,9 @@ pub(crate) async fn handle_new_blocks<
     handle_block::<_, _, _, _, _, _, _, _, P>(
       db,
       key,
-      recognized_id.clone(),
+      recognized_id,
       processors,
-      publish_serai_tx.clone(),
+      publish_serai_tx,
       publish_tributary_tx,
       spec,
       block,
@@ -205,7 +202,7 @@ pub(crate) async fn scan_tributaries_task<
   Pro: Processors,
   P: P2p,
   FRid: Send + Future<Output = ()>,
-  RID: 'static + Send + Sync + RIDTrait<FRid>,
+  RID: 'static + Send + Sync + Clone + RIDTrait<FRid>,
 >(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -243,9 +240,9 @@ pub(crate) async fn scan_tributaries_task<
               handle_new_blocks::<_, _, _, _, _, _, _, _, P>(
                 &mut tributary_db,
                 &key,
-                recognized_id.clone(),
+                &recognized_id,
                 &processors,
-                |set, tx_type, tx| {
+                &|set, tx_type, tx| {
                   let serai = serai.clone();
                   async move {
                     loop {
