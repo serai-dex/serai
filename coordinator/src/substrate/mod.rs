@@ -25,11 +25,7 @@ use processor_messages::SubstrateContext;
 
 use tokio::{sync::mpsc, time::sleep};
 
-use crate::{
-  Db,
-  processors::Processors,
-  tributary::{TributarySpec, SeraiBlockNumber},
-};
+use crate::{Db, processors::Processors, tributary::TributarySpec};
 
 mod db;
 pub use db::*;
@@ -355,12 +351,6 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       .finalized_block_by_number(b)
       .await?
       .expect("couldn't get block before the latest finalized block");
-
-    // Save the block number for this block, as needed by the Tributary code
-    // TODO: Review why this is?
-    let mut txn = db.txn();
-    SeraiBlockNumber::set(&mut txn, block.hash(), &b);
-    txn.commit();
 
     log::info!("handling substrate block {b}");
     handle_block(db, key, new_tributary_spec, tributary_retired, processors, serai, block).await?;

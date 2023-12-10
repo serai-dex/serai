@@ -25,7 +25,7 @@ use serai_client::{
 
 use serai_db::*;
 
-use crate::{Db, substrate::in_set};
+use crate::{Db, substrate::in_set, tributary::SeraiBlockNumber};
 
 // 5 minutes, expressed in blocks
 // TODO: Pull a constant for block time
@@ -232,6 +232,9 @@ pub async fn advance_cosign_protocol(
       .finalized_block_by_number(block)
       .await?
       .expect("couldn't get block which should've been finalized");
+
+    // Save the block number for this block, as needed by the cosigner to perform cosigning
+    SeraiBlockNumber::set(&mut txn, actual_block.hash(), &block);
 
     if potentially_cosign_block(&mut txn, serai, block, skipped_block, window_end_exclusive).await?
     {

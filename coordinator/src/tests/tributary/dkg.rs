@@ -267,7 +267,7 @@ async fn dkg_test() {
   for (i, key) in keys.iter().enumerate() {
     handle_new_blocks::<_, _, _, _, _, _, _, _, LocalP2p>(
       &mut dbs[i],
-      &key,
+      key,
       |_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
       &processors,
       |_, _, _| async { panic!("test tried to publish a new Serai TX") },
