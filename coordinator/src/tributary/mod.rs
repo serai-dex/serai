@@ -25,7 +25,6 @@ use serai_client::{
   validator_sets::primitives::{Session, ValidatorSet},
 };
 
-#[rustfmt::skip]
 use tributary::{
   ReadWrite,
   transaction::{Signed, TransactionError, TransactionKind, Transaction as TransactionTrait},

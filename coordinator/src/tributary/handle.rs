@@ -32,13 +32,11 @@ use crate::{
     DataSet, Accumulation,
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType, TributaryBlockHandler},
-    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, AttemptDb,
-    DataReceived, DataDb,
+    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, DkgKeyPair,
+    AttemptDb, DataReceived, DataDb,
   },
   P2p,
 };
-
-use super::CurrentlyCompletingKeyPair;
 
 pub fn dkg_confirmation_nonces(
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -82,7 +80,7 @@ pub fn generated_key_pair<D: Db>(
   key_pair: &KeyPair,
   attempt: u32,
 ) -> Result<[u8; 32], Participant> {
-  CurrentlyCompletingKeyPair::set(txn, spec.genesis(), key_pair);
+  DkgKeyPair::set(txn, spec.genesis(), attempt, key_pair);
   let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
   (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, key_pair)
 }
@@ -474,7 +472,7 @@ impl<
             let preprocesses = ConfirmationNonces::get(self.txn, genesis, attempt).unwrap();
             // TODO: This can technically happen under very very very specific timing as the txn put
             // happens before DkgConfirmed, yet the txn commit isn't guaranteed to
-            let key_pair = CurrentlyCompletingKeyPair::get(self.txn, genesis).expect(
+            let key_pair = DkgKeyPair::get(self.txn, genesis, attempt).expect(
               "in DkgConfirmed handling, which happens after everyone \
               (including us) fires DkgConfirmed, yet no confirming key pair",
             );

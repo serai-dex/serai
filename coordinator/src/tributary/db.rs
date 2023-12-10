@@ -50,7 +50,7 @@ create_db!(
     ConfirmationNonces: (genesis: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
     RemovalNonces:
       (genesis: [u8; 32], removing: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
-    CurrentlyCompletingKeyPair: (genesis: [u8; 32]) -> KeyPair,
+    DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
     DkgCompleted: (genesis: [u8; 32]) -> (),
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
