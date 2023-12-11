@@ -52,9 +52,7 @@ fn create_coin<T: Config>(coin: &Coin) -> (T::AccountId, AccountIdLookupOf<T>) {
   (caller, caller_lookup)
 }
 
-fn create_coin_and_pool<T: Config>(
-  coin: &Coin,
-) -> (PoolCoinId, T::AccountId, AccountIdLookupOf<T>) {
+fn create_coin_and_pool<T: Config>(coin: &Coin) -> (Coin, T::AccountId, AccountIdLookupOf<T>) {
   let (caller, caller_lookup) = create_coin::<T>(coin);
   assert_ok!(Dex::<T>::create_pool(*coin));
 

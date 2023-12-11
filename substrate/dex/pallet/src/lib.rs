@@ -112,9 +112,6 @@ pub mod pallet {
   /// migration.
   pub type PoolId = Coin;
 
-  /// Liquidity token id is the same as pool id.
-  pub type PoolCoinId = Coin;
-
   /// LiquidityTokens Pallet as an instance of coins pallet.
   pub type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
 
@@ -149,10 +146,10 @@ pub mod pallet {
     type WeightInfo: WeightInfo;
   }
 
-  /// Map from `PoolCoinId` to `PoolInfo`. This establishes whether a pool has been officially
+  /// Map from `PoolId` to `()`. This establishes whether a pool has been officially
   /// created rather than people sending tokens directly to a pool's public account.
   #[pallet::storage]
-  pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolInfo<Coin>, OptionQuery>;
+  pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, (), OptionQuery>;
 
   #[pallet::storage]
   #[pallet::getter(fn spot_price_for_block)]
@@ -196,9 +193,6 @@ pub mod pallet {
       pool_id: PoolId,
       /// The account ID of the pool.
       pool_account: T::AccountId,
-      /// The id of the liquidity tokens that will be minted when coins are added to this
-      /// pool.
-      lp_token: PoolCoinId,
     },
 
     /// A successful call of the `AddLiquidity` extrinsic will create this event.
@@ -213,8 +207,6 @@ pub mod pallet {
       coin_amount: SubstrateAmount,
       /// The amount of the SRI that was added to the pool.
       sri_amount: SubstrateAmount,
-      /// The id of the lp token that was minted.
-      lp_token: PoolCoinId,
       /// The amount of lp tokens that were minted of that id.
       lp_token_minted: SubstrateAmount,
     },
@@ -231,8 +223,6 @@ pub mod pallet {
       coin_amount: SubstrateAmount,
       /// The amount of the second coin that was removed from the pool.
       sri_amount: SubstrateAmount,
-      /// The id of the lp token that was burned.
-      lp_token: PoolCoinId,
       /// The amount of lp tokens that were burned of that id.
       lp_token_burned: SubstrateAmount,
     },
@@ -289,8 +279,6 @@ pub mod pallet {
   pub enum Error<T> {
     /// Provided coins are equal.
     EqualCoins,
-    /// Provided coin is not supported for pool.
-    UnsupportedCoin,
     /// Pool already exists.
     PoolExists,
     /// Desired amount can't be zero.
@@ -326,22 +314,16 @@ pub mod pallet {
     ZeroLiquidity,
     /// Amount can't be zero.
     ZeroAmount,
-    /// Insufficient liquidity in the pool.
-    InsufficientLiquidity,
     /// Calculated amount out is less than provided minimum amount.
     ProvidedMinimumNotSufficientForSwap,
     /// Provided maximum amount is not sufficient for swap.
     ProvidedMaximumNotSufficientForSwap,
-    /// Only pools with native on one side are valid.
-    PoolMustContainNativeCurrency,
     /// The provided path must consists of 2 coins at least.
     InvalidPath,
     /// It was not possible to calculate path data.
     PathError,
     /// The provided path must consists of unique coins.
     NonUniquePath,
-    /// It was not possible to get or increment the Id of the pool.
-    IncorrectPoolCoinId,
     /// Unable to find an element in an array/vec that should have one-to-one correspondence
     /// with another. For example, an array of coins constituting a `path` should have a
     /// corresponding array of `amounts` along the path.
@@ -427,10 +409,9 @@ pub mod pallet {
       let pool_account = Self::get_pool_account(pool_id);
       frame_system::Pallet::<T>::inc_providers(&pool_account);
 
-      let pool_info = PoolInfo { lp_token: coin };
-      Pools::<T>::insert(pool_id, pool_info);
+      Pools::<T>::insert(pool_id, ());
 
-      Self::deposit_event(Event::PoolCreated { pool_id, pool_account, lp_token: coin });
+      Self::deposit_event(Event::PoolCreated { pool_id, pool_account });
 
       Ok(())
     }
@@ -474,8 +455,7 @@ pub mod pallet {
 
       let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
 
-      let maybe_pool = Pools::<T>::get(pool_id);
-      let pool = maybe_pool.as_ref().ok_or(Error::<T>::PoolNotFound)?;
+      Pools::<T>::get(pool_id).as_ref().ok_or(Error::<T>::PoolNotFound)?;
       let pool_account = Self::get_pool_account(pool_id);
 
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
@@ -540,7 +520,6 @@ pub mod pallet {
         pool_id,
         coin_amount,
         sri_amount,
-        lp_token: pool.lp_token,
         lp_token_minted: lp_token_amount,
       });
 
@@ -566,8 +545,7 @@ pub mod pallet {
       let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
       ensure!(lp_token_burn > 0, Error::<T>::ZeroLiquidity);
 
-      let maybe_pool = Pools::<T>::get(pool_id);
-      let pool = maybe_pool.as_ref().ok_or(Error::<T>::PoolNotFound)?;
+      Pools::<T>::get(pool_id).as_ref().ok_or(Error::<T>::PoolNotFound)?;
 
       let pool_account = Self::get_pool_account(pool_id);
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
@@ -609,7 +587,6 @@ pub mod pallet {
         pool_id,
         coin_amount,
         sri_amount,
-        lp_token: pool.lp_token,
         lp_token_burned: lp_token_burn,
       });
 

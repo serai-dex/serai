@@ -101,7 +101,6 @@ fn can_create_pool() {
     let coin2 = Coin::Monero;
     let pool_id = Dex::get_pool_id(coin1, coin2).unwrap();
 
-    let lp_token = coin2;
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(1000) }));
     assert_ok!(Dex::create_pool(coin2));
 
@@ -109,11 +108,7 @@ fn can_create_pool() {
 
     assert_eq!(
       events(),
-      [Event::<Test>::PoolCreated {
-        pool_id,
-        pool_account: Dex::get_pool_account(pool_id),
-        lp_token
-      }]
+      [Event::<Test>::PoolCreated { pool_id, pool_account: Dex::get_pool_account(pool_id) }]
     );
     assert_eq!(pools(), vec![pool_id]);
 
@@ -148,7 +143,6 @@ fn different_pools_should_have_different_lp_tokens() {
       [Event::<Test>::PoolCreated {
         pool_id: pool_id_1_2,
         pool_account: Dex::get_pool_account(pool_id_1_2),
-        lp_token: lp_token2_1
       }]
     );
 
@@ -158,7 +152,6 @@ fn different_pools_should_have_different_lp_tokens() {
       [Event::<Test>::PoolCreated {
         pool_id: pool_id_1_3,
         pool_account: Dex::get_pool_account(pool_id_1_3),
-        lp_token: lp_token3_1,
       }]
     );
 
@@ -195,7 +188,6 @@ fn can_add_liquidity() {
       pool_id,
       sri_amount: 10000,
       coin_amount: 10,
-      lp_token: lp_token1,
       lp_token_minted: 216,
     }));
     let pallet_account = Dex::get_pool_account(pool_id);
@@ -215,7 +207,6 @@ fn can_add_liquidity() {
       pool_id,
       sri_amount: 10000,
       coin_amount: 10,
-      lp_token: lp_token2,
       lp_token_minted: 216,
     }));
     let pallet_account = Dex::get_pool_account(pool_id);
@@ -324,7 +315,6 @@ fn can_remove_liquidity() {
       pool_id,
       sri_amount: 999990000,
       coin_amount: 99999,
-      lp_token,
       lp_token_burned: total_lp_received,
     }));
 
@@ -715,7 +705,6 @@ fn check_no_panic_when_try_swap_close_to_empty_pool() {
       pool_id,
       sri_amount: liquidity1,
       coin_amount: liquidity2,
-      lp_token,
       lp_token_minted,
     }));
 

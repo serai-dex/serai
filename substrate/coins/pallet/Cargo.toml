@@ -12,8 +12,11 @@ rust-version = "1.70"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["scale", "scale-info"]
+
 [dependencies]
-parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
 frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }

@@ -12,8 +12,11 @@ rust-version = "1.70"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["scale", "scale-info"]
+
 [dependencies]
-codec = { package = "parity-scale-codec", version = "3.6.1", default-features = false }
+scale = { package = "parity-scale-codec", version = "3.6.1", default-features = false }
 scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
 
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -33,7 +36,7 @@ serai-primitives = { path = "../../primitives", default-features = false }
 [features]
 default = ["std"]
 std = [
-  "codec/std",
+  "scale/std",
   "scale-info/std",
 
   "sp-std/std",

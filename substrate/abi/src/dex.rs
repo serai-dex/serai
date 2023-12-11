@@ -3,7 +3,6 @@ use sp_runtime::BoundedVec;
 use serai_primitives::*;
 
 type PoolId = Coin;
-type PoolCoinId = Coin;
 type MaxSwapPathLength = sp_core::ConstU32<3>;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
@@ -44,7 +43,6 @@ pub enum Event {
   PoolCreated {
     pool_id: PoolId,
     pool_account: SeraiAddress,
-    lp_token: PoolCoinId,
   },
 
   LiquidityAdded {
@@ -53,7 +51,6 @@ pub enum Event {
     pool_id: PoolId,
     coin_amount: SubstrateAmount,
     sri_amount: SubstrateAmount,
-    lp_token: PoolCoinId,
     lp_token_minted: SubstrateAmount,
   },
 
@@ -63,7 +60,6 @@ pub enum Event {
     pool_id: PoolId,
     coin_amount: SubstrateAmount,
     sri_amount: SubstrateAmount,
-    lp_token: PoolCoinId,
     lp_token_burned: SubstrateAmount,
   },
 
