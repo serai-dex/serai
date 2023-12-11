@@ -10,7 +10,6 @@ use frost::{
 
 use log::{info, debug, warn, error};
 
-use scale::Encode;
 use serai_client::validator_sets::primitives::Session;
 use messages::sign::*;
 

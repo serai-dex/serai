@@ -224,13 +224,15 @@ pub trait SignMachine<S>: Send + Sync + Sized {
   /// security as your private key share.
   fn cache(self) -> CachedPreprocess;
 
-  /// Create a sign machine from a cached preprocess. After this, the preprocess must be deleted so
-  /// it's never reused. Any reuse would cause the signer to leak their secret share.
+  /// Create a sign machine from a cached preprocess.
+
+  /// After this, the preprocess must be deleted so it's never reused. Any reuse will presumably
+  /// cause the signer to leak their secret share.
   fn from_cache(
     params: Self::Params,
     keys: Self::Keys,
     cache: CachedPreprocess,
-  ) -> Result<Self, FrostError>;
+  ) -> (Self, Self::Preprocess);
 
   /// Read a Preprocess message. Despite taking self, this does not save the preprocess.
   /// It must be externally cached and passed into sign.
@@ -277,9 +279,8 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     algorithm: A,
     keys: ThresholdKeys<C>,
     cache: CachedPreprocess,
-  ) -> Result<Self, FrostError> {
-    let (machine, _) = AlgorithmMachine::new(algorithm, keys).seeded_preprocess(cache);
-    Ok(machine)
+  ) -> (Self, Self::Preprocess) {
+    AlgorithmMachine::new(algorithm, keys).seeded_preprocess(cache)
   }
 
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess> {

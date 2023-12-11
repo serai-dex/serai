@@ -1,9 +1,12 @@
-use core::{future::Future, time::Duration};
+use core::{marker::PhantomData, future::Future, time::Duration};
 use std::sync::Arc;
+
+use rand_core::OsRng;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use frost::Participant;
 
 use tokio::sync::broadcast;
 
@@ -22,9 +25,11 @@ use tributary::{
 
 use crate::{
   Db,
-  tributary::handle::{fatal_slash, handle_application_tx},
   processors::Processors,
-  tributary::{TributarySpec, Transaction, LastBlock, EventDb},
+  tributary::{
+    TributarySpec, Label, SignData, Transaction, Topic, AttemptDb, LastHandledBlock,
+    FatallySlashed, DkgCompleted, signing_protocol::DkgRemoval,
+  },
   P2p,
 };
 
@@ -34,13 +39,31 @@ pub enum RecognizedIdType {
   Plan,
 }
 
-pub(crate) trait RIDTrait<FRid>:
-  Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid
-{
+#[async_trait::async_trait]
+pub trait RIDTrait {
+  async fn recognized_id(
+    &self,
+    set: ValidatorSet,
+    genesis: [u8; 32],
+    kind: RecognizedIdType,
+    id: Vec<u8>,
+  );
 }
-impl<FRid, F: Clone + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid> RIDTrait<FRid>
-  for F
+#[async_trait::async_trait]
+impl<
+    FRid: Send + Future<Output = ()>,
+    F: Sync + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid,
+  > RIDTrait for F
 {
+  async fn recognized_id(
+    &self,
+    set: ValidatorSet,
+    genesis: [u8; 32],
+    kind: RecognizedIdType,
+    id: Vec<u8>,
+  ) {
+    (self)(set, genesis, kind, id).await
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,123 +72,181 @@ pub enum PstTxType {
   RemoveParticipant([u8; 32]),
 }
 
-// Handle a specific Tributary block
-#[allow(clippy::too_many_arguments)]
-async fn handle_block<
-  D: Db,
+#[async_trait::async_trait]
+pub trait PSTTrait {
+  async fn publish_serai_tx(
+    &self,
+    set: ValidatorSet,
+    kind: PstTxType,
+    tx: serai_client::Transaction,
+  );
+}
+#[async_trait::async_trait]
+impl<
+    FPst: Send + Future<Output = ()>,
+    F: Sync + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
+  > PSTTrait for F
+{
+  async fn publish_serai_tx(
+    &self,
+    set: ValidatorSet,
+    kind: PstTxType,
+    tx: serai_client::Transaction,
+  ) {
+    (self)(set, kind, tx).await
+  }
+}
+
+#[async_trait::async_trait]
+pub trait PTTTrait {
+  async fn publish_tributary_tx(&self, tx: Transaction);
+}
+#[async_trait::async_trait]
+impl<FPtt: Send + Future<Output = ()>, F: Sync + Fn(Transaction) -> FPtt> PTTTrait for F {
+  async fn publish_tributary_tx(&self, tx: Transaction) {
+    (self)(tx).await
+  }
+}
+
+pub struct TributaryBlockHandler<
+  'a,
+  T: DbTxn,
   Pro: Processors,
-  FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-  FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
-  FRid: Future<Output = ()>,
-  RID: RIDTrait<FRid>,
+  PST: PSTTrait,
+  PTT: PTTTrait,
+  RID: RIDTrait,
   P: P2p,
->(
-  db: &mut D,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: RID,
-  processors: &Pro,
-  publish_serai_tx: PST,
-  publish_tributary_tx: &PTT,
-  spec: &TributarySpec,
+> {
+  pub txn: &'a mut T,
+  pub our_key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+  pub recognized_id: &'a RID,
+  pub processors: &'a Pro,
+  pub publish_serai_tx: &'a PST,
+  pub publish_tributary_tx: &'a PTT,
+  pub spec: &'a TributarySpec,
   block: Block<Transaction>,
-) {
-  log::info!("found block for Tributary {:?}", spec.set());
+  _p2p: PhantomData<P>,
+}
 
-  let hash = block.hash();
+impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
+  TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
+{
+  pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
+    let genesis = self.spec.genesis();
 
-  let mut event_id = 0;
-  #[allow(clippy::explicit_counter_loop)] // event_id isn't TX index. It just currently lines up
-  for tx in block.transactions {
-    if EventDb::get(db, hash, event_id).is_some() {
-      event_id += 1;
-      continue;
+    log::warn!("fatally slashing {}. reason: {}", hex::encode(slashing), reason);
+    FatallySlashed::set_fatally_slashed(self.txn, genesis, slashing);
+    // TODO: disconnect the node from network/ban from further participation in all Tributaries
+
+    // TODO: If during DKG, trigger a re-attempt
+    // Despite triggering a re-attempt, this DKG may still complete and may become in-use
+
+    // If during a DKG, remove the participant
+    if DkgCompleted::get(self.txn, genesis).is_none() {
+      AttemptDb::recognize_topic(self.txn, genesis, Topic::DkgRemoval(slashing));
+      let preprocess = (DkgRemoval {
+        spec: self.spec,
+        key: self.our_key,
+        txn: self.txn,
+        removing: slashing,
+        attempt: 0,
+      })
+      .preprocess();
+      let mut tx = Transaction::DkgRemoval(SignData {
+        plan: slashing,
+        attempt: 0,
+        label: Label::Preprocess,
+        data: vec![preprocess.to_vec()],
+        signed: Transaction::empty_signed(),
+      });
+      tx.sign(&mut OsRng, genesis, self.our_key);
+      self.publish_tributary_tx.publish_tributary_tx(tx).await;
     }
-
-    let mut txn = db.txn();
-
-    match tx {
-      TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
-        // Since the evidence is on the chain, it should already have been validated
-        // We can just punish the signer
-        let data = match ev {
-          Evidence::ConflictingMessages(first, second) => (first, Some(second)),
-          Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
-          Evidence::InvalidPrecommit(first) => (first, None),
-          Evidence::InvalidValidRound(first) => (first, None),
-        };
-        let msgs = (
-          decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
-          if data.1.is_some() {
-            Some(
-              decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.1.unwrap())
-                .unwrap(),
-            )
-          } else {
-            None
-          },
-        );
-
-        // Since anything with evidence is fundamentally faulty behavior, not just temporal errors,
-        // mark the node as fatally slashed
-        fatal_slash::<D, _, _>(
-          &mut txn,
-          spec,
-          publish_tributary_tx,
-          key,
-          msgs.0.msg.sender,
-          &format!("invalid tendermint messages: {:?}", msgs),
-        )
-        .await;
-      }
-      TributaryTransaction::Application(tx) => {
-        handle_application_tx::<D, _, _, _, _, _, _, _>(
-          tx,
-          spec,
-          processors,
-          publish_serai_tx.clone(),
-          publish_tributary_tx,
-          key,
-          recognized_id.clone(),
-          &mut txn,
-        )
-        .await;
-      }
-    }
-
-    EventDb::handle_event(&mut txn, hash, event_id);
-    txn.commit();
-
-    event_id += 1;
   }
 
-  // TODO: Trigger any necessary re-attempts
+  // TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
+  // Tributary post-DKG
+  // https://github.com/serai-dex/serai/issues/426
+
+  pub async fn fatal_slash_with_participant_index(&mut self, i: Participant, reason: &str) {
+    // Resolve from Participant to <Ristretto as Ciphersuite>::G
+    let i = u16::from(i);
+    let mut validator = None;
+    for (potential, _) in self.spec.validators() {
+      let v_i = self.spec.i(potential).unwrap();
+      if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
+        validator = Some(potential);
+        break;
+      }
+    }
+    let validator = validator.unwrap();
+
+    self.fatal_slash(validator.to_bytes(), reason).await;
+  }
+
+  async fn handle<D: Db>(mut self) {
+    log::info!("found block for Tributary {:?}", self.spec.set());
+
+    let transactions = self.block.transactions.clone();
+    for tx in transactions {
+      match tx {
+        TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
+          // Since the evidence is on the chain, it should already have been validated
+          // We can just punish the signer
+          let data = match ev {
+            Evidence::ConflictingMessages(first, second) => (first, Some(second)),
+            Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
+            Evidence::InvalidPrecommit(first) => (first, None),
+            Evidence::InvalidValidRound(first) => (first, None),
+          };
+          let msgs = (
+            decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
+            if data.1.is_some() {
+              Some(
+                decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.1.unwrap())
+                  .unwrap(),
+              )
+            } else {
+              None
+            },
+          );
+
+          // Since anything with evidence is fundamentally faulty behavior, not just temporal
+          // errors, mark the node as fatally slashed
+          self
+            .fatal_slash(msgs.0.msg.sender, &format!("invalid tendermint messages: {:?}", msgs))
+            .await;
+        }
+        TributaryTransaction::Application(tx) => {
+          self.handle_application_tx(tx).await;
+        }
+      }
+    }
+
+    // TODO: Trigger any necessary re-attempts
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
-  FPst: Future<Output = ()>,
-  PST: Clone + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-  FPtt: Future<Output = ()>,
-  PTT: Clone + Fn(Transaction) -> FPtt,
-  FRid: Future<Output = ()>,
-  RID: RIDTrait<FRid>,
+  PST: PSTTrait,
+  PTT: PTTTrait,
+  RID: RIDTrait,
   P: P2p,
 >(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  recognized_id: RID,
+  recognized_id: &RID,
   processors: &Pro,
-  publish_serai_tx: PST,
+  publish_serai_tx: &PST,
   publish_tributary_tx: &PTT,
   spec: &TributarySpec,
   tributary: &TributaryReader<D, Transaction>,
 ) {
   let genesis = tributary.genesis();
-  let mut last_block = LastBlock::get(db, genesis).unwrap_or(genesis);
+  let mut last_block = LastHandledBlock::get(db, genesis).unwrap_or(genesis);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
 
@@ -182,20 +263,22 @@ pub(crate) async fn handle_new_blocks<
       }
     }
 
-    handle_block::<_, _, _, _, _, _, _, _, P>(
-      db,
-      key,
-      recognized_id.clone(),
-      processors,
-      publish_serai_tx.clone(),
-      publish_tributary_tx,
+    let mut txn = db.txn();
+    (TributaryBlockHandler {
+      txn: &mut txn,
       spec,
+      our_key: key,
+      recognized_id,
+      processors,
+      publish_serai_tx,
+      publish_tributary_tx,
       block,
-    )
+      _p2p: PhantomData::<P>,
+    })
+    .handle::<D>()
     .await;
     last_block = next;
-    let mut txn = db.txn();
-    LastBlock::set(&mut txn, genesis, &next);
+    LastHandledBlock::set(&mut txn, genesis, &next);
     txn.commit();
   }
 }
@@ -204,8 +287,7 @@ pub(crate) async fn scan_tributaries_task<
   D: Db,
   Pro: Processors,
   P: P2p,
-  FRid: Send + Future<Output = ()>,
-  RID: 'static + Send + Sync + RIDTrait<FRid>,
+  RID: 'static + Send + Sync + Clone + RIDTrait,
 >(
   raw_db: D,
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -240,12 +322,12 @@ pub(crate) async fn scan_tributaries_task<
               // the next block occurs
               let next_block_notification = tributary.next_block_notification().await;
 
-              handle_new_blocks::<_, _, _, _, _, _, _, _, P>(
+              handle_new_blocks::<_, _, _, _, _, P>(
                 &mut tributary_db,
                 &key,
-                recognized_id.clone(),
+                &recognized_id,
                 &processors,
-                |set, tx_type, tx| {
+                &|set, tx_type, tx| {
                   let serai = serai.clone();
                   async move {
                     loop {
@@ -314,7 +396,7 @@ pub(crate) async fn scan_tributaries_task<
                     }
                   }
                 },
-                &|tx| {
+                &|tx: Transaction| {
                   let tributary = tributary.clone();
                   async move {
                     match tributary.add_transaction(tx.clone()).await {

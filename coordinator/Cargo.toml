@@ -18,7 +18,6 @@ async-trait = { version = "0.1", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
-rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
 
@@ -38,7 +37,7 @@ message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary = { package = "tributary-chain", path = "./tributary" }
 
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
-serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
+serai-client = { path = "../substrate/client", default-features = false, features = ["serai", "borsh"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }

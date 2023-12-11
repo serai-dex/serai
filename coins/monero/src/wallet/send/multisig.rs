@@ -226,7 +226,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     );
   }
 
-  fn from_cache(_: (), _: ThresholdKeys<Ed25519>, _: CachedPreprocess) -> Result<Self, FrostError> {
+  fn from_cache(_: (), _: ThresholdKeys<Ed25519>, _: CachedPreprocess) -> (Self, Self::Preprocess) {
     unimplemented!(
       "Monero transactions don't support caching their preprocesses due to {}",
       "being already bound to a specific transaction"

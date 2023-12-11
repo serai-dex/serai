@@ -16,7 +16,6 @@ use frost::{
 
 use log::info;
 
-use scale::Encode;
 use serai_client::validator_sets::primitives::{Session, KeyPair};
 use messages::key_gen::*;
 

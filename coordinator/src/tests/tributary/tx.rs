@@ -23,7 +23,11 @@ async fn tx_test() {
   let keys = new_keys(&mut OsRng);
   let spec = new_spec(&mut OsRng, &keys);
 
-  let tributaries = new_tributaries(&keys, &spec).await;
+  let tributaries = new_tributaries(&keys, &spec)
+    .await
+    .into_iter()
+    .map(|(_, p2p, tributary)| (p2p, tributary))
+    .collect::<Vec<_>>();
 
   // Run the tributaries in the background
   tokio::spawn(run_tributaries(tributaries.clone()));
@@ -39,8 +43,11 @@ async fn tx_test() {
 
   // Create the TX with a null signature so we can get its sig hash
   let block_before_tx = tributaries[sender].1.tip().await;
-  let mut tx =
-    Transaction::DkgCommitments(attempt, vec![commitments.clone()], Transaction::empty_signed());
+  let mut tx = Transaction::DkgCommitments {
+    attempt,
+    commitments: vec![commitments.clone()],
+    signed: Transaction::empty_signed(),
+  };
   tx.sign(&mut OsRng, spec.genesis(), &key);
 
   assert_eq!(tributaries[sender].1.add_transaction(tx.clone()).await, Ok(true));

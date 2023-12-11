@@ -34,5 +34,19 @@ serai-signals-primitives = { path = "../signals/primitives", version = "0.1" }
 frame-support = { git = "https://github.com/serai-dex/substrate" }
 
 [features]
-borsh = ["dep:borsh"]
-serde = ["dep:serde"]
+borsh = [
+  "dep:borsh",
+  "serai-primitives/borsh",
+  "serai-coins-primitives/borsh",
+  "serai-validator-sets-primitives/borsh",
+  "serai-in-instructions-primitives/borsh",
+  "serai-signals-primitives/borsh",
+]
+serde = [
+  "dep:serde",
+  "serai-primitives/serde",
+  "serai-coins-primitives/serde",
+  "serai-validator-sets-primitives/serde",
+  "serai-in-instructions-primitives/serde",
+  "serai-signals-primitives/serde",
+]

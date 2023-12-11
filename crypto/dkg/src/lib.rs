@@ -31,8 +31,7 @@ pub mod tests;
 
 /// The ID of a participant, defined as a non-zero u16.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 pub struct Participant(pub(crate) u16);
 impl Participant {
   /// Create a new Participant identifier from a u16.
@@ -118,6 +117,14 @@ mod lib {
     Ciphersuite,
   };
 
+  #[cfg(feature = "borsh")]
+  impl borsh::BorshDeserialize for Participant {
+    fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+      Participant::new(u16::deserialize_reader(reader)?)
+        .ok_or_else(|| io::Error::other("invalid participant"))
+    }
+  }
+
   // Validate a map of values to have the expected included participants
   pub(crate) fn validate_map<T, B: Clone + PartialEq + Eq + Debug>(
     map: &HashMap<Participant, T>,
@@ -147,8 +154,7 @@ mod lib {
   /// Parameters for a multisig.
   // These fields should not be made public as they should be static
   #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-  #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-  #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+  #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
   pub struct ThresholdParams {
     /// Participants needed to sign on behalf of the group.
     pub(crate) t: u16,
@@ -186,6 +192,16 @@ mod lib {
     /// Return the participant index of the share with these parameters.
     pub fn i(&self) -> Participant {
       self.i
+    }
+  }
+
+  #[cfg(feature = "borsh")]
+  impl borsh::BorshDeserialize for ThresholdParams {
+    fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+      let t = u16::deserialize_reader(reader)?;
+      let n = u16::deserialize_reader(reader)?;
+      let i = Participant::deserialize_reader(reader)?;
+      ThresholdParams::new(t, n, i).map_err(|e| io::Error::other(format!("{e:?}")))
     }
   }
 

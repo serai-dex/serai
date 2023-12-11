@@ -54,6 +54,7 @@ serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
 serai = ["thiserror", "serde", "serde_json", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+borsh = ["serai-abi/borsh"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]

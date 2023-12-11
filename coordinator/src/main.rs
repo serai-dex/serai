@@ -31,12 +31,12 @@ use tokio::{
   time::sleep,
 };
 
-use ::tributary::{
-  ProvidedError, TransactionKind, TransactionError, TransactionTrait, Block, Tributary,
-};
+use ::tributary::{ProvidedError, TransactionKind, TransactionTrait, Block, Tributary};
 
 mod tributary;
-use crate::tributary::{TributarySpec, SignData, Transaction, scanner::RecognizedIdType, PlanIds};
+use crate::tributary::{
+  TributarySpec, Label, SignData, Transaction, scanner::RecognizedIdType, PlanIds,
+};
 
 mod db;
 use db::*;
@@ -124,48 +124,6 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
     .send(TributaryEvent::NewTributary(ActiveTributary { spec, tributary: Arc::new(tributary) }))
     .map_err(|_| "all ActiveTributary recipients closed")
     .unwrap();
-}
-
-async fn publish_signed_transaction<D: Db, P: P2p>(
-  txn: &mut D::Transaction<'_>,
-  tributary: &Tributary<D, Transaction, P>,
-  tx: Transaction,
-) {
-  log::debug!("publishing transaction {}", hex::encode(tx.hash()));
-
-  let (order, signer) = if let TransactionKind::Signed(order, signed) = tx.kind() {
-    let signer = signed.signer;
-
-    // Safe as we should deterministically create transactions, meaning if this is already on-disk,
-    // it's what we're saving now
-    SignedTransactionDb::set(txn, &order, signed.nonce, &tx.serialize());
-
-    (order, signer)
-  } else {
-    panic!("non-signed transaction passed to publish_signed_transaction");
-  };
-
-  // If we're trying to publish 5, when the last transaction published was 3, this will delay
-  // publication until the point in time we publish 4
-  while let Some(tx) = SignedTransactionDb::take_signed_transaction(
-    txn,
-    &order,
-    tributary
-      .next_nonce(&signer, &order)
-      .await
-      .expect("we don't have a nonce, meaning we aren't a participant on this tributary"),
-  ) {
-    // We need to return a proper error here to enable that, due to a race condition around
-    // multiple publications
-    match tributary.add_transaction(tx.clone()).await {
-      Ok(_) => {}
-      // Some asynchonicity if InvalidNonce, assumed safe to deterministic nonces
-      Err(TransactionError::InvalidNonce) => {
-        log::warn!("publishing TX {tx:?} returned InvalidNonce. was it already added?")
-      }
-      Err(e) => panic!("created an invalid transaction: {e:?}"),
-    }
-  }
 }
 
 // TODO: Find a better pattern for this
@@ -317,7 +275,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
         BatchDb::set(&mut txn, batch.batch.network, batch.batch.id, &batch.clone());
 
         // Get the next-to-execute batch ID
-        let mut next = substrate::get_expected_next_batch(serai, network).await;
+        let Ok(mut next) = substrate::expected_next_batch(serai, network).await else {
+          return false;
+        };
 
         // Since we have a new batch, publish all batches yet to be published to Serai
         // This handles the edge-case where batch n+1 is signed before batch n is
@@ -329,7 +289,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
         while let Some(batch) = batches.pop_front() {
           // If this Batch should no longer be published, continue
-          if substrate::get_expected_next_batch(serai, network).await > batch.batch.id {
+          let Ok(expected_next_batch) = substrate::expected_next_batch(serai, network).await else {
+            return false;
+          };
+          if expected_next_batch > batch.batch.id {
             continue;
           }
 
@@ -398,7 +361,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
     let txs = match msg.msg.clone() {
       ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
         key_gen::ProcessorMessage::Commitments { id, commitments } => {
-          vec![Transaction::DkgCommitments(id.attempt, commitments, Transaction::empty_signed())]
+          vec![Transaction::DkgCommitments {
+            attempt: id.attempt,
+            commitments,
+            signed: Transaction::empty_signed(),
+          }]
         }
         key_gen::ProcessorMessage::InvalidCommitments { id: _, faulty } => {
           // This doesn't need the ID since it's a Provided transaction which everyone will provide
@@ -411,7 +378,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
-          let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, id.attempt);
+          let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, &mut txn, id.attempt);
 
           let our_i = spec
             .i(pub_key)
@@ -449,7 +416,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // As for the safety of calling error_generating_key_pair, the processor is presumed
           // to only send InvalidShare or GeneratedKeyPair for a given attempt
           let mut txs = if let Some(faulty) =
-            crate::tributary::error_generating_key_pair::<_>(&txn, key, spec, id.attempt)
+            crate::tributary::error_generating_key_pair(&mut txn, key, spec, id.attempt)
           {
             vec![Transaction::RemoveParticipant(faulty)]
           } else {
@@ -480,7 +447,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
           match share {
             Ok(share) => {
-              vec![Transaction::DkgConfirmed(id.attempt, share, Transaction::empty_signed())]
+              vec![Transaction::DkgConfirmed {
+                attempt: id.attempt,
+                confirmation_share: share,
+                signed: Transaction::empty_signed(),
+              }]
             }
             Err(p) => {
               vec![Transaction::RemoveParticipant(p)]
@@ -511,18 +482,20 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
             vec![]
           } else {
-            vec![Transaction::SignPreprocess(SignData {
+            vec![Transaction::Sign(SignData {
               plan: id.id,
               attempt: id.attempt,
+              label: Label::Preprocess,
               data: preprocesses,
               signed: Transaction::empty_signed(),
             })]
           }
         }
         sign::ProcessorMessage::Share { id, shares } => {
-          vec![Transaction::SignShare(SignData {
+          vec![Transaction::Sign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Share,
             data: shares,
             signed: Transaction::empty_signed(),
           })]
@@ -555,9 +528,10 @@ async fn handle_processor_message<D: Db, P: P2p>(
           vec![]
         }
         coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } => {
-          vec![Transaction::SubstratePreprocess(SignData {
+          vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Preprocess,
             data: preprocesses.into_iter().map(Into::into).collect(),
             signed: Transaction::empty_signed(),
           })]
@@ -586,13 +560,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
               preprocesses.into_iter().map(Into::into).collect(),
             );
 
-            let intended = Transaction::Batch(
-              block.0,
-              match id.id {
+            let intended = Transaction::Batch {
+              block: block.0,
+              batch: match id.id {
                 SubstrateSignableId::Batch(id) => id,
                 _ => panic!("BatchPreprocess did not contain Batch ID"),
               },
-            );
+            };
 
             // If this is the new key's first Batch, only create this TX once we verify all
             // all prior published `Batch`s
@@ -649,18 +623,20 @@ async fn handle_processor_message<D: Db, P: P2p>(
               res
             }
           } else {
-            vec![Transaction::SubstratePreprocess(SignData {
+            vec![Transaction::SubstrateSign(SignData {
               plan: id.id,
               attempt: id.attempt,
+              label: Label::Preprocess,
               data: preprocesses.into_iter().map(Into::into).collect(),
               signed: Transaction::empty_signed(),
             })]
           }
         }
         coordinator::ProcessorMessage::SubstrateShare { id, shares } => {
-          vec![Transaction::SubstrateShare(SignData {
+          vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
+            label: Label::Share,
             data: shares.into_iter().map(|share| share.to_vec()).collect(),
             signed: Transaction::empty_signed(),
           })]
@@ -706,7 +682,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         TransactionKind::Signed(_, _) => {
           tx.sign(&mut OsRng, genesis, key);
-          publish_signed_transaction(&mut txn, tributary, tx).await;
+          tributary::publish_signed_transaction(&mut txn, tributary, tx).await;
         }
       }
     }
@@ -1079,16 +1055,18 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         };
 
         let mut tx = match id_type {
-          RecognizedIdType::Batch => Transaction::SubstratePreprocess(SignData {
+          RecognizedIdType::Batch => Transaction::SubstrateSign(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
             plan: SubstrateSignableId::Batch(id.as_slice().try_into().unwrap()),
+            label: Label::Preprocess,
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),
 
-          RecognizedIdType::Plan => Transaction::SignPreprocess(SignData {
+          RecognizedIdType::Plan => Transaction::Sign(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
             plan: id.try_into().unwrap(),
+            label: Label::Preprocess,
             attempt: 0,
             signed: Transaction::empty_signed(),
           }),
@@ -1119,7 +1097,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
           // TODO: Should this not take a txn accordingly? It's best practice to take a txn, yet
           // taking a txn fails to declare its achieved independence
           let mut txn = raw_db.txn();
-          publish_signed_transaction(&mut txn, tributary, tx).await;
+          tributary::publish_signed_transaction(&mut txn, tributary, tx).await;
           txn.commit();
           break;
         }

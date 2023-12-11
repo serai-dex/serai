@@ -16,7 +16,6 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, warn};
 
-use scale::Encode;
 use serai_client::validator_sets::primitives::Session;
 
 use messages::coordinator::*;
