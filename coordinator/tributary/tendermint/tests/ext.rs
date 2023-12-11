@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use parity_scale_codec::{Encode, Decode};
 
-use futures::SinkExt;
+use futures_util::sink::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
 use tendermint_machine::{

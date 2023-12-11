@@ -29,7 +29,8 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 serai-db = { path = "../../common/db" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
-futures = { version = "0.3", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink", "channel"] }
+futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint" }
 
 tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }

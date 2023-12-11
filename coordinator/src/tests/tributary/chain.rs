@@ -5,7 +5,7 @@ use std::{
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, OsRng};
-use futures::{task::Poll, poll};
+use futures_util::{task::Poll, poll};
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},

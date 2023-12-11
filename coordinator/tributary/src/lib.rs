@@ -8,7 +8,8 @@ use zeroize::Zeroizing;
 use ciphersuite::{Ciphersuite, Ristretto};
 
 use scale::Decode;
-use futures::{StreamExt, SinkExt, channel::mpsc::UnboundedReceiver};
+use futures_channel::mpsc::UnboundedReceiver;
+use futures_util::{StreamExt, SinkExt};
 use ::tendermint::{
   ext::{BlockNumber, Commit, Block as BlockTrait, Network},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,

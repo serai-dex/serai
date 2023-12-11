@@ -16,7 +16,8 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 
 parity-scale-codec = { version = "3", default-features = false, features = ["std", "derive"] }
 
-futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+futures-util = { version = "0.3", default-features = false, features = ["std", "async-await-macro", "sink", "channel"] }
+futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tokio = { version = "1", default-features = false, features = ["time"] }
 
 [dev-dependencies]

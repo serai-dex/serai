@@ -4,7 +4,7 @@ use std::{
   collections::HashMap,
 };
 
-use futures::{FutureExt, future};
+use futures_util::{FutureExt, future};
 use tokio::time::sleep;
 
 use crate::{
@@ -80,9 +80,9 @@ impl<N: Network> RoundData<N> {
     let propose_timeout = timeout_future(Step::Propose);
     let prevote_timeout = timeout_future(Step::Prevote);
     let precommit_timeout = timeout_future(Step::Precommit);
-    futures::pin_mut!(propose_timeout, prevote_timeout, precommit_timeout);
+    futures_util::pin_mut!(propose_timeout, prevote_timeout, precommit_timeout);
 
-    futures::select_biased! {
+    futures_util::select_biased! {
       step = propose_timeout => step,
       step = prevote_timeout => step,
       step = precommit_timeout => step,

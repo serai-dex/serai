@@ -4306,6 +4306,7 @@ dependencies = [
 name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [
+ "async-lock",
  "async-trait",
  "base58-monero",
  "curve25519-dalek",
@@ -4313,7 +4314,6 @@ dependencies = [
  "digest_auth",
  "dleq",
  "flexible-transcript",
- "futures",
  "group",
  "hex",
  "hex-literal",
@@ -7337,7 +7337,7 @@ dependencies = [
  "env_logger",
  "flexible-transcript",
  "frost-schnorrkel",
- "futures",
+ "futures-util",
  "hex",
  "libp2p",
  "log",
@@ -8981,7 +8981,8 @@ name = "tendermint-machine"
 version = "0.2.0"
 dependencies = [
  "async-trait",
- "futures",
+ "futures-channel",
+ "futures-util",
  "hex",
  "log",
  "parity-scale-codec",
@@ -9400,7 +9401,8 @@ dependencies = [
  "blake2",
  "ciphersuite",
  "flexible-transcript",
- "futures",
+ "futures-channel",
+ "futures-util",
  "hex",
  "log",
  "parity-scale-codec",

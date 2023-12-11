@@ -8,10 +8,10 @@ use std::{
 
 use parity_scale_codec::{Encode, Decode};
 
-use futures::{
+use futures_channel::mpsc;
+use futures_util::{
   FutureExt, StreamExt, SinkExt,
   future::{self, Fuse},
-  channel::mpsc,
 };
 use tokio::time::sleep;
 
@@ -367,7 +367,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let mut queue_future =
         if self.queue.is_empty() { Fuse::terminated() } else { future::ready(()).fuse() };
 
-      if let Some((our_message, msg, mut sig)) = futures::select_biased! {
+      if let Some((our_message, msg, mut sig)) = futures_util::select_biased! {
         // Handle a new block occurring externally (an external sync loop)
         // Has the highest priority as it makes all other futures here irrelevant
         msg = self.synced_block_recv.next() => {

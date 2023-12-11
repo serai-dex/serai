@@ -6,7 +6,7 @@ use std_shims::sync::OnceLock;
 #[cfg(all(feature = "cache-distribution", not(feature = "std")))]
 use std_shims::sync::Mutex;
 #[cfg(all(feature = "cache-distribution", feature = "std"))]
-use futures::lock::Mutex;
+use async_lock::Mutex;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
