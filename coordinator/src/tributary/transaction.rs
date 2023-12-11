@@ -132,7 +132,7 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
 pub enum Transaction {
   RemoveParticipant(Participant),
 
-  // Once this completes successfully, no more instances should be created.
+  // TODO: DKG re-attempts
   DkgCommitments {
     attempt: u32,
     commitments: Vec<Vec<u8>>,
@@ -161,6 +161,7 @@ pub enum Transaction {
   DkgRemoval(SignData<[u8; 32]>),
 
   // Co-sign a Substrate block.
+  // TODO: Cosign re-attempts
   CosignSubstrateBlock([u8; 32]),
 
   // When we have synchrony on a batch, we can allow signing it
@@ -168,6 +169,7 @@ pub enum Transaction {
   // which would be binding over the block hash and automatically achieve synchrony on all
   // relevant batches. ExternalBlock was removed for this due to complexity around the pipeline
   // with the current processor, yet it would still be an improvement.
+  // TODO: Batch re-attempts
   Batch {
     block: [u8; 32],
     batch: [u8; 5],
@@ -176,6 +178,7 @@ pub enum Transaction {
   // IDs
   SubstrateBlock(u64),
 
+  // TODO: Sign re-attempts
   SubstrateSign(SignData<SubstrateSignableId>),
   Sign(SignData<[u8; 32]>),
   // This is defined as an Unsigned transaction in order to de-duplicate SignCompleted amongst

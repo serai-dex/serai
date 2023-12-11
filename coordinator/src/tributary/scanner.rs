@@ -15,6 +15,8 @@ use serai_client::{validator_sets::primitives::ValidatorSet, Serai};
 
 use serai_db::DbTxn;
 
+use processor_messages::coordinator::SubstrateSignableId;
+
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, TransactionError, Block, TributaryReader,
   tendermint::{
@@ -27,8 +29,8 @@ use crate::{
   Db,
   processors::Processors,
   tributary::{
-    TributarySpec, Label, SignData, Transaction, Topic, AttemptDb, LastHandledBlock,
-    FatallySlashed, DkgCompleted, signing_protocol::DkgRemoval,
+    TributarySpec, Label, SignData, Transaction, Topic, TributaryBlockNumber, LastHandledBlock,
+    AttemptDb, ReattemptDb, FatallySlashed, DkgCompleted, signing_protocol::DkgRemoval,
   },
   P2p,
 };
@@ -125,6 +127,7 @@ pub struct TributaryBlockHandler<
   pub publish_tributary_tx: &'a PTT,
   pub spec: &'a TributarySpec,
   block: Block<Transaction>,
+  pub block_number: u32,
   _p2p: PhantomData<P>,
 }
 
@@ -223,7 +226,70 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
     }
 
-    // TODO: Trigger any necessary re-attempts
+    let genesis = self.spec.genesis();
+    for topic in ReattemptDb::take(self.txn, genesis, self.block_number) {
+      let attempt = AttemptDb::start_next_attempt(self.txn, genesis, topic);
+      /*
+        All of these have the same common flow:
+
+        1) Check if this re-attempt is actually needed
+        2) If so, dispatch whatever events as needed
+
+        This is because we *always* re-attempt any protocol which had participation. That doesn't
+        mean we *should* re-attempt this protocol.
+
+        The alternatives were:
+        1) Note on-chain we completed a protocol, halting re-attempts upon 34%.
+        2) Vote on-chain to re-attempt a protocol.
+
+        This schema doesn't have any additional messages upon the success case (whereas
+        alternative #1 does) and doesn't have overhead (as alternative #2 does, sending votes and
+        then preprocesses. This only sends preprocesses).
+      */
+      match topic {
+        Topic::Dkg => {
+          // Check if the DKG was completed on-chain/we know of a completion
+          todo!();
+
+          // Since it wasn't completed on-chain, instruct the processor to start the next attempt
+          todo!();
+        }
+        Topic::DkgConfirmation => {
+          panic!("re-attempting DkgConfirmation when we should be re-attempting the Dkg")
+        }
+        Topic::DkgRemoval(removing) => {
+          // Check if the removal was completed on-chain/we know of a completion
+          todo!();
+
+          // Since it wasn't completed on-chain, spawn a new DkgRemoval and publish the Tributary
+          // TX for it
+          todo!();
+        }
+        Topic::SubstrateSign(id) => match id {
+          SubstrateSignableId::CosigningSubstrateBlock(block) => {
+            // Check if the cosigner has a signature from our set for this block/a newer one
+            todo!();
+
+            // Instruct the processor to start the next attempt
+            todo!();
+          }
+          SubstrateSignableId::Batch(block) => {
+            // Check if the Batch was published/we're actively publish it
+            todo!();
+
+            // Instruct the processor to start the next attempt
+            todo!();
+          }
+        },
+        Topic::Sign(id) => {
+          // Check if our processor told us of a completion for this
+          todo!();
+
+          // Instruct the processor to start the next attempt
+          todo!();
+        }
+      }
+    }
   }
 }
 
@@ -247,8 +313,10 @@ pub(crate) async fn handle_new_blocks<
 ) {
   let genesis = tributary.genesis();
   let mut last_block = LastHandledBlock::get(db, genesis).unwrap_or(genesis);
+  let mut block_number = TributaryBlockNumber::get(db, last_block).unwrap_or(0);
   while let Some(next) = tributary.block_after(&last_block) {
     let block = tributary.block(&next).unwrap();
+    block_number += 1;
 
     // Make sure we have all of the provided transactions for this block
     for tx in &block.transactions {
@@ -264,6 +332,7 @@ pub(crate) async fn handle_new_blocks<
     }
 
     let mut txn = db.txn();
+    TributaryBlockNumber::set(&mut txn, next, &block_number);
     (TributaryBlockHandler {
       txn: &mut txn,
       spec,
@@ -273,6 +342,7 @@ pub(crate) async fn handle_new_blocks<
       publish_serai_tx,
       publish_tributary_tx,
       block,
+      block_number,
       _p2p: PhantomData::<P>,
     })
     .handle::<D>()

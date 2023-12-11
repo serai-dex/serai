@@ -31,7 +31,7 @@ use crate::{
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType, PSTTrait, PTTTrait, TributaryBlockHandler},
     FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, DkgKeyPair,
-    AttemptDb, DataReceived, DataDb,
+    AttemptDb, ReattemptDb, DataReceived, DataDb,
   },
   P2p,
 };
@@ -121,13 +121,25 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     DataReceived::set(self.txn, genesis, data_spec, &now_received);
     DataDb::set(self.txn, genesis, data_spec, &signer.to_bytes(), data);
 
+    let received_range = (prior_received + 1) ..= now_received;
+
+    // If 2/3rds of the network participated in this preprocess, queue it for an automatic
+    // re-attempt
+    // DkgConfirmation doesn't have a re-attempt as it's just an extension for Dkg
+    if received_range.contains(&self.spec.t()) && (data_spec.topic != Topic::DkgConfirmation) {
+      // Double check the attempt on this entry, as we don't want to schedule a re-attempt if this
+      // is an old entry
+      // This is an assert, not part of the if check, as old data shouldn't be here in the first
+      // place
+      assert_eq!(AttemptDb::attempt(self.txn, genesis, data_spec.topic), Some(data_spec.attempt));
+      ReattemptDb::schedule_reattempt(self.txn, genesis, self.block_number, data_spec.topic);
+    }
+
     // If we have all the needed commitments/preprocesses/shares, tell the processor
-    let needed = if (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation) {
-      self.spec.n()
-    } else {
-      self.spec.t()
-    };
-    if (prior_received < needed) && (now_received >= needed) {
+    let needs_everyone =
+      (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation);
+    let needed = if needs_everyone { self.spec.n() } else { self.spec.t() };
+    if received_range.contains(&needed) {
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in self.spec.validators().iter().map(|validator| validator.0) {
