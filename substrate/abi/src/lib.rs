@@ -41,7 +41,7 @@ pub enum TransactionPaymentEvent {
 pub enum Event {
   System(system::Event),
   Timestamp,
-  TransactionPayment(TransactionPaymentEvent),
+  TransactionPayment,
   Coins(coins::Event),
   LiquidityTokens(coins::Event),
   Dex(dex::Event),

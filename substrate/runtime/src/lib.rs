@@ -70,7 +70,6 @@ pub type Hash = sp_core::H256;
 pub type SignedExtra = (
   system::CheckNonZeroSender<Runtime>,
   system::CheckSpecVersion<Runtime>,
-  system::CheckTxVersion<Runtime>,
   system::CheckGenesis<Runtime>,
   system::CheckEra<Runtime>,
   system::CheckNonce<Runtime>,
@@ -205,7 +204,6 @@ impl timestamp::Config for Runtime {
 }
 
 impl transaction_payment::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type OnChargeTransaction = Coins;
   type OperationalFeeMultiplier = ConstU8<5>;
   type WeightToFee = IdentityFee<SubstrateAmount>;

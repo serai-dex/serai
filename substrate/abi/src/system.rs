@@ -1,4 +1,5 @@
-use frame_support::dispatch::{DispatchInfo, DispatchError};
+use sp_runtime::DispatchError;
+use frame_support::dispatch::DispatchInfo;
 
 use serai_primitives::SeraiAddress;
 

@@ -27,9 +27,9 @@ serde_json = { version = "1", optional = true }
 
 serai-abi = { path = "../abi", version = "0.1" }
 
-sp-core = { git = "https://github.com/serai-dex/substrate", optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", optional = true }
-frame-system = { git = "https://github.com/serai-dex/substrate", optional = true }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", optional = true }
+frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", optional = true }
 
 async-lock = "3"
 

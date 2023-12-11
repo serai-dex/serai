@@ -22,11 +22,11 @@ scale-info = { version = "2", features = ["derive"] }
 borsh = { version = "1", features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", features = ["derive", "alloc"], optional = true }
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 serai-primitives = { path = "../primitives", version = "0.1" }
 serai-coins-primitives = { path = "../coins/primitives", version = "0.1" }
@@ -34,7 +34,7 @@ serai-validator-sets-primitives = { path = "../validator-sets/primitives", versi
 serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1" }
 serai-signals-primitives = { path = "../signals/primitives", version = "0.1" }
 
-frame-support = { git = "https://github.com/serai-dex/substrate" }
+frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
 
 [features]
 borsh = [
