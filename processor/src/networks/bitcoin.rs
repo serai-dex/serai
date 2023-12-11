@@ -21,7 +21,9 @@ use bitcoin_serai::{
     consensus::{Encodable, Decodable},
     script::Instruction,
     address::{NetworkChecked, Address as BAddress},
-    Transaction, Block, Network as BNetwork,
+    Transaction, Block, Network as BNetwork, ScriptBuf,
+    opcodes::all::{OP_SHA256, OP_EQUAL},
+    blockdata::transaction::{TxIn, TxOut},
   },
   wallet::{
     tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
@@ -37,7 +39,7 @@ use bitcoin_serai::bitcoin::{
   sighash::{EcdsaSighashType, SighashCache},
   script::{PushBytesBuf, Builder},
   absolute::LockTime,
-  Amount as BAmount, Sequence, Script, Witness, OutPoint, TxOut, TxIn,
+  Amount as BAmount, Sequence, Script, Witness, OutPoint,
   transaction::Version,
 };
 
@@ -447,6 +449,79 @@ impl Bitcoin {
       }
     }
   }
+
+  // expected script has to start with SHA256 PUSH MSG_HASH OP_EQ ..
+  fn expected_script_pattern(&self, script: &ScriptBuf) -> Option<bool> {
+    let mut ins = script.instructions();
+
+    // first item should be SHA256 code
+    if ins.next()?.ok()?.opcode()? != OP_SHA256 {
+      return Some(false);
+    }
+
+    // next should be a data push
+    ins.next()?.ok()?.push_bytes()?;
+
+    // next should be a equality check
+    if ins.next()?.ok()?.opcode()? != OP_EQUAL {
+      return Some(false);
+    }
+
+    Some(true)
+  }
+
+  async fn spent_output_of(&self, input: &TxIn) -> TxOut {
+    let mut spent_tx = input.previous_output.txid.as_raw_hash().to_byte_array();
+    spent_tx.reverse();
+    let mut tx;
+    while {
+      tx = self.get_transaction(&spent_tx).await;
+      tx.is_err()
+    } {
+      log::error!("couldn't get transaction from bitcoin node: {tx:?}");
+      sleep(Duration::from_secs(5)).await;
+    }
+    tx.unwrap().output.swap_remove(usize::try_from(input.previous_output.vout).unwrap())
+  }
+
+  async fn extract_serai_data(&self, tx: &Transaction) -> Vec<u8> {
+    // check outputs
+    let mut data = (|| {
+      for output in &tx.output {
+        if output.script_pubkey.is_op_return() {
+          match output.script_pubkey.instructions_minimal().last() {
+            Some(Ok(Instruction::PushBytes(data))) => return data.as_bytes().to_vec(),
+            _ => continue,
+          }
+        }
+      }
+      vec![]
+    })();
+
+    // check inputs
+    if data.is_empty() {
+      for input in &tx.input {
+        if self.spent_output_of(input).await.script_pubkey.is_p2wsh() {
+          let witness = input.witness.to_vec();
+          let redeem_script = ScriptBuf::from_bytes(witness[0].clone());
+          if let Some(true) = self.expected_script_pattern(&redeem_script) {
+            data = witness[1].clone();
+            break;
+          }
+        }
+      }
+    }
+
+    data.truncate(MAX_DATA_LEN.try_into().unwrap());
+    data
+  }
+
+  async fn extract_origin(&self, tx: &Transaction) -> Option<Address> {
+    let spent_output = self.spent_output_of(&tx.input[0]).await;
+    BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin)
+      .ok()
+      .and_then(Address::new)
+  }
 }
 
 #[async_trait]
@@ -571,46 +646,23 @@ impl Network for Bitcoin {
         let offset_repr_ref: &[u8] = offset_repr.as_ref();
         let kind = kinds[offset_repr_ref];
 
-        let mut data = if kind == OutputType::External {
-          (|| {
-            for output in &tx.output {
-              if output.script_pubkey.is_op_return() {
-                match output.script_pubkey.instructions_minimal().last() {
-                  Some(Ok(Instruction::PushBytes(data))) => return data.as_bytes().to_vec(),
-                  _ => continue,
-                }
-              }
-            }
-            vec![]
-          })()
-        } else {
-          vec![]
-        };
-        data.truncate(MAX_DATA_LEN.try_into().unwrap());
-
-        let presumed_origin = {
-          let spent_output = tx.input[0].previous_output;
-          let mut spent_tx = spent_output.txid.as_raw_hash().to_byte_array();
-          spent_tx.reverse();
-          let spent_output = {
-            let mut tx;
-            while {
-              tx = self.get_transaction(&spent_tx).await;
-              tx.is_err()
-            } {
-              log::error!("couldn't get transaction from bitcoin node: {tx:?}");
-              sleep(Duration::from_secs(5)).await;
-            }
-            tx.unwrap().output.swap_remove(usize::try_from(spent_output.vout).unwrap())
-          };
-          BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin)
-            .ok()
-            .and_then(Address::new)
-        };
-
-        let output = Output { kind, presumed_origin, output, data };
+        let output = Output { kind, presumed_origin: None, output, data: vec![] };
         assert_eq!(output.tx_id(), tx.id());
         outputs.push(output);
+      }
+
+      if outputs.is_empty() {
+        continue;
+      }
+
+      // populate the rest of the outputs
+      let presumed_origin = self.extract_origin(tx).await;
+      let data = self.extract_serai_data(tx).await;
+      for output in &mut outputs {
+        if output.kind == OutputType::External {
+          output.data = data.clone();
+        }
+        output.presumed_origin = presumed_origin.clone();
       }
     }
 
