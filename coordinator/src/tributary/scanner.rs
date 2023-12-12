@@ -255,9 +255,9 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
             let our_i = self.spec.i(Ristretto::generator() * self.our_key.deref()).unwrap();
 
             // TODO: Handle removed parties (modify n/i to accept list of removed)
-            // TODO: Don't try to re-attempt yet spin if too many parties have been removed
             // TODO: Don't fatal slash, yet don't include, parties who have been offline so long as
-            // we still meet the needed threshold
+            // we still meet the needed threshold. We'd need a complete DKG protocol we then remove
+            // the offline participants from. publishing the DKG protocol completed without them.
 
             let params =
               frost::ThresholdParams::new(self.spec.t(), self.spec.n(), our_i.start).unwrap();
@@ -319,6 +319,9 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               // If the Batch hasn't appeared on-chain...
               if BatchInstructionsHashDb::get(self.txn, self.spec.set().network, batch).is_none() {
                 // Instruct the processor to start the next attempt
+                // The processor won't continue if it's already signed a Batch
+                // Prior checking if the Batch is on-chain just may reduce the non-participating
+                // 33% from publishing their re-attempt messages
                 self
                   .processors
                   .send(
