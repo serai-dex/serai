@@ -73,6 +73,7 @@ pub enum PstTxType {
 
 #[async_trait::async_trait]
 pub trait PSTTrait {
+  // TODO: Diversify publish_set_keys, publish_remove_participant, then remove PstTxType
   async fn publish_serai_tx(
     &self,
     set: ValidatorSet,
@@ -131,6 +132,21 @@ pub struct TributaryBlockHandler<
 impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
   TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
+  async fn dkg_removal_attempt(&mut self, removing: [u8; 32], attempt: u32) {
+    let preprocess =
+      (DkgRemoval { spec: self.spec, key: self.our_key, txn: self.txn, removing, attempt })
+        .preprocess();
+    let mut tx = Transaction::DkgRemoval(SignData {
+      plan: removing,
+      attempt,
+      label: Label::Preprocess,
+      data: vec![preprocess.to_vec()],
+      signed: Transaction::empty_signed(),
+    });
+    tx.sign(&mut OsRng, self.spec.genesis(), self.our_key);
+    self.publish_tributary_tx.publish_tributary_tx(tx).await;
+  }
+
   pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
     // TODO: If this fatal slash puts the remaining set below the threshold, spin
 
@@ -146,23 +162,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     // If during a DKG, remove the participant
     if DkgCompleted::get(self.txn, genesis).is_none() {
       AttemptDb::recognize_topic(self.txn, genesis, Topic::DkgRemoval(slashing));
-      let preprocess = (DkgRemoval {
-        spec: self.spec,
-        key: self.our_key,
-        txn: self.txn,
-        removing: slashing,
-        attempt: 0,
-      })
-      .preprocess();
-      let mut tx = Transaction::DkgRemoval(SignData {
-        plan: slashing,
-        attempt: 0,
-        label: Label::Preprocess,
-        data: vec![preprocess.to_vec()],
-        signed: Transaction::empty_signed(),
-      });
-      tx.sign(&mut OsRng, genesis, self.our_key);
-      self.publish_tributary_tx.publish_tributary_tx(tx).await;
+      self.dkg_removal_attempt(slashing, 0).await;
     }
   }
 
@@ -280,8 +280,8 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
             SeraiDkgCompleted::get(self.txn, self.spec.set()).is_none() &&
             SeraiDkgRemoval::get(self.txn, self.spec.set(), removing).is_none()
           {
-            // Since it wasn't completed, spawn a new DkgRemoval and publish the Tributary TX for it
-            todo!();
+            // Since it wasn't completed, attempt a new DkgRemoval
+            self.dkg_removal_attempt(removing, attempt).await;
           }
         }
         Topic::SubstrateSign(inner_id) => {
