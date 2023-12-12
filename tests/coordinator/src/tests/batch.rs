@@ -38,11 +38,7 @@ pub async fn batch(
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
-  let id = SubstrateSignId {
-    session,
-    id: SubstrateSignableId::Batch((OsRng.next_u64() >> 32).try_into().unwrap()),
-    attempt: 0,
-  };
+  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(batch.id), attempt: 0 };
 
   for processor in processors.iter_mut() {
     processor

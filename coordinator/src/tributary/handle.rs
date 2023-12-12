@@ -123,7 +123,10 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     // If 2/3rds of the network participated in this preprocess, queue it for an automatic
     // re-attempt
     // DkgConfirmation doesn't have a re-attempt as it's just an extension for Dkg
-    if received_range.contains(&self.spec.t()) && (data_spec.topic != Topic::DkgConfirmation) {
+    if (data_spec.label == Label::Preprocess) &&
+      received_range.contains(&self.spec.t()) &&
+      (data_spec.topic != Topic::DkgConfirmation)
+    {
       // Double check the attempt on this entry, as we don't want to schedule a re-attempt if this
       // is an old entry
       // This is an assert, not part of the if check, as old data shouldn't be here in the first
