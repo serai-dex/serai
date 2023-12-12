@@ -322,19 +322,8 @@ async fn sign_test() {
 
       // We should now get a SubstrateBlock
       for processor in &mut processors {
-        // We may have a BatchReattempt to ignore in the pipeline depending on timing
-        let mut received = processor.recv_message().await;
-        if matches!(
-          received,
-          messages::CoordinatorMessage::Coordinator(
-            messages::coordinator::CoordinatorMessage::BatchReattempt { .. }
-          )
-        ) {
-          received = processor.recv_message().await
-        }
-
         assert_eq!(
-          received,
+          processor.recv_message().await,
           messages::CoordinatorMessage::Substrate(
             messages::substrate::CoordinatorMessage::SubstrateBlock {
               context: SubstrateContext {
