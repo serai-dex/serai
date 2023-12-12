@@ -35,6 +35,23 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn participant_removed_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+    self
+      .0
+      .events(|event| {
+        if let serai_abi::Event::ValidatorSets(event) = event {
+          if matches!(event, ValidatorSetsEvent::ParticipantRemoved { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      })
+      .await
+  }
+
   pub async fn key_gen_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0

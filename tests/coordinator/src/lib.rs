@@ -269,9 +269,22 @@ impl Processor {
               assert_eq!(msg.id, *next_recv_id);
 
               let msg_msg = borsh::from_slice(&msg.msg).unwrap();
-              if !is_cosign_message(&msg_msg) {
+              // Remove any BatchReattempts clogging the pipe
+              // TODO: Set up a wrapper around serai-client so we aren't throwing this away yet
+              // leave it for the tests
+              if matches!(
+                msg_msg,
+                messages::CoordinatorMessage::Coordinator(
+                  messages::coordinator::CoordinatorMessage::BatchReattempt { .. }
+                )
+              ) {
+                queue.ack(Service::Coordinator, msg.id).await;
+                *next_recv_id += 1;
                 continue;
               }
+              if !is_cosign_message(&msg_msg) {
+                continue;
+              };
               queue.ack(Service::Coordinator, msg.id).await;
               *next_recv_id += 1;
               msg_msg
@@ -393,17 +406,13 @@ impl Processor {
     *next_send_id += 1;
   }
 
-  /// Receive a message from the coordinator as a processor.
-  pub async fn recv_message(&mut self) -> CoordinatorMessage {
+  async fn recv_message_inner(&mut self) -> CoordinatorMessage {
     loop {
       tokio::task::yield_now().await;
 
       let mut queue_lock = self.queue.lock().await;
       let (_, next_recv_id, queue) = &mut *queue_lock;
-      // Set a timeout of an entire 6 minutes as cosigning may be delayed by up to 5 minutes
-      let msg = tokio::time::timeout(Duration::from_secs(6 * 60), queue.next(Service::Coordinator))
-        .await
-        .unwrap();
+      let msg = queue.next(Service::Coordinator).await;
       assert_eq!(msg.from, Service::Coordinator);
       assert_eq!(msg.id, *next_recv_id);
 
@@ -417,6 +426,13 @@ impl Processor {
       *next_recv_id += 1;
       return msg_msg;
     }
+  }
+
+  /// Receive a message from the coordinator as a processor.
+  pub async fn recv_message(&mut self) -> CoordinatorMessage {
+    // Set a timeout of 15 minutes to allow effectively any protocol to occur without a fear of
+    // an arbitrary timeout cutting it short
+    tokio::time::timeout(Duration::from_secs(15 * 60), self.recv_message_inner()).await.unwrap()
   }
 
   pub async fn set_substrate_key(

@@ -9,7 +9,7 @@ use tokio::{
   time::sleep,
 };
 
-use scale::Encode;
+use borsh::BorshSerialize;
 use sp_application_crypto::RuntimePublic;
 use serai_client::{
   primitives::{NETWORKS, NetworkId, Signature},
@@ -28,7 +28,8 @@ use crate::{
 
 create_db! {
   CosignDb {
-    ReceivedCosign: (set: ValidatorSet, block: [u8; 32]) -> Vec<u8>,
+    ReceivedCosign: (set: ValidatorSet, block: [u8; 32]) -> CosignedBlock,
+    LatestCosign: (network: NetworkId) -> CosignedBlock,
     DistinctChain: (set: ValidatorSet) -> (),
   }
 }
@@ -37,7 +38,7 @@ pub struct CosignEvaluator<D: Db> {
   db: Mutex<D>,
   serai: Arc<Serai>,
   stakes: RwLock<Option<HashMap<NetworkId, u64>>>,
-  latest_cosigns: RwLock<HashMap<NetworkId, (u64, CosignedBlock)>>,
+  latest_cosigns: RwLock<HashMap<NetworkId, CosignedBlock>>,
 }
 
 impl<D: Db> CosignEvaluator<D> {
@@ -50,10 +51,10 @@ impl<D: Db> CosignEvaluator<D> {
 
     let latest_cosigns = self.latest_cosigns.read().await;
     let mut highest_block = 0;
-    for (block_num, _) in latest_cosigns.values() {
+    for cosign in latest_cosigns.values() {
       let mut networks = HashSet::new();
-      for (network, (sub_block_num, _)) in &*latest_cosigns {
-        if sub_block_num >= block_num {
+      for (network, sub_cosign) in &*latest_cosigns {
+        if sub_cosign.block_number >= cosign.block_number {
           networks.insert(network);
         }
       }
@@ -61,7 +62,7 @@ impl<D: Db> CosignEvaluator<D> {
         networks.into_iter().map(|network| stakes.get(network).unwrap_or(&0)).sum::<u64>();
       let needed_stake = ((total_stake * 2) / 3) + 1;
       if (total_stake == 0) || (sum_stake > needed_stake) {
-        highest_block = highest_block.max(*block_num);
+        highest_block = highest_block.max(cosign.block_number);
       }
     }
 
@@ -106,7 +107,7 @@ impl<D: Db> CosignEvaluator<D> {
   async fn handle_new_cosign(&self, cosign: CosignedBlock) -> Result<(), SeraiError> {
     // If we already have this cosign or a newer cosign, return
     if let Some(latest) = self.latest_cosigns.read().await.get(&cosign.network) {
-      if latest.0 >= cosign.block_number {
+      if latest.block_number >= cosign.block_number {
         return Ok(());
       }
     }
@@ -180,7 +181,8 @@ impl<D: Db> CosignEvaluator<D> {
     {
       let mut db = self.db.lock().await;
       let mut txn = db.txn();
-      ReceivedCosign::set(&mut txn, set_with_keys, cosign.block, &cosign.encode());
+      ReceivedCosign::set(&mut txn, set_with_keys, cosign.block, &cosign);
+      LatestCosign::set(&mut txn, set_with_keys.network, &(cosign));
       txn.commit();
     }
 
@@ -258,7 +260,7 @@ impl<D: Db> CosignEvaluator<D> {
     } else {
       {
         let mut latest_cosigns = self.latest_cosigns.write().await;
-        latest_cosigns.insert(cosign.network, (block.number(), cosign));
+        latest_cosigns.insert(cosign.network, cosign);
       }
       self.update_latest_cosign().await;
     }
@@ -268,11 +270,18 @@ impl<D: Db> CosignEvaluator<D> {
 
   #[allow(clippy::new_ret_no_self)]
   pub fn new<P: P2p>(db: D, p2p: P, serai: Arc<Serai>) -> mpsc::UnboundedSender<CosignedBlock> {
+    let mut latest_cosigns = HashMap::new();
+    for network in NETWORKS {
+      if let Some(cosign) = LatestCosign::get(&db, network) {
+        latest_cosigns.insert(network, cosign);
+      }
+    }
+
     let evaluator = Arc::new(Self {
       db: Mutex::new(db),
       serai,
       stakes: RwLock::new(None),
-      latest_cosigns: RwLock::new(HashMap::new()),
+      latest_cosigns: RwLock::new(latest_cosigns),
     });
 
     // Spawn a task to update stakes regularly
@@ -310,15 +319,11 @@ impl<D: Db> CosignEvaluator<D> {
     tokio::spawn({
       async move {
         loop {
-          let cosigns = evaluator
-            .latest_cosigns
-            .read()
-            .await
-            .values()
-            .map(|cosign| cosign.1)
-            .collect::<Vec<_>>();
+          let cosigns = evaluator.latest_cosigns.read().await.values().cloned().collect::<Vec<_>>();
           for cosign in cosigns {
-            P2p::broadcast(&p2p, P2pMessageKind::CosignedBlock, cosign.encode()).await;
+            let mut buf = vec![];
+            cosign.serialize(&mut buf).unwrap();
+            P2p::broadcast(&p2p, P2pMessageKind::CosignedBlock, buf).await;
           }
           sleep(Duration::from_secs(60)).await;
         }

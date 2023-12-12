@@ -26,12 +26,9 @@ use serai_db::*;
 use crate::{
   processors::Processors,
   tributary::{
-    SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, Label, DataSpecification,
-    DataSet, Accumulation,
+    *,
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType, PSTTrait, PTTTrait, TributaryBlockHandler},
-    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, DkgKeyPair,
-    AttemptDb, DataReceived, DataDb,
   },
   P2p,
 };
@@ -106,6 +103,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     signer: <Ristretto as Ciphersuite>::G,
     data: &Vec<u8>,
   ) -> Accumulation {
+    log::debug!("accumulating entry for {:?} attempt #{}", &data_spec.topic, &data_spec.attempt);
     let genesis = self.spec.genesis();
     if DataDb::get(self.txn, genesis, data_spec, &signer.to_bytes()).is_some() {
       panic!("accumulating data for a participant multiple times");
@@ -121,13 +119,37 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     DataReceived::set(self.txn, genesis, data_spec, &now_received);
     DataDb::set(self.txn, genesis, data_spec, &signer.to_bytes(), data);
 
+    let received_range = (prior_received + 1) ..= now_received;
+
+    // If 2/3rds of the network participated in this preprocess, queue it for an automatic
+    // re-attempt
+    // DkgConfirmation doesn't have a re-attempt as it's just an extension for Dkg
+    if (data_spec.label == Label::Preprocess) &&
+      received_range.contains(&self.spec.t()) &&
+      (data_spec.topic != Topic::DkgConfirmation)
+    {
+      // Double check the attempt on this entry, as we don't want to schedule a re-attempt if this
+      // is an old entry
+      // This is an assert, not part of the if check, as old data shouldn't be here in the first
+      // place
+      assert_eq!(AttemptDb::attempt(self.txn, genesis, data_spec.topic), Some(data_spec.attempt));
+      ReattemptDb::schedule_reattempt(self.txn, genesis, self.block_number, data_spec.topic);
+
+      // Because this attempt was participated in, it was justified
+      // The question becomes why did the prior attempt fail?
+      // TODO: Slash people who failed to participate as expected in the prior attempt
+    }
+
     // If we have all the needed commitments/preprocesses/shares, tell the processor
-    let needed = if (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation) {
-      self.spec.n()
-    } else {
-      self.spec.t()
-    };
-    if (prior_received < needed) && (now_received >= needed) {
+    let needs_everyone =
+      (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation);
+    let needed = if needs_everyone { self.spec.n() } else { self.spec.t() };
+    if received_range.contains(&needed) {
+      log::debug!(
+        "accumulation for entry {:?} attempt #{} is ready",
+        &data_spec.topic,
+        &data_spec.attempt
+      );
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in self.spec.validators().iter().map(|validator| validator.0) {
@@ -187,6 +209,12 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
     // If the attempt is lesser than the blockchain's, return
     if data_spec.attempt < curr_attempt {
+      log::debug!(
+        "dated attempt published onto tributary for topic {:?} (used attempt {}, current {})",
+        data_spec.topic,
+        data_spec.attempt,
+        curr_attempt
+      );
       return Accumulation::NotReady;
     }
     // If the attempt is greater, this is a premature publication, full slash
@@ -541,17 +569,22 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               return;
             };
 
-            // TODO: Only handle this if we're not actively removing any of the signers
+            // We need to only handle this if we're not actively removing any of the signers
+            // At the start of this function, we only handle messages from non-fatally slashed
+            // participants, so this is held
+            //
             // The created Substrate call will fail if a removed validator was one of the signers
             // Since:
             // 1) publish_serai_tx will block this task until the TX is published
             // 2) We won't scan any more TXs/blocks until we handle this TX
             // The TX *must* be successfully published *before* we start removing any more
             // signers
+            //
             // Accordingly, if the signers aren't currently being removed, they won't be removed
             // by the time this transaction is successfully published *unless* a malicious 34%
             // participates with the non-participating 33% to continue operation and produce a
             // distinct removal (since the non-participating won't block in this block)
+            //
             // This breaks BFT and is accordingly within bounds
 
             let tx = serai_client::SeraiValidatorSets::remove_participant(
@@ -560,6 +593,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               signers,
               Signature(signature),
             );
+            LocallyDkgRemoved::set(self.txn, genesis, data.plan, &());
             self
               .publish_serai_tx
               .publish_serai_tx(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
@@ -597,7 +631,12 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
         );
         self
           .recognized_id
-          .recognized_id(self.spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec())
+          .recognized_id(
+            self.spec.set(),
+            genesis,
+            RecognizedIdType::Batch,
+            batch.to_le_bytes().to_vec(),
+          )
           .await;
       }
 

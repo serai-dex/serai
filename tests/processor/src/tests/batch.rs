@@ -7,7 +7,6 @@ use dkg::{Participant, tests::clone_without};
 
 use messages::{coordinator::*, SubstrateContext};
 
-use scale::Encode;
 use serai_client::{
   primitives::{
     BlockHash, Amount, Balance, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId,
@@ -28,11 +27,7 @@ pub(crate) async fn recv_batch_preprocesses(
   batch: &Batch,
   attempt: u32,
 ) -> (SubstrateSignId, HashMap<Participant, [u8; 64]>) {
-  let id = SubstrateSignId {
-    session,
-    id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
-    attempt,
-  };
+  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(batch.id), attempt };
 
   let mut block = None;
   let mut preprocesses = HashMap::new();

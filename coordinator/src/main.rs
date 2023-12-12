@@ -18,6 +18,7 @@ use frost::Participant;
 use serai_db::{DbTxn, Db};
 
 use scale::Encode;
+use borsh::BorshSerialize;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet, KeyPair},
@@ -248,7 +249,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
           },
         };
         cosign_channel.send(cosigned_block).unwrap();
-        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, cosigned_block.encode()).await;
+        let mut buf = vec![];
+        cosigned_block.serialize(&mut buf).unwrap();
+        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
         None
       }
     },
@@ -555,7 +558,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
                 let SubstrateSignableId::Batch(id) = id.id else {
                   panic!("BatchPreprocess SubstrateSignableId wasn't Batch")
                 };
-                id.encode()
+                id.to_le_bytes()
               },
               preprocesses.into_iter().map(Into::into).collect(),
             );
@@ -1057,7 +1060,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
         let mut tx = match id_type {
           RecognizedIdType::Batch => Transaction::SubstrateSign(SignData {
             data: get_preprocess(&raw_db, id_type, &id).await,
-            plan: SubstrateSignableId::Batch(id.as_slice().try_into().unwrap()),
+            plan: SubstrateSignableId::Batch(u32::from_le_bytes(id.try_into().unwrap())),
             label: Label::Preprocess,
             attempt: 0,
             signed: Transaction::empty_signed(),

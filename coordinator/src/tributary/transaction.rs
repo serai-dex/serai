@@ -132,7 +132,6 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
 pub enum Transaction {
   RemoveParticipant(Participant),
 
-  // Once this completes successfully, no more instances should be created.
   DkgCommitments {
     attempt: u32,
     commitments: Vec<Vec<u8>>,
@@ -170,7 +169,7 @@ pub enum Transaction {
   // with the current processor, yet it would still be an improvement.
   Batch {
     block: [u8; 32],
-    batch: [u8; 5],
+    batch: u32,
   },
   // When a Serai block is finalized, with the contained batches, we can allow the associated plan
   // IDs
@@ -230,13 +229,13 @@ impl Debug for Transaction {
       Transaction::Batch { block, batch } => fmt
         .debug_struct("Transaction::Batch")
         .field("block", &hex::encode(block))
-        .field("batch", &hex::encode(batch))
+        .field("batch", &batch)
         .finish(),
       Transaction::SubstrateBlock(block) => {
         fmt.debug_struct("Transaction::SubstrateBlock").field("block", block).finish()
       }
       Transaction::SubstrateSign(sign_data) => {
-        fmt.debug_struct("Transaction::Substrate").field("sign_data", sign_data).finish()
+        fmt.debug_struct("Transaction::SubstrateSign").field("sign_data", sign_data).finish()
       }
       Transaction::Sign(sign_data) => {
         fmt.debug_struct("Transaction::Sign").field("sign_data", sign_data).finish()
@@ -390,9 +389,9 @@ impl ReadWrite for Transaction {
       7 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
-        let mut batch = [0; 5];
+        let mut batch = [0; 4];
         reader.read_exact(&mut batch)?;
-        Ok(Transaction::Batch { block, batch })
+        Ok(Transaction::Batch { block, batch: u32::from_le_bytes(batch) })
       }
 
       8 => {
@@ -514,7 +513,7 @@ impl ReadWrite for Transaction {
       Transaction::Batch { block, batch } => {
         writer.write_all(&[7])?;
         writer.write_all(block)?;
-        writer.write_all(batch)
+        writer.write_all(&batch.to_le_bytes())
       }
 
       Transaction::SubstrateBlock(block) => {

@@ -12,7 +12,7 @@ use serai_client::{
   SeraiError, Block, Serai, TemporalSerai,
   primitives::{BlockHash, NetworkId},
   validator_sets::{
-    primitives::{ValidatorSet, KeyPair, amortize_excess_key_shares},
+    primitives::{ValidatorSet, amortize_excess_key_shares},
     ValidatorSetsEvent,
   },
   in_instructions::InInstructionsEvent,
@@ -25,7 +25,11 @@ use processor_messages::SubstrateContext;
 
 use tokio::{sync::mpsc, time::sleep};
 
-use crate::{Db, processors::Processors, tributary::TributarySpec};
+use crate::{
+  Db,
+  processors::Processors,
+  tributary::{TributarySpec, SeraiDkgRemoval, SeraiDkgCompleted},
+};
 
 mod db;
 pub use db::*;
@@ -110,37 +114,6 @@ async fn handle_new_set<D: Db>(
   } else {
     log::info!("not present in new set {:?}", set);
   }
-
-  Ok(())
-}
-
-async fn handle_key_gen<Pro: Processors>(
-  processors: &Pro,
-  serai: &Serai,
-  block: &Block,
-  set: ValidatorSet,
-  key_pair: KeyPair,
-) -> Result<(), SeraiError> {
-  processors
-    .send(
-      set.network,
-      processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
-        context: SubstrateContext {
-          serai_time: block.time().unwrap() / 1000,
-          network_latest_finalized_block: serai
-            .as_of(block.hash())
-            .in_instructions()
-            .latest_block_for_network(set.network)
-            .await?
-            // The processor treats this as a magic value which will cause it to find a network
-            // block which has a time greater than or equal to the Serai time
-            .unwrap_or(BlockHash([0; 32])),
-        },
-        session: set.session,
-        key_pair,
-      },
-    )
-    .await;
 
   Ok(())
 }
@@ -249,6 +222,19 @@ async fn handle_block<D: Db, Pro: Processors>(
   // Define an indexed event ID.
   let mut event_id = 0;
 
+  if HandledEvent::is_unhandled(db, hash, event_id) {
+    let mut txn = db.txn();
+    for removal in serai.as_of(hash).validator_sets().participant_removed_events().await? {
+      let ValidatorSetsEvent::ParticipantRemoved { set, removed } = removal else {
+        panic!("ParticipantRemoved event wasn't ParticipantRemoved: {removal:?}");
+      };
+      SeraiDkgRemoval::set(&mut txn, set, removed.0, &());
+    }
+    HandledEvent::handle_event(&mut txn, hash, event_id);
+    txn.commit();
+  }
+  event_id += 1;
+
   // If a new validator set was activated, create tributary/inform processor to do a DKG
   for new_set in serai.as_of(hash).validator_sets().new_set_events().await? {
     // Individually mark each event as handled so on reboot, we minimize duplicates
@@ -279,12 +265,31 @@ async fn handle_block<D: Db, Pro: Processors>(
   for key_gen in serai.as_of(hash).validator_sets().key_gen_events().await? {
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh key gen event {:?}", key_gen);
-      if let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen {
-        handle_key_gen(processors, serai, &block, set, key_pair).await?;
-      } else {
+      let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
-      }
+      };
+      processors
+        .send(
+          set.network,
+          processor_messages::substrate::CoordinatorMessage::ConfirmKeyPair {
+            context: SubstrateContext {
+              serai_time: block.time().unwrap() / 1000,
+              network_latest_finalized_block: serai
+                .as_of(block.hash())
+                .in_instructions()
+                .latest_block_for_network(set.network)
+                .await?
+                // The processor treats this as a magic value which will cause it to find a network
+                // block which has a time greater than or equal to the Serai time
+                .unwrap_or(BlockHash([0; 32])),
+            },
+            session: set.session,
+            key_pair,
+          },
+        )
+        .await;
       let mut txn = db.txn();
+      SeraiDkgCompleted::set(&mut txn, set, &());
       HandledEvent::handle_event(&mut txn, hash, event_id);
       txn.commit();
     }

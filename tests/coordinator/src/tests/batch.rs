@@ -38,9 +38,7 @@ pub async fn batch(
   substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   batch: Batch,
 ) -> u64 {
-  let mut id = [0; 5];
-  OsRng.fill_bytes(&mut id);
-  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(id), attempt: 0 };
+  let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(batch.id), attempt: 0 };
 
   for processor in processors.iter_mut() {
     processor
@@ -222,8 +220,19 @@ pub async fn batch(
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
   for processor in processors {
+    // Handle a potential re-attempt message in the pipeline
+    let mut received = processor.recv_message().await;
+    if matches!(
+      received,
+      messages::CoordinatorMessage::Coordinator(
+        messages::coordinator::CoordinatorMessage::BatchReattempt { .. }
+      )
+    ) {
+      received = processor.recv_message().await
+    }
+
     assert_eq!(
-      processor.recv_message().await,
+      received,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {

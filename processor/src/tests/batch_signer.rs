@@ -13,7 +13,6 @@ use sp_application_crypto::{RuntimePublic, sr25519::Public};
 
 use serai_db::{DbTxn, Db, MemDb};
 
-use scale::Encode;
 #[rustfmt::skip]
 use serai_client::{primitives::*, in_instructions::primitives::*, validator_sets::primitives::Session};
 
@@ -49,11 +48,8 @@ async fn test_batch_signer() {
     ],
   };
 
-  let actual_id = SubstrateSignId {
-    session: Session(0),
-    id: SubstrateSignableId::Batch((batch.network, batch.id).encode().try_into().unwrap()),
-    attempt: 0,
-  };
+  let actual_id =
+    SubstrateSignId { session: Session(0), id: SubstrateSignableId::Batch(batch.id), attempt: 0 };
 
   let mut signing_set = vec![];
   while signing_set.len() < usize::from(keys.values().next().unwrap().params().t()) {
