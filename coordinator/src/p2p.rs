@@ -8,7 +8,7 @@ use std::{
 
 use async_trait::async_trait;
 
-use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 use serai_client::primitives::NetworkId;
 
 use serai_db::Db;
@@ -39,7 +39,7 @@ use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub struct CosignedBlock {
   pub network: NetworkId,
   pub block_number: u64,
@@ -705,8 +705,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
         }
       }
       P2pMessageKind::CosignedBlock => {
-        let mut msg_ref: &[u8] = msg.msg.as_ref();
-        let Ok(msg) = CosignedBlock::decode(&mut scale::IoReader(&mut msg_ref)) else {
+        let Ok(msg) = CosignedBlock::deserialize_reader(&mut msg.msg.as_slice()) else {
           log::error!("received CosignedBlock message with invalidly serialized contents");
           continue;
         };

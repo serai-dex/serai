@@ -18,6 +18,7 @@ use frost::Participant;
 use serai_db::{DbTxn, Db};
 
 use scale::Encode;
+use borsh::BorshSerialize;
 use serai_client::{
   primitives::NetworkId,
   validator_sets::primitives::{Session, ValidatorSet, KeyPair},
@@ -248,7 +249,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
           },
         };
         cosign_channel.send(cosigned_block).unwrap();
-        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, cosigned_block.encode()).await;
+        let mut buf = vec![];
+        cosigned_block.serialize(&mut buf).unwrap();
+        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
         None
       }
     },
