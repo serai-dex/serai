@@ -503,7 +503,8 @@ pub(crate) async fn scan_tributaries_task<
                               PstTxType::RemoveParticipant(removed) => {
                                 if let Ok(Some(_)) = serai.keys(spec.set()).await {
                                   log::info!(
-                                    "keys were set before we could publish removal for {:?}",
+                                    "keys were set before we {} {:?}",
+                                    "personally could publish the removal for",
                                     hex::encode(removed)
                                   );
                                   break;
