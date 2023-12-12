@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, future::Future, time::Duration};
+use core::{marker::PhantomData, ops::Deref, future::Future, time::Duration};
 use std::sync::Arc;
 
 use rand_core::OsRng;
@@ -28,10 +28,7 @@ use tributary::{
 use crate::{
   Db,
   processors::Processors,
-  tributary::{
-    TributarySpec, Label, SignData, Transaction, Topic, TributaryBlockNumber, LastHandledBlock,
-    AttemptDb, ReattemptDb, FatallySlashed, DkgCompleted, signing_protocol::DkgRemoval,
-  },
+  tributary::{*, signing_protocol::*},
   P2p,
 };
 
@@ -135,6 +132,8 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
   TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
+    // TODO: If this fatal slash puts the remaining set below the threshold, spin
+
     let genesis = self.spec.genesis();
 
     log::warn!("fatally slashing {}. reason: {}", hex::encode(slashing), reason);
@@ -248,45 +247,101 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       */
       match topic {
         Topic::Dkg => {
-          // Check if the DKG was completed on-chain/we know of a completion
-          todo!();
+          if DkgCompleted::get(self.txn, genesis).is_none() {
+            // Since it wasn't completed, instruct the processor to start the next attempt
+            let id =
+              processor_messages::key_gen::KeyGenId { session: self.spec.set().session, attempt };
+            let our_i = self.spec.i(Ristretto::generator() * self.our_key.deref()).unwrap();
 
-          // Since it wasn't completed on-chain, instruct the processor to start the next attempt
-          todo!();
+            // TODO: Handle removed parties (modify n/i to accept list of removed)
+            // TODO: Don't try to re-attempt yet spin if too many parties have been removed
+            // TODO: Don't fatal slash, yet don't include, parties who have been offline so long as
+            // we still meet the needed threshold
+
+            let params =
+              frost::ThresholdParams::new(self.spec.t(), self.spec.n(), our_i.start).unwrap();
+            let shares = u16::from(our_i.end) - u16::from(our_i.start);
+
+            self
+              .processors
+              .send(
+                self.spec.set().network,
+                processor_messages::key_gen::CoordinatorMessage::GenerateKey { id, params, shares },
+              )
+              .await;
+          }
         }
         Topic::DkgConfirmation => {
           panic!("re-attempting DkgConfirmation when we should be re-attempting the Dkg")
         }
         Topic::DkgRemoval(removing) => {
-          // Check if the removal was completed on-chain/we know of a completion
-          todo!();
-
-          // Since it wasn't completed on-chain, spawn a new DkgRemoval and publish the Tributary
-          // TX for it
-          todo!();
+          if DkgCompleted::get(self.txn, genesis).is_none() &&
+            LocallyDkgRemoved::get(self.txn, genesis, removing).is_none() &&
+            SeraiDkgCompleted::get(self.txn, self.spec.set()).is_none() &&
+            SeraiDkgRemoval::get(self.txn, self.spec.set(), removing).is_none()
+          {
+            // Since it wasn't completed, spawn a new DkgRemoval and publish the Tributary TX for it
+            todo!();
+          }
         }
-        Topic::SubstrateSign(id) => match id {
-          SubstrateSignableId::CosigningSubstrateBlock(block) => {
-            // Check if the cosigner has a signature from our set for this block/a newer one
-            todo!();
+        Topic::SubstrateSign(inner_id) => {
+          let id = processor_messages::coordinator::SubstrateSignId {
+            session: self.spec.set().session,
+            id: inner_id,
+            attempt,
+          };
+          match inner_id {
+            SubstrateSignableId::CosigningSubstrateBlock(block) => {
+              let block_number = SeraiBlockNumber::get(self.txn, block)
+                .expect("couldn't get the block number for prior attempted cosign");
 
-            // Instruct the processor to start the next attempt
-            todo!();
-          }
-          SubstrateSignableId::Batch(block) => {
-            // Check if the Batch was published/we're actively publish it
-            todo!();
+              // Check if the cosigner has a signature from our set for this block/a newer one
+              todo!();
 
-            // Instruct the processor to start the next attempt
-            todo!();
+              // Instruct the processor to start the next attempt
+              self
+                .processors
+                .send(
+                  self.spec.set().network,
+                  processor_messages::coordinator::CoordinatorMessage::CosignSubstrateBlock {
+                    id,
+                    block_number,
+                  },
+                )
+                .await;
+            }
+            SubstrateSignableId::Batch(batch) => {
+              // Check if the Batch was published/we're actively publishing it
+              todo!();
+
+              // Instruct the processor to start the next attempt
+              self
+                .processors
+                .send(
+                  self.spec.set().network,
+                  processor_messages::coordinator::CoordinatorMessage::BatchReattempt { id },
+                )
+                .await;
+            }
           }
-        },
+        }
         Topic::Sign(id) => {
-          // Check if our processor told us of a completion for this
-          todo!();
-
           // Instruct the processor to start the next attempt
-          todo!();
+          // If it has already noted a completion, it won't send a preprocess and will simply drop
+          // the re-attempt message
+          self
+            .processors
+            .send(
+              self.spec.set().network,
+              processor_messages::sign::CoordinatorMessage::Reattempt {
+                id: processor_messages::sign::SignId {
+                  session: self.spec.set().session,
+                  id,
+                  attempt,
+                },
+              },
+            )
+            .await;
         }
       }
     }
