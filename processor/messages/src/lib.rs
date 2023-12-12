@@ -168,7 +168,7 @@ pub mod coordinator {
   )]
   pub enum SubstrateSignableId {
     CosigningSubstrateBlock([u8; 32]),
-    Batch([u8; 5]),
+    Batch(u32),
   }
 
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]

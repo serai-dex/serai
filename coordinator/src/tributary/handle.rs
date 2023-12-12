@@ -611,7 +611,12 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
         );
         self
           .recognized_id
-          .recognized_id(self.spec.set(), genesis, RecognizedIdType::Batch, batch.to_vec())
+          .recognized_id(
+            self.spec.set(),
+            genesis,
+            RecognizedIdType::Batch,
+            batch.to_le_bytes().to_vec(),
+          )
           .await;
       }
 

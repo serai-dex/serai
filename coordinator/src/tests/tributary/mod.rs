@@ -223,27 +223,24 @@ fn serialize_transaction() {
   {
     let mut block = [0; 32];
     OsRng.fill_bytes(&mut block);
-    let mut batch = [0; 5];
-    OsRng.fill_bytes(&mut batch);
+    let batch = u32::try_from(OsRng.next_u64() >> 32).unwrap();
     test_read_write(Transaction::Batch { block, batch });
   }
   test_read_write(Transaction::SubstrateBlock(OsRng.next_u64()));
 
   {
-    let mut plan = [0; 5];
-    OsRng.fill_bytes(&mut plan);
+    let batch = u32::try_from(OsRng.next_u64() >> 32).unwrap();
     test_read_write(Transaction::SubstrateSign(random_sign_data(
       &mut OsRng,
-      SubstrateSignableId::Batch(plan),
+      SubstrateSignableId::Batch(batch),
       Label::Preprocess,
     )));
   }
   {
-    let mut plan = [0; 5];
-    OsRng.fill_bytes(&mut plan);
+    let batch = u32::try_from(OsRng.next_u64() >> 32).unwrap();
     test_read_write(Transaction::SubstrateSign(random_sign_data(
       &mut OsRng,
-      SubstrateSignableId::Batch(plan),
+      SubstrateSignableId::Batch(batch),
       Label::Share,
     )));
   }

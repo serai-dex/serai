@@ -16,7 +16,6 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, debug, warn};
 
-use scale::Encode;
 use serai_client::{
   primitives::{NetworkId, BlockHash},
   in_instructions::primitives::{Batch, SignedBatch, batch_message},
@@ -26,15 +25,10 @@ use serai_client::{
 use messages::coordinator::*;
 use crate::{Get, DbTxn, Db, create_db};
 
-// Generate an ID unique to a Batch
-fn batch_sign_id(network: NetworkId, id: u32) -> [u8; 5] {
-  (network, id).encode().try_into().unwrap()
-}
-
 create_db!(
   BatchSignerDb {
-    CompletedDb: (id: [u8; 5]) -> (),
-    AttemptDb: (id: [u8; 5], attempt: u32) -> (),
+    CompletedDb: (id: u32) -> (),
+    AttemptDb: (id: u32, attempt: u32) -> (),
     BatchDb: (block: BlockHash) -> SignedBatch
   }
 );
@@ -51,14 +45,12 @@ pub struct BatchSigner<D: Db> {
   session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
-  signable: HashMap<[u8; 5], Batch>,
-  attempt: HashMap<[u8; 5], u32>,
+  signable: HashMap<u32, Batch>,
+  attempt: HashMap<u32, u32>,
   #[allow(clippy::type_complexity)]
-  preprocessing:
-    HashMap<[u8; 5], (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
+  preprocessing: HashMap<u32, (Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
   #[allow(clippy::type_complexity)]
-  signing:
-    HashMap<[u8; 5], (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
+  signing: HashMap<u32, (AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 }
 
 impl<D: Db> fmt::Debug for BatchSigner<D> {
@@ -92,7 +84,7 @@ impl<D: Db> BatchSigner<D> {
     }
   }
 
-  fn verify_id(&self, id: &SubstrateSignId) -> Result<(Session, [u8; 5], u32), ()> {
+  fn verify_id(&self, id: &SubstrateSignId) -> Result<(Session, u32, u32), ()> {
     let SubstrateSignId { session, id, attempt } = id;
     let SubstrateSignableId::Batch(id) = id else { panic!("BatchSigner handed non-Batch") };
 
@@ -104,17 +96,12 @@ impl<D: Db> BatchSigner<D> {
       // rebooted OR we detected the signed batch on chain
       // The latter is the expected flow for batches not actively being participated in
       None => {
-        warn!("not attempting batch {} #{}", hex::encode(id), attempt);
+        warn!("not attempting batch {id} #{attempt}");
         Err(())?;
       }
       Some(our_attempt) => {
         if attempt != our_attempt {
-          warn!(
-            "sent signing data for batch {} #{} yet we have attempt #{}",
-            hex::encode(id),
-            attempt,
-            attempt
-          );
+          warn!("sent signing data for batch {id} #{attempt} yet we have attempt #{our_attempt}");
           Err(())?;
         }
       }
@@ -127,7 +114,7 @@ impl<D: Db> BatchSigner<D> {
   async fn attempt(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    id: [u8; 5],
+    id: u32,
     attempt: u32,
   ) -> Option<ProcessorMessage> {
     // See above commentary for why this doesn't emit SignedBatch
@@ -138,12 +125,7 @@ impl<D: Db> BatchSigner<D> {
     // Check if we're already working on this attempt
     if let Some(curr_attempt) = self.attempt.get(&id) {
       if curr_attempt >= &attempt {
-        warn!(
-          "told to attempt {} #{} yet we're already working on {}",
-          hex::encode(id),
-          attempt,
-          curr_attempt
-        );
+        warn!("told to attempt {id} #{attempt} yet we're already working on {curr_attempt}");
         return None;
       }
     }
@@ -163,7 +145,7 @@ impl<D: Db> BatchSigner<D> {
     // Update the attempt number
     self.attempt.insert(id, attempt);
 
-    info!("signing batch {} #{}", hex::encode(id), attempt);
+    info!("signing batch {id} #{attempt}");
 
     // If we reboot mid-sign, the current design has us abort all signs and wait for latter
     // attempts/new signing protocols
@@ -180,9 +162,7 @@ impl<D: Db> BatchSigner<D> {
     // TODO: This isn't complete as this txn may not be committed with the expected timing
     if AttemptDb::get(txn, id, attempt).is_some() {
       warn!(
-        "already attempted batch {}, attempt #{}. this is an error if we didn't reboot",
-        hex::encode(id),
-        attempt
+        "already attempted batch {id}, attempt #{attempt}. this is an error if we didn't reboot"
       );
       return None;
     }
@@ -215,7 +195,7 @@ impl<D: Db> BatchSigner<D> {
     batch: Batch,
   ) -> Option<ProcessorMessage> {
     debug_assert_eq!(self.network, batch.network);
-    let id = batch_sign_id(batch.network, batch.id);
+    let id = batch.id;
     if CompletedDb::get(txn, id).is_some() {
       debug!("Sign batch order for ID we've already completed signing");
       // See batch_signed for commentary on why this simply returns
@@ -246,10 +226,7 @@ impl<D: Db> BatchSigner<D> {
         let (machines, our_preprocesses) = match self.preprocessing.remove(&id) {
           // Either rebooted or RPC error, or some invariant
           None => {
-            warn!(
-              "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id),
-            );
+            warn!("not preprocessing for {id}. this is an error if we didn't reboot");
             return None;
           }
           Some(preprocess) => preprocess,
@@ -344,10 +321,7 @@ impl<D: Db> BatchSigner<D> {
               panic!("never preprocessed yet signing?");
             }
 
-            warn!(
-              "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(id)
-            );
+            warn!("not preprocessing for {id}. this is an error if we didn't reboot");
             return None;
           }
           Some(signing) => signing,
@@ -399,7 +373,7 @@ impl<D: Db> BatchSigner<D> {
           },
         };
 
-        info!("signed batch {} with attempt #{}", hex::encode(id), attempt);
+        info!("signed batch {id} with attempt #{attempt}");
 
         let batch =
           SignedBatch { batch: self.signable.remove(&id).unwrap(), signature: sig.into() };
@@ -426,15 +400,13 @@ impl<D: Db> BatchSigner<D> {
   }
 
   pub fn batch_signed(&mut self, txn: &mut D::Transaction<'_>, id: u32) {
-    let sign_id = batch_sign_id(self.network, id);
-
     // Stop trying to sign for this batch
-    CompletedDb::set(txn, sign_id, &());
+    CompletedDb::set(txn, id, &());
 
-    self.signable.remove(&sign_id);
-    self.attempt.remove(&sign_id);
-    self.preprocessing.remove(&sign_id);
-    self.signing.remove(&sign_id);
+    self.signable.remove(&id);
+    self.attempt.remove(&id);
+    self.preprocessing.remove(&id);
+    self.signing.remove(&id);
 
     // This doesn't emit SignedBatch because it doesn't have access to the SignedBatch
     // This function is expected to only be called once Substrate acknowledges this block,

@@ -28,6 +28,7 @@ use tributary::{
 use crate::{
   Db,
   processors::Processors,
+  substrate::BatchInstructionsHashDb,
   tributary::{*, signing_protocol::*},
   P2p,
 };
@@ -315,17 +316,17 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               }
             }
             SubstrateSignableId::Batch(batch) => {
-              // Check if the Batch was published/we're actively publishing it
-              todo!();
-
-              // Instruct the processor to start the next attempt
-              self
-                .processors
-                .send(
-                  self.spec.set().network,
-                  processor_messages::coordinator::CoordinatorMessage::BatchReattempt { id },
-                )
-                .await;
+              // If the Batch hasn't appeared on-chain...
+              if BatchInstructionsHashDb::get(self.txn, self.spec.set().network, batch).is_none() {
+                // Instruct the processor to start the next attempt
+                self
+                  .processors
+                  .send(
+                    self.spec.set().network,
+                    processor_messages::coordinator::CoordinatorMessage::BatchReattempt { id },
+                  )
+                  .await;
+              }
             }
           }
         }
