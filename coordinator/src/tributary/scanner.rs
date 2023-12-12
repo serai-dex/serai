@@ -229,6 +229,8 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     let genesis = self.spec.genesis();
     for topic in ReattemptDb::take(self.txn, genesis, self.block_number) {
       let attempt = AttemptDb::start_next_attempt(self.txn, genesis, topic);
+      log::info!("re-attempting {topic:?} with attempt {attempt}");
+
       /*
         All of these have the same common flow:
 

@@ -235,7 +235,7 @@ impl Debug for Transaction {
         fmt.debug_struct("Transaction::SubstrateBlock").field("block", block).finish()
       }
       Transaction::SubstrateSign(sign_data) => {
-        fmt.debug_struct("Transaction::Substrate").field("sign_data", sign_data).finish()
+        fmt.debug_struct("Transaction::SubstrateSign").field("sign_data", sign_data).finish()
       }
       Transaction::Sign(sign_data) => {
         fmt.debug_struct("Transaction::Sign").field("sign_data", sign_data).finish()

@@ -103,6 +103,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     signer: <Ristretto as Ciphersuite>::G,
     data: &Vec<u8>,
   ) -> Accumulation {
+    log::debug!("accumulating entry for {:?} attempt #{}", &data_spec.topic, &data_spec.attempt);
     let genesis = self.spec.genesis();
     if DataDb::get(self.txn, genesis, data_spec, &signer.to_bytes()).is_some() {
       panic!("accumulating data for a participant multiple times");
@@ -144,6 +145,11 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation);
     let needed = if needs_everyone { self.spec.n() } else { self.spec.t() };
     if received_range.contains(&needed) {
+      log::debug!(
+        "accumulation for entry {:?} attempt #{} is ready",
+        &data_spec.topic,
+        &data_spec.attempt
+      );
       return Accumulation::Ready({
         let mut data = HashMap::new();
         for validator in self.spec.validators().iter().map(|validator| validator.0) {
@@ -203,6 +209,12 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
     // If the attempt is lesser than the blockchain's, return
     if data_spec.attempt < curr_attempt {
+      log::debug!(
+        "dated attempt published onto tributary for topic {:?} (used attempt {}, current {})",
+        data_spec.topic,
+        data_spec.attempt,
+        curr_attempt
+      );
       return Accumulation::NotReady;
     }
     // If the attempt is greater, this is a premature publication, full slash
