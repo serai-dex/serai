@@ -187,7 +187,20 @@ impl Rpc {
 
   /// Publish a transaction.
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
-    let txid = self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await?;
+    let txid = match self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await {
+      Ok(txid) => txid,
+      Err(e) => {
+        // A const from Bitcoin's bitcoin/src/rpc/protocol.h
+        const RPC_VERIFY_ALREADY_IN_CHAIN: isize = -27;
+        // If this was already successfully published, consider this having succeeded
+        if let RpcError::RequestError(Error { code, .. }) = e {
+          if code == RPC_VERIFY_ALREADY_IN_CHAIN {
+            return Ok(tx.txid());
+          }
+        }
+        Err(e)?
+      }
+    };
     if txid != tx.txid() {
       Err(RpcError::InvalidResponse("returned TX ID inequals calculated TX ID"))?;
     }
