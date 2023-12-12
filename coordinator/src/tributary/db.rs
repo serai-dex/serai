@@ -5,7 +5,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use frost::Participant;
 
-use serai_client::validator_sets::primitives::KeyPair;
+use serai_client::validator_sets::primitives::{KeyPair, ValidatorSet};
 
 use processor_messages::coordinator::SubstrateSignableId;
 
@@ -45,6 +45,9 @@ pub enum Accumulation {
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
+    SeraiDkgRemoval: (spec: ValidatorSet, removing: [u8; 32]) -> (),
+    SeraiDkgCompleted: (spec: ValidatorSet) -> (),
+
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
@@ -56,6 +59,7 @@ create_db!(
       (genesis: [u8; 32], removing: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
     DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
     DkgCompleted: (genesis: [u8; 32]) -> (),
+    LocallyDkgRemoved: (genesis: [u8; 32], validator: [u8; 32]) -> (),
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     ReattemptDb: (genesis: [u8; 32], block: u32) -> Vec<Topic>,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,

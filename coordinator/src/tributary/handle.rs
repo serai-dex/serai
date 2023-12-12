@@ -26,12 +26,9 @@ use serai_db::*;
 use crate::{
   processors::Processors,
   tributary::{
-    SignData, Transaction, TributarySpec, SeraiBlockNumber, Topic, Label, DataSpecification,
-    DataSet, Accumulation,
+    *,
     signing_protocol::{DkgConfirmer, DkgRemoval},
     scanner::{RecognizedIdType, RIDTrait, PstTxType, PSTTrait, PTTTrait, TributaryBlockHandler},
-    FatallySlashed, DkgShare, DkgCompleted, PlanIds, ConfirmationNonces, RemovalNonces, DkgKeyPair,
-    AttemptDb, ReattemptDb, DataReceived, DataDb,
   },
   P2p,
 };
@@ -133,6 +130,10 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       // place
       assert_eq!(AttemptDb::attempt(self.txn, genesis, data_spec.topic), Some(data_spec.attempt));
       ReattemptDb::schedule_reattempt(self.txn, genesis, self.block_number, data_spec.topic);
+
+      // Because this attempt was participated in, it was justified
+      // The question becomes why did the prior attempt fail?
+      // TODO: Slash people who failed to participate as expected in the prior attempt
     }
 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
@@ -572,6 +573,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               signers,
               Signature(signature),
             );
+            LocallyDkgRemoved::set(self.txn, genesis, data.plan, &());
             self
               .publish_serai_tx
               .publish_serai_tx(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
