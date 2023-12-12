@@ -554,17 +554,22 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               return;
             };
 
-            // TODO: Only handle this if we're not actively removing any of the signers
+            // We need to only handle this if we're not actively removing any of the signers
+            // At the start of this function, we only handle messages from non-fatally slashed
+            // participants, so this is held
+            //
             // The created Substrate call will fail if a removed validator was one of the signers
             // Since:
             // 1) publish_serai_tx will block this task until the TX is published
             // 2) We won't scan any more TXs/blocks until we handle this TX
             // The TX *must* be successfully published *before* we start removing any more
             // signers
+            //
             // Accordingly, if the signers aren't currently being removed, they won't be removed
             // by the time this transaction is successfully published *unless* a malicious 34%
             // participates with the non-participating 33% to continue operation and produce a
             // distinct removal (since the non-participating won't block in this block)
+            //
             // This breaks BFT and is accordingly within bounds
 
             let tx = serai_client::SeraiValidatorSets::remove_participant(
