@@ -11,12 +11,12 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
 FROM alpine:latest as bitcoin
 
-ENV BITCOIN_VERSION=25.1
+ENV BITCOIN_VERSION=26.0
 
 RUN apk --no-cache add git gnupg
 
 # Download Bitcoin
-RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz \
+RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz \
   && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS \
   && wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
 
@@ -26,10 +26,10 @@ RUN git clone https://github.com/bitcoin-core/guix.sigs && \
   find . -iname '*.gpg' -exec gpg --import {} \; && \
   gpg --verify --status-fd 1 --verify ../../SHA256SUMS.asc ../../SHA256SUMS | grep "^\[GNUPG:\] VALIDSIG.*71A3B16735405025D447E8F274810B012346C9A6"
 
-RUN grep bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
+RUN grep bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
 
 # Prepare Image
-RUN tar xzvf bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
+RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 FROM debian:bookworm-slim as image
 
