@@ -151,7 +151,14 @@ fn test_classic_seed() {
     // Test against Monero
     {
       let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
-      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim_seed(&vector.seed))).unwrap());
+      let trim = trim_seed(&vector.seed);
+      println!(
+        "{}. seed: {}, entropy: {:?}, trim: {trim}",
+        line!(),
+        *seed.to_string(),
+        *seed.entropy()
+      );
+      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
 
       let spend: [u8; 32] = hex::decode(vector.spend).unwrap().try_into().unwrap();
       // For classical seeds, Monero directly uses the entropy as a spend key
@@ -177,7 +184,14 @@ fn test_classic_seed() {
     // Test against ourselves
     {
       let seed = Seed::new(&mut OsRng, SeedType::Classic(vector.language));
-      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim_seed(&seed.to_string()))).unwrap());
+      let trim = trim_seed(&seed.to_string());
+      println!(
+        "{}. seed: {}, entropy: {:?}, trim: {trim}",
+        line!(),
+        *seed.to_string(),
+        *seed.entropy()
+      );
+      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
       assert_eq!(
         seed,
         Seed::from_entropy(SeedType::Classic(vector.language), seed.entropy(), None).unwrap()
@@ -337,20 +351,30 @@ fn test_polyseed() {
 
     // String -> Seed
     let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
+    let trim = trim_seed(&vector.seed);
+    let add_whitespace = add_whitespace(vector.seed.clone());
+    let seed_without_accents = seed_without_accents(&vector.seed);
+    println!(
+      "{}. seed: {}, entropy: {:?}, trim: {}, add_whitespace: {}, seed_without_accents: {}",
+      line!(),
+      *seed.to_string(),
+      *seed.entropy(),
+      trim,
+      add_whitespace,
+      seed_without_accents,
+    );
 
     // Make sure a version with added whitespace still works
-    let whitespaced_seed =
-      Seed::from_string(Zeroizing::new(add_whitespace(vector.seed.clone()))).unwrap();
+    let whitespaced_seed = Seed::from_string(Zeroizing::new(add_whitespace)).unwrap();
     assert_eq!(seed, whitespaced_seed);
     // Check trimmed versions works
     if vector.has_prefix {
-      let trimmed_seed = Seed::from_string(Zeroizing::new(trim_seed(&vector.seed))).unwrap();
+      let trimmed_seed = Seed::from_string(Zeroizing::new(trim)).unwrap();
       assert_eq!(seed, trimmed_seed);
     }
     // Check versions without accents work
     if vector.has_accent {
-      let seed_without_accents =
-        Seed::from_string(Zeroizing::new(seed_without_accents(&vector.seed))).unwrap();
+      let seed_without_accents = Seed::from_string(Zeroizing::new(seed_without_accents)).unwrap();
       assert_eq!(seed, seed_without_accents);
     }
 
@@ -367,6 +391,7 @@ fn test_polyseed() {
     // Check against ourselves
     {
       let seed = Seed::new(&mut OsRng, SeedType::Polyseed(vector.language));
+      println!("{}. seed: {}, key: {:?}", line!(), *seed.to_string(), *seed.key());
       assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
       assert_eq!(
         seed,
