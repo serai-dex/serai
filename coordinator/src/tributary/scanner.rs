@@ -296,19 +296,23 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
                 .expect("couldn't get the block number for prior attempted cosign");
 
               // Check if the cosigner has a signature from our set for this block/a newer one
-              todo!();
-
-              // Instruct the processor to start the next attempt
-              self
-                .processors
-                .send(
-                  self.spec.set().network,
-                  processor_messages::coordinator::CoordinatorMessage::CosignSubstrateBlock {
-                    id,
-                    block_number,
-                  },
-                )
-                .await;
+              let latest_cosign =
+                crate::cosign_evaluator::LatestCosign::get(self.txn, self.spec.set().network)
+                  .map(|cosign| cosign.block_number)
+                  .unwrap_or(0);
+              if latest_cosign < block_number {
+                // Instruct the processor to start the next attempt
+                self
+                  .processors
+                  .send(
+                    self.spec.set().network,
+                    processor_messages::coordinator::CoordinatorMessage::CosignSubstrateBlock {
+                      id,
+                      block_number,
+                    },
+                  )
+                  .await;
+              }
             }
             SubstrateSignableId::Batch(batch) => {
               // Check if the Batch was published/we're actively publishing it
