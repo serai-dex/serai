@@ -114,7 +114,7 @@ impl ReattemptDb {
     topic: Topic,
   ) {
     // 5 minutes
-    const BASE_REATTEMPT_DELAY: u32 = (5 * 60) / tributary::tendermint::TARGET_BLOCK_TIME;
+    const BASE_REATTEMPT_DELAY: u32 = (5 * 60 * 1000) / tributary::tendermint::TARGET_BLOCK_TIME;
     // 5 minutes for attempts 0 ..= 2, 10 minutes for attempts 3 ..= 5, 15 minutes for attempts > 5
     // Assumes no event will take longer than 15 minutes, yet grows the time in case there are
     // network bandwidth issues
