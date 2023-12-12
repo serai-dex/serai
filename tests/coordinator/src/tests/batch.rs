@@ -224,8 +224,19 @@ pub async fn batch(
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
   for processor in processors {
+    // Handle a potential re-attempt message in the pipeline
+    let mut received = processor.recv_message().await;
+    if matches!(
+      received,
+      messages::CoordinatorMessage::Coordinator(
+        messages::coordinator::CoordinatorMessage::BatchReattempt { .. }
+      )
+    ) {
+      received = processor.recv_message().await
+    }
+
     assert_eq!(
-      processor.recv_message().await,
+      received,
       messages::CoordinatorMessage::Substrate(
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context: SubstrateContext {
