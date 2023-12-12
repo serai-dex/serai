@@ -37,7 +37,7 @@ use bitcoin_serai::bitcoin::{
   secp256k1::{SECP256K1, SecretKey, Message},
   PrivateKey, PublicKey,
   sighash::{EcdsaSighashType, SighashCache},
-  script::{PushBytesBuf, Builder},
+  script::PushBytesBuf,
   absolute::LockTime,
   Amount as BAmount, Sequence, Script, Witness, OutPoint,
   transaction::Version,
@@ -394,6 +394,31 @@ impl Bitcoin {
     // Accordingly, setting 1 is 4x the current relay rule minimum (and should be more than safe).
     // TODO: Rewrite to fee_per_vbyte, not fee_per_weight?
     Ok(Fee(fee.max(1)))
+  }
+
+  #[cfg(test)]
+  pub fn sign_btc_input_for_p2pkh(tx: &Transaction, private_key: &PrivateKey) -> ScriptBuf {
+    let public_key = PublicKey::from_private_key(SECP256K1, private_key);
+    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+
+    let mut der = SECP256K1
+      .sign_ecdsa_low_r(
+        &Message::from(
+          SighashCache::new(tx)
+            .legacy_signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32())
+            .unwrap()
+            .to_raw_hash(),
+        ),
+        &private_key.inner,
+      )
+      .serialize_der()
+      .to_vec();
+    der.push(1);
+
+    ScriptBuf::builder()
+      .push_slice(PushBytesBuf::try_from(der).unwrap())
+      .push_key(&public_key)
+      .into_script()
   }
 
   async fn make_signable_transaction(
@@ -826,13 +851,9 @@ impl Network for Bitcoin {
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self
       .rpc
-      .rpc_call::<Vec<String>>("generatetoaddress", serde_json::json!([1, main_addr]))
+      .rpc_call::<Vec<String>>("generatetoaddress", serde_json::json!([100, main_addr]))
       .await
       .unwrap();
-
-    for _ in 0 .. 100 {
-      self.mine_block().await;
-    }
 
     let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
     let mut tx = Transaction {
@@ -849,24 +870,7 @@ impl Network for Bitcoin {
         script_pubkey: address.as_ref().script_pubkey(),
       }],
     };
-
-    let mut der = SECP256K1
-      .sign_ecdsa_low_r(
-        &Message::from(
-          SighashCache::new(&tx)
-            .legacy_signature_hash(0, &main_addr.script_pubkey(), EcdsaSighashType::All.to_u32())
-            .unwrap()
-            .to_raw_hash(),
-        ),
-        &private_key.inner,
-      )
-      .serialize_der()
-      .to_vec();
-    der.push(1);
-    tx.input[0].script_sig = Builder::new()
-      .push_slice(PushBytesBuf::try_from(der).unwrap())
-      .push_key(&public_key)
-      .into_script();
+    tx.input[0].script_sig = Self::sign_btc_input_for_p2pkh(&tx, &private_key);
 
     let block = self.get_latest_block_number().await.unwrap() + 1;
     self.rpc.send_raw_transaction(&tx).await.unwrap();
