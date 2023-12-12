@@ -1,6 +1,7 @@
 use core::time::Duration;
 use std::sync::Arc;
 
+use ciphersuite::Ciphersuite;
 use rand_core::OsRng;
 
 use frost::{Participant, tests::key_gen};
@@ -14,6 +15,31 @@ use crate::{
   multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
+pub async fn new_scanner<N: Network, D: Db>(
+  network: &N,
+  db: &D,
+  group_key: <N::Curve as Ciphersuite>::G,
+) -> ScannerHandle<N, D> {
+  let first = Arc::new(Mutex::new(true));
+  let activation_number = network.get_latest_block_number().await.unwrap();
+  let mut db = db.clone();
+  let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
+  let mut first = first.lock().await;
+  if *first {
+    assert!(current_keys.is_empty());
+    let mut txn = db.txn();
+    scanner.register_key(&mut txn, activation_number, group_key).await;
+    txn.commit();
+    for _ in 0 .. N::CONFIRMATIONS {
+      network.mine_block().await;
+    }
+    *first = false;
+  } else {
+    assert_eq!(current_keys.len(), 1);
+  }
+  scanner
+}
+
 pub async fn test_scanner<N: Network>(network: N) {
   let mut keys =
     frost::tests::key_gen::<_, N::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
@@ -25,28 +51,8 @@ pub async fn test_scanner<N: Network>(network: N) {
     network.mine_block().await;
   }
 
-  let first = Arc::new(Mutex::new(true));
-  let activation_number = network.get_latest_block_number().await.unwrap();
   let db = MemDb::new();
-  let new_scanner = || async {
-    let mut db = db.clone();
-    let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
-    let mut first = first.lock().await;
-    if *first {
-      assert!(current_keys.is_empty());
-      let mut txn = db.txn();
-      scanner.register_key(&mut txn, activation_number, group_key).await;
-      txn.commit();
-      for _ in 0 .. N::CONFIRMATIONS {
-        network.mine_block().await;
-      }
-      *first = false;
-    } else {
-      assert_eq!(current_keys.len(), 1);
-    }
-    scanner
-  };
-  let scanner = new_scanner().await;
+  let scanner = new_scanner(&network, &db, group_key).await;
 
   // Receive funds
   let block = network.test_send(N::external_address(keys.group_key())).await;
@@ -73,7 +79,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   let (mut scanner, outputs) = verify_event(scanner).await;
 
   // Create a new scanner off the current DB and verify it re-emits the above events
-  verify_event(new_scanner().await).await;
+  verify_event(new_scanner(&network, &db, group_key).await).await;
 
   // Acknowledge the block
   let mut cloned_db = db.clone();
@@ -86,7 +92,12 @@ pub async fn test_scanner<N: Network>(network: N) {
   assert!(timeout(Duration::from_secs(30), scanner.events.recv()).await.is_err());
 
   // Create a new scanner off the current DB and make sure it also does nothing
-  assert!(timeout(Duration::from_secs(30), new_scanner().await.events.recv()).await.is_err());
+  assert!(timeout(
+    Duration::from_secs(30),
+    new_scanner(&network, &db, group_key).await.events.recv()
+  )
+  .await
+  .is_err());
 }
 
 pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {

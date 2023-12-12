@@ -503,9 +503,9 @@ impl Bitcoin {
       for input in &tx.input {
         if self.spent_output_of(input).await.script_pubkey.is_p2wsh() {
           let witness = input.witness.to_vec();
-          let redeem_script = ScriptBuf::from_bytes(witness[0].clone());
+          let redeem_script = ScriptBuf::from_bytes(witness[1].clone());
           if let Some(true) = self.expected_script_pattern(&redeem_script) {
-            data = witness[1].clone();
+            data = witness[0].clone();
             break;
           }
         }
