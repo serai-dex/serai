@@ -272,6 +272,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       provided_in_chain,
       allow_non_local_provided,
     );
+    // Drop this TXN's changes as we're solely verifying the block
     drop(txn);
     res
   }

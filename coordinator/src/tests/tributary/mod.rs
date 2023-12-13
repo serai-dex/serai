@@ -123,10 +123,13 @@ fn serialize_sign_data() {
 
 #[test]
 fn serialize_transaction() {
-  test_read_write(Transaction::RemoveParticipant(
-    frost::Participant::new(u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1))
-      .unwrap(),
-  ));
+  test_read_write(Transaction::RemoveParticipantDueToDkg {
+    attempt: u32::try_from(OsRng.next_u64() >> 32).unwrap(),
+    participant: frost::Participant::new(
+      u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
+    )
+    .unwrap(),
+  });
 
   {
     let mut commitments = vec![random_vec(&mut OsRng, 512)];

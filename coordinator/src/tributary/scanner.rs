@@ -133,10 +133,19 @@ pub struct TributaryBlockHandler<
 impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
   TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
-  async fn dkg_removal_attempt(&mut self, removing: [u8; 32], attempt: u32) {
-    let preprocess =
-      (DkgRemoval { spec: self.spec, key: self.our_key, txn: self.txn, removing, attempt })
-        .preprocess();
+  async fn attempt_dkg_removal(&mut self, removing: [u8; 32], attempt: u32) {
+    let genesis = self.spec.genesis();
+    let removed = crate::tributary::removed_as_of_fatal_slash(self.txn, genesis, removing)
+      .expect("attempting DKG removal to remove someone who wasn't removed");
+    let preprocess = (DkgRemoval {
+      key: self.our_key,
+      spec: self.spec,
+      txn: self.txn,
+      removed: &removed,
+      removing,
+      attempt,
+    })
+    .preprocess();
     let mut tx = Transaction::DkgRemoval(SignData {
       plan: removing,
       attempt,
@@ -144,7 +153,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       data: vec![preprocess.to_vec()],
       signed: Transaction::empty_signed(),
     });
-    tx.sign(&mut OsRng, self.spec.genesis(), self.our_key);
+    tx.sign(&mut OsRng, genesis, self.our_key);
     self.publish_tributary_tx.publish_tributary_tx(tx).await;
   }
 
@@ -163,7 +172,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     // If during a DKG, remove the participant
     if DkgCompleted::get(self.txn, genesis).is_none() {
       AttemptDb::recognize_topic(self.txn, genesis, Topic::DkgRemoval(slashing));
-      self.dkg_removal_attempt(slashing, 0).await;
+      self.attempt_dkg_removal(slashing, 0).await;
     }
   }
 
@@ -171,12 +180,17 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
   // Tributary post-DKG
   // https://github.com/serai-dex/serai/issues/426
 
-  pub async fn fatal_slash_with_participant_index(&mut self, i: Participant, reason: &str) {
+  pub async fn fatal_slash_with_participant_index(
+    &mut self,
+    removed: &[<Ristretto as Ciphersuite>::G],
+    i: Participant,
+    reason: &str,
+  ) {
     // Resolve from Participant to <Ristretto as Ciphersuite>::G
     let i = u16::from(i);
     let mut validator = None;
     for (potential, _) in self.spec.validators() {
-      let v_i = self.spec.i(potential).unwrap();
+      let v_i = self.spec.i(removed, potential).unwrap();
       if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
         validator = Some(potential);
         break;
@@ -250,19 +264,34 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       */
       match topic {
         Topic::Dkg => {
+          #[allow(clippy::unwrap_or_default)]
+          FatalSlashesAsOfDkgAttempt::set(
+            self.txn,
+            genesis,
+            attempt,
+            &FatalSlashes::get(self.txn, genesis).unwrap_or(vec![]),
+          );
+
           if DkgCompleted::get(self.txn, genesis).is_none() {
             // Since it wasn't completed, instruct the processor to start the next attempt
             let id =
               processor_messages::key_gen::KeyGenId { session: self.spec.set().session, attempt };
-            let our_i = self.spec.i(Ristretto::generator() * self.our_key.deref()).unwrap();
 
-            // TODO: Handle removed parties (modify n/i to accept list of removed)
+            let removed = crate::tributary::latest_removed(self.txn, genesis);
+            let our_i =
+              self.spec.i(&removed, Ristretto::generator() * self.our_key.deref()).unwrap();
+
             // TODO: Don't fatal slash, yet don't include, parties who have been offline so long as
-            // we still meet the needed threshold. We'd need a complete DKG protocol we then remove
-            // the offline participants from. publishing the DKG protocol completed without them.
+            // we still meet the needed threshold. This will have to have any parties removed for
+            // being offline, who aren't participating in the confirmed key, drop the Tributary and
+            // notify their processor.
+
+            // TODO: Instead of DKG confirmations taking a n-of-n MuSig, have it take a t-of-n with
+            // a specification of those explicitly removed and those removed due to being offline.
 
             let params =
-              frost::ThresholdParams::new(self.spec.t(), self.spec.n(), our_i.start).unwrap();
+              frost::ThresholdParams::new(self.spec.t(), self.spec.n(&removed), our_i.start)
+                .unwrap();
             let shares = u16::from(our_i.end) - u16::from(our_i.start);
 
             self
@@ -284,7 +313,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
             SeraiDkgRemoval::get(self.txn, self.spec.set(), removing).is_none()
           {
             // Since it wasn't completed, attempt a new DkgRemoval
-            self.dkg_removal_attempt(removing, attempt).await;
+            self.attempt_dkg_removal(removing, attempt).await;
           }
         }
         Topic::SubstrateSign(inner_id) => {

@@ -179,7 +179,6 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
 pub trait GAIN: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32> {}
 impl<F: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32>> GAIN for F {}
 
-// This will only cause mutations when the transaction is valid
 pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
@@ -204,7 +203,7 @@ pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
         Err(TransactionError::InvalidSigner)?;
       }
 
-      // TODO: Use Schnorr half-aggregation and a batch verification here
+      // TODO: Use a batch verification here
       if !signature.verify(*signer, tx.sig_hash(genesis)) {
         Err(TransactionError::InvalidSignature)?;
       }

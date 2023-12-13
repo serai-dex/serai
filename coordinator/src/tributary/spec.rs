@@ -1,5 +1,5 @@
 use core::{ops::Range, fmt::Debug};
-use std::io;
+use std::{io, collections::HashMap};
 
 use transcript::{Transcript, RecommendedTranscript};
 
@@ -88,26 +88,53 @@ impl TributarySpec {
     self.start_time
   }
 
-  pub fn n(&self) -> u16 {
-    self.validators.iter().map(|(_, weight)| weight).sum()
+  pub fn n(&self, removed_validators: &[<Ristretto as Ciphersuite>::G]) -> u16 {
+    self
+      .validators
+      .iter()
+      .map(|(validator, weight)| if removed_validators.contains(validator) { 0 } else { *weight })
+      .sum()
   }
 
   pub fn t(&self) -> u16 {
-    ((2 * self.n()) / 3) + 1
+    // t doesn't change with regards to the amount of removed validators
+    ((2 * self.n(&[])) / 3) + 1
   }
 
-  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Range<Participant>> {
+  pub fn i(
+    &self,
+    removed_validators: &[<Ristretto as Ciphersuite>::G],
+    key: <Ristretto as Ciphersuite>::G,
+  ) -> Option<Range<Participant>> {
+    let mut all_is = HashMap::new();
     let mut i = 1;
     for (validator, weight) in &self.validators {
-      if validator == &key {
-        return Some(Range {
-          start: Participant::new(i).unwrap(),
-          end: Participant::new(i + weight).unwrap(),
-        });
-      }
+      all_is.insert(
+        *validator,
+        Range { start: Participant::new(i).unwrap(), end: Participant::new(i + weight).unwrap() },
+      );
       i += weight;
     }
-    None
+
+    let original_i = all_is.get(&key)?.clone();
+    let mut result_i = original_i.clone();
+    for removed_validator in removed_validators {
+      let removed_i = all_is
+        .get(removed_validator)
+        .expect("removed validator wasn't present in set to begin with");
+      // If the queried key was removed, return None
+      if &original_i == removed_i {
+        return None;
+      }
+
+      // If the removed was before the queried, shift the queried down accordingly
+      if removed_i.start < original_i.start {
+        let removed_shares = u16::from(removed_i.end) - u16::from(removed_i.start);
+        result_i.start = Participant::new(u16::from(original_i.start) - removed_shares).unwrap();
+        result_i.end = Participant::new(u16::from(original_i.end) - removed_shares).unwrap();
+      }
+    }
+    Some(result_i)
   }
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {

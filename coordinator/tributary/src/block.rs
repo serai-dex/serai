@@ -249,8 +249,6 @@ impl<T: TransactionTrait> Block<T> {
       }
       last_tx_order = current_tx_order;
 
-      // TODO: should we modify the verify_transaction to take `Transaction<T>` or
-      // use this pattern of verifying tendermint Txs and app txs differently?
       match tx {
         Transaction::Tendermint(tx) => {
           match verify_tendermint_tx::<N>(tx, schema.clone(), &commit) {

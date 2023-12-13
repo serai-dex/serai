@@ -108,14 +108,14 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   // This is safe due to the message-queue deduplicating based off the intent system
   let set = spec.set();
   let our_i = spec
-    .i(Ristretto::generator() * key.deref())
+    .i(&[], Ristretto::generator() * key.deref())
     .expect("adding a tributary for a set we aren't in set for");
   processors
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
         id: processor_messages::key_gen::KeyGenId { session: set.session, attempt: 0 },
-        params: frost::ThresholdParams::new(spec.t(), spec.n(), our_i.start).unwrap(),
+        params: frost::ThresholdParams::new(spec.t(), spec.n(&[]), our_i.start).unwrap(),
         shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
     )
@@ -370,21 +370,24 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           }]
         }
-        key_gen::ProcessorMessage::InvalidCommitments { id: _, faulty } => {
+        key_gen::ProcessorMessage::InvalidCommitments { id, faulty } => {
           // This doesn't need the ID since it's a Provided transaction which everyone will provide
-          // With this provision comes explicit ordering (with regards to other RemoveParticipant
-          // transactions) and group consensus
+          // With this provision comes explicit ordering (with regards to other
+          // RemoveParticipantDueToDkg transactions) and group consensus
           // Accordingly, this can't be replayed
           // It could be included on-chain early/late with regards to the chain's active attempt,
-          // which attempt scheduling is written to avoid
-          vec![Transaction::RemoveParticipant(faulty)]
+          // which attempt scheduling is written to make a non-issue by auto re-attempting once a
+          // fatal slash occurs, regardless of timing
+          vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant: faulty }]
         }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
           let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, &mut txn, id.attempt);
 
+          let removed = crate::tributary::removed_as_of_dkg_attempt(&txn, genesis, id.attempt)
+            .expect("participating in a DKG attempt yet we didn't track who was removed yet?");
           let our_i = spec
-            .i(pub_key)
+            .i(&removed, pub_key)
             .expect("processor message to DKG for a session we aren't a validator in");
 
           // `tx_shares` needs to be done here as while it can be serialized from the HashMap
@@ -392,7 +395,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
           let mut tx_shares = Vec::with_capacity(shares.len());
           for shares in &mut shares {
             tx_shares.push(vec![]);
-            for i in 1 ..= spec.n() {
+            for i in 1 ..= spec.n(&removed) {
               let i = Participant::new(i).unwrap();
               if our_i.contains(&i) {
                 if shares.contains_key(&i) {
@@ -415,13 +418,16 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
           // Check if the MuSig signature had any errors as if so, we need to provide
-          // RemoveParticipant
+          // RemoveParticipantDueToDkg
           // As for the safety of calling error_generating_key_pair, the processor is presumed
           // to only send InvalidShare or GeneratedKeyPair for a given attempt
           let mut txs = if let Some(faulty) =
             crate::tributary::error_generating_key_pair(&mut txn, key, spec, id.attempt)
           {
-            vec![Transaction::RemoveParticipant(faulty)]
+            vec![Transaction::RemoveParticipantDueToDkg {
+              attempt: id.attempt,
+              participant: faulty,
+            }]
           } else {
             vec![]
           };
@@ -457,14 +463,14 @@ async fn handle_processor_message<D: Db, P: P2p>(
               }]
             }
             Err(p) => {
-              vec![Transaction::RemoveParticipant(p)]
+              vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant: p }]
             }
           }
         }
         // This is a response to the ordered VerifyBlame, which is why this satisfies the provided
         // transaction's needs to be perfectly ordered
-        key_gen::ProcessorMessage::Blame { id: _, participant } => {
-          vec![Transaction::RemoveParticipant(participant)]
+        key_gen::ProcessorMessage::Blame { id, participant } => {
+          vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant }]
         }
       },
       ProcessorMessage::Sign(msg) => match msg {

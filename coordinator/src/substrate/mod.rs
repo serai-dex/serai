@@ -268,6 +268,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       let ValidatorSetsEvent::KeyGen { set, key_pair } = key_gen else {
         panic!("KeyGen event wasn't KeyGen: {key_gen:?}");
       };
+      let substrate_key = key_pair.0 .0;
       processors
         .send(
           set.network,
@@ -289,7 +290,7 @@ async fn handle_block<D: Db, Pro: Processors>(
         )
         .await;
       let mut txn = db.txn();
-      SeraiDkgCompleted::set(&mut txn, set, &());
+      SeraiDkgCompleted::set(&mut txn, set, &substrate_key);
       HandledEvent::handle_event(&mut txn, hash, event_id);
       txn.commit();
     }

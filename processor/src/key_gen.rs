@@ -29,7 +29,7 @@ pub struct KeyConfirmed<C: Ciphersuite> {
 
 create_db!(
   KeyGenDb {
-    ParamsDb: (session: &Session) -> (ThresholdParams, u16),
+    ParamsDb: (session: &Session, attempt: u32) -> (ThresholdParams, u16),
     // Not scoped to the set since that'd have latter attempts overwrite former
     // A former attempt may become the finalized attempt, even if it doesn't in a timely manner
     // Overwriting its commitments would be accordingly poor
@@ -152,7 +152,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
   pub fn in_set(&self, session: &Session) -> bool {
     // We determine if we're in set using if we have the parameters for a session's key generation
-    ParamsDb::get(&self.db, session).is_some()
+    // The usage of 0 for the attempt is valid so long as we aren't malicious and accordingly
+    // aren't fatally slashed
+    // TODO: Revisit once we do DKG removals for being offline
+    ParamsDb::get(&self.db, session, 0).is_some()
   }
 
   #[allow(clippy::type_complexity)]
@@ -319,7 +322,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           self.active_share.remove(&id.session).is_none()
         {
           // If we haven't handled this session before, save the params
-          ParamsDb::set(txn, &id.session, &(params, shares));
+          ParamsDb::set(txn, &id.session, id.attempt, &(params, shares));
         }
 
         let (machines, commitments) = key_gen_machines(id, params, shares);
@@ -338,7 +341,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           panic!("commitments when already handled commitments");
         }
 
-        let (params, share_quantity) = ParamsDb::get(txn, &id.session).unwrap();
+        let (params, share_quantity) = ParamsDb::get(txn, &id.session, id.attempt).unwrap();
 
         // Unwrap the machines, rebuilding them if we didn't have them in our cache
         // We won't if the processor rebooted
@@ -373,7 +376,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Shares { id, shares } => {
         info!("Received shares for {:?}", id);
 
-        let (params, share_quantity) = ParamsDb::get(txn, &id.session).unwrap();
+        let (params, share_quantity) = ParamsDb::get(txn, &id.session, id.attempt).unwrap();
 
         // Same commentary on inconsistency as above exists
         let (machines, our_shares) = self.active_share.remove(&id.session).unwrap_or_else(|| {
@@ -514,7 +517,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       }
 
       CoordinatorMessage::VerifyBlame { id, accuser, accused, share, blame } => {
-        let params = ParamsDb::get(txn, &id.session).unwrap().0;
+        let params = ParamsDb::get(txn, &id.session, id.attempt).unwrap().0;
 
         let mut share_ref = share.as_slice();
         let Ok(substrate_share) = EncryptedMessage::<

@@ -39,7 +39,9 @@ pub fn dkg_confirmation_nonces(
   txn: &mut impl DbTxn,
   attempt: u32,
 ) -> [u8; 64] {
-  (DkgConfirmer { key, spec, txn, attempt }).preprocess()
+  DkgConfirmer::new(key, spec, txn, attempt)
+    .expect("getting DKG confirmation nonces for unknown attempt")
+    .preprocess()
 }
 
 // If there's an error generating a key pair, return any errors which would've occured when
@@ -58,7 +60,10 @@ pub fn error_generating_key_pair(
   // Sign a key pair which can't be valid
   // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
   let key_pair = KeyPair(Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
-  match (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, &key_pair) {
+  match DkgConfirmer::new(key, spec, txn, attempt)
+    .expect("reporting an error during DKG for an unrecognized attempt")
+    .share(preprocesses, &key_pair)
+  {
     Ok(mut share) => {
       // Zeroize the share to ensure it's not accessed
       share.zeroize();
@@ -76,13 +81,20 @@ pub fn generated_key_pair<D: Db>(
   attempt: u32,
 ) -> Result<[u8; 32], Participant> {
   DkgKeyPair::set(txn, spec.genesis(), attempt, key_pair);
+  KeyToDkgAttempt::set(txn, key_pair.0 .0, &attempt);
   let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
-  (DkgConfirmer { key, spec, txn, attempt }).share(preprocesses, key_pair)
+  DkgConfirmer::new(key, spec, txn, attempt)
+    .expect("claiming to have generated a key pair for an unrecognized attempt")
+    .share(preprocesses, key_pair)
 }
 
-fn unflatten(spec: &TributarySpec, data: &mut HashMap<Participant, Vec<u8>>) {
+fn unflatten(
+  spec: &TributarySpec,
+  removed: &[<Ristretto as Ciphersuite>::G],
+  data: &mut HashMap<Participant, Vec<u8>>,
+) {
   for (validator, _) in spec.validators() {
-    let range = spec.i(validator).unwrap();
+    let range = spec.i(removed, validator).unwrap();
     let Some(all_segments) = data.remove(&range.start) else {
       continue;
     };
@@ -99,6 +111,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 {
   fn accumulate(
     &mut self,
+    removed: &[<Ristretto as Ciphersuite>::G],
     data_spec: &DataSpecification,
     signer: <Ristretto as Ciphersuite>::G,
     data: &Vec<u8>,
@@ -109,8 +122,10 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       panic!("accumulating data for a participant multiple times");
     }
     let signer_shares = {
-      let signer_i =
-        self.spec.i(signer).expect("transaction signed by a non-validator for this tributary");
+      let signer_i = self
+        .spec
+        .i(removed, signer)
+        .expect("transaction signed by a non-validator for this tributary");
       u16::from(signer_i.end) - u16::from(signer_i.start)
     };
 
@@ -143,7 +158,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
     let needs_everyone =
       (data_spec.topic == Topic::Dkg) || (data_spec.topic == Topic::DkgConfirmation);
-    let needed = if needs_everyone { self.spec.n() } else { self.spec.t() };
+    let needed = if needs_everyone { self.spec.n(removed) } else { self.spec.t() };
     if received_range.contains(&needed) {
       log::debug!(
         "accumulation for entry {:?} attempt #{} is ready",
@@ -154,7 +169,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
         let mut data = HashMap::new();
         for validator in self.spec.validators().iter().map(|validator| validator.0) {
           data.insert(
-            self.spec.i(validator).unwrap().start,
+            self.spec.i(removed, validator).unwrap().start,
             if let Some(data) = DataDb::get(self.txn, genesis, data_spec, &validator.to_bytes()) {
               data
             } else {
@@ -170,7 +185,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           .remove(
             &self
               .spec
-              .i(Ristretto::generator() * self.our_key.deref())
+              .i(removed, Ristretto::generator() * self.our_key.deref())
               .expect("handling a message for a Tributary we aren't part of")
               .start,
           )
@@ -187,6 +202,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
   async fn handle_data(
     &mut self,
+    removed: &[<Ristretto as Ciphersuite>::G],
     data_spec: &DataSpecification,
     bytes: Vec<u8>,
     signed: &Signed,
@@ -234,15 +250,16 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     // TODO: If this is shares, we need to check they are part of the selected signing set
 
     // Accumulate this data
-    self.accumulate(data_spec, signed.signer, &bytes)
+    self.accumulate(removed, data_spec, signed.signer, &bytes)
   }
 
   async fn check_sign_data_len(
     &mut self,
+    removed: &[<Ristretto as Ciphersuite>::G],
     signer: <Ristretto as Ciphersuite>::G,
     len: usize,
   ) -> Result<(), ()> {
-    let signer_i = self.spec.i(signer).unwrap();
+    let signer_i = self.spec.i(removed, signer).unwrap();
     if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
       self
         .fatal_slash(
@@ -255,16 +272,23 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     Ok(())
   }
 
-  fn dkg_removal(&mut self, data: &SignData<[u8; 32]>) -> DkgRemoval<'_, T> {
+  fn dkg_removal<'a>(
+    &'a mut self,
+    removed: &'a [<Ristretto as Ciphersuite>::G],
+    data: &'a SignData<[u8; 32]>,
+  ) -> DkgRemoval<'a, T> {
     DkgRemoval {
-      spec: self.spec,
       key: self.our_key,
+      spec: self.spec,
       txn: self.txn,
+      removed,
       removing: data.plan,
       attempt: data.attempt,
     }
   }
 
+  // TODO: Don't call fatal_slash in here, return the party to fatal_slash to ensure no further
+  // execution occurs
   pub(crate) async fn handle_application_tx(&mut self, tx: Transaction) {
     let genesis = self.spec.genesis();
 
@@ -279,19 +303,37 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
     }
 
     match tx {
-      Transaction::RemoveParticipant(i) => {
-        self.fatal_slash_with_participant_index(i, "RemoveParticipant Provided TX").await
+      Transaction::RemoveParticipantDueToDkg { attempt, participant } => {
+        self
+          .fatal_slash_with_participant_index(
+            &removed_as_of_dkg_attempt(self.txn, genesis, attempt).unwrap_or_else(|| {
+              panic!(
+                "removed a participant due to a provided transaction with an attempt not {}",
+                "locally handled?"
+              )
+            }),
+            participant,
+            "RemoveParticipantDueToDkg Provided TX",
+          )
+          .await
       }
 
       Transaction::DkgCommitments { attempt, commitments, signed } => {
-        let Ok(_) = self.check_sign_data_len(signed.signer, commitments.len()).await else {
+        let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
+          self
+            .fatal_slash(signed.signer.to_bytes(), "DkgCommitments with an unrecognized attempt")
+            .await;
+          return;
+        };
+        let Ok(_) = self.check_sign_data_len(&removed, signed.signer, commitments.len()).await
+        else {
           return;
         };
         let data_spec = DataSpecification { topic: Topic::Dkg, label: Label::Preprocess, attempt };
-        match self.handle_data(&data_spec, commitments.encode(), &signed).await {
+        match self.handle_data(&removed, &data_spec, commitments.encode(), &signed).await {
           Accumulation::Ready(DataSet::Participating(mut commitments)) => {
             log::info!("got all DkgCommitments for {}", hex::encode(genesis));
-            unflatten(self.spec, &mut commitments);
+            unflatten(self.spec, &removed, &mut commitments);
             self
               .processors
               .send(
@@ -311,17 +353,23 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
 
       Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
-        let Ok(_) = self.check_sign_data_len(signed.signer, shares.len()).await else {
+        let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
+          self
+            .fatal_slash(signed.signer.to_bytes(), "DkgShares with an unrecognized attempt")
+            .await;
+          return;
+        };
+        let Ok(_) = self.check_sign_data_len(&removed, signed.signer, shares.len()).await else {
           return;
         };
 
         let sender_i = self
           .spec
-          .i(signed.signer)
+          .i(&removed, signed.signer)
           .expect("transaction added to tributary by signer who isn't a participant");
         let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
         for shares in &shares {
-          if shares.len() != (usize::from(self.spec.n() - sender_is_len)) {
+          if shares.len() != (usize::from(self.spec.n(&removed) - sender_is_len)) {
             self.fatal_slash(signed.signer.to_bytes(), "invalid amount of DKG shares").await;
             return;
           }
@@ -329,7 +377,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
         // Save each share as needed for blame
         {
-          let from_range = self.spec.i(signed.signer).unwrap();
+          let from_range = self.spec.i(&removed, signed.signer).unwrap();
           for (from_offset, shares) in shares.iter().enumerate() {
             let from =
               Participant::new(u16::from(from_range.start) + u16::try_from(from_offset).unwrap())
@@ -352,7 +400,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
         // Filter down to only our share's bytes for handle
         let our_i = self
           .spec
-          .i(Ristretto::generator() * self.our_key.deref())
+          .i(&removed, Ristretto::generator() * self.our_key.deref())
           .expect("in a tributary we're not a validator for");
 
         let our_shares = if sender_i == our_i {
@@ -382,7 +430,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
         let data_spec = DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt };
         let encoded_data = (confirmation_nonces.to_vec(), our_shares.encode()).encode();
-        match self.handle_data(&data_spec, encoded_data, &signed).await {
+        match self.handle_data(&removed, &data_spec, encoded_data, &signed).await {
           Accumulation::Ready(DataSet::Participating(confirmation_nonces_and_shares)) => {
             log::info!("got all DkgShares for {}", hex::encode(genesis));
 
@@ -440,7 +488,13 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
 
       Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
-        let range = self.spec.i(signed.signer).unwrap();
+        let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
+          self
+            .fatal_slash(signed.signer.to_bytes(), "InvalidDkgShare with an unrecognized attempt")
+            .await;
+          return;
+        };
+        let range = self.spec.i(&removed, signed.signer).unwrap();
         if !range.contains(&accuser) {
           self
             .fatal_slash(
@@ -457,7 +511,15 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           return;
         }
 
-        let share = DkgShare::get(self.txn, genesis, accuser.into(), faulty.into()).unwrap();
+        let Some(share) = DkgShare::get(self.txn, genesis, accuser.into(), faulty.into()) else {
+          self
+            .fatal_slash(
+              signed.signer.to_bytes(),
+              "InvalidDkgShare had a non-existent faulty participant",
+            )
+            .await;
+          return;
+        };
         self
           .processors
           .send(
@@ -474,11 +536,24 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
 
       Transaction::DkgConfirmed { attempt, confirmation_share, signed } => {
+        let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
+          self
+            .fatal_slash(signed.signer.to_bytes(), "DkgConfirmed with an unrecognized attempt")
+            .await;
+          return;
+        };
+
         let data_spec =
           DataSpecification { topic: Topic::DkgConfirmation, label: Label::Share, attempt };
-        match self.handle_data(&data_spec, confirmation_share.to_vec(), &signed).await {
+        match self.handle_data(&removed, &data_spec, confirmation_share.to_vec(), &signed).await {
           Accumulation::Ready(DataSet::Participating(shares)) => {
             log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
+
+            let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
+              panic!(
+                "DkgConfirmed for everyone yet didn't have the removed parties for this attempt",
+              );
+            };
 
             let preprocesses = ConfirmationNonces::get(self.txn, genesis, attempt).unwrap();
             // TODO: This can technically happen under very very very specific timing as the txn put
@@ -487,16 +562,17 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
               "in DkgConfirmed handling, which happens after everyone \
               (including us) fires DkgConfirmed, yet no confirming key pair",
             );
-            let sig =
-              match (DkgConfirmer { spec: self.spec, key: self.our_key, txn: self.txn, attempt })
-                .complete(preprocesses, &key_pair, shares)
-              {
-                Ok(sig) => sig,
-                Err(p) => {
-                  self.fatal_slash_with_participant_index(p, "invalid DkgConfirmer share").await;
-                  return;
-                }
-              };
+            let mut confirmer = DkgConfirmer::new(self.our_key, self.spec, self.txn, attempt)
+              .expect("confirming DKG for unrecognized attempt");
+            let sig = match confirmer.complete(preprocesses, &key_pair, shares) {
+              Ok(sig) => sig,
+              Err(p) => {
+                self
+                  .fatal_slash_with_participant_index(&removed, p, "invalid DkgConfirmer share")
+                  .await;
+                return;
+              }
+            };
 
             DkgCompleted::set(self.txn, genesis, &());
 
@@ -527,13 +603,20 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           return;
         }
 
+        let Some(removed) =
+          crate::tributary::removed_as_of_fatal_slash(self.txn, genesis, data.plan)
+        else {
+          self.fatal_slash(signer.to_bytes(), "removing someone who wasn't fatally slashed").await;
+          return;
+        };
+
         let data_spec = DataSpecification {
           topic: Topic::DkgRemoval(data.plan),
           label: data.label,
           attempt: data.attempt,
         };
         let Accumulation::Ready(DataSet::Participating(results)) =
-          self.handle_data(&data_spec, data.data.encode(), &data.signed).await
+          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
         else {
           return;
         };
@@ -542,7 +625,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           Label::Preprocess => {
             RemovalNonces::set(self.txn, genesis, data.plan, data.attempt, &results);
 
-            let Ok(share) = self.dkg_removal(&data).share(results) else {
+            let Ok(share) = self.dkg_removal(&removed, &data).share(results) else {
               // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
               // slash) and censor transactions (yet don't explicitly ban)
               return;
@@ -562,7 +645,8 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
             let preprocesses =
               RemovalNonces::get(self.txn, genesis, data.plan, data.attempt).unwrap();
 
-            let Ok((signers, signature)) = self.dkg_removal(&data).complete(preprocesses, results)
+            let Ok((signers, signature)) =
+              self.dkg_removal(&removed, &data).complete(preprocesses, results)
             else {
               // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
               // slash) and censor transactions (yet don't explicitly ban)
@@ -656,8 +740,21 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
 
       Transaction::SubstrateSign(data) => {
+        // Provided transactions ensure synchrony on any signing protocol, and we won't start
+        // signing with threshold keys before we've confirmed them on-chain
+        let Some(removed) =
+          crate::tributary::removed_as_of_set_keys(self.txn, self.spec.set(), genesis)
+        else {
+          self
+            .fatal_slash(
+              data.signed.signer.to_bytes(),
+              "signing despite not having set keys on substrate",
+            )
+            .await;
+          return;
+        };
         let signer = data.signed.signer;
-        let Ok(_) = self.check_sign_data_len(signer, data.data.len()).await else {
+        let Ok(_) = self.check_sign_data_len(&removed, signer, data.data.len()).await else {
           return;
         };
         let expected_len = match data.label {
@@ -672,6 +769,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
                 "unexpected length data for substrate signing protocol",
               )
               .await;
+            return;
           }
         }
 
@@ -681,11 +779,11 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           attempt: data.attempt,
         };
         let Accumulation::Ready(DataSet::Participating(mut results)) =
-          self.handle_data(&data_spec, data.data.encode(), &data.signed).await
+          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
         else {
           return;
         };
-        unflatten(self.spec, &mut results);
+        unflatten(self.spec, &removed, &mut results);
 
         let id = SubstrateSignId {
           session: self.spec.set().session,
@@ -706,7 +804,19 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
       }
 
       Transaction::Sign(data) => {
-        let Ok(_) = self.check_sign_data_len(data.signed.signer, data.data.len()).await else {
+        let Some(removed) =
+          crate::tributary::removed_as_of_set_keys(self.txn, self.spec.set(), genesis)
+        else {
+          self
+            .fatal_slash(
+              data.signed.signer.to_bytes(),
+              "signing despite not having set keys on substrate",
+            )
+            .await;
+          return;
+        };
+        let Ok(_) = self.check_sign_data_len(&removed, data.signed.signer, data.data.len()).await
+        else {
           return;
         };
 
@@ -716,9 +826,9 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
           attempt: data.attempt,
         };
         if let Accumulation::Ready(DataSet::Participating(mut results)) =
-          self.handle_data(&data_spec, data.data.encode(), &data.signed).await
+          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
         {
-          unflatten(self.spec, &mut results);
+          unflatten(self.spec, &removed, &mut results);
           let id =
             SignId { session: self.spec.set().session, id: data.plan, attempt: data.attempt };
           self

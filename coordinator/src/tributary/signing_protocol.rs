@@ -217,19 +217,20 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
 // index the validators in the order they've been defined.
 fn threshold_i_map_to_keys_and_musig_i_map(
   spec: &TributarySpec,
+  removed: &[<Ristretto as Ciphersuite>::G],
   our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   mut map: HashMap<Participant, Vec<u8>>,
   sort_by_keys: bool,
 ) -> (Vec<<Ristretto as Ciphersuite>::G>, HashMap<Participant, Vec<u8>>) {
   // Insert our own index so calculations aren't offset
   let our_threshold_i =
-    spec.i(<Ristretto as Ciphersuite>::generator() * our_key.deref()).unwrap().start;
+    spec.i(removed, <Ristretto as Ciphersuite>::generator() * our_key.deref()).unwrap().start;
   assert!(map.insert(our_threshold_i, vec![]).is_none());
 
   let spec_validators = spec.validators();
   let key_from_threshold_i = |threshold_i| {
     for (key, _) in &spec_validators {
-      if threshold_i == spec.i(*key).unwrap().start {
+      if threshold_i == spec.i(removed, *key).unwrap().start {
         return *key;
       }
     }
@@ -262,13 +263,25 @@ fn threshold_i_map_to_keys_and_musig_i_map(
 }
 
 pub(crate) struct DkgConfirmer<'a, T: DbTxn> {
-  pub(crate) key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
-  pub(crate) spec: &'a TributarySpec,
-  pub(crate) txn: &'a mut T,
-  pub(crate) attempt: u32,
+  key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+  spec: &'a TributarySpec,
+  removed: Vec<<Ristretto as Ciphersuite>::G>,
+  txn: &'a mut T,
+  attempt: u32,
 }
 
 impl<T: DbTxn> DkgConfirmer<'_, T> {
+  pub(crate) fn new<'a>(
+    key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
+    spec: &'a TributarySpec,
+    txn: &'a mut T,
+    attempt: u32,
+  ) -> Option<DkgConfirmer<'a, T>> {
+    // This relies on how confirmations are inlined into the DKG protocol and they accordingly
+    // share attempts
+    let removed = crate::tributary::removed_as_of_dkg_attempt(txn, spec.genesis(), attempt)?;
+    Some(DkgConfirmer { key, spec, removed, txn, attempt })
+  }
   fn signing_protocol(&mut self) -> SigningProtocol<'_, T, (&'static [u8; 12], u32)> {
     let context = (b"DkgConfirmer", self.attempt);
     SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
@@ -289,8 +302,14 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
     let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-    let preprocesses =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses, false).1;
+    let preprocesses = threshold_i_map_to_keys_and_musig_i_map(
+      self.spec,
+      &self.removed,
+      self.key,
+      preprocesses,
+      false,
+    )
+    .1;
     let msg = set_keys_message(&self.spec.set(), key_pair);
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
@@ -309,7 +328,8 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
-    let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares, false).1;
+    let shares =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, &self.removed, self.key, shares, false).1;
 
     let machine = self
       .share_internal(preprocesses, key_pair)
@@ -323,6 +343,7 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
 pub(crate) struct DkgRemoval<'a, T: DbTxn> {
   pub(crate) key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub(crate) spec: &'a TributarySpec,
+  pub(crate) removed: &'a [<Ristretto as Ciphersuite>::G],
   pub(crate) txn: &'a mut T,
   pub(crate) removing: [u8; 32],
   pub(crate) attempt: u32,
@@ -362,8 +383,13 @@ impl<T: DbTxn> DkgRemoval<'_, T> {
     &mut self,
     preprocesses: HashMap<Participant, Vec<u8>>,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let (participants, preprocesses) =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses, true);
+    let (participants, preprocesses) = threshold_i_map_to_keys_and_musig_i_map(
+      self.spec,
+      self.removed,
+      self.key,
+      preprocesses,
+      true,
+    );
     let msg = remove_participant_message(&self.spec.set(), Public(self.removing));
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
@@ -381,7 +407,7 @@ impl<T: DbTxn> DkgRemoval<'_, T> {
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<(Vec<SeraiAddress>, [u8; 64]), Participant> {
     let (participants, shares) =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares, true);
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.removed, self.key, shares, true);
     let signers = participants.iter().map(|key| SeraiAddress(key.to_bytes())).collect::<Vec<_>>();
 
     let machine = self

@@ -42,15 +42,18 @@ pub enum Accumulation {
   NotReady,
 }
 
+// TODO: Move from genesis to set for indexing
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
     SeraiDkgRemoval: (spec: ValidatorSet, removing: [u8; 32]) -> (),
-    SeraiDkgCompleted: (spec: ValidatorSet) -> (),
+    SeraiDkgCompleted: (spec: ValidatorSet) -> [u8; 32],
 
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
+    FatalSlashesAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
+    FatalSlashesAsOfFatalSlash: (genesis: [u8; 32], fatally_slashed: [u8; 32]) -> Vec<[u8; 32]>,
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
     DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
@@ -58,6 +61,7 @@ create_db!(
     RemovalNonces:
       (genesis: [u8; 32], removing: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
     DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
+    KeyToDkgAttempt: (key: [u8; 32]) -> u32,
     DkgCompleted: (genesis: [u8; 32]) -> (),
     LocallyDkgRemoved: (genesis: [u8; 32], validator: [u8; 32]) -> (),
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
@@ -74,13 +78,14 @@ impl FatallySlashed {
     Self::set(txn, genesis, account, &());
     let mut existing = FatalSlashes::get(txn, genesis).unwrap_or_default();
 
-    // Don't append if we already have it
+    // Don't append if we already have it, which can occur upon multiple faults
     if existing.iter().any(|existing| existing == &account) {
       return;
     }
 
     existing.push(account);
     FatalSlashes::set(txn, genesis, &existing);
+    FatalSlashesAsOfFatalSlash::set(txn, genesis, account, &existing);
   }
 }
 

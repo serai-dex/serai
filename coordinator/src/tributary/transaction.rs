@@ -130,7 +130,10 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Transaction {
-  RemoveParticipant(Participant),
+  RemoveParticipantDueToDkg {
+    attempt: u32,
+    participant: Participant,
+  },
 
   DkgCommitments {
     attempt: u32,
@@ -194,9 +197,10 @@ pub enum Transaction {
 impl Debug for Transaction {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
     match self {
-      Transaction::RemoveParticipant(participant) => fmt
-        .debug_struct("Transaction::RemoveParticipant")
+      Transaction::RemoveParticipantDueToDkg { attempt, participant } => fmt
+        .debug_struct("Transaction::RemoveParticipantDueToDkg")
         .field("participant", participant)
+        .field("attempt", attempt)
         .finish(),
       Transaction::DkgCommitments { attempt, commitments: _, signed } => fmt
         .debug_struct("Transaction::DkgCommitments")
@@ -255,12 +259,19 @@ impl ReadWrite for Transaction {
     reader.read_exact(&mut kind)?;
 
     match kind[0] {
-      0 => Ok(Transaction::RemoveParticipant({
-        let mut participant = [0; 2];
-        reader.read_exact(&mut participant)?;
-        Participant::new(u16::from_le_bytes(participant))
-          .ok_or_else(|| io::Error::other("invalid participant in RemoveParticipant"))?
-      })),
+      0 => Ok(Transaction::RemoveParticipantDueToDkg {
+        attempt: {
+          let mut attempt = [0; 4];
+          reader.read_exact(&mut attempt)?;
+          u32::from_le_bytes(attempt)
+        },
+        participant: {
+          let mut participant = [0; 2];
+          reader.read_exact(&mut participant)?;
+          Participant::new(u16::from_le_bytes(participant))
+            .ok_or_else(|| io::Error::other("invalid participant in RemoveParticipantDueToDkg"))?
+        },
+      }),
 
       1 => {
         let mut attempt = [0; 4];
@@ -424,9 +435,10 @@ impl ReadWrite for Transaction {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Transaction::RemoveParticipant(i) => {
+      Transaction::RemoveParticipantDueToDkg { attempt, participant } => {
         writer.write_all(&[0])?;
-        writer.write_all(&u16::from(*i).to_le_bytes())
+        writer.write_all(&attempt.to_le_bytes())?;
+        writer.write_all(&u16::from(*participant).to_le_bytes())
       }
 
       Transaction::DkgCommitments { attempt, commitments, signed } => {
@@ -545,7 +557,7 @@ impl ReadWrite for Transaction {
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
-      Transaction::RemoveParticipant(_) => TransactionKind::Provided("remove"),
+      Transaction::RemoveParticipantDueToDkg { .. } => TransactionKind::Provided("remove"),
 
       Transaction::DkgCommitments { attempt, commitments: _, signed } => {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
@@ -623,7 +635,9 @@ impl Transaction {
   ) {
     fn signed(tx: &mut Transaction) -> (u32, &mut Signed) {
       let nonce = match tx {
-        Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
+        Transaction::RemoveParticipantDueToDkg { .. } => {
+          panic!("signing RemoveParticipantDueToDkg")
+        }
 
         Transaction::DkgCommitments { .. } => 0,
         Transaction::DkgShares { .. } => 1,
@@ -645,7 +659,7 @@ impl Transaction {
       (
         nonce,
         match tx {
-          Transaction::RemoveParticipant(_) => panic!("signing RemoveParticipant"),
+          Transaction::RemoveParticipantDueToDkg { .. } => panic!("signing RemoveParticipant"),
 
           Transaction::DkgCommitments { ref mut signed, .. } => signed,
           Transaction::DkgShares { ref mut signed, .. } => signed,
