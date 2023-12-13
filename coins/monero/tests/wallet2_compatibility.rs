@@ -157,6 +157,7 @@ struct Transfer {
 #[derive(Debug, Deserialize)]
 struct TransfersResponse {
   transfer: Transfer,
+  transfers: Vec<Transfer>,
 }
 
 test!(
@@ -225,6 +226,66 @@ test!(
         .unwrap()
         .1
         .is_none());
+    },
+  ),
+);
+
+test!(
+  send_to_wallet_rpc_subaddresses,
+  (
+    |_, mut builder: Builder, _| async move {
+      // initialize rpc
+      let (wallet_rpc, daemon_rpc, _) = initialize_rpcs().await;
+
+      // make the subaddress
+      #[derive(Debug, Deserialize)]
+      struct AddressesResponse {
+        addresses: Vec<String>,
+        address_index: u32,
+      }
+      let addrs: AddressesResponse = wallet_rpc
+        .json_rpc_call("create_address", Some(json!({ "account_index": 0, "count": 2 })))
+        .await
+        .unwrap();
+      assert!(addrs.address_index != 0);
+      assert!(addrs.addresses.len() == 2);
+
+      builder.add_payments(&[
+        (MoneroAddress::from_str(Network::Mainnet, &addrs.addresses[0]).unwrap(), 1000000),
+        (MoneroAddress::from_str(Network::Mainnet, &addrs.addresses[1]).unwrap(), 2000000),
+      ]);
+      (builder.build().unwrap(), (wallet_rpc, daemon_rpc, addrs.address_index))
+    },
+    |_, tx: Transaction, _, data: (Rpc<HttpRpc>, Rpc<HttpRpc>, u32)| async move {
+      // confirm receipt
+      let _: EmptyResponse = data.0.json_rpc_call("refresh", None).await.unwrap();
+      let transfer: TransfersResponse = data
+        .0
+        .json_rpc_call(
+          "get_transfer_by_txid",
+          Some(json!({ "txid": hex::encode(tx.hash()), "account_index": 0 })),
+        )
+        .await
+        .unwrap();
+
+      assert_eq!(transfer.transfers.len(), 2);
+      for t in transfer.transfers {
+        match t.amount {
+          1000000 => assert_eq!(t.subaddr_index, Index { major: 0, minor: data.2 }),
+          2000000 => assert_eq!(t.subaddr_index, Index { major: 0, minor: data.2 + 1 }),
+          _ => unreachable!(),
+        }
+      }
+
+      // Make sure 3 additional pub keys are included in TX extra
+      let keys = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
+        .unwrap()
+        .keys()
+        .unwrap()
+        .1
+        .unwrap();
+
+      assert_eq!(keys.len(), 3);
     },
   ),
 );
