@@ -5,6 +5,8 @@ use dockertest::{
 
 #[cfg(feature = "bitcoin")]
 mod bitcoin {
+  use std::sync::Arc;
+
   use super::*;
   use crate::{
     networks::{Network, Bitcoin, Output, OutputType, Block},
@@ -33,7 +35,10 @@ mod bitcoin {
     primitives::insecure_pair_from_name,
   };
   use serai_db::MemDb;
-  use tokio::time::{timeout, Duration};
+  use tokio::{
+    time::{timeout, Duration},
+    sync::Mutex,
+  };
 
   #[test]
   fn test_dust_constant() {
@@ -75,7 +80,7 @@ mod bitcoin {
 
       // create a scanner
       let db = MemDb::new();
-      let mut scanner = new_scanner(&btc, &db, group_key).await;
+      let mut scanner = new_scanner(&btc, &db, group_key, &Arc::new(Mutex::new(true))).await;
 
       // make a transfer instruction & hash it for script.
       let serai_address = insecure_pair_from_name("dadadadada").public();
