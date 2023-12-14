@@ -11,7 +11,11 @@ use frost::Participant;
 use tokio::sync::broadcast;
 
 use scale::{Encode, Decode};
-use serai_client::{validator_sets::primitives::ValidatorSet, Serai};
+use serai_client::{
+  primitives::{SeraiAddress, Signature},
+  validator_sets::primitives::{KeyPair, ValidatorSet},
+  Serai,
+};
 
 use serai_db::DbTxn;
 
@@ -66,35 +70,123 @@ impl<
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PstTxType {
-  SetKeys,
-  RemoveParticipant([u8; 32]),
-}
-
 #[async_trait::async_trait]
-pub trait PSTTrait {
-  // TODO: Diversify publish_set_keys, publish_remove_participant, then remove PstTxType
-  async fn publish_serai_tx(
+pub trait PublishSeraiTransaction {
+  async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature);
+  async fn publish_remove_participant(
     &self,
     set: ValidatorSet,
-    kind: PstTxType,
-    tx: serai_client::Transaction,
+    removing: [u8; 32],
+    signers: Vec<SeraiAddress>,
+    signature: Signature,
   );
 }
-#[async_trait::async_trait]
-impl<
-    FPst: Send + Future<Output = ()>,
-    F: Sync + Fn(ValidatorSet, PstTxType, serai_client::Transaction) -> FPst,
-  > PSTTrait for F
-{
-  async fn publish_serai_tx(
-    &self,
-    set: ValidatorSet,
-    kind: PstTxType,
-    tx: serai_client::Transaction,
-  ) {
-    (self)(set, kind, tx).await
+
+mod impl_pst_for_serai {
+  use super::*;
+
+  use serai_client::SeraiValidatorSets;
+
+  // Uses a macro because Rust can't resolve the lifetimes/generics around the check function
+  // check is expected to return true if the effect has already occurred
+  // The generated publish function will return true if *we* published the transaction
+  macro_rules! common_pst {
+    ($Meta: ty, $check: ident) => {
+      async fn publish(
+        serai: &Serai,
+        set: ValidatorSet,
+        tx: serai_client::Transaction,
+        meta: $Meta,
+      ) -> bool {
+        loop {
+          match serai.publish(&tx).await {
+            Ok(_) => return true,
+            // This is assumed to be some ephemeral error due to the assumed fault-free
+            // creation
+            // TODO2: Differentiate connection errors from invariants
+            Err(e) => {
+              if let Ok(serai) = serai.as_of_latest_finalized_block().await {
+                let serai = serai.validator_sets();
+
+                // The following block is irrelevant, and can/likely will fail, if we're publishing
+                // a TX for an old session
+                // If we're on a newer session, move on
+                if let Ok(Some(current_session)) = serai.session(set.network).await {
+                  if current_session.0 > set.session.0 {
+                    log::warn!(
+                      "trying to publish a TX relevant to set {set:?} which isn't the latest"
+                    );
+                    return false;
+                  }
+                }
+
+                // Check if someone else published the TX in question
+                if $check(serai, set, meta).await {
+                  return false;
+                }
+
+                log::error!("couldn't connect to Serai node to publish TX: {e:?}");
+                tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+
+  #[async_trait::async_trait]
+  impl PublishSeraiTransaction for Serai {
+    async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature) {
+      let tx = SeraiValidatorSets::set_keys(set.network, key_pair, signature);
+      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, _: ()) -> bool {
+        if matches!(serai.keys(set).await, Ok(Some(_))) {
+          log::info!("another coordinator set key pair for {:?}", set);
+          return true;
+        }
+        false
+      }
+      common_pst!((), check);
+      if publish(self, set, tx, ()).await {
+        log::info!("published set keys for {set:?}");
+      }
+    }
+
+    async fn publish_remove_participant(
+      &self,
+      set: ValidatorSet,
+      removing: [u8; 32],
+      signers: Vec<SeraiAddress>,
+      signature: Signature,
+    ) {
+      let tx = SeraiValidatorSets::remove_participant(
+        set.network,
+        SeraiAddress(removing),
+        signers,
+        signature,
+      );
+      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, removing: [u8; 32]) -> bool {
+        if let Ok(Some(_)) = serai.keys(set).await {
+          log::info!(
+            "keys were set before we personally could publish the removal for {}",
+            hex::encode(removing)
+          );
+          return true;
+        }
+
+        if let Ok(Some(participants)) = serai.participants(set.network).await {
+          if !participants.iter().any(|(participant, _)| participant.0 == removing) {
+            log::info!("another coordinator published removal for {:?}", hex::encode(removing),);
+            return true;
+          }
+        }
+        false
+      }
+      common_pst!([u8; 32], check);
+      if publish(self, set, tx, removing).await {
+        log::info!("published remove participant for {}", hex::encode(removing));
+      }
+    }
   }
 }
 
@@ -113,7 +205,7 @@ pub struct TributaryBlockHandler<
   'a,
   T: DbTxn,
   Pro: Processors,
-  PST: PSTTrait,
+  PST: PublishSeraiTransaction,
   PTT: PTTTrait,
   RID: RIDTrait,
   P: P2p,
@@ -130,8 +222,14 @@ pub struct TributaryBlockHandler<
   _p2p: PhantomData<P>,
 }
 
-impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
-  TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
+impl<
+    T: DbTxn,
+    Pro: Processors,
+    PST: PublishSeraiTransaction,
+    PTT: PTTTrait,
+    RID: RIDTrait,
+    P: P2p,
+  > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   async fn attempt_dkg_removal(&mut self, removing: [u8; 32], attempt: u32) {
     let genesis = self.spec.genesis();
@@ -391,7 +489,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 pub(crate) async fn handle_new_blocks<
   D: Db,
   Pro: Processors,
-  PST: PSTTrait,
+  PST: PublishSeraiTransaction,
   PTT: PTTTrait,
   RID: RIDTrait,
   P: P2p,
@@ -491,84 +589,7 @@ pub(crate) async fn scan_tributaries_task<
                 &key,
                 &recognized_id,
                 &processors,
-                &|set, tx_type, tx| {
-                  let serai = serai.clone();
-                  async move {
-                    loop {
-                      match serai.publish(&tx).await {
-                        Ok(_) => {
-                          log::info!("set key pair for {set:?}");
-                          break;
-                        }
-                        // This is assumed to be some ephemeral error due to the assumed fault-free
-                        // creation
-                        // TODO2: Differentiate connection errors from invariants
-                        Err(e) => {
-                          if let Ok(serai) = serai.as_of_latest_finalized_block().await {
-                            let serai = serai.validator_sets();
-
-                            // The following block is irrelevant, and can/likely will fail, if
-                            // we're publishing a TX for an old session
-                            // If we're on a newer session, move on
-                            if let Ok(Some(current_session)) =
-                              serai.session(spec.set().network).await
-                            {
-                              if current_session.0 > spec.set().session.0 {
-                                log::warn!(
-                                  "trying to publish a TX relevant to a set {} {:?}",
-                                  "which isn't the latest",
-                                  set
-                                );
-                                break;
-                              }
-                            }
-
-                            // Check if someone else published the TX in question
-                            match tx_type {
-                              PstTxType::SetKeys => {
-                                if matches!(serai.keys(spec.set()).await, Ok(Some(_))) {
-                                  log::info!("another coordinator set key pair for {:?}", set);
-                                  break;
-                                }
-                              }
-                              PstTxType::RemoveParticipant(removed) => {
-                                if let Ok(Some(_)) = serai.keys(spec.set()).await {
-                                  log::info!(
-                                    "keys were set before we {} {:?}",
-                                    "personally could publish the removal for",
-                                    hex::encode(removed)
-                                  );
-                                  break;
-                                }
-
-                                if let Ok(Some(participants)) =
-                                  serai.participants(spec.set().network).await
-                                {
-                                  if !participants
-                                    .iter()
-                                    .any(|(participant, _)| participant.0 == removed)
-                                  {
-                                    log::info!(
-                                      "another coordinator published removal for {:?}",
-                                      hex::encode(removed)
-                                    );
-                                    break;
-                                  }
-                                }
-                              }
-                            }
-                          }
-
-                          log::error!(
-                            "couldn't connect to Serai node to publish {tx_type:?} TX: {:?}",
-                            e
-                          );
-                          tokio::time::sleep(core::time::Duration::from_secs(10)).await;
-                        }
-                      }
-                    }
-                  }
-                },
+                &*serai,
                 &|tx: Transaction| {
                   let tributary = tributary.clone();
                   async move {

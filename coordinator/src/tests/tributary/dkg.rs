@@ -8,7 +8,10 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
 use sp_runtime::traits::Verify;
-use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair};
+use serai_client::{
+  primitives::{SeraiAddress, Signature},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
+};
 
 use tokio::time::sleep;
 
@@ -24,7 +27,7 @@ use tributary::{TransactionTrait, Tributary};
 use crate::{
   tributary::{
     Transaction, TributarySpec,
-    scanner::{PstTxType, handle_new_blocks},
+    scanner::{PublishSeraiTransaction, handle_new_blocks},
   },
   tests::{
     MemProcessors, LocalP2p,
@@ -104,7 +107,7 @@ async fn dkg_test() {
         panic!("provided TX caused recognized_id to be called in new_processors")
       },
       &processors,
-      &|_, _, _| async { panic!("test tried to publish a new Serai TX in new_processors") },
+      &(),
       &|_| async {
         panic!(
           "test tried to publish a new Tributary TX from handle_application_tx in new_processors"
@@ -135,7 +138,7 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after Commitments")
     },
     &processors,
-    &|_, _, _| async { panic!("test tried to publish a new Serai TX after Commitments") },
+    &(),
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after Commitments"
@@ -221,7 +224,7 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after some shares")
     },
     &processors,
-    &|_, _, _| async { panic!("test tried to publish a new Serai TX after some shares") },
+    &(),
     &|_| async {
       panic!(
         "test tried to publish a new Tributary TX from handle_application_tx after some shares"
@@ -273,7 +276,7 @@ async fn dkg_test() {
       key,
       &|_, _, _, _| async { panic!("provided TX caused recognized_id to be called after shares") },
       &processors,
-      &|_, _, _| async { panic!("test tried to publish a new Serai TX") },
+      &(),
       &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
       &spec,
       &tributaries[i].1.reader(),
@@ -338,6 +341,39 @@ async fn dkg_test() {
     wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;
   }
 
+  struct CheckPublishSetKeys {
+    spec: TributarySpec,
+    key_pair: KeyPair,
+  }
+  #[async_trait::async_trait]
+  impl PublishSeraiTransaction for CheckPublishSetKeys {
+    async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature) {
+      assert_eq!(set, self.spec.set());
+      assert_eq!(self.key_pair, key_pair);
+      assert!(signature.verify(
+        &*serai_client::validator_sets::primitives::set_keys_message(&set, &key_pair),
+        &serai_client::Public(
+          frost::dkg::musig::musig_key::<Ristretto>(
+            &serai_client::validator_sets::primitives::musig_context(set),
+            &self.spec.validators().into_iter().map(|(validator, _)| validator).collect::<Vec<_>>()
+          )
+          .unwrap()
+          .to_bytes()
+        ),
+      ));
+    }
+
+    async fn publish_remove_participant(
+      &self,
+      set: ValidatorSet,
+      removing: [u8; 32],
+      signers: Vec<SeraiAddress>,
+      signature: Signature,
+    ) {
+      ().publish_remove_participant(set, removing, signers, signature).await
+    }
+  }
+
   // The scanner should successfully try to publish a transaction with a validly signed signature
   handle_new_blocks::<_, _, _, _, _, LocalP2p>(
     &mut dbs[0],
@@ -346,44 +382,7 @@ async fn dkg_test() {
       panic!("provided TX caused recognized_id to be called after DKG confirmation")
     },
     &processors,
-    &|set: ValidatorSet, tx_type, tx: serai_client::Transaction| {
-      assert_eq!(tx_type, PstTxType::SetKeys);
-
-      let spec = spec.clone();
-      let key_pair = key_pair.clone();
-      async move {
-        assert_eq!(tx.signature, None);
-        match tx.call {
-          serai_client::abi::Call::ValidatorSets(
-            serai_client::abi::validator_sets::Call::set_keys {
-              network,
-              key_pair: set_key_pair,
-              signature,
-            },
-          ) => {
-            assert_eq!(set, spec.set());
-            assert_eq!(set.network, network);
-            assert_eq!(key_pair, set_key_pair);
-            assert!(signature.verify(
-              &*serai_client::validator_sets::primitives::set_keys_message(&set, &key_pair),
-              &serai_client::Public(
-                frost::dkg::musig::musig_key::<Ristretto>(
-                  &serai_client::validator_sets::primitives::musig_context(set),
-                  &spec
-                    .validators()
-                    .into_iter()
-                    .map(|(validator, _)| validator)
-                    .collect::<Vec<_>>()
-                )
-                .unwrap()
-                .to_bytes()
-              ),
-            ));
-          }
-          _ => panic!("Serai TX wasn't to set_keys"),
-        }
-      }
-    },
+    &CheckPublishSetKeys { spec: spec.clone(), key_pair: key_pair.clone() },
     &|_| async { panic!("test tried to publish a new Tributary TX from handle_application_tx") },
     &spec,
     &tributaries[0].1.reader(),

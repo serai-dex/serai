@@ -9,9 +9,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
-use serai_client::{
-  Public, SeraiAddress, Signature, validator_sets::primitives::KeyPair, SeraiValidatorSets,
-};
+use serai_client::{Public, Signature, validator_sets::primitives::KeyPair};
 
 use tributary::{Signed, TransactionKind, TransactionTrait};
 
@@ -28,7 +26,9 @@ use crate::{
   tributary::{
     *,
     signing_protocol::{DkgConfirmer, DkgRemoval},
-    scanner::{RecognizedIdType, RIDTrait, PstTxType, PSTTrait, PTTTrait, TributaryBlockHandler},
+    scanner::{
+      RecognizedIdType, RIDTrait, PublishSeraiTransaction, PTTTrait, TributaryBlockHandler,
+    },
   },
   P2p,
 };
@@ -106,8 +106,14 @@ fn unflatten(
   }
 }
 
-impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: P2p>
-  TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
+impl<
+    T: DbTxn,
+    Pro: Processors,
+    PST: PublishSeraiTransaction,
+    PTT: PTTTrait,
+    RID: RIDTrait,
+    P: P2p,
+  > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   fn accumulate(
     &mut self,
@@ -576,14 +582,7 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
 
             DkgCompleted::set(self.txn, genesis, &());
 
-            self
-              .publish_serai_tx
-              .publish_serai_tx(
-                self.spec.set(),
-                PstTxType::SetKeys,
-                SeraiValidatorSets::set_keys(self.spec.set().network, key_pair, Signature(sig)),
-              )
-              .await;
+            self.publish_serai_tx.publish_set_keys(self.spec.set(), key_pair, Signature(sig)).await;
           }
           Accumulation::Ready(DataSet::NotParticipating) => {
             panic!("wasn't a participant in DKG confirmination shares")
@@ -671,16 +670,14 @@ impl<T: DbTxn, Pro: Processors, PST: PSTTrait, PTT: PTTTrait, RID: RIDTrait, P: 
             //
             // This breaks BFT and is accordingly within bounds
 
-            let tx = serai_client::SeraiValidatorSets::remove_participant(
-              self.spec.set().network,
-              SeraiAddress(data.plan),
-              signers,
-              Signature(signature),
-            );
+            // TODO: The above isn't true. It blocks until the TX is published, not included the
+            // finalized chain. We just need to inline remove_participant into set_keys to avoid
+            // all of this.
+
             LocallyDkgRemoved::set(self.txn, genesis, data.plan, &());
             self
               .publish_serai_tx
-              .publish_serai_tx(self.spec.set(), PstTxType::RemoveParticipant(data.plan), tx)
+              .publish_remove_participant(self.spec.set(), data.plan, signers, Signature(signature))
               .await;
           }
         }

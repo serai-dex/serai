@@ -3,11 +3,15 @@ use core::fmt::Debug;
 use rand_core::{RngCore, OsRng};
 
 use scale::{Encode, Decode};
+use serai_client::{
+  primitives::{SeraiAddress, Signature},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
+};
 use processor_messages::coordinator::SubstrateSignableId;
 
 use tributary::{ReadWrite, tests::random_signed_with_nonce};
 
-use crate::tributary::{Label, SignData, Transaction};
+use crate::tributary::{Label, SignData, Transaction, scanner::PublishSeraiTransaction};
 
 mod chain;
 pub use chain::*;
@@ -19,6 +23,22 @@ mod dkg;
 
 mod handle_p2p;
 mod sync;
+
+#[async_trait::async_trait]
+impl PublishSeraiTransaction for () {
+  async fn publish_set_keys(&self, _set: ValidatorSet, _key_pair: KeyPair, _signature: Signature) {
+    panic!("publish_set_keys was called in test")
+  }
+  async fn publish_remove_participant(
+    &self,
+    _set: ValidatorSet,
+    _removing: [u8; 32],
+    _signers: Vec<SeraiAddress>,
+    _signature: Signature,
+  ) {
+    panic!("publish_remove_participant was called in test")
+  }
+}
 
 fn random_u32<R: RngCore>(rng: &mut R) -> u32 {
   u32::try_from(rng.next_u64() >> 32).unwrap()
