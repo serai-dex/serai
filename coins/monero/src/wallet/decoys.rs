@@ -188,9 +188,7 @@ async fn select_decoys<R: RngCore + CryptoRng, RPC: RpcConnection>(
   // Should never happen, yet risks desyncing if it did
   distribution.truncate(height);
 
-  if distribution.len() != height {
-    Err(RpcError::InternalError("unexpected rct out distribution len"))?;
-  } else if distribution.len() < DEFAULT_LOCK_WINDOW {
+  if distribution.len() < DEFAULT_LOCK_WINDOW {
     Err(RpcError::InternalError("not enough decoy candidates"))?;
   }
 
