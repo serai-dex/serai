@@ -23,7 +23,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install nightly rust
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c clippy
+        run: rustup tolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rust-src -t wasm32-unknown-unknown -c clippy
 
       - name: Run Clippy
         run: cargo +${{ steps.nightly.outputs.version }} clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
