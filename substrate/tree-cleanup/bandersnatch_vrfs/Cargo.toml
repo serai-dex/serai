@@ -1,6 +1,6 @@
 [package]
 name = "bandersnatch_vrfs"
-version = "0.0.3"
+version = "0.0.4"
 description = "Empty library to remove the unused bandersnatch_vrfs from the Cargo.lock"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tree-cleanup/bandersnatch_vrfs"
@@ -15,3 +15,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 std = []
+substrate-curves = []
