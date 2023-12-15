@@ -105,6 +105,8 @@ sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experime
 
 # is-terminal now has an std-based solution with an equivalent API
 is-terminal = { path = "substrate/tree-cleanup/is-terminal" }
+# So does matches
+matches = { path = "substrate/tree-cleanup/matches" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
@@ -116,6 +118,9 @@ is-terminal = { path = "substrate/tree-cleanup/is-terminal" }
 # The following two patches resolve everything
 option-ext = { path = "substrate/tree-cleanup/option-ext" }
 directories-next = { path = "substrate/tree-cleanup/directories-next" }
+
+# mach is unmaintained, so this wraps mach2 as mach
+mach = { path = "substrate/tree-cleanup/mach" }
 
 # cargo believes the following are in-tree despite no features activating them
 # We provide empty crates to not only prove they're unused, yet also clean up

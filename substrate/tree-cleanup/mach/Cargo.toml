@@ -1,0 +1,17 @@
+[package]
+name = "mach"
+version = "0.3.2"
+description = "Replacement for mach which uses the mach2 implementation"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tree-cleanup/mach"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.242"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+mach2 = "0.4"
