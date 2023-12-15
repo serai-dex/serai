@@ -1,0 +1,14 @@
+[package]
+name = "matches"
+version = "0.1.10"
+description = "Replacement for the matches polyfill which uses the std impl"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/matches"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.56"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

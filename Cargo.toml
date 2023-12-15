@@ -69,8 +69,10 @@ members = [
   "tests/reproducible-runtime",
 
   "patches/is-terminal",
+  "patches/matches",
   "patches/option-ext",
   "patches/directories-next",
+  "patches/mach",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
@@ -102,6 +104,8 @@ dockertest = { git = "https://github.com/kayabaNerve/dockertest-rs", branch = "a
 
 # is-terminal now has an std-based solution with an equivalent API
 is-terminal = { path = "patches/is-terminal" }
+# So does matches
+matches = { path = "patches/matches" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
@@ -110,6 +114,9 @@ is-terminal = { path = "patches/is-terminal" }
 # The following two patches resolve everything
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
+
+# mach is unmaintained, so this wraps mach2 as mach
+mach = { path = "patches/mach" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
