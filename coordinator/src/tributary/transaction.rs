@@ -160,8 +160,6 @@ pub enum Transaction {
     signed: Signed,
   },
 
-  DkgRemoval(SignData<[u8; 32]>),
-
   // Co-sign a Substrate block.
   CosignSubstrateBlock([u8; 32]),
 
@@ -223,9 +221,6 @@ impl Debug for Transaction {
         .field("attempt", attempt)
         .field("signer", &hex::encode(signed.signer.to_bytes()))
         .finish_non_exhaustive(),
-      Transaction::DkgRemoval(sign_data) => {
-        fmt.debug_struct("Transaction::DkgRemoval").field("sign_data", sign_data).finish()
-      }
       Transaction::CosignSubstrateBlock(block) => fmt
         .debug_struct("Transaction::CosignSubstrateBlock")
         .field("block", &hex::encode(block))
@@ -389,15 +384,13 @@ impl ReadWrite for Transaction {
         Ok(Transaction::DkgConfirmed { attempt, confirmation_share, signed })
       }
 
-      5 => SignData::read(reader).map(Transaction::DkgRemoval),
-
-      6 => {
+      5 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         Ok(Transaction::CosignSubstrateBlock(block))
       }
 
-      7 => {
+      6 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         let mut batch = [0; 4];
@@ -405,16 +398,16 @@ impl ReadWrite for Transaction {
         Ok(Transaction::Batch { block, batch: u32::from_le_bytes(batch) })
       }
 
-      8 => {
+      7 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      9 => SignData::read(reader).map(Transaction::SubstrateSign),
-      10 => SignData::read(reader).map(Transaction::Sign),
+      8 => SignData::read(reader).map(Transaction::SubstrateSign),
+      9 => SignData::read(reader).map(Transaction::Sign),
 
-      11 => {
+      10 => {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
@@ -512,37 +505,32 @@ impl ReadWrite for Transaction {
         signed.write_without_nonce(writer)
       }
 
-      Transaction::DkgRemoval(data) => {
-        writer.write_all(&[5])?;
-        data.write(writer)
-      }
-
       Transaction::CosignSubstrateBlock(block) => {
-        writer.write_all(&[6])?;
+        writer.write_all(&[5])?;
         writer.write_all(block)
       }
 
       Transaction::Batch { block, batch } => {
-        writer.write_all(&[7])?;
+        writer.write_all(&[6])?;
         writer.write_all(block)?;
         writer.write_all(&batch.to_le_bytes())
       }
 
       Transaction::SubstrateBlock(block) => {
-        writer.write_all(&[8])?;
+        writer.write_all(&[7])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::SubstrateSign(data) => {
-        writer.write_all(&[9])?;
+        writer.write_all(&[8])?;
         data.write(writer)
       }
       Transaction::Sign(data) => {
-        writer.write_all(&[10])?;
+        writer.write_all(&[9])?;
         data.write(writer)
       }
       Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
-        writer.write_all(&[11])?;
+        writer.write_all(&[10])?;
         writer.write_all(plan)?;
         writer
           .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
@@ -572,10 +560,6 @@ impl TransactionTrait for Transaction {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
       }
 
-      Transaction::DkgRemoval(data) => {
-        TransactionKind::Signed((b"dkg_removal", data.plan, data.attempt).encode(), &data.signed)
-      }
-
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
 
       Transaction::Batch { .. } => TransactionKind::Provided("batch"),
@@ -601,7 +585,7 @@ impl TransactionTrait for Transaction {
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
-    // TODO: Check DkgRemoval and SubstrateSign's lengths here
+    // TODO: Check SubstrateSign's lengths here
 
     if let Transaction::SignCompleted { first_signer, signature, .. } = self {
       if !signature.verify(*first_signer, self.sign_completed_challenge()) {
@@ -644,8 +628,6 @@ impl Transaction {
         Transaction::InvalidDkgShare { .. } => 2,
         Transaction::DkgConfirmed { .. } => 2,
 
-        Transaction::DkgRemoval(data) => data.label.nonce(),
-
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
         Transaction::Batch { .. } => panic!("signing Batch"),
@@ -665,8 +647,6 @@ impl Transaction {
           Transaction::DkgShares { ref mut signed, .. } => signed,
           Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
           Transaction::DkgConfirmed { ref mut signed, .. } => signed,
-
-          Transaction::DkgRemoval(ref mut data) => &mut data.signed,
 
           Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 

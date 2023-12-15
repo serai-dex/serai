@@ -126,36 +126,22 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
-  pub async fn musig_key(&self, set: ValidatorSet) -> Result<Option<[u8; 32]>, SeraiError> {
-    self.0.storage(PALLET, "MuSigKeys", (sp_core::hashing::twox_64(&set.encode()), set)).await
-  }
-
   // TODO: Store these separately since we almost never need both at once?
   pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
   }
 
-  pub fn set_keys(network: NetworkId, key_pair: KeyPair, signature: Signature) -> Transaction {
+  pub fn set_keys(
+    network: NetworkId,
+    removed_participants: Vec<SeraiAddress>,
+    key_pair: KeyPair,
+    signature: Signature,
+  ) -> Transaction {
     Serai::unsigned(serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::set_keys {
       network,
+      removed_participants,
       key_pair,
       signature,
     }))
-  }
-
-  pub fn remove_participant(
-    network: NetworkId,
-    to_remove: SeraiAddress,
-    signers: Vec<SeraiAddress>,
-    signature: Signature,
-  ) -> Transaction {
-    Serai::unsigned(serai_abi::Call::ValidatorSets(
-      serai_abi::validator_sets::Call::remove_participant {
-        network,
-        to_remove,
-        signers,
-        signature,
-      },
-    ))
   }
 }

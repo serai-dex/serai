@@ -66,16 +66,6 @@ pub fn removed_as_of_set_keys(
   removed_as_of_dkg_attempt(getter, genesis, attempt)
 }
 
-pub fn removed_as_of_fatal_slash(
-  getter: &impl Get,
-  genesis: [u8; 32],
-  fatally_slashed: [u8; 32],
-) -> Option<Vec<<Ristretto as Ciphersuite>::G>> {
-  FatalSlashesAsOfFatalSlash::get(getter, genesis, fatally_slashed).map(|keys| {
-    keys.iter().map(|key| <Ristretto as Ciphersuite>::G::from_bytes(key).unwrap()).collect()
-  })
-}
-
 pub async fn publish_signed_transaction<D: Db, P: crate::P2p>(
   txn: &mut D::Transaction<'_>,
   tributary: &Tributary<D, Transaction, P>,

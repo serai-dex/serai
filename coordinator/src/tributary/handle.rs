@@ -1,8 +1,6 @@
 use core::ops::Deref;
 use std::collections::HashMap;
 
-use rand_core::OsRng;
-
 use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
@@ -25,7 +23,7 @@ use crate::{
   processors::Processors,
   tributary::{
     *,
-    signing_protocol::{DkgConfirmer, DkgRemoval},
+    signing_protocol::DkgConfirmer,
     scanner::{
       RecognizedIdType, RIDTrait, PublishSeraiTransaction, PTTTrait, TributaryBlockHandler,
     },
@@ -276,21 +274,6 @@ impl<
       Err(())?;
     }
     Ok(())
-  }
-
-  fn dkg_removal<'a>(
-    &'a mut self,
-    removed: &'a [<Ristretto as Ciphersuite>::G],
-    data: &'a SignData<[u8; 32]>,
-  ) -> DkgRemoval<'a, T> {
-    DkgRemoval {
-      key: self.our_key,
-      spec: self.spec,
-      txn: self.txn,
-      removed,
-      removing: data.plan,
-      attempt: data.attempt,
-    }
   }
 
   // TODO: Don't call fatal_slash in here, return the party to fatal_slash to ensure no further
@@ -582,104 +565,20 @@ impl<
 
             DkgCompleted::set(self.txn, genesis, &());
 
-            self.publish_serai_tx.publish_set_keys(self.spec.set(), key_pair, Signature(sig)).await;
+            self
+              .publish_serai_tx
+              .publish_set_keys(
+                self.spec.set(),
+                removed.into_iter().map(|key| key.to_bytes().into()).collect(),
+                key_pair,
+                Signature(sig),
+              )
+              .await;
           }
           Accumulation::Ready(DataSet::NotParticipating) => {
             panic!("wasn't a participant in DKG confirmination shares")
           }
           Accumulation::NotReady => {}
-        }
-      }
-
-      Transaction::DkgRemoval(data) => {
-        let signer = data.signed.signer;
-        let expected_len = match data.label {
-          Label::Preprocess => 64,
-          Label::Share => 32,
-        };
-        if (data.data.len() != 1) || (data.data[0].len() != expected_len) {
-          self.fatal_slash(signer.to_bytes(), "unexpected length data for dkg removal").await;
-          return;
-        }
-
-        let Some(removed) =
-          crate::tributary::removed_as_of_fatal_slash(self.txn, genesis, data.plan)
-        else {
-          self.fatal_slash(signer.to_bytes(), "removing someone who wasn't fatally slashed").await;
-          return;
-        };
-
-        let data_spec = DataSpecification {
-          topic: Topic::DkgRemoval(data.plan),
-          label: data.label,
-          attempt: data.attempt,
-        };
-        let Accumulation::Ready(DataSet::Participating(results)) =
-          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
-        else {
-          return;
-        };
-
-        match data.label {
-          Label::Preprocess => {
-            RemovalNonces::set(self.txn, genesis, data.plan, data.attempt, &results);
-
-            let Ok(share) = self.dkg_removal(&removed, &data).share(results) else {
-              // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
-              // slash) and censor transactions (yet don't explicitly ban)
-              return;
-            };
-
-            let mut tx = Transaction::DkgRemoval(SignData {
-              plan: data.plan,
-              attempt: data.attempt,
-              label: Label::Preprocess,
-              data: vec![share.to_vec()],
-              signed: Transaction::empty_signed(),
-            });
-            tx.sign(&mut OsRng, genesis, self.our_key);
-            self.publish_tributary_tx.publish_tributary_tx(tx).await;
-          }
-          Label::Share => {
-            let preprocesses =
-              RemovalNonces::get(self.txn, genesis, data.plan, data.attempt).unwrap();
-
-            let Ok((signers, signature)) =
-              self.dkg_removal(&removed, &data).complete(preprocesses, results)
-            else {
-              // TODO: Locally increase slash points to maximum (distinct from an explicitly fatal
-              // slash) and censor transactions (yet don't explicitly ban)
-              return;
-            };
-
-            // We need to only handle this if we're not actively removing any of the signers
-            // At the start of this function, we only handle messages from non-fatally slashed
-            // participants, so this is held
-            //
-            // The created Substrate call will fail if a removed validator was one of the signers
-            // Since:
-            // 1) publish_serai_tx will block this task until the TX is published
-            // 2) We won't scan any more TXs/blocks until we handle this TX
-            // The TX *must* be successfully published *before* we start removing any more
-            // signers
-            //
-            // Accordingly, if the signers aren't currently being removed, they won't be removed
-            // by the time this transaction is successfully published *unless* a malicious 34%
-            // participates with the non-participating 33% to continue operation and produce a
-            // distinct removal (since the non-participating won't block in this block)
-            //
-            // This breaks BFT and is accordingly within bounds
-
-            // TODO: The above isn't true. It blocks until the TX is published, not included the
-            // finalized chain. We just need to inline remove_participant into set_keys to avoid
-            // all of this.
-
-            LocallyDkgRemoved::set(self.txn, genesis, data.plan, &());
-            self
-              .publish_serai_tx
-              .publish_remove_participant(self.spec.set(), data.plan, signers, Signature(signature))
-              .await;
-          }
         }
       }
 

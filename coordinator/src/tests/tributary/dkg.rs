@@ -347,11 +347,18 @@ async fn dkg_test() {
   }
   #[async_trait::async_trait]
   impl PublishSeraiTransaction for CheckPublishSetKeys {
-    async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature) {
+    async fn publish_set_keys(
+      &self,
+      set: ValidatorSet,
+      removed: Vec<SeraiAddress>,
+      key_pair: KeyPair,
+      signature: Signature,
+    ) {
       assert_eq!(set, self.spec.set());
+      assert!(removed.is_empty());
       assert_eq!(self.key_pair, key_pair);
       assert!(signature.verify(
-        &*serai_client::validator_sets::primitives::set_keys_message(&set, &key_pair),
+        &*serai_client::validator_sets::primitives::set_keys_message(&set, &[], &key_pair),
         &serai_client::Public(
           frost::dkg::musig::musig_key::<Ristretto>(
             &serai_client::validator_sets::primitives::musig_context(set),
@@ -361,16 +368,6 @@ async fn dkg_test() {
           .to_bytes()
         ),
       ));
-    }
-
-    async fn publish_remove_participant(
-      &self,
-      set: ValidatorSet,
-      removing: [u8; 32],
-      signers: Vec<SeraiAddress>,
-      signature: Signature,
-    ) {
-      ().publish_remove_participant(set, removing, signers, signature).await
     }
   }
 

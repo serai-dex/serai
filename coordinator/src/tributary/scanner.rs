@@ -1,8 +1,6 @@
 use core::{marker::PhantomData, ops::Deref, future::Future, time::Duration};
 use std::sync::Arc;
 
-use rand_core::OsRng;
-
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
@@ -29,13 +27,7 @@ use tributary::{
   },
 };
 
-use crate::{
-  Db,
-  processors::Processors,
-  substrate::BatchInstructionsHashDb,
-  tributary::{*, signing_protocol::*},
-  P2p,
-};
+use crate::{Db, processors::Processors, substrate::BatchInstructionsHashDb, tributary::*, P2p};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum RecognizedIdType {
@@ -72,12 +64,11 @@ impl<
 
 #[async_trait::async_trait]
 pub trait PublishSeraiTransaction {
-  async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature);
-  async fn publish_remove_participant(
+  async fn publish_set_keys(
     &self,
     set: ValidatorSet,
-    removing: [u8; 32],
-    signers: Vec<SeraiAddress>,
+    removed: Vec<SeraiAddress>,
+    key_pair: KeyPair,
     signature: Signature,
   );
 }
@@ -137,8 +128,14 @@ mod impl_pst_for_serai {
 
   #[async_trait::async_trait]
   impl PublishSeraiTransaction for Serai {
-    async fn publish_set_keys(&self, set: ValidatorSet, key_pair: KeyPair, signature: Signature) {
-      let tx = SeraiValidatorSets::set_keys(set.network, key_pair, signature);
+    async fn publish_set_keys(
+      &self,
+      set: ValidatorSet,
+      removed: Vec<SeraiAddress>,
+      key_pair: KeyPair,
+      signature: Signature,
+    ) {
+      let tx = SeraiValidatorSets::set_keys(set.network, removed, key_pair, signature);
       async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, _: ()) -> bool {
         if matches!(serai.keys(set).await, Ok(Some(_))) {
           log::info!("another coordinator set key pair for {:?}", set);
@@ -149,42 +146,6 @@ mod impl_pst_for_serai {
       common_pst!((), check);
       if publish(self, set, tx, ()).await {
         log::info!("published set keys for {set:?}");
-      }
-    }
-
-    async fn publish_remove_participant(
-      &self,
-      set: ValidatorSet,
-      removing: [u8; 32],
-      signers: Vec<SeraiAddress>,
-      signature: Signature,
-    ) {
-      let tx = SeraiValidatorSets::remove_participant(
-        set.network,
-        SeraiAddress(removing),
-        signers,
-        signature,
-      );
-      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, removing: [u8; 32]) -> bool {
-        if let Ok(Some(_)) = serai.keys(set).await {
-          log::info!(
-            "keys were set before we personally could publish the removal for {}",
-            hex::encode(removing)
-          );
-          return true;
-        }
-
-        if let Ok(Some(participants)) = serai.participants(set.network).await {
-          if !participants.iter().any(|(participant, _)| participant.0 == removing) {
-            log::info!("another coordinator published removal for {:?}", hex::encode(removing),);
-            return true;
-          }
-        }
-        false
-      }
-      common_pst!([u8; 32], check);
-      if publish(self, set, tx, removing).await {
-        log::info!("published remove participant for {}", hex::encode(removing));
       }
     }
   }
@@ -231,30 +192,6 @@ impl<
     P: P2p,
   > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
-  async fn attempt_dkg_removal(&mut self, removing: [u8; 32], attempt: u32) {
-    let genesis = self.spec.genesis();
-    let removed = crate::tributary::removed_as_of_fatal_slash(self.txn, genesis, removing)
-      .expect("attempting DKG removal to remove someone who wasn't removed");
-    let preprocess = (DkgRemoval {
-      key: self.our_key,
-      spec: self.spec,
-      txn: self.txn,
-      removed: &removed,
-      removing,
-      attempt,
-    })
-    .preprocess();
-    let mut tx = Transaction::DkgRemoval(SignData {
-      plan: removing,
-      attempt,
-      label: Label::Preprocess,
-      data: vec![preprocess.to_vec()],
-      signed: Transaction::empty_signed(),
-    });
-    tx.sign(&mut OsRng, genesis, self.our_key);
-    self.publish_tributary_tx.publish_tributary_tx(tx).await;
-  }
-
   pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
     // TODO: If this fatal slash puts the remaining set below the threshold, spin
 
@@ -266,12 +203,6 @@ impl<
 
     // TODO: If during DKG, trigger a re-attempt
     // Despite triggering a re-attempt, this DKG may still complete and may become in-use
-
-    // If during a DKG, remove the participant
-    if DkgCompleted::get(self.txn, genesis).is_none() {
-      AttemptDb::recognize_topic(self.txn, genesis, Topic::DkgRemoval(slashing));
-      self.attempt_dkg_removal(slashing, 0).await;
-    }
   }
 
   // TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
@@ -403,16 +334,6 @@ impl<
         }
         Topic::DkgConfirmation => {
           panic!("re-attempting DkgConfirmation when we should be re-attempting the Dkg")
-        }
-        Topic::DkgRemoval(removing) => {
-          if DkgCompleted::get(self.txn, genesis).is_none() &&
-            LocallyDkgRemoved::get(self.txn, genesis, removing).is_none() &&
-            SeraiDkgCompleted::get(self.txn, self.spec.set()).is_none() &&
-            SeraiDkgRemoval::get(self.txn, self.spec.set(), removing).is_none()
-          {
-            // Since it wasn't completed, attempt a new DkgRemoval
-            self.attempt_dkg_removal(removing, attempt).await;
-          }
         }
         Topic::SubstrateSign(inner_id) => {
           let id = processor_messages::coordinator::SubstrateSignId {

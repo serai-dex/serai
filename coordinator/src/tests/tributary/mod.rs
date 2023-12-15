@@ -26,17 +26,14 @@ mod sync;
 
 #[async_trait::async_trait]
 impl PublishSeraiTransaction for () {
-  async fn publish_set_keys(&self, _set: ValidatorSet, _key_pair: KeyPair, _signature: Signature) {
-    panic!("publish_set_keys was called in test")
-  }
-  async fn publish_remove_participant(
+  async fn publish_set_keys(
     &self,
     _set: ValidatorSet,
-    _removing: [u8; 32],
-    _signers: Vec<SeraiAddress>,
+    _removed: Vec<SeraiAddress>,
+    _key_pair: KeyPair,
     _signature: Signature,
   ) {
-    panic!("publish_remove_participant was called in test")
+    panic!("publish_set_keys was called in test")
   }
 }
 
@@ -225,17 +222,6 @@ fn serialize_transaction() {
     },
     signed: random_signed_with_nonce(&mut OsRng, 2),
   });
-
-  {
-    let mut key = [0; 32];
-    OsRng.fill_bytes(&mut key);
-    test_read_write(Transaction::DkgRemoval(random_sign_data(&mut OsRng, key, Label::Preprocess)));
-  }
-  {
-    let mut key = [0; 32];
-    OsRng.fill_bytes(&mut key);
-    test_read_write(Transaction::DkgRemoval(random_sign_data(&mut OsRng, key, Label::Share)));
-  }
 
   {
     let mut block = [0; 32];

@@ -28,7 +28,7 @@ use tokio::{sync::mpsc, time::sleep};
 use crate::{
   Db,
   processors::Processors,
-  tributary::{TributarySpec, SeraiDkgRemoval, SeraiDkgCompleted},
+  tributary::{TributarySpec, SeraiDkgCompleted},
 };
 
 mod db;
@@ -221,19 +221,6 @@ async fn handle_block<D: Db, Pro: Processors>(
 
   // Define an indexed event ID.
   let mut event_id = 0;
-
-  if HandledEvent::is_unhandled(db, hash, event_id) {
-    let mut txn = db.txn();
-    for removal in serai.as_of(hash).validator_sets().participant_removed_events().await? {
-      let ValidatorSetsEvent::ParticipantRemoved { set, removed } = removal else {
-        panic!("ParticipantRemoved event wasn't ParticipantRemoved: {removal:?}");
-      };
-      SeraiDkgRemoval::set(&mut txn, set, removed.0, &());
-    }
-    HandledEvent::handle_event(&mut txn, hash, event_id);
-    txn.commit();
-  }
-  event_id += 1;
 
   // If a new validator set was activated, create tributary/inform processor to do a DKG
   for new_set in serai.as_of(hash).validator_sets().new_set_events().await? {

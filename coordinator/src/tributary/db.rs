@@ -19,7 +19,6 @@ use crate::tributary::{Label, Transaction};
 pub enum Topic {
   Dkg,
   DkgConfirmation,
-  DkgRemoval([u8; 32]),
   SubstrateSign(SubstrateSignableId),
   Sign([u8; 32]),
 }
@@ -46,14 +45,12 @@ pub enum Accumulation {
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
-    SeraiDkgRemoval: (spec: ValidatorSet, removing: [u8; 32]) -> (),
     SeraiDkgCompleted: (spec: ValidatorSet) -> [u8; 32],
 
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     FatalSlashesAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
-    FatalSlashesAsOfFatalSlash: (genesis: [u8; 32], fatally_slashed: [u8; 32]) -> Vec<[u8; 32]>,
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
     DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
@@ -85,7 +82,6 @@ impl FatallySlashed {
 
     existing.push(account);
     FatalSlashes::set(txn, genesis, &existing);
-    FatalSlashesAsOfFatalSlash::set(txn, genesis, account, &existing);
   }
 }
 

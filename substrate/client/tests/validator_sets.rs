@@ -5,7 +5,7 @@ use sp_core::{sr25519::Public, Pair};
 use serai_client::{
   primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
   validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair, musig_key},
+    primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   Serai,
@@ -58,7 +58,6 @@ serai_test!(
         .collect::<Vec<_>>();
       let participants_ref: &[_] = participants.as_ref();
       assert_eq!(participants_ref, [public].as_ref());
-      assert_eq!(vs_serai.musig_key(set).await.unwrap().unwrap(), musig_key(set, &[public]).0);
     }
 
     let block = set_keys(&serai, set, key_pair.clone()).await;

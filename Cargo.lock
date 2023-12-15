@@ -7735,6 +7735,7 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "hashbrown 0.14.3",
  "pallet-babe",
  "pallet-grandpa",
  "parity-scale-codec",

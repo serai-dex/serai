@@ -98,14 +98,13 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
   Public(dkg::musig::musig_key::<Ristretto>(&musig_context(set), &keys).unwrap().to_bytes())
 }
 
-/// The message for the remove_participant signature.
-pub fn remove_participant_message(set: &ValidatorSet, removed: Public) -> Vec<u8> {
-  (b"ValidatorSets-remove_participant", set, removed).encode()
-}
-
 /// The message for the set_keys signature.
-pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
-  (b"ValidatorSets-set_keys", set, key_pair).encode()
+pub fn set_keys_message(
+  set: &ValidatorSet,
+  removed_participants: &[Public],
+  key_pair: &KeyPair,
+) -> Vec<u8> {
+  (b"ValidatorSets-set_keys", set, removed_participants, key_pair).encode()
 }
 
 /// For a set of validators whose key shares may exceed the maximum, reduce until they equal the

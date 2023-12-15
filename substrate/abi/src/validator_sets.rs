@@ -8,13 +8,8 @@ use serai_validator_sets_primitives::*;
 pub enum Call {
   set_keys {
     network: NetworkId,
+    removed_participants: Vec<SeraiAddress>,
     key_pair: KeyPair,
-    signature: Signature,
-  },
-  remove_participant {
-    network: NetworkId,
-    to_remove: SeraiAddress,
-    signers: Vec<SeraiAddress>,
     signature: Signature,
   },
   allocate {

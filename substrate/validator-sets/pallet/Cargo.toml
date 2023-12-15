@@ -16,6 +16,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 ignored = ["scale", "scale-info"]
 
 [dependencies]
+hashbrown = { version = "0.14", default-features = false, features = ["ahash", "inline-more"] }
+
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
