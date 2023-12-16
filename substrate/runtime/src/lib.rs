@@ -6,6 +6,8 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use core::marker::PhantomData;
+
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
@@ -55,9 +57,11 @@ use support::{
   parameter_types, construct_runtime,
 };
 
+use validator_sets::MembershipProof;
+
+use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
-use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
@@ -141,8 +145,6 @@ parameter_types! {
       Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-
-  pub const MaxAuthorities: u32 = validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
 }
 
 pub struct CallFilter;
@@ -275,20 +277,43 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+// for publishing equivocation evidences.
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+  RuntimeCall: From<C>,
+{
+  type Extrinsic = Transaction;
+  type OverarchingCall = RuntimeCall;
+}
+
+// for validating equivocation evidences.
+// The following runtime construction doesn't actually implement the pallet as doing so is
+// unnecessary
+// TODO: Replace the requirement on Config for a requirement on FindAuthor directly
+impl pallet_authorship::Config for Runtime {
+  type FindAuthor = ValidatorSets;
+  type EventHandler = ();
+}
+
+// Maximum number of authorities per session.
+pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET }>;
+
+/// Longevity of an offence report.
+pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
+
 impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]
   type EpochDuration = ConstU64<{ 1 * DAYS }>;
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
-  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+  type EpochChangeTrigger = babe::ExternalTrigger;
   type DisabledValidators = ValidatorSets;
 
   type WeightInfo = ();
-
   type MaxAuthorities = MaxAuthorities;
 
-  // TODO: Handle equivocation reports
-  type KeyOwnerProof = sp_core::Void;
-  type EquivocationReportSystem = ();
+  type KeyOwnerProof = MembershipProof<Self>;
+  type EquivocationReportSystem =
+    babe::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
 
 impl grandpa::Config for Runtime {
@@ -297,10 +322,10 @@ impl grandpa::Config for Runtime {
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
 
-  // TODO: Handle equivocation reports
   type MaxSetIdSessionEntries = ConstU64<0>;
-  type KeyOwnerProof = sp_core::Void;
-  type EquivocationReportSystem = ();
+  type KeyOwnerProof = MembershipProof<Self>;
+  type EquivocationReportSystem =
+    grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
 
 pub type Executive = frame_executive::Executive<
@@ -459,18 +484,22 @@ sp_api::impl_runtime_apis! {
       Babe::next_epoch()
     }
 
+    // This refers to a key being 'owned' by an authority in a system with multiple keys per
+    // validator
+    // Since we do not have such an infrastructure, we do not need this
     fn generate_key_ownership_proof(
-      _: sp_consensus_babe::Slot,
-      _: BabeId,
+      _slot: sp_consensus_babe::Slot,
+      _authority_id: BabeId,
     ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
-      None
+      Some(sp_consensus_babe::OpaqueKeyOwnershipProof::new(vec![]))
     }
 
     fn submit_report_equivocation_unsigned_extrinsic(
-      _: sp_consensus_babe::EquivocationProof<Header>,
+      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
       _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      None
+      let proof = MembershipProof(equivocation_proof.offender.clone().into(), PhantomData);
+      Babe::submit_unsigned_equivocation_report(equivocation_proof, proof)
     }
   }
 
@@ -483,18 +512,19 @@ sp_api::impl_runtime_apis! {
       Grandpa::current_set_id()
     }
 
-    fn submit_report_equivocation_unsigned_extrinsic(
-      _: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
-      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
-    ) -> Option<()> {
-      None
-    }
-
     fn generate_key_ownership_proof(
       _set_id: sp_consensus_grandpa::SetId,
       _authority_id: GrandpaId,
     ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
-      None
+      Some(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new(vec![]))
+    }
+
+    fn submit_report_equivocation_unsigned_extrinsic(
+      equivocation_proof: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
+      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      let proof = MembershipProof(equivocation_proof.offender().clone().into(), PhantomData);
+      Grandpa::submit_unsigned_equivocation_report(equivocation_proof, proof)
     }
   }
 
