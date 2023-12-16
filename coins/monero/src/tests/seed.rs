@@ -58,12 +58,12 @@ fn test_classic_seed() {
     },
     Vector {
       language: classic::Language::Spanish,
-      seed: "minero ocupar mirar evadir octubre cal logro miope \
-               opaco disco ancla litio clase cuello nasal clase \
-               fiar avance deseo mente grumo negro cordón croqueta clase"
+      seed: "pluma laico atraer pintor peor cerca balde buscar \
+               lancha batir nulo reloj resto gemelo nevera poder columna gol \
+               oveja latir amplio bolero feliz fuerza nevera"
         .into(),
-      spend: "ae2c9bebdddac067d73ec0180147fc92bdf9ac7337f1bcafbbe57dd13558eb02".into(),
-      view: "18deafb34d55b7a43cae2c1c1c206a3c80c12cc9d1f84640b484b95b7fec3e05".into(),
+      spend: "30303983fc8d215dd020cc6b8223793318d55c466a86e4390954f373fdc7200a".into(),
+      view: "97c649143f3c147ba59aa5506cc09c7992c5c219bb26964442142bf97980800e".into(),
     },
     Vector {
       language: classic::Language::German,
@@ -152,12 +152,6 @@ fn test_classic_seed() {
     {
       let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
       let trim = trim_seed(&vector.seed);
-      println!(
-        "{}. seed: {}, entropy: {:?}, trim: {trim}",
-        line!(),
-        *seed.to_string(),
-        *seed.entropy()
-      );
       assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
 
       let spend: [u8; 32] = hex::decode(vector.spend).unwrap().try_into().unwrap();
@@ -185,12 +179,6 @@ fn test_classic_seed() {
     {
       let seed = Seed::new(&mut OsRng, SeedType::Classic(vector.language));
       let trim = trim_seed(&seed.to_string());
-      println!(
-        "{}. seed: {}, entropy: {:?}, trim: {trim}",
-        line!(),
-        *seed.to_string(),
-        *seed.entropy()
-      );
       assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
       assert_eq!(
         seed,

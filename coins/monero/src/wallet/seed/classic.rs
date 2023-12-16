@@ -195,6 +195,7 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
   }
 
   // find the language
+  let mut invalid_checksum = false;
   let (matched_indices, lang_name, lang) = (|| {
     let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
     let mut matched_indices = Zeroizing::new(vec![]);
@@ -232,11 +233,18 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
         // check the trimmed checksum and trimmed last word line up
         if trim(&checksum, lang.unique_prefix_length) != trim(&last_word, lang.unique_prefix_length)
         {
-          Err(SeedError::InvalidChecksum)?;
+          // Valid checksum can appear invalid because multiple languages have the same prefixes,
+          // so keep trying all languages
+          invalid_checksum = true;
+          continue 'language;
         }
       }
 
       return Ok((matched_indices, lang_name, lang));
+    }
+
+    if invalid_checksum {
+      Err(SeedError::InvalidChecksum)?
     }
 
     Err(SeedError::UnknownLanguage)?
