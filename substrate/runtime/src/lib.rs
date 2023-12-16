@@ -6,7 +6,7 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-use scale::Encode;
+use core::marker::PhantomData;
 
 // Re-export all components
 pub use serai_primitives as primitives;
@@ -49,7 +49,7 @@ use sp_runtime::{
 use primitives::{PublicKey, AccountLookup, SubstrateAmount};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains, KeyOwnerProofSystem},
+  traits::{ConstU8, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -287,6 +287,9 @@ where
 }
 
 // for validating equivocation evidences.
+// The following runtime construction doesn't actually implement the pallet as doing so is
+// unnecessary
+// TODO: Replace the requirement on Config for a requirement on FindAuthor directly
 impl pallet_authorship::Config for Runtime {
   type FindAuthor = ValidatorSets;
   type EventHandler = ();
@@ -481,21 +484,22 @@ sp_api::impl_runtime_apis! {
       Babe::next_epoch()
     }
 
+    // This refers to a key being 'owned' by an authority in a system with multiple keys per
+    // validator
+    // Since we do not have such an infrastructure, we do not need this
     fn generate_key_ownership_proof(
       _slot: sp_consensus_babe::Slot,
-      authority_id: BabeId,
+      _authority_id: BabeId,
     ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
-      ValidatorSets::prove((sp_consensus_babe::KEY_TYPE, authority_id))
-        .map(|p| p.encode())
-        .map(sp_consensus_babe::OpaqueKeyOwnershipProof::new)
+      Some(sp_consensus_babe::OpaqueKeyOwnershipProof::new(vec![]))
     }
 
     fn submit_report_equivocation_unsigned_extrinsic(
       equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
-      key_owner_proof: sp_consensus_babe::OpaqueKeyOwnershipProof,
+      _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      let key_owner_proof = key_owner_proof.decode()?;
-      Babe::submit_unsigned_equivocation_report(equivocation_proof, key_owner_proof)
+      let proof = MembershipProof(equivocation_proof.offender.clone().into(), PhantomData);
+      Babe::submit_unsigned_equivocation_report(equivocation_proof, proof)
     }
   }
 
@@ -508,21 +512,19 @@ sp_api::impl_runtime_apis! {
       Grandpa::current_set_id()
     }
 
-    fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
-      key_owner_proof: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
-    ) -> Option<()> {
-      let key_owner_proof = key_owner_proof.decode()?;
-      Grandpa::submit_unsigned_equivocation_report(equivocation_proof, key_owner_proof)
-    }
-
     fn generate_key_ownership_proof(
       _set_id: sp_consensus_grandpa::SetId,
-      authority_id: GrandpaId,
+      _authority_id: GrandpaId,
     ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
-      ValidatorSets::prove((sp_consensus_grandpa::KEY_TYPE, authority_id))
-        .map(|p| p.encode())
-        .map(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new)
+      Some(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new(vec![]))
+    }
+
+    fn submit_report_equivocation_unsigned_extrinsic(
+      equivocation_proof: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
+      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      let proof = MembershipProof(equivocation_proof.offender().clone().into(), PhantomData);
+      Grandpa::submit_unsigned_equivocation_report(equivocation_proof, proof)
     }
   }
 
