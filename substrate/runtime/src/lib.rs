@@ -6,6 +6,8 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use scale::Encode;
+
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
@@ -55,13 +57,11 @@ use support::{
   parameter_types, construct_runtime,
 };
 
-use codec::Encode;
-
 use validator_sets::MembershipProof;
 
+use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
-use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
@@ -282,7 +282,7 @@ impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
   RuntimeCall: From<C>,
 {
-  type Extrinsic = UncheckedExtrinsic;
+  type Extrinsic = Transaction;
   type OverarchingCall = RuntimeCall;
 }
 
