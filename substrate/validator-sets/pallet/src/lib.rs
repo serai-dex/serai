@@ -5,11 +5,7 @@ use core::marker::PhantomData;
 use scale::{Encode, Decode};
 use scale_info::TypeInfo;
 
-use sp_std::{
-  vec,
-  vec::Vec,
-  ops::{Add, Sub},
-};
+use sp_std::{vec, vec::Vec};
 use sp_core::sr25519::{Public, Signature};
 use sp_application_crypto::RuntimePublic;
 use sp_session::{ShouldEndSession, GetSessionNumber, GetValidatorCount};
@@ -530,6 +526,20 @@ pub mod pallet {
       Ok(())
     }
 
+    fn session_to_unlock_on_for_current_set(network: NetworkId) -> Option<Session> {
+      let mut to_unlock_on = Self::session(network)?;
+      // Move to the next session, as deallocating currently in-use stake is obviously invalid
+      to_unlock_on.0 += 1;
+      if network == NetworkId::Serai {
+        // Since the next Serai set will already have been decided, we can only deallocate one
+        // session later
+        to_unlock_on.0 += 1;
+      }
+      // Increase the session by one, creating a cooldown period
+      to_unlock_on.0 += 1;
+      Some(to_unlock_on)
+    }
+
     /// Decreases a validator's allocation to a set.
     ///
     /// Errors if the capacity provided by this allocation is in use.
@@ -604,16 +614,7 @@ pub mod pallet {
 
       // Set it to PendingDeallocations, letting it be released upon a future session
       // This unwrap should be fine as this account is active, meaning a session has occurred
-      let mut to_unlock_on = Self::session(network).unwrap();
-      if network == NetworkId::Serai {
-        // Since the next Serai set will already have been decided, we can only deallocate once the
-        // next set ends
-        to_unlock_on.0 += 2;
-      } else {
-        to_unlock_on.0 += 1;
-      }
-      // Increase the session by one, creating a cooldown period
-      to_unlock_on.0 += 1;
+      let to_unlock_on = Self::session_to_unlock_on_for_current_set(network).unwrap();
       let existing =
         PendingDeallocations::<T>::get((network, account), to_unlock_on).unwrap_or(Amount(0));
       PendingDeallocations::<T>::set(
@@ -784,17 +785,31 @@ pub mod pallet {
       let network = NetworkId::Serai;
 
       let mut allocation = Self::allocation((network, validator)).unwrap_or(Amount(0));
-
       // reduce the current allocation to 0.
       Self::set_allocation(network, validator, Amount(0));
-      // Clear any pending deallocations.
-      for (_, pending) in PendingDeallocations::<T>::drain_prefix((network, validator)) {
-        allocation = allocation.add(pending);
+
+      // Take the pending deallocation from the current session
+      allocation.0 += PendingDeallocations::<T>::take(
+        (network, validator),
+        Self::session_to_unlock_on_for_current_set(network).unwrap(),
+      )
+      .unwrap_or(Amount(0))
+      .0;
+
+      // Reduce the TotalAllocatedStake for the network, if in set
+      // TotalAllocatedStake is the sum of allocations and pending deallocations from the current
+      // session, since pending deallocations can still be slashed and therefore still contribute
+      // to economic security, hence the allocation calculations above being above and the ones
+      // below being below
+      if InSet::<T>::contains_key(NetworkId::Serai, validator) {
+        let current_staked = Self::total_allocated_stake(network).unwrap();
+        TotalAllocatedStake::<T>::set(network, Some(current_staked - allocation));
       }
 
-      // reduce the TotalAllocatedStake for the network
-      let current_staked = Self::total_allocated_stake(network).unwrap();
-      TotalAllocatedStake::<T>::set(network, Some(current_staked.sub(allocation)));
+      // Clear any other pending deallocations.
+      for (_, pending) in PendingDeallocations::<T>::drain_prefix((network, validator)) {
+        allocation.0 += pending.0;
+      }
 
       // burn the allocation from the stake account
       Coins::<T>::burn(
