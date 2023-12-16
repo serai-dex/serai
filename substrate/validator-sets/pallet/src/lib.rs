@@ -804,18 +804,26 @@ pub mod pallet {
       .unwrap();
     }
 
-    fn disable_serai_validator(validator: Public) {
-      let index = Babe::<T>::authorities()
-        .into_iter()
-        .position(|(id, _)| id.into_inner() == validator)
-        .unwrap();
-      SeraiDisabledIndices::<T>::set(u32::try_from(index).unwrap(), Some(validator));
+    /// Disable a Serai validator, preventing them from further authoring blocks.
+    ///
+    /// Returns true if the validator-to-disable was actually a validator.
+    /// Returns false if they weren't.
+    fn disable_serai_validator(validator: Public) -> bool {
+      if let Some(index) =
+        Babe::<T>::authorities().into_iter().position(|(id, _)| id.into_inner() == validator)
+      {
+        SeraiDisabledIndices::<T>::set(u32::try_from(index).unwrap(), Some(validator));
 
-      let session = Self::session(NetworkId::Serai).unwrap();
-      Self::deposit_event(Event::ParticipantRemoved {
-        set: ValidatorSet { network: NetworkId::Serai, session },
-        removed: validator,
-      });
+        let session = Self::session(NetworkId::Serai).unwrap();
+        Self::deposit_event(Event::ParticipantRemoved {
+          set: ValidatorSet { network: NetworkId::Serai, session },
+          removed: validator,
+        });
+
+        true
+      } else {
+        false
+      }
     }
   }
 
@@ -1014,9 +1022,8 @@ pub mod pallet {
     }
   }
 
-  impl<T: Config, V: Encode + Decode + Into<Public> + From<Public>>
-    KeyOwnerProofSystem<(KeyTypeId, V)> for Pallet<T>
-  {
+  #[rustfmt::skip]
+  impl<T: Config, V: Into<Public> + From<Public>> KeyOwnerProofSystem<(KeyTypeId, V)> for Pallet<T> {
     type Proof = MembershipProof<T>;
     type IdentificationTuple = Public;
 
