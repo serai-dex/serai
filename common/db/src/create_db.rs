@@ -22,7 +22,7 @@ pub fn serai_db_key(
 ///
 /// * `db_name` - A database name
 /// * `field_name` - An item name
-/// * `args` - Comma seperated list of key arguments
+/// * `args` - Comma separated list of key arguments
 /// * `field_type` - The return type
 ///
 /// # Example

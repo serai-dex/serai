@@ -61,7 +61,7 @@ pub fn ack_challenge(
   id: u64,
   nonce: <Ristretto as Ciphersuite>::G,
 ) -> <Ristretto as Ciphersuite>::F {
-  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Ackowledgement");
+  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Acknowledgement");
   transcript.domain_separate(b"metadata");
   transcript.append_message(b"to", borsh::to_vec(&to).unwrap());
   transcript.append_message(b"to_key", to_key.to_bytes());

@@ -2,7 +2,7 @@
 
 A multiexp implementation for ff/group implementing Straus and Pippenger. A
 batch verification API is also available via the "batch" feature, which enables
-secure multiexponentation batch verification given a series of values which
+secure multiexponentiation batch verification given a series of values which
 should sum to the identity, identifying which doesn't via binary search if they
 don't.
 

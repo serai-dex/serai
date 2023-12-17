@@ -51,7 +51,7 @@ pub trait Algorithm<C: Curve>: Send + Sync + Clone {
   /// Read an addendum from a reader.
   fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<Self::Addendum>;
 
-  /// Proccess the addendum for the specified participant. Guaranteed to be called in order.
+  /// Process the addendum for the specified participant. Guaranteed to be called in order.
   fn process_addendum(
     &mut self,
     params: &ThresholdView<C>,

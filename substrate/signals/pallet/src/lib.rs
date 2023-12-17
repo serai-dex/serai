@@ -57,7 +57,7 @@ pub mod pallet {
   pub struct RegisteredRetirementSignal<T: Config> {
     in_favor_of: [u8; 32],
     registrant: T::AccountId,
-    registed_at: BlockNumberFor<T>,
+    registered_at: BlockNumberFor<T>,
   }
 
   impl<T: Config> RegisteredRetirementSignal<T> {
@@ -135,10 +135,10 @@ pub mod pallet {
     RetirementSignalLockedIn,
     RetirementSignalAlreadyRegistered,
     NotRetirementSignalRegistrant,
-    NonExistantRetirementSignal,
+    NonExistentRetirementSignal,
     ExpiredRetirementSignal,
     NotValidator,
-    RevokingNonExistantFavor,
+    RevokingNonExistentFavor,
   }
 
   // 80% threshold
@@ -236,7 +236,7 @@ pub mod pallet {
       for_network: NetworkId,
     ) -> DispatchResult {
       if !Favors::<T>::contains_key((signal_id, for_network), account) {
-        Err::<(), _>(Error::<T>::RevokingNonExistantFavor)?;
+        Err::<(), _>(Error::<T>::RevokingNonExistentFavor)?;
       }
       Favors::<T>::remove((signal_id, for_network), account);
       Self::deposit_event(Event::<T>::FavorRevoked { signal_id, by: account, for_network });
@@ -275,7 +275,7 @@ pub mod pallet {
       let signal = RegisteredRetirementSignal {
         in_favor_of,
         registrant: account,
-        registed_at: frame_system::Pallet::<T>::block_number(),
+        registered_at: frame_system::Pallet::<T>::block_number(),
       };
       let signal_id = signal.id();
 
@@ -301,7 +301,7 @@ pub mod pallet {
       let account = ensure_signed(origin)?;
       let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(retirement_signal_id)
       else {
-        return Err::<(), _>(Error::<T>::NonExistantRetirementSignal.into());
+        return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into());
       };
       if account != registered_signal.registrant {
         Err::<(), _>(Error::<T>::NotRetirementSignalRegistrant)?;
@@ -341,7 +341,7 @@ pub mod pallet {
         // We don't have to do this for a `Halt` signal as `Halt` doesn't have the registration
         // process
         let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(signal_id) else {
-          return Err::<(), _>(Error::<T>::NonExistantRetirementSignal.into());
+          return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into());
         };
 
         // Check the signal isn't out of date
@@ -350,7 +350,7 @@ pub mod pallet {
         // The reason to still have it is because locking in a dated runtime may cause a corrupt
         // blockchain and lead to a failure in system integrity
         // `Halt`, which doesn't have this check, at worst causes temporary downtime
-        if (registered_signal.registed_at + T::RetirementValidityDuration::get().into()) <
+        if (registered_signal.registered_at + T::RetirementValidityDuration::get().into()) <
           frame_system::Pallet::<T>::block_number()
         {
           Err::<(), _>(Error::<T>::ExpiredRetirementSignal)?;
@@ -448,7 +448,7 @@ pub mod pallet {
         // Check this Signal exists (which would've been implied by Favors for it existing)
         if let SignalId::Retirement(signal_id) = signal_id {
           if RegisteredRetirementSignals::<T>::get(signal_id).is_none() {
-            Err::<(), _>(Error::<T>::NonExistantRetirementSignal)?;
+            Err::<(), _>(Error::<T>::NonExistentRetirementSignal)?;
           }
         }
       }

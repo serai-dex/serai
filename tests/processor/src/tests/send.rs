@@ -272,7 +272,7 @@ fn send_test() {
       for (i, coordinator) in coordinators.iter_mut().enumerate() {
         if !participating.contains(&i) {
           coordinator.publish_transacton(&ops, &tx).await;
-          // Tell them of it as a completion of the relevant signing nodess
+          // Tell them of it as a completion of the relevant signing nodes
           coordinator
             .send_message(messages::sign::CoordinatorMessage::Completed {
               session: Session(0),
@@ -297,8 +297,8 @@ fn send_test() {
       }
 
       // TODO: Test the Eventuality from the blockchain, instead of from the coordinator
-      // TODO: Test what happenns when Completed is sent with a non-existent TX ID
-      // TODO: Test what happenns when Completed is sent with a non-completing TX ID
+      // TODO: Test what happens when Completed is sent with a non-existent TX ID
+      // TODO: Test what happens when Completed is sent with a non-completing TX ID
     });
   }
 }

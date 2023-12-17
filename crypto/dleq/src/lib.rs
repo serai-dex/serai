@@ -28,7 +28,7 @@ mod tests;
 pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   // From here, there are three ways to get a scalar under the ff/group API
   // 1: Scalar::random(ChaCha20Rng::from_seed(self.transcript.rng_seed(b"challenge")))
-  // 2: Grabbing a UInt library to perform reduction by the modulus, then determining endianess
+  // 2: Grabbing a UInt library to perform reduction by the modulus, then determining endianness
   //    and loading it in
   // 3: Iterating over each byte and manually doubling/adding. This is simplest
 

@@ -507,14 +507,14 @@ impl Network for Bitcoin {
   // The output should be ~36 bytes, or 144 weight units
   // The overhead should be ~20 bytes at most, or 80 weight units
   // 684 weight units, 171 vbytes, round up to 200
-  // 200 vbytes at 1 sat/weight (our current minumum fee, 4 sat/vbyte) = 800 sat fee for the
+  // 200 vbytes at 1 sat/weight (our current minimum fee, 4 sat/vbyte) = 800 sat fee for the
   // aggregation TX
   const COST_TO_AGGREGATE: u64 = 800;
 
   // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
   // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
   // While our inputs are entirely SegWit, such fine tuning is not necessary and could create
-  // issues in the future (if the size decreases or we mis-evaluate it)
+  // issues in the future (if the size decreases or we misevaluate it)
   // It also offers a minimal amount of benefit when we are able to logarithmically accumulate
   // inputs
   // For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and

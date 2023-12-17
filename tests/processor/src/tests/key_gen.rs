@@ -115,7 +115,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
   .await;
 
   // Confirm the key pair
-  // TODO: Beter document network_latest_finalized_block's genesis state, and error if a set claims
+  // TODO: Better document network_latest_finalized_block's genesis state, and error if a set claims
   // [0; 32] was finalized
   let context = SubstrateContext {
     serai_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),

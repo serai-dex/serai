@@ -18,7 +18,7 @@ pub struct Scheduler<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
   coin: Coin,
 
-  // Serai, when it has more outputs expected than it can handle in a single tranaction, will
+  // Serai, when it has more outputs expected than it can handle in a single transaction, will
   // schedule the outputs to be handled later. Immediately, it just creates additional outputs
   // which will eventually handle those outputs
   //
@@ -321,7 +321,7 @@ impl<N: Network> Scheduler<N> {
 
     // If we don't have UTXOs available, don't try to continue
     if self.utxos.is_empty() {
-      log::info!("no utxos currently avilable");
+      log::info!("no utxos currently available");
       return plans;
     }
 

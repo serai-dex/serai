@@ -20,7 +20,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
 
   let mut res1 = F0::ZERO;
   let mut res2 = F1::ZERO;
-  // Uses the bits API to ensure a consistent endianess
+  // Uses the bits API to ensure a consistent endianness
   let mut bits = scalar.to_le_bits();
   scalar.zeroize();
   // Convert it to big endian

@@ -6,7 +6,7 @@ use std::{
 
 use crate::*;
 
-/// An atomic operation for the in-memory databae.
+/// An atomic operation for the in-memory database.
 #[must_use]
 #[derive(PartialEq, Eq, Debug)]
 pub struct MemDbTxn<'a>(&'a MemDb, HashMap<Vec<u8>, Vec<u8>>, HashSet<Vec<u8>>);

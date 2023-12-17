@@ -22,7 +22,7 @@ fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
   tables
 }
 
-// Straus's algorithm for multiexponentation, as published in The American Mathematical Monthly
+// Straus's algorithm for multiexponentiation, as published in The American Mathematical Monthly
 // DOI: 10.2307/2310929
 pub(crate) fn straus<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> G
 where

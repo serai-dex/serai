@@ -572,7 +572,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         .unwrap()
         .blame(accuser, accused, network_share, network_blame);
 
-        // If thw accused was blamed for either, mark them as at fault
+        // If the accused was blamed for either, mark them as at fault
         if (substrate_blame == accused) || (network_blame == accused) {
           return ProcessorMessage::Blame { id, participant: accused };
         }

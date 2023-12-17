@@ -140,7 +140,7 @@ async fn potentially_cosign_block(
 
   // If we skipped a block, we're supposed to sign it plus the COSIGN_DISTANCE if no other blocks
   // trigger a cosigning protocol covering it
-  // This means there will be the maximum delay allowed from a block needing cosigning occuring
+  // This means there will be the maximum delay allowed from a block needing cosigning occurring
   // and a cosign for it triggering
   let maximally_latent_cosign_block =
     skipped_block.map(|skipped_block| skipped_block + COSIGN_DISTANCE);

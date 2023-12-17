@@ -547,7 +547,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
           let key_vec = key.to_bytes().as_ref().to_vec();
 
-          // TODO: These lines are the ones which will cause a really long-lived lock acquisiton
+          // TODO: These lines are the ones which will cause a really long-lived lock acquisition
           for output in network.get_outputs(&block, key).await {
             assert_eq!(output.key(), key);
             if output.balance().amount.0 >= N::DUST {

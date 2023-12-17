@@ -142,7 +142,7 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
     }
   };
 
-  // The ack_block acquisiton shows the Scanner isn't maintaining the lock on its own thread after
+  // The ack_block acquisition shows the Scanner isn't maintaining the lock on its own thread after
   // emitting the Block event
   // TODO: This is incomplete. Also test after emitting Completed
   let mut txn = db.txn();

@@ -306,7 +306,7 @@ impl_from!(substrate, ProcessorMessage, Substrate);
 // Intent generation code
 
 const COORDINATOR_UID: u8 = 0;
-const PROCESSSOR_UID: u8 = 1;
+const PROCESSOR_UID: u8 = 1;
 
 const TYPE_KEY_GEN_UID: u8 = 2;
 const TYPE_SIGN_UID: u8 = 3;
@@ -401,7 +401,7 @@ impl ProcessorMessage {
           key_gen::ProcessorMessage::Blame { id, .. } => (5, id),
         };
 
-        let mut res = vec![PROCESSSOR_UID, TYPE_KEY_GEN_UID, sub];
+        let mut res = vec![PROCESSOR_UID, TYPE_KEY_GEN_UID, sub];
         res.extend(&id.encode());
         res
       }
@@ -415,7 +415,7 @@ impl ProcessorMessage {
           sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
         };
 
-        let mut res = vec![PROCESSSOR_UID, TYPE_SIGN_UID, sub];
+        let mut res = vec![PROCESSOR_UID, TYPE_SIGN_UID, sub];
         res.extend(&id);
         res
       }
@@ -430,7 +430,7 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::CosignedBlock { block, .. } => (5, block.encode()),
         };
 
-        let mut res = vec![PROCESSSOR_UID, TYPE_COORDINATOR_UID, sub];
+        let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];
         res.extend(&id);
         res
       }
@@ -443,7 +443,7 @@ impl ProcessorMessage {
           }
         };
 
-        let mut res = vec![PROCESSSOR_UID, TYPE_SUBSTRATE_UID, sub];
+        let mut res = vec![PROCESSOR_UID, TYPE_SUBSTRATE_UID, sub];
         res.extend(&id);
         res
       }

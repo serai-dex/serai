@@ -108,7 +108,7 @@ impl Coin {
 // more liquidity, the only reason we'd have so many coins from a network is if there's no DEX
 // on-chain
 // There's probably no chain with so many *worthwhile* coins and no on-chain DEX
-// This could probably be just 4, yet 8 is a hedge for the unforseen
+// This could probably be just 4, yet 8 is a hedge for the unforeseen
 // If necessary, this can be increased with a fork
 pub const MAX_COINS_PER_NETWORK: u32 = 8;
 

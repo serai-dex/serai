@@ -84,7 +84,7 @@ impl Rpc {
     for line in res.split('\n') {
       // This doesn't check if the arguments are as expected
       // This is due to Bitcoin supporting a large amount of optional arguments, which
-      // occassionally change, with their own mechanism of text documentation, making matching off
+      // occasionally change, with their own mechanism of text documentation, making matching off
       // it a quite involved task
       // Instead, once we've confirmed the methods are present, we assume our arguments are aligned
       // Else we'll error at time of call

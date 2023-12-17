@@ -173,7 +173,7 @@ fn algorithm(len: usize) -> Algorithm {
   }
 }
 
-/// Performs a multiexponentation, automatically selecting the optimal algorithm based on the
+/// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
 /// amount of pairs.
 pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G
 where
@@ -188,7 +188,7 @@ where
   }
 }
 
-/// Performs a multiexponentation in variable time, automatically selecting the optimal algorithm
+/// Performs a multiexponentiation in variable time, automatically selecting the optimal algorithm
 /// based on the amount of pairs.
 pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G
 where

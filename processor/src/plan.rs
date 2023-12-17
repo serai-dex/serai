@@ -77,7 +77,7 @@ impl<N: Network> Payment<N> {
 pub struct Plan<N: Network> {
   pub key: <N::Curve as Ciphersuite>::G,
   pub inputs: Vec<N::Output>,
-  /// The payments this Plan is inteded to create.
+  /// The payments this Plan is intended to create.
   ///
   /// This should only contain payments leaving Serai. While it is acceptable for users to enter
   /// Serai's address(es) as the payment address, as that'll be handled by anything which expects
@@ -152,7 +152,7 @@ impl<N: Network> Plan<N> {
     let change = if let Some(change) = &self.change {
       change.clone().try_into().map_err(|_| {
         io::Error::other(format!(
-          "an address we said to use as change couldn't be convered to a Vec<u8>: {}",
+          "an address we said to use as change couldn't be converted to a Vec<u8>: {}",
           change.to_string(),
         ))
       })?

@@ -38,7 +38,7 @@
   only way to operate on distinct received messages would be if:
 
   1) A logical flaw exists, letting new messages over write prior messages
-  2) A reorganization occured from chain A to chain B, and with it, different messages
+  2) A reorganization occurred from chain A to chain B, and with it, different messages
 
   Reorganizations are not supported, as BFT is assumed by the presence of a BFT algorithm. While
   a significant amount of processes may be byzantine, leading to BFT being broken, that still will

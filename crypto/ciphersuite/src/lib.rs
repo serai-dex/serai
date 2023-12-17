@@ -52,7 +52,7 @@ pub trait Ciphersuite:
   /// Group element type.
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
   /// Hash algorithm used with this curve.
-  // Requires BlockSizeUser so it can be used within Hkdf which requies that.
+  // Requires BlockSizeUser so it can be used within Hkdf which requires that.
   type H: Send + Clone + BlockSizeUser + Digest + HashMarker + SecureDigest;
 
   /// ID for this curve.

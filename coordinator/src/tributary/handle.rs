@@ -42,7 +42,7 @@ pub fn dkg_confirmation_nonces(
     .preprocess()
 }
 
-// If there's an error generating a key pair, return any errors which would've occured when
+// If there's an error generating a key pair, return any errors which would've occurred when
 // executing the DkgConfirmer in order to stay in sync with those who did.
 //
 // The caller must ensure only error_generating_key_pair or generated_key_pair is called for a

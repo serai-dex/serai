@@ -118,7 +118,7 @@ fn cipher<C: Ciphersuite>(context: &str, ecdh: &Zeroizing<C::G>) -> ChaCha20 {
   zeroize(challenge.as_mut());
 
   // Since the key is single-use, it doesn't matter what we use for the IV
-  // The isssue is key + IV reuse. If we never reuse the key, we can't have the opportunity to
+  // The issue is key + IV reuse. If we never reuse the key, we can't have the opportunity to
   // reuse a nonce
   // Use a static IV in acknowledgement of this
   let mut iv = Cc20Iv::default();

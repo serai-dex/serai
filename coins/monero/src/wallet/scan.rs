@@ -397,7 +397,7 @@ impl Scanner {
         }
         let subaddress = *subaddress.unwrap();
 
-        // If it has torsion, it'll substract the non-torsioned shared key to a torsioned key
+        // If it has torsion, it'll subtract the non-torsioned shared key to a torsioned key
         // We will not have a torsioned key in our HashMap of keys, so we wouldn't identify it as
         // ours
         // If we did though, it'd enable bypassing the included burning bug protection

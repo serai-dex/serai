@@ -74,7 +74,7 @@ fn invalid_block() {
     assert!(blockchain.verify_block::<N>(&block, &validators, false).is_err());
   }
 
-  // Mutate tranactions merkle
+  // Mutate transactions merkle
   {
     let mut block = block;
     block.header.transactions = Blake2s256::digest(block.header.transactions).into();

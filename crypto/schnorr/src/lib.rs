@@ -83,7 +83,7 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   }
 
   /// Return the series of pairs whose products sum to zero for a valid signature.
-  /// This is inteded to be used with a multiexp.
+  /// This is intended to be used with a multiexp.
   pub fn batch_statements(&self, public_key: C::G, challenge: C::F) -> [(C::F, C::G); 3] {
     // s = r + ca
     // sG == R + cA

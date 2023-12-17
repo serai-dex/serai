@@ -186,7 +186,7 @@ impl SignableTransaction {
     //  src/policy/policy.cpp#L295-L298
     // implements this as expected
 
-    // Technically, it takes whatever's greater, the weight or the amount of signature operatons
+    // Technically, it takes whatever's greater, the weight or the amount of signature operations
     // multiplied by DEFAULT_BYTES_PER_SIGOP (20)
     // We only use 1 signature per input, and our inputs have a weight exceeding 20
     // Accordingly, our inputs' weight will always be greater than the cost of the signature ops

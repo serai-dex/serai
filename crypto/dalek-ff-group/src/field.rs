@@ -222,7 +222,7 @@ impl FieldElement {
     FieldElement(reduce(U512::from(value.mul_wide(&value))))
   }
 
-  /// Perform an exponentation.
+  /// Perform an exponentiation.
   pub fn pow(&self, other: FieldElement) -> FieldElement {
     let mut table = [FieldElement::ONE; 16];
     table[1] = *self;

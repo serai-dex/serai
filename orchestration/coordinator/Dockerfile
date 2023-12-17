@@ -65,8 +65,8 @@ USER coordinator
 WORKDIR /home/coordinator
 
 # Copy the Coordinator binary and relevant license
-COPY --from=builder --chown=processsor /serai/bin/serai-coordinator /bin/
-COPY --from=builder --chown=processsor /serai/AGPL-3.0 .
+COPY --from=builder --chown=processor /serai/bin/serai-coordinator /bin/
+COPY --from=builder --chown=processor /serai/AGPL-3.0 .
 
 # Run coordinator
 CMD ["serai-coordinator"]

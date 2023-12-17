@@ -43,7 +43,7 @@ pub struct Vectors {
 }
 
 // Vectors are expected to be formatted per the IETF proof of concept
-// The included vectors are direcly from
+// The included vectors are directly from
 // https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-14/poc
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
