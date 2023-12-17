@@ -256,7 +256,7 @@ impl<C: Curve> BindingFactor<C> {
   }
 
   pub(crate) fn calculate_binding_factors<T: Clone + Transcript>(&mut self, transcript: &T) {
-    for (l, binding) in self.0.iter_mut() {
+    for (l, binding) in &mut self.0 {
       let mut transcript = transcript.clone();
       transcript.append_message(b"participant", C::F::from(u64::from(u16::from(*l))).to_repr());
       // It *should* be perfectly fine to reuse a binding factor for multiple nonces

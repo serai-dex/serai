@@ -78,7 +78,7 @@ async fn spend<N: Network, D: Db>(
 
 pub async fn test_addresses<N: Network>(network: N) {
   let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
-  for (_, keys) in keys.iter_mut() {
+  for keys in keys.values_mut() {
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();

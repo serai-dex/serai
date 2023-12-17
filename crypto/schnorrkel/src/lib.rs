@@ -99,7 +99,7 @@ impl Algorithm<Ristretto> for Schnorrkel {
     &mut self,
     _: &ThresholdView<Ristretto>,
     _: Participant,
-    _: (),
+    (): (),
   ) -> Result<(), FrostError> {
     Ok(())
   }

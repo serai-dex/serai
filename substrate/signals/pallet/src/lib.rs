@@ -1,6 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[allow(deprecated, clippy::let_unit_value)] // TODO
+#[allow(
+  deprecated,
+  clippy::let_unit_value,
+  clippy::cast_possible_truncation,
+  clippy::ignored_unit_patterns
+)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
   use scale_info::TypeInfo;

@@ -29,7 +29,7 @@ pub fn scalar_normalize<F0: PrimeFieldBits + Zeroize, F1: PrimeFieldBits>(
   let mut skip = bits.len() - usize::try_from(mutual_capacity).unwrap();
   // Needed to zero out the bits
   #[allow(unused_assignments)]
-  for mut bit in bits.iter_mut() {
+  for mut bit in &mut bits {
     if skip > 0 {
       bit.deref_mut().zeroize();
       skip -= 1;

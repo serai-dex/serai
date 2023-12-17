@@ -124,7 +124,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
       justification_import: Some(Box::new(justification_import)),
       client: client.clone(),
       select_chain: select_chain.clone(),
-      create_inherent_data_providers: move |_, _| async move {
+      create_inherent_data_providers: move |_, ()| async move {
         Ok(create_inherent_data_providers(slot_duration))
       },
       spawner: &task_manager.spawn_essential_handle(),
@@ -259,7 +259,7 @@ pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError
       block_import,
       sync_oracle: sync_service.clone(),
       justification_sync_link: sync_service.clone(),
-      create_inherent_data_providers: move |_, _| async move {
+      create_inherent_data_providers: move |_, ()| async move {
         Ok(create_inherent_data_providers(slot_duration))
       },
       force_authoring,

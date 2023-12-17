@@ -38,7 +38,6 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
     let current_mempool_key = self.current_mempool_key();
-    #[allow(clippy::unwrap_or_default)]
     let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
 
     let mut txn = self.db.txn();
@@ -182,14 +181,14 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     signer: &<Ristretto as Ciphersuite>::G,
     order: Vec<u8>,
   ) -> Option<u32> {
-    self.last_nonce_in_mempool.get(&(*signer, order)).cloned().map(|nonce| nonce + 1)
+    self.last_nonce_in_mempool.get(&(*signer, order)).copied().map(|nonce| nonce + 1)
   }
 
   /// Get transactions to include in a block.
   pub(crate) fn block(&mut self) -> Vec<Transaction<T>> {
     let mut unsigned = vec![];
     let mut signed = vec![];
-    for hash in self.txs.keys().cloned().collect::<Vec<_>>() {
+    for hash in self.txs.keys().copied().collect::<Vec<_>>() {
       let tx = &self.txs[&hash];
 
       match tx.kind() {
@@ -222,7 +221,6 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
     let transaction_key = self.transaction_key(tx);
     let current_mempool_key = self.current_mempool_key();
-    #[allow(clippy::unwrap_or_default)]
     let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
 
     let mut i = 0;

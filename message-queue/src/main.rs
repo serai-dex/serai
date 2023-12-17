@@ -250,18 +250,18 @@ async fn main() {
               msg,
               SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
             );
-            let Ok(_) = socket.write_all(&[1]).await else { break };
+            let Ok(()) = socket.write_all(&[1]).await else { break };
           }
           MessageQueueRequest::Next { from, to } => match get_next_message(from, to) {
             Some(msg) => {
-              let Ok(_) = socket.write_all(&[1]).await else { break };
+              let Ok(()) = socket.write_all(&[1]).await else { break };
               let msg = borsh::to_vec(&msg).unwrap();
               let len = u32::try_from(msg.len()).unwrap();
-              let Ok(_) = socket.write_all(&len.to_le_bytes()).await else { break };
-              let Ok(_) = socket.write_all(&msg).await else { break };
+              let Ok(()) = socket.write_all(&len.to_le_bytes()).await else { break };
+              let Ok(()) = socket.write_all(&msg).await else { break };
             }
             None => {
-              let Ok(_) = socket.write_all(&[0]).await else { break };
+              let Ok(()) = socket.write_all(&[0]).await else { break };
             }
           },
           MessageQueueRequest::Ack { from, to, id, sig } => {
@@ -271,7 +271,7 @@ async fn main() {
               id,
               SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
             );
-            let Ok(_) = socket.write_all(&[1]).await else { break };
+            let Ok(()) = socket.write_all(&[1]).await else { break };
           }
         }
       }

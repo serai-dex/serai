@@ -8,6 +8,13 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>", "Vrx <vrx00@proton.me>"]
 edition = "2021"
 rust-version = "1.74"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
 [dependencies]
 std-shims = { version = "0.1.1", path = "../../common/std-shims", default-features = false }
 

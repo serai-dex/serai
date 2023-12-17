@@ -184,7 +184,7 @@ impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> fo
     &mut self,
     _: &ThresholdView<C>,
     _: Participant,
-    _: (),
+    (): (),
   ) -> Result<(), FrostError> {
     Ok(())
   }

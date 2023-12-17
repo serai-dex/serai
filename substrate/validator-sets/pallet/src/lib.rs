@@ -53,11 +53,16 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
   // rely on it and Substrate only relies on it to offer economic calculations we also don't rely
   // on
   fn validator_count(&self) -> u32 {
-    Babe::<T>::authorities().len() as u32
+    u32::try_from(Babe::<T>::authorities().len()).unwrap()
   }
 }
 
-#[allow(deprecated, clippy::let_unit_value)] // TODO
+#[allow(
+  deprecated,
+  clippy::let_unit_value,
+  clippy::cast_possible_truncation,
+  clippy::ignored_unit_patterns
+)] // TODO
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
@@ -717,7 +722,7 @@ pub mod pallet {
           None,
         ),
         WeakBoundedVec::force_from(
-          next_validators.iter().cloned().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          next_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
           None,
         ),
         Some(session),

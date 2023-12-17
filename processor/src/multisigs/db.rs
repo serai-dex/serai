@@ -113,7 +113,7 @@ impl ResolvedDb {
       let end = i + 32;
       if signing[start .. end] == plan {
         found = true;
-        signing = [&signing[.. start], &signing[end ..]].concat().to_vec();
+        signing = [&signing[.. start], &signing[end ..]].concat();
         break;
       }
     }

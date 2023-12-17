@@ -13,5 +13,8 @@ publish = false
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 loom = "0.7"

@@ -13,6 +13,9 @@ publish = false
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Macros
 async-trait = { version = "0.1", default-features = false }

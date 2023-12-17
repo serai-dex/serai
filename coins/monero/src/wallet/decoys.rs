@@ -28,6 +28,7 @@ const MATURITY: u64 = 60;
 const RECENT_WINDOW: usize = 15;
 const BLOCK_TIME: usize = 120;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
+#[allow(clippy::cast_precision_loss)]
 const TIP_APPLICATION: f64 = (LOCK_WINDOW * BLOCK_TIME) as f64;
 
 // TODO: Resolve safety of this in case a reorg occurs/the network changes
@@ -76,6 +77,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
 
       // Use a gamma distribution
       let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
+      #[allow(clippy::cast_precision_loss)]
       if age > TIP_APPLICATION {
         age -= TIP_APPLICATION;
       } else {
@@ -83,6 +85,7 @@ async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
         age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
       }
 
+      #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
       let o = (age * per_second) as u64;
       if o < high {
         let i = distribution.partition_point(|s| *s < (high - 1 - o));
@@ -193,6 +196,7 @@ impl Decoys {
     distribution.truncate(height + 1); // height is inclusive, and 0 is a valid height
 
     let high = distribution[distribution.len() - 1];
+    #[allow(clippy::cast_precision_loss)]
     let per_second = {
       let blocks = distribution.len().min(BLOCKS_PER_YEAR);
       let outputs = high - distribution[distribution.len().saturating_sub(blocks + 1)];

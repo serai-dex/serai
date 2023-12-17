@@ -39,7 +39,6 @@ pub fn removed_as_of_dkg_attempt(
 }
 
 pub fn latest_removed(getter: &impl Get, genesis: [u8; 32]) -> Vec<<Ristretto as Ciphersuite>::G> {
-  #[allow(clippy::unwrap_or_default)]
   FatalSlashes::get(getter, genesis)
     .unwrap_or(vec![])
     .iter()

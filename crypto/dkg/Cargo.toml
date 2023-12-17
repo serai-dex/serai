@@ -13,6 +13,9 @@ rust-version = "1.70"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 thiserror = { version = "1", default-features = false, optional = true }
 

@@ -280,7 +280,7 @@ fn batch_test() {
           // TODO: Double check how the processor handles this ID field
           // It should be able to assert its perfectly sequential
           id.attempt = attempt;
-          for coordinator in coordinators.iter_mut() {
+          for coordinator in &mut coordinators {
             coordinator
               .send_message(messages::coordinator::CoordinatorMessage::BatchReattempt {
                 id: id.clone(),

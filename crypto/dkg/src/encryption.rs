@@ -226,7 +226,7 @@ impl<C: Ciphersuite, E: Encryptable> EncryptedMessage<C, E> {
     use ciphersuite::group::ff::PrimeField;
 
     let mut repr = <C::F as PrimeField>::Repr::default();
-    for b in repr.as_mut().iter_mut() {
+    for b in repr.as_mut() {
       *b = 255;
     }
     // Tries to guarantee the above assumption.

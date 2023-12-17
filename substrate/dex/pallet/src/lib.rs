@@ -94,6 +94,7 @@ use sp_std::prelude::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
+#[allow(clippy::cast_possible_truncation)] // TODO: Investigate why Substrate generates this
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
@@ -751,7 +752,7 @@ pub mod pallet {
         )?;
 
         let mut i = 0;
-        let path_len = path.len() as u32;
+        let path_len = u32::try_from(path.len()).unwrap();
         #[allow(clippy::explicit_counter_loop)]
         for coins_pair in path.windows(2) {
           if let [coin1, coin2] = coins_pair {

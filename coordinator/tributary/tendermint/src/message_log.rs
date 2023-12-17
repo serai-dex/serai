@@ -21,9 +21,7 @@ impl<N: Network> MessageLog<N> {
   pub(crate) fn log(&mut self, signed: SignedMessageFor<N>) -> Result<bool, TendermintError<N>> {
     let msg = &signed.msg;
     // Clarity, and safety around default != new edge cases
-    #[allow(clippy::unwrap_or_default)]
     let round = self.log.entry(msg.round).or_insert_with(HashMap::new);
-    #[allow(clippy::unwrap_or_default)]
     let msgs = round.entry(msg.sender).or_insert_with(HashMap::new);
 
     // Handle message replays without issue. It's only multiple messages which is malicious

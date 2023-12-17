@@ -136,7 +136,7 @@ mod impl_pst_for_serai {
       signature: Signature,
     ) {
       let tx = SeraiValidatorSets::set_keys(set.network, removed, key_pair, signature);
-      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, _: ()) -> bool {
+      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, (): ()) -> bool {
         if matches!(serai.keys(set).await, Ok(Some(_))) {
           log::info!("another coordinator set key pair for {:?}", set);
           return true;
@@ -293,7 +293,6 @@ impl<
       */
       match topic {
         Topic::Dkg => {
-          #[allow(clippy::unwrap_or_default)]
           FatalSlashesAsOfDkgAttempt::set(
             self.txn,
             genesis,

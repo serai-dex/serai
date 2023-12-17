@@ -355,7 +355,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   }
 
   fn from_cache(
-    _: (),
+    (): (),
     _: ThresholdKeys<Secp256k1>,
     _: CachedPreprocess,
   ) -> (Self, Self::Preprocess) {

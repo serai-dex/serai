@@ -42,6 +42,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
+  #[allow(clippy::cast_lossless)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);
@@ -278,7 +279,7 @@ where
     };
 
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
-    let bits_per_group = BitSignature::from(SIGNATURE).bits();
+    let bits_per_group = usize::from(BitSignature::from(SIGNATURE).bits());
 
     let mut pow_2 = (generators.0.primary, generators.1.primary);
 
@@ -391,7 +392,7 @@ where
     generators: (Generators<G0>, Generators<G1>),
   ) -> Result<(G0, G1), DLEqError> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
-    let bits_per_group = BitSignature::from(SIGNATURE).bits();
+    let bits_per_group = usize::from(BitSignature::from(SIGNATURE).bits());
     let has_remainder = (capacity % bits_per_group) != 0;
 
     // These shouldn't be possible, as locally created and deserialized proofs should be properly
@@ -449,7 +450,7 @@ where
   #[cfg(feature = "serialize")]
   pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let capacity = usize::try_from(G0::Scalar::CAPACITY.min(G1::Scalar::CAPACITY)).unwrap();
-    let bits_per_group = BitSignature::from(SIGNATURE).bits();
+    let bits_per_group = usize::from(BitSignature::from(SIGNATURE).bits());
 
     let mut bits = Vec::with_capacity(capacity / bits_per_group);
     for _ in 0 .. (capacity / bits_per_group) {

@@ -257,7 +257,7 @@ mod lib {
       self.params.zeroize();
       self.secret_share.zeroize();
       self.group_key.zeroize();
-      for (_, share) in self.verification_shares.iter_mut() {
+      for share in self.verification_shares.values_mut() {
         share.zeroize();
       }
     }
@@ -410,10 +410,10 @@ mod lib {
       self.group_key.zeroize();
       self.included.zeroize();
       self.secret_share.zeroize();
-      for (_, share) in self.original_verification_shares.iter_mut() {
+      for share in self.original_verification_shares.values_mut() {
         share.zeroize();
       }
-      for (_, share) in self.verification_shares.iter_mut() {
+      for share in self.verification_shares.values_mut() {
         share.zeroize();
       }
     }
@@ -484,7 +484,7 @@ mod lib {
       );
 
       let mut verification_shares = self.verification_shares();
-      for (i, share) in verification_shares.iter_mut() {
+      for (i, share) in &mut verification_shares {
         *share *= lagrange::<C::F>(*i, &included);
       }
 

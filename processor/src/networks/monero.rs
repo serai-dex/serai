@@ -285,7 +285,7 @@ impl Monero {
       fees.push(tx.rct_signatures.base.fee / u64::try_from(tx.serialize().len()).unwrap());
     }
     fees.sort();
-    let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
+    let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
     // TODO: Set a sane minimum fee
     Ok(Fee { per_weight: fee.max(1500000), mask: 10000 })
@@ -665,7 +665,7 @@ impl Network for Monero {
 
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
     match self.rpc.publish_transaction(tx).await {
-      Ok(_) => Ok(()),
+      Ok(()) => Ok(()),
       Err(RpcError::ConnectionError(e)) => {
         log::debug!("Monero ConnectionError: {e}");
         Err(NetworkError::ConnectionError)?

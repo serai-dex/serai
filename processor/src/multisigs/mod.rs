@@ -198,12 +198,12 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (
       MultisigManager {
         scanner,
-        existing: current_keys.first().cloned().map(|(activation_block, key)| MultisigViewer {
+        existing: current_keys.first().copied().map(|(activation_block, key)| MultisigViewer {
           activation_block,
           key,
           scheduler: schedulers.remove(0),
         }),
-        new: current_keys.get(1).cloned().map(|(activation_block, key)| MultisigViewer {
+        new: current_keys.get(1).copied().map(|(activation_block, key)| MultisigViewer {
           activation_block,
           key,
           scheduler: schedulers.remove(0),

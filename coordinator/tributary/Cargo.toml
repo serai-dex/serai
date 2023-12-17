@@ -7,6 +7,13 @@ repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tribut
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
 [dependencies]
 async-trait = { version = "0.1", default-features = false }
 thiserror = { version = "1", default-features = false }

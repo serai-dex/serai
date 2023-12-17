@@ -207,7 +207,7 @@ impl<T: TransactionTrait> Block<T> {
     let mut last_tx_order = Order::Provided;
     let mut included_in_block = HashSet::new();
     let mut txs = Vec::with_capacity(self.transactions.len());
-    for tx in self.transactions.iter() {
+    for tx in &self.transactions {
       let tx_hash = tx.hash();
       txs.push(tx_hash);
 

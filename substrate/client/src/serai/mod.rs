@@ -317,7 +317,6 @@ impl<'a> TemporalSerai<'a> {
     if events.is_none() {
       drop(events);
       let mut events_write = self.events.write().await;
-      #[allow(clippy::unwrap_or_default)]
       if events_write.is_none() {
         *events_write = Some(self.storage("System", "Events", ()).await?.unwrap_or(vec![]));
       }

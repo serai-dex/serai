@@ -109,7 +109,7 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
         network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS + i,
         {
           let mut keys = key_gen(&mut OsRng);
-          for (_, keys) in keys.iter_mut() {
+          for keys in keys.values_mut() {
             N::tweak_keys(keys);
           }
           keys[&Participant::new(1).unwrap()].group_key()

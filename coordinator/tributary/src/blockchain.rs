@@ -73,7 +73,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let mut res = Self {
       db: Some(db.clone()),
       genesis,
-      participants: participants.iter().cloned().collect(),
+      participants: participants.iter().copied().collect(),
 
       block_number: 0,
       tip: genesis,

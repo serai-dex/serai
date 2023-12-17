@@ -166,7 +166,7 @@ pub async fn key_gen<C: Ciphersuite>(
     }
   }
   let mut message = None;
-  for processor in processors.iter_mut() {
+  for processor in &mut *processors {
     let msg = processor.recv_message().await;
     if message.is_none() {
       match msg {
@@ -208,7 +208,7 @@ pub async fn key_gen<C: Ciphersuite>(
     KeyPair(Public(substrate_key), network_key.try_into().unwrap())
   );
 
-  for processor in processors.iter_mut() {
+  for processor in &mut *processors {
     processor.set_substrate_key(substrate_priv_key.clone()).await;
   }
 

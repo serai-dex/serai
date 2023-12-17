@@ -200,7 +200,7 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
     let mut matched_indices = Zeroizing::new(vec![]);
 
     // Iterate through all the languages
-    'language: for (lang_name, lang) in LANGUAGES().iter() {
+    'language: for (lang_name, lang) in LANGUAGES() {
       matched_indices.zeroize();
       matched_indices.clear();
 

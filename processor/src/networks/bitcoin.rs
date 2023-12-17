@@ -383,7 +383,7 @@ impl Bitcoin {
       }
     }
     fees.sort();
-    let fee = fees.get(fees.len() / 2).cloned().unwrap_or(0);
+    let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
     // The DUST constant documentation notes a relay rule practically enforcing a
     // 1000 sat/kilo-vbyte minimum fee.

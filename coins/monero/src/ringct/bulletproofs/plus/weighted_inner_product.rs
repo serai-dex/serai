@@ -414,7 +414,7 @@ impl WipStatement {
 
     let mut multiexp = P_terms;
     multiexp.reserve(4 + (2 * generators.len()));
-    for (scalar, _) in multiexp.iter_mut() {
+    for (scalar, _) in &mut multiexp {
       *scalar *= neg_e_square;
     }
 

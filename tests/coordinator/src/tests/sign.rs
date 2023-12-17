@@ -77,7 +77,7 @@ pub async fn sign(
       let known_signer_i = Participant::new(u16::from(processor_is[known_signer])).unwrap();
       assert!(!preprocesses.contains_key(&known_signer_i));
 
-      let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
+      let mut participants = preprocesses.keys().copied().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
         assert_eq!(preprocess, vec![u8::try_from(u16::from(p)).unwrap(); 128]);
       }

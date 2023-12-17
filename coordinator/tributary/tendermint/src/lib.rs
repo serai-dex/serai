@@ -30,7 +30,7 @@ pub mod ext;
 use ext::*;
 
 pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
-  [&end_time.to_le_bytes(), id].concat().to_vec()
+  [&end_time.to_le_bytes(), id].concat()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
@@ -398,7 +398,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         },
 
         // Handle our messages
-        _ = queue_future => {
+        () = queue_future => {
           Some((true, self.queue.pop_front().unwrap(), None))
         },
 
@@ -752,7 +752,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if self.block.round().step == Step::Propose {
       // Delay error handling (triggering a slash) until after we vote.
       let (valid, err) = match self.network.validate(block).await {
-        Ok(_) => (true, Ok(None)),
+        Ok(()) => (true, Ok(None)),
         Err(BlockError::Temporal) => (false, Ok(None)),
         Err(BlockError::Fatal) => (false, {
           log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
@@ -812,7 +812,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
       if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id()))) {
         match self.network.validate(block).await {
-          Ok(_) => (),
+          Ok(()) => (),
           // BlockError::Temporal is due to a temporal error we have, yet a supermajority of the
           // network does not, Because we do not believe this block to be fatally invalid, and
           // because a supermajority deems it valid, accept it.

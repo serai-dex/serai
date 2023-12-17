@@ -305,7 +305,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
         let mut these_shares: HashMap<_, _> =
           substrate_shares.drain().map(|(i, share)| (i, share.serialize())).collect();
-        for (i, share) in these_shares.iter_mut() {
+        for (i, share) in &mut these_shares {
           share.extend(network_shares[i].serialize());
         }
         shares.push(these_shares);

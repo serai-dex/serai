@@ -112,7 +112,7 @@ impl HttpRpc {
       )?;
       Authentication::Authenticated {
         username: split_userpass[0].to_string(),
-        password: split_userpass.get(1).unwrap_or(&"").to_string(),
+        password: (*split_userpass.get(1).unwrap_or(&"")).to_string(),
         connection: Arc::new(Mutex::new((challenge, client))),
       }
     } else {

@@ -45,7 +45,7 @@ impl BitSignature {
     }
   }
 
-  pub(crate) const fn bits(&self) -> usize {
+  pub(crate) const fn bits(&self) -> u8 {
     match self {
       BitSignature::ClassicLinear => 1,
       BitSignature::ConciseLinear => 2,

@@ -32,7 +32,7 @@ impl ScalarVector {
 
   pub(crate) fn add(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
-    for val in res.0.iter_mut() {
+    for val in &mut res.0 {
       *val += scalar.borrow();
     }
     res
@@ -40,7 +40,7 @@ impl ScalarVector {
 
   pub(crate) fn sub(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
-    for val in res.0.iter_mut() {
+    for val in &mut res.0 {
       *val -= scalar.borrow();
     }
     res
@@ -48,7 +48,7 @@ impl ScalarVector {
 
   pub(crate) fn mul(&self, scalar: impl Borrow<Scalar>) -> Self {
     let mut res = self.clone();
-    for val in res.0.iter_mut() {
+    for val in &mut res.0 {
       *val *= scalar.borrow();
     }
     res

@@ -46,7 +46,7 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
     },
@@ -61,7 +61,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -75,7 +75,7 @@ test!(
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 6);
     },
@@ -92,7 +92,7 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -157,7 +157,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 2000000000000);
@@ -170,7 +170,7 @@ test!(
       builder.add_payment(addr, 2);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 2);
     },
@@ -184,7 +184,7 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -200,12 +200,12 @@ test!(
       }
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut scanned_tx = scanner.scan_transaction(&tx).not_locked();
 
       let mut output_amounts = HashSet::new();
       for i in 0 .. 15 {
-        output_amounts.insert((i + 1) as u64);
+        output_amounts.insert(i + 1);
       }
       for _ in 0 .. 15 {
         let output = scanned_tx.swap_remove(0);
@@ -224,7 +224,7 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -245,7 +245,7 @@ test!(
 
         builder.add_payment(
           view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)),
-          (i + 1) as u64,
+          u64::from(i + 1),
         );
         subaddresses.push(subaddress);
       }
@@ -259,7 +259,7 @@ test!(
 
       let mut output_amounts_by_subaddress = HashMap::new();
       for i in 0 .. 15 {
-        output_amounts_by_subaddress.insert((i + 1) as u64, state.1[i]);
+        output_amounts_by_subaddress.insert(u64::try_from(i + 1).unwrap(), state.1[i]);
       }
       for _ in 0 .. 15 {
         let output = scanned_tx.swap_remove(0);
@@ -281,7 +281,7 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -303,7 +303,7 @@ test!(
 
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, _| async move {
+    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
       let mut outputs = scanner.scan_transaction(&tx).not_locked();
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 10000);

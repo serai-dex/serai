@@ -96,3 +96,28 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 # subxt *can* pull these off crates.io yet there's no benefit to this
 sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
 sp-std = { git = "https://github.com/serai-dex/substrate" }
+
+[workspace.lints.clippy]
+unwrap_or_default = "allow"
+borrow_as_ptr = "deny"
+cast_lossless = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_precision_loss = "deny"
+cast_ptr_alignment = "deny"
+cast_sign_loss = "deny"
+checked_conversions = "deny"
+cloned_instead_of_copied = "deny"
+enum_glob_use = "deny"
+expl_impl_clone_on_copy = "deny"
+explicit_into_iter_loop = "deny"
+explicit_iter_loop = "deny"
+flat_map_option = "deny"
+float_cmp = "deny"
+fn_params_excessive_bools = "deny"
+ignored_unit_patterns = "deny"
+implicit_clone = "deny"
+inefficient_to_string = "deny"
+invalid_upcast_comparisons = "deny"
+large_stack_arrays = "deny"
+linkedlist = "deny"

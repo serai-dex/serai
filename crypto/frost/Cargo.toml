@@ -13,6 +13,9 @@ rust-version = "1.74"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 thiserror = "1"
 

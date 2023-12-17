@@ -172,8 +172,8 @@ impl Bulletproofs {
         write_scalar(&bp.wip.r_answer.0, w)?;
         write_scalar(&bp.wip.s_answer.0, w)?;
         write_scalar(&bp.wip.delta_answer.0, w)?;
-        specific_write_vec(&bp.wip.L.iter().cloned().map(|L| L.0).collect::<Vec<_>>(), w)?;
-        specific_write_vec(&bp.wip.R.iter().cloned().map(|R| R.0).collect::<Vec<_>>(), w)
+        specific_write_vec(&bp.wip.L.iter().copied().map(|L| L.0).collect::<Vec<_>>(), w)?;
+        specific_write_vec(&bp.wip.R.iter().copied().map(|R| R.0).collect::<Vec<_>>(), w)
       }
     }
   }

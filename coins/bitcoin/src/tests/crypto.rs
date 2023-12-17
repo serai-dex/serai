@@ -20,7 +20,7 @@ fn test_algorithm() {
   let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
   const MESSAGE: &[u8] = b"Hello, World!";
 
-  for (_, keys) in keys.iter_mut() {
+  for keys in keys.values_mut() {
     let (_, offset) = make_even(keys.group_key());
     *keys = keys.offset(Scalar::from(offset));
   }

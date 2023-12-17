@@ -246,14 +246,14 @@ fn send_test() {
         // TODO: Double check how the processor handles this ID field
         // It should be able to assert its perfectly sequential
         id.attempt = attempt;
-        for coordinator in coordinators.iter_mut() {
+        for coordinator in &mut coordinators {
           coordinator
             .send_message(messages::sign::CoordinatorMessage::Reattempt { id: id.clone() })
             .await;
         }
         (id, preprocesses) = recv_sign_preprocesses(&mut coordinators, Session(0), attempt).await;
       }
-      let participating = preprocesses.keys().cloned().collect::<Vec<_>>();
+      let participating = preprocesses.keys().copied().collect::<Vec<_>>();
 
       let tx_id = sign_tx(&mut coordinators, Session(0), id.clone(), preprocesses).await;
 

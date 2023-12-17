@@ -67,10 +67,10 @@ impl MessageQueue {
   #[must_use]
   async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> bool {
     let msg = borsh::to_vec(&msg).unwrap();
-    let Ok(_) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+    let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
       return false;
     };
-    let Ok(_) = socket.write_all(&msg).await else { return false };
+    let Ok(()) = socket.write_all(&msg).await else { return false };
     true
   }
 

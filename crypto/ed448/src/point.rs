@@ -214,7 +214,7 @@ impl Sum<Point> for Point {
 
 impl<'a> Sum<&'a Point> for Point {
   fn sum<I: Iterator<Item = &'a Point>>(iter: I) -> Point {
-    Point::sum(iter.cloned())
+    Point::sum(iter.copied())
   }
 }
 

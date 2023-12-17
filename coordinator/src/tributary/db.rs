@@ -127,14 +127,12 @@ impl ReattemptDb {
       .min(3);
     let upon_block = current_block_number + reattempt_delay;
 
-    #[allow(clippy::unwrap_or_default)]
     let mut reattempts = Self::get(txn, genesis, upon_block).unwrap_or(vec![]);
     reattempts.push(topic);
     Self::set(txn, genesis, upon_block, &reattempts);
   }
 
   pub fn take(txn: &mut impl DbTxn, genesis: [u8; 32], block_number: u32) -> Vec<Topic> {
-    #[allow(clippy::unwrap_or_default)]
     let res = Self::get(txn, genesis, block_number).unwrap_or(vec![]);
     if !res.is_empty() {
       Self::del(txn, genesis, block_number);

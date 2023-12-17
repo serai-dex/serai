@@ -55,6 +55,7 @@ const CLEAR_BITS: usize = (SECRET_SIZE * BITS_PER_BYTE) - SECRET_BITS; // 2
 
 // Polyseed calls this CLEAR_MASK and has a very complicated formula for this fundamental
 // equivalency
+#[allow(clippy::cast_possible_truncation)]
 const LAST_BYTE_SECRET_BITS_MASK: u8 = ((1 << (BITS_PER_BYTE - CLEAR_BITS)) - 1) as u8;
 
 const SECRET_BITS_PER_WORD: usize = 10;
@@ -265,7 +266,7 @@ impl Polyseed {
     // Decode the seed into its polynomial coefficients
     let mut poly = [0; POLYSEED_LENGTH];
     let lang = (|| {
-      'language: for (name, lang) in LANGUAGES().iter() {
+      'language: for (name, lang) in LANGUAGES() {
         for (i, word) in seed.split_whitespace().enumerate() {
           // Find the word's index
           fn check_if_matches<S: AsRef<str>, I: Iterator<Item = S>>(

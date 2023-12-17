@@ -136,7 +136,6 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
       }
       txn.commit();
     } else {
-      #[allow(clippy::unwrap_or_default)]
       let mut currently_provided = txn.get(&current_provided_key).unwrap_or(vec![]);
       currently_provided.extend(tx_hash);
       txn.put(current_provided_key, currently_provided);

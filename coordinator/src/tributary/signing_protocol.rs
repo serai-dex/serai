@@ -158,7 +158,7 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
     let machine = self.preprocess_internal(participants).0;
 
-    let mut participants = serialized_preprocesses.keys().cloned().collect::<Vec<_>>();
+    let mut participants = serialized_preprocesses.keys().copied().collect::<Vec<_>>();
     participants.sort();
     let mut preprocesses = HashMap::new();
     for participant in participants {
@@ -231,7 +231,7 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   };
 
   let mut sorted = vec![];
-  let mut threshold_is = map.keys().cloned().collect::<Vec<_>>();
+  let mut threshold_is = map.keys().copied().collect::<Vec<_>>();
   threshold_is.sort();
   for threshold_i in threshold_is {
     sorted.push((key_from_threshold_i(threshold_i), map.remove(&threshold_i).unwrap()));

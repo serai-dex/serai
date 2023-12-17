@@ -147,7 +147,7 @@ pub async fn sign<N: Network>(
 
 pub async fn test_signer<N: Network>(network: N) {
   let mut keys = key_gen(&mut OsRng);
-  for (_, keys) in keys.iter_mut() {
+  for keys in keys.values_mut() {
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();

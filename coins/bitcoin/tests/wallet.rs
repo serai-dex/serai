@@ -82,7 +82,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
 
 fn keys() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, ProjectivePoint) {
   let mut keys = key_gen(&mut OsRng);
-  for (_, keys) in keys.iter_mut() {
+  for keys in keys.values_mut() {
     *keys = tweak_keys(keys);
   }
   let key = keys.values().next().unwrap().group_key();

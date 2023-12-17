@@ -314,7 +314,7 @@ impl<
             .await;
           return;
         };
-        let Ok(_) = self.check_sign_data_len(&removed, signed.signer, commitments.len()).await
+        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, commitments.len()).await
         else {
           return;
         };
@@ -348,7 +348,7 @@ impl<
             .await;
           return;
         };
-        let Ok(_) = self.check_sign_data_len(&removed, signed.signer, shares.len()).await else {
+        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, shares.len()).await else {
           return;
         };
 
@@ -626,7 +626,7 @@ impl<
           despite us not providing that transaction",
         );
 
-        for id in plan_ids.into_iter() {
+        for id in plan_ids {
           AttemptDb::recognize_topic(self.txn, genesis, Topic::Sign(id));
           self
             .recognized_id
@@ -650,7 +650,7 @@ impl<
           return;
         };
         let signer = data.signed.signer;
-        let Ok(_) = self.check_sign_data_len(&removed, signer, data.data.len()).await else {
+        let Ok(()) = self.check_sign_data_len(&removed, signer, data.data.len()).await else {
           return;
         };
         let expected_len = match data.label {
@@ -711,7 +711,7 @@ impl<
             .await;
           return;
         };
-        let Ok(_) = self.check_sign_data_len(&removed, data.signed.signer, data.data.len()).await
+        let Ok(()) = self.check_sign_data_len(&removed, data.signed.signer, data.data.len()).await
         else {
           return;
         };

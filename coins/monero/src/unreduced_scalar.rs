@@ -16,7 +16,7 @@ pub(crate) fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
   *PRECOMPUTED_SCALARS_CELL.get_or_init(|| {
     let mut precomputed_scalars = [Scalar::ONE; 8];
     for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
-      *scalar = Scalar::from(((i * 2) + 1) as u8);
+      *scalar = Scalar::from(u8::try_from((i * 2) + 1).unwrap());
     }
     precomputed_scalars
   })
@@ -57,7 +57,7 @@ impl UnreducedScalar {
     let bits = self.as_bits();
     let mut naf = [0i8; 256];
     for (b, bit) in bits.into_iter().enumerate() {
-      naf[b] = bit as i8;
+      naf[b] = i8::try_from(bit).unwrap();
     }
 
     for i in 0 .. 256 {
@@ -127,8 +127,8 @@ impl UnreducedScalar {
     for &numb in self.non_adjacent_form().iter().rev() {
       recovered += recovered;
       match numb.cmp(&0) {
-        Ordering::Greater => recovered += precomputed_scalars[(numb as usize) / 2],
-        Ordering::Less => recovered -= precomputed_scalars[((-numb) as usize) / 2],
+        Ordering::Greater => recovered += precomputed_scalars[usize::try_from(numb).unwrap() / 2],
+        Ordering::Less => recovered -= precomputed_scalars[usize::try_from(-numb).unwrap() / 2],
         Ordering::Equal => (),
       }
     }

@@ -469,7 +469,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
         let mut parsed = HashMap::new();
         for l in {
-          let mut keys = preprocesses.keys().cloned().collect::<Vec<_>>();
+          let mut keys = preprocesses.keys().copied().collect::<Vec<_>>();
           keys.sort();
           keys
         } {
@@ -549,7 +549,7 @@ impl<N: Network, D: Db> Signer<N, D> {
 
         let mut parsed = HashMap::new();
         for l in {
-          let mut keys = shares.keys().cloned().collect::<Vec<_>>();
+          let mut keys = shares.keys().copied().collect::<Vec<_>>();
           keys.sort();
           keys
         } {

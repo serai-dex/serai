@@ -12,6 +12,9 @@ rust-version = "1.74"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
 

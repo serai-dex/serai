@@ -47,7 +47,7 @@ impl<D: Db> CosignEvaluator<D> {
     // If we haven't gotten the stake data yet, return
     let Some(stakes) = stakes_lock.as_ref() else { return };
 
-    let total_stake = stakes.values().cloned().sum::<u64>();
+    let total_stake = stakes.values().copied().sum::<u64>();
 
     let latest_cosigns = self.latest_cosigns.read().await;
     let mut highest_block = 0;
@@ -319,7 +319,7 @@ impl<D: Db> CosignEvaluator<D> {
     tokio::spawn({
       async move {
         loop {
-          let cosigns = evaluator.latest_cosigns.read().await.values().cloned().collect::<Vec<_>>();
+          let cosigns = evaluator.latest_cosigns.read().await.values().copied().collect::<Vec<_>>();
           for cosign in cosigns {
             let mut buf = vec![];
             cosign.serialize(&mut buf).unwrap();

@@ -40,7 +40,7 @@ pub async fn batch(
 ) -> u64 {
   let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(batch.id), attempt: 0 };
 
-  for processor in processors.iter_mut() {
+  for processor in &mut *processors {
     processor
       .send_message(messages::substrate::ProcessorMessage::Batch { batch: batch.clone() })
       .await;
@@ -92,7 +92,7 @@ pub async fn batch(
       let known_signer_i = Participant::new(u16::from(processor_is[known_signer])).unwrap();
       assert!(!preprocesses.contains_key(&known_signer_i));
 
-      let mut participants = preprocesses.keys().cloned().collect::<HashSet<_>>();
+      let mut participants = preprocesses.keys().copied().collect::<HashSet<_>>();
       for (p, preprocess) in preprocesses {
         assert_eq!(preprocess, [u8::try_from(u16::from(p)).unwrap(); 64]);
       }
@@ -219,7 +219,7 @@ pub async fn batch(
 
   // Verify the coordinator sends SubstrateBlock to all processors
   let last_block = serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
-  for processor in processors {
+  for processor in &mut *processors {
     // Handle a potential re-attempt message in the pipeline
     let mut received = processor.recv_message().await;
     if matches!(

@@ -410,7 +410,7 @@ impl LibP2p {
             // If we are sending heartbeats, we should've sent one after 60s of no finalized blocks
             // (where a finalized block only occurs due to network activity), meaning this won't be
             // run
-            _ = tokio::time::sleep(Duration::from_secs(80).saturating_sub(time_since_last)) => {
+            () = tokio::time::sleep(Duration::from_secs(80).saturating_sub(time_since_last)) => {
               broadcast_raw(
                 &mut swarm,
                 &mut time_of_last_p2p_message,

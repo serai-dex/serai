@@ -82,7 +82,7 @@ impl<C: Curve> Algorithm<C> for MultiNonce<C> {
     &mut self,
     _: &ThresholdView<C>,
     _: Participant,
-    _: (),
+    (): (),
   ) -> Result<(), FrostError> {
     Ok(())
   }

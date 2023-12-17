@@ -337,7 +337,7 @@ async fn dkg_test() {
   for (i, tx) in txs.iter().enumerate() {
     assert_eq!(tributaries[i].1.add_transaction(tx.clone()).await, Ok(true));
   }
-  for tx in txs.iter() {
+  for tx in &txs {
     wait_for_tx_inclusion(&tributaries[0].1, block_before_tx, tx.hash()).await;
   }
 

@@ -268,8 +268,10 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
 impl signals::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   // 1 week
+  #[allow(clippy::cast_possible_truncation)]
   type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
   // 2 weeks
+  #[allow(clippy::cast_possible_truncation)]
   type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 

@@ -80,7 +80,7 @@ pub(crate) fn shared_key(
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
-    [uniqueness.as_ref(), &output_derivation].concat().to_vec()
+    [uniqueness.as_ref(), &output_derivation].concat()
   } else {
     output_derivation
   };

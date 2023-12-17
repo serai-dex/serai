@@ -13,6 +13,9 @@ rust-version = "1.74"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 rand_core = "0.6"
 zeroize = "^1.5"

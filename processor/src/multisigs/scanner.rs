@@ -484,7 +484,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
           let needing_ack = {
             let scanner_lock = scanner_hold.read().await;
             let scanner = scanner_lock.as_ref().unwrap();
-            scanner.need_ack.front().cloned()
+            scanner.need_ack.front().copied()
           };
 
           if let Some(needing_ack) = needing_ack {

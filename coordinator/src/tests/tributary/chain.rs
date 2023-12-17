@@ -95,7 +95,7 @@ pub async fn run_tributaries(
   mut tributaries: Vec<(LocalP2p, Tributary<MemDb, Transaction, LocalP2p>)>,
 ) {
   loop {
-    for (p2p, tributary) in tributaries.iter_mut() {
+    for (p2p, tributary) in &mut tributaries {
       while let Poll::Ready(msg) = poll!(p2p.receive()) {
         match msg.kind {
           P2pMessageKind::Tributary(genesis) => {
@@ -170,7 +170,7 @@ async fn tributary_test() {
   // run_tributaries will run them ad infinitum
   let timeout = SystemTime::now() + Duration::from_secs(65);
   while (blocks < 10) && (SystemTime::now().duration_since(timeout).is_err()) {
-    for (p2p, tributary) in tributaries.iter_mut() {
+    for (p2p, tributary) in &mut tributaries {
       while let Poll::Ready(msg) = poll!(p2p.receive()) {
         match msg.kind {
           P2pMessageKind::Tributary(genesis) => {
@@ -196,7 +196,7 @@ async fn tributary_test() {
   }
 
   // Handle all existing messages
-  for (p2p, tributary) in tributaries.iter_mut() {
+  for (p2p, tributary) in &mut tributaries {
     while let Poll::Ready(msg) = poll!(p2p.receive()) {
       match msg.kind {
         P2pMessageKind::Tributary(genesis) => {
@@ -220,7 +220,7 @@ async fn tributary_test() {
   }
   assert!(tips.len() <= 2);
   if tips.len() == 2 {
-    for tip in tips.iter() {
+    for tip in &tips {
       // Find a Tributary where this isn't the tip
       for (_, tributary) in &tributaries {
         let Some(after) = tributary.reader().block_after(tip) else { continue };

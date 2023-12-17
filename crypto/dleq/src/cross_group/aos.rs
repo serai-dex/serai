@@ -240,7 +240,7 @@ where
     }
 
     let mut s = [(G0::Scalar::ZERO, G1::Scalar::ZERO); RING_LEN];
-    for s in s.iter_mut() {
+    for s in &mut s {
       *s = (read_scalar(r)?, read_scalar(r)?);
     }
 
