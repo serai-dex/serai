@@ -102,7 +102,7 @@ where
   #[allow(non_snake_case)]
   pub(crate) fn prove<R: RngCore + CryptoRng, T: Clone + Transcript>(
     rng: &mut R,
-    transcript: T,
+    transcript: &T,
     generators: (Generators<G0>, Generators<G1>),
     ring: &[(G0, G1)],
     mut actual: usize,
@@ -122,7 +122,7 @@ where
     #[allow(non_snake_case)]
     let mut R = original_R;
 
-    for i in ((actual + 1) .. (actual + RING_LEN + 1)).map(|i| i % RING_LEN) {
+    for i in ((actual + 1) ..= (actual + RING_LEN)).map(|i| i % RING_LEN) {
       let e = Self::nonces(transcript.clone(), R);
       if i == 0 {
         match Re_0 {
@@ -144,11 +144,10 @@ where
         r.0.zeroize();
         r.1.zeroize();
         break;
-      // Generate a decoy response
-      } else {
-        s[i] = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
       }
 
+      // Generate a decoy response
+      s[i] = (G0::Scalar::random(&mut *rng), G1::Scalar::random(&mut *rng));
       R = Self::R(generators, s[i], ring[i], e);
     }
 
@@ -159,7 +158,7 @@ where
   pub(crate) fn verify<R: RngCore + CryptoRng, T: Clone + Transcript>(
     &self,
     rng: &mut R,
-    transcript: T,
+    transcript: &T,
     generators: (Generators<G0>, Generators<G1>),
     batch: &mut (BatchVerifier<(), G0>, BatchVerifier<(), G1>),
     ring: &[(G0, G1)],

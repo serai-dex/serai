@@ -134,6 +134,7 @@ fn checksum_index(words: &[Zeroizing<String>], lang: &WordList) -> usize {
 }
 
 // Convert a private key to a seed
+#[allow(clippy::needless_pass_by_value)]
 fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
   let bytes = Zeroizing::new(key.to_bytes());
 
@@ -282,6 +283,7 @@ impl ClassicSeed {
     key_to_seed(lang, Zeroizing::new(random_scalar(rng)))
   }
 
+  #[allow(clippy::needless_pass_by_value)]
   pub fn from_string(words: Zeroizing<String>) -> Result<ClassicSeed, SeedError> {
     let (lang, entropy) = seed_to_bytes(&words)?;
 
@@ -297,6 +299,7 @@ impl ClassicSeed {
     Ok(Self::from_entropy(lang, entropy).unwrap())
   }
 
+  #[allow(clippy::needless_pass_by_value)]
   pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<ClassicSeed> {
     Option::from(Scalar::from_canonical_bytes(*entropy))
       .map(|scalar| key_to_seed(lang, Zeroizing::new(scalar)))

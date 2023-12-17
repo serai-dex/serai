@@ -408,10 +408,8 @@ where
     Self::transcript(transcript, generators, keys);
 
     let batch_capacity = match BitSignature::from(SIGNATURE) {
-      BitSignature::ClassicLinear => 3,
-      BitSignature::ConciseLinear => 3,
-      BitSignature::EfficientLinear => (self.bits.len() + 1) * 3,
-      BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3,
+      BitSignature::ClassicLinear | BitSignature::ConciseLinear => 3,
+      BitSignature::EfficientLinear | BitSignature::CompromiseLinear => (self.bits.len() + 1) * 3,
     };
     let mut batch = (BatchVerifier::new(batch_capacity), BatchVerifier::new(batch_capacity));
 

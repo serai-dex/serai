@@ -97,7 +97,7 @@ impl HttpRpc {
         Err(RpcError::ConnectionError("invalid amount of passwords".to_string()))?;
       }
 
-      let client = Client::without_connection_pool(url.clone())
+      let client = Client::without_connection_pool(&url)
         .map_err(|_| RpcError::ConnectionError("invalid URL".to_string()))?;
       // Obtain the initial challenge, which also somewhat validates this connection
       let challenge = Self::digest_auth_challenge(

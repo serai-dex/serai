@@ -111,7 +111,7 @@ impl<D: Db> BatchSigner<D> {
   }
 
   #[must_use]
-  async fn attempt(
+  fn attempt(
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: u32,
@@ -189,11 +189,7 @@ impl<D: Db> BatchSigner<D> {
   }
 
   #[must_use]
-  pub async fn sign(
-    &mut self,
-    txn: &mut D::Transaction<'_>,
-    batch: Batch,
-  ) -> Option<ProcessorMessage> {
+  pub fn sign(&mut self, txn: &mut D::Transaction<'_>, batch: Batch) -> Option<ProcessorMessage> {
     debug_assert_eq!(self.network, batch.network);
     let id = batch.id;
     if CompletedDb::get(txn, id).is_some() {
@@ -203,11 +199,11 @@ impl<D: Db> BatchSigner<D> {
     }
 
     self.signable.insert(id, batch);
-    self.attempt(txn, id, 0).await
+    self.attempt(txn, id, 0)
   }
 
   #[must_use]
-  pub async fn handle(
+  pub fn handle(
     &mut self,
     txn: &mut D::Transaction<'_>,
     msg: CoordinatorMessage,
@@ -394,7 +390,7 @@ impl<D: Db> BatchSigner<D> {
         let SubstrateSignableId::Batch(batch_id) = id.id else {
           panic!("BatchReattempt passed non-Batch ID")
         };
-        self.attempt(txn, batch_id, id.attempt).await.map(Into::into)
+        self.attempt(txn, batch_id, id.attempt).map(Into::into)
       }
     }
   }

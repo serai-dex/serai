@@ -70,8 +70,7 @@ pub fn build(name: String) {
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
       let mut metadatas = match name.as_str() {
-        "bitcoin" => vec![],
-        "monero" => vec![],
+        "bitcoin" | "monero" => vec![],
         "message-queue" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
@@ -94,12 +93,7 @@ pub fn build(name: String) {
           meta(repo_path.join("message-queue")),
           meta(repo_path.join("coordinator")),
         ],
-        "runtime" => vec![
-          meta(repo_path.join("common")),
-          meta(repo_path.join("crypto")),
-          meta(repo_path.join("substrate")),
-        ],
-        "serai" => vec![
+        "runtime" | "serai" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
           meta(repo_path.join("substrate")),
@@ -132,7 +126,7 @@ pub fn build(name: String) {
 
       if let Some(last_modified) = last_modified {
         if last_modified < created_time {
-          println!("{} was built after the most recent source code edits, assuming built.", name);
+          println!("{name} was built after the most recent source code edits, assuming built.");
           built_lock.insert(name, true);
           return;
         }

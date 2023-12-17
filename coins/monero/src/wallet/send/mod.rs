@@ -415,7 +415,7 @@ impl SignableTransaction {
     r_seed: Option<Zeroizing<[u8; 32]>>,
     inputs: Vec<(SpendableOutput, Decoys)>,
     payments: Vec<(MoneroAddress, u64)>,
-    change: Change,
+    change: &Change,
     data: Vec<Vec<u8>>,
     fee_rate: Fee,
   ) -> Result<SignableTransaction, TransactionError> {

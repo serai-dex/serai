@@ -112,7 +112,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     blockchain_next_nonce: F,
     internal: bool,
     tx: Transaction<T>,
-    schema: N::SignatureScheme,
+    schema: &N::SignatureScheme,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
   ) -> Result<bool, TransactionError> {

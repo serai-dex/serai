@@ -356,17 +356,19 @@ impl Scanner {
       let output_key = output_key.unwrap();
 
       for key in [Some(Some(&tx_key)), additional.as_ref().map(|additional| additional.get(o))] {
-        let key = if let Some(Some(key)) = key {
-          key
-        } else if let Some(None) = key {
-          // This is non-standard. There were additional keys, yet not one for this output
-          // https://github.com/monero-project/monero/
-          //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
-          //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
-          // TODO: Should this return? Where does Monero set the trap handler for this exception?
-          continue;
-        } else {
-          break;
+        let key = match key {
+          Some(Some(key)) => key,
+          Some(None) => {
+            // This is non-standard. There were additional keys, yet not one for this output
+            // https://github.com/monero-project/monero/
+            //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
+            //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
+            // TODO: Should this return? Where does Monero set the trap handler for this exception?
+            continue;
+          }
+          None => {
+            break;
+          }
         };
         let (view_tag, shared_key, payment_id_xor) = shared_key(
           if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix.inputs)) } else { None },

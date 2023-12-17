@@ -46,7 +46,7 @@ mod _serde {
     fn deserialize<D: Deserializer<'a>>(de: D) -> Result<Self, D::Error> {
       let bytes = sp_core::bytes::deserialize(de)?;
       scale::Decode::decode(&mut &bytes[..])
-        .map_err(|e| serde::de::Error::custom(format!("invalid transaction: {}", e)))
+        .map_err(|e| serde::de::Error::custom(format!("invalid transaction: {e}")))
     }
   }
 }

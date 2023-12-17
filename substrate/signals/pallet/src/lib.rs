@@ -149,7 +149,7 @@ pub mod pallet {
     // Returns true if this network's current set is in favor of the signal.
     //
     // Must only be called for networks which have a set decided.
-    fn tally_for_network(signal_id: SignalId, network: NetworkId) -> Result<bool, Error<T>> {
+    fn tally_for_network(signal_id: SignalId, network: NetworkId) -> bool {
       let this_network_session = VsPallet::<T>::latest_decided_session(network).unwrap();
       let this_set = ValidatorSet { network, session: this_network_session };
 
@@ -197,18 +197,18 @@ pub mod pallet {
           SetsInFavor::<T>::set((signal_id, this_set), Some(()));
           Self::deposit_event(Event::SetInFavor { signal_id, set: this_set });
         }
-        Ok(true)
+        true
       } else {
         if SetsInFavor::<T>::contains_key((signal_id, this_set)) {
           // This should no longer be under the current tally
           SetsInFavor::<T>::remove((signal_id, this_set));
           Self::deposit_event(Event::SetNoLongerInFavor { signal_id, set: this_set });
         }
-        Ok(false)
+        false
       }
     }
 
-    fn tally_for_all_networks(signal_id: SignalId) -> Result<bool, Error<T>> {
+    fn tally_for_all_networks(signal_id: SignalId) -> bool {
       let mut total_in_favor_stake = 0;
       let mut total_allocated_stake = 0;
       for network in serai_primitives::NETWORKS {
@@ -226,10 +226,8 @@ pub mod pallet {
         total_allocated_stake += network_stake.0;
       }
 
-      Ok(
-        total_in_favor_stake >=
-          (total_allocated_stake * REQUIREMENT_NUMERATOR).div_ceil(REQUIREMENT_DIVISOR),
-      )
+      total_in_favor_stake >=
+        (total_allocated_stake * REQUIREMENT_NUMERATOR).div_ceil(REQUIREMENT_DIVISOR)
     }
 
     fn revoke_favor_internal(
@@ -247,7 +245,7 @@ pub mod pallet {
       // Technically, this tally may make the network in favor and justify re-tallying for all
       // networks
       // Its assumed not to
-      Self::tally_for_network(signal_id, for_network)?;
+      Self::tally_for_network(signal_id, for_network);
       Ok(())
     }
   }
@@ -378,7 +376,7 @@ pub mod pallet {
       // Check if the network is in favor
       // tally_for_network expects the network to be active, which is implied by being in the
       // latest decided set
-      let network_in_favor = Self::tally_for_network(signal_id, for_network)?;
+      let network_in_favor = Self::tally_for_network(signal_id, for_network);
 
       // If this network is in favor, check if enough networks are
       // We could optimize this by only running the following code when the network is *newly* in
@@ -387,7 +385,7 @@ pub mod pallet {
       // to each other, any new votes will cause a re-tally
       if network_in_favor {
         // If enough are, lock in the signal
-        if Self::tally_for_all_networks(signal_id)? {
+        if Self::tally_for_all_networks(signal_id) {
           match signal_id {
             SignalId::Retirement(signal_id) => {
               LockedInRetirement::<T>::set(Some((

@@ -13,7 +13,7 @@ use crate::curve::{P256, IetfP256Hram};
 fn secp256k1_vectors() {
   test_with_vectors::<_, Secp256k1, IetfSecp256k1Hram>(
     &mut OsRng,
-    Vectors::from(
+    &Vectors::from(
       serde_json::from_str::<serde_json::Value>(include_str!(
         "vectors/frost-secp256k1-sha256.json"
       ))
@@ -27,7 +27,7 @@ fn secp256k1_vectors() {
 fn p256_vectors() {
   test_with_vectors::<_, P256, IetfP256Hram>(
     &mut OsRng,
-    Vectors::from(
+    &Vectors::from(
       serde_json::from_str::<serde_json::Value>(include_str!("vectors/frost-p256-sha256.json"))
         .unwrap(),
     ),

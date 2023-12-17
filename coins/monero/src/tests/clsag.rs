@@ -119,9 +119,9 @@ fn clsag_multisig() {
 
   sign(
     &mut OsRng,
-    algorithm.clone(),
+    &algorithm,
     keys.clone(),
-    algorithm_machines(&mut OsRng, algorithm, &keys),
+    algorithm_machines(&mut OsRng, &algorithm, &keys),
     &[1; 32],
   );
 }

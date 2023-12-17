@@ -543,8 +543,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
             self.slash(sender, slash).await
           }
-          Err(TendermintError::Temporal) => (),
-          Err(TendermintError::AlreadyHandled) => (),
+          Err(TendermintError::Temporal | TendermintError::AlreadyHandled) => (),
         }
       }
     }
@@ -627,7 +626,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           // Uses a junk signature since message equality disregards the signature
           if self.block.log.has_consensus(
             msg.round,
-            Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
+            &Data::Precommit(Some((block.id(), self.signer.sign(&[]).await))),
           ) {
             // If msg.round is in the future, these Precommits won't have their inner signatures
             // verified
@@ -714,7 +713,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // of the round map
     if (self.block.round().step == Step::Prevote) && matches!(msg.data, Data::Prevote(_)) {
       let (participation, weight) =
-        self.block.log.message_instances(self.block.round().number, Data::Prevote(None));
+        self.block.log.message_instances(self.block.round().number, &Data::Prevote(None));
       // 34-35
       if participation >= self.weights.threshold() {
         self.block.round_mut().set_timeout(Step::Prevote);
@@ -767,7 +766,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 23 and 29. If it's some, both are satisfied if they're for the same ID. If it's some
       // with different IDs, the function on 22 rejects yet the function on 28 has one other
       // condition
-      let locked = self.block.locked.as_ref().map(|(_, id)| id == &block.id()).unwrap_or(true);
+      let locked = self.block.locked.as_ref().map_or(true, |(_, id)| id == &block.id());
       let mut vote = raw_vote.filter(|_| locked);
 
       if let Some(vr) = vr {
@@ -780,7 +779,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           ))?;
         }
 
-        if self.block.log.has_consensus(*vr, Data::Prevote(Some(block.id()))) {
+        if self.block.log.has_consensus(*vr, &Data::Prevote(Some(block.id()))) {
           // Allow differing locked values if the proposal has a newer valid round
           // This is the other condition described above
           if let Some((locked_round, _)) = self.block.locked.as_ref() {
@@ -798,25 +797,18 @@ impl<N: Network + 'static> TendermintMachine<N> {
       return Ok(None);
     }
 
-    if self
-      .block
-      .valid
-      .as_ref()
-      .map(|(round, _)| round != &self.block.round().number)
-      .unwrap_or(true)
-    {
+    if self.block.valid.as_ref().map_or(true, |(round, _)| round != &self.block.round().number) {
       // 36-43
 
       // The run once condition is implemented above. Since valid will always be set by this, it
       // not being set, or only being set historically, means this has yet to be run
 
-      if self.block.log.has_consensus(self.block.round().number, Data::Prevote(Some(block.id()))) {
+      if self.block.log.has_consensus(self.block.round().number, &Data::Prevote(Some(block.id()))) {
         match self.network.validate(block).await {
-          Ok(()) => (),
           // BlockError::Temporal is due to a temporal error we have, yet a supermajority of the
           // network does not, Because we do not believe this block to be fatally invalid, and
           // because a supermajority deems it valid, accept it.
-          Err(BlockError::Temporal) => (),
+          Ok(()) | Err(BlockError::Temporal) => (),
           Err(BlockError::Fatal) => {
             log::warn!(target: "tendermint", "Validator proposed a fatally invalid block");
             // TODO: Produce evidence of this for the higher level code to decide what to do with

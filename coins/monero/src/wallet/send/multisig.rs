@@ -70,7 +70,7 @@ impl SignableTransaction {
   /// The height is the Monero blockchain height to synchronize around.
   pub fn multisig(
     self,
-    keys: ThresholdKeys<Ed25519>,
+    keys: &ThresholdKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
   ) -> Result<TransactionMachine, TransactionError> {
     let mut inputs = vec![];

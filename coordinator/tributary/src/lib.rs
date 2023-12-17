@@ -190,7 +190,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       start_time
     };
     let proposal = TendermintBlock(
-      blockchain.build_block::<TendermintNetwork<D, T, P>>(validators.clone()).serialize(),
+      blockchain.build_block::<TendermintNetwork<D, T, P>>(&validators).serialize(),
     );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
@@ -273,7 +273,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
       true,
       tx,
-      self.network.signature_scheme(),
+      &self.network.signature_scheme(),
     );
     if res == Ok(true) {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
@@ -344,7 +344,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
           self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
             false,
             tx,
-            self.network.signature_scheme(),
+            &self.network.signature_scheme(),
           );
         log::debug!("received transaction message. valid new transaction: {res:?}");
         res == Ok(true)

@@ -229,6 +229,7 @@ impl PartialEq for Monero {
 }
 impl Eq for Monero {}
 
+#[allow(clippy::needless_pass_by_value)] // Needed to satisfy API expectations
 fn map_rpc_err(err: RpcError) -> NetworkError {
   if let RpcError::InvalidNode(reason) = &err {
     log::error!("Monero RpcError::InvalidNode({reason})");
@@ -384,7 +385,7 @@ impl Monero {
       Some(Zeroizing::new(*plan_id)),
       inputs.clone(),
       payments,
-      Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
+      &Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
       vec![],
       fee_rate,
     ) {
@@ -657,7 +658,7 @@ impl Network for Monero {
     keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    match transaction.actual.clone().multisig(keys, transaction.transcript) {
+    match transaction.actual.clone().multisig(&keys, transaction.transcript) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }
@@ -753,7 +754,7 @@ impl Network for Monero {
       None,
       inputs,
       vec![(address.into(), amount - fee)],
-      Change::fingerprintable(Some(Self::test_address().into())),
+      &Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
       self.rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
     )

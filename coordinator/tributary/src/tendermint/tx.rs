@@ -88,7 +88,7 @@ fn decode_and_verify_signed_message<N: Network>(
 // re-implements an entire foreign library's checks for malicious behavior).
 pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
-  schema: N::SignatureScheme,
+  schema: &N::SignatureScheme,
   commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
   tx.verify()?;
@@ -98,8 +98,8 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
     TendermintTx::SlashEvidence(ev) => {
       match ev {
         Evidence::ConflictingMessages(first, second) => {
-          let first = decode_and_verify_signed_message::<N>(first, &schema)?.msg;
-          let second = decode_and_verify_signed_message::<N>(second, &schema)?.msg;
+          let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
+          let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
 
           // Make sure they're distinct messages, from the same sender, within the same block
           if (first == second) || (first.sender != second.sender) || (first.block != second.block) {
@@ -112,8 +112,8 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
         }
         Evidence::ConflictingPrecommit(first, second) => {
-          let first = decode_and_verify_signed_message::<N>(first, &schema)?.msg;
-          let second = decode_and_verify_signed_message::<N>(second, &schema)?.msg;
+          let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
+          let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
 
           if (first.sender != second.sender) || (first.block != second.block) {
             Err(TransactionError::InvalidContent)?;
@@ -136,7 +136,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           Err(TransactionError::InvalidContent)?
         }
         Evidence::InvalidPrecommit(msg) => {
-          let msg = decode_and_verify_signed_message::<N>(msg, &schema)?.msg;
+          let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
 
           let Data::Precommit(Some((id, sig))) = &msg.data else {
             Err(TransactionError::InvalidContent)?
@@ -173,7 +173,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
         }
         Evidence::InvalidValidRound(msg) => {
-          let msg = decode_and_verify_signed_message::<N>(msg, &schema)?.msg;
+          let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
 
           let Data::Proposal(Some(vr), _) = &msg.data else {
             Err(TransactionError::InvalidContent)?

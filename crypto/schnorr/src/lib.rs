@@ -69,6 +69,7 @@ impl<C: Ciphersuite> SchnorrSignature<C> {
   /// This challenge must be properly crafted, which means being binding to the public key, nonce,
   /// and any message. Failure to do so will let a malicious adversary to forge signatures for
   /// different keys/messages.
+  #[allow(clippy::needless_pass_by_value)] // Prevents further-use of this single-use value
   pub fn sign(
     private_key: &Zeroizing<C::F>,
     nonce: Zeroizing<C::F>,

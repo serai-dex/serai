@@ -85,13 +85,13 @@ impl FirstPreprocessDb {
     network: NetworkId,
     id_type: RecognizedIdType,
     id: &[u8],
-    preprocess: Vec<Vec<u8>>,
+    preprocess: &Vec<Vec<u8>>,
   ) {
     if let Some(existing) = FirstPreprocessDb::get(txn, network, id_type, id) {
-      assert_eq!(existing, preprocess, "saved a distinct first preprocess");
+      assert_eq!(&existing, preprocess, "saved a distinct first preprocess");
       return;
     }
-    FirstPreprocessDb::set(txn, network, id_type, id, &preprocess);
+    FirstPreprocessDb::set(txn, network, id_type, id, preprocess);
   }
 }
 
@@ -114,7 +114,7 @@ impl HandoverBatchDb {
   }
 }
 impl QueuedBatchesDb {
-  pub fn queue(txn: &mut impl DbTxn, set: ValidatorSet, batch: Transaction) {
+  pub fn queue(txn: &mut impl DbTxn, set: ValidatorSet, batch: &Transaction) {
     let mut batches = Self::get(txn, set).unwrap_or_default();
     batch.write(&mut batches).unwrap();
     Self::set(txn, set, &batches);

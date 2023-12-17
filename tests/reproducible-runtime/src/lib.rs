@@ -96,6 +96,6 @@ pub fn reproducibly_builds() {
     for res in res.clone() {
       identical.insert(res.unwrap());
     }
-    assert_eq!(identical.len(), 1, "got different runtime hashes {:?}", res);
+    assert_eq!(identical.len(), 1, "got different runtime hashes {res:?}");
   });
 }

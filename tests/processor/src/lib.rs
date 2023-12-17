@@ -314,7 +314,7 @@ impl Coordinator {
         let res: Option<String> =
           rpc.rpc_call("submitblock", serde_json::json!([hex::encode(block)])).await.unwrap();
         if let Some(err) = res {
-          panic!("submitblock failed: {}", err);
+          panic!("submitblock failed: {err}");
         }
       }
       NetworkId::Ethereum => todo!(),

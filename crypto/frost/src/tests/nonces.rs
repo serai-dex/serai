@@ -154,14 +154,14 @@ impl<C: Curve> Algorithm<C> for MultiNonce<C> {
 // 3) Provide algorithms with nonces which match the group nonces
 pub fn test_multi_nonce<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let keys = key_gen::<R, C>(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, MultiNonce::<C>::new(), &keys);
-  sign(&mut *rng, MultiNonce::<C>::new(), keys.clone(), machines, &[]);
+  let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
+  sign(&mut *rng, &MultiNonce::<C>::new(), keys.clone(), machines, &[]);
 }
 
 /// Test malleating a commitment for a nonce across generators causes the preprocess to error.
 pub fn test_invalid_commitment<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let keys = key_gen::<R, C>(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, MultiNonce::<C>::new(), &keys);
+  let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
   let (machines, mut preprocesses) = preprocess(&mut *rng, machines, |_, _| {});
 
   // Select a random participant to give an invalid commitment
@@ -193,7 +193,7 @@ pub fn test_invalid_commitment<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
 /// Test malleating the DLEq proof for a preprocess causes it to error.
 pub fn test_invalid_dleq_proof<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let keys = key_gen::<R, C>(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, MultiNonce::<C>::new(), &keys);
+  let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
   let (machines, mut preprocesses) = preprocess(&mut *rng, machines, |_, _| {});
 
   // Select a random participant to give an invalid DLEq proof

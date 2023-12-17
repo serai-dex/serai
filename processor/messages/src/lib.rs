@@ -130,8 +130,8 @@ pub mod sign {
 
     pub fn session(&self) -> Session {
       match self {
-        CoordinatorMessage::Preprocesses { id, .. } => id.session,
-        CoordinatorMessage::Shares { id, .. } => id.session,
+        CoordinatorMessage::Preprocesses { id, .. } |
+        CoordinatorMessage::Shares { id, .. } |
         CoordinatorMessage::Reattempt { id } => id.session,
         CoordinatorMessage::Completed { session, .. } => *session,
       }
@@ -193,12 +193,7 @@ pub mod coordinator {
     // network *and the local node*
     // This synchrony obtained lets us ignore the synchrony requirement offered here
     pub fn required_block(&self) -> Option<BlockHash> {
-      match self {
-        CoordinatorMessage::CosignSubstrateBlock { .. } => None,
-        CoordinatorMessage::SubstratePreprocesses { .. } => None,
-        CoordinatorMessage::SubstrateShares { .. } => None,
-        CoordinatorMessage::BatchReattempt { .. } => None,
-      }
+      None
     }
   }
 
@@ -240,7 +235,7 @@ pub mod substrate {
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       let context = match self {
-        CoordinatorMessage::ConfirmKeyPair { context, .. } => context,
+        CoordinatorMessage::ConfirmKeyPair { context, .. } |
         CoordinatorMessage::SubstrateBlock { context, .. } => context,
       };
       Some(context.network_latest_finalized_block)

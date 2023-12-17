@@ -191,8 +191,7 @@ pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
   tx.verify()?;
 
   match tx.kind() {
-    TransactionKind::Provided(_) => {}
-    TransactionKind::Unsigned => {}
+    TransactionKind::Provided(_) | TransactionKind::Unsigned => {}
     TransactionKind::Signed(order, Signed { signer, nonce, signature }) => {
       if let Some(next_nonce) = get_and_increment_nonce(signer, &order) {
         if *nonce != next_nonce {

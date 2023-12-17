@@ -351,9 +351,8 @@ pub mod pallet {
 
       // Update CurrentSession
       let session = {
-        let new_session = CurrentSession::<T>::get(network)
-          .map(|session| Session(session.0 + 1))
-          .unwrap_or(Session(0));
+        let new_session =
+          CurrentSession::<T>::get(network).map_or(Session(0), |session| Session(session.0 + 1));
         CurrentSession::<T>::set(network, Some(new_session));
         new_session
       };

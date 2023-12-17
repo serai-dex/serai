@@ -348,7 +348,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     if self.blockchain.write().await.add_transaction::<Self>(
       true,
       Transaction::Tendermint(tx),
-      self.signature_scheme(),
+      &self.signature_scheme(),
     ) == Ok(true)
     {
       self.p2p.broadcast(signer.genesis, to_broadcast).await;
@@ -362,7 +362,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       .blockchain
       .read()
       .await
-      .verify_block::<Self>(&block, self.signature_scheme(), false)
+      .verify_block::<Self>(&block, &self.signature_scheme(), false)
       .map_err(|e| match e {
         BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
         _ => {
@@ -398,7 +398,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       let block_res = self.blockchain.write().await.add_block::<Self>(
         &block,
         encoded_commit.clone(),
-        self.signature_scheme(),
+        &self.signature_scheme(),
       );
       match block_res {
         Ok(()) => {
@@ -425,7 +425,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     *self.to_rebroadcast.write().await = vec![];
 
     Some(TendermintBlock(
-      self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize(),
+      self.blockchain.write().await.build_block::<Self>(&self.signature_scheme()).serialize(),
     ))
   }
 }

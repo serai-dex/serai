@@ -130,8 +130,8 @@ pub fn test_sqrt<F: Field>() {
   assert_eq!(root * root, has_root, "sqrt(x)^2 != x");
 
   let check = |value: (_, _), expected: (_, F), msg| {
-    assert_eq!(bool::from(value.0), bool::from(expected.0), "{}", msg);
-    assert!((value.1 == expected.1) || (value.1 == -expected.1), "{}", msg);
+    assert_eq!(bool::from(value.0), bool::from(expected.0), "{msg}");
+    assert!((value.1 == expected.1) || (value.1 == -expected.1), "{msg}");
   };
   check(
     F::sqrt_ratio(&has_root, &F::ONE),

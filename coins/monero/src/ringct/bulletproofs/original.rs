@@ -223,7 +223,7 @@ impl OriginalStruct {
     let A = normalize(&self.A);
     let S = normalize(&self.S);
 
-    let commitments = commitments.iter().map(|c| c.mul_by_cofactor()).collect::<Vec<_>>();
+    let commitments = commitments.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
     // Verify it
     let mut proof = Vec::with_capacity(4 + commitments.len());

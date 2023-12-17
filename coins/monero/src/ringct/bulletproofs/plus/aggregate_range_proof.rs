@@ -2,7 +2,7 @@ use std_shims::vec::Vec;
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
 use group::{
@@ -142,7 +142,7 @@ impl AggregateRangeStatement {
     A_terms.push((y_mn_plus_one, commitment_accum));
     A_terms.push((
       ((y_pows * z) - (d.sum() * y_mn_plus_one * z) - (y_pows * z.square())),
-      generators.g(),
+      Generators::g(),
     ));
 
     (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
@@ -151,7 +151,7 @@ impl AggregateRangeStatement {
   pub(crate) fn prove<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    witness: AggregateRangeWitness,
+    witness: &AggregateRangeWitness,
   ) -> Option<AggregateRangeProof> {
     // Check for consistency with the witness
     if self.V.len() != witness.values.len() {
@@ -202,7 +202,7 @@ impl AggregateRangeStatement {
     for (i, a_r) in a_r.0.iter().enumerate() {
       A_terms.push((*a_r, generators.generator(GeneratorsList::HBold1, i)));
     }
-    A_terms.push((alpha, generators.h()));
+    A_terms.push((alpha, Generators::h()));
     let mut A = multiexp(&A_terms);
     A_terms.zeroize();
 
@@ -222,7 +222,7 @@ impl AggregateRangeStatement {
     Some(AggregateRangeProof {
       A,
       wip: WipStatement::new(generators, A_hat, y)
-        .prove(rng, transcript, WipWitness::new(a_l, a_r, alpha).unwrap())
+        .prove(rng, transcript, &Zeroizing::new(WipWitness::new(a_l, a_r, alpha).unwrap()))
         .unwrap(),
     })
   }

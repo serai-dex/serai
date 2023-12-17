@@ -20,7 +20,7 @@ use crate::{
 
 const ID: KeyGenId = KeyGenId { session: Session(1), attempt: 3 };
 
-pub async fn test_key_gen<N: Network>() {
+pub fn test_key_gen<N: Network>() {
   let mut entropies = HashMap::new();
   let mut dbs = HashMap::new();
   let mut key_gens = HashMap::new();
@@ -37,18 +37,15 @@ pub async fn test_key_gen<N: Network>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    if let ProcessorMessage::Commitments { id, mut commitments } = key_gen
-      .handle(
-        &mut txn,
-        CoordinatorMessage::GenerateKey {
-          id: ID,
-          params: ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap())
-            .unwrap(),
-          shares: 1,
-        },
-      )
-      .await
-    {
+    if let ProcessorMessage::Commitments { id, mut commitments } = key_gen.handle(
+      &mut txn,
+      CoordinatorMessage::GenerateKey {
+        id: ID,
+        params: ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap())
+          .unwrap(),
+        shares: 1,
+      },
+    ) {
       assert_eq!(id, ID);
       assert_eq!(commitments.len(), 1);
       all_commitments
@@ -74,16 +71,10 @@ pub async fn test_key_gen<N: Network>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::Shares { id, mut shares } = key_gen
-      .handle(
-        &mut txn,
-        CoordinatorMessage::Commitments {
-          id: ID,
-          commitments: clone_without(&all_commitments, &i),
-        },
-      )
-      .await
-    {
+    if let ProcessorMessage::Shares { id, mut shares } = key_gen.handle(
+      &mut txn,
+      CoordinatorMessage::Commitments { id: ID, commitments: clone_without(&all_commitments, &i) },
+    ) {
       assert_eq!(id, ID);
       assert_eq!(shares.len(), 1);
       all_shares.insert(i, shares.swap_remove(0));
@@ -102,19 +93,16 @@ pub async fn test_key_gen<N: Network>() {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } = key_gen
-      .handle(
-        &mut txn,
-        CoordinatorMessage::Shares {
-          id: ID,
-          shares: vec![all_shares
-            .iter()
-            .filter_map(|(l, shares)| if i == *l { None } else { Some((*l, shares[&i].clone())) })
-            .collect()],
-        },
-      )
-      .await
-    {
+    if let ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } = key_gen.handle(
+      &mut txn,
+      CoordinatorMessage::Shares {
+        id: ID,
+        shares: vec![all_shares
+          .iter()
+          .filter_map(|(l, shares)| if i == *l { None } else { Some((*l, shares[&i].clone())) })
+          .collect()],
+      },
+    ) {
       assert_eq!(id, ID);
       if res.is_none() {
         res = Some((substrate_key, network_key.clone()));
@@ -134,13 +122,11 @@ pub async fn test_key_gen<N: Network>() {
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen
-      .confirm(
-        &mut txn,
-        ID.session,
-        KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
-      )
-      .await;
+    let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen.confirm(
+      &mut txn,
+      ID.session,
+      &KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
+    );
     txn.commit();
 
     assert_eq!(substrate_keys.len(), 1);

@@ -17,8 +17,9 @@ fn test() {
 
   let keys = key_gen(&mut OsRng);
   let key = keys[&Participant::new(1).unwrap()].group_key();
-  let machines = algorithm_machines(&mut OsRng, Schnorrkel::new(CONTEXT), &keys);
-  let signature = sign(&mut OsRng, Schnorrkel::new(CONTEXT), keys, machines, MSG);
+  let algorithm = Schnorrkel::new(CONTEXT);
+  let machines = algorithm_machines(&mut OsRng, &algorithm, &keys);
+  let signature = sign(&mut OsRng, &algorithm, keys, machines, MSG);
 
   let key = PublicKey::from_bytes(key.to_bytes().as_ref()).unwrap();
   key.verify(&mut SigningContext::new(CONTEXT).bytes(MSG), &signature).unwrap()

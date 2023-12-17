@@ -23,7 +23,7 @@ fn test_aggregate_range_proof() {
     let statement = AggregateRangeStatement::new(commitment_points).unwrap();
     let witness = AggregateRangeWitness::new(&commitments).unwrap();
 
-    let proof = statement.clone().prove(&mut OsRng, witness).unwrap();
+    let proof = statement.clone().prove(&mut OsRng, &witness).unwrap();
     statement.verify(&mut OsRng, &mut verifier, (), proof);
   }
   assert!(verifier.verify_vartime());

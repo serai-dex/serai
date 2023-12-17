@@ -18,7 +18,7 @@ impl Request {
 
         let mut userpass_iter = userpass.split(':');
         let username = userpass_iter.next().unwrap().to_string();
-        let password = userpass_iter.next().map(str::to_string).unwrap_or_else(String::new);
+        let password = userpass_iter.next().map_or_else(String::new, str::to_string);
         zeroize::Zeroize::zeroize(&mut userpass);
 
         return Ok((username, password));

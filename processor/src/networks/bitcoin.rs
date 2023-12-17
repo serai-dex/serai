@@ -427,7 +427,7 @@ impl Bitcoin {
     match BSignableTransaction::new(
       inputs.iter().map(|input| input.output.clone()).collect(),
       &payments,
-      change.as_ref().map(|change| change.0.clone()),
+      change.as_ref().map(|change| &change.0),
       None,
       fee.0,
     ) {
@@ -435,16 +435,14 @@ impl Bitcoin {
       Err(TransactionError::NoInputs) => {
         panic!("trying to create a bitcoin transaction without inputs")
       }
-      // No outputs left and the change isn't worth enough
-      Err(TransactionError::NoOutputs) => Ok(None),
+      // No outputs left and the change isn't worth enough/not even enough funds to pay the fee
+      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds) => Ok(None),
       // amortize_fee removes payments which fall below the dust threshold
       Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
       Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
       Err(TransactionError::TooLowFee) => {
         panic!("created a transaction whose fee is below the minimum")
       }
-      // Mot even enough funds to pay the fee
-      Err(TransactionError::NotEnoughFunds) => Ok(None),
       Err(TransactionError::TooLargeTransaction) => {
         panic!("created a too large transaction despite limiting inputs/outputs")
       }
@@ -637,7 +635,7 @@ impl Network for Bitcoin {
       return res;
     }
 
-    async fn check_block(
+    fn check_block(
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
       res: &mut HashMap<[u8; 32], (usize, Transaction)>,
@@ -678,11 +676,11 @@ impl Network for Bitcoin {
         block.unwrap()
       };
 
-      check_block(eventualities, &block, &mut res).await;
+      check_block(eventualities, &block, &mut res);
     }
 
     // Also check the current block
-    check_block(eventualities, block, &mut res).await;
+    check_block(eventualities, block, &mut res);
     assert_eq!(eventualities.block_number, this_block_num);
 
     res
@@ -733,7 +731,7 @@ impl Network for Bitcoin {
       transaction
         .actual
         .clone()
-        .multisig(keys.clone(), transaction.transcript)
+        .multisig(&keys, transaction.transcript)
         .expect("used the wrong keys"),
     )
   }

@@ -143,12 +143,12 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
 /// Test a Ciphersuite with its vectors.
 pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   rng: &mut R,
-  vectors: Vectors,
+  vectors: &Vectors,
 ) {
   test_ciphersuite::<R, C, H>(rng);
 
   // Test against the vectors
-  let keys = vectors_to_multisig_keys::<C>(&vectors);
+  let keys = vectors_to_multisig_keys::<C>(vectors);
   {
     let group_key =
       <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref())

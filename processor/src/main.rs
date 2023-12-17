@@ -199,7 +199,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     if tributary_mutable.key_gen.in_set(&session) {
       // See TributaryMutable's struct definition for why this block is safe
       let KeyConfirmed { substrate_keys, network_keys } =
-        tributary_mutable.key_gen.confirm(txn, session, key_pair.clone()).await;
+        tributary_mutable.key_gen.confirm(txn, session, &key_pair);
       if session.0 == 0 {
         tributary_mutable.batch_signer =
           Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
@@ -214,7 +214,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
-      coordinator.send(tributary_mutable.key_gen.handle(txn, msg).await).await;
+      coordinator.send(tributary_mutable.key_gen.handle(txn, msg)).await;
     }
 
     CoordinatorMessage::Sign(msg) => {
@@ -232,9 +232,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     CoordinatorMessage::Coordinator(msg) => {
       let is_batch = match msg {
         CoordinatorCoordinatorMessage::CosignSubstrateBlock { .. } => false,
-        CoordinatorCoordinatorMessage::SubstratePreprocesses { ref id, .. } => {
-          matches!(&id.id, SubstrateSignableId::Batch(_))
-        }
+        CoordinatorCoordinatorMessage::SubstratePreprocesses { ref id, .. } |
         CoordinatorCoordinatorMessage::SubstrateShares { ref id, .. } => {
           matches!(&id.id, SubstrateSignableId::Batch(_))
         }
@@ -248,7 +246,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             "coordinator told us to sign a batch when we don't currently have a Substrate signer",
           )
           .handle(txn, msg)
-          .await
         {
           coordinator.send(msg).await;
         }
@@ -272,7 +269,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           }
           _ => {
             if let Some(cosigner) = tributary_mutable.cosigner.as_mut() {
-              if let Some(msg) = cosigner.handle(txn, msg).await {
+              if let Some(msg) = cosigner.handle(txn, msg) {
                 coordinator.send(msg).await;
               }
             } else {
@@ -355,7 +352,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
             // Set this variable so when we get the next Batch event, we can handle it
             PendingActivationsDb::set_pending_activation::<N>(
               txn,
-              block_before_queue_block,
+              &block_before_queue_block,
               session,
               key_pair,
             );
@@ -429,7 +426,7 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
           for (key, id, tx, eventuality) in to_sign {
             if let Some(session) = SessionDb::get(txn, key.to_bytes().as_ref()) {
               let signer = signers.get_mut(&session).unwrap();
-              if let Some(msg) = signer.sign_transaction(txn, id, tx, eventuality).await {
+              if let Some(msg) = signer.sign_transaction(txn, id, tx, &eventuality).await {
                 coordinator.send(msg).await;
               }
             }
@@ -521,7 +518,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
       if plan.key == network_key {
         let mut txn = raw_db.txn();
         if let Some(msg) =
-          signer.sign_transaction(&mut txn, plan.id(), tx.clone(), eventuality.clone()).await
+          signer.sign_transaction(&mut txn, plan.id(), tx.clone(), eventuality).await
         {
           coordinator.send(msg).await;
         }
@@ -622,7 +619,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
               ).await;
 
               if let Some(batch_signer) = tributary_mutable.batch_signer.as_mut() {
-                if let Some(msg) = batch_signer.sign(&mut txn, batch).await {
+                if let Some(msg) = batch_signer.sign(&mut txn, batch) {
                   coordinator.send(msg).await;
                 }
               }
@@ -644,7 +641,7 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
           MultisigEvent::Completed(key, id, tx) => {
             if let Some(session) = SessionDb::get(&txn, &key) {
               let signer = tributary_mutable.signers.get_mut(&session).unwrap();
-              if let Some(msg) = signer.completed(&mut txn, id, tx) {
+              if let Some(msg) = signer.completed(&mut txn, id, &tx) {
                 coordinator.send(msg).await;
               }
             }

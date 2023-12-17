@@ -104,13 +104,11 @@ impl RctType {
 
   pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
-      RctType::Null => false,
-      RctType::MlsagAggregate => false,
-      RctType::MlsagIndividual => false,
+      RctType::Null |
+      RctType::MlsagAggregate |
+      RctType::MlsagIndividual |
       RctType::Bulletproofs => false,
-      RctType::BulletproofsCompactAmount => true,
-      RctType::Clsag => true,
-      RctType::BulletproofsPlus => true,
+      RctType::BulletproofsCompactAmount | RctType::Clsag | RctType::BulletproofsPlus => true,
     }
   }
 }
@@ -151,9 +149,7 @@ impl RctBase {
       RctType::from_byte(read_byte(r)?).ok_or_else(|| io::Error::other("invalid RCT type"))?;
 
     match rct_type {
-      RctType::Null => {}
-      RctType::MlsagAggregate => {}
-      RctType::MlsagIndividual => {}
+      RctType::Null | RctType::MlsagAggregate | RctType::MlsagIndividual => {}
       RctType::Bulletproofs |
       RctType::BulletproofsCompactAmount |
       RctType::Clsag |
@@ -325,7 +321,7 @@ impl RctPrunable {
       RctPrunable::MlsagBorromean { borromean, .. } => {
         borromean.iter().try_for_each(|rs| rs.write(w))
       }
-      RctPrunable::MlsagBulletproofs { bulletproofs, .. } => bulletproofs.signature_write(w),
+      RctPrunable::MlsagBulletproofs { bulletproofs, .. } |
       RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.signature_write(w),
     }
   }
@@ -386,8 +382,8 @@ impl RctSignatures {
     serialized
   }
 
-  pub fn read<R: Read>(decoys: Vec<usize>, outputs: usize, r: &mut R) -> io::Result<RctSignatures> {
+  pub fn read<R: Read>(decoys: &[usize], outputs: usize, r: &mut R) -> io::Result<RctSignatures> {
     let base = RctBase::read(decoys.len(), outputs, r)?;
-    Ok(RctSignatures { base: base.0, prunable: RctPrunable::read(base.1, &decoys, outputs, r)? })
+    Ok(RctSignatures { base: base.0, prunable: RctPrunable::read(base.1, decoys, outputs, r)? })
   }
 }

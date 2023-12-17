@@ -335,7 +335,7 @@ impl<N: Network> Scheduler<N> {
     // Since we do multiple aggregation TXs at once, this will execute in logarithmic time
     let utxos = self.utxos.drain(..).collect::<Vec<_>>();
     let mut utxo_chunks =
-      utxos.chunks(N::MAX_INPUTS).map(|chunk| chunk.to_vec()).collect::<Vec<_>>();
+      utxos.chunks(N::MAX_INPUTS).map(<[<N as Network>::Output]>::to_vec).collect::<Vec<_>>();
 
     // Use the first chunk for any scheduled payments, since it has the most value
     let utxos = utxo_chunks.remove(0);
@@ -456,10 +456,7 @@ impl<N: Network> Scheduler<N> {
     }
 
     // If we didn't actually create this output, return, dropping the child payments
-    let actual = match actual {
-      Some(actual) => actual,
-      None => return,
-    };
+    let Some(actual) = actual else { return };
 
     // Amortize the fee amongst all payments underneath this branch
     {

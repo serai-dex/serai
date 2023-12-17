@@ -7,7 +7,7 @@ use scale::{Encode, Decode};
 use messages::SubstrateContext;
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, NetworkId, Coin, ExternalAddress, BlockHash},
+  primitives::{MAX_DATA_LEN, NetworkId, Coin, ExternalAddress, BlockHash, Data},
   in_instructions::primitives::{
     InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
   },
@@ -316,7 +316,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       assert_eq!(balance.coin.network(), N::NETWORK);
 
       if let Ok(address) = N::Address::try_from(address.consume()) {
-        payments.push(Payment { address, data: data.map(|data| data.consume()), balance });
+        payments.push(Payment { address, data: data.map(Data::consume), balance });
       }
     }
 
@@ -513,7 +513,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut plans = vec![];
     existing_outputs.retain(|output| {
       match output.kind() {
-        OutputType::External => false,
+        OutputType::External | OutputType::Forwarded => false,
         OutputType::Branch => {
           let scheduler = &mut self.existing.as_mut().unwrap().scheduler;
           // There *would* be a race condition here due to the fact we only mark a `Branch` output
@@ -576,7 +576,6 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
           false
         }
-        OutputType::Forwarded => false,
       }
     });
     plans
@@ -873,7 +872,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
                 // letting it die out
                 if let Some(tx) = &tx {
                   instruction.balance.amount.0 -= tx.0.fee();
-                  ForwardedOutputDb::save_forwarded_output(txn, instruction);
+                  ForwardedOutputDb::save_forwarded_output(txn, &instruction);
                 }
               } else if let Some(refund_to) = refund_to {
                 if let Ok(refund_to) = refund_to.consume().try_into() {
@@ -907,9 +906,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           }
 
           let (refund_to, instruction) = instruction_from_output::<N>(&output);
-          let instruction = if let Some(instruction) = instruction {
-            instruction
-          } else {
+          let Some(instruction) = instruction else {
             if let Some(refund_to) = refund_to {
               if let Ok(refund_to) = refund_to.consume().try_into() {
                 plans.push(Self::refund_plan(output.clone(), refund_to));
@@ -922,7 +919,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           if Some(output.key()) == self.new.as_ref().map(|new| new.key) {
             match step {
               RotationStep::UseExisting => {
-                DelayedOutputDb::save_delayed_output(txn, instruction);
+                DelayedOutputDb::save_delayed_output(txn, &instruction);
                 continue;
               }
               RotationStep::NewAsChange |
@@ -1003,7 +1000,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       // within the block. Unknown Eventualities may have their Completed events emitted after
       // ScannerEvent::Block however.
       ScannerEvent::Completed(key, block_number, id, tx) => {
-        ResolvedDb::resolve_plan::<N>(txn, &key, id, tx.id());
+        ResolvedDb::resolve_plan::<N>(txn, &key, id, &tx.id());
         (block_number, MultisigEvent::Completed(key, id, tx))
       }
     };

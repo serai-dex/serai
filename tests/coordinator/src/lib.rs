@@ -307,12 +307,11 @@ impl Processor {
                   block_number,
                 },
               ) => {
-                let block = match id {
-                  SubstrateSignId {
-                    id: SubstrateSignableId::CosigningSubstrateBlock(block),
-                    ..
-                  } => block,
-                  _ => panic!("CosignSubstrateBlock didn't have CosigningSubstrateBlock ID"),
+                let SubstrateSignId {
+                  id: SubstrateSignableId::CosigningSubstrateBlock(block), ..
+                } = id
+                else {
+                  panic!("CosignSubstrateBlock didn't have CosigningSubstrateBlock ID")
                 };
 
                 let new_cosign = CurrentCosign { block_number, block };

@@ -46,7 +46,7 @@ macro_rules! test_network {
     #[tokio::test]
     async fn $key_gen() {
       init_logger();
-      test_key_gen::<$N>().await;
+      test_key_gen::<$N>();
     }
 
     #[test]

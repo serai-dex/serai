@@ -7,7 +7,7 @@ use std_shims::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use curve25519_dalek::edwards::EdwardsPoint;
 use multiexp::BatchVerifier;
@@ -91,7 +91,7 @@ impl Bulletproofs {
       Bulletproofs::Plus(
         AggregateRangeStatement::new(outputs.iter().map(|com| DfgPoint(com.calculate())).collect())
           .unwrap()
-          .prove(rng, AggregateRangeWitness::new(outputs).unwrap())
+          .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs).unwrap()))
           .unwrap(),
       )
     })

@@ -239,7 +239,7 @@ mod binaries {
       assert!(batch.verify_vartime());
     }
 
-    println!("Deserialized, hashed, and reserialized {block_i} with {} TXs", txs_len);
+    println!("Deserialized, hashed, and reserialized {block_i} with {txs_len} TXs");
   }
 }
 

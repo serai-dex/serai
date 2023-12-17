@@ -102,7 +102,7 @@ impl ResolvedDb {
     txn: &mut impl DbTxn,
     key: &[u8],
     plan: [u8; 32],
-    resolution: <N::Transaction as Transaction<N>>::Id,
+    resolution: &<N::Transaction as Transaction<N>>::Id,
   ) {
     let mut signing = SigningDb::get(txn, key).unwrap_or_default();
     assert_eq!(signing.len() % 32, 0);
@@ -160,7 +160,7 @@ impl PlansFromScanningDb {
 }
 
 impl ForwardedOutputDb {
-  pub fn save_forwarded_output(txn: &mut impl DbTxn, instruction: InInstructionWithBalance) {
+  pub fn save_forwarded_output(txn: &mut impl DbTxn, instruction: &InInstructionWithBalance) {
     let mut existing = Self::get(txn, instruction.balance).unwrap_or_default();
     existing.extend(instruction.encode());
     Self::set(txn, instruction.balance, &existing);
@@ -184,7 +184,7 @@ impl ForwardedOutputDb {
 }
 
 impl DelayedOutputDb {
-  pub fn save_delayed_output(txn: &mut impl DbTxn, instruction: InInstructionWithBalance) {
+  pub fn save_delayed_output(txn: &mut impl DbTxn, instruction: &InInstructionWithBalance) {
     let mut existing = Self::get(txn).unwrap_or_default();
     existing.extend(instruction.encode());
     Self::set(txn, &existing);

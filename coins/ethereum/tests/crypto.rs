@@ -47,13 +47,8 @@ fn test_signing() {
   const MESSAGE: &[u8] = b"Hello, World!";
 
   let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
-  let _sig = sign(
-    &mut OsRng,
-    algo,
-    keys.clone(),
-    algorithm_machines(&mut OsRng, IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), &keys),
-    MESSAGE,
-  );
+  let _sig =
+    sign(&mut OsRng, &algo, keys.clone(), algorithm_machines(&mut OsRng, &algo, &keys), MESSAGE);
 }
 
 #[test]
@@ -79,9 +74,9 @@ fn test_ecrecover_hack() {
   let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
-    algo.clone(),
+    &algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, algo, &keys),
+    algorithm_machines(&mut OsRng, &algo, &keys),
     full_message,
   );
 

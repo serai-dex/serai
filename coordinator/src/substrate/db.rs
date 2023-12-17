@@ -18,7 +18,7 @@ pub use inner_db::{NextBlock, BatchInstructionsHashDb};
 pub struct HandledEvent;
 impl HandledEvent {
   fn next_to_handle_event(getter: &impl Get, block: [u8; 32]) -> u32 {
-    inner_db::HandledEvent::get(getter, block).map(|last| last + 1).unwrap_or(0)
+    inner_db::HandledEvent::get(getter, block).map_or(0, |last| last + 1)
   }
   pub fn is_unhandled(getter: &impl Get, block: [u8; 32], event_id: u32) -> bool {
     let next = Self::next_to_handle_event(getter, block);

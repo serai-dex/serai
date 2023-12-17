@@ -63,7 +63,7 @@ impl Client {
     }
   }
 
-  pub fn without_connection_pool(host: String) -> Result<Client, Error> {
+  pub fn without_connection_pool(host: &str) -> Result<Client, Error> {
     Ok(Client {
       connection: Connection::Connection {
         connector: Self::connector(),

@@ -29,9 +29,9 @@ fn test_algorithm() {
     Schnorr::<RecommendedTranscript>::new(RecommendedTranscript::new(b"bitcoin-serai sign test"));
   let sig = sign(
     &mut OsRng,
-    algo.clone(),
+    &algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, algo, &keys),
+    algorithm_machines(&mut OsRng, &algo, &keys),
     Hash::hash(MESSAGE).as_ref(),
   );
 

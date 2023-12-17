@@ -50,6 +50,7 @@ pub trait Transcript: Send + Clone {
   fn rng_seed(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
+#[derive(Clone, Copy)]
 enum DigestTranscriptMember {
   Name,
   Domain,

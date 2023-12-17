@@ -65,8 +65,7 @@ impl Coin {
     match self {
       Coin::Serai => NetworkId::Serai,
       Coin::Bitcoin => NetworkId::Bitcoin,
-      Coin::Ether => NetworkId::Ethereum,
-      Coin::Dai => NetworkId::Ethereum,
+      Coin::Ether | Coin::Dai => NetworkId::Ethereum,
       Coin::Monero => NetworkId::Monero,
     }
   }
@@ -93,11 +92,8 @@ impl Coin {
 
   pub fn decimals(&self) -> u32 {
     match self {
-      Coin::Serai => 8,
-      Coin::Bitcoin => 8,
       // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
-      Coin::Ether => 8,
-      Coin::Dai => 8,
+      Coin::Serai | Coin::Bitcoin | Coin::Ether | Coin::Dai => 8,
       Coin::Monero => 12,
     }
   }

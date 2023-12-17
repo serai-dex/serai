@@ -94,7 +94,8 @@ use sp_std::prelude::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
-#[allow(clippy::cast_possible_truncation)] // TODO: Investigate why Substrate generates this
+// TODO: Investigate why Substrate generates these
+#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;

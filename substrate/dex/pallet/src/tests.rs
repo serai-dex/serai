@@ -74,7 +74,7 @@ fn check_pool_accounts_dont_collide() {
   for coin in coins() {
     let account = Dex::get_pool_account(coin);
     if map.contains(&account) {
-      panic!("Collision at {:?}", coin);
+      panic!("Collision at {coin:?}");
     }
     map.insert(account);
   }

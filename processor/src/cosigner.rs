@@ -114,7 +114,7 @@ impl Cosigner {
   }
 
   #[must_use]
-  pub async fn handle(
+  pub fn handle(
     &mut self,
     txn: &mut impl DbTxn,
     msg: CoordinatorMessage,

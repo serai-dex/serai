@@ -97,7 +97,11 @@ impl CompletionsDb {
 }
 
 impl EventualityDb {
-  fn save_eventuality<N: Network>(txn: &mut impl DbTxn, id: [u8; 32], eventuality: N::Eventuality) {
+  fn save_eventuality<N: Network>(
+    txn: &mut impl DbTxn,
+    id: [u8; 32],
+    eventuality: &N::Eventuality,
+  ) {
     txn.put(Self::key(id), eventuality.serialize());
   }
 
@@ -113,7 +117,7 @@ impl TransactionDb {
 
   fn transaction<N: Network>(
     getter: &impl Get,
-    id: <N::Transaction as Transaction<N>>::Id,
+    id: &<N::Transaction as Transaction<N>>::Id,
   ) -> Option<N::Transaction> {
     Self::get(getter, id.as_ref()).map(|tx| N::Transaction::read(&mut tx.as_slice()).unwrap())
   }
@@ -164,7 +168,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           log::info!("rebroadcasting {}", hex::encode(&completion));
           // TODO: Don't drop the error entirely. Check for invariants
           let _ = network
-            .publish_transaction(&TransactionDb::transaction::<N>(&db, completion).unwrap())
+            .publish_transaction(&TransactionDb::transaction::<N>(&db, &completion).unwrap())
             .await;
         }
       }
@@ -221,7 +225,7 @@ impl<N: Network, D: Db> Signer<N, D> {
   }
 
   #[must_use]
-  fn already_completed(&self, txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
+  fn already_completed(txn: &mut D::Transaction<'_>, id: [u8; 32]) -> bool {
     if !CompletionsDb::completions::<N>(txn, id).is_empty() {
       debug!(
         "SignTransaction/Reattempt order for {}, which we've already completed signing",
@@ -238,7 +242,7 @@ impl<N: Network, D: Db> Signer<N, D> {
   fn complete(
     &mut self,
     id: [u8; 32],
-    tx_id: <N::Transaction as Transaction<N>>::Id,
+    tx_id: &<N::Transaction as Transaction<N>>::Id,
   ) -> ProcessorMessage {
     // Assert we're actively signing for this TX
     assert!(self.signable.remove(&id).is_some(), "completed a TX we weren't signing for");
@@ -260,16 +264,16 @@ impl<N: Network, D: Db> Signer<N, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx: N::Transaction,
+    tx: &N::Transaction,
   ) -> Option<ProcessorMessage> {
-    let first_completion = !self.already_completed(txn, id);
+    let first_completion = !Self::already_completed(txn, id);
 
     // Save this completion to the DB
     CompletedOnChainDb::complete_on_chain(txn, &id);
-    CompletionsDb::complete::<N>(txn, id, &tx);
+    CompletionsDb::complete::<N>(txn, id, tx);
 
     if first_completion {
-      Some(self.complete(id, tx.id()))
+      Some(self.complete(id, &tx.id()))
     } else {
       None
     }
@@ -302,13 +306,13 @@ impl<N: Network, D: Db> Signer<N, D> {
       if self.network.confirm_completion(&eventuality, &tx) {
         info!("signer eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
 
-        let first_completion = !self.already_completed(txn, id);
+        let first_completion = !Self::already_completed(txn, id);
 
         // Save this completion to the DB
         CompletionsDb::complete::<N>(txn, id, &tx);
 
         if first_completion {
-          return Some(self.complete(id, tx.id()));
+          return Some(self.complete(id, &tx.id()));
         }
       } else {
         warn!(
@@ -337,7 +341,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     id: [u8; 32],
     attempt: u32,
   ) -> Option<ProcessorMessage> {
-    if self.already_completed(txn, id) {
+    if Self::already_completed(txn, id) {
       return None;
     }
 
@@ -427,13 +431,13 @@ impl<N: Network, D: Db> Signer<N, D> {
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
     tx: N::SignableTransaction,
-    eventuality: N::Eventuality,
+    eventuality: &N::Eventuality,
   ) -> Option<ProcessorMessage> {
     // The caller is expected to re-issue sign orders on reboot
     // This is solely used by the rebroadcast task
     ActiveSignsDb::add_active_sign(txn, &id);
 
-    if self.already_completed(txn, id) {
+    if Self::already_completed(txn, id) {
       return None;
     }
 
@@ -596,7 +600,7 @@ impl<N: Network, D: Db> Signer<N, D> {
         }
 
         // Stop trying to sign for this TX
-        Some(self.complete(id.id, tx_id))
+        Some(self.complete(id.id, &tx_id))
       }
 
       CoordinatorMessage::Reattempt { id } => self.attempt(txn, id.id, id.attempt).await,

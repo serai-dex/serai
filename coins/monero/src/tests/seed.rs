@@ -320,7 +320,7 @@ fn test_polyseed() {
     let seed_without_accents = |seed: &str| {
       seed
         .split_whitespace()
-        .map(|w| w.chars().filter(|c| c.is_ascii()).collect::<String>())
+        .map(|w| w.chars().filter(char::is_ascii).collect::<String>())
         .collect::<Vec<_>>()
         .join(" ")
     };

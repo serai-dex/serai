@@ -99,7 +99,7 @@ impl<N: Network> core::fmt::Debug for Plan<N> {
       .field("key", &hex::encode(self.key.to_bytes()))
       .field("inputs", &self.inputs)
       .field("payments", &self.payments)
-      .field("change", &self.change.as_ref().map(|change| change.to_string()))
+      .field("change", &self.change.as_ref().map(ToString::to_string))
       .finish()
   }
 }

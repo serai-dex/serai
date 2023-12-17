@@ -122,7 +122,7 @@ impl SignableTransaction {
   pub fn new(
     mut inputs: Vec<ReceivedOutput>,
     payments: &[(Address, u64)],
-    change: Option<Address>,
+    change: Option<&Address>,
     data: Option<Vec<u8>>,
     fee_per_weight: u64,
   ) -> Result<SignableTransaction, TransactionError> {
@@ -140,7 +140,7 @@ impl SignableTransaction {
       }
     }
 
-    if data.as_ref().map(|data| data.len()).unwrap_or(0) > 80 {
+    if data.as_ref().map_or(0, Vec::len) > 80 {
       Err(TransactionError::TooMuchData)?;
     }
 
@@ -212,7 +212,7 @@ impl SignableTransaction {
     }
 
     // If there's a change address, check if there's change to give it
-    if let Some(change) = change.as_ref() {
+    if let Some(change) = change {
       let weight_with_change = Self::calculate_weight(tx_ins.len(), payments, Some(change));
       let fee_with_change = fee_per_weight * weight_with_change;
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
@@ -263,7 +263,7 @@ impl SignableTransaction {
   /// Returns None if the wrong keys are used.
   pub fn multisig(
     self,
-    keys: ThresholdKeys<Secp256k1>,
+    keys: &ThresholdKeys<Secp256k1>,
     mut transcript: RecommendedTranscript,
   ) -> Option<TransactionMachine> {
     transcript.domain_separate(b"bitcoin_transaction");

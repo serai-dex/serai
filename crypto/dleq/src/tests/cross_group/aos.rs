@@ -11,14 +11,14 @@ use crate::{
 
 #[allow(non_snake_case)]
 #[cfg(feature = "serialize")]
-fn test_aos_serialization<const RING_LEN: usize>(proof: Aos<G0, G1, RING_LEN>, Re_0: Re<G0, G1>) {
+fn test_aos_serialization<const RING_LEN: usize>(proof: &Aos<G0, G1, RING_LEN>, Re_0: Re<G0, G1>) {
   let mut buf = vec![];
   proof.write(&mut buf).unwrap();
   let deserialized = Aos::read::<&[u8]>(&mut buf.as_ref(), Re_0).unwrap();
-  assert_eq!(proof, deserialized);
+  assert_eq!(proof, &deserialized);
 }
 
-fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
+fn test_aos<const RING_LEN: usize>(default: &Re<G0, G1>) {
   let generators = generators();
 
   let mut ring_keys = [(<G0 as Group>::Scalar::ZERO, <G1 as Group>::Scalar::ZERO); RING_LEN];
@@ -34,7 +34,7 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
   for (actual, key) in ring_keys.iter_mut().enumerate() {
     let proof = Aos::<_, _, RING_LEN>::prove(
       &mut OsRng,
-      transcript(),
+      &transcript(),
       generators,
       &ring,
       actual,
@@ -43,25 +43,25 @@ fn test_aos<const RING_LEN: usize>(default: Re<G0, G1>) {
     );
 
     let mut batch = (BatchVerifier::new(0), BatchVerifier::new(0));
-    proof.verify(&mut OsRng, transcript(), generators, &mut batch, &ring).unwrap();
+    proof.verify(&mut OsRng, &transcript(), generators, &mut batch, &ring).unwrap();
     // For e, these should have nothing. For R, these should have 6 elements each which sum to 0
     assert!(batch.0.verify_vartime());
     assert!(batch.1.verify_vartime());
 
     #[cfg(feature = "serialize")]
-    test_aos_serialization(proof, default.clone());
+    test_aos_serialization(&proof, default.clone());
   }
 }
 
 #[test]
 fn test_aos_e() {
-  test_aos::<2>(Re::e_default());
-  test_aos::<4>(Re::e_default());
+  test_aos::<2>(&Re::e_default());
+  test_aos::<4>(&Re::e_default());
 }
 
 #[allow(non_snake_case)]
 #[test]
 fn test_aos_R() {
   // Batch verification appreciates the longer vectors, which means not batching bits
-  test_aos::<2>(Re::R_default());
+  test_aos::<2>(&Re::R_default());
 }

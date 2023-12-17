@@ -31,8 +31,6 @@ pub(crate) enum GeneratorsList {
 // TODO: Table these
 #[derive(Clone, Debug)]
 pub(crate) struct Generators {
-  g: EdwardsPoint,
-
   g_bold1: &'static [EdwardsPoint],
   h_bold1: &'static [EdwardsPoint],
 }
@@ -47,18 +45,18 @@ impl Generators {
   #[allow(clippy::new_without_default)]
   pub(crate) fn new() -> Self {
     let gens = generators::GENERATORS();
-    Generators { g: dalek_ff_group::EdwardsPoint(crate::H()), g_bold1: &gens.G, h_bold1: &gens.H }
+    Generators { g_bold1: &gens.G, h_bold1: &gens.H }
   }
 
   pub(crate) fn len(&self) -> usize {
     self.g_bold1.len()
   }
 
-  pub(crate) fn g(&self) -> EdwardsPoint {
-    self.g
+  pub(crate) fn g() -> EdwardsPoint {
+    dalek_ff_group::EdwardsPoint(crate::H())
   }
 
-  pub(crate) fn h(&self) -> EdwardsPoint {
+  pub(crate) fn h() -> EdwardsPoint {
     EdwardsPoint::generator()
   }
 
@@ -74,11 +72,7 @@ impl Generators {
     let generators = padded_pow_of_2(generators);
     assert!(generators <= self.g_bold1.len());
 
-    Generators {
-      g: self.g,
-      g_bold1: &self.g_bold1[.. generators],
-      h_bold1: &self.h_bold1[.. generators],
-    }
+    Generators { g_bold1: &self.g_bold1[.. generators], h_bold1: &self.h_bold1[.. generators] }
   }
 }
 

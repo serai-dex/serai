@@ -32,7 +32,7 @@ impl PendingActivationsDb {
   }
   pub fn set_pending_activation<N: Network>(
     txn: &mut impl DbTxn,
-    block_before_queue_block: <N::Block as Block<N>>::Id,
+    block_before_queue_block: &<N::Block as Block<N>>::Id,
     session: Session,
     key_pair: KeyPair,
   ) {

@@ -64,14 +64,14 @@ impl<N: Network> MessageLog<N> {
 
   // For a given round, return the participating weight for this step, and the weight agreeing with
   // the data.
-  pub(crate) fn message_instances(&self, round: RoundNumber, data: DataFor<N>) -> (u64, u64) {
+  pub(crate) fn message_instances(&self, round: RoundNumber, data: &DataFor<N>) -> (u64, u64) {
     let mut participating = 0;
     let mut weight = 0;
     for (participant, msgs) in &self.log[&round] {
       if let Some(msg) = msgs.get(&data.step()) {
         let validator_weight = self.weights.weight(*participant);
         participating += validator_weight;
-        if data == msg.msg.data {
+        if data == &msg.msg.data {
           weight += validator_weight;
         }
       }
@@ -102,7 +102,7 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Check if consensus has been reached on a specific piece of data
-  pub(crate) fn has_consensus(&self, round: RoundNumber, data: DataFor<N>) -> bool {
+  pub(crate) fn has_consensus(&self, round: RoundNumber, data: &DataFor<N>) -> bool {
     let (_, weight) = self.message_instances(round, data);
     weight >= self.weights.threshold()
   }

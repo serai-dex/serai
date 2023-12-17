@@ -72,7 +72,7 @@ pub async fn sign<N: Network>(
     match signers
       .get_mut(&i)
       .unwrap()
-      .sign_transaction(&mut txn, actual_id.id, tx, eventuality)
+      .sign_transaction(&mut txn, actual_id.id, tx, &eventuality)
       .await
     {
       // All participants should emit a preprocess

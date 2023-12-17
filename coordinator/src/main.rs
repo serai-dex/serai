@@ -159,17 +159,17 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // We'll only receive these if we fired GenerateKey, which we'll only do if if we're
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-      key_gen::ProcessorMessage::Commitments { id, .. } => Some(id.session),
-      key_gen::ProcessorMessage::InvalidCommitments { id, .. } => Some(id.session),
-      key_gen::ProcessorMessage::Shares { id, .. } => Some(id.session),
-      key_gen::ProcessorMessage::InvalidShare { id, .. } => Some(id.session),
-      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Commitments { id, .. } |
+      key_gen::ProcessorMessage::InvalidCommitments { id, .. } |
+      key_gen::ProcessorMessage::Shares { id, .. } |
+      key_gen::ProcessorMessage::InvalidShare { id, .. } |
+      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } |
       key_gen::ProcessorMessage::Blame { id, .. } => Some(id.session),
     },
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
-      sign::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
-      sign::ProcessorMessage::Preprocess { id, .. } => Some(id.session),
+      sign::ProcessorMessage::InvalidParticipant { id, .. } |
+      sign::ProcessorMessage::Preprocess { id, .. } |
       sign::ProcessorMessage::Share { id, .. } => Some(id.session),
       // While the Processor's Scanner will always emit Completed, that's routed through the
       // Signer and only becomes a ProcessorMessage::Completed if the Signer is present and
@@ -233,9 +233,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
         None
       }
       // We'll only fire these if we are the Substrate signer, making the Tributary relevant
-      coordinator::ProcessorMessage::InvalidParticipant { id, .. } => Some(id.session),
-      coordinator::ProcessorMessage::CosignPreprocess { id, .. } => Some(id.session),
-      coordinator::ProcessorMessage::BatchPreprocess { id, .. } => Some(id.session),
+      coordinator::ProcessorMessage::InvalidParticipant { id, .. } |
+      coordinator::ProcessorMessage::CosignPreprocess { id, .. } |
+      coordinator::ProcessorMessage::BatchPreprocess { id, .. } |
       coordinator::ProcessorMessage::SubstrateShare { id, .. } => Some(id.session),
       coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
@@ -486,7 +486,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               network,
               RecognizedIdType::Plan,
               &id.id,
-              preprocesses,
+              &preprocesses,
             );
 
             vec![]
@@ -566,7 +566,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
                 };
                 id.to_le_bytes()
               },
-              preprocesses.into_iter().map(Into::into).collect(),
+              &preprocesses.into_iter().map(Into::into).collect::<Vec<_>>(),
             );
 
             let intended = Transaction::Batch {
@@ -611,8 +611,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
               // the prior Batch hasn't been verified yet...
               if (last_received != 0) &&
                 LastVerifiedBatchDb::get(&txn, msg.network)
-                  .map(|last_verified| last_verified < (last_received - 1))
-                  .unwrap_or(true)
+                  .map_or(true, |last_verified| last_verified < (last_received - 1))
               {
                 // Withhold this TX until we verify all prior `Batch`s
                 queue = true;
@@ -620,7 +619,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             }
 
             if queue {
-              QueuedBatchesDb::queue(&mut txn, spec.set(), intended);
+              QueuedBatchesDb::queue(&mut txn, spec.set(), &intended);
               vec![]
             } else {
               // Because this is post-verification of the handover batch, take all queued `Batch`s
@@ -650,10 +649,11 @@ async fn handle_processor_message<D: Db, P: P2p>(
             signed: Transaction::empty_signed(),
           })]
         }
+        #[allow(clippy::match_same_arms)] // Allowed to preserve layout
         coordinator::ProcessorMessage::CosignedBlock { .. } => unreachable!(),
       },
       ProcessorMessage::Substrate(inner_msg) => match inner_msg {
-        processor_messages::substrate::ProcessorMessage::Batch { .. } => unreachable!(),
+        processor_messages::substrate::ProcessorMessage::Batch { .. } |
         processor_messages::substrate::ProcessorMessage::SignedBatch { .. } => unreachable!(),
       },
     };
@@ -823,9 +823,8 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
       let _hvq_lock = HANDOVER_VERIFY_QUEUE_LOCK.get_or_init(|| Mutex::new(())).lock().await;
       let mut txn = db.txn();
       let mut to_publish = vec![];
-      let start_id = LastVerifiedBatchDb::get(&txn, network)
-        .map(|already_verified| already_verified + 1)
-        .unwrap_or(0);
+      let start_id =
+        LastVerifiedBatchDb::get(&txn, network).map_or(0, |already_verified| already_verified + 1);
       if let Some(last_id) =
         substrate::verify_published_batches::<D>(&mut txn, network, u32::MAX).await
       {
@@ -847,7 +846,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
             to_publish.push((set.session, queued.remove(0)));
             // Re-queue the remaining batches
             for remaining in queued {
-              QueuedBatchesDb::queue(&mut txn, set, remaining);
+              QueuedBatchesDb::queue(&mut txn, set, &remaining);
             }
           }
 

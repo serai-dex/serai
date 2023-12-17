@@ -415,7 +415,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
     )
   }
 
-  async fn emit(&mut self, event: ScannerEvent<N>) -> bool {
+  fn emit(&mut self, event: ScannerEvent<N>) -> bool {
     if self.events.send(event).is_err() {
       info!("Scanner handler was dropped. Shutting down?");
       return false;
@@ -496,12 +496,9 @@ impl<N: Network, D: Db> Scanner<N, D> {
           }
         }
 
-        let block = match network.get_block(block_being_scanned).await {
-          Ok(block) => block,
-          Err(_) => {
-            warn!("couldn't get block {block_being_scanned}");
-            break;
-          }
+        let Ok(block) = network.get_block(block_being_scanned).await else {
+          warn!("couldn't get block {block_being_scanned}");
+          break;
         };
         let block_id = block.id();
 
@@ -570,7 +567,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
 
             completion_block_numbers.push(block_number);
             // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs
-            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), block_number, id, tx)).await {
+            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), block_number, id, tx)) {
               return;
             }
           }
@@ -687,10 +684,7 @@ impl<N: Network, D: Db> Scanner<N, D> {
           txn.commit();
 
           // Send all outputs
-          if !scanner
-            .emit(ScannerEvent::Block { is_retirement_block, block: block_id, outputs })
-            .await
-          {
+          if !scanner.emit(ScannerEvent::Block { is_retirement_block, block: block_id, outputs }) {
             return;
           }
 

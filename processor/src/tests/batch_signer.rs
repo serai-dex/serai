@@ -23,8 +23,8 @@ use messages::{
 };
 use crate::batch_signer::BatchSigner;
 
-#[tokio::test]
-async fn test_batch_signer() {
+#[test]
+fn test_batch_signer() {
   let keys = key_gen::<_, Ristretto>(&mut OsRng);
 
   let participant_one = Participant::new(1).unwrap();
@@ -74,7 +74,7 @@ async fn test_batch_signer() {
     let mut db = MemDb::new();
 
     let mut txn = db.txn();
-    match signer.sign(&mut txn, batch.clone()).await.unwrap() {
+    match signer.sign(&mut txn, batch.clone()).unwrap() {
       // All participants should emit a preprocess
       coordinator::ProcessorMessage::BatchPreprocess {
         id,
@@ -109,7 +109,6 @@ async fn test_batch_signer() {
           preprocesses: clone_without(&preprocesses, i),
         },
       )
-      .await
       .unwrap()
     {
       ProcessorMessage::Coordinator(coordinator::ProcessorMessage::SubstrateShare {
@@ -137,7 +136,6 @@ async fn test_batch_signer() {
           shares: clone_without(&shares, i),
         },
       )
-      .await
       .unwrap()
     {
       ProcessorMessage::Substrate(substrate::ProcessorMessage::SignedBatch {

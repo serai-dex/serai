@@ -361,7 +361,7 @@ impl Wallet {
           None,
           these_inputs.drain(..).zip(decoys.drain(..)).collect(),
           vec![(to_addr, AMOUNT)],
-          Change::new(view_pair, false),
+          &Change::new(view_pair, false),
           data,
           rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
         )

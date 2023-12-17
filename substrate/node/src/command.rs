@@ -100,7 +100,7 @@ pub fn run() -> sc_cli::Result<()> {
       if config.role.is_authority() {
         config.state_pruning = Some(PruningMode::ArchiveAll);
       }
-      service::new_full(config).await.map_err(sc_cli::Error::Service)
+      service::new_full(config).map_err(sc_cli::Error::Service)
     }),
   }
 }

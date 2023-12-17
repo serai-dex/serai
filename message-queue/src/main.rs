@@ -54,7 +54,7 @@ pub(crate) use self::clippy::*;
 */
 pub(crate) fn queue_message(
   db: &mut Db,
-  meta: Metadata,
+  meta: &Metadata,
   msg: Vec<u8>,
   sig: SchnorrSignature<Ristretto>,
 ) {
@@ -115,7 +115,7 @@ pub(crate) fn queue_message(
 pub(crate) fn get_next_message(from: Service, to: Service) -> Option<QueuedMessage> {
   let queue_outer = QUEUES.read().unwrap();
   let queue = queue_outer[&(from, to)].read().unwrap();
-  let next = queue.last_acknowledged().map(|i| i + 1).unwrap_or(0);
+  let next = queue.last_acknowledged().map_or(0, |i| i + 1);
   queue.get_message(next)
 }
 
@@ -246,7 +246,7 @@ async fn main() {
           MessageQueueRequest::Queue { meta, msg, sig } => {
             queue_message(
               &mut db,
-              meta,
+              &meta,
               msg,
               SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
             );

@@ -241,7 +241,7 @@ macro_rules! test {
                       tx
                         .clone()
                         .multisig(
-                          keys[&i].clone(),
+                          &keys[&i],
                           RecommendedTranscript::new(b"Monero Serai Test Transaction"),
                         )
                         .unwrap(),

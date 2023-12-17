@@ -174,7 +174,7 @@ impl<T: TransactionTrait> Block<T> {
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     get_and_increment_nonce: &mut G,
-    schema: N::SignatureScheme,
+    schema: &N::SignatureScheme,
     commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     provided_in_chain: impl Fn([u8; 32]) -> bool, // TODO: merge this with unsigned_on_chain?
@@ -217,7 +217,7 @@ impl<T: TransactionTrait> Block<T> {
             Err(BlockError::ProvidedAlreadyIncluded)?;
           }
 
-          if let Some(local) = locally_provided.get_mut(order).and_then(|deque| deque.pop_front()) {
+          if let Some(local) = locally_provided.get_mut(order).and_then(VecDeque::pop_front) {
             // Since this was a provided TX, it must be an application TX
             let Transaction::Application(tx) = tx else {
               Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
@@ -250,12 +250,10 @@ impl<T: TransactionTrait> Block<T> {
       last_tx_order = current_tx_order;
 
       match tx {
-        Transaction::Tendermint(tx) => {
-          match verify_tendermint_tx::<N>(tx, schema.clone(), &commit) {
-            Ok(()) => {}
-            Err(e) => Err(BlockError::TransactionError(e))?,
-          }
-        }
+        Transaction::Tendermint(tx) => match verify_tendermint_tx::<N>(tx, schema, &commit) {
+          Ok(()) => {}
+          Err(e) => Err(BlockError::TransactionError(e))?,
+        },
         Transaction::Application(tx) => {
           match verify_transaction(tx, genesis, get_and_increment_nonce) {
             Ok(()) => {}

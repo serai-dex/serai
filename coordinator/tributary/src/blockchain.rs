@@ -139,25 +139,23 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     order: &str,
   ) -> bool {
     let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
-    let local =
-      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let local = db.get(local_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
     let block_key =
       ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
-    let block =
-      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let block = db.get(block_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
 
     local >= block
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
-    db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
+    db.get(Self::tip_key(genesis)).map_or(genesis, |bytes| bytes.try_into().unwrap())
   }
 
   pub(crate) fn add_transaction<N: Network>(
     &mut self,
     internal: bool,
     tx: Transaction<T>,
-    schema: N::SignatureScheme,
+    schema: &N::SignatureScheme,
   ) -> Result<bool, TransactionError> {
     let db = self.db.as_ref().unwrap();
     let genesis = self.genesis;
@@ -177,8 +175,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
         if self.participants.contains(&signer) {
           Some(
             db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
-              .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-              .unwrap_or(0),
+              .map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap())),
           )
         } else {
           None
@@ -211,15 +208,14 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           .as_ref()
           .unwrap()
           .get(Self::next_nonce_key(&self.genesis, signer, order))
-          .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-          .unwrap_or(0),
+          .map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap())),
       )
     } else {
       None
     }
   }
 
-  pub(crate) fn build_block<N: Network>(&mut self, schema: N::SignatureScheme) -> Block<T> {
+  pub(crate) fn build_block<N: Network>(&mut self, schema: &N::SignatureScheme) -> Block<T> {
     let block = Block::new(
       self.tip,
       self.provided.transactions.values().flatten().cloned().collect(),
@@ -233,7 +229,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn verify_block<N: Network>(
     &self,
     block: &Block<T>,
-    schema: N::SignatureScheme,
+    schema: &N::SignatureScheme,
     allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
@@ -258,8 +254,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           let key = Self::next_nonce_key(&self.genesis, signer, order);
           let next = txn
             .get(&key)
-            .map(|next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()))
-            .unwrap_or(0);
+            .map_or(0, |next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()));
           txn.put(key, (next + 1).to_le_bytes());
           Some(next)
         } else {
@@ -282,7 +277,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     &mut self,
     block: &Block<T>,
     commit: Vec<u8>,
-    schema: N::SignatureScheme,
+    schema: &N::SignatureScheme,
   ) -> Result<(), BlockError> {
     self.verify_block::<N>(block, schema, true)?;
 

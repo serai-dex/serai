@@ -89,7 +89,7 @@ impl KeysDb {
   fn confirm_keys<N: Network>(
     txn: &mut impl DbTxn,
     session: Session,
-    key_pair: KeyPair,
+    key_pair: &KeyPair,
   ) -> (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>) {
     let (keys_vec, keys) = GeneratedKeysDb::read_keys::<N>(
       txn,
@@ -175,7 +175,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     KeysDb::substrate_keys_by_session::<N>(&self.db, session)
   }
 
-  pub async fn handle(
+  pub fn handle(
     &mut self,
     txn: &mut D::Transaction<'_>,
     msg: CoordinatorMessage,
@@ -582,11 +582,13 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     }
   }
 
-  pub async fn confirm(
+  // This should only be called if we're participating, hence taking our instance
+  #[allow(clippy::unused_self)]
+  pub fn confirm(
     &mut self,
     txn: &mut D::Transaction<'_>,
     session: Session,
-    key_pair: KeyPair,
+    key_pair: &KeyPair,
   ) -> KeyConfirmed<N::Curve> {
     info!(
       "Confirmed key pair {} {} for {:?}",

@@ -396,9 +396,8 @@ pub async fn scan_task<D: Db, Pro: Processors>(
           Ok(latest) => {
             if latest.header.number >= next_substrate_block {
               return latest;
-            } else {
-              sleep(Duration::from_secs(3)).await;
             }
+            sleep(Duration::from_secs(3)).await;
           }
           Err(e) => {
             log::error!("couldn't communicate with serai node: {e}");
@@ -493,7 +492,7 @@ pub(crate) async fn verify_published_batches<D: Db>(
 ) -> Option<u32> {
   // TODO: Localize from MainDb to SubstrateDb
   let last = crate::LastVerifiedBatchDb::get(txn, network);
-  for id in last.map(|last| last + 1).unwrap_or(0) ..= optimistic_up_to {
+  for id in last.map_or(0, |last| last + 1) ..= optimistic_up_to {
     let Some(on_chain) = BatchInstructionsHashDb::get(txn, network, id) else {
       break;
     };

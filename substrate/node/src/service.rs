@@ -149,7 +149,7 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   })
 }
 
-pub async fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   let sc_service::PartialComponents {
     client,
     backend,

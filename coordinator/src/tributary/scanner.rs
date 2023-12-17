@@ -192,7 +192,7 @@ impl<
     P: P2p,
   > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
-  pub async fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
+  pub fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
     // TODO: If this fatal slash puts the remaining set below the threshold, spin
 
     let genesis = self.spec.genesis();
@@ -209,7 +209,7 @@ impl<
   // Tributary post-DKG
   // https://github.com/serai-dex/serai/issues/426
 
-  pub async fn fatal_slash_with_participant_index(
+  pub fn fatal_slash_with_participant_index(
     &mut self,
     removed: &[<Ristretto as Ciphersuite>::G],
     i: Participant,
@@ -227,7 +227,7 @@ impl<
     }
     let validator = validator.unwrap();
 
-    self.fatal_slash(validator.to_bytes(), reason).await;
+    self.fatal_slash(validator.to_bytes(), reason);
   }
 
   async fn handle<D: Db>(mut self) {
@@ -240,10 +240,9 @@ impl<
           // Since the evidence is on the chain, it should already have been validated
           // We can just punish the signer
           let data = match ev {
-            Evidence::ConflictingMessages(first, second) => (first, Some(second)),
+            Evidence::ConflictingMessages(first, second) |
             Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
-            Evidence::InvalidPrecommit(first) => (first, None),
-            Evidence::InvalidValidRound(first) => (first, None),
+            Evidence::InvalidPrecommit(first) | Evidence::InvalidValidRound(first) => (first, None),
           };
           let msgs = (
             decode_signed_message::<TendermintNetwork<D, Transaction, P>>(&data.0).unwrap(),
@@ -259,9 +258,7 @@ impl<
 
           // Since anything with evidence is fundamentally faulty behavior, not just temporal
           // errors, mark the node as fatally slashed
-          self
-            .fatal_slash(msgs.0.msg.sender, &format!("invalid tendermint messages: {:?}", msgs))
-            .await;
+          self.fatal_slash(msgs.0.msg.sender, &format!("invalid tendermint messages: {msgs:?}"));
         }
         TributaryTransaction::Application(tx) => {
           self.handle_application_tx(tx).await;
@@ -348,8 +345,7 @@ impl<
               // Check if the cosigner has a signature from our set for this block/a newer one
               let latest_cosign =
                 crate::cosign_evaluator::LatestCosign::get(self.txn, self.spec.set().network)
-                  .map(|cosign| cosign.block_number)
-                  .unwrap_or(0);
+                  .map_or(0, |cosign| cosign.block_number);
               if latest_cosign < block_number {
                 // Instruct the processor to start the next attempt
                 self

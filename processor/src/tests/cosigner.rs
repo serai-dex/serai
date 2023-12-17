@@ -18,8 +18,8 @@ use serai_client::{primitives::*, validator_sets::primitives::Session};
 use messages::coordinator::*;
 use crate::cosigner::Cosigner;
 
-#[tokio::test]
-async fn test_cosigner() {
+#[test]
+fn test_cosigner() {
   let keys = key_gen::<_, Ristretto>(&mut OsRng);
 
   let participant_one = Participant::new(1).unwrap();
@@ -88,7 +88,6 @@ async fn test_cosigner() {
           preprocesses: clone_without(&preprocesses, i),
         },
       )
-      .await
       .unwrap()
     {
       ProcessorMessage::SubstrateShare { id, shares: mut these_shares } => {
@@ -113,7 +112,6 @@ async fn test_cosigner() {
           shares: clone_without(&shares, i),
         },
       )
-      .await
       .unwrap()
     {
       ProcessorMessage::CosignedBlock { block_number, block: signed_block, signature } => {

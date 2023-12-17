@@ -489,7 +489,7 @@ impl ReadWrite for Transaction {
         writer.write_all(&u16::from(*faulty).to_le_bytes())?;
 
         // Flattens Some(vec![]) to None on the expectation no actual blame will be 0-length
-        assert!(blame.as_ref().map(|blame| blame.len()).unwrap_or(1) != 0);
+        assert!(blame.as_ref().map_or(1, Vec::len) != 0);
         let blame_len =
           u16::try_from(blame.as_ref().unwrap_or(&vec![]).len()).expect("blame exceeded 64 KB");
         writer.write_all(&blame_len.to_le_bytes())?;
@@ -547,15 +547,9 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipantDueToDkg { .. } => TransactionKind::Provided("remove"),
 
-      Transaction::DkgCommitments { attempt, commitments: _, signed } => {
-        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
-      }
-      Transaction::DkgShares { attempt, signed, .. } => {
-        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
-      }
-      Transaction::InvalidDkgShare { attempt, signed, .. } => {
-        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
-      }
+      Transaction::DkgCommitments { attempt, commitments: _, signed } |
+      Transaction::DkgShares { attempt, signed, .. } |
+      Transaction::InvalidDkgShare { attempt, signed, .. } |
       Transaction::DkgConfirmed { attempt, signed, .. } => {
         TransactionKind::Signed((b"dkg", attempt).encode(), signed)
       }
@@ -625,8 +619,7 @@ impl Transaction {
 
         Transaction::DkgCommitments { .. } => 0,
         Transaction::DkgShares { .. } => 1,
-        Transaction::InvalidDkgShare { .. } => 2,
-        Transaction::DkgConfirmed { .. } => 2,
+        Transaction::InvalidDkgShare { .. } | Transaction::DkgConfirmed { .. } => 2,
 
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
@@ -635,6 +628,7 @@ impl Transaction {
 
         Transaction::SubstrateSign(data) => data.label.nonce(),
         Transaction::Sign(data) => data.label.nonce(),
+
         Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
       };
 
@@ -643,9 +637,9 @@ impl Transaction {
         match tx {
           Transaction::RemoveParticipantDueToDkg { .. } => panic!("signing RemoveParticipant"),
 
-          Transaction::DkgCommitments { ref mut signed, .. } => signed,
-          Transaction::DkgShares { ref mut signed, .. } => signed,
-          Transaction::InvalidDkgShare { ref mut signed, .. } => signed,
+          Transaction::DkgCommitments { ref mut signed, .. } |
+          Transaction::DkgShares { ref mut signed, .. } |
+          Transaction::InvalidDkgShare { ref mut signed, .. } |
           Transaction::DkgConfirmed { ref mut signed, .. } => signed,
 
           Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
@@ -655,6 +649,7 @@ impl Transaction {
 
           Transaction::SubstrateSign(ref mut data) => &mut data.signed,
           Transaction::Sign(ref mut data) => &mut data.signed,
+
           Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
         },
       )

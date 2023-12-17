@@ -204,18 +204,18 @@ impl<
     Accumulation::NotReady
   }
 
-  async fn handle_data(
+  fn handle_data(
     &mut self,
     removed: &[<Ristretto as Ciphersuite>::G],
     data_spec: &DataSpecification,
-    bytes: Vec<u8>,
+    bytes: &Vec<u8>,
     signed: &Signed,
   ) -> Accumulation {
     let genesis = self.spec.genesis();
 
     let Some(curr_attempt) = AttemptDb::attempt(self.txn, genesis, data_spec.topic) else {
       // Premature publication of a valid ID/publication of an invalid ID
-      self.fatal_slash(signed.signer.to_bytes(), "published data for ID without an attempt").await;
+      self.fatal_slash(signed.signer.to_bytes(), "published data for ID without an attempt");
       return Accumulation::NotReady;
     };
 
@@ -223,7 +223,7 @@ impl<
     // This shouldn't be reachable since nonces were made inserted by the coordinator, yet it's a
     // cheap check to leave in for safety
     if DataDb::get(self.txn, genesis, data_spec, &signed.signer.to_bytes()).is_some() {
-      self.fatal_slash(signed.signer.to_bytes(), "published data multiple times").await;
+      self.fatal_slash(signed.signer.to_bytes(), "published data multiple times");
       return Accumulation::NotReady;
     }
 
@@ -239,12 +239,10 @@ impl<
     }
     // If the attempt is greater, this is a premature publication, full slash
     if data_spec.attempt > curr_attempt {
-      self
-        .fatal_slash(
-          signed.signer.to_bytes(),
-          "published data with an attempt which hasn't started",
-        )
-        .await;
+      self.fatal_slash(
+        signed.signer.to_bytes(),
+        "published data with an attempt which hasn't started",
+      );
       return Accumulation::NotReady;
     }
 
@@ -254,10 +252,10 @@ impl<
     // TODO: If this is shares, we need to check they are part of the selected signing set
 
     // Accumulate this data
-    self.accumulate(removed, data_spec, signed.signer, &bytes)
+    self.accumulate(removed, data_spec, signed.signer, bytes)
   }
 
-  async fn check_sign_data_len(
+  fn check_sign_data_len(
     &mut self,
     removed: &[<Ristretto as Ciphersuite>::G],
     signer: <Ristretto as Ciphersuite>::G,
@@ -265,12 +263,10 @@ impl<
   ) -> Result<(), ()> {
     let signer_i = self.spec.i(removed, signer).unwrap();
     if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
-      self
-        .fatal_slash(
-          signer.to_bytes(),
-          "signer published a distinct amount of sign data than they had shares",
-        )
-        .await;
+      self.fatal_slash(
+        signer.to_bytes(),
+        "signer published a distinct amount of sign data than they had shares",
+      );
       Err(())?;
     }
     Ok(())
@@ -292,34 +288,28 @@ impl<
     }
 
     match tx {
-      Transaction::RemoveParticipantDueToDkg { attempt, participant } => {
-        self
-          .fatal_slash_with_participant_index(
-            &removed_as_of_dkg_attempt(self.txn, genesis, attempt).unwrap_or_else(|| {
-              panic!(
-                "removed a participant due to a provided transaction with an attempt not {}",
-                "locally handled?"
-              )
-            }),
-            participant,
-            "RemoveParticipantDueToDkg Provided TX",
-          )
-          .await
-      }
+      Transaction::RemoveParticipantDueToDkg { attempt, participant } => self
+        .fatal_slash_with_participant_index(
+          &removed_as_of_dkg_attempt(self.txn, genesis, attempt).unwrap_or_else(|| {
+            panic!(
+              "removed a participant due to a provided transaction with an attempt not {}",
+              "locally handled?"
+            )
+          }),
+          participant,
+          "RemoveParticipantDueToDkg Provided TX",
+        ),
 
       Transaction::DkgCommitments { attempt, commitments, signed } => {
         let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
-          self
-            .fatal_slash(signed.signer.to_bytes(), "DkgCommitments with an unrecognized attempt")
-            .await;
+          self.fatal_slash(signed.signer.to_bytes(), "DkgCommitments with an unrecognized attempt");
           return;
         };
-        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, commitments.len()).await
-        else {
+        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, commitments.len()) else {
           return;
         };
         let data_spec = DataSpecification { topic: Topic::Dkg, label: Label::Preprocess, attempt };
-        match self.handle_data(&removed, &data_spec, commitments.encode(), &signed).await {
+        match self.handle_data(&removed, &data_spec, &commitments.encode(), &signed) {
           Accumulation::Ready(DataSet::Participating(mut commitments)) => {
             log::info!("got all DkgCommitments for {}", hex::encode(genesis));
             unflatten(self.spec, &removed, &mut commitments);
@@ -343,12 +333,10 @@ impl<
 
       Transaction::DkgShares { attempt, mut shares, confirmation_nonces, signed } => {
         let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
-          self
-            .fatal_slash(signed.signer.to_bytes(), "DkgShares with an unrecognized attempt")
-            .await;
+          self.fatal_slash(signed.signer.to_bytes(), "DkgShares with an unrecognized attempt");
           return;
         };
-        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, shares.len()).await else {
+        let Ok(()) = self.check_sign_data_len(&removed, signed.signer, shares.len()) else {
           return;
         };
 
@@ -359,7 +347,7 @@ impl<
         let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
         for shares in &shares {
           if shares.len() != (usize::from(self.spec.n(&removed) - sender_is_len)) {
-            self.fatal_slash(signed.signer.to_bytes(), "invalid amount of DKG shares").await;
+            self.fatal_slash(signed.signer.to_bytes(), "invalid amount of DKG shares");
             return;
           }
         }
@@ -419,7 +407,7 @@ impl<
 
         let data_spec = DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt };
         let encoded_data = (confirmation_nonces.to_vec(), our_shares.encode()).encode();
-        match self.handle_data(&removed, &data_spec, encoded_data, &signed).await {
+        match self.handle_data(&removed, &data_spec, &encoded_data, &signed) {
           Accumulation::Ready(DataSet::Participating(confirmation_nonces_and_shares)) => {
             log::info!("got all DkgShares for {}", hex::encode(genesis));
 
@@ -479,34 +467,27 @@ impl<
       Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
         let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
           self
-            .fatal_slash(signed.signer.to_bytes(), "InvalidDkgShare with an unrecognized attempt")
-            .await;
+            .fatal_slash(signed.signer.to_bytes(), "InvalidDkgShare with an unrecognized attempt");
           return;
         };
         let range = self.spec.i(&removed, signed.signer).unwrap();
         if !range.contains(&accuser) {
-          self
-            .fatal_slash(
-              signed.signer.to_bytes(),
-              "accused with a Participant index which wasn't theirs",
-            )
-            .await;
+          self.fatal_slash(
+            signed.signer.to_bytes(),
+            "accused with a Participant index which wasn't theirs",
+          );
           return;
         }
         if range.contains(&faulty) {
-          self
-            .fatal_slash(signed.signer.to_bytes(), "accused self of having an InvalidDkgShare")
-            .await;
+          self.fatal_slash(signed.signer.to_bytes(), "accused self of having an InvalidDkgShare");
           return;
         }
 
         let Some(share) = DkgShare::get(self.txn, genesis, accuser.into(), faulty.into()) else {
-          self
-            .fatal_slash(
-              signed.signer.to_bytes(),
-              "InvalidDkgShare had a non-existent faulty participant",
-            )
-            .await;
+          self.fatal_slash(
+            signed.signer.to_bytes(),
+            "InvalidDkgShare had a non-existent faulty participant",
+          );
           return;
         };
         self
@@ -526,15 +507,13 @@ impl<
 
       Transaction::DkgConfirmed { attempt, confirmation_share, signed } => {
         let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
-          self
-            .fatal_slash(signed.signer.to_bytes(), "DkgConfirmed with an unrecognized attempt")
-            .await;
+          self.fatal_slash(signed.signer.to_bytes(), "DkgConfirmed with an unrecognized attempt");
           return;
         };
 
         let data_spec =
           DataSpecification { topic: Topic::DkgConfirmation, label: Label::Share, attempt };
-        match self.handle_data(&removed, &data_spec, confirmation_share.to_vec(), &signed).await {
+        match self.handle_data(&removed, &data_spec, &confirmation_share.to_vec(), &signed) {
           Accumulation::Ready(DataSet::Participating(shares)) => {
             log::info!("got all DkgConfirmed for {}", hex::encode(genesis));
 
@@ -556,9 +535,7 @@ impl<
             let sig = match confirmer.complete(preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
               Err(p) => {
-                self
-                  .fatal_slash_with_participant_index(&removed, p, "invalid DkgConfirmer share")
-                  .await;
+                self.fatal_slash_with_participant_index(&removed, p, "invalid DkgConfirmer share");
                 return;
               }
             };
@@ -641,16 +618,14 @@ impl<
         let Some(removed) =
           crate::tributary::removed_as_of_set_keys(self.txn, self.spec.set(), genesis)
         else {
-          self
-            .fatal_slash(
-              data.signed.signer.to_bytes(),
-              "signing despite not having set keys on substrate",
-            )
-            .await;
+          self.fatal_slash(
+            data.signed.signer.to_bytes(),
+            "signing despite not having set keys on substrate",
+          );
           return;
         };
         let signer = data.signed.signer;
-        let Ok(()) = self.check_sign_data_len(&removed, signer, data.data.len()).await else {
+        let Ok(()) = self.check_sign_data_len(&removed, signer, data.data.len()) else {
           return;
         };
         let expected_len = match data.label {
@@ -659,12 +634,10 @@ impl<
         };
         for data in &data.data {
           if data.len() != expected_len {
-            self
-              .fatal_slash(
-                signer.to_bytes(),
-                "unexpected length data for substrate signing protocol",
-              )
-              .await;
+            self.fatal_slash(
+              signer.to_bytes(),
+              "unexpected length data for substrate signing protocol",
+            );
             return;
           }
         }
@@ -675,7 +648,7 @@ impl<
           attempt: data.attempt,
         };
         let Accumulation::Ready(DataSet::Participating(mut results)) =
-          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
+          self.handle_data(&removed, &data_spec, &data.data.encode(), &data.signed)
         else {
           return;
         };
@@ -703,16 +676,13 @@ impl<
         let Some(removed) =
           crate::tributary::removed_as_of_set_keys(self.txn, self.spec.set(), genesis)
         else {
-          self
-            .fatal_slash(
-              data.signed.signer.to_bytes(),
-              "signing despite not having set keys on substrate",
-            )
-            .await;
+          self.fatal_slash(
+            data.signed.signer.to_bytes(),
+            "signing despite not having set keys on substrate",
+          );
           return;
         };
-        let Ok(()) = self.check_sign_data_len(&removed, data.signed.signer, data.data.len()).await
-        else {
+        let Ok(()) = self.check_sign_data_len(&removed, data.signed.signer, data.data.len()) else {
           return;
         };
 
@@ -722,7 +692,7 @@ impl<
           attempt: data.attempt,
         };
         if let Accumulation::Ready(DataSet::Participating(mut results)) =
-          self.handle_data(&removed, &data_spec, data.data.encode(), &data.signed).await
+          self.handle_data(&removed, &data_spec, &data.data.encode(), &data.signed)
         {
           unflatten(self.spec, &removed, &mut results);
           let id =
@@ -750,9 +720,7 @@ impl<
         );
 
         if AttemptDb::attempt(self.txn, genesis, Topic::Sign(plan)).is_none() {
-          self
-            .fatal_slash(first_signer.to_bytes(), "claimed an unrecognized plan was completed")
-            .await;
+          self.fatal_slash(first_signer.to_bytes(), "claimed an unrecognized plan was completed");
           return;
         };
 

@@ -135,10 +135,10 @@ mod literal {
   const TWO: Participant = Participant(2);
 
   fn test_blame(
-    commitment_msgs: HashMap<Participant, EncryptionKeyMessage<Ristretto, Commitments<Ristretto>>>,
+    commitment_msgs: &HashMap<Participant, EncryptionKeyMessage<Ristretto, Commitments<Ristretto>>>,
     machines: Vec<BlameMachine<Ristretto>>,
-    msg: FrostEncryptedMessage<Ristretto>,
-    blame: Option<EncryptionKeyProof<Ristretto>>,
+    msg: &FrostEncryptedMessage<Ristretto>,
+    blame: &Option<EncryptionKeyProof<Ristretto>>,
   ) {
     for machine in machines {
       let (additional, blamed) = machine.blame(ONE, TWO, msg.clone(), blame.clone());
@@ -188,7 +188,7 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(&commitment_msgs, machines, &secret_shares[&ONE][&TWO].clone(), &blame.unwrap());
   }
 
   #[test]
@@ -228,7 +228,7 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_key();
-    test_blame(commitment_msgs, machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
+    test_blame(&commitment_msgs, machines, &secret_shares[&TWO][&ONE].clone(), &blame.unwrap());
   }
 
   // This should be largely equivalent to the prior test
@@ -263,7 +263,7 @@ mod literal {
       .collect::<Vec<_>>();
 
     blame.as_mut().unwrap().as_mut().unwrap().invalidate_dleq();
-    test_blame(commitment_msgs, machines, secret_shares[&TWO][&ONE].clone(), blame.unwrap());
+    test_blame(&commitment_msgs, machines, &secret_shares[&TWO][&ONE].clone(), &blame.unwrap());
   }
 
   #[test]
@@ -296,7 +296,7 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(&commitment_msgs, machines, &secret_shares[&ONE][&TWO].clone(), &blame.unwrap());
   }
 
   #[test]
@@ -329,6 +329,6 @@ mod literal {
       })
       .collect::<Vec<_>>();
 
-    test_blame(commitment_msgs, machines, secret_shares[&ONE][&TWO].clone(), blame.unwrap());
+    test_blame(&commitment_msgs, machines, &secret_shares[&ONE][&TWO].clone(), &blame.unwrap());
   }
 }

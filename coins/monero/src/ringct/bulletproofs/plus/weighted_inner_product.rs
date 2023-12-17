@@ -189,7 +189,7 @@ impl WipStatement {
     self,
     rng: &mut R,
     mut transcript: Scalar,
-    witness: WipWitness,
+    witness: &WipWitness,
   ) -> Option<WipProof> {
     let WipStatement { generators, P, mut y } = self;
     #[cfg(not(debug_assertions))]
@@ -198,7 +198,7 @@ impl WipStatement {
     if generators.len() != witness.a.len() {
       return None;
     }
-    let (g, h) = (generators.g(), generators.h());
+    let (g, h) = (Generators::g(), Generators::h());
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. generators.len() {
@@ -345,7 +345,7 @@ impl WipStatement {
   ) -> bool {
     let WipStatement { generators, P, y } = self;
 
-    let (g, h) = (generators.g(), generators.h());
+    let (g, h) = (Generators::g(), Generators::h());
 
     // Verify the L/R lengths
     {

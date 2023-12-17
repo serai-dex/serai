@@ -57,7 +57,7 @@ fn ed448_8032_vector() {
 fn ed448_vectors() {
   test_with_vectors::<_, Ed448, IetfEd448Hram>(
     &mut OsRng,
-    Vectors::from(
+    &Vectors::from(
       serde_json::from_str::<serde_json::Value>(include_str!("vectors/frost-ed448-shake256.json"))
         .unwrap(),
     ),

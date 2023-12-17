@@ -38,7 +38,7 @@ pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u
     &mut OsRng,
     frost::tests::algorithm_machines(
       &mut OsRng,
-      Schnorrkel::new(b"substrate"),
+      &Schnorrkel::new(b"substrate"),
       &HashMap::from([(threshold_keys.params().i(), threshold_keys.into())]),
     ),
     &set_keys_message(&set, &[], &key_pair),

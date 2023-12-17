@@ -136,7 +136,7 @@ impl SignableTransactionBuilder {
       read.r_seed.clone(),
       read.inputs.clone(),
       read.payments.clone(),
-      read.change_address.clone(),
+      &read.change_address,
       read.data.clone(),
       read.fee_rate,
     )

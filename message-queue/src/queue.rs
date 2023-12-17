@@ -16,8 +16,7 @@ impl<D: Db> Queue<D> {
     self
       .0
       .get(self.message_count_key())
-      .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0)
+      .map_or(0, |bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
   }
 
   fn last_acknowledged_key(&self) -> Vec<u8> {

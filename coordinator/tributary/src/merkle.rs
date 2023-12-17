@@ -17,13 +17,7 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
         [
           b"branch_hash".as_ref(),
           hashes[i].as_ref(),
-          hashes
-            .get(i + 1)
-            .map(|hash| {
-              let res: &[u8] = hash.as_ref();
-              res
-            })
-            .unwrap_or(zero.as_ref()),
+          hashes.get(i + 1).map_or(zero.as_ref(), AsRef::as_ref),
         ]
         .concat(),
       ));
@@ -33,5 +27,5 @@ pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
     hashes = interim;
   }
 
-  hashes.first().copied().map(Into::into).unwrap_or(zero)
+  hashes.first().copied().map_or(zero, Into::into)
 }

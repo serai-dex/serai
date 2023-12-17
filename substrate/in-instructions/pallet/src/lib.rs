@@ -9,7 +9,8 @@ use serai_primitives::{BlockHash, NetworkId};
 pub use in_instructions_primitives as primitives;
 use primitives::*;
 
-#[allow(clippy::cast_possible_truncation)] // TODO: Investigate why Substrate generates this
+// TODO: Investigate why Substrate generates these
+#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
 #[frame_support::pallet]
 pub mod pallet {
   use sp_std::vec;

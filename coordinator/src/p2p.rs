@@ -59,11 +59,10 @@ pub enum P2pMessageKind {
 impl P2pMessageKind {
   fn genesis(&self) -> Option<[u8; 32]> {
     match self {
-      P2pMessageKind::KeepAlive => None,
-      P2pMessageKind::Tributary(genesis) => Some(*genesis),
-      P2pMessageKind::Heartbeat(genesis) => Some(*genesis),
+      P2pMessageKind::KeepAlive | P2pMessageKind::CosignedBlock => None,
+      P2pMessageKind::Tributary(genesis) |
+      P2pMessageKind::Heartbeat(genesis) |
       P2pMessageKind::Block(genesis) => Some(*genesis),
-      P2pMessageKind::CosignedBlock => None,
     }
   }
 
@@ -303,7 +302,7 @@ impl LibP2p {
       let mut time_of_last_p2p_message = Instant::now();
 
       #[allow(clippy::needless_pass_by_ref_mut)] // False positive
-      async fn broadcast_raw(
+      fn broadcast_raw(
         p2p: &mut Swarm<Behavior>,
         time_of_last_p2p_message: &mut Instant,
         genesis: Option<[u8; 32]>,
@@ -364,7 +363,7 @@ impl LibP2p {
                 &mut time_of_last_p2p_message,
                 genesis,
                 msg,
-              ).await;
+              );
             }
 
             // Handle new incoming messages
@@ -416,7 +415,7 @@ impl LibP2p {
                 &mut time_of_last_p2p_message,
                 None,
                 P2pMessageKind::KeepAlive.serialize()
-              ).await;
+              );
             }
           }
         }
@@ -689,16 +688,8 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
     let msg = p2p.receive().await;
     match msg.kind {
       P2pMessageKind::KeepAlive => {}
-      P2pMessageKind::Tributary(genesis) => {
-        if let Some(channel) = channels.read().await.get(&genesis) {
-          channel.send(msg).unwrap();
-        }
-      }
-      P2pMessageKind::Heartbeat(genesis) => {
-        if let Some(channel) = channels.read().await.get(&genesis) {
-          channel.send(msg).unwrap();
-        }
-      }
+      P2pMessageKind::Tributary(genesis) |
+      P2pMessageKind::Heartbeat(genesis) |
       P2pMessageKind::Block(genesis) => {
         if let Some(channel) = channels.read().await.get(&genesis) {
           channel.send(msg).unwrap();

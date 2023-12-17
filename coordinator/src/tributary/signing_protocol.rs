@@ -184,7 +184,6 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
   }
 
   fn complete_internal(
-    &mut self,
     machine: AlgorithmSignatureMachine<Ristretto, Schnorrkel>,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
@@ -251,6 +250,8 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   (participants, map)
 }
 
+type DkgConfirmerSigningProtocol<'a, T> = SigningProtocol<'a, T, (&'static [u8; 12], u32)>;
+
 pub(crate) struct DkgConfirmer<'a, T: DbTxn> {
   key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &'a TributarySpec,
@@ -271,7 +272,7 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     let removed = crate::tributary::removed_as_of_dkg_attempt(txn, spec.genesis(), attempt)?;
     Some(DkgConfirmer { key, spec, removed, txn, attempt })
   }
-  fn signing_protocol(&mut self) -> SigningProtocol<'_, T, (&'static [u8; 12], u32)> {
+  fn signing_protocol(&mut self) -> DkgConfirmerSigningProtocol<'_, T> {
     let context = (b"DkgConfirmer", self.attempt);
     SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
   }
@@ -323,6 +324,6 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
       .expect("trying to complete a machine which failed to preprocess")
       .0;
 
-    self.signing_protocol().complete_internal(machine, shares)
+    DkgConfirmerSigningProtocol::<'_, T>::complete_internal(machine, shares)
   }
 }

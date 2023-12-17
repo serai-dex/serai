@@ -112,9 +112,9 @@ async fn test_ecrecover_hack() {
   let algo = IetfSchnorr::<Secp256k1, crypto::EthereumHram>::ietf();
   let sig = sign(
     &mut OsRng,
-    algo.clone(),
+    &algo,
     keys.clone(),
-    algorithm_machines(&mut OsRng, algo, &keys),
+    algorithm_machines(&mut OsRng, &algo, &keys),
     full_message,
   );
   let mut processed_sig =

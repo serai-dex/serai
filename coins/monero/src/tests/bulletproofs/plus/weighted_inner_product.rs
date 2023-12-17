@@ -23,7 +23,7 @@ fn test_zero_weighted_inner_product() {
   let witness = WipWitness::new(ScalarVector::new(1), ScalarVector::new(1), Scalar::ZERO).unwrap();
 
   let transcript = Scalar::random(&mut OsRng);
-  let proof = statement.clone().prove(&mut OsRng, transcript, witness).unwrap();
+  let proof = statement.clone().prove(&mut OsRng, transcript, &witness).unwrap();
 
   let mut verifier = BatchVerifier::new(1);
   statement.verify(&mut OsRng, &mut verifier, (), transcript, proof);
@@ -37,8 +37,8 @@ fn test_weighted_inner_product() {
   let generators = Generators::new();
   for i in [1, 2, 4, 8, 16, 32] {
     let generators = generators.reduce(i);
-    let g = generators.g();
-    let h = generators.h();
+    let g = Generators::g();
+    let h = Generators::h();
     assert_eq!(generators.len(), i);
     let mut g_bold = vec![];
     let mut h_bold = vec![];
@@ -75,7 +75,7 @@ fn test_weighted_inner_product() {
     let witness = WipWitness::new(a, b, alpha).unwrap();
 
     let transcript = Scalar::random(&mut OsRng);
-    let proof = statement.clone().prove(&mut OsRng, transcript, witness).unwrap();
+    let proof = statement.clone().prove(&mut OsRng, transcript, &witness).unwrap();
     statement.verify(&mut OsRng, &mut verifier, (), transcript, proof);
   }
   assert!(verifier.verify_vartime());

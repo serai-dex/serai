@@ -262,6 +262,7 @@ impl Polyseed {
   }
 
   /// Create a new `Polyseed` from a String.
+  #[allow(clippy::needless_pass_by_value)]
   pub fn from_string(seed: Zeroizing<String>) -> Result<Polyseed, SeedError> {
     // Decode the seed into its polynomial coefficients
     let mut poly = [0; POLYSEED_LENGTH];
@@ -302,7 +303,7 @@ impl Polyseed {
           }
 
           let Some(coeff) = (if lang.has_accent {
-            let ascii = |word: &str| word.chars().filter(|c| c.is_ascii()).collect::<String>();
+            let ascii = |word: &str| word.chars().filter(char::is_ascii).collect::<String>();
             check_if_matches(
               lang.has_prefix,
               lang.words.iter().map(|lang_word| ascii(lang_word)),

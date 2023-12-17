@@ -89,7 +89,7 @@ fn empty_block() {
       LAST,
       HashMap::new(),
       &mut |_, _| None,
-      validators,
+      &validators,
       commit,
       unsigned_in_chain,
       provided_in_chain,
@@ -129,7 +129,7 @@ fn duplicate_nonces() {
         last_nonce += 1;
         Some(res)
       },
-      validators.clone(),
+      &validators,
       commit,
       unsigned_in_chain,
       provided_in_chain,

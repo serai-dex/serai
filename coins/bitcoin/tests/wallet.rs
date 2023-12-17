@@ -91,14 +91,14 @@ fn keys() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, ProjectivePoint) {
 
 fn sign(
   keys: &HashMap<Participant, ThresholdKeys<Secp256k1>>,
-  tx: SignableTransaction,
+  tx: &SignableTransaction,
 ) -> Transaction {
   let mut machines = HashMap::new();
   for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
     machines.insert(
       i,
       tx.clone()
-        .multisig(keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
+        .multisig(&keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
         .unwrap(),
     );
   }
@@ -206,7 +206,7 @@ async_sequential! {
     // No change
     assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
     // Consolidation TX
-    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
+    assert!(SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, FEE).is_ok());
     // Data
     assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
     // No outputs
@@ -229,7 +229,7 @@ async_sequential! {
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
+      SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, 0),
       Err(TransactionError::TooLowFee),
     );
 
@@ -274,13 +274,13 @@ async_sequential! {
     let tx = SignableTransaction::new(
       vec![output.clone(), offset_output.clone()],
       &payments,
-      Some(change_addr.clone()),
+      Some(&change_addr),
       None,
       FEE
     ).unwrap();
     let needed_fee = tx.needed_fee();
     let expected_id = tx.txid();
-    let tx = sign(&keys, tx);
+    let tx = sign(&keys, &tx);
 
     assert_eq!(tx.output.len(), 3);
 
@@ -341,10 +341,10 @@ async_sequential! {
 
     let tx = sign(
       &keys,
-      SignableTransaction::new(
+      &SignableTransaction::new(
         vec![output],
         &[],
-        Some(Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())),
+        Some(&Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())),
         Some(data.clone()),
         FEE
       ).unwrap()

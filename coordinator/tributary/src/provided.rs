@@ -103,17 +103,11 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
 
     // get local and on-chain tx numbers
     let local_key = Self::locally_provided_quantity_key(&self.genesis, order);
-    let mut local_quantity = self
-      .db
-      .get(&local_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
+    let mut local_quantity =
+      self.db.get(&local_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
     let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
-    let on_chain_quantity = self
-      .db
-      .get(on_chain_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
+    let on_chain_quantity =
+      self.db.get(on_chain_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
 
     let current_provided_key = self.current_provided_key();
 
@@ -158,7 +152,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     block: [u8; 32],
     tx: [u8; 32],
   ) {
-    if let Some(next_tx) = self.transactions.get_mut(order).and_then(|queue| queue.pop_front()) {
+    if let Some(next_tx) = self.transactions.get_mut(order).and_then(VecDeque::pop_front) {
       assert_eq!(next_tx.hash(), tx);
 
       let current_provided_key = self.current_provided_key();
@@ -184,11 +178,8 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     // bump the on-chain tx number.
     let on_chain_key = Self::on_chain_provided_quantity_key(&self.genesis, order);
     let block_order_key = Self::block_provided_quantity_key(&self.genesis, &block, order);
-    let mut on_chain_quantity = self
-      .db
-      .get(&on_chain_key)
-      .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
-      .unwrap_or(0);
+    let mut on_chain_quantity =
+      self.db.get(&on_chain_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
 
     let this_provided_id = on_chain_quantity;
     txn.put(Self::on_chain_provided_key(&self.genesis, order, this_provided_id), tx);

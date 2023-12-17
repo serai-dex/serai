@@ -96,7 +96,7 @@ fn core(
   msg: &[u8; 32],
   D: &EdwardsPoint,
   s: &[Scalar],
-  A_c1: Mode,
+  A_c1: &Mode,
 ) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
@@ -164,7 +164,7 @@ fn core(
     Mode::Verify(c1) => {
       start = 0;
       end = n;
-      c = c1;
+      c = *c1;
     }
   }
 
@@ -226,7 +226,7 @@ impl Clsag {
       s.push(random_scalar(rng));
     }
     let ((D, p, c), c1) =
-      core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, Mode::Sign(r, A, AH));
+      core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
 
     (Clsag { D, s, c1 }, pseudo_out, p, c * z)
   }
@@ -301,7 +301,7 @@ impl Clsag {
       Err(ClsagError::InvalidD)?;
     }
 
-    let (_, c1) = core(ring, I, pseudo_out, msg, &D, &self.s, Mode::Verify(self.c1));
+    let (_, c1) = core(ring, I, pseudo_out, msg, &D, &self.s, &Mode::Verify(self.c1));
     if c1 != self.c1 {
       Err(ClsagError::InvalidC1)?;
     }
