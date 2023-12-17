@@ -129,11 +129,6 @@ w3f-bls = { path = "substrate/tree-cleanup/w3f-bls" }
 [patch."https://github.com/w3f/ring-vrf"]
 bandersnatch_vrfs = { path = "substrate/tree-cleanup/bandersnatch_vrfs" }
 
-# The external arkworks-substrate repo refers back to the paritytech
-# polkadot-sdk repo, hence patching it to point to serai-dex's
-[patch."https://github.com/paritytech/polkadot-sdk"]
-sp-crypto-ec-utils = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
-
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
 borrow_as_ptr = "deny"
