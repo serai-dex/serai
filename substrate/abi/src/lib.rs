@@ -41,7 +41,7 @@ pub enum TransactionPaymentEvent {
 pub enum Event {
   System(system::Event),
   Timestamp,
-  TransactionPayment(TransactionPaymentEvent),
+  TransactionPayment,
   Coins(coins::Event),
   LiquidityTokens(coins::Event),
   Dex(dex::Event),
@@ -65,7 +65,6 @@ pub struct Extra {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SignedPayloadExtra {
   pub spec_version: u32,
-  pub tx_version: u32,
   pub genesis: [u8; 32],
   pub mortality_checkpoint: [u8; 32],
 }

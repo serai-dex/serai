@@ -9,7 +9,8 @@ RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
 # Install dependencies
 RUN apt install clang -y
 
-# Add the wasm toolchain
+# Add the std src and wasm toolchain
+RUN rustup component add rust-src
 RUN rustup target add wasm32-unknown-unknown
 
 # Add files for build

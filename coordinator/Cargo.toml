@@ -39,7 +39,7 @@ processor-messages = { package = "serai-processor-messages", path = "../processo
 message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary = { package = "tributary-chain", path = "./tributary" }
 
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+sp-application-crypto = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai", "borsh"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
@@ -54,8 +54,8 @@ libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
+sp-application-crypto = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false, features = ["std"] }
 
 [features]
 parity-db = ["serai-db/parity-db"]

@@ -8,7 +8,6 @@ notice = "warn"
 unmaintained = "warn"
 
 ignore = [
-  "RUSTSEC-2021-0139", # https://github.com/serai-dex/serai/228
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
 ]
 
@@ -98,6 +97,6 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/serai-dex/substrate-bip39",
-  "https://github.com/serai-dex/substrate",
+  "https://github.com/serai-dex/polkadot-sdk",
   "https://github.com/monero-rs/base58-monero",
 ]

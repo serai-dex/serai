@@ -1,0 +1,17 @@
+[package]
+name = "directories-next"
+version = "2.0.0"
+description = "Patch from directories-next back to directories"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/tree-cleanup/directories-next"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.74"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+directories = "5"

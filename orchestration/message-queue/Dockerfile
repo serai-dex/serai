@@ -22,7 +22,8 @@ RUN apt install -y pkg-config clang
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler
 
-# Add the wasm toolchain
+# Add the std src and wasm toolchain
+RUN rustup component add rust-src
 RUN rustup target add wasm32-unknown-unknown
 
 # Add files for build

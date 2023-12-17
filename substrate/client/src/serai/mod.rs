@@ -167,7 +167,6 @@ impl Serai {
 
   pub fn sign(&self, signer: &Pair, call: Call, nonce: u32, tip: u64) -> Transaction {
     const SPEC_VERSION: u32 = 1;
-    const TX_VERSION: u32 = 1;
 
     let extra =
       Extra { era: sp_runtime::generic::Era::Immortal, nonce: Compact(nonce), tip: Compact(tip) };
@@ -176,7 +175,6 @@ impl Serai {
       &extra,
       SignedPayloadExtra {
         spec_version: SPEC_VERSION,
-        tx_version: TX_VERSION,
         genesis: self.genesis,
         mortality_checkpoint: self.genesis,
       },

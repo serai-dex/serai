@@ -16,13 +16,12 @@ fn account_from_name(name: &'static str) -> PublicKey {
 }
 
 fn testnet_genesis(
-  wasm_binary: &[u8],
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
 ) -> RuntimeGenesisConfig {
   let validators = validators.iter().map(|name| account_from_name(name)).collect::<Vec<_>>();
   RuntimeGenesisConfig {
-    system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
+    system: SystemConfig { _config: PhantomData },
 
     transaction_payment: Default::default(),
 
@@ -67,6 +66,7 @@ fn testnet_genesis(
 pub fn development_config() -> Result<ChainSpec, &'static str> {
   let wasm_binary = WASM_BINARY.ok_or("Development wasm not available")?;
 
+  #[allow(deprecated)]
   Ok(ChainSpec::from_genesis(
     // Name
     "Development Network",
@@ -75,7 +75,6 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
     ChainType::Development,
     || {
       testnet_genesis(
-        wasm_binary,
         &["Alice"],
         vec![
           account_from_name("Alice"),
@@ -99,12 +98,15 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
     None,
     // Extensions
     None,
+    // Code
+    wasm_binary,
   ))
 }
 
 pub fn testnet_config() -> Result<ChainSpec, &'static str> {
   let wasm_binary = WASM_BINARY.ok_or("Testnet wasm not available")?;
 
+  #[allow(deprecated)]
   Ok(ChainSpec::from_genesis(
     // Name
     "Local Test Network",
@@ -113,7 +115,6 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
     ChainType::Local,
     || {
       testnet_genesis(
-        wasm_binary,
         &["Alice", "Bob", "Charlie", "Dave"],
         vec![
           account_from_name("Alice"),
@@ -137,5 +138,7 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
     None,
     // Extensions
     None,
+    // Code
+    wasm_binary,
   ))
 }

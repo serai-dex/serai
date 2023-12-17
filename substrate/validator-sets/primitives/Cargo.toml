@@ -27,8 +27,8 @@ serde = { version = "1", default-features = false, features = ["derive", "alloc"
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 

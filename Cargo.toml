@@ -36,6 +36,12 @@ members = [
   "coordinator/tributary",
   "coordinator",
 
+  "substrate/tree-cleanup/is-terminal",
+  "substrate/tree-cleanup/option-ext",
+  "substrate/tree-cleanup/directories-next",
+  "substrate/tree-cleanup/bandersnatch_vrfs",
+  "substrate/tree-cleanup/w3f-bls",
+
   "substrate/primitives",
 
   "substrate/coins/primitives",
@@ -94,8 +100,34 @@ panic = "unwind"
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
 # subxt *can* pull these off crates.io yet there's no benefit to this
-sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
-sp-std = { git = "https://github.com/serai-dex/substrate" }
+sp-core-hashing = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "experimental" }
+
+# is-terminal now has an std-based solution with an equivalent API
+is-terminal = { path = "substrate/tree-cleanup/is-terminal" }
+# So does matches
+matches = { path = "substrate/tree-cleanup/matches" }
+
+# directories-next was created because directories was unmaintained
+# directories-next is now unmaintained while directories is maintained
+# The directories author pulls in ridiculously pointless crates and prefers
+# copyleft licenses
+# Serai's polkadot-sdk consolidated to directories-next, as directories-next is
+# acceptable and because we couldn't consolidate to directories without forking
+# wasmtime
+# The following two patches resolve everything
+option-ext = { path = "substrate/tree-cleanup/option-ext" }
+directories-next = { path = "substrate/tree-cleanup/directories-next" }
+
+# mach is unmaintained, so this wraps mach2 as mach
+mach = { path = "substrate/tree-cleanup/mach" }
+
+# cargo believes the following are in-tree despite no features activating them
+# We provide empty crates to not only prove they're unused, yet also clean up
+# our Cargo.lock
+w3f-bls = { path = "substrate/tree-cleanup/w3f-bls" }
+[patch."https://github.com/w3f/ring-vrf"]
+bandersnatch_vrfs = { path = "substrate/tree-cleanup/bandersnatch_vrfs" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
