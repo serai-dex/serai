@@ -215,14 +215,16 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   mut map: HashMap<Participant, Vec<u8>>,
 ) -> (Vec<<Ristretto as Ciphersuite>::G>, HashMap<Participant, Vec<u8>>) {
   // Insert our own index so calculations aren't offset
-  let our_threshold_i =
-    spec.i(removed, <Ristretto as Ciphersuite>::generator() * our_key.deref()).unwrap().start;
+  let our_threshold_i = spec
+    .i(removed, <Ristretto as Ciphersuite>::generator() * our_key.deref())
+    .expect("MuSig t-of-n signing a for a protocol we were removed from")
+    .start;
   assert!(map.insert(our_threshold_i, vec![]).is_none());
 
   let spec_validators = spec.validators();
   let key_from_threshold_i = |threshold_i| {
     for (key, _) in &spec_validators {
-      if threshold_i == spec.i(removed, *key).unwrap().start {
+      if threshold_i == spec.i(removed, *key).expect("MuSig t-of-n participant was removed").start {
         return *key;
       }
     }

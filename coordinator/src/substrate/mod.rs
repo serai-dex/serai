@@ -276,6 +276,9 @@ async fn handle_block<D: Db, Pro: Processors>(
           },
         )
         .await;
+
+      // TODO: If we were in the set, yet were removed, drop the tributary
+
       let mut txn = db.txn();
       SeraiDkgCompleted::set(&mut txn, set, &substrate_key);
       HandledEvent::handle_event(&mut txn, hash, event_id);

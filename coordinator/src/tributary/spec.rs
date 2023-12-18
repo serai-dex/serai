@@ -137,6 +137,19 @@ impl TributarySpec {
     Some(result_i)
   }
 
+  pub fn reverse_lookup_i(
+    &self,
+    removed_validators: &[<Ristretto as Ciphersuite>::G],
+    i: Participant,
+  ) -> Option<<Ristretto as Ciphersuite>::G> {
+    for (validator, _) in &self.validators {
+      if self.i(removed_validators, *validator).map_or(false, |range| range.contains(&i)) {
+        return Some(*validator);
+      }
+    }
+    None
+  }
+
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
     self.validators.iter().map(|(validator, weight)| (*validator, u64::from(*weight))).collect()
   }

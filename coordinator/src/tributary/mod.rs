@@ -32,18 +32,10 @@ pub fn removed_as_of_dkg_attempt(
   if attempt == 0 {
     Some(vec![])
   } else {
-    FatalSlashesAsOfDkgAttempt::get(getter, genesis, attempt).map(|keys| {
+    RemovedAsOfDkgAttempt::get(getter, genesis, attempt).map(|keys| {
       keys.iter().map(|key| <Ristretto as Ciphersuite>::G::from_bytes(key).unwrap()).collect()
     })
   }
-}
-
-pub fn latest_removed(getter: &impl Get, genesis: [u8; 32]) -> Vec<<Ristretto as Ciphersuite>::G> {
-  FatalSlashes::get(getter, genesis)
-    .unwrap_or(vec![])
-    .iter()
-    .map(|key| <Ristretto as Ciphersuite>::G::from_bytes(key).unwrap())
-    .collect()
 }
 
 pub fn removed_as_of_set_keys(

@@ -131,8 +131,8 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
 #[derive(Clone, PartialEq, Eq)]
 pub enum Transaction {
   RemoveParticipantDueToDkg {
-    attempt: u32,
-    participant: Participant,
+    participant: <Ristretto as Ciphersuite>::G,
+    signed: Signed,
   },
 
   DkgCommitments {
@@ -195,11 +195,11 @@ pub enum Transaction {
 impl Debug for Transaction {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { attempt, participant } => fmt
+      Transaction::RemoveParticipantDueToDkg { participant, signed } => fmt
         .debug_struct("Transaction::RemoveParticipantDueToDkg")
-        .field("participant", participant)
-        .field("attempt", attempt)
-        .finish(),
+        .field("participant", &hex::encode(participant.to_bytes()))
+        .field("signer", &hex::encode(signed.signer.to_bytes()))
+        .finish_non_exhaustive(),
       Transaction::DkgCommitments { attempt, commitments: _, signed } => fmt
         .debug_struct("Transaction::DkgCommitments")
         .field("attempt", attempt)
@@ -255,17 +255,8 @@ impl ReadWrite for Transaction {
 
     match kind[0] {
       0 => Ok(Transaction::RemoveParticipantDueToDkg {
-        attempt: {
-          let mut attempt = [0; 4];
-          reader.read_exact(&mut attempt)?;
-          u32::from_le_bytes(attempt)
-        },
-        participant: {
-          let mut participant = [0; 2];
-          reader.read_exact(&mut participant)?;
-          Participant::new(u16::from_le_bytes(participant))
-            .ok_or_else(|| io::Error::other("invalid participant in RemoveParticipantDueToDkg"))?
-        },
+        participant: Ristretto::read_G(reader)?,
+        signed: Signed::read_without_nonce(reader, 0)?,
       }),
 
       1 => {
@@ -428,10 +419,10 @@ impl ReadWrite for Transaction {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { attempt, participant } => {
+      Transaction::RemoveParticipantDueToDkg { participant, signed } => {
         writer.write_all(&[0])?;
-        writer.write_all(&attempt.to_le_bytes())?;
-        writer.write_all(&u16::from(*participant).to_le_bytes())
+        writer.write_all(&participant.to_bytes())?;
+        signed.write_without_nonce(writer)
       }
 
       Transaction::DkgCommitments { attempt, commitments, signed } => {
@@ -457,7 +448,7 @@ impl ReadWrite for Transaction {
         writer.write_all(&[2])?;
         writer.write_all(&attempt.to_le_bytes())?;
 
-        // `shares` is a Vec which is supposed to map to a HashMap<Pariticpant, Vec<u8>>. Since we
+        // `shares` is a Vec which is supposed to map to a HashMap<Participant, Vec<u8>>. Since we
         // bound participants to 150, this conversion is safe if a valid in-memory transaction.
         writer.write_all(&[u8::try_from(shares.len()).unwrap()])?;
         // This assumes at least one share is being sent to another party
@@ -545,7 +536,9 @@ impl ReadWrite for Transaction {
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { .. } => TransactionKind::Provided("remove"),
+      Transaction::RemoveParticipantDueToDkg { participant, signed } => {
+        TransactionKind::Signed((b"remove", participant.to_bytes()).encode(), signed)
+      }
 
       Transaction::DkgCommitments { attempt, commitments: _, signed } |
       Transaction::DkgShares { attempt, signed, .. } |
@@ -612,10 +605,9 @@ impl Transaction {
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   ) {
     fn signed(tx: &mut Transaction) -> (u32, &mut Signed) {
+      #[allow(clippy::match_same_arms)] // Doesn't make semantic sense here
       let nonce = match tx {
-        Transaction::RemoveParticipantDueToDkg { .. } => {
-          panic!("signing RemoveParticipantDueToDkg")
-        }
+        Transaction::RemoveParticipantDueToDkg { .. } => 0,
 
         Transaction::DkgCommitments { .. } => 0,
         Transaction::DkgShares { .. } => 1,
@@ -635,8 +627,7 @@ impl Transaction {
       (
         nonce,
         match tx {
-          Transaction::RemoveParticipantDueToDkg { .. } => panic!("signing RemoveParticipant"),
-
+          Transaction::RemoveParticipantDueToDkg { ref mut signed, .. } |
           Transaction::DkgCommitments { ref mut signed, .. } |
           Transaction::DkgShares { ref mut signed, .. } |
           Transaction::InvalidDkgShare { ref mut signed, .. } |
