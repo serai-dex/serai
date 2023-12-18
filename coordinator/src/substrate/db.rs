@@ -13,7 +13,7 @@ mod inner_db {
     }
   );
 }
-pub use inner_db::{NextBlock, BatchInstructionsHashDb};
+pub(crate) use inner_db::{NextBlock, BatchInstructionsHashDb};
 
 pub struct HandledEvent;
 impl HandledEvent {

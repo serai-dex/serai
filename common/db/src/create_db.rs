@@ -42,9 +42,9 @@ macro_rules! create_db {
   }) => {
     $(
       #[derive(Clone, Debug)]
-      pub struct $field_name;
+      pub(crate) struct $field_name;
       impl $field_name {
-        pub fn key($($arg: $arg_type),*) -> Vec<u8> {
+        pub(crate) fn key($($arg: $arg_type),*) -> Vec<u8> {
           use scale::Encode;
           $crate::serai_db_key(
             stringify!($db_name).as_bytes(),
@@ -52,17 +52,17 @@ macro_rules! create_db {
             ($($arg),*).encode()
           )
         }
-        pub fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &$field_type) {
+        pub(crate) fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &$field_type) {
           let key = $field_name::key($($arg),*);
           txn.put(&key, borsh::to_vec(data).unwrap());
         }
-        pub fn get(getter: &impl Get, $($arg: $arg_type),*) -> Option<$field_type> {
+        pub(crate) fn get(getter: &impl Get, $($arg: $arg_type),*) -> Option<$field_type> {
           getter.get($field_name::key($($arg),*)).map(|data| {
             borsh::from_slice(data.as_ref()).unwrap()
           })
         }
         #[allow(dead_code)]
-        pub fn del(txn: &mut impl DbTxn $(, $arg: $arg_type)*) {
+        pub(crate) fn del(txn: &mut impl DbTxn $(, $arg: $arg_type)*) {
           txn.del(&$field_name::key($($arg),*))
         }
       }
@@ -83,7 +83,7 @@ macro_rules! db_channel {
       }
 
       impl $field_name {
-        pub fn send(txn: &mut impl DbTxn $(, $arg: $arg_type)*, value: &$field_type) {
+        pub(crate) fn send(txn: &mut impl DbTxn $(, $arg: $arg_type)*, value: &$field_type) {
           // Use index 0 to store the amount of messages
           let messages_sent_key = $field_name::key($($arg),*, 0);
           let messages_sent = txn.get(&messages_sent_key).map(|counter| {
@@ -98,7 +98,7 @@ macro_rules! db_channel {
 
           $field_name::set(txn, $($arg),*, index_to_use, value);
         }
-        pub fn try_recv(txn: &mut impl DbTxn $(, $arg: $arg_type)*) -> Option<$field_type> {
+        pub(crate) fn try_recv(txn: &mut impl DbTxn $(, $arg: $arg_type)*) -> Option<$field_type> {
           let messages_recvd_key = $field_name::key($($arg),*, 1);
           let messages_recvd = txn.get(&messages_recvd_key).map(|counter| {
             u32::from_le_bytes(counter.try_into().unwrap())
