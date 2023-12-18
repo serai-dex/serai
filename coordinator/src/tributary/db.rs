@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
 use serai_client::validator_sets::primitives::{KeyPair, ValidatorSet};
@@ -49,26 +50,41 @@ create_db!(
 
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
+
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
-    FatalSlashesAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
+    RemovedAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
+    OfflineDuringDkg: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
-    DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,
-    PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
-    ConfirmationNonces: (genesis: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
-    RemovalNonces:
-      (genesis: [u8; 32], removing: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
-    DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
-    KeyToDkgAttempt: (key: [u8; 32]) -> u32,
-    DkgCompleted: (genesis: [u8; 32]) -> (),
-    LocallyDkgRemoved: (genesis: [u8; 32], validator: [u8; 32]) -> (),
+
+    VotedToRemove: (genesis: [u8; 32], voter: [u8; 32], to_remove: [u8; 32]) -> (),
+    VotesToRemove: (genesis: [u8; 32], to_remove: [u8; 32]) -> u16,
+
     AttemptDb: (genesis: [u8; 32], topic: &Topic) -> u32,
     ReattemptDb: (genesis: [u8; 32], block: u32) -> Vec<Topic>,
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
     DataDb: (genesis: [u8; 32], data_spec: &DataSpecification, signer_bytes: &[u8; 32]) -> Vec<u8>,
 
+    DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,
+    ConfirmationNonces: (genesis: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
+    DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
+    KeyToDkgAttempt: (key: [u8; 32]) -> u32,
+    DkgLocallyCompleted: (genesis: [u8; 32]) -> (),
+
+    PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
+
     SignedTransactionDb: (order: &[u8], nonce: u32) -> Vec<u8>,
   }
 );
+
+impl FatalSlashes {
+  pub fn get_as_keys(getter: &impl Get, genesis: [u8; 32]) -> Vec<<Ristretto as Ciphersuite>::G> {
+    FatalSlashes::get(getter, genesis)
+      .unwrap_or(vec![])
+      .iter()
+      .map(|key| <Ristretto as Ciphersuite>::G::from_bytes(key).unwrap())
+      .collect::<Vec<_>>()
+  }
+}
 
 impl FatallySlashed {
   pub fn set_fatally_slashed(txn: &mut impl DbTxn, genesis: [u8; 32], account: [u8; 32]) {

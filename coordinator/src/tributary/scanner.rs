@@ -1,10 +1,9 @@
 use core::{marker::PhantomData, ops::Deref, future::Future, time::Duration};
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashSet};
 
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::Participant;
 
 use tokio::sync::broadcast;
 
@@ -193,42 +192,17 @@ impl<
   > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
 {
   pub fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
-    // TODO: If this fatal slash puts the remaining set below the threshold, spin
-
     let genesis = self.spec.genesis();
 
     log::warn!("fatally slashing {}. reason: {}", hex::encode(slashing), reason);
     FatallySlashed::set_fatally_slashed(self.txn, genesis, slashing);
-    // TODO: disconnect the node from network/ban from further participation in all Tributaries
 
-    // TODO: If during DKG, trigger a re-attempt
-    // Despite triggering a re-attempt, this DKG may still complete and may become in-use
+    // TODO: disconnect the node from network/ban from further participation in all Tributaries
   }
 
   // TODO: Once Substrate confirms a key, we need to rotate our validator set OR form a second
   // Tributary post-DKG
   // https://github.com/serai-dex/serai/issues/426
-
-  pub fn fatal_slash_with_participant_index(
-    &mut self,
-    removed: &[<Ristretto as Ciphersuite>::G],
-    i: Participant,
-    reason: &str,
-  ) {
-    // Resolve from Participant to <Ristretto as Ciphersuite>::G
-    let i = u16::from(i);
-    let mut validator = None;
-    for (potential, _) in self.spec.validators() {
-      let v_i = self.spec.i(removed, potential).unwrap();
-      if (u16::from(v_i.start) <= i) && (i < u16::from(v_i.end)) {
-        validator = Some(potential);
-        break;
-      }
-    }
-    let validator = validator.unwrap();
-
-    self.fatal_slash(validator.to_bytes(), reason);
-  }
 
   async fn handle<D: Db>(mut self) {
     log::info!("found block for Tributary {:?}", self.spec.set());
@@ -267,9 +241,150 @@ impl<
     }
 
     let genesis = self.spec.genesis();
+
+    let current_fatal_slashes = FatalSlashes::get_as_keys(self.txn, genesis);
+
+    // Calculate the shares still present, spinning if not enough are
+    // still_present_shares is used by a below branch, yet it's a natural byproduct of checking if
+    // we should spin, hence storing it in a variable here
+    let still_present_shares = {
+      // Start with the original n value
+      let mut present_shares = self.spec.n(&[]);
+      // Remove everyone fatally slashed
+      for removed in &current_fatal_slashes {
+        let original_i_for_removed =
+          self.spec.i(&[], *removed).expect("removed party was never present");
+        let removed_shares =
+          u16::from(original_i_for_removed.end) - u16::from(original_i_for_removed.start);
+        present_shares -= removed_shares;
+      }
+
+      // Spin if the present shares don't satisfy the required threshold
+      if present_shares < self.spec.t() {
+        loop {
+          log::error!(
+            "fatally slashed so many participants for {:?} we no longer meet the threshold",
+            self.spec.set()
+          );
+          tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+        }
+      }
+
+      present_shares
+    };
+
     for topic in ReattemptDb::take(self.txn, genesis, self.block_number) {
       let attempt = AttemptDb::start_next_attempt(self.txn, genesis, topic);
       log::info!("re-attempting {topic:?} with attempt {attempt}");
+
+      // Slash people who failed to participate as expected in the prior attempt
+      {
+        let prior_attempt = attempt - 1;
+        let (removed, expected_participants) = match topic {
+          Topic::Dkg => {
+            // Every validator who wasn't removed is expected to have participated
+            let removed =
+              crate::tributary::removed_as_of_dkg_attempt(self.txn, genesis, prior_attempt)
+                .expect("prior attempt didn't have its removed saved to disk");
+            let removed_set = removed.iter().copied().collect::<HashSet<_>>();
+            (
+              removed,
+              self
+                .spec
+                .validators()
+                .into_iter()
+                .filter_map(|(validator, _)| {
+                  Some(validator).filter(|validator| !removed_set.contains(validator))
+                })
+                .collect(),
+            )
+          }
+          Topic::DkgConfirmation => {
+            panic!("TODO: re-attempting DkgConfirmation when we should be re-attempting the Dkg")
+          }
+          Topic::SubstrateSign(_) | Topic::Sign(_) => {
+            let removed =
+              crate::tributary::removed_as_of_set_keys(self.txn, self.spec.set(), genesis)
+                .expect("SubstrateSign/Sign yet have yet to set keys");
+            // TODO: If 67% sent preprocesses, this should be them. Else, this should be vec![]
+            let expected_participants = vec![];
+            (removed, expected_participants)
+          }
+        };
+
+        let (expected_topic, expected_label) = match topic {
+          Topic::Dkg => {
+            let n = self.spec.n(&removed);
+            // If we got all the DKG shares, we should be on DKG confirmation
+            let share_spec =
+              DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt: prior_attempt };
+            if DataReceived::get(self.txn, genesis, &share_spec).unwrap_or(0) == n {
+              // Label::Share since there is no Label::Preprocess for DkgConfirmation since the
+              // preprocess is part of Topic::Dkg Label::Share
+              (Topic::DkgConfirmation, Label::Share)
+            } else {
+              let preprocess_spec = DataSpecification {
+                topic: Topic::Dkg,
+                label: Label::Preprocess,
+                attempt: prior_attempt,
+              };
+              // If we got all the DKG preprocesses, DKG shares
+              if DataReceived::get(self.txn, genesis, &preprocess_spec).unwrap_or(0) == n {
+                // Label::Share since there is no Label::Preprocess for DkgConfirmation since the
+                // preprocess is part of Topic::Dkg Label::Share
+                (Topic::Dkg, Label::Share)
+              } else {
+                (Topic::Dkg, Label::Preprocess)
+              }
+            }
+          }
+          Topic::DkgConfirmation => unreachable!(),
+          // If we got enough participants to move forward, then we expect shares from them all
+          Topic::SubstrateSign(_) | Topic::Sign(_) => (topic, Label::Share),
+        };
+
+        let mut did_not_participate = vec![];
+        for expected_participant in expected_participants {
+          if DataDb::get(
+            self.txn,
+            genesis,
+            &DataSpecification {
+              topic: expected_topic,
+              label: expected_label,
+              attempt: prior_attempt,
+            },
+            &expected_participant.to_bytes(),
+          )
+          .is_none()
+          {
+            did_not_participate.push(expected_participant);
+          }
+        }
+
+        // If a supermajority didn't participate as expected, the protocol was likely aborted due
+        // to detection of a completion or some larger networking error
+        // Accordingly, clear did_not_participate
+        // TODO
+
+        // If during the DKG, explicitly mark these people as having been offline
+        // TODO: If they were offline sufficiently long ago, don't strike them off
+        if topic == Topic::Dkg {
+          let mut existing = OfflineDuringDkg::get(self.txn, genesis).unwrap_or(vec![]);
+          for did_not_participate in did_not_participate {
+            existing.push(did_not_participate.to_bytes());
+          }
+          OfflineDuringDkg::set(self.txn, genesis, &existing);
+        }
+
+        // Slash everyone who didn't participate as expected
+        // This may be overzealous as if a minority detects a completion, they'll abort yet the
+        // supermajority will cause the above allowance to not trigger, causing an honest minority
+        // to be slashed
+        // At the end of the protocol, the accumulated slashes are reduced by the amount obtained
+        // by the worst-performing member of the supermajority, and this is expected to
+        // sufficiently compensate for slashes which occur under normal operation
+        // TODO
+      }
 
       /*
         All of these have the same common flow:
@@ -290,33 +405,62 @@ impl<
       */
       match topic {
         Topic::Dkg => {
-          FatalSlashesAsOfDkgAttempt::set(
+          let mut removed = current_fatal_slashes.clone();
+
+          let t = self.spec.t();
+          {
+            let mut present_shares = still_present_shares;
+
+            // Load the parties marked as offline across the various attempts
+            let mut offline = OfflineDuringDkg::get(self.txn, genesis)
+              .unwrap_or(vec![])
+              .iter()
+              .map(|key| <Ristretto as Ciphersuite>::G::from_bytes(key).unwrap())
+              .collect::<Vec<_>>();
+            // Pop from the list to prioritize the removal of those recently offline
+            while let Some(offline) = offline.pop() {
+              // Make sure they weren't removed already (such as due to being fatally slashed)
+              // This also may trigger if they were offline across multiple attempts
+              if removed.contains(&offline) {
+                continue;
+              }
+
+              // If we can remove them and still meet the threshold, do so
+              let original_i_for_offline =
+                self.spec.i(&[], offline).expect("offline was never present?");
+              let offline_shares =
+                u16::from(original_i_for_offline.end) - u16::from(original_i_for_offline.start);
+              if (present_shares - offline_shares) >= t {
+                present_shares -= offline_shares;
+                removed.push(offline);
+              }
+
+              // If we've removed as many people as we can, break
+              if present_shares == t {
+                break;
+              }
+            }
+          }
+
+          RemovedAsOfDkgAttempt::set(
             self.txn,
             genesis,
             attempt,
-            &FatalSlashes::get(self.txn, genesis).unwrap_or(vec![]),
+            &removed.iter().map(<Ristretto as Ciphersuite>::G::to_bytes).collect(),
           );
 
-          if DkgCompleted::get(self.txn, genesis).is_none() {
+          if DkgLocallyCompleted::get(self.txn, genesis).is_none() {
+            let Some(our_i) = self.spec.i(&removed, Ristretto::generator() * self.our_key.deref())
+            else {
+              continue;
+            };
+
             // Since it wasn't completed, instruct the processor to start the next attempt
             let id =
               processor_messages::key_gen::KeyGenId { session: self.spec.set().session, attempt };
 
-            let removed = crate::tributary::latest_removed(self.txn, genesis);
-            let our_i =
-              self.spec.i(&removed, Ristretto::generator() * self.our_key.deref()).unwrap();
-
-            // TODO: Don't fatal slash, yet don't include, parties who have been offline so long as
-            // we still meet the needed threshold. This will have to have any parties removed for
-            // being offline, who aren't participating in the confirmed key, drop the Tributary and
-            // notify their processor.
-
-            // TODO: Instead of DKG confirmations taking a n-of-n MuSig, have it take a t-of-n with
-            // a specification of those explicitly removed and those removed due to being offline.
-
             let params =
-              frost::ThresholdParams::new(self.spec.t(), self.spec.n(&removed), our_i.start)
-                .unwrap();
+              frost::ThresholdParams::new(t, self.spec.n(&removed), our_i.start).unwrap();
             let shares = u16::from(our_i.end) - u16::from(our_i.start);
 
             self
@@ -328,9 +472,7 @@ impl<
               .await;
           }
         }
-        Topic::DkgConfirmation => {
-          panic!("re-attempting DkgConfirmation when we should be re-attempting the Dkg")
-        }
+        Topic::DkgConfirmation => unreachable!(),
         Topic::SubstrateSign(inner_id) => {
           let id = processor_messages::coordinator::SubstrateSignId {
             session: self.spec.set().session,

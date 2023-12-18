@@ -371,14 +371,22 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }]
         }
         key_gen::ProcessorMessage::InvalidCommitments { id, faulty } => {
-          // This doesn't need the ID since it's a Provided transaction which everyone will provide
-          // With this provision comes explicit ordering (with regards to other
-          // RemoveParticipantDueToDkg transactions) and group consensus
-          // Accordingly, this can't be replayed
-          // It could be included on-chain early/late with regards to the chain's active attempt,
-          // which attempt scheduling is written to make a non-issue by auto re-attempting once a
-          // fatal slash occurs, regardless of timing
-          vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant: faulty }]
+          // This doesn't have guaranteed timing
+          //
+          // While the party *should* be fatally slashed and not included in future attempts,
+          // they'll actually be fatally slashed (assuming liveness before the Tributary retires)
+          // and not included in future attempts *which begin after the latency window completes*
+          let participant = spec
+            .reverse_lookup_i(
+              &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
+                .expect("participating in DKG attempt yet we didn't save who was removed"),
+              faulty,
+            )
+            .unwrap();
+          vec![Transaction::RemoveParticipantDueToDkg {
+            participant,
+            signed: Transaction::empty_signed(),
+          }]
         }
         key_gen::ProcessorMessage::Shares { id, mut shares } => {
           // Create a MuSig-based machine to inform Substrate of this key generation
@@ -388,7 +396,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             .expect("participating in a DKG attempt yet we didn't track who was removed yet?");
           let our_i = spec
             .i(&removed, pub_key)
-            .expect("processor message to DKG for a session we aren't a validator in");
+            .expect("processor message to DKG for an attempt we aren't a validator in");
 
           // `tx_shares` needs to be done here as while it can be serialized from the HashMap
           // without further context, it can't be deserialized without context
@@ -417,30 +425,13 @@ async fn handle_processor_message<D: Db, P: P2p>(
           }]
         }
         key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
-          // Check if the MuSig signature had any errors as if so, we need to provide
-          // RemoveParticipantDueToDkg
-          // As for the safety of calling error_generating_key_pair, the processor is presumed
-          // to only send InvalidShare or GeneratedKeyPair for a given attempt
-          let mut txs = if let Some(faulty) =
-            crate::tributary::error_generating_key_pair(&mut txn, key, spec, id.attempt)
-          {
-            vec![Transaction::RemoveParticipantDueToDkg {
-              attempt: id.attempt,
-              participant: faulty,
-            }]
-          } else {
-            vec![]
-          };
-
-          txs.push(Transaction::InvalidDkgShare {
+          vec![Transaction::InvalidDkgShare {
             attempt: id.attempt,
             accuser,
             faulty,
             blame,
             signed: Transaction::empty_signed(),
-          });
-
-          txs
+          }]
         }
         key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
           // TODO2: Check the KeyGenId fields
@@ -454,6 +445,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             id.attempt,
           );
 
+          // TODO: Move this into generated_key_pair?
           match share {
             Ok(share) => {
               vec![Transaction::DkgConfirmed {
@@ -463,14 +455,32 @@ async fn handle_processor_message<D: Db, P: P2p>(
               }]
             }
             Err(p) => {
-              vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant: p }]
+              let participant = spec
+                .reverse_lookup_i(
+                  &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
+                    .expect("participating in DKG attempt yet we didn't save who was removed"),
+                  p,
+                )
+                .unwrap();
+              vec![Transaction::RemoveParticipantDueToDkg {
+                participant,
+                signed: Transaction::empty_signed(),
+              }]
             }
           }
         }
-        // This is a response to the ordered VerifyBlame, which is why this satisfies the provided
-        // transaction's needs to be perfectly ordered
         key_gen::ProcessorMessage::Blame { id, participant } => {
-          vec![Transaction::RemoveParticipantDueToDkg { attempt: id.attempt, participant }]
+          let participant = spec
+            .reverse_lookup_i(
+              &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
+                .expect("participating in DKG attempt yet we didn't save who was removed"),
+              participant,
+            )
+            .unwrap();
+          vec![Transaction::RemoveParticipantDueToDkg {
+            participant,
+            signed: Transaction::empty_signed(),
+          }]
         }
       },
       ProcessorMessage::Sign(msg) => match msg {

@@ -1,13 +1,14 @@
 use core::ops::Deref;
 use std::collections::HashMap;
 
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
+use rand_core::OsRng;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
-use serai_client::{Public, Signature, validator_sets::primitives::KeyPair};
+use serai_client::{Signature, validator_sets::primitives::KeyPair};
 
 use tributary::{Signed, TransactionKind, TransactionTrait};
 
@@ -42,35 +43,6 @@ pub fn dkg_confirmation_nonces(
     .preprocess()
 }
 
-// If there's an error generating a key pair, return any errors which would've occurred when
-// executing the DkgConfirmer in order to stay in sync with those who did.
-//
-// The caller must ensure only error_generating_key_pair or generated_key_pair is called for a
-// given attempt.
-pub fn error_generating_key_pair(
-  txn: &mut impl DbTxn,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
-  spec: &TributarySpec,
-  attempt: u32,
-) -> Option<Participant> {
-  let preprocesses = ConfirmationNonces::get(txn, spec.genesis(), attempt).unwrap();
-
-  // Sign a key pair which can't be valid
-  // (0xff used as 0 would be the Ristretto identity point, 0-length for the network key)
-  let key_pair = KeyPair(Public([0xff; 32]), vec![0xffu8; 0].try_into().unwrap());
-  match DkgConfirmer::new(key, spec, txn, attempt)
-    .expect("reporting an error during DKG for an unrecognized attempt")
-    .share(preprocesses, &key_pair)
-  {
-    Ok(mut share) => {
-      // Zeroize the share to ensure it's not accessed
-      share.zeroize();
-      None
-    }
-    Err(p) => Some(p),
-  }
-}
-
 pub fn generated_key_pair<D: Db>(
   txn: &mut D::Transaction<'_>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -92,7 +64,7 @@ fn unflatten(
   data: &mut HashMap<Participant, Vec<u8>>,
 ) {
   for (validator, _) in spec.validators() {
-    let range = spec.i(removed, validator).unwrap();
+    let Some(range) = spec.i(removed, validator) else { continue };
     let Some(all_segments) = data.remove(&range.start) else {
       continue;
     };
@@ -126,10 +98,10 @@ impl<
       panic!("accumulating data for a participant multiple times");
     }
     let signer_shares = {
-      let signer_i = self
-        .spec
-        .i(removed, signer)
-        .expect("transaction signed by a non-validator for this tributary");
+      let Some(signer_i) = self.spec.i(removed, signer) else {
+        log::warn!("accumulating data from {} who was removed", hex::encode(signer.to_bytes()));
+        return Accumulation::NotReady;
+      };
       u16::from(signer_i.end) - u16::from(signer_i.start)
     };
 
@@ -153,10 +125,6 @@ impl<
       // place
       assert_eq!(AttemptDb::attempt(self.txn, genesis, data_spec.topic), Some(data_spec.attempt));
       ReattemptDb::schedule_reattempt(self.txn, genesis, self.block_number, data_spec.topic);
-
-      // Because this attempt was participated in, it was justified
-      // The question becomes why did the prior attempt fail?
-      // TODO: Slash people who failed to participate as expected in the prior attempt
     }
 
     // If we have all the needed commitments/preprocesses/shares, tell the processor
@@ -169,37 +137,29 @@ impl<
         &data_spec.topic,
         &data_spec.attempt
       );
-      return Accumulation::Ready({
-        let mut data = HashMap::new();
-        for validator in self.spec.validators().iter().map(|validator| validator.0) {
-          data.insert(
-            self.spec.i(removed, validator).unwrap().start,
-            if let Some(data) = DataDb::get(self.txn, genesis, data_spec, &validator.to_bytes()) {
-              data
-            } else {
-              continue;
-            },
-          );
-        }
 
-        assert_eq!(data.len(), usize::from(needed));
+      let mut data = HashMap::new();
+      for validator in self.spec.validators().iter().map(|validator| validator.0) {
+        let Some(i) = self.spec.i(removed, validator) else { continue };
+        data.insert(
+          i.start,
+          if let Some(data) = DataDb::get(self.txn, genesis, data_spec, &validator.to_bytes()) {
+            data
+          } else {
+            continue;
+          },
+        );
+      }
 
-        // Remove our own piece of data, if we were involved
-        if data
-          .remove(
-            &self
-              .spec
-              .i(removed, Ristretto::generator() * self.our_key.deref())
-              .expect("handling a message for a Tributary we aren't part of")
-              .start,
-          )
-          .is_some()
-        {
-          DataSet::Participating(data)
-        } else {
-          DataSet::NotParticipating
+      assert_eq!(data.len(), usize::from(needed));
+
+      // Remove our own piece of data, if we were involved
+      if let Some(i) = self.spec.i(removed, Ristretto::generator() * self.our_key.deref()) {
+        if data.remove(&i.start).is_some() {
+          return Accumulation::Ready(DataSet::Participating(data));
         }
-      });
+      }
+      return Accumulation::Ready(DataSet::NotParticipating);
     }
     Accumulation::NotReady
   }
@@ -261,7 +221,12 @@ impl<
     signer: <Ristretto as Ciphersuite>::G,
     len: usize,
   ) -> Result<(), ()> {
-    let signer_i = self.spec.i(removed, signer).unwrap();
+    let Some(signer_i) = self.spec.i(removed, signer) else {
+      // TODO: Ensure processor doesn't so participate/check how it handles removals for being
+      // offline
+      self.fatal_slash(signer.to_bytes(), "signer participated despite being removed");
+      Err(())?
+    };
     if len != usize::from(u16::from(signer_i.end) - u16::from(signer_i.start)) {
       self.fatal_slash(
         signer.to_bytes(),
@@ -288,17 +253,33 @@ impl<
     }
 
     match tx {
-      Transaction::RemoveParticipantDueToDkg { attempt, participant } => self
-        .fatal_slash_with_participant_index(
-          &removed_as_of_dkg_attempt(self.txn, genesis, attempt).unwrap_or_else(|| {
-            panic!(
-              "removed a participant due to a provided transaction with an attempt not {}",
-              "locally handled?"
-            )
-          }),
-          participant,
-          "RemoveParticipantDueToDkg Provided TX",
-        ),
+      Transaction::RemoveParticipantDueToDkg { participant, signed } => {
+        if self.spec.i(&[], participant).is_none() {
+          self.fatal_slash(
+            participant.to_bytes(),
+            "RemoveParticipantDueToDkg vote for non-validator",
+          );
+          return;
+        }
+
+        let participant = participant.to_bytes();
+        let signer = signed.signer.to_bytes();
+
+        assert!(
+          VotedToRemove::get(self.txn, genesis, signer, participant).is_none(),
+          "VotedToRemove multiple times despite a single nonce being allocated",
+        );
+        VotedToRemove::set(self.txn, genesis, signer, participant, &());
+
+        let prior_votes = VotesToRemove::get(self.txn, genesis, participant).unwrap_or(0);
+        let signer_votes =
+          self.spec.i(&[], signed.signer).expect("signer wasn't a validator for this network?");
+        let new_votes = prior_votes + u16::from(signer_votes.end) - u16::from(signer_votes.start);
+        VotesToRemove::set(self.txn, genesis, participant, &new_votes);
+        if ((prior_votes + 1) ..= new_votes).contains(&self.spec.t()) {
+          self.fatal_slash(participant, "RemoveParticipantDueToDkg vote")
+        }
+      }
 
       Transaction::DkgCommitments { attempt, commitments, signed } => {
         let Some(removed) = removed_as_of_dkg_attempt(self.txn, genesis, attempt) else {
@@ -325,7 +306,10 @@ impl<
               .await;
           }
           Accumulation::Ready(DataSet::NotParticipating) => {
-            panic!("wasn't a participant in DKG commitments")
+            assert!(
+              removed.contains(&(Ristretto::generator() * self.our_key.deref())),
+              "NotParticipating in a DkgCommitments we weren't removed for"
+            );
           }
           Accumulation::NotReady => {}
         }
@@ -336,14 +320,19 @@ impl<
           self.fatal_slash(signed.signer.to_bytes(), "DkgShares with an unrecognized attempt");
           return;
         };
+        let not_participating = removed.contains(&(Ristretto::generator() * self.our_key.deref()));
+
         let Ok(()) = self.check_sign_data_len(&removed, signed.signer, shares.len()) else {
           return;
         };
 
-        let sender_i = self
-          .spec
-          .i(&removed, signed.signer)
-          .expect("transaction added to tributary by signer who isn't a participant");
+        let Some(sender_i) = self.spec.i(&removed, signed.signer) else {
+          self.fatal_slash(
+            signed.signer.to_bytes(),
+            "DkgShares for a DKG they aren't participating in",
+          );
+          return;
+        };
         let sender_is_len = u16::from(sender_i.end) - u16::from(sender_i.start);
         for shares in &shares {
           if shares.len() != (usize::from(self.spec.n(&removed) - sender_is_len)) {
@@ -353,56 +342,59 @@ impl<
         }
 
         // Save each share as needed for blame
-        {
-          let from_range = self.spec.i(&removed, signed.signer).unwrap();
-          for (from_offset, shares) in shares.iter().enumerate() {
-            let from =
-              Participant::new(u16::from(from_range.start) + u16::try_from(from_offset).unwrap())
-                .unwrap();
+        for (from_offset, shares) in shares.iter().enumerate() {
+          let from =
+            Participant::new(u16::from(sender_i.start) + u16::try_from(from_offset).unwrap())
+              .unwrap();
 
-            for (to_offset, share) in shares.iter().enumerate() {
-              // 0-indexed (the enumeration) to 1-indexed (Participant)
-              let mut to = u16::try_from(to_offset).unwrap() + 1;
-              // Adjust for the omission of the sender's own shares
-              if to >= u16::from(from_range.start) {
-                to += u16::from(from_range.end) - u16::from(from_range.start);
-              }
-              let to = Participant::new(to).unwrap();
-
-              DkgShare::set(self.txn, genesis, from.into(), to.into(), share);
+          for (to_offset, share) in shares.iter().enumerate() {
+            // 0-indexed (the enumeration) to 1-indexed (Participant)
+            let mut to = u16::try_from(to_offset).unwrap() + 1;
+            // Adjust for the omission of the sender's own shares
+            if to >= u16::from(sender_i.start) {
+              to += u16::from(sender_i.end) - u16::from(sender_i.start);
             }
+            let to = Participant::new(to).unwrap();
+
+            DkgShare::set(self.txn, genesis, from.into(), to.into(), share);
           }
         }
 
         // Filter down to only our share's bytes for handle
-        let our_i = self
-          .spec
-          .i(&removed, Ristretto::generator() * self.our_key.deref())
-          .expect("in a tributary we're not a validator for");
-
-        let our_shares = if sender_i == our_i {
-          vec![]
-        } else {
-          // 1-indexed to 0-indexed
-          let mut our_i_pos = u16::from(our_i.start) - 1;
-          // Handle the omission of the sender's own data
-          if u16::from(our_i.start) > u16::from(sender_i.start) {
-            our_i_pos -= sender_is_len;
+        let our_shares = if let Some(our_i) =
+          self.spec.i(&removed, Ristretto::generator() * self.our_key.deref())
+        {
+          if sender_i == our_i {
+            vec![]
+          } else {
+            // 1-indexed to 0-indexed
+            let mut our_i_pos = u16::from(our_i.start) - 1;
+            // Handle the omission of the sender's own data
+            if u16::from(our_i.start) > u16::from(sender_i.start) {
+              our_i_pos -= sender_is_len;
+            }
+            let our_i_pos = usize::from(our_i_pos);
+            shares
+              .iter_mut()
+              .map(|shares| {
+                shares
+                  .drain(
+                    our_i_pos ..
+                      (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
+                  )
+                  .collect::<Vec<_>>()
+              })
+              .collect()
           }
-          let our_i_pos = usize::from(our_i_pos);
-          shares
-            .iter_mut()
-            .map(|shares| {
-              shares
-                .drain(
-                  our_i_pos ..
-                    (our_i_pos + usize::from(u16::from(our_i.end) - u16::from(our_i.start))),
-                )
-                .collect::<Vec<_>>()
-            })
-            .collect()
+        } else {
+          assert!(
+            not_participating,
+            "we didn't have an i while handling DkgShares we weren't removed for"
+          );
+          // Since we're not participating, simply save vec![] for our shares
+          vec![]
         };
-        // Drop shares as it's been mutated into invalidity
+        // Drop shares as it's presumably been mutated into invalidity
         drop(shares);
 
         let data_spec = DataSpecification { topic: Topic::Dkg, label: Label::Share, attempt };
@@ -458,7 +450,7 @@ impl<
               .await;
           }
           Accumulation::Ready(DataSet::NotParticipating) => {
-            panic!("wasn't a participant in DKG shares")
+            assert!(not_participating, "NotParticipating in a DkgShares we weren't removed for");
           }
           Accumulation::NotReady => {}
         }
@@ -470,7 +462,13 @@ impl<
             .fatal_slash(signed.signer.to_bytes(), "InvalidDkgShare with an unrecognized attempt");
           return;
         };
-        let range = self.spec.i(&removed, signed.signer).unwrap();
+        let Some(range) = self.spec.i(&removed, signed.signer) else {
+          self.fatal_slash(
+            signed.signer.to_bytes(),
+            "InvalidDkgShare for a DKG they aren't participating in",
+          );
+          return;
+        };
         if !range.contains(&accuser) {
           self.fatal_slash(
             signed.signer.to_bytes(),
@@ -524,8 +522,8 @@ impl<
             };
 
             let preprocesses = ConfirmationNonces::get(self.txn, genesis, attempt).unwrap();
-            // TODO: This can technically happen under very very very specific timing as the txn put
-            // happens before DkgConfirmed, yet the txn commit isn't guaranteed to
+            // TODO: This can technically happen under very very very specific timing as the txn
+            // put happens before DkgConfirmed, yet the txn commit isn't guaranteed to
             let key_pair = DkgKeyPair::get(self.txn, genesis, attempt).expect(
               "in DkgConfirmed handling, which happens after everyone \
               (including us) fires DkgConfirmed, yet no confirming key pair",
@@ -535,12 +533,17 @@ impl<
             let sig = match confirmer.complete(preprocesses, &key_pair, shares) {
               Ok(sig) => sig,
               Err(p) => {
-                self.fatal_slash_with_participant_index(&removed, p, "invalid DkgConfirmer share");
+                let mut tx = Transaction::RemoveParticipantDueToDkg {
+                  participant: self.spec.reverse_lookup_i(&removed, p).unwrap(),
+                  signed: Transaction::empty_signed(),
+                };
+                tx.sign(&mut OsRng, genesis, self.our_key);
+                self.publish_tributary_tx.publish_tributary_tx(tx).await;
                 return;
               }
             };
 
-            DkgCompleted::set(self.txn, genesis, &());
+            DkgLocallyCompleted::set(self.txn, genesis, &());
 
             self
               .publish_serai_tx

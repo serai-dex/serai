@@ -2,6 +2,8 @@ use core::fmt::Debug;
 
 use rand_core::{RngCore, OsRng};
 
+use ciphersuite::{group::Group, Ciphersuite, Ristretto};
+
 use scale::{Encode, Decode};
 use serai_client::{
   primitives::{SeraiAddress, Signature},
@@ -141,11 +143,8 @@ fn serialize_sign_data() {
 #[test]
 fn serialize_transaction() {
   test_read_write(&Transaction::RemoveParticipantDueToDkg {
-    attempt: u32::try_from(OsRng.next_u64() >> 32).unwrap(),
-    participant: frost::Participant::new(
-      u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
-    )
-    .unwrap(),
+    participant: <Ristretto as Ciphersuite>::G::random(&mut OsRng),
+    signed: random_signed_with_nonce(&mut OsRng, 0),
   });
 
   {
