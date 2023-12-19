@@ -7281,6 +7281,7 @@ dependencies = [
  "hex",
  "modular-frost",
  "monero-serai",
+ "multiaddr",
  "parity-scale-codec",
  "rand_core",
  "serai-abi",

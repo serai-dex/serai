@@ -4,7 +4,7 @@ use std::{
   collections::{VecDeque, HashSet, HashMap},
 };
 
-use serai_client::primitives::NetworkId;
+use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet};
 
 use processor_messages::CoordinatorMessage;
 
@@ -62,8 +62,8 @@ impl LocalP2p {
 impl P2p for LocalP2p {
   type Id = usize;
 
-  async fn subscribe(&self, _genesis: [u8; 32]) {}
-  async fn unsubscribe(&self, _genesis: [u8; 32]) {}
+  async fn subscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
+  async fn unsubscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
 
   async fn send_raw(&self, to: Self::Id, _genesis: Option<[u8; 32]>, msg: Vec<u8>) {
     self.1.write().await.1[to].push_back((self.0, msg));

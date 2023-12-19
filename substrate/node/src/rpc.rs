@@ -85,7 +85,6 @@ where
             all_p2p_addresses.push(address);
           }
         }
-        // TODO: Remove mdns in the coordinator for this
         Ok(all_p2p_addresses)
       },
     )?;
