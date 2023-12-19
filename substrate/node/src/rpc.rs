@@ -73,15 +73,12 @@ where
             .await
             .unwrap_or_else(HashSet::new)
             .into_iter();
-          let start_len = all_p2p_addresses.len();
-          // Only take up to three addresses
-          // There should be one, there may be two if their IP address changed, and 3 should only
-          // occur if they have multiple proxies/an IP address changing frequentlly/some issue
+          // Only take a single address
+          // There should be one, there may be two if their IP address changed, and more should only
+          // occur if they have multiple proxies/an IP address changing frequently/some issue
           // preventing consistent self-identification
-          // It shouldn't be harmful to try three addresses, yet it likely would be to try 1000
-          while let Some(address) =
-            returned_addresses.next().filter(|_| (all_p2p_addresses.len() - start_len) < 3)
-          {
+          // It isn't beneficial to use multiple addresses for a single peer here
+          if let Some(address) = returned_addresses.next() {
             all_p2p_addresses.push(address);
           }
         }
