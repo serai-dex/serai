@@ -57,7 +57,7 @@ dockertest = "0.4"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
-serai = ["thiserror", "serde", "serde_json", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+serai = ["thiserror", "serde", "serde_json", "serai-abi/serde", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 borsh = ["serai-abi/borsh"]
 
 networks = []
