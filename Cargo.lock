@@ -7559,6 +7559,7 @@ dependencies = [
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
+ "tokio",
 ]
 
 [[package]]
@@ -7671,6 +7672,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
+ "hashbrown 0.14.3",
  "pallet-authorship",
  "pallet-babe",
  "pallet-grandpa",

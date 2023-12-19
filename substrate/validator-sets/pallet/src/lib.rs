@@ -124,8 +124,9 @@ pub mod pallet {
   #[pallet::getter(fn allocation_per_key_share)]
   pub type AllocationPerKeyShare<T: Config> =
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
-  /// The validators selected to be in-set who haven't been removed.
+  /// The validators selected to be in-set.
   #[pallet::storage]
+  #[pallet::getter(fn participants_for_latest_decided_set)]
   pub(crate) type Participants<T: Config> = StorageMap<
     _,
     Identity,
