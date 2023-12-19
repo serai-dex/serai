@@ -1,6 +1,6 @@
 use std::{boxed::Box, sync::Arc};
 
-use futures::stream::StreamExt;
+use futures_util::stream::StreamExt;
 
 use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};

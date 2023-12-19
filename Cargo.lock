@@ -7530,7 +7530,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "frame-benchmarking",
- "futures",
+ "futures-util",
  "jsonrpsee",
  "pallet-transaction-payment-rpc",
  "sc-authority-discovery",

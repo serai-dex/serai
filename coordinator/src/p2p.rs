@@ -13,13 +13,13 @@ use serai_client::primitives::NetworkId;
 
 use serai_db::Db;
 
+use futures_util::StreamExt;
 use tokio::{
   sync::{Mutex, RwLock, mpsc, broadcast},
   time::sleep,
 };
 
 use libp2p::{
-  futures::StreamExt,
   identity::Keypair,
   PeerId,
   tcp::Config as TcpConfig,

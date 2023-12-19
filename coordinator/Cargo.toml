@@ -48,11 +48,11 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "mdns", "macros"] }
 
 [dev-dependencies]
-futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
