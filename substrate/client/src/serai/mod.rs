@@ -312,7 +312,7 @@ impl Serai {
     &self,
     network: NetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
-    self.call("p2p_validators", [network]).await
+    self.call("p2p_validators", network).await
   }
 }
 

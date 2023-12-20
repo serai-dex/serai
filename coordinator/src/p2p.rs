@@ -390,21 +390,16 @@ impl LibP2p {
             set = subscribe_recv.recv() => {
               let (subscribe, set, genesis): (_, ValidatorSet, [u8; 32]) =
                 set.expect("subscribe_recv closed. are we shutting down?");
+              let topic = topic_for_set(set);
               if subscribe {
+                log::info!("subscribing to p2p messages for {set:?}");
                 pending_p2p_connections.push(set.network);
                 set_for_genesis.insert(genesis, set);
-                swarm
-                  .behaviour_mut()
-                  .gossipsub
-                  .subscribe(&topic_for_set(set))
-                  .unwrap();
+                swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
               } else {
+                log::info!("unsubscribing to p2p messages for {set:?}");
                 set_for_genesis.remove(&genesis);
-                swarm
-                  .behaviour_mut()
-                  .gossipsub
-                  .unsubscribe(&topic_for_set(set))
-                  .unwrap();
+                swarm.behaviour_mut().gossipsub.unsubscribe(&topic).unwrap();
               }
             }
 
