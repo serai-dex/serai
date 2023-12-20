@@ -348,7 +348,6 @@ impl LibP2p {
               if let Err(e) = swarm.dial(addr) {
                 log::warn!("dialing peer failed: {e:?}");
               }
-              // swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer);
             };
 
             while let Some(network) = pending_p2p_connections.pop() {
@@ -418,12 +417,16 @@ impl LibP2p {
 
             // Handle new incoming messages
             event = swarm.next() => {
-              if let Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
-                GsEvent::Message { propagation_source, message, .. },
-              ))) = event {
-                receive_send
-                  .send((propagation_source, message.data))
-                  .expect("receive_send closed. are we shutting down?");
+              match event {
+                Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id),
+                Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
+                  GsEvent::Message { propagation_source, message, .. },
+                ))) => {
+                  receive_send
+                    .send((propagation_source, message.data))
+                    .expect("receive_send closed. are we shutting down?");
+                }
+                _ => {}
               }
             }
 
