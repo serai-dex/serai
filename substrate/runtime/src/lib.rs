@@ -569,6 +569,7 @@ sp_api::impl_runtime_apis! {
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
+      // Converts to `[u8; 32]` so it can be hashed
       let serai_validators = Babe::authorities()
         .into_iter()
         .map(|(id, _)| id.into_inner().0)
