@@ -97,7 +97,7 @@ impl HttpRpc {
         Err(RpcError::ConnectionError("invalid amount of passwords".to_string()))?;
       }
 
-      let client = Client::without_connection_pool(&url)
+      let client = Client::without_connection_pool(&url, true)
         .map_err(|_| RpcError::ConnectionError("invalid URL".to_string()))?;
       // Obtain the initial challenge, which also somewhat validates this connection
       let challenge = Self::digest_auth_challenge(
@@ -252,15 +252,15 @@ impl HttpRpc {
           // We don't need to create a new connection as simple-request will for us
           if error.is_some() || is_stale {
             connection_lock.0 = None;
-            // If we're not already on our second attempt, move to the next loop iteration
-            // (retrying all of this once)
-            if attempt == 0 {
-              continue;
-            }
             if let Some(e) = error {
               Err(e)?
             } else {
               debug_assert!(is_stale);
+              // If we're not already on our second attempt, move to the next loop iteration
+              // (retrying all of this once)
+              if attempt == 0 {
+                continue;
+              }
               Err(RpcError::InvalidNode(
                 "node claimed fresh connection had stale authentication".to_string(),
               ))?

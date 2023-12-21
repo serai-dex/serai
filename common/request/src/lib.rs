@@ -48,25 +48,27 @@ pub struct Client {
 }
 
 impl Client {
-  fn connector() -> Connector {
+  fn connector(keep_alive: bool) -> Connector {
+    let mut res = HttpConnector::new();
+    if keep_alive {
+      res.set_keepalive(None);
+    }
     #[cfg(feature = "tls")]
     let res =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
-    #[cfg(not(feature = "tls"))]
-    let res = HttpConnector::new();
+      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().wrap_connector(res);
     res
   }
 
   pub fn with_connection_pool() -> Client {
     Client {
-      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector())),
+      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector(false))),
     }
   }
 
-  pub fn without_connection_pool(host: &str) -> Result<Client, Error> {
+  pub fn without_connection_pool(host: &str, keep_alive: bool) -> Result<Client, Error> {
     Ok(Client {
       connection: Connection::Connection {
-        connector: Self::connector(),
+        connector: Self::connector(keep_alive),
         host: {
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
           if uri.host().is_none() {
