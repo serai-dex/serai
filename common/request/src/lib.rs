@@ -54,14 +54,19 @@ impl Client {
       res.set_keepalive(None);
     }
     #[cfg(feature = "tls")]
-    let res =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().wrap_connector(res);
+    let res = HttpsConnectorBuilder::new()
+      .with_native_roots()
+      .https_or_http()
+      .enable_http1()
+      .wrap_connector(res);
     res
   }
 
   pub fn with_connection_pool() -> Client {
     Client {
-      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector(false))),
+      connection: Connection::ConnectionPool(
+        hyper::Client::builder().build(Self::connector(false)),
+      ),
     }
   }
 
