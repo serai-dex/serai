@@ -1,7 +1,5 @@
 use std::sync::OnceLock;
 
-use ciphersuite::Ristretto;
-
 use dockertest::DockerTest;
 
 use crate::*;
@@ -21,7 +19,11 @@ pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
 pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
-pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {
+pub(crate) async fn new_test<F: Send + core::future::Future>(
+  test_body: impl 'static + Send + Sync + FnOnce(Vec<Processor>) -> F,
+) {
+  let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
+
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   for i in 0 .. COORDINATORS {
@@ -39,7 +41,28 @@ pub(crate) fn new_test() -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, Dock
       test.provide_container(composition);
     }
   }
-  (coordinators, test)
+  test
+    .run_async(|ops| async move {
+      // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
+      // TODO: Replace this with a Coordinator RPC
+      tokio::time::sleep(Duration::from_secs(150)).await;
+
+      // Sleep even longer if in the CI due to it being slower than commodity hardware
+      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        tokio::time::sleep(Duration::from_secs(120)).await;
+      }
+
+      // Connect to the Message Queues as the processor
+      let mut processors: Vec<Processor> = vec![];
+      for (i, (handles, key)) in coordinators.into_iter().enumerate() {
+        processors.push(
+          Processor::new(i.try_into().unwrap(), NetworkId::Bitcoin, &ops, handles, key).await,
+        );
+      }
+
+      test_body(processors).await;
+    })
+    .await;
 }
 
 // TODO: Don't use a pessimistic sleep
