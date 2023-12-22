@@ -291,6 +291,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-recursion"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd55a5ba1179988837d24ab4c7cc8ed6efdeff578ede0416b4225a5fca35bd0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.41",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1597,8 +1608,7 @@ dependencies = [
 [[package]]
 name = "dockertest"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88933ed892cc8f5be247da11a1cd86a5c64802ac0172982e8aeb8315cb6dacfa"
+source = "git+https://github.com/kayabaNerve/dockertest-rs?branch=arc#c0ea77997048f9edc9987984bbe20e43fac74e06"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7360,6 +7370,8 @@ dependencies = [
 name = "serai-coordinator-tests"
 version = "0.1.0"
 dependencies = [
+ "async-recursion",
+ "async-trait",
  "blake2",
  "borsh",
  "ciphersuite",

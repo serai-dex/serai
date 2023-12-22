@@ -260,7 +260,7 @@ pub async fn batch(
 
 #[tokio::test]
 async fn batch_test() {
-  new_test(|mut processors| async move {
+  new_test(|mut processors: Vec<Processor>| async move {
     let (processor_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
     batch(
       &mut processors,

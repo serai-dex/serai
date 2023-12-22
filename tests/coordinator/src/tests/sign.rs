@@ -168,7 +168,7 @@ pub async fn sign(
 
 #[tokio::test]
 async fn sign_test() {
-  new_test(|mut processors| async move {
+  new_test(|mut processors: Vec<Processor>| async move {
     let (participant_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
 
     // 'Send' external coins into Serai

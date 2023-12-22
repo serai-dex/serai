@@ -1,9 +1,8 @@
 #![allow(clippy::needless_pass_by_ref_mut)] // False positives
 
 use std::{
-  sync::{OnceLock, Arc, Mutex},
+  sync::{OnceLock, Arc},
   time::Duration,
-  fs,
 };
 
 use tokio::{task::AbortHandle, sync::Mutex as AsyncMutex};
@@ -27,15 +26,10 @@ use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
 use serai_client::{primitives::Signature, Serai};
 
-use dockertest::{
-  PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, StartPolicy,
-  TestBodySpecification, DockerOperations,
-};
+use dockertest::{PullPolicy, Image, TestBodySpecification, DockerOperations};
 
 #[cfg(test)]
 mod tests;
-
-static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
 pub fn coordinator_instance(
   name: &str,
@@ -81,78 +75,6 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
   .set_publish_all_ports(true)
 }
 
-pub type Handles = (String, String, String);
-pub fn coordinator_stack(
-  name: &str,
-) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
-  let serai_composition = serai_composition(name);
-
-  let (coord_key, message_queue_keys, message_queue_composition) =
-    serai_message_queue_tests::instance();
-
-  let coordinator_composition = coordinator_instance(name, coord_key);
-
-  // Give every item in this stack a unique ID
-  // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
-  let (first, unique_id) = {
-    let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
-    let mut unique_id_lock = unique_id_mutex.lock().unwrap();
-    let first = *unique_id_lock == 0;
-    let unique_id = *unique_id_lock;
-    *unique_id_lock += 1;
-    (first, unique_id)
-  };
-
-  let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", "coordinator"]
-    .iter()
-    .collect::<std::path::PathBuf>();
-  if first {
-    let _ = fs::remove_dir_all(&logs_path);
-    fs::create_dir_all(&logs_path).expect("couldn't create logs directory");
-    assert!(
-      fs::read_dir(&logs_path).expect("couldn't read the logs folder").next().is_none(),
-      "logs folder wasn't empty, despite removing it at the start of the run",
-    );
-  }
-  let logs_path = logs_path.to_str().unwrap().to_string();
-
-  let mut compositions = vec![];
-  let mut handles = vec![];
-  for (name, composition) in [
-    ("serai_node", serai_composition),
-    ("message_queue", message_queue_composition),
-    ("coordinator", coordinator_composition),
-  ] {
-    let handle = format!("coordinator-{name}-{unique_id}");
-
-    compositions.push(
-      composition.set_start_policy(StartPolicy::Strict).set_handle(handle.clone()).set_log_options(
-        Some(LogOptions {
-          action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
-            LogAction::Forward
-          } else {
-            LogAction::ForwardToFile { path: logs_path.clone() }
-          },
-          policy: LogPolicy::Always,
-          source: LogSource::Both,
-        }),
-      ),
-    );
-
-    handles.push(handle);
-  }
-
-  let coordinator_composition = compositions.last_mut().unwrap();
-  coordinator_composition.inject_container_name(handles[0].clone(), "SERAI_HOSTNAME");
-  coordinator_composition.inject_container_name(handles[1].clone(), "MESSAGE_QUEUE_RPC");
-
-  (
-    (handles[0].clone(), handles[1].clone(), handles[2].clone()),
-    message_queue_keys[&NetworkId::Bitcoin],
-    compositions,
-  )
-}
-
 fn is_cosign_message(msg: &CoordinatorMessage) -> bool {
   matches!(
     msg,
@@ -183,8 +105,6 @@ pub struct Processor {
   serai_rpc: String,
   #[allow(unused)]
   message_queue_handle: String,
-  #[allow(unused)]
-  coordinator_handle: String,
 
   queue: Arc<AsyncMutex<(u64, u64, MessageQueue)>>,
   abort_handle: Option<Arc<AbortHandle>>,
@@ -205,7 +125,7 @@ impl Processor {
     raw_i: u8,
     network: NetworkId,
     ops: &DockerOperations,
-    handles: (String, String, String),
+    handles: (String, String),
     processor_key: <Ristretto as Ciphersuite>::F,
   ) -> Processor {
     let message_queue_rpc = ops.handle(&handles.1).host_port(2287).unwrap();
@@ -232,7 +152,6 @@ impl Processor {
 
       serai_rpc,
       message_queue_handle: handles.1,
-      coordinator_handle: handles.2,
 
       queue: Arc::new(AsyncMutex::new((
         0,

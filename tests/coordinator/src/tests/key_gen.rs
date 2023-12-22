@@ -220,7 +220,7 @@ pub async fn key_gen<C: Ciphersuite>(
 
 #[tokio::test]
 async fn key_gen_test() {
-  new_test(|mut processors| async move {
+  new_test(|mut processors: Vec<Processor>| async move {
     key_gen::<Secp256k1>(&mut processors).await;
   })
   .await;
