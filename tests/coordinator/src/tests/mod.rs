@@ -4,6 +4,8 @@ use std::{
   fs,
 };
 
+use tokio::sync::Mutex;
+
 use dockertest::{
   LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, TestBodySpecification,
   DockerOperations, DockerTest,
@@ -24,8 +26,8 @@ pub use sign::sign;
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
+// Provide a unique ID and ensures only one invocation occurs at a time.
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
-pub(crate) static ONE_AT_A_TIME: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[async_trait::async_trait]
 pub(crate) trait TestBody: 'static + Send + Sync {
@@ -39,7 +41,7 @@ impl<F: Send + Future, TB: 'static + Send + Sync + Fn(Vec<Processor>) -> F> Test
 }
 
 pub(crate) async fn new_test(test_body: impl TestBody) {
-  let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
+  let mut unique_id_lock = UNIQUE_ID.get_or_init(|| Mutex::new(0)).lock();
 
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
@@ -64,8 +66,6 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     // Give every item in this stack a unique ID
     // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
     let (first, unique_id) = {
-      let unique_id_mutex = UNIQUE_ID.get_or_init(|| Mutex::new(0));
-      let mut unique_id_lock = unique_id_mutex.lock().unwrap();
       let first = *unique_id_lock == 0;
       let unique_id = *unique_id_lock;
       *unique_id_lock += 1;
