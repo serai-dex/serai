@@ -167,6 +167,7 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
         serai_container.name()
       )));
       test.provide_container(composition);
+      drop(context_lock);
       test.run_async(spawn_coordinator_or_run_test).await;
     } else {
       // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block

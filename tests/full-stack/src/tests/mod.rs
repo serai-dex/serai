@@ -194,6 +194,8 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
         serai_container.name(),
       )));
       test.provide_container(composition);
+      drop(outer_ops);
+      drop(context_lock);
       test.run_async(spawn_coordinator_or_run_test).await;
     } else {
       let outer_ops = outer_ops.take().unwrap();
