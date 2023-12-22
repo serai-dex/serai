@@ -120,15 +120,12 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     handles_and_keys: Vec<(Handles, <Ristretto as Ciphersuite>::F)>,
     test_body: Box<dyn TestBody>,
   }
-  static CONTEXT: OnceLock<Context> = OnceLock::new();
-  CONTEXT
-    .set(Context {
-      pending_coordinator_compositions: Mutex::new(coordinator_compositions),
-      handles_and_keys: coordinators,
-      test_body: Box::new(test_body),
-    })
-    .map_err(|_| ())
-    .unwrap();
+  static CONTEXT: OnceLock<Mutex<Option<Context>>> = OnceLock::new();
+  *CONTEXT.get_or_init(|| Mutex::new(None)).lock().await = Some(Context {
+    pending_coordinator_compositions: Mutex::new(coordinator_compositions),
+    handles_and_keys: coordinators,
+    test_body: Box::new(test_body),
+  });
 
   // The DockerOperations from the first invocation, containing the Message Queue servers and the
   // Serai nodes.
@@ -140,8 +137,9 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     // If the outer operations have yet to be set, these *are* the outer operations
     let outer_ops = OUTER_OPS.get_or_init(|| inner_ops);
 
+    let context_lock = CONTEXT.get().unwrap().lock().await;
     let Context { pending_coordinator_compositions, handles_and_keys: coordinators, test_body } =
-      CONTEXT.get().unwrap();
+      context_lock.as_ref().unwrap();
 
     // Check if there is a coordinator left
     let maybe_coordinator = {
