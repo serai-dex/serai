@@ -19,6 +19,9 @@ workspace = true
 [dependencies]
 hex = "0.4"
 
+async-trait = "0.1"
+async-recursion = "1"
+
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
@@ -38,6 +41,7 @@ serai-client = { path = "../../substrate/client", features = ["serai"] }
 tokio = { version = "1", features = ["time"] }
 
 dockertest = "0.4"
+serai-docker-tests = { path = "../docker" }
 serai-message-queue-tests = { path = "../message-queue" }
 serai-processor-tests = { path = "../processor" }
 serai-coordinator-tests = { path = "../coordinator" }

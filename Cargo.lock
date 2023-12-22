@@ -7431,6 +7431,8 @@ version = "0.1.0"
 name = "serai-full-stack-tests"
 version = "0.1.0"
 dependencies = [
+ "async-recursion",
+ "async-trait",
  "bitcoin-serai",
  "curve25519-dalek",
  "dockertest",
@@ -7440,6 +7442,7 @@ dependencies = [
  "rand_core",
  "serai-client",
  "serai-coordinator-tests",
+ "serai-docker-tests",
  "serai-message-queue-tests",
  "serai-processor",
  "serai-processor-tests",
