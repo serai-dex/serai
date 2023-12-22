@@ -1,8 +1,5 @@
 use core::future::Future;
-use std::{
-  sync::{Mutex, OnceLock},
-  fs,
-};
+use std::{sync::OnceLock, collections::HashMap};
 
 use tokio::sync::Mutex;
 
@@ -10,6 +7,8 @@ use dockertest::{
   LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, TestBodySpecification,
   DockerOperations, DockerTest,
 };
+
+use serai_docker_tests::fresh_logs_folder;
 
 use crate::*;
 
@@ -41,7 +40,7 @@ impl<F: Send + Future, TB: 'static + Send + Sync + Fn(Vec<Processor>) -> F> Test
 }
 
 pub(crate) async fn new_test(test_body: impl TestBody) {
-  let mut unique_id_lock = UNIQUE_ID.get_or_init(|| Mutex::new(0)).lock();
+  let mut unique_id_lock = UNIQUE_ID.get_or_init(|| Mutex::new(0)).lock().await;
 
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
@@ -58,10 +57,10 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     };
     let serai_composition = serai_composition(name);
 
-    let (coord_key, message_queue_keys, message_queue_composition) =
+    let (processor_key, message_queue_keys, message_queue_composition) =
       serai_message_queue_tests::instance();
 
-    let coordinator_composition = coordinator_instance(name, coord_key);
+    let coordinator_composition = coordinator_instance(name, processor_key);
 
     // Give every item in this stack a unique ID
     // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
@@ -72,22 +71,10 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
       (first, unique_id)
     };
 
-    let logs_path =
-      [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", "coordinator"]
-        .iter()
-        .collect::<std::path::PathBuf>();
-    if first {
-      let _ = fs::remove_dir_all(&logs_path);
-      fs::create_dir_all(&logs_path).expect("couldn't create logs directory");
-      assert!(
-        fs::read_dir(&logs_path).expect("couldn't read the logs folder").next().is_none(),
-        "logs folder wasn't empty, despite removing it at the start of the run",
-      );
-    }
-    let logs_path = logs_path.to_str().unwrap().to_string();
+    let logs_path = fresh_logs_folder(first, "coordinator");
 
     let mut compositions = vec![];
-    let mut handles = vec![];
+    let mut handles = HashMap::new();
     for (name, composition) in [
       ("serai_node", serai_composition),
       ("message_queue", message_queue_composition),
@@ -110,45 +97,56 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
           })),
       );
 
-      handles.push(handle);
+      handles.insert(name, handle);
     }
 
-    let coord_key = message_queue_keys[&NetworkId::Bitcoin];
+    let processor_key = message_queue_keys[&NetworkId::Bitcoin];
 
-    coordinators.push(((handles[0].clone(), handles[1].clone()), coord_key));
+    coordinators.push((
+      Handles {
+        serai: handles.remove("serai_node").unwrap(),
+        message_queue: handles.remove("message_queue").unwrap(),
+      },
+      processor_key,
+    ));
     coordinator_compositions.push(compositions.pop().unwrap());
     for composition in compositions {
       test.provide_container(composition);
     }
   }
 
-  static COORDINATOR_COMPOSITIONS: OnceLock<Mutex<Vec<TestBodySpecification>>> = OnceLock::new();
-  COORDINATOR_COMPOSITIONS.set(Mutex::new(coordinator_compositions)).map_err(|_| ()).unwrap();
-
   struct Context {
-    handles_and_keys: Vec<((String, String), <Ristretto as Ciphersuite>::F)>,
+    pending_coordinator_compositions: Mutex<Vec<TestBodySpecification>>,
+    handles_and_keys: Vec<(Handles, <Ristretto as Ciphersuite>::F)>,
     test_body: Box<dyn TestBody>,
   }
   static CONTEXT: OnceLock<Context> = OnceLock::new();
   CONTEXT
-    .set(Context { handles_and_keys: coordinators, test_body: Box::new(test_body) })
+    .set(Context {
+      pending_coordinator_compositions: Mutex::new(coordinator_compositions),
+      handles_and_keys: coordinators,
+      test_body: Box::new(test_body),
+    })
     .map_err(|_| ())
     .unwrap();
 
+  // The DockerOperations from the first invocation, containing the Message Queue servers and the
+  // Serai nodes.
   static OUTER_OPS: OnceLock<DockerOperations> = OnceLock::new();
 
+  // Spawns a coordinator, if one has yet to be spawned, or else runs the test.
   #[async_recursion::async_recursion]
   async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
+    // If the outer operations have yet to be set, these *are* the outer operations
     let outer_ops = OUTER_OPS.get_or_init(|| inner_ops);
 
-    let Context { handles_and_keys: coordinators, test_body } = CONTEXT.get().unwrap();
+    let Context { pending_coordinator_compositions, handles_and_keys: coordinators, test_body } =
+      CONTEXT.get().unwrap();
 
-    // Now that the Message Queue and Node containers have spawned, spawn the coordinator if there
-    // are ones left to spawn
-    // If not, run the test body
-    let maybe_composition_and_handles = {
-      let mut remaining = COORDINATOR_COMPOSITIONS.get().unwrap().lock().unwrap();
-      let maybe_composition_and_handles = if !remaining.is_empty() {
+    // Check if there is a coordinator left
+    let maybe_coordinator = {
+      let mut remaining = pending_coordinator_compositions.lock().await;
+      let maybe_coordinator = if !remaining.is_empty() {
         let handles = coordinators[coordinators.len() - remaining.len()].0.clone();
         let composition = remaining.remove(0);
         Some((composition, handles))
@@ -156,30 +154,26 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
         None
       };
       drop(remaining);
-      maybe_composition_and_handles
+      maybe_coordinator
     };
-    if let Some((mut composition, handles)) = maybe_composition_and_handles {
-      let serai_container = outer_ops.handle(&handles.0);
+
+    if let Some((mut composition, handles)) = maybe_coordinator {
+      // Spawn it by building another DockerTest which recursively calls this function
+      // TODO: Spawn this outside of DockerTest so we can remove the recursion
+      let serai_container = outer_ops.handle(&handles.serai);
       composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
-      let message_queue_container = outer_ops.handle(&handles.1);
+      let message_queue_container = outer_ops.handle(&handles.message_queue);
       composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
       let mut test = DockerTest::new().with_network(dockertest::Network::External(format!(
         "container:{}",
         serai_container.name()
       )));
       test.provide_container(composition);
-
-      // Recurse until none remain
       test.run_async(spawn_coordinator_or_run_test).await;
     } else {
       // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
-      // TODO: Replace this with a Coordinator RPC
-      tokio::time::sleep(Duration::from_secs(150)).await;
-
-      // Sleep even longer if in the CI due to it being slower than commodity hardware
-      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
-        tokio::time::sleep(Duration::from_secs(120)).await;
-      }
+      // TODO: Replace this with a Coordinator RPC we can query
+      tokio::time::sleep(Duration::from_secs(60)).await;
 
       // Connect to the Message Queues as the processor
       let mut processors: Vec<Processor> = vec![];

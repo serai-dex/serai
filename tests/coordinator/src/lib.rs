@@ -98,13 +98,19 @@ fn is_cosign_message(msg: &CoordinatorMessage) -> bool {
   )
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Handles {
+  pub(crate) serai: String,
+  pub(crate) message_queue: String,
+}
+
 #[derive(Clone)]
 pub struct Processor {
   network: NetworkId,
 
   serai_rpc: String,
   #[allow(unused)]
-  message_queue_handle: String,
+  handles: Handles,
 
   queue: Arc<AsyncMutex<(u64, u64, MessageQueue)>>,
   abort_handle: Option<Arc<AbortHandle>>,
@@ -125,14 +131,14 @@ impl Processor {
     raw_i: u8,
     network: NetworkId,
     ops: &DockerOperations,
-    handles: (String, String),
+    handles: Handles,
     processor_key: <Ristretto as Ciphersuite>::F,
   ) -> Processor {
-    let message_queue_rpc = ops.handle(&handles.1).host_port(2287).unwrap();
+    let message_queue_rpc = ops.handle(&handles.message_queue).host_port(2287).unwrap();
     let message_queue_rpc = format!("{}:{}", message_queue_rpc.0, message_queue_rpc.1);
 
     // Sleep until the Substrate RPC starts
-    let serai_rpc = ops.handle(&handles.0).host_port(9944).unwrap();
+    let serai_rpc = ops.handle(&handles.serai).host_port(9944).unwrap();
     let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
     // Bound execution to 60 seconds
     for _ in 0 .. 60 {
@@ -151,7 +157,7 @@ impl Processor {
       network,
 
       serai_rpc,
-      message_queue_handle: handles.1,
+      handles,
 
       queue: Arc::new(AsyncMutex::new((
         0,

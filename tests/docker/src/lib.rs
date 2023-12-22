@@ -7,6 +7,21 @@ use std::{
   process::Command,
 };
 
+pub fn fresh_logs_folder(first: bool, label: &str) -> String {
+  let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
+    .iter()
+    .collect::<std::path::PathBuf>();
+  if first {
+    let _ = fs::remove_dir_all(&logs_path);
+    fs::create_dir_all(&logs_path).expect("couldn't create logs directory");
+    assert!(
+      fs::read_dir(&logs_path).expect("couldn't read the logs folder").next().is_none(),
+      "logs folder wasn't empty, despite removing it at the start of the run",
+    );
+  }
+  logs_path.to_str().unwrap().to_string()
+}
+
 static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 pub fn build(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
