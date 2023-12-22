@@ -157,14 +157,21 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
   // Serai nodes.
   static OUTER_OPS: OnceLock<Mutex<Option<DockerOperations>>> = OnceLock::new();
 
+  // Reset OUTER_OPS
+  *OUTER_OPS.get_or_init(|| Mutex::new(None)).lock().await = None;
+
   // Spawns a coordinator, if one has yet to be spawned, or else runs the test.
   #[async_recursion::async_recursion]
   async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
     // If the outer operations have yet to be set, these *are* the outer operations
-    let outer_ops = OUTER_OPS.get_or_init(|| Mutex::new(Some(inner_ops)));
+    let outer_ops = OUTER_OPS.get().unwrap();
+    if outer_ops.lock().await.is_none() {
+      *outer_ops.lock().await = Some(inner_ops);
+    }
 
     let context_lock = CONTEXT.get().unwrap().lock().await;
-    let Context { pending_coordinator_compositions, handles, test_body } = context_lock.as_ref().unwrap();
+    let Context { pending_coordinator_compositions, handles, test_body } =
+      context_lock.as_ref().unwrap();
 
     // Check if there is a coordinator left
     let maybe_coordinator = {

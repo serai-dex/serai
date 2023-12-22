@@ -129,13 +129,19 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
 
   // The DockerOperations from the first invocation, containing the Message Queue servers and the
   // Serai nodes.
-  static OUTER_OPS: OnceLock<DockerOperations> = OnceLock::new();
+  static OUTER_OPS: OnceLock<Mutex<Option<DockerOperations>>> = OnceLock::new();
+
+  // Reset OUTER_OPS
+  *OUTER_OPS.get_or_init(|| Mutex::new(None)).lock().await = None;
 
   // Spawns a coordinator, if one has yet to be spawned, or else runs the test.
   #[async_recursion::async_recursion]
   async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
     // If the outer operations have yet to be set, these *are* the outer operations
-    let outer_ops = OUTER_OPS.get_or_init(|| inner_ops);
+    let outer_ops = OUTER_OPS.get().unwrap();
+    if outer_ops.lock().await.is_none() {
+      *outer_ops.lock().await = Some(inner_ops);
+    }
 
     let context_lock = CONTEXT.get().unwrap().lock().await;
     let Context { pending_coordinator_compositions, handles_and_keys: coordinators, test_body } =
@@ -156,20 +162,26 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     };
 
     if let Some((mut composition, handles)) = maybe_coordinator {
-      // Spawn it by building another DockerTest which recursively calls this function
-      // TODO: Spawn this outside of DockerTest so we can remove the recursion
-      let serai_container = outer_ops.handle(&handles.serai);
-      composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
-      let message_queue_container = outer_ops.handle(&handles.message_queue);
-      composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
-      let mut test = DockerTest::new().with_network(dockertest::Network::External(format!(
-        "container:{}",
-        serai_container.name()
-      )));
+      let network = {
+        let outer_ops = outer_ops.lock().await;
+        let outer_ops = outer_ops.as_ref().unwrap();
+        // Spawn it by building another DockerTest which recursively calls this function
+        // TODO: Spawn this outside of DockerTest so we can remove the recursion
+        let serai_container = outer_ops.handle(&handles.serai);
+        composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
+        let message_queue_container = outer_ops.handle(&handles.message_queue);
+        composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
+
+        format!("container:{}", serai_container.name())
+      };
+      let mut test = DockerTest::new().with_network(dockertest::Network::External(network));
       test.provide_container(composition);
+
       drop(context_lock);
       test.run_async(spawn_coordinator_or_run_test).await;
     } else {
+      let outer_ops = outer_ops.lock().await.take().unwrap();
+
       // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
       // TODO: Replace this with a Coordinator RPC we can query
       tokio::time::sleep(Duration::from_secs(60)).await;
@@ -181,7 +193,7 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
           Processor::new(
             i.try_into().unwrap(),
             NetworkId::Bitcoin,
-            outer_ops,
+            &outer_ops,
             handles.clone(),
             *key,
           )
