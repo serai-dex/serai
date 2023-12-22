@@ -161,11 +161,10 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
   #[async_recursion::async_recursion]
   async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
     // If the outer operations have yet to be set, these *are* the outer operations
-    let mut outer_ops = OUTER_OPS.get_or_init(|| Mutex::new(Some(inner_ops))).lock().await;
+    let outer_ops = OUTER_OPS.get_or_init(|| Mutex::new(Some(inner_ops)));
 
     let context_lock = CONTEXT.get().unwrap().lock().await;
-    let Context { pending_coordinator_compositions, handles, test_body } =
-      context_lock.as_ref().unwrap();
+    let Context { pending_coordinator_compositions, handles, test_body } = context_lock.as_ref().unwrap();
 
     // Check if there is a coordinator left
     let maybe_coordinator = {
@@ -182,23 +181,25 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     };
 
     if let Some((mut composition, handles)) = maybe_coordinator {
-      let outer_ops = outer_ops.as_ref().unwrap();
-      // Spawn it by building another DockerTest which recursively calls this function
-      // TODO: Spawn this outside of DockerTest so we can remove the recursion
-      let serai_container = outer_ops.handle(&handles.serai);
-      composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
-      let message_queue_container = outer_ops.handle(&handles.message_queue);
-      composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
-      let mut test = DockerTest::new().with_network(dockertest::Network::External(format!(
-        "container:{}",
-        serai_container.name(),
-      )));
+      let network = {
+        let outer_ops = outer_ops.lock().await;
+        let outer_ops = outer_ops.as_ref().unwrap();
+        // Spawn it by building another DockerTest which recursively calls this function
+        // TODO: Spawn this outside of DockerTest so we can remove the recursion
+        let serai_container = outer_ops.handle(&handles.serai);
+        composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
+        let message_queue_container = outer_ops.handle(&handles.message_queue);
+        composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
+
+        format!("container:{}", serai_container.name())
+      };
+      let mut test = DockerTest::new().with_network(dockertest::Network::External(network));
       test.provide_container(composition);
-      drop(outer_ops);
+
       drop(context_lock);
       test.run_async(spawn_coordinator_or_run_test).await;
     } else {
-      let outer_ops = outer_ops.take().unwrap();
+      let outer_ops = outer_ops.lock().await.take().unwrap();
       test_body.body(outer_ops, handles.clone()).await;
     }
   }
