@@ -27,6 +27,7 @@ serde_json = { version = "1", optional = true }
 
 serai-abi = { path = "../abi", version = "0.1" }
 
+multiaddr = { version = "0.18", optional = true }
 sp-core = { git = "https://github.com/serai-dex/substrate", optional = true }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", optional = true }
 frame-system = { git = "https://github.com/serai-dex/substrate", optional = true }
@@ -56,7 +57,7 @@ dockertest = "0.4"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
-serai = ["thiserror", "serde", "serde_json", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+serai = ["thiserror", "serde", "serde_json", "serai-abi/serde", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 borsh = ["serai-abi/borsh"]
 
 networks = []

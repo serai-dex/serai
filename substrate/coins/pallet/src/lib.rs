@@ -145,7 +145,7 @@ pub mod pallet {
     fn increase_balance_internal(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       let coin = &balance.coin;
 
-      // sub amount from account
+      // add amount to account
       let new_amount = Self::balances(to, coin)
         .checked_add(balance.amount.0)
         .ok_or(Error::<T, I>::AmountOverflowed)?;

@@ -1,5 +1,4 @@
 use std::{
-  sync::Mutex,
   time::{Duration, SystemTime},
   collections::HashMap,
 };
@@ -221,30 +220,8 @@ pub async fn key_gen<C: Ciphersuite>(
 
 #[tokio::test]
 async fn key_gen_test() {
-  let _one_at_a_time = ONE_AT_A_TIME.get_or_init(|| Mutex::new(())).lock();
-  let (processors, test) = new_test();
-
-  test
-    .run_async(|ops| async move {
-      // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
-      // TODO: Replace this with a Coordinator RPC
-      tokio::time::sleep(Duration::from_secs(150)).await;
-
-      // Sleep even longer if in the CI due to it being slower than commodity hardware
-      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
-        tokio::time::sleep(Duration::from_secs(120)).await;
-      }
-
-      // Connect to the Message Queues as the processor
-      let mut new_processors: Vec<Processor> = vec![];
-      for (i, (handles, key)) in processors.into_iter().enumerate() {
-        new_processors.push(
-          Processor::new(i.try_into().unwrap(), NetworkId::Bitcoin, &ops, handles, key).await,
-        );
-      }
-      let mut processors = new_processors;
-
-      key_gen::<Secp256k1>(&mut processors).await;
-    })
-    .await;
+  new_test(|mut processors: Vec<Processor>| async move {
+    key_gen::<Secp256k1>(&mut processors).await;
+  })
+  .await;
 }

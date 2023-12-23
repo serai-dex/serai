@@ -11,6 +11,7 @@ use core::marker::PhantomData;
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
+use primitives::{NetworkId, NETWORKS};
 
 pub use frame_system as system;
 pub use frame_support as support;
@@ -43,7 +44,7 @@ use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
   traits::{Convert, BlakeTwo256, Block as BlockT},
   transaction_validity::{TransactionSource, TransactionValidity},
-  Perbill, ApplyExtrinsicResult,
+  BoundedVec, Perbill, ApplyExtrinsicResult,
 };
 
 use primitives::{PublicKey, AccountLookup, SubstrateAmount};
@@ -377,6 +378,13 @@ mod benches {
   );
 }
 
+sp_api::decl_runtime_apis! {
+  #[api_version(1)]
+  pub trait SeraiRuntimeApi {
+    fn validators(network_id: NetworkId) -> Vec<PublicKey>;
+  }
+}
+
 sp_api::impl_runtime_apis! {
   impl sp_api::Core<Block> for Runtime {
     fn version() -> RuntimeVersion {
@@ -561,10 +569,41 @@ sp_api::impl_runtime_apis! {
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
     fn authorities() -> Vec<AuthorityDiscoveryId> {
-      Babe::authorities()
+      // Converts to `[u8; 32]` so it can be hashed
+      let serai_validators = Babe::authorities()
         .into_iter()
-        .map(|(id, _)| AuthorityDiscoveryId::from(id.into_inner()))
-        .collect()
+        .map(|(id, _)| id.into_inner().0)
+        .collect::<hashbrown::HashSet<_>>();
+      let mut all = serai_validators;
+      for network in NETWORKS {
+        if network == NetworkId::Serai {
+          continue;
+        }
+        let participants =
+          ValidatorSets::participants_for_latest_decided_set(network)
+            .map_or(vec![], BoundedVec::into_inner);
+        for (participant, _) in participants {
+          all.insert(participant.0);
+        }
+      }
+      all.into_iter().map(|id| AuthorityDiscoveryId::from(PublicKey::from_raw(id))).collect()
+    }
+  }
+
+  impl crate::SeraiRuntimeApi<Block> for Runtime {
+    fn validators(network_id: NetworkId) -> Vec<PublicKey> {
+      if network_id == NetworkId::Serai {
+        Babe::authorities()
+          .into_iter()
+          .map(|(id, _)| id.into_inner())
+          .collect()
+      } else {
+        ValidatorSets::participants_for_latest_decided_set(network_id)
+          .map_or(
+            vec![],
+            |vec| vec.into_inner().into_iter().map(|(validator, _)| validator).collect()
+          )
+      }
     }
   }
 }

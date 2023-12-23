@@ -20,11 +20,6 @@ workspace = true
 name = "serai-node"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-
-futures-util = "0.3"
-jsonrpsee = { version = "0.16", features = ["server"] }
-
 sp-core = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
 sp-io = { git = "https://github.com/serai-dex/substrate" }
@@ -36,6 +31,12 @@ sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
 
 serai-runtime = { path = "../runtime", features = ["std"] }
+
+clap = { version = "4", features = ["derive"] }
+
+futures-util = "0.3"
+tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
+jsonrpsee = { version = "0.16", features = ["server"] }
 
 sc-offchain = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }

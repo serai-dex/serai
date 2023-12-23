@@ -97,6 +97,8 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 sp-core-hashing = { git = "https://github.com/serai-dex/substrate" }
 sp-std = { git = "https://github.com/serai-dex/substrate" }
 
+dockertest = { git = "https://github.com/kayabaNerve/dockertest-rs", branch = "arc" }
+
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
 borrow_as_ptr = "deny"

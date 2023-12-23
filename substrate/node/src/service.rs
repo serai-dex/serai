@@ -206,6 +206,42 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     );
   }
 
+  let role = config.role.clone();
+  let keystore = keystore_container.keystore();
+  let prometheus_registry = config.prometheus_registry().cloned();
+
+  // TODO: Ensure we're considered as an authority is a validator of an external network
+  let authority_discovery = if role.is_authority() {
+    let (worker, service) = sc_authority_discovery::new_worker_and_service_with_config(
+      #[allow(clippy::field_reassign_with_default)]
+      {
+        let mut worker = sc_authority_discovery::WorkerConfig::default();
+        worker.publish_non_global_ips = publish_non_global_ips;
+        worker.strict_record_validation = true;
+        worker
+      },
+      client.clone(),
+      network.clone(),
+      Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
+        match e {
+          Event::Dht(e) => Some(e),
+          _ => None,
+        }
+      })),
+      sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
+      prometheus_registry.clone(),
+    );
+    task_manager.spawn_handle().spawn(
+      "authority-discovery-worker",
+      Some("networking"),
+      worker.run(),
+    );
+
+    Some(service)
+  } else {
+    None
+  };
+
   let rpc_builder = {
     let client = client.clone();
     let pool = transaction_pool.clone();
@@ -215,18 +251,15 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
         client: client.clone(),
         pool: pool.clone(),
         deny_unsafe,
+        authority_discovery: authority_discovery.clone(),
       })
       .map_err(Into::into)
     })
   };
 
   let enable_grandpa = !config.disable_grandpa;
-  let role = config.role.clone();
   let force_authoring = config.force_authoring;
   let name = config.network.node_name.clone();
-  let prometheus_registry = config.prometheus_registry().cloned();
-
-  let keystore = keystore_container.keystore();
 
   sc_service::spawn_tasks(sc_service::SpawnTasksParams {
     config,
@@ -251,7 +284,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       select_chain,
       env: sc_basic_authorship::ProposerFactory::new(
         task_manager.spawn_handle(),
-        client.clone(),
+        client,
         transaction_pool.clone(),
         prometheus_registry.as_ref(),
         telemetry.as_ref().map(Telemetry::handle),
@@ -274,33 +307,6 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       "babe-proposer",
       Some("block-authoring"),
       sc_consensus_babe::start_babe(babe_config)?,
-    );
-  }
-
-  if role.is_authority() {
-    task_manager.spawn_handle().spawn(
-      "authority-discovery-worker",
-      Some("networking"),
-      sc_authority_discovery::new_worker_and_service_with_config(
-        #[allow(clippy::field_reassign_with_default)]
-        {
-          let mut worker = sc_authority_discovery::WorkerConfig::default();
-          worker.publish_non_global_ips = publish_non_global_ips;
-          worker
-        },
-        client,
-        network.clone(),
-        Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
-          match e {
-            Event::Dht(e) => Some(e),
-            _ => None,
-          }
-        })),
-        sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
-        prometheus_registry.clone(),
-      )
-      .0
-      .run(),
     );
   }
 

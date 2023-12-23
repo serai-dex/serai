@@ -951,10 +951,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
   key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   p2p: P,
   processors: Pro,
-  serai: Serai,
+  serai: Arc<Serai>,
 ) {
-  let serai = Arc::new(serai);
-
   let (new_tributary_spec_send, mut new_tributary_spec_recv) = mpsc::unbounded_channel();
   // Reload active tributaries from the database
   for spec in ActiveTributaryDb::active_tributaries(&raw_db).1 {
@@ -1212,11 +1210,10 @@ async fn main() {
     key_bytes.zeroize();
     key
   };
-  let p2p = LibP2p::new();
 
   let processors = Arc::new(MessageQueue::from_env(Service::Coordinator));
 
-  let serai = || async {
+  let serai = (async {
     loop {
       let Ok(serai) = Serai::new(format!(
         "http://{}:9944",
@@ -1229,8 +1226,10 @@ async fn main() {
         continue;
       };
       log::info!("made initial connection to Serai node");
-      return serai;
+      return Arc::new(serai);
     }
-  };
-  run(db, key, p2p, processors, serai().await).await
+  })
+  .await;
+  let p2p = LibP2p::new(serai.clone());
+  run(db, key, p2p, processors, serai).await
 }

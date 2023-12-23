@@ -19,6 +19,8 @@ workspace = true
 [dependencies]
 hex = "0.4"
 
+async-trait = "0.1"
+async-recursion = "1"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 

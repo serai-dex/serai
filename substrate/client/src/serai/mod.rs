@@ -16,7 +16,7 @@ pub use abi::{primitives, Transaction};
 use abi::*;
 
 pub use primitives::{SeraiAddress, Signature, Amount};
-use primitives::Header;
+use primitives::{Header, NetworkId};
 
 pub mod coins;
 pub use coins::SeraiCoins;
@@ -305,6 +305,14 @@ impl Serai {
   /// Returns a TemporalSerai able to retrieve state as of the specified block.
   pub fn as_of(&self, block: [u8; 32]) -> TemporalSerai {
     TemporalSerai { serai: self, block, events: RwLock::new(None) }
+  }
+
+  /// Return the P2P Multiaddrs for the validators of the specified network.
+  pub async fn p2p_validators(
+    &self,
+    network: NetworkId,
+  ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
+    self.call("p2p_validators", network).await
   }
 }
 
