@@ -143,5 +143,14 @@ impl AsRef<[u8]> for Data {
   }
 }
 
+/// Lexicographically reverses a given byte array.
+pub fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
+  let mut res = [0u8; N];
+  for (i, byte) in bytes.iter().enumerate() {
+    res[i] = !*byte;
+  }
+  res
+}
+
 pub type BlockNumber = u64;
 pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;

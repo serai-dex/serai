@@ -216,23 +216,13 @@ pub mod pallet {
   type SortedAllocations<T: Config> =
     StorageMap<_, Identity, (NetworkId, [u8; 8], [u8; 16], Public), (), OptionQuery>;
   impl<T: Config> Pallet<T> {
-    /// A function which takes an amount and generates a byte array with a lexicographic order from
-    /// high amount to low amount.
-    #[inline]
-    fn lexicographic_amount(amount: Amount) -> [u8; 8] {
-      let mut bytes = amount.0.to_be_bytes();
-      for byte in &mut bytes {
-        *byte = !*byte;
-      }
-      bytes
-    }
     #[inline]
     fn sorted_allocation_key(
       network: NetworkId,
       key: Public,
       amount: Amount,
     ) -> (NetworkId, [u8; 8], [u8; 16], Public) {
-      let amount = Self::lexicographic_amount(amount);
+      let amount = reverse_lexicographic_order(amount.0.to_be_bytes());
       let hash = sp_io::hashing::blake2_128(&(network, amount, key).encode());
       (network, amount, hash, key)
     }
