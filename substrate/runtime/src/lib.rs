@@ -579,6 +579,12 @@ sp_api::impl_runtime_apis! {
         if network == NetworkId::Serai {
           continue;
         }
+        // Returning the latest-decided, not latest and active, means the active set
+        // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
+        // forcing some validators to successfully peer find in order for the threshold to become
+        // online again, this may cause a liveness failure.
+        //
+        // This is assumed not to matter in real life, yet an interesting note.
         let participants =
           ValidatorSets::participants_for_latest_decided_set(network)
             .map_or(vec![], BoundedVec::into_inner);
