@@ -110,7 +110,7 @@ test!(
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+        rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
         Change::new(&change_view, false),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
@@ -294,7 +294,7 @@ test!(
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+        rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
         Change::fingerprintable(None),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
