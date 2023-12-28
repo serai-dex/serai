@@ -756,7 +756,7 @@ impl Network for Monero {
       vec![(address.into(), amount - fee)],
       &Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
-      self.rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+      self.rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
     )
     .unwrap()
     .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))
