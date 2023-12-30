@@ -3,7 +3,7 @@ FROM rust:1.75.0-slim-bookworm as builder
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   rm -rf /var/lib/apt/lists/* && \
-  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20230703T000000Z bookworm main" > /etc/apt/sources.list && \
+  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20231201T000000Z bookworm main" > /etc/apt/sources.list && \
   apt update
 
 # Install dependencies
@@ -22,6 +22,7 @@ ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
 ADD mini /serai/mini
 ADD tests /serai/tests
+ADD patches /serai/patches
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
