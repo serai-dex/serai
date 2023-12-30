@@ -33,7 +33,10 @@ pub struct RingMatrix {
 
 impl RingMatrix {
   pub fn new(matrix: Vec<Vec<EdwardsPoint>>) -> Result<Self, MlsagError> {
-    if matrix.is_empty() {
+    // Monero requires that there is more than one ring member for MLSAG signatures:
+    // https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
+    // src/ringct/rctSigs.cpp#L462
+    if matrix.len() < 2 {
       Err(MlsagError::InvalidRing)?;
     }
     for member in &matrix {
