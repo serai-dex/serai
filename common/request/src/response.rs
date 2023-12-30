@@ -1,7 +1,7 @@
 use hyper::{
   StatusCode,
   header::{HeaderValue, HeaderMap},
-  body::{Buf, Body},
+  body::{HttpBody, Buf, Body},
 };
 
 use crate::{Client, Error};
@@ -17,6 +17,6 @@ impl<'a> Response<'a> {
     self.0.headers()
   }
   pub async fn body(self) -> Result<impl std::io::Read, Error> {
-    hyper::body::aggregate(self.0.into_body()).await.map(Buf::reader).map_err(Error::Hyper)
+    Ok(self.0.into_body().collect().await.map_err(Error::Hyper)?.aggregate().reader())
   }
 }
