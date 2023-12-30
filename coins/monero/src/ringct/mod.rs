@@ -257,7 +257,8 @@ impl RctPrunable {
 
   pub fn read<R: Read>(
     rct_type: RctType,
-    decoys: &[usize],
+    ring_length: usize,
+    inputs: usize,
     outputs: usize,
     r: &mut R,
   ) -> io::Result<RctPrunable> {
@@ -268,7 +269,7 @@ impl RctPrunable {
     //   src/ringct/rctSigs.cpp#L609
     // And then for RctNull, that's only allowed for miner TXs which require one input of
     // Input::Gen
-    if decoys.is_empty() {
+    if inputs == 0 {
       Err(io::Error::other("transaction had no inputs"))?;
     }
 
@@ -276,11 +277,11 @@ impl RctPrunable {
       RctType::Null => RctPrunable::Null,
       RctType::MlsagAggregate => RctPrunable::AggregateMlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsag: Mlsag::read(decoys[0], decoys.len() + 1, r)?,
+        mlsag: Mlsag::read(ring_length, inputs + 1, r)?,
       },
       RctType::MlsagIndividual => RctPrunable::MlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
+        mlsags: (0 .. inputs).map(|_| Mlsag::read(ring_length, 2, r)).collect::<Result<_, _>>()?,
       },
       RctType::Bulletproofs | RctType::BulletproofsCompactAmount => {
         RctPrunable::MlsagBulletproofs {
@@ -295,8 +296,10 @@ impl RctPrunable {
             }
             Bulletproofs::read(r)?
           },
-          mlsags: decoys.iter().map(|d| Mlsag::read(*d, 2, r)).collect::<Result<_, _>>()?,
-          pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
+          mlsags: (0 .. inputs)
+            .map(|_| Mlsag::read(ring_length, 2, r))
+            .collect::<Result<_, _>>()?,
+          pseudo_outs: read_raw_vec(read_point, inputs, r)?,
         }
       }
       RctType::Clsag | RctType::BulletproofsPlus => RctPrunable::Clsag {
@@ -308,8 +311,8 @@ impl RctPrunable {
             r,
           )?
         },
-        clsags: (0 .. decoys.len()).map(|o| Clsag::read(decoys[o], r)).collect::<Result<_, _>>()?,
-        pseudo_outs: read_raw_vec(read_point, decoys.len(), r)?,
+        clsags: (0 .. inputs).map(|_| Clsag::read(ring_length, r)).collect::<Result<_, _>>()?,
+        pseudo_outs: read_raw_vec(read_point, inputs, r)?,
       },
     })
   }
@@ -382,8 +385,16 @@ impl RctSignatures {
     serialized
   }
 
-  pub fn read<R: Read>(decoys: &[usize], outputs: usize, r: &mut R) -> io::Result<RctSignatures> {
-    let base = RctBase::read(decoys.len(), outputs, r)?;
-    Ok(RctSignatures { base: base.0, prunable: RctPrunable::read(base.1, decoys, outputs, r)? })
+  pub fn read<R: Read>(
+    ring_length: usize,
+    inputs: usize,
+    outputs: usize,
+    r: &mut R,
+  ) -> io::Result<RctSignatures> {
+    let base = RctBase::read(inputs, outputs, r)?;
+    Ok(RctSignatures {
+      base: base.0,
+      prunable: RctPrunable::read(base.1, ring_length, inputs, outputs, r)?,
+    })
   }
 }
