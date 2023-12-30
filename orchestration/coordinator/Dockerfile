@@ -35,6 +35,7 @@ ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
 ADD mini /serai/mini
 ADD tests /serai/tests
+ADD patches /serai/patches
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
