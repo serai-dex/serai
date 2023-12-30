@@ -1,4 +1,4 @@
-FROM rust:1.74-slim-bookworm as builder
+FROM rust:1.75-slim-bookworm as builder
 
 COPY --from=mimalloc libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
