@@ -1,0 +1,10 @@
+# Switch to a non-root user
+# System user (not a human), shell of nologin, no password assigned
+RUN useradd --system --create-home --shell /sbin/nologin monero
+USER monero
+
+WORKDIR /home/monero
+COPY --from=monero --chown=monero monero-wallet-rpc /bin
+ADD scripts /scripts
+
+EXPOSE 6061
