@@ -58,5 +58,6 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 
 [features]
+longer-reattempts = []
 parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]

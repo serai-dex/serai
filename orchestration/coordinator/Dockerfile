@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build -p serai-coordinator --features parity-db && \
+  cargo build -p serai-coordinator --features "parity-db longer-reattempts" && \
   mv /serai/target/debug/serai-coordinator /serai/bin
 FROM debian:bookworm-slim as image
 
