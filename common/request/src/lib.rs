@@ -49,11 +49,14 @@ pub struct Client {
 
 impl Client {
   fn connector() -> Connector {
+    let mut res = HttpConnector::new();
+    res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     #[cfg(feature = "tls")]
-    let res =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
-    #[cfg(not(feature = "tls"))]
-    let res = HttpConnector::new();
+    let res = HttpsConnectorBuilder::new()
+      .with_native_roots()
+      .https_or_http()
+      .enable_http1()
+      .wrap_connector(res);
     res
   }
 
