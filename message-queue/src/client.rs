@@ -122,7 +122,13 @@ impl MessageQueue {
       }
       first = false;
 
-      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      let mut socket = match TcpStream::connect(&self.url).await {
+        Ok(socket) => socket,
+        Err(e) => {
+          log::warn!("couldn't connect to message-queue server: {e:?}");
+          continue;
+        }
+      };
 
       loop {
         if !Self::send(&mut socket, msg.clone()).await {
@@ -132,6 +138,7 @@ impl MessageQueue {
           continue 'outer;
         };
         // If there wasn't a message, check again in 1s
+        // TODO: Use a notification system here
         if status == 0 {
           tokio::time::sleep(core::time::Duration::from_secs(1)).await;
           continue;
