@@ -563,6 +563,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
   loop {
     let mut txn = raw_db.txn();
 
+    log::trace!("new db txn in run");
+
     let mut outer_msg = None;
 
     tokio::select! {
