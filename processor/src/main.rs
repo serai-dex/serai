@@ -61,6 +61,10 @@ use multisigs::{MultisigEvent, MultisigManager};
 #[cfg(test)]
 mod tests;
 
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
+
 // Items which are mutably borrowed by Tributary.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
