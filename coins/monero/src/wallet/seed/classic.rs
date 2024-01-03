@@ -16,7 +16,7 @@ use crate::{random_scalar, wallet::seed::SeedError};
 pub(crate) const CLASSIC_SEED_LENGTH: usize = 24;
 pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Zeroize)]
 pub enum Language {
   Chinese,
   English,
@@ -184,63 +184,58 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
     }
     *res += word;
   }
-  ClassicSeed(res)
+  ClassicSeed(lang, res)
 }
 
 // Convert a seed to bytes
-pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]>), SeedError> {
+pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, SeedError> {
   // get seed words
   let words = words.split_whitespace().map(|w| Zeroizing::new(w.to_string())).collect::<Vec<_>>();
   if (words.len() != CLASSIC_SEED_LENGTH) && (words.len() != CLASSIC_SEED_LENGTH_WITH_CHECKSUM) {
     panic!("invalid seed passed to seed_to_bytes");
   }
 
-  // find the language
-  let (matched_indices, lang_name, lang) = (|| {
+  let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
+  if has_checksum && lang == Language::EnglishOld {
+    Err(SeedError::EnglishOldWithChecksum)?;
+  }
+
+  // Validate words are in the language word list
+  let lang_word_list: &WordList = &LANGUAGES()[&lang];
+  let matched_indices = (|| {
     let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
     let mut matched_indices = Zeroizing::new(vec![]);
 
-    // Iterate through all the languages
-    'language: for (lang_name, lang) in LANGUAGES() {
-      matched_indices.zeroize();
-      matched_indices.clear();
+    // Iterate through all the words and see if they're all present
+    for word in &words {
+      let trimmed = trim(word, lang_word_list.unique_prefix_length);
+      let word = if has_checksum { &trimmed } else { word };
 
-      // Iterate through all the words and see if they're all present
-      for word in &words {
-        let trimmed = trim(word, lang.unique_prefix_length);
-        let word = if has_checksum { &trimmed } else { word };
-
-        if let Some(index) = if has_checksum {
-          lang.trimmed_word_map.get(word.deref())
-        } else {
-          lang.word_map.get(&word.as_str())
-        } {
-          matched_indices.push(*index);
-        } else {
-          continue 'language;
-        }
+      if let Some(index) = if has_checksum {
+        lang_word_list.trimmed_word_map.get(word.deref())
+      } else {
+        lang_word_list.word_map.get(&word.as_str())
+      } {
+        matched_indices.push(*index);
+      } else {
+        Err(SeedError::InvalidSeed)?;
       }
-
-      if has_checksum {
-        if lang_name == &Language::EnglishOld {
-          Err(SeedError::EnglishOldWithChecksum)?;
-        }
-
-        // exclude the last word when calculating a checksum.
-        let last_word = words.last().unwrap().clone();
-        let checksum = words[checksum_index(&words[.. words.len() - 1], lang)].clone();
-
-        // check the trimmed checksum and trimmed last word line up
-        if trim(&checksum, lang.unique_prefix_length) != trim(&last_word, lang.unique_prefix_length)
-        {
-          Err(SeedError::InvalidChecksum)?;
-        }
-      }
-
-      return Ok((matched_indices, lang_name, lang));
     }
 
-    Err(SeedError::UnknownLanguage)?
+    if has_checksum {
+      // exclude the last word when calculating a checksum.
+      let last_word = words.last().unwrap().clone();
+      let checksum = words[checksum_index(&words[.. words.len() - 1], lang_word_list)].clone();
+
+      // check the trimmed checksum and trimmed last word line up
+      if trim(&checksum, lang_word_list.unique_prefix_length) !=
+        trim(&last_word, lang_word_list.unique_prefix_length)
+      {
+        Err(SeedError::InvalidChecksum)?;
+      }
+    }
+
+    return Ok(matched_indices);
   })()?;
 
   // convert to bytes
@@ -254,16 +249,17 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
     indices[3] = matched_indices[i3 + 2];
 
     let inner = |i| {
-      let mut base = (lang.word_list.len() - indices[i] + indices[i + 1]) % lang.word_list.len();
+      let mut base = (lang_word_list.word_list.len() - indices[i] + indices[i + 1]) %
+        lang_word_list.word_list.len();
       // Shift the index over
       for _ in 0 .. i {
-        base *= lang.word_list.len();
+        base *= lang_word_list.word_list.len();
       }
       base
     };
     // set the last index
     indices[0] = indices[1] + inner(1) + inner(2);
-    if (indices[0] % lang.word_list.len()) != indices[1] {
+    if (indices[0] % lang_word_list.word_list.len()) != indices[1] {
       Err(SeedError::InvalidSeed)?;
     }
 
@@ -273,19 +269,19 @@ pub(crate) fn seed_to_bytes(words: &str) -> Result<(Language, Zeroizing<[u8; 32]
     bytes.zeroize();
   }
 
-  Ok((*lang_name, res))
+  Ok(res)
 }
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
-pub struct ClassicSeed(Zeroizing<String>);
+pub struct ClassicSeed(Language, Zeroizing<String>);
 impl ClassicSeed {
   pub(crate) fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> ClassicSeed {
     key_to_seed(lang, Zeroizing::new(random_scalar(rng)))
   }
 
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_string(words: Zeroizing<String>) -> Result<ClassicSeed, SeedError> {
-    let (lang, entropy) = seed_to_bytes(&words)?;
+  pub fn from_string(lang: Language, words: Zeroizing<String>) -> Result<ClassicSeed, SeedError> {
+    let entropy = seed_to_bytes(lang, &words)?;
 
     // Make sure this is a valid scalar
     let scalar = Scalar::from_canonical_bytes(*entropy);
@@ -306,10 +302,10 @@ impl ClassicSeed {
   }
 
   pub(crate) fn to_string(&self) -> Zeroizing<String> {
-    self.0.clone()
+    self.1.clone()
   }
 
   pub(crate) fn entropy(&self) -> Zeroizing<[u8; 32]> {
-    seed_to_bytes(&self.0).unwrap().1
+    seed_to_bytes(self.0, &self.1).unwrap()
   }
 }
