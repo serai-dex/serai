@@ -235,7 +235,7 @@ pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8
       }
     }
 
-    return Ok(matched_indices);
+    Ok(matched_indices)
   })()?;
 
   // convert to bytes
