@@ -13,8 +13,12 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use sp_core::{ConstU32, bounded::BoundedVec};
+#[cfg(test)]
+use sp_io::TestExternalities;
+#[cfg(test)]
+use sp_core::hexdisplay::AsBytesRef;
 
+use sp_core::{ConstU32, bounded::BoundedVec};
 pub use sp_application_crypto as crypto;
 
 mod amount;
@@ -150,6 +154,63 @@ pub fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
     res[i] = !*byte;
   }
   res
+}
+
+#[test]
+fn test_reverse_lexicographic_order() {
+  TestExternalities::default().execute_with(|| {
+    // Storage
+    let map_prefix = "ReverseTest1";
+    let reverse_map_prefix = "ReverseTest2";
+    let map = |key: &[u8]| return [map_prefix.as_bytes(), key].concat();
+    let reverse_map = |key: &[u8]| return [reverse_map_prefix.as_bytes(), key].concat();
+
+    // Iterator
+    struct MapIter {
+      prev_key: Vec<u8>,
+    }
+    impl MapIter {
+      pub fn new(prev_key: Vec<u8>) -> Self {
+        MapIter { prev_key }
+      }
+
+      pub fn next(&mut self) -> Option<Vec<u8>> {
+        let next = sp_io::storage::next_key(&self.prev_key);
+        if let Some(key) = next {
+          self.prev_key = key.clone();
+          // throw away the prefix part(first 11 bytes)
+          return Some(key[12 ..].to_vec());
+        }
+        None
+      }
+    }
+
+    // populate the maps
+    let amounts: Vec<u64> = vec![1, 10, 8922387466, 4, 4598712599, 59, 3498765432, 65];
+    let amounts_sorted: Vec<u64> = vec![1, 4, 10, 59, 65, 3498765432, 4598712599, 8922387466];
+    for a in amounts {
+      sp_io::storage::set(map(a.to_be_bytes().as_ref()).as_bytes_ref(), &[]);
+      sp_io::storage::set(
+        reverse_map(reverse_lexicographic_order(a.to_be_bytes()).as_ref()).as_bytes_ref(),
+        &[],
+      );
+    }
+
+    // retrive back and check whether they are sorted as expected
+    let total_size = amounts_sorted.len();
+    let mut map_iter = MapIter::new(map_prefix.as_bytes().to_vec());
+    let mut reverse_map_iter = MapIter::new(reverse_map_prefix.as_bytes().to_vec());
+    for i in 0 .. amounts_sorted.len() {
+      let first = map_iter.next().unwrap();
+      let second = reverse_map_iter.next().unwrap();
+
+      assert_eq!(u64::from_be_bytes(first.try_into().unwrap()), amounts_sorted[i]);
+      assert_eq!(
+        u64::from_be_bytes(reverse_lexicographic_order(second.try_into().unwrap())),
+        amounts_sorted[total_size - (i + 1)]
+      );
+    }
+  });
 }
 
 pub type BlockNumber = u64;
