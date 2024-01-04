@@ -263,67 +263,62 @@ impl Polyseed {
 
   /// Create a new `Polyseed` from a String.
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_string(seed: Zeroizing<String>) -> Result<Polyseed, SeedError> {
+  pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, SeedError> {
     // Decode the seed into its polynomial coefficients
     let mut poly = [0; POLYSEED_LENGTH];
-    let lang = (|| {
-      'language: for (name, lang) in LANGUAGES() {
-        for (i, word) in seed.split_whitespace().enumerate() {
-          // Find the word's index
-          fn check_if_matches<S: AsRef<str>, I: Iterator<Item = S>>(
-            has_prefix: bool,
-            mut lang_words: I,
-            word: &str,
-          ) -> Option<usize> {
-            if has_prefix {
-              // Get the position of the word within the iterator
-              // Doesn't use starts_with and some words are substrs of others, leading to false
-              // positives
-              let mut get_position = || {
-                lang_words.position(|lang_word| {
-                  let mut lang_word = lang_word.as_ref().chars();
-                  let mut word = word.chars();
 
-                  let mut res = true;
-                  for _ in 0 .. PREFIX_LEN {
-                    res &= lang_word.next() == word.next();
-                  }
-                  res
-                })
-              };
-              let res = get_position();
-              // If another word has this prefix, don't call it a match
-              if get_position().is_some() {
-                return None;
+    // Validate words are in the lang word list
+    let lang_word_list: &WordList = &LANGUAGES()[&lang];
+    for (i, word) in seed.split_whitespace().enumerate() {
+      // Find the word's index
+      fn check_if_matches<S: AsRef<str>, I: Iterator<Item = S>>(
+        has_prefix: bool,
+        mut lang_words: I,
+        word: &str,
+      ) -> Option<usize> {
+        if has_prefix {
+          // Get the position of the word within the iterator
+          // Doesn't use starts_with and some words are substrs of others, leading to false
+          // positives
+          let mut get_position = || {
+            lang_words.position(|lang_word| {
+              let mut lang_word = lang_word.as_ref().chars();
+              let mut word = word.chars();
+
+              let mut res = true;
+              for _ in 0 .. PREFIX_LEN {
+                res &= lang_word.next() == word.next();
               }
               res
-            } else {
-              lang_words.position(|lang_word| lang_word.as_ref() == word)
-            }
-          }
-
-          let Some(coeff) = (if lang.has_accent {
-            let ascii = |word: &str| word.chars().filter(char::is_ascii).collect::<String>();
-            check_if_matches(
-              lang.has_prefix,
-              lang.words.iter().map(|lang_word| ascii(lang_word)),
-              &ascii(word),
-            )
-          } else {
-            check_if_matches(lang.has_prefix, lang.words.iter(), word)
-          }) else {
-            continue 'language;
+            })
           };
-
-          // WordList asserts the word list length is less than u16::MAX
-          poly[i] = u16::try_from(coeff).expect("coeff exceeded u16");
+          let res = get_position();
+          // If another word has this prefix, don't call it a match
+          if get_position().is_some() {
+            return None;
+          }
+          res
+        } else {
+          lang_words.position(|lang_word| lang_word.as_ref() == word)
         }
-
-        return Ok(*name);
       }
 
-      Err(SeedError::UnknownLanguage)
-    })()?;
+      let Some(coeff) = (if lang_word_list.has_accent {
+        let ascii = |word: &str| word.chars().filter(char::is_ascii).collect::<String>();
+        check_if_matches(
+          lang_word_list.has_prefix,
+          lang_word_list.words.iter().map(|lang_word| ascii(lang_word)),
+          &ascii(word),
+        )
+      } else {
+        check_if_matches(lang_word_list.has_prefix, lang_word_list.words.iter(), word)
+      }) else {
+        Err(SeedError::InvalidSeed)?
+      };
+
+      // WordList asserts the word list length is less than u16::MAX
+      poly[i] = u16::try_from(coeff).expect("coeff exceeded u16");
+    }
 
     // xor out the coin
     poly[POLY_NUM_CHECK_DIGITS] ^= COIN;

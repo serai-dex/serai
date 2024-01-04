@@ -137,6 +137,53 @@ fn test_classic_seed() {
       spend: "647f4765b66b636ff07170ab6280a9a6804dfbaf19db2ad37d23be024a18730b".into(),
       view: "045da65316a906a8c30046053119c18020b07a7a3a6ef5c01ab2a8755416bd02".into(),
     },
+    // The following seeds require the language specification in order to calculate
+    // a single valid checksum
+    Vector {
+      language: classic::Language::Spanish,
+      seed: "pluma laico atraer pintor peor cerca balde buscar \
+               lancha batir nulo reloj resto gemelo nevera poder columna gol \
+               oveja latir amplio bolero feliz fuerza nevera"
+        .into(),
+      spend: "30303983fc8d215dd020cc6b8223793318d55c466a86e4390954f373fdc7200a".into(),
+      view: "97c649143f3c147ba59aa5506cc09c7992c5c219bb26964442142bf97980800e".into(),
+    },
+    Vector {
+      language: classic::Language::Spanish,
+      seed: "pluma pluma pluma pluma pluma pluma pluma pluma \
+               pluma pluma pluma pluma pluma pluma pluma pluma \
+               pluma pluma pluma pluma pluma pluma pluma pluma pluma"
+        .into(),
+      spend: "b4050000b4050000b4050000b4050000b4050000b4050000b4050000b4050000".into(),
+      view: "d73534f7912b395eb70ef911791a2814eb6df7ce56528eaaa83ff2b72d9f5e0f".into(),
+    },
+    Vector {
+      language: classic::Language::English,
+      seed: "plus plus plus plus plus plus plus plus \
+               plus plus plus plus plus plus plus plus \
+               plus plus plus plus plus plus plus plus plus"
+        .into(),
+      spend: "3b0400003b0400003b0400003b0400003b0400003b0400003b0400003b040000".into(),
+      view: "43a8a7715eed11eff145a2024ddcc39740255156da7bbd736ee66a0838053a02".into(),
+    },
+    Vector {
+      language: classic::Language::Spanish,
+      seed: "audio audio audio audio audio audio audio audio \
+               audio audio audio audio audio audio audio audio \
+               audio audio audio audio audio audio audio audio audio"
+        .into(),
+      spend: "ba000000ba000000ba000000ba000000ba000000ba000000ba000000ba000000".into(),
+      view: "1437256da2c85d029b293d8c6b1d625d9374969301869b12f37186e3f906c708".into(),
+    },
+    Vector {
+      language: classic::Language::English,
+      seed: "audio audio audio audio audio audio audio audio \
+               audio audio audio audio audio audio audio audio \
+               audio audio audio audio audio audio audio audio audio"
+        .into(),
+      spend: "7900000079000000790000007900000079000000790000007900000079000000".into(),
+      view: "20bec797ab96780ae6a045dd816676ca7ed1d7c6773f7022d03ad234b581d600".into(),
+    },
   ];
 
   for vector in vectors {
@@ -150,15 +197,15 @@ fn test_classic_seed() {
 
     // Test against Monero
     {
-      let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
+      println!("{}. language: {:?}, seed: {}", line!(), vector.language, vector.seed.clone());
+      let seed =
+        Seed::from_string(SeedType::Classic(vector.language), Zeroizing::new(vector.seed.clone()))
+          .unwrap();
       let trim = trim_seed(&vector.seed);
-      println!(
-        "{}. seed: {}, entropy: {:?}, trim: {trim}",
-        line!(),
-        *seed.to_string(),
-        *seed.entropy()
+      assert_eq!(
+        seed,
+        Seed::from_string(SeedType::Classic(vector.language), Zeroizing::new(trim)).unwrap()
       );
-      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
 
       let spend: [u8; 32] = hex::decode(vector.spend).unwrap().try_into().unwrap();
       // For classical seeds, Monero directly uses the entropy as a spend key
@@ -184,19 +231,20 @@ fn test_classic_seed() {
     // Test against ourselves
     {
       let seed = Seed::new(&mut OsRng, SeedType::Classic(vector.language));
+      println!("{}. seed: {}", line!(), *seed.to_string());
       let trim = trim_seed(&seed.to_string());
-      println!(
-        "{}. seed: {}, entropy: {:?}, trim: {trim}",
-        line!(),
-        *seed.to_string(),
-        *seed.entropy()
+      assert_eq!(
+        seed,
+        Seed::from_string(SeedType::Classic(vector.language), Zeroizing::new(trim)).unwrap()
       );
-      assert_eq!(seed, Seed::from_string(Zeroizing::new(trim)).unwrap());
       assert_eq!(
         seed,
         Seed::from_entropy(SeedType::Classic(vector.language), seed.entropy(), None).unwrap()
       );
-      assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
+      assert_eq!(
+        seed,
+        Seed::from_string(SeedType::Classic(vector.language), seed.to_string()).unwrap()
+      );
     }
   }
 }
@@ -309,6 +357,18 @@ fn test_polyseed() {
       has_prefix: false,
       has_accent: false,
     },
+    // The following seed requires the language specification in order to calculate
+    // a single valid checksum
+    Vector {
+      language: polyseed::Language::Spanish,
+      seed: "impo sort usua cabi venu nobl oliv clim \
+        cont barr marc auto prod vaca torn fati"
+        .into(),
+      entropy: "dbfce25fe09b68a340e01c62417eeef43ad51800000000000000000000000000".into(),
+      birthday: 1701511650,
+      has_prefix: true,
+      has_accent: true,
+    },
   ];
 
   for vector in vectors {
@@ -350,31 +410,32 @@ fn test_polyseed() {
     };
 
     // String -> Seed
-    let seed = Seed::from_string(Zeroizing::new(vector.seed.clone())).unwrap();
+    println!("{}. language: {:?}, seed: {}", line!(), vector.language, vector.seed.clone());
+    let seed =
+      Seed::from_string(SeedType::Polyseed(vector.language), Zeroizing::new(vector.seed.clone()))
+        .unwrap();
     let trim = trim_seed(&vector.seed);
     let add_whitespace = add_whitespace(vector.seed.clone());
     let seed_without_accents = seed_without_accents(&vector.seed);
-    println!(
-      "{}. seed: {}, entropy: {:?}, trim: {}, add_whitespace: {}, seed_without_accents: {}",
-      line!(),
-      *seed.to_string(),
-      *seed.entropy(),
-      trim,
-      add_whitespace,
-      seed_without_accents,
-    );
 
     // Make sure a version with added whitespace still works
-    let whitespaced_seed = Seed::from_string(Zeroizing::new(add_whitespace)).unwrap();
+    let whitespaced_seed =
+      Seed::from_string(SeedType::Polyseed(vector.language), Zeroizing::new(add_whitespace))
+        .unwrap();
     assert_eq!(seed, whitespaced_seed);
     // Check trimmed versions works
     if vector.has_prefix {
-      let trimmed_seed = Seed::from_string(Zeroizing::new(trim)).unwrap();
+      let trimmed_seed =
+        Seed::from_string(SeedType::Polyseed(vector.language), Zeroizing::new(trim)).unwrap();
       assert_eq!(seed, trimmed_seed);
     }
     // Check versions without accents work
     if vector.has_accent {
-      let seed_without_accents = Seed::from_string(Zeroizing::new(seed_without_accents)).unwrap();
+      let seed_without_accents = Seed::from_string(
+        SeedType::Polyseed(vector.language),
+        Zeroizing::new(seed_without_accents),
+      )
+      .unwrap();
       assert_eq!(seed, seed_without_accents);
     }
 
@@ -391,8 +452,11 @@ fn test_polyseed() {
     // Check against ourselves
     {
       let seed = Seed::new(&mut OsRng, SeedType::Polyseed(vector.language));
-      println!("{}. seed: {}, key: {:?}", line!(), *seed.to_string(), *seed.key());
-      assert_eq!(seed, Seed::from_string(seed.to_string()).unwrap());
+      println!("{}. seed: {}", line!(), *seed.to_string());
+      assert_eq!(
+        seed,
+        Seed::from_string(SeedType::Polyseed(vector.language), seed.to_string()).unwrap()
+      );
       assert_eq!(
         seed,
         Seed::from_entropy(

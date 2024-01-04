@@ -61,13 +61,23 @@ impl Seed {
   }
 
   /// Parse a seed from a `String`.
-  pub fn from_string(words: Zeroizing<String>) -> Result<Seed, SeedError> {
-    match words.split_whitespace().count() {
-      CLASSIC_SEED_LENGTH | CLASSIC_SEED_LENGTH_WITH_CHECKSUM => {
-        ClassicSeed::from_string(words).map(Seed::Classic)
+  pub fn from_string(seed_type: SeedType, words: Zeroizing<String>) -> Result<Seed, SeedError> {
+    let word_count = words.split_whitespace().count();
+    match seed_type {
+      SeedType::Classic(lang) => {
+        if word_count != CLASSIC_SEED_LENGTH && word_count != CLASSIC_SEED_LENGTH_WITH_CHECKSUM {
+          Err(SeedError::InvalidSeedLength)?
+        } else {
+          ClassicSeed::from_string(lang, words).map(Seed::Classic)
+        }
       }
-      POLYSEED_LENGTH => Polyseed::from_string(words).map(Seed::Polyseed),
-      _ => Err(SeedError::InvalidSeedLength)?,
+      SeedType::Polyseed(lang) => {
+        if word_count != POLYSEED_LENGTH {
+          Err(SeedError::InvalidSeedLength)?
+        } else {
+          Polyseed::from_string(lang, words).map(Seed::Polyseed)
+        }
+      }
     }
   }
 
