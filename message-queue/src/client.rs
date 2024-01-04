@@ -122,10 +122,10 @@ impl MessageQueue {
     'outer: loop {
       if !first {
         tokio::time::sleep(core::time::Duration::from_secs(5)).await;
-        continue;
       }
       first = false;
 
+      log::trace!("opening socket to message-queue for next");
       let mut socket = match TcpStream::connect(&self.url).await {
         Ok(socket) => socket,
         Err(e) => {
@@ -133,6 +133,7 @@ impl MessageQueue {
           continue;
         }
       };
+      log::trace!("opened socket for next");
 
       loop {
         if !Self::send(&mut socket, msg.clone()).await {
