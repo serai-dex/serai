@@ -7344,6 +7344,7 @@ dependencies = [
  "sp-runtime",
  "tokio",
  "tributary-chain",
+ "zalloc",
  "zeroize",
 ]
 
@@ -7486,6 +7487,7 @@ dependencies = [
  "serai-env",
  "serai-primitives",
  "tokio",
+ "zalloc",
  "zeroize",
 ]
 
@@ -7607,6 +7609,7 @@ dependencies = [
  "sp-application-crypto",
  "thiserror",
  "tokio",
+ "zalloc",
  "zeroize",
 ]
 

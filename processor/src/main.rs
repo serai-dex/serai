@@ -61,6 +61,10 @@ use multisigs::{MultisigEvent, MultisigManager};
 #[cfg(test)]
 mod tests;
 
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
+
 // Items which are mutably borrowed by Tributary.
 // Any exceptions to this have to be carefully monitored in order to ensure consistency isn't
 // violated.
@@ -558,6 +562,8 @@ async fn run<N: Network, D: Db, Co: Coordinator>(mut raw_db: D, network: N, mut 
 
   loop {
     let mut txn = raw_db.txn();
+
+    log::trace!("new db txn in run");
 
     let mut outer_msg = None;
 

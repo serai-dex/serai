@@ -63,6 +63,10 @@ use cosign_evaluator::CosignEvaluator;
 #[cfg(test)]
 pub mod tests;
 
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
+
 #[derive(Clone)]
 pub struct ActiveTributary<D: Db, P: P2p> {
   pub spec: TributarySpec,

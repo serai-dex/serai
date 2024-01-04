@@ -68,9 +68,13 @@ impl MessageQueue {
   async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> bool {
     let msg = borsh::to_vec(&msg).unwrap();
     let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+      log::warn!("couldn't send the message len");
       return false;
     };
-    let Ok(()) = socket.write_all(&msg).await else { return false };
+    let Ok(()) = socket.write_all(&msg).await else {
+      log::warn!("couldn't write the message");
+      return false;
+    };
     true
   }
 
@@ -118,20 +122,32 @@ impl MessageQueue {
     'outer: loop {
       if !first {
         tokio::time::sleep(core::time::Duration::from_secs(5)).await;
-        continue;
       }
       first = false;
 
-      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
+      log::trace!("opening socket to message-queue for next");
+      let mut socket = match TcpStream::connect(&self.url).await {
+        Ok(socket) => socket,
+        Err(e) => {
+          log::warn!("couldn't connect to message-queue server: {e:?}");
+          continue;
+        }
+      };
+      log::trace!("opened socket for next");
 
       loop {
         if !Self::send(&mut socket, msg.clone()).await {
           continue 'outer;
         }
-        let Ok(status) = socket.read_u8().await else {
-          continue 'outer;
+        let status = match socket.read_u8().await {
+          Ok(status) => status,
+          Err(e) => {
+            log::warn!("couldn't read status u8: {e:?}");
+            continue 'outer;
+          }
         };
         // If there wasn't a message, check again in 1s
+        // TODO: Use a notification system here
         if status == 0 {
           tokio::time::sleep(core::time::Duration::from_secs(1)).await;
           continue;
@@ -143,12 +159,17 @@ impl MessageQueue {
       // Timeout after 5 seconds in case there's an issue with the length handling
       let Ok(msg) = tokio::time::timeout(core::time::Duration::from_secs(5), async {
         // Read the message length
-        let Ok(len) = socket.read_u32_le().await else {
-          return vec![];
+        let len = match socket.read_u32_le().await {
+          Ok(len) => len,
+          Err(e) => {
+            log::warn!("couldn't read len: {e:?}");
+            return vec![];
+          }
         };
         let mut buf = vec![0; usize::try_from(len).unwrap()];
         // Read the message
         let Ok(_) = socket.read_exact(&mut buf).await else {
+          log::warn!("couldn't read the message");
           return vec![];
         };
         buf

@@ -32,6 +32,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 
+zalloc = { path = "../common/zalloc" }
 serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env" }
 
