@@ -331,14 +331,11 @@ impl Transaction {
       }
     } else if prefix.version == 2 {
       rct_signatures = RctSignatures::read(
-        &prefix
-          .inputs
-          .iter()
-          .map(|input| match input {
-            Input::Gen(_) => 0,
-            Input::ToKey { key_offsets, .. } => key_offsets.len(),
-          })
-          .collect::<Vec<_>>(),
+        prefix.inputs.first().map_or(0, |input| match input {
+          Input::Gen(_) => 0,
+          Input::ToKey { key_offsets, .. } => key_offsets.len(),
+        }),
+        prefix.inputs.len(),
         prefix.outputs.len(),
         r,
       )?;
