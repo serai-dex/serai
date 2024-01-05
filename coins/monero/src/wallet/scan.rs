@@ -363,7 +363,6 @@ impl Scanner {
             // https://github.com/monero-project/monero/
             //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
             //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
-            // TODO: Should this return? Where does Monero set the trap handler for this exception?
             continue;
           }
           None => {
