@@ -54,6 +54,7 @@ impl Client {
     #[cfg(feature = "tls")]
     let res = HttpsConnectorBuilder::new()
       .with_native_roots()
+      .expect("couldn't fetch system's SSL roots")
       .https_or_http()
       .enable_http1()
       .wrap_connector(res);
