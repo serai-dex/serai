@@ -73,6 +73,7 @@ members = [
   "patches/option-ext",
   "patches/directories-next",
   "patches/mach",
+  "patches/proc-macro-crate",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due
@@ -117,6 +118,9 @@ directories-next = { path = "patches/directories-next" }
 
 # mach is unmaintained, so this wraps mach2 as mach
 mach = { path = "patches/mach" }
+
+# proc-macro-crate 2 binds to an old version of toml for msrv so we patch to 3
+proc-macro-crate = { path = "patches/proc-macro-crate" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
