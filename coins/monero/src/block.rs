@@ -114,9 +114,16 @@ impl Block {
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
+    let header = BlockHeader::read(r)?;
+
+    let miner_tx = Transaction::read(r)?;
+    if !matches!(miner_tx.prefix.inputs.as_slice(), &[Input::Gen(_)]) {
+      Err(io::Error::other("Miner transaction has incorrect input type."))?;
+    }
+
     Ok(Block {
-      header: BlockHeader::read(r)?,
-      miner_tx: Transaction::read(r)?,
+      header,
+      miner_tx,
       txs: (0_usize .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }
