@@ -48,6 +48,12 @@ pub enum Event {
     set: ValidatorSet,
     key_pair: KeyPair,
   },
+  AcceptedHandover {
+    set: ValidatorSet,
+  },
+  SetRetired {
+    set: ValidatorSet,
+  },
   AllocationIncreased {
     validator: SeraiAddress,
     network: NetworkId,
@@ -63,8 +69,5 @@ pub enum Event {
     validator: SeraiAddress,
     network: NetworkId,
     session: Session,
-  },
-  SetRetired {
-    set: ValidatorSet,
   },
 }

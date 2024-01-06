@@ -329,6 +329,12 @@ pub mod pallet {
       set: ValidatorSet,
       key_pair: KeyPair,
     },
+    AcceptedHandover {
+      set: ValidatorSet,
+    },
+    SetRetired {
+      set: ValidatorSet,
+    },
     AllocationIncreased {
       validator: T::AccountId,
       network: NetworkId,
@@ -344,9 +350,6 @@ pub mod pallet {
       validator: T::AccountId,
       network: NetworkId,
       session: Session,
-    },
-    SetRetired {
-      set: ValidatorSet,
     },
   }
 
@@ -695,6 +698,11 @@ pub mod pallet {
       // This overwrites the prior value as the prior to-report set's stake presumably just
       // unlocked, making their report unenforceable
       PendingSlashReport::<T>::set(set.network, Some(keys.0));
+
+      // We're retiring this set because the set after it accepted the handover
+      Self::deposit_event(Event::AcceptedHandover {
+        set: ValidatorSet { network: set.network, session: Session(set.session.0 + 1) },
+      });
     }
 
     /// Take the amount deallocatable.
