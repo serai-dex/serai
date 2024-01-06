@@ -692,7 +692,7 @@ impl Network for Monero {
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
-    self.rpc.get_block(*id).await.unwrap().number().try_into().unwrap()
+    self.rpc.get_block(*id).await.unwrap().number().unwrap().try_into().unwrap()
   }
 
   #[cfg(test)]
