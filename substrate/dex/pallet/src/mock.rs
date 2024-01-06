@@ -40,6 +40,8 @@ pub use coins_pallet as coins;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
+pub const ORACLE_WINDOWS_SIZE: u32 = 10;
+
 construct_runtime!(
   pub enum Test
   {
@@ -92,6 +94,9 @@ impl Config for Test {
   type WeightInfo = ();
   type LPFee = ConstU32<3>; // means 0.3%
   type MaxSwapPathLength = ConstU32<4>;
+
+  type OracleWindowSize = ConstU32<{ ORACLE_WINDOWS_SIZE }>;
+
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;
 }

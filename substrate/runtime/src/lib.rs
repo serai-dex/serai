@@ -124,6 +124,15 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 
+/// This needs to be long enough for arbitrage to occur and make holding
+/// any fake price up sufficiently unprofitable.
+pub const ORACLE_WINDOW_SIZE: u32 = 1000;
+
+/// Since median price is the middle price in our window, we have to double
+/// the duration to wait 'ORACLE_WINDOW_SIZE' times and +1 to make it odd, so we don't constantly
+/// end up with 2 possible median prices.
+pub const MEDIAN_PRICE_WINDOW_SIZE: u32 = (2 * ORACLE_WINDOW_SIZE) + 1;
+
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
     c: PRIMARY_PROBABILITY,
@@ -245,6 +254,8 @@ impl dex::Config for Runtime {
   type MintMinLiquidity = ConstU64<10000>;
 
   type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
+
+  type OracleWindowSize = ConstU32<{ MEDIAN_PRICE_WINDOW_SIZE }>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
 }

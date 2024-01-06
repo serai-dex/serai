@@ -20,14 +20,6 @@
 
 use super::*;
 
-/// This needs to be long enough for arbitrage to occur and make holding
-/// any fake price up sufficiently unprofitable.
-pub const ORACLE_WINDOW_SIZE: u32 = 1000;
-
-/// Since median price is the middle price in our window, we have to double
-/// the duration to wait 'ORACLE_WINDOW_SIZE' times.
-pub const MEDIAN_PRICE_WINDOW_SIZE: u32 = 2 * ORACLE_WINDOW_SIZE;
-
 /// Trait for providing methods to swap between the various coin classes.
 pub trait Swap<AccountId, Balance, MultiCoinId> {
   /// Swap exactly `amount_in` of coin `path[0]` for coin `path[1]`.

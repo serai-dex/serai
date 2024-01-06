@@ -7690,7 +7690,6 @@ dependencies = [
  "serde",
  "sp-application-crypto",
  "sp-core",
- "sp-io",
  "sp-runtime",
  "zeroize",
 ]
