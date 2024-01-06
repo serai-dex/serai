@@ -307,6 +307,10 @@ pub mod pallet {
   #[pallet::getter(fn keys)]
   pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
 
+  /// The key for validator sets which can (and still need to) publish their slash reports.
+  #[pallet::storage]
+  pub type PendingSlashReport<T: Config> = StorageMap<_, Identity, NetworkId, Public, OptionQuery>;
+
   /// Disabled validators.
   #[pallet::storage]
   pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
@@ -681,8 +685,16 @@ pub mod pallet {
     }
 
     pub fn retire_set(set: ValidatorSet) {
-      Keys::<T>::remove(set);
-      Pallet::<T>::deposit_event(Event::SetRetired { set });
+      let keys = Keys::<T>::take(set).unwrap();
+      // If the prior prior set didn't report, emit they're retired now
+      if PendingSlashReport::<T>::get(set.network).is_some() {
+        Self::deposit_event(Event::SetRetired {
+          set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
+        });
+      }
+      // This overwrites the prior value as the prior to-report set's stake presumably just
+      // unlocked, making their report unenforceable
+      PendingSlashReport::<T>::set(set.network, Some(keys.0));
     }
 
     /// Take the amount deallocatable.
@@ -883,6 +895,31 @@ pub mod pallet {
       Ok(())
     }
 
+    #[pallet::call_index(1)]
+    #[pallet::weight(0)] // TODO
+    pub fn report_slashes(
+      origin: OriginFor<T>,
+      network: NetworkId,
+      slashes: BoundedVec<(Public, u32), ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
+      signature: Signature,
+    ) -> DispatchResult {
+      ensure_none(origin)?;
+
+      // signature isn't checked as this is an unsigned transaction, and validate_unsigned
+      // (called by pre_dispatch) checks it
+      let _ = signature;
+
+      // TODO: Handle slashes
+      let _ = slashes;
+
+      // Emit set retireed
+      Pallet::<T>::deposit_event(Event::SetRetired {
+        set: ValidatorSet { network, session: Session(Self::session(network).unwrap().0 - 1) },
+      });
+
+      Ok(())
+    }
+
     #[pallet::call_index(2)]
     #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
@@ -1012,8 +1049,31 @@ pub mod pallet {
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
-            .and_provides(set)
+            .and_provides((0, set))
             .longevity(u64::MAX)
+            .propagate(true)
+            .build()
+        }
+        Call::report_slashes { network, ref slashes, ref signature } => {
+          let network = *network;
+          // Don't allow Serai to publish a slash report as BABE/GRANDPA handles slashes directly
+          if network == NetworkId::Serai {
+            Err(InvalidTransaction::Custom(0))?;
+          }
+          let Some(key) = PendingSlashReport::<T>::take(network) else {
+            // Assumed already published
+            Err(InvalidTransaction::Stale)?
+          };
+          // There must have been a previous session is PendingSlashReport is populated
+          let set =
+            ValidatorSet { network, session: Session(Self::session(network).unwrap().0 - 1) };
+          if !key.verify(&report_slashes_message(&set, slashes), signature) {
+            Err(InvalidTransaction::BadProof)?;
+          }
+
+          ValidTransaction::with_tag_prefix("ValidatorSets")
+            .and_provides((1, set))
+            .longevity(MAX_KEY_SHARES_PER_SET.into())
             .propagate(true)
             .build()
         }

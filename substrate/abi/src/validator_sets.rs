@@ -1,3 +1,5 @@
+use sp_core::{ConstU32, bounded_vec::BoundedVec};
+
 pub use serai_validator_sets_primitives as primitives;
 
 use serai_primitives::*;
@@ -10,6 +12,11 @@ pub enum Call {
     network: NetworkId,
     removed_participants: Vec<SeraiAddress>,
     key_pair: KeyPair,
+    signature: Signature,
+  },
+  report_slashes {
+    network: NetworkId,
+    slashes: BoundedVec<(SeraiAddress, u32), ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
     signature: Signature,
   },
   allocate {
