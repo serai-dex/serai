@@ -77,13 +77,14 @@ fn unflatten(
 }
 
 impl<
+    D: Db,
     T: DbTxn,
     Pro: Processors,
     PST: PublishSeraiTransaction,
     PTT: PTTTrait,
     RID: RIDTrait,
     P: P2p,
-  > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
+  > TributaryBlockHandler<'_, D, T, Pro, PST, PTT, RID, P>
 {
   fn accumulate(
     &mut self,
@@ -548,6 +549,7 @@ impl<
             self
               .publish_serai_tx
               .publish_set_keys(
+                self.db,
                 self.spec.set(),
                 removed.into_iter().map(|key| key.to_bytes().into()).collect(),
                 key_pair,

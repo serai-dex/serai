@@ -30,6 +30,7 @@ mod sync;
 impl PublishSeraiTransaction for () {
   async fn publish_set_keys(
     &self,
+    _db: &(impl Sync + serai_db::Get),
     _set: ValidatorSet,
     _removed: Vec<SeraiAddress>,
     _key_pair: KeyPair,

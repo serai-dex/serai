@@ -15,7 +15,7 @@ use serai_client::{
 
 use tokio::time::sleep;
 
-use serai_db::{Db, MemDb, DbTxn};
+use serai_db::{Get, DbTxn, Db, MemDb};
 
 use processor_messages::{
   key_gen::{self, KeyGenId},
@@ -349,6 +349,7 @@ async fn dkg_test() {
   impl PublishSeraiTransaction for CheckPublishSetKeys {
     async fn publish_set_keys(
       &self,
+      _db: &(impl Sync + Get),
       set: ValidatorSet,
       removed: Vec<SeraiAddress>,
       key_pair: KeyPair,
