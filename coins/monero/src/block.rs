@@ -58,10 +58,10 @@ pub struct Block {
 }
 
 impl Block {
-  pub fn number(&self) -> usize {
+  pub fn number(&self) -> Option<u64> {
     match self.miner_tx.prefix.inputs.first() {
-      Some(Input::Gen(number)) => (*number).try_into().unwrap(),
-      _ => panic!("invalid block, miner TX didn't have a Input::Gen"),
+      Some(Input::Gen(number)) => Some(*number),
+      _ => None,
     }
   }
 
