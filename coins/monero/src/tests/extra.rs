@@ -144,3 +144,15 @@ fn extra_mysterious_minergate_only_wrong_size() {
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert!(extra.0.is_empty());
 }
+
+#[test]
+fn extra_mysterious_minergate_and_pub_key() {
+  let mut buf: Vec<u8> = vec![222, 1, 42];
+  buf.extend(PUB_KEY_BYTES.to_vec());
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert_eq!(
+    extra.0,
+    vec![ExtraField::MysteriousMinergate(vec![42]), ExtraField::PublicKey(pub_key())]
+  );
+  test_write_buf(&extra, &buf);
+}
