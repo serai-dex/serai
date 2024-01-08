@@ -4,6 +4,9 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
+// TODO: implement std_shim::io::BufRead
+use std::io::BufRead;
+
 use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
@@ -13,6 +16,7 @@ use crate::serialize::{
   write_point, write_vec,
 };
 
+pub const MAX_TX_EXTRA_PADDING_COUNT: usize = 255;
 pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
 pub const PAYMENT_ID_MARKER: u8 = 0;
@@ -70,6 +74,7 @@ impl PaymentId {
 // Doesn't bother with padding nor MinerGate
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub enum ExtraField {
+  Padding(usize),
   PublicKey(EdwardsPoint),
   Nonce(Vec<u8>),
   MergeMining(usize, [u8; 32]),
@@ -79,6 +84,12 @@ pub enum ExtraField {
 impl ExtraField {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
+      ExtraField::Padding(size) => {
+        w.write_all(&[0])?;
+        for _ in 1 .. *size {
+          write_byte(&0u8, w)?;
+        }
+      }
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
         w.write_all(&key.compress().to_bytes())?;
@@ -100,8 +111,31 @@ impl ExtraField {
     Ok(())
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  pub fn read<R: BufRead>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
+      0 => ExtraField::Padding({
+        // Read until either non-zero, max padding count, or end of buffer
+        let mut size: usize = 1;
+        loop {
+          let buf = r.fill_buf()?;
+          let mut n_consume = 0;
+          for v in buf.as_ref() {
+            if *v != 0u8 {
+              Err(io::Error::other("non-zero value after padding"))?
+            }
+            n_consume += 1;
+            size += 1;
+            if size > MAX_TX_EXTRA_PADDING_COUNT {
+              Err(io::Error::other("padding exceeded max count"))?
+            }
+          }
+          if n_consume == 0 {
+            break;
+          }
+          r.consume(n_consume);
+        }
+        size
+      }),
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
@@ -118,7 +152,7 @@ impl ExtraField {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct Extra(Vec<ExtraField>);
+pub struct Extra(pub(crate) Vec<ExtraField>);
 impl Extra {
   pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
     let mut key = None;
@@ -200,7 +234,7 @@ impl Extra {
     buf
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
+  pub fn read<R: BufRead>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;
     while {
