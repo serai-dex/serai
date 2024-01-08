@@ -124,7 +124,7 @@ impl ExtraField {
         loop {
           let buf = r.fill_buf()?;
           let mut n_consume = 0;
-          for v in buf.as_ref() {
+          for v in buf {
             if *v != 0u8 {
               Err(io::Error::other("non-zero value after padding"))?
             }

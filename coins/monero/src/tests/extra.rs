@@ -20,9 +20,9 @@ fn pub_key() -> EdwardsPoint {
     .unwrap()
 }
 
-fn test_write_buf(extra: Extra, buf: Vec<u8>) {
+fn test_write_buf(extra: &Extra, buf: &[u8]) {
   let mut w: Vec<u8> = vec![];
-  Extra::write(&extra, &mut w).unwrap();
+  Extra::write(extra, &mut w).unwrap();
   assert_eq!(buf, w);
 }
 
@@ -31,7 +31,7 @@ fn empty_extra() {
   let buf: Vec<u8> = vec![];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert!(extra.0.is_empty());
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn padding_only_size_1() {
   let buf: Vec<u8> = vec![0];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::Padding(1)]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn padding_only_size_2() {
   let buf: Vec<u8> = vec![0, 0];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::Padding(2)]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn padding_only_max_size() {
   let buf: Vec<u8> = vec![0; MAX_TX_EXTRA_PADDING_COUNT];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::Padding(MAX_TX_EXTRA_PADDING_COUNT)]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn pub_key_only() {
   let buf: Vec<u8> = PUB_KEY_BYTES.to_vec();
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::PublicKey(pub_key())]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn extra_nonce_only() {
   let buf: Vec<u8> = vec![2, 1, 42];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::Nonce(vec![42])]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn pub_key_and_padding() {
   ]);
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::PublicKey(pub_key()), ExtraField::Padding(76)]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn extra_mysterious_minergate_only() {
   let buf: Vec<u8> = vec![222, 1, 42];
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::MysteriousMinergate(vec![42])]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn extra_mysterious_minergate_only_large() {
   buf.extend_from_slice(&vec![0; 512]);
   let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
   assert_eq!(extra.0, vec![ExtraField::MysteriousMinergate(vec![0; 512])]);
-  test_write_buf(extra, buf);
+  test_write_buf(&extra, &buf);
 }
 
 #[test]
