@@ -247,8 +247,10 @@ pub mod pallet {
         }
       };
 
-      // We should always have a next since we are follwing the items in the key lists.
-      let next = next.unwrap();
+      // We should always have a next since we are follwing the items in the key lists except
+      // very specific scenario which `current_size` is `1` and inserted value and current is the
+      // same value, in which next is already the current.
+      let next = next.unwrap_or(current.to_be_bytes());
       MedianPrice::<T>::set(coin, Some(Amount(u64::from_be_bytes(next))));
     }
   }
