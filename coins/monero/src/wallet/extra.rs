@@ -79,6 +79,7 @@ pub enum ExtraField {
   Nonce(Vec<u8>),
   MergeMining(usize, [u8; 32]),
   PublicKeys(Vec<EdwardsPoint>),
+  MysteriousMinergate(Vec<u8>),
 }
 
 impl ExtraField {
@@ -106,6 +107,10 @@ impl ExtraField {
       ExtraField::PublicKeys(keys) => {
         w.write_all(&[4])?;
         write_vec(write_point, keys, w)?;
+      }
+      ExtraField::MysteriousMinergate(data) => {
+        w.write_all(&[0xDE])?;
+        write_vec(write_byte, data, w)?;
       }
     }
     Ok(())
@@ -146,6 +151,7 @@ impl ExtraField {
       }),
       3 => ExtraField::MergeMining(read_varint(r)?, read_bytes(r)?),
       4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
+      0xDE => ExtraField::MysteriousMinergate(read_vec(read_byte, r)?),
       _ => Err(io::Error::other("unknown extra field"))?,
     })
   }
