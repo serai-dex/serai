@@ -334,7 +334,7 @@ impl Scanner {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
-    let Some((tx_key, additional)) = extra.keys() else {
+    let Some((tx_keys, additional)) = extra.keys() else {
       return Timelocked(tx.prefix.timelock, vec![]);
     };
 
@@ -355,7 +355,9 @@ impl Scanner {
       }
       let output_key = output_key.unwrap();
 
-      for key in [Some(Some(&tx_key)), additional.as_ref().map(|additional| additional.get(o))] {
+      let additional = additional.as_ref().map(|additional| additional.get(o));
+
+      for key in tx_keys.iter().map(|key| Some(Some(key))).chain(core::iter::once(additional)) {
         let key = match key {
           Some(Some(key)) => key,
           Some(None) => {

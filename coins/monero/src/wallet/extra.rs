@@ -120,12 +120,12 @@ impl ExtraField {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Extra(Vec<ExtraField>);
 impl Extra {
-  pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
-    let mut key = None;
+  pub fn keys(&self) -> Option<(Vec<EdwardsPoint>, Option<Vec<EdwardsPoint>>)> {
+    let mut keys = vec![];
     let mut additional = None;
     for field in &self.0 {
       match field.clone() {
-        ExtraField::PublicKey(this_key) => key = key.or(Some(this_key)),
+        ExtraField::PublicKey(this_key) => keys.push(this_key),
         ExtraField::PublicKeys(these_additional) => {
           additional = additional.or(Some(these_additional))
         }
@@ -133,7 +133,11 @@ impl Extra {
       }
     }
     // Don't return any keys if this was non-standard and didn't include the primary key
-    key.map(|key| (key, additional))
+    if keys.is_empty() {
+      None
+    } else {
+      Some((keys, additional))
+    }
   }
 
   pub fn payment_id(&self) -> Option<PaymentId> {
