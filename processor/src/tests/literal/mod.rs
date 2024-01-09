@@ -16,24 +16,22 @@ mod bitcoin {
   use sp_application_crypto::Pair;
 
   use bitcoin_serai::bitcoin::{
-    secp256k1::{SECP256K1, SecretKey},
+    secp256k1::{SECP256K1, SecretKey, Message},
     PrivateKey, PublicKey,
     hashes::{HashEngine, Hash, sha256::Hash as Sha256},
+    sighash::{SighashCache, EcdsaSighashType},
     absolute::LockTime,
     Amount as BAmount, Sequence, Script, Witness, OutPoint,
     address::Address as BAddress,
     transaction::{Version, Transaction, TxIn, TxOut},
     Network as BNetwork, ScriptBuf,
-    opcodes::all::{OP_SHA256, OP_EQUAL},
+    opcodes::all::{OP_SHA256, OP_EQUALVERIFY},
   };
 
   use frost::Participant;
   use rand_core::OsRng;
-  use scale::{Encode, Decode};
-  use serai_client::{
-    in_instructions::primitives::{Shorthand, RefundableInInstruction, InInstruction},
-    primitives::insecure_pair_from_name,
-  };
+  use scale::Encode;
+  use serai_client::{in_instructions::primitives::Shorthand, primitives::insecure_pair_from_name};
   use serai_db::MemDb;
   use tokio::{
     time::{timeout, Duration},
@@ -88,12 +86,16 @@ mod bitcoin {
       let mut data = Sha256::engine();
       data.input(&message);
 
-      // make the output script => `OP_SHA256 PUSH MSG_HASH OP_EQUAL`
-      let script = ScriptBuf::builder()
+      // make the output script => msg_script(OP_SHA256 PUSH MSG_HASH OP_EQUALVERIFY) + any_script
+      let mut script = ScriptBuf::builder()
         .push_opcode(OP_SHA256)
         .push_slice(Sha256::from_engine(data).as_byte_array())
-        .push_opcode(OP_EQUAL)
+        .push_opcode(OP_EQUALVERIFY)
         .into_script();
+      // append a regular spend script
+      for i in main_addr.script_pubkey().instructions() {
+        script.push_instruction(i.unwrap());
+      }
 
       let tx = btc.get_block(new_block).await.unwrap().txdata.swap_remove(0);
       let dust = BAmount::from_sat(bitcoin_serai::wallet::DUST);
@@ -114,15 +116,11 @@ mod bitcoin {
           TxOut { value: dust, script_pubkey: ScriptBuf::new_p2wsh(&script.wscript_hash()) },
         ],
       };
-      tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, &private_key);
+      tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, 0, &private_key);
+      let witness_value = tx.output[1].value;
 
       // send it
       btc.rpc.send_raw_transaction(&tx).await.unwrap();
-
-      // witness script
-      let mut witness = Witness::new();
-      witness.push(message);
-      witness.push(script);
 
       // make another tx that spends both outputs
       let mut tx = Transaction {
@@ -139,15 +137,35 @@ mod bitcoin {
             previous_output: OutPoint { txid: tx.txid(), vout: 1 },
             script_sig: Script::new().into(),
             sequence: Sequence(u32::MAX),
-            witness,
+            witness: Witness::new(),
           },
         ],
         output: vec![TxOut {
-          value: tx.output[0].value + tx.output[1].value - BAmount::from_sat(10000),
-          script_pubkey: address.0.script_pubkey(),
+          value: tx.output[0].value + witness_value - BAmount::from_sat(10000),
+          script_pubkey: address.as_ref().script_pubkey(),
         }],
       };
-      tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, &private_key);
+      // sign the first input
+      tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, 0, &private_key);
+
+      // add the witness script
+      let mut sig = SECP256K1
+        .sign_ecdsa_low_r(
+          &Message::from(
+            SighashCache::new(&tx)
+              .p2wsh_signature_hash(1, &script, witness_value, EcdsaSighashType::All)
+              .unwrap()
+              .to_raw_hash(),
+          ),
+          &private_key.inner,
+        )
+        .serialize_der()
+        .to_vec();
+      sig.push(1);
+      tx.input[1].witness.push(sig);
+      tx.input[1].witness.push(public_key.inner.serialize());
+      tx.input[1].witness.push(message.clone());
+      tx.input[1].witness.push(script);
 
       // send it
       let block_number = btc.get_latest_block_number().await.unwrap() + 1;
@@ -172,17 +190,7 @@ mod bitcoin {
         };
 
       // verify that message is correct
-      let mut data = outputs[0].data();
-      let Ok(shorthand) = Shorthand::decode(&mut data) else {
-        panic!("can't decode msg data into Shorthand")
-      };
-      let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else {
-        panic!("can't convert Shorthand to instruction")
-      };
-      match instruction.instruction {
-        InInstruction::Transfer(address) => assert_eq!(address, serai_address.into()),
-        _ => panic!("wrong instruction type"),
-      }
+      assert_eq!(outputs[0].data(), message);
     });
   }
 
