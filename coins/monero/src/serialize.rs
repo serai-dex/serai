@@ -12,11 +12,21 @@ use curve25519_dalek::{
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
 mod sealed {
-  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy { const BITS: usize; }
-  impl VarInt for u8 { const BITS = 8; }
-  impl VarInt for u32 { const BITS = 32; }
-  impl VarInt for u64 { const BITS = 64; }
-  impl VarInt for usize { const BITS = sizeof::<usize>() * 8; }
+  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy {
+    const BITS: usize;
+  }
+  impl VarInt for u8 {
+    const BITS: usize = 8;
+  }
+  impl VarInt for u32 {
+    const BITS: usize = 32;
+  }
+  impl VarInt for u64 {
+    const BITS: usize = 64;
+  }
+  impl VarInt for usize {
+    const BITS: usize = core::mem::size_of::<usize>() * 8;
+  }
 }
 
 // This will panic if the VarInt exceeds u64::MAX
