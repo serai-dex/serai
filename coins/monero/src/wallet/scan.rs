@@ -388,11 +388,7 @@ impl Scanner {
           o,
         );
 
-        let payment_id = match payment_id.map(|id| id ^ payment_id_xor) {
-          Some(PaymentId::Encrypted(id)) => Some(PaymentId::Encrypted(id)),
-          Some(PaymentId::Unencrypted(id)) => Some(PaymentId::Unencrypted(id)),
-          None => None,
-        };
+        let payment_id = payment_id.map(|id| id ^ payment_id_xor);
 
         if let Some(actual_view_tag) = output.view_tag {
           if actual_view_tag != view_tag {

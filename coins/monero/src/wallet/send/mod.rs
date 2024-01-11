@@ -80,13 +80,11 @@ impl SendOutput {
     let (view_tag, shared_key, payment_id_xor) =
       shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh, o);
 
-    let payment_id = if let Some(id) =
-      output.0.payment_id().or(if need_dummy_payment_id { Some([0u8; 8]) } else { None })
-    {
-      Some((u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes())
-    } else {
-      None
-    };
+    let payment_id = output
+      .0
+      .payment_id()
+      .or(if need_dummy_payment_id { Some([0u8; 8]) } else { None })
+      .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes());
 
     (
       SendOutput {
