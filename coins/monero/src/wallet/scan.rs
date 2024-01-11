@@ -9,6 +9,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
+use monero_generators::decompress_point;
+
 use crate::{
   Commitment,
   serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
@@ -349,7 +351,7 @@ impl Scanner {
         }
       }
 
-      let output_key = output.key.decompress();
+      let output_key = decompress_point(output.key);
       if output_key.is_none() {
         continue;
       }

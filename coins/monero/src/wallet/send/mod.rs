@@ -787,7 +787,7 @@ impl SignableTransaction {
       fee -= output.commitment.amount;
       tx_outputs.push(Output {
         amount: None,
-        key: output.dest.compress(),
+        key: output.dest.compress().to_bytes(),
         view_tag: Some(output.view_tag).filter(|_| self.protocol.view_tags()),
       });
       encrypted_amounts.push(EncryptedAmount::Compact { amount: output.amount });
@@ -928,7 +928,7 @@ impl Eventuality {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {
         amount: None,
-        key: expected.dest.compress(),
+        key: expected.dest.compress().to_bytes(),
         view_tag: Some(expected.view_tag).filter(|_| self.protocol.view_tags()),
       } != actual) ||
         (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||

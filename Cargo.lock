@@ -4288,6 +4288,7 @@ dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
  "group",
+ "hex",
  "sha3",
  "std-shims",
  "subtle",

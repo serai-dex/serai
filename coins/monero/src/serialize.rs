@@ -4,10 +4,9 @@ use std_shims::{
   io::{self, Read, Write},
 };
 
-use curve25519_dalek::{
-  scalar::Scalar,
-  edwards::{EdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
+
+use monero_generators::decompress_point;
 
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
@@ -126,11 +125,7 @@ pub(crate) fn read_scalar<R: Read>(r: &mut R) -> io::Result<Scalar> {
 
 pub(crate) fn read_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   let bytes = read_bytes(r)?;
-  CompressedEdwardsY(bytes)
-    .decompress()
-    // Ban points which are either unreduced or -0
-    .filter(|point| point.compress().to_bytes() == bytes)
-    .ok_or_else(|| io::Error::other("invalid point"))
+  decompress_point(bytes).ok_or_else(|| io::Error::other("invalid point"))
 }
 
 pub(crate) fn read_torsion_free_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {

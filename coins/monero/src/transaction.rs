@@ -6,7 +6,7 @@ use std_shims::{
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::{
   Protocol, hash,
@@ -76,7 +76,7 @@ impl Input {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
   pub amount: Option<u64>,
-  pub key: CompressedEdwardsY,
+  pub key: [u8; 32],
   pub view_tag: Option<u8>,
 }
 
@@ -90,7 +90,7 @@ impl Output {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(&self.amount.unwrap_or(0), w)?;
     w.write_all(&[2 + u8::from(self.view_tag.is_some())])?;
-    w.write_all(&self.key.to_bytes())?;
+    w.write_all(&self.key)?;
     if let Some(view_tag) = self.view_tag {
       w.write_all(&[view_tag])?;
     }
@@ -122,7 +122,7 @@ impl Output {
 
     Ok(Output {
       amount,
-      key: CompressedEdwardsY(read_bytes(r)?),
+      key: read_bytes(r)?,
       view_tag: if view_tag { Some(read_byte(r)?) } else { None },
     })
   }

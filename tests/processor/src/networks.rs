@@ -304,7 +304,7 @@ impl Wallet {
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
-        use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, edwards::CompressedEdwardsY};
+        use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
         use monero_serai::{
           Protocol,
           wallet::{
@@ -312,6 +312,7 @@ impl Wallet {
             SpendableOutput, Decoys, Change, FeePriority, Scanner, SignableTransaction,
           },
           rpc::HttpRpc,
+          decompress_point,
         };
         use processor::{additional_key, networks::Monero};
 
@@ -338,8 +339,7 @@ impl Wallet {
         .await
         .unwrap();
 
-        let to_spend_key =
-          CompressedEdwardsY(<[u8; 32]>::try_from(to.as_ref()).unwrap()).decompress().unwrap();
+        let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
         let to_addr = Address::new(
           AddressMeta::new(

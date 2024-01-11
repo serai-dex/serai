@@ -211,7 +211,7 @@ pub struct Scanner {
   pair: ViewPair,
   // Also contains the spend key as None
   pub(crate) subaddresses: HashMap<CompressedEdwardsY, Option<SubaddressIndex>>,
-  pub(crate) burning_bug: Option<HashSet<CompressedEdwardsY>>,
+  pub(crate) burning_bug: Option<HashSet<[u8; 32]>>,
 }
 
 impl Zeroize for Scanner {
@@ -250,7 +250,7 @@ impl Scanner {
   ///
   /// If None is passed, a modified shared key derivation is used which is immune to the burning
   /// bug (specifically the Guaranteed feature from Featured Addresses).
-  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {
+  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<[u8; 32]>>) -> Scanner {
     let mut subaddresses = HashMap::new();
     subaddresses.insert(pair.spend.compress(), None);
     Scanner { pair, subaddresses, burning_bug }
