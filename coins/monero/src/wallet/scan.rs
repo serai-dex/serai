@@ -351,7 +351,7 @@ impl Scanner {
         }
       }
 
-      let output_key = decompress_point(output.key);
+      let output_key = decompress_point(output.key.to_bytes());
       if output_key.is_none() {
         continue;
       }
