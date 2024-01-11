@@ -99,7 +99,8 @@ pub struct Metadata {
   /// The subaddress this output was sent to.
   pub subaddress: Option<SubaddressIndex>,
   /// The payment ID included with this output.
-  /// There are 2 circumstances in which the reference wallet2 ignores the payment ID:
+  /// There are 2 circumstances in which the reference wallet2 ignores the payment ID
+  /// but the payment ID will be returned here anyway:
   ///
   /// 1) If the payment ID is tied to an output received by a subaddress account
   /// that spent Monero in the transaction (the received output is considered
