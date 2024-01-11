@@ -278,12 +278,8 @@ test!(
       }
 
       // Make sure 3 additional pub keys are included in TX extra
-      let keys = Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
-        .unwrap()
-        .keys()
-        .unwrap()
-        .1
-        .unwrap();
+      let keys =
+        Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref()).unwrap().keys().unwrap().1.unwrap();
 
       assert_eq!(keys.len(), 3);
     },
