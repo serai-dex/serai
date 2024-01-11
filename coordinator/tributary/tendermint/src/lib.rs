@@ -816,6 +816,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
           }
         };
 
+        if self.block.locked.is_some() && (block.id() != self.block.locked.unwrap().1) {
+          // we got a prevote consensus on a block that is different the what is locked previously
+          // which will cause a precommit to two diffrent blocks, which isn't permitted.
+          // So we refuse to handle this block from here on.
+          Err(TendermintError::Temporal)?;
+        }
+
         self.block.valid = Some((self.block.round().number, block.clone()));
         if self.block.round().step == Step::Prevote {
           self.block.locked = Some((self.block.round().number, block.id()));
