@@ -124,6 +124,8 @@ pub mod pallet {
   #[pallet::getter(fn allocation_per_key_share)]
   pub type AllocationPerKeyShare<T: Config> =
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
+  // TODO: This map holds the current active set pariticpants(except for serai)
+  // and not the latest decided. Same for `Inset`.
   /// The validators selected to be in-set.
   #[pallet::storage]
   #[pallet::getter(fn participants_for_latest_decided_set)]
@@ -369,20 +371,17 @@ pub mod pallet {
       let mut iter = SortedAllocationsIter::<T>::new(network);
       let mut participants = vec![];
       let mut key_shares = 0;
-      let mut total_stake = 0;
       while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
         let Some((key, amount)) = iter.next() else { break };
 
         let these_key_shares = amount.0 / allocation_per_key_share;
         InSet::<T>::set(network, key, Some(these_key_shares));
-        participants.push((key, these_key_shares));
+        participants.push((key, amount.0));
 
         // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
         // Off-chain, the key shares per validator will be accordingly adjusted
         key_shares += these_key_shares;
-        total_stake += amount.0;
       }
-      TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
@@ -454,6 +453,7 @@ pub mod pallet {
     }
 
     // is_bft returns if the network is able to survive any single node becoming byzantine.
+    // TODO: this fn doesn't check againts the current set instead latest decided, intentional?
     fn is_bft(network: NetworkId) -> bool {
       let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
 
@@ -519,13 +519,6 @@ pub mod pallet {
       // Check here if this call would prevent a non-BFT net from *ever* becoming BFT
       if (new_allocation / allocation_per_key_share) >= (MAX_KEY_SHARES_PER_SET / 3).into() {
         Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
-      }
-
-      if InSet::<T>::contains_key(network, account) {
-        TotalAllocatedStake::<T>::set(
-          network,
-          Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
-        );
       }
 
       Ok(())
@@ -681,6 +674,13 @@ pub mod pallet {
     }
 
     pub fn retire_set(set: ValidatorSet) {
+      // set the total allocated stake for the current set
+      let participants =
+        Participants::<T>::get(set.network).expect("set retired without a new set");
+      let total_stake = participants.iter().fold(0, |acc, (_, stake)| acc + stake);
+      TotalAllocatedStake::<T>::set(set.network, Some(Amount(total_stake)));
+
+      // reomve prev keys
       Keys::<T>::remove(set);
       Pallet::<T>::deposit_event(Event::SetRetired { set });
     }
@@ -715,14 +715,23 @@ pub mod pallet {
 
       // Update Babe and Grandpa
       let session = prior_serai_session.0 + 1;
+      let key_share_amount = Self::allocation_per_key_share(NetworkId::Serai).unwrap().0;
       let next_validators = Participants::<T>::get(NetworkId::Serai).unwrap();
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
-          now_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          now_validators
+            .iter()
+            .copied()
+            .map(|(id, staked)| (BabeAuthorityId::from(id), staked / key_share_amount))
+            .collect(),
           None,
         ),
         WeakBoundedVec::force_from(
-          next_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
+          next_validators
+            .iter()
+            .copied()
+            .map(|(id, staked)| (BabeAuthorityId::from(id), staked / key_share_amount))
+            .collect(),
           None,
         ),
         Some(session),
@@ -730,7 +739,10 @@ pub mod pallet {
       Grandpa::<T>::new_session(
         true,
         session,
-        next_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+        next_validators
+          .into_iter()
+          .map(|(id, staked)| (GrandpaAuthorityId::from(id), staked / key_share_amount))
+          .collect(),
       );
 
       // Clear SeraiDisabledIndices, only preserving keys still present in the new session
