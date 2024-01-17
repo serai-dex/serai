@@ -1,14 +1,15 @@
 use hyper::{
   StatusCode,
   header::{HeaderValue, HeaderMap},
-  body::{HttpBody, Buf, Body},
+  body::{Buf, Incoming},
 };
+use http_body_util::BodyExt;
 
 use crate::{Client, Error};
 
 // Borrows the client so its async task lives as long as this response exists.
 #[derive(Debug)]
-pub struct Response<'a>(pub(crate) hyper::Response<Body>, pub(crate) &'a Client);
+pub struct Response<'a>(pub(crate) hyper::Response<Incoming>, pub(crate) &'a Client);
 impl<'a> Response<'a> {
   pub fn status(&self) -> StatusCode {
     self.0.status()
