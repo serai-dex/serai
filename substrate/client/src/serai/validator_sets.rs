@@ -69,6 +69,23 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn accepted_handover_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+    self
+      .0
+      .events(|event| {
+        if let serai_abi::Event::ValidatorSets(event) = event {
+          if matches!(event, ValidatorSetsEvent::AcceptedHandover { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      })
+      .await
+  }
+
   pub async fn set_retired_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0

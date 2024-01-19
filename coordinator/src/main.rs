@@ -9,7 +9,10 @@ use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
 use ciphersuite::{
-  group::ff::{Field, PrimeField},
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
@@ -963,6 +966,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     new_tributary_spec_send.send(spec).unwrap();
   }
 
+  let (perform_slash_report_send, mut perform_slash_report_recv) = mpsc::unbounded_channel();
+
   let (tributary_retired_send, mut tributary_retired_recv) = mpsc::unbounded_channel();
 
   // Handle new Substrate blocks
@@ -972,6 +977,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     processors.clone(),
     serai.clone(),
     new_tributary_spec_send,
+    perform_slash_report_send,
     tributary_retired_send,
   ));
 
@@ -1026,10 +1032,12 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let raw_db = raw_db.clone();
     let key = key.clone();
 
+    let specs = Arc::new(RwLock::new(HashMap::new()));
     let tributaries = Arc::new(RwLock::new(HashMap::new()));
     // Spawn a task to maintain a local view of the tributaries for whenever recognized_id is
     // called
     tokio::spawn({
+      let specs = specs.clone();
       let tributaries = tributaries.clone();
       let mut set_to_genesis = HashMap::new();
       async move {
@@ -1038,9 +1046,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
             Ok(TributaryEvent::NewTributary(tributary)) => {
               set_to_genesis.insert(tributary.spec.set(), tributary.spec.genesis());
               tributaries.write().await.insert(tributary.spec.genesis(), tributary.tributary);
+              specs.write().await.insert(tributary.spec.set(), tributary.spec);
             }
             Ok(TributaryEvent::TributaryRetired(set)) => {
               if let Some(genesis) = set_to_genesis.remove(&set) {
+                specs.write().await.remove(&set);
                 tributaries.write().await.remove(&genesis);
               }
             }
@@ -1048,6 +1058,84 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
               panic!("recognized_id lagged to handle tributary_event")
             }
             Err(broadcast::error::RecvError::Closed) => panic!("tributary_event sender closed"),
+          }
+        }
+      }
+    });
+
+    // Also spawn a task to handle slash reports, as this needs such a view of tributaries
+    tokio::spawn({
+      let mut raw_db = raw_db.clone();
+      let key = key.clone();
+      let tributaries = tributaries.clone();
+      async move {
+        'task_loop: loop {
+          match perform_slash_report_recv.recv().await {
+            Some(set) => {
+              let (genesis, validators) = loop {
+                let specs = specs.read().await;
+                let Some(spec) = specs.get(&set) else {
+                  // If we don't have this Tributary because it's retired, break and move on
+                  if RetiredTributaryDb::get(&raw_db, set).is_some() {
+                    continue 'task_loop;
+                  }
+
+                  // This may happen if the task above is simply slow
+                  log::warn!("tributary we don't have yet is supposed to perform a slash report");
+                  continue;
+                };
+                break (spec.genesis(), spec.validators());
+              };
+
+              let mut slashes = vec![];
+              for (validator, _) in validators {
+                if validator == (<Ristretto as Ciphersuite>::generator() * key.deref()) {
+                  continue;
+                }
+                let validator = validator.to_bytes();
+
+                let fatally = tributary::FatallySlashed::get(&raw_db, genesis, validator).is_some();
+                // TODO: Properly type this
+                let points = if fatally {
+                  u32::MAX
+                } else {
+                  tributary::SlashPoints::get(&raw_db, genesis, validator).unwrap_or(0)
+                };
+                slashes.push(points);
+              }
+
+              let mut tx = Transaction::SlashReport(slashes, Transaction::empty_signed());
+              tx.sign(&mut OsRng, genesis, &key);
+
+              let mut first = true;
+              loop {
+                if !first {
+                  sleep(Duration::from_millis(100)).await;
+                }
+                first = false;
+
+                let tributaries = tributaries.read().await;
+                let Some(tributary) = tributaries.get(&genesis) else {
+                  // If we don't have this Tributary because it's retired, break and move on
+                  if RetiredTributaryDb::get(&raw_db, set).is_some() {
+                    break;
+                  }
+
+                  // This may happen if the task above is simply slow
+                  log::warn!("tributary we don't have yet is supposed to perform a slash report");
+                  continue;
+                };
+                // This is safe to perform multiple times and solely needs atomicity with regards
+                // to itself
+                // TODO: Should this not take a txn accordingly? It's best practice to take a txn,
+                // yet taking a txn fails to declare its achieved independence
+                let mut txn = raw_db.txn();
+                tributary::publish_signed_transaction(&mut txn, tributary, tx).await;
+                txn.commit();
+                break;
+              }
+            }
+            None => panic!("perform slash report sender closed"),
           }
         }
       }

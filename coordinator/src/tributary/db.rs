@@ -51,10 +51,13 @@ create_db!(
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
 
+    // TODO: Revisit the point of this
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     RemovedAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
     OfflineDuringDkg: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
+    // TODO: Combine these two
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
+    SlashPoints: (genesis: [u8; 32], account: [u8; 32]) -> u32,
 
     VotedToRemove: (genesis: [u8; 32], voter: [u8; 32], to_remove: [u8; 32]) -> (),
     VotesToRemove: (genesis: [u8; 32], to_remove: [u8; 32]) -> u16,
