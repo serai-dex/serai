@@ -18,7 +18,7 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   db: Option<D>,
   genesis: [u8; 32],
 
-  block_number: u32,
+  block_number: u64,
   tip: [u8; 32],
   participants: HashSet<<Ristretto as Ciphersuite>::G>,
 
@@ -38,7 +38,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block", [genesis, hash].concat())
   }
-  fn block_hash_key(genesis: &[u8], block_number: u32) -> Vec<u8> {
+  fn block_hash_key(genesis: &[u8], block_number: u64) -> Vec<u8> {
     D::key(b"tributary_blockchain", b"block_hash", [genesis, &block_number.to_le_bytes()].concat())
   }
   fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
@@ -88,7 +88,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       let db = res.db.as_ref().unwrap();
       db.get(res.block_number_key()).map(|number| (number, db.get(Self::tip_key(genesis)).unwrap()))
     } {
-      res.block_number = u32::from_le_bytes(block_number.try_into().unwrap());
+      res.block_number = u64::from_le_bytes(block_number.try_into().unwrap());
       res.tip.copy_from_slice(&tip);
     }
 
@@ -99,7 +99,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     self.tip
   }
 
-  pub(crate) fn block_number(&self) -> u32 {
+  pub(crate) fn block_number(&self) -> u64 {
     self.block_number
   }
 
@@ -112,7 +112,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     db.get(Self::commit_key(&genesis, block))
   }
 
-  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u32) -> Option<[u8; 32]> {
+  pub(crate) fn block_hash_from_db(db: &D, genesis: [u8; 32], block: u64) -> Option<[u8; 32]> {
     db.get(Self::block_hash_key(&genesis, block)).map(|h| h.try_into().unwrap())
   }
 
@@ -120,11 +120,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     Self::commit_from_db(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
-  pub(crate) fn block_hash(&self, block: u32) -> Option<[u8; 32]> {
+  pub(crate) fn block_hash(&self, block: u64) -> Option<[u8; 32]> {
     Self::block_hash_from_db(self.db.as_ref().unwrap(), self.genesis, block)
   }
 
-  pub(crate) fn commit_by_block_number(&self, block: u32) -> Option<Vec<u8>> {
+  pub(crate) fn commit_by_block_number(&self, block: u64) -> Option<Vec<u8>> {
     self.commit(&self.block_hash(block)?)
   }
 
@@ -160,16 +160,16 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let db = self.db.as_ref().unwrap();
     let genesis = self.genesis;
 
-    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
+    let commit = |block: u64| -> Option<Commit<N::SignatureScheme>> {
       let hash = Self::block_hash_from_db(db, genesis, block)?;
       // we must have a commit per valid hash
       let commit = Self::commit_from_db(db, genesis, &hash).unwrap();
       // commit has to be valid if it is coming from our db
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
     };
-
     let unsigned_in_chain =
       |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
+
     self.mempool.add::<N, _>(
       |signer, order| {
         if self.participants.contains(&signer) {
@@ -233,11 +233,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     let db = self.db.as_ref().unwrap();
-    let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
-    let provided_in_chain =
-      |hash: [u8; 32]| db.get(Self::provided_included_key(&self.genesis, &hash)).is_some();
-    let commit = |block: u32| -> Option<Commit<N::SignatureScheme>> {
+    let provided_or_unsigned_in_chain = |hash: [u8; 32]| {
+      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some() ||
+        db.get(Self::provided_included_key(&self.genesis, &hash)).is_some()
+    };
+    let commit = |block: u64| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
       Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
@@ -263,8 +263,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       },
       schema,
       &commit,
-      unsigned_in_chain,
-      provided_in_chain,
+      provided_or_unsigned_in_chain,
       allow_non_local_provided,
     );
     // Drop this TXN's changes as we're solely verifying the block

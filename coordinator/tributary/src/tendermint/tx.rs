@@ -83,18 +83,15 @@ fn decode_and_verify_signed_message<N: Network>(
 }
 
 // TODO: Move this into tendermint-machine
-// TODO: Strongly type Evidence, instead of having two messages and no idea what's supposedly
-// wrong with them. Doing so will massively simplify the auditability of this (as this
-// re-implements an entire foreign library's checks for malicious behavior).
+// This function takes a TendermintTx, which can't be imported to tendermint create.
 pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
   schema: &N::SignatureScheme,
-  commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
+  commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
   tx.verify()?;
 
   match tx {
-    // TODO: Only allow one evidence per validator, since evidence is fatal
     TendermintTx::SlashEvidence(ev) => {
       match ev {
         Evidence::ConflictingMessages(first, second) => {
@@ -147,17 +144,13 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
           }
 
           // get the last commit
-          // TODO: Why do we use u32 when Tendermint uses u64?
-          let prior_commit = match u32::try_from(msg.block.0 - 1) {
-            Ok(n) => match commit(n) {
-              Some(c) => c,
-              // If we have yet to sync the block in question, we will return InvalidContent based
-              // on our own temporal ambiguity
-              // This will also cause an InvalidContent for anything using a non-existent block,
-              // yet that's valid behavior
-              // TODO: Double check the ramifications of this
-              _ => Err(TransactionError::InvalidContent)?,
-            },
+          let prior_commit = match commit(msg.block.0 - 1) {
+            Some(c) => c,
+            // If we have yet to sync the block in question, we will return InvalidContent based
+            // on our own temporal ambiguity
+            // This will also cause an InvalidContent for anything using a non-existent block,
+            // yet that's valid behavior
+            // TODO: Double check the ramifications of this
             _ => Err(TransactionError::InvalidContent)?,
           };
 

@@ -175,9 +175,8 @@ impl<T: TransactionTrait> Block<T> {
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     get_and_increment_nonce: &mut G,
     schema: &N::SignatureScheme,
-    commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
-    unsigned_in_chain: impl Fn([u8; 32]) -> bool,
-    provided_in_chain: impl Fn([u8; 32]) -> bool, // TODO: merge this with unsigned_on_chain?
+    commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
+    provided_or_unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -213,7 +212,7 @@ impl<T: TransactionTrait> Block<T> {
 
       let current_tx_order = match tx.kind() {
         TransactionKind::Provided(order) => {
-          if provided_in_chain(tx_hash) {
+          if provided_or_unsigned_in_chain(tx_hash) {
             Err(BlockError::ProvidedAlreadyIncluded)?;
           }
 
@@ -233,7 +232,7 @@ impl<T: TransactionTrait> Block<T> {
         }
         TransactionKind::Unsigned => {
           // check we don't already have the tx in the chain
-          if unsigned_in_chain(tx_hash) || included_in_block.contains(&tx_hash) {
+          if provided_or_unsigned_in_chain(tx_hash) || included_in_block.contains(&tx_hash) {
             Err(BlockError::UnsignedAlreadyIncluded)?;
           }
           included_in_block.insert(tx_hash);
