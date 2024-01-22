@@ -76,6 +76,10 @@ create_db!(
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
 
     SignedTransactionDb: (order: &[u8], nonce: u32) -> Vec<u8>,
+
+    SlashReports: (genesis: [u8; 32], signer: [u8; 32]) -> Vec<u32>,
+    SlashReported: (genesis: [u8; 32]) -> u16,
+    SlashReportCutOff: (genesis: [u8; 32]) -> u64,
   }
 );
 
