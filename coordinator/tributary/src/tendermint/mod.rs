@@ -278,9 +278,26 @@ pub const LATENCY_TIME: u32 = 1667;
 pub const TARGET_BLOCK_TIME: u32 = BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME);
 
 #[test]
-fn assert_target_block_time_no_overflow() {
-  // make sure target block time didn't overflow.
-  let _ = BLOCK_PROCESSING_TIME.checked_add(LATENCY_TIME.checked_mul(3).unwrap()).unwrap();
+fn assert_target_block_time() {
+  use serai_db::MemDb;
+
+  #[derive(Clone, Debug)]
+  pub struct DummyP2p;
+
+  #[async_trait::async_trait]
+  impl P2p for DummyP2p {
+    async fn broadcast(&self, _: [u8; 32], _: Vec<u8>) {
+      unimplemented!()
+    }
+  }
+
+  // Type paremeters don't matter here since we only need to call the block_time()
+  // and it only relies on the constants of the trait implementation. block_time() is in seconds,
+  // TARGET_BLOCK_TIME is in milliseconds.
+  assert_eq!(
+    <TendermintNetwork<MemDb, TendermintTx, DummyP2p> as Network>::block_time(),
+    TARGET_BLOCK_TIME / 1000
+  )
 }
 
 #[async_trait]
@@ -347,8 +364,6 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     };
 
     // add tx to blockchain and broadcast to peers
-    // TODO: Make a function out of this following block
-    // Why? Seems like a single caller.
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
     if self.blockchain.write().await.add_transaction::<Self>(
