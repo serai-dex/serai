@@ -80,7 +80,7 @@ create_db!(
     SlashReports: (genesis: [u8; 32], signer: [u8; 32]) -> Vec<u32>,
     SlashReported: (genesis: [u8; 32]) -> u16,
     SlashReportCutOff: (genesis: [u8; 32]) -> u64,
-    SlashReport: (set: ValidatorSet) -> Vec<u32>,
+    SlashReport: (set: ValidatorSet) -> Vec<([u8; 32], u32)>,
   }
 );
 

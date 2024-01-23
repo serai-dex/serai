@@ -213,6 +213,10 @@ impl<D: Db> BatchSigner<D> {
         panic!("BatchSigner passed CosignSubstrateBlock")
       }
 
+      CoordinatorMessage::SignSlashReport { .. } => {
+        panic!("Cosigner passed SignSlashReport")
+      }
+
       CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
         let (session, id, attempt) = self.verify_id(&id).ok()?;
 

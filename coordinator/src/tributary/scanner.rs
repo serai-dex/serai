@@ -620,7 +620,17 @@ impl<
         }
       }
 
-      SlashReport::set(self.txn, self.spec.set(), &medians);
+      let mut report = vec![];
+      for (i, (validator, _)) in self.spec.validators().into_iter().enumerate() {
+        if medians[i] != 0 {
+          report.push((validator.to_bytes(), medians[i]));
+        }
+      }
+
+      // This does lock in the report, meaning further slash point accumulations won't be reported
+      // They still have value to be locally tracked due to local decisions made based off
+      // accumulated slash reports
+      SlashReport::set(self.txn, self.spec.set(), &report);
 
       // Start a signing protocol for this
       self
@@ -633,7 +643,7 @@ impl<
               id: SubstrateSignableId::SlashReport,
               attempt: 0,
             },
-            report: medians,
+            report,
           },
         )
         .await;
