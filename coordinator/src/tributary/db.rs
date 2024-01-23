@@ -80,6 +80,7 @@ create_db!(
     SlashReports: (genesis: [u8; 32], signer: [u8; 32]) -> Vec<u32>,
     SlashReported: (genesis: [u8; 32]) -> u16,
     SlashReportCutOff: (genesis: [u8; 32]) -> u64,
+    SlashReport: (set: ValidatorSet) -> Vec<u32>,
   }
 );
 
@@ -123,7 +124,13 @@ impl AttemptDb {
   pub fn attempt(getter: &impl Get, genesis: [u8; 32], topic: Topic) -> Option<u32> {
     let attempt = Self::get(getter, genesis, &topic);
     // Don't require explicit recognition of the Dkg topic as it starts when the chain does
-    if attempt.is_none() && ((topic == Topic::Dkg) || (topic == Topic::DkgConfirmation)) {
+    // Don't require explicit recognition of the SlashReport topic as it isn't a DoS risk and it
+    // should always happen (eventually)
+    if attempt.is_none() &&
+      ((topic == Topic::Dkg) ||
+        (topic == Topic::DkgConfirmation) ||
+        (topic == Topic::SubstrateSign(SubstrateSignableId::SlashReport)))
+    {
       return Some(0);
     }
     attempt

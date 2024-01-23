@@ -16,7 +16,7 @@ use serai_client::{
 
 use serai_db::DbTxn;
 
-use processor_messages::coordinator::SubstrateSignableId;
+use processor_messages::coordinator::{SubstrateSignId, SubstrateSignableId};
 
 use tributary::{
   TransactionKind, Transaction as TributaryTransaction, TransactionError, Block, TributaryReader,
@@ -520,6 +520,24 @@ impl<
                   .await;
               }
             }
+            SubstrateSignableId::SlashReport => {
+              // If this Tributary hasn't been retired...
+              // (published SlashReport/took too long to do so)
+              if crate::RetiredTributaryDb::get(self.txn, self.spec.set()).is_none() {
+                let report = SlashReport::get(self.txn, self.spec.set())
+                  .expect("re-attempting signing a SlashReport we don't have?");
+                self
+                  .processors
+                  .send(
+                    self.spec.set().network,
+                    processor_messages::coordinator::CoordinatorMessage::SignSlashReport {
+                      id,
+                      report,
+                    },
+                  )
+                  .await;
+              }
+            }
           }
         }
         Topic::Sign(id) => {
@@ -541,6 +559,84 @@ impl<
             .await;
         }
       }
+    }
+
+    if Some(u64::from(self.block_number)) == SlashReportCutOff::get(self.txn, genesis) {
+      // Grab every slash report
+      let mut all_reports = vec![];
+      for (i, (validator, _)) in self.spec.validators().into_iter().enumerate() {
+        let Some(mut report) = SlashReports::get(self.txn, genesis, validator.to_bytes()) else {
+          continue;
+        };
+        // Assign them 0 points for themselves
+        report.insert(i, 0);
+        // Uses &[] as we only need the length which is independent to who else was removed
+        let signer_i = self.spec.i(&[], validator).unwrap();
+        let signer_len = u16::from(signer_i.end) - u16::from(signer_i.start);
+        // Push `n` copies, one for each of their shares
+        for _ in 0 .. signer_len {
+          all_reports.push(report.clone());
+        }
+      }
+
+      // For each participant, grab their median
+      let mut medians = vec![];
+      for p in 0 .. self.spec.validators().len() {
+        let mut median_calc = vec![];
+        for report in &all_reports {
+          median_calc.push(report[p]);
+        }
+        median_calc.sort_unstable();
+        medians.push(median_calc[median_calc.len() / 2]);
+      }
+
+      // Grab the points of the last party within the best-performing threshold
+      // This is done by first expanding the point values by the amount of shares
+      let mut sorted_medians = vec![];
+      for (i, (_, shares)) in self.spec.validators().into_iter().enumerate() {
+        for _ in 0 .. shares {
+          sorted_medians.push(medians[i]);
+        }
+      }
+      // Then performing the sort
+      sorted_medians.sort_unstable();
+      let worst_points_by_party_within_threshold = sorted_medians[usize::from(self.spec.t()) - 1];
+
+      // Reduce everyone's points by this value
+      for median in &mut medians {
+        *median = median.saturating_sub(worst_points_by_party_within_threshold);
+      }
+
+      // The threshold now has the proper incentive to report this as they no longer suffer
+      // negative effects
+      //
+      // Additionally, if all validators had degraded performance, they don't all get penalized for
+      // what's likely outside their control (as it occurred universally)
+
+      // Mark everyone fatally slashed with u32::MAX
+      for (i, (validator, _)) in self.spec.validators().into_iter().enumerate() {
+        if FatallySlashed::get(self.txn, genesis, validator.to_bytes()).is_some() {
+          medians[i] = u32::MAX;
+        }
+      }
+
+      SlashReport::set(self.txn, self.spec.set(), &medians);
+
+      // Start a signing protocol for this
+      self
+        .processors
+        .send(
+          self.spec.set().network,
+          processor_messages::coordinator::CoordinatorMessage::SignSlashReport {
+            id: SubstrateSignId {
+              session: self.spec.set().session,
+              id: SubstrateSignableId::SlashReport,
+              attempt: 0,
+            },
+            report: medians,
+          },
+        )
+        .await;
     }
   }
 }
