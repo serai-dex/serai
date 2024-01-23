@@ -8,6 +8,7 @@ use http_body_util::BodyExt;
 use crate::{Client, Error};
 
 // Borrows the client so its async task lives as long as this response exists.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Response<'a>(pub(crate) hyper::Response<Incoming>, pub(crate) &'a Client);
 impl<'a> Response<'a> {

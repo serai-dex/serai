@@ -14,10 +14,7 @@ use scale_info::TypeInfo;
 use crate::{Coin, Amount};
 
 /// The type used for balances (a Coin and Balance).
-#[rustfmt::skip]
-#[derive(
-  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
