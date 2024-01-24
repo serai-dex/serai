@@ -21,6 +21,8 @@ impl<
 {
 }
 
+// We use our own Transaction struct, over UncheckedExtrinsic, for more control, a bit more
+// simplicity, and in order to be immune to https://github.com/paritytech/polkadot-sdk/issues/2947
 #[allow(private_bounds)]
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 pub struct Transaction<Call: TransactionMember, Extra: TransactionMember> {

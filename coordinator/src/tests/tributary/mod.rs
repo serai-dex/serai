@@ -30,6 +30,7 @@ mod sync;
 impl PublishSeraiTransaction for () {
   async fn publish_set_keys(
     &self,
+    _db: &(impl Sync + serai_db::Get),
     _set: ValidatorSet,
     _removed: Vec<SeraiAddress>,
     _key_pair: KeyPair,
@@ -62,7 +63,7 @@ fn random_sign_data<R: RngCore, Id: Clone + PartialEq + Eq + Debug + Encode + De
 
     data: {
       let mut res = vec![];
-      for _ in 0 ..= (rng.next_u64() % 256) {
+      for _ in 0 .. (rng.next_u64() % 256) {
         res.push(random_vec(&mut OsRng, 512));
       }
       res

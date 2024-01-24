@@ -174,9 +174,9 @@ impl BlockTrait<Monero> for Block {
     const BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW: u64 = 60;
 
     // If Monero doesn't have enough blocks to build a window, it doesn't define a network time
-    if (u64::try_from(self.number()).unwrap() + 1) < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
+    if (self.number().unwrap() + 1) < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
       // Use the block number as the time
-      return self.number().try_into().unwrap();
+      return self.number().unwrap();
     }
 
     let mut timestamps = vec![self.header.timestamp];
@@ -194,7 +194,7 @@ impl BlockTrait<Monero> for Block {
       timestamps.push(parent_block.header.timestamp);
       parent = parent_block.parent();
 
-      if parent_block.number() == 0 {
+      if parent_block.number().unwrap() == 0 {
         break;
       }
     }
@@ -212,7 +212,7 @@ impl BlockTrait<Monero> for Block {
     // Monero also solely requires the block's time not be less than the median, it doesn't ensure
     // it advances the median forward
     // Ensure monotonicity despite both these issues by adding the block number to the median time
-    res + u64::try_from(self.number()).unwrap()
+    res + self.number().unwrap()
   }
 }
 
@@ -585,16 +585,21 @@ impl Network for Monero {
 
         if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix.extra) {
           if eventuality.matches(&tx) {
-            res.insert(eventualities.map.remove(&tx.prefix.extra).unwrap().0, (block.number(), tx));
+            res.insert(
+              eventualities.map.remove(&tx.prefix.extra).unwrap().0,
+              (usize::try_from(block.number().unwrap()).unwrap(), tx),
+            );
           }
         }
       }
 
       eventualities.block_number += 1;
-      assert_eq!(eventualities.block_number, block.number());
+      assert_eq!(eventualities.block_number, usize::try_from(block.number().unwrap()).unwrap());
     }
 
-    for block_num in (eventualities.block_number + 1) .. block.number() {
+    for block_num in
+      (eventualities.block_number + 1) .. usize::try_from(block.number().unwrap()).unwrap()
+    {
       let block = {
         let mut block;
         while {
@@ -612,7 +617,7 @@ impl Network for Monero {
 
     // Also check the current block
     check_block(self, eventualities, block, &mut res).await;
-    assert_eq!(eventualities.block_number, block.number());
+    assert_eq!(eventualities.block_number, usize::try_from(block.number().unwrap()).unwrap());
 
     res
   }
@@ -687,7 +692,7 @@ impl Network for Monero {
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
-    self.rpc.get_block(*id).await.unwrap().number()
+    self.rpc.get_block(*id).await.unwrap().number().unwrap().try_into().unwrap()
   }
 
   #[cfg(test)]

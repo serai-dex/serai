@@ -32,6 +32,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 
+zalloc = { path = "../common/zalloc" }
 serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env" }
 
@@ -58,5 +59,6 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 
 [features]
+longer-reattempts = []
 parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]

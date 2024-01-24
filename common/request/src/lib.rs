@@ -5,14 +5,13 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
+use tower_service::Service as TowerService;
 #[cfg(feature = "tls")]
 use hyper_rustls::{HttpsConnectorBuilder, HttpsConnector};
-use hyper::{
-  Uri,
-  header::HeaderValue,
-  body::Body,
-  service::Service,
-  client::{HttpConnector, conn::http1::SendRequest},
+use hyper::{Uri, header::HeaderValue, body::Bytes, client::conn::http1::SendRequest};
+use hyper_util::{
+  rt::tokio::TokioExecutor,
+  client::legacy::{Client as HyperClient, connect::HttpConnector},
 };
 pub use hyper;
 
@@ -29,6 +28,7 @@ pub enum Error {
   InconsistentHost,
   ConnectionError(Box<dyn Send + Sync + std::error::Error>),
   Hyper(hyper::Error),
+  HyperUtil(hyper_util::client::legacy::Error),
 }
 
 #[cfg(not(feature = "tls"))]
@@ -38,8 +38,12 @@ type Connector = HttpsConnector<HttpConnector>;
 
 #[derive(Clone, Debug)]
 enum Connection {
-  ConnectionPool(hyper::Client<Connector>),
-  Connection { connector: Connector, host: Uri, connection: Arc<Mutex<Option<SendRequest<Body>>>> },
+  ConnectionPool(HyperClient<Connector, Full<Bytes>>),
+  Connection {
+    connector: Connector,
+    host: Uri,
+    connection: Arc<Mutex<Option<SendRequest<Full<Bytes>>>>>,
+  },
 }
 
 #[derive(Clone, Debug)]
@@ -49,17 +53,23 @@ pub struct Client {
 
 impl Client {
   fn connector() -> Connector {
+    let mut res = HttpConnector::new();
+    res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     #[cfg(feature = "tls")]
-    let res =
-      HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build();
-    #[cfg(not(feature = "tls"))]
-    let res = HttpConnector::new();
+    let res = HttpsConnectorBuilder::new()
+      .with_native_roots()
+      .expect("couldn't fetch system's SSL roots")
+      .https_or_http()
+      .enable_http1()
+      .wrap_connector(res);
     res
   }
 
   pub fn with_connection_pool() -> Client {
     Client {
-      connection: Connection::ConnectionPool(hyper::Client::builder().build(Self::connector())),
+      connection: Connection::ConnectionPool(
+        HyperClient::builder(TokioExecutor::new()).build(Self::connector()),
+      ),
     }
   }
 
@@ -112,7 +122,9 @@ impl Client {
     }
 
     let response = match &self.connection {
-      Connection::ConnectionPool(client) => client.request(request).await.map_err(Error::Hyper)?,
+      Connection::ConnectionPool(client) => {
+        client.request(request).await.map_err(Error::HyperUtil)?
+      }
       Connection::Connection { connector, host, connection } => {
         let mut connection_lock = connection.lock().await;
 

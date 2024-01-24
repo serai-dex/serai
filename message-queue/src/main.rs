@@ -1,6 +1,3 @@
-mod messages;
-mod queue;
-
 pub(crate) use std::{
   sync::{Arc, RwLock},
   collections::HashMap,
@@ -37,6 +34,13 @@ mod clippy {
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 }
 pub(crate) use self::clippy::*;
+
+mod messages;
+mod queue;
+
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
 
 // queue RPC method
 /*

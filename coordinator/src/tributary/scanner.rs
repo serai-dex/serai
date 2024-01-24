@@ -65,6 +65,7 @@ impl<
 pub trait PublishSeraiTransaction {
   async fn publish_set_keys(
     &self,
+    db: &(impl Sync + Get),
     set: ValidatorSet,
     removed: Vec<SeraiAddress>,
     key_pair: KeyPair,
@@ -84,6 +85,7 @@ mod impl_pst_for_serai {
     ($Meta: ty, $check: ident) => {
       async fn publish(
         serai: &Serai,
+        db: &impl Get,
         set: ValidatorSet,
         tx: serai_client::Transaction,
         meta: $Meta,
@@ -95,29 +97,25 @@ mod impl_pst_for_serai {
             // creation
             // TODO2: Differentiate connection errors from invariants
             Err(e) => {
+              // The following block is irrelevant, and can/likely will fail, if we're publishing
+              // a TX for an old session
+              // If we're on a newer session, move on
+              if crate::RetiredTributaryDb::get(db, set).is_some() {
+                log::warn!("trying to publish a TX relevant to set {set:?} which isn't the latest");
+                return false;
+              }
+
               if let Ok(serai) = serai.as_of_latest_finalized_block().await {
                 let serai = serai.validator_sets();
-
-                // The following block is irrelevant, and can/likely will fail, if we're publishing
-                // a TX for an old session
-                // If we're on a newer session, move on
-                if let Ok(Some(current_session)) = serai.session(set.network).await {
-                  if current_session.0 > set.session.0 {
-                    log::warn!(
-                      "trying to publish a TX relevant to set {set:?} which isn't the latest"
-                    );
-                    return false;
-                  }
-                }
 
                 // Check if someone else published the TX in question
                 if $check(serai, set, meta).await {
                   return false;
                 }
-
-                log::error!("couldn't connect to Serai node to publish TX: {e:?}");
-                tokio::time::sleep(core::time::Duration::from_secs(5)).await;
               }
+
+              log::error!("couldn't connect to Serai node to publish TX: {e:?}");
+              tokio::time::sleep(core::time::Duration::from_secs(5)).await;
             }
           }
         }
@@ -129,6 +127,7 @@ mod impl_pst_for_serai {
   impl PublishSeraiTransaction for Serai {
     async fn publish_set_keys(
       &self,
+      db: &(impl Sync + Get),
       set: ValidatorSet,
       removed: Vec<SeraiAddress>,
       key_pair: KeyPair,
@@ -143,7 +142,7 @@ mod impl_pst_for_serai {
         false
       }
       common_pst!((), check);
-      if publish(self, set, tx, ()).await {
+      if publish(self, db, set, tx, ()).await {
         log::info!("published set keys for {set:?}");
       }
     }
@@ -163,6 +162,7 @@ impl<FPtt: Send + Future<Output = ()>, F: Sync + Fn(Transaction) -> FPtt> PTTTra
 
 pub struct TributaryBlockHandler<
   'a,
+  D: Db,
   T: DbTxn,
   Pro: Processors,
   PST: PublishSeraiTransaction,
@@ -170,6 +170,7 @@ pub struct TributaryBlockHandler<
   RID: RIDTrait,
   P: P2p,
 > {
+  pub db: &'a D,
   pub txn: &'a mut T,
   pub our_key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
   pub recognized_id: &'a RID,
@@ -183,13 +184,14 @@ pub struct TributaryBlockHandler<
 }
 
 impl<
+    D: Db,
     T: DbTxn,
     Pro: Processors,
     PST: PublishSeraiTransaction,
     PTT: PTTTrait,
     RID: RIDTrait,
     P: P2p,
-  > TributaryBlockHandler<'_, T, Pro, PST, PTT, RID, P>
+  > TributaryBlockHandler<'_, D, T, Pro, PST, PTT, RID, P>
 {
   pub fn fatal_slash(&mut self, slashing: [u8; 32], reason: &str) {
     let genesis = self.spec.genesis();
@@ -204,7 +206,7 @@ impl<
   // Tributary post-DKG
   // https://github.com/serai-dex/serai/issues/426
 
-  async fn handle<D: Db>(mut self) {
+  async fn handle(mut self) {
     log::info!("found block for Tributary {:?}", self.spec.set());
 
     let transactions = self.block.transactions.clone();
@@ -581,9 +583,11 @@ pub(crate) async fn handle_new_blocks<
       }
     }
 
-    let mut txn = db.txn();
+    let mut db_clone = db.clone();
+    let mut txn = db_clone.txn();
     TributaryBlockNumber::set(&mut txn, next, &block_number);
     (TributaryBlockHandler {
+      db,
       txn: &mut txn,
       spec,
       our_key: key,
@@ -595,7 +599,7 @@ pub(crate) async fn handle_new_blocks<
       block_number,
       _p2p: PhantomData::<P>,
     })
-    .handle::<D>()
+    .handle()
     .await;
     last_block = next;
     LastHandledBlock::set(&mut txn, genesis, &next);

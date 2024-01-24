@@ -131,16 +131,26 @@ impl ReattemptDb {
     topic: Topic,
   ) {
     // 5 minutes
+    #[cfg(not(feature = "longer-reattempts"))]
     const BASE_REATTEMPT_DELAY: u32 = (5 * 60 * 1000) / tributary::tendermint::TARGET_BLOCK_TIME;
+
+    // 10 minutes, intended for latent environments like the GitHub CI
+    #[cfg(feature = "longer-reattempts")]
+    const BASE_REATTEMPT_DELAY: u32 = (10 * 60 * 1000) / tributary::tendermint::TARGET_BLOCK_TIME;
+
     // 5 minutes for attempts 0 ..= 2, 10 minutes for attempts 3 ..= 5, 15 minutes for attempts > 5
     // Assumes no event will take longer than 15 minutes, yet grows the time in case there are
     // network bandwidth issues
-    let reattempt_delay = BASE_REATTEMPT_DELAY *
+    let mut reattempt_delay = BASE_REATTEMPT_DELAY *
       ((AttemptDb::attempt(txn, genesis, topic)
         .expect("scheduling re-attempt for unknown topic") /
         3) +
         1)
       .min(3);
+    // Allow more time for DKGs since they have an extra round and much more data
+    if matches!(topic, Topic::Dkg) {
+      reattempt_delay *= 4;
+    }
     let upon_block = current_block_number + reattempt_delay;
 
     let mut reattempts = Self::get(txn, genesis, upon_block).unwrap_or(vec![]);

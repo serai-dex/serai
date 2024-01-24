@@ -11,7 +11,6 @@ use crate::{
   tests::{THRESHOLD, PARTICIPANTS, clone_without},
 };
 
-// Needed so rustfmt doesn't fail to format on line length issues
 type FrostEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
 type FrostSecretShares<C> = HashMap<Participant, FrostEncryptedMessage<C>>;
 

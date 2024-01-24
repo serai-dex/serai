@@ -40,6 +40,7 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 # Uses a single threaded runtime since this shouldn't ever be CPU-bound
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
+zalloc = { path = "../common/zalloc" }
 serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }

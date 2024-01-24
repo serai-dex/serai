@@ -12,11 +12,21 @@ use curve25519_dalek::{
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
 mod sealed {
-  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy {}
-  impl VarInt for u8 {}
-  impl VarInt for u32 {}
-  impl VarInt for u64 {}
-  impl VarInt for usize {}
+  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy {
+    const BITS: usize;
+  }
+  impl VarInt for u8 {
+    const BITS: usize = 8;
+  }
+  impl VarInt for u32 {
+    const BITS: usize = 32;
+  }
+  impl VarInt for u64 {
+    const BITS: usize = 64;
+  }
+  impl VarInt for usize {
+    const BITS: usize = core::mem::size_of::<usize>() * 8;
+  }
 }
 
 // This will panic if the VarInt exceeds u64::MAX
@@ -102,7 +112,7 @@ pub(crate) fn read_varint<R: Read, U: sealed::VarInt>(r: &mut R) -> io::Result<U
     if (bits != 0) && (b == 0) {
       Err(io::Error::other("non-canonical varint"))?;
     }
-    if ((bits + 7) > 64) && (b >= (1 << (64 - bits))) {
+    if ((bits + 7) >= U::BITS) && (b >= (1 << (U::BITS - bits))) {
       Err(io::Error::other("varint overflow"))?;
     }
 

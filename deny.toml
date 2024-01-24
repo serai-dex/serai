@@ -65,8 +65,6 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-runtime" },
   { allow = ["AGPL-3.0"], name = "serai-node" },
 
-  { allow = ["AGPL-3.0"], name = "serai-client" },
-
   { allow = ["AGPL-3.0"], name = "mini-serai" },
 
   { allow = ["AGPL-3.0"], name = "serai-docker-tests" },
