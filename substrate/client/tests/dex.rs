@@ -11,7 +11,7 @@ use serai_client::{
     SeraiAddress, PublicKey,
   },
   in_instructions::primitives::{
-    InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR, OutAddress,
+    InInstruction, InInstructionWithBalance, Batch, ADD_LIQUIDITY_ACCOUNT, SWAP_ACCOUNT, OutAddress,
   },
   dex::DexEvent,
   Serai,
@@ -270,7 +270,7 @@ serai_test!(
     assert_eq!(
       events,
       vec![DexEvent::LiquidityAdded {
-        who: IN_INSTRUCTION_EXECUTOR,
+        who: ADD_LIQUIDITY_ACCOUNT,
         mint_to: pair.public().into(),
         pool_id: Coin::Bitcoin,
         coin_amount: 10_000_000_000_000, // half of sent amount
@@ -357,8 +357,8 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR,
-          send_to: IN_INSTRUCTION_EXECUTOR,
+          who: SWAP_ACCOUNT,
+          send_to: SWAP_ACCOUNT,
           path,
           amount_in: 20_000_000_000_000,
           amount_out: 11066655622377
@@ -396,7 +396,7 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR,
+          who: SWAP_ACCOUNT,
           send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 20_000_000_000_000,
@@ -434,7 +434,7 @@ serai_test!(
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
-          who: IN_INSTRUCTION_EXECUTOR,
+          who: SWAP_ACCOUNT,
           send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 10_000_000_000_000,
