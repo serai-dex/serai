@@ -211,8 +211,11 @@ pub mod coordinator {
     InvalidParticipant { id: SubstrateSignId, participant: Participant },
     CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
     BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<[u8; 64]> },
+    SlashReportPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
     SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
+    // TODO: Make these signatures [u8; 64]?
     CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
+    SignedSlashReport { session: Session, signature: Vec<u8> },
   }
 }
 
@@ -431,8 +434,11 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
           coordinator::ProcessorMessage::CosignPreprocess { id, .. } => (2, id.encode()),
           coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (3, id.encode()),
-          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (4, id.encode()),
-          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (5, block.encode()),
+          coordinator::ProcessorMessage::SlashReportPreprocess { id, .. } => (4, id.encode()),
+          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (5, id.encode()),
+          // Unique since only one instance of a signature matters
+          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (6, block.encode()),
+          coordinator::ProcessorMessage::SignedSlashReport { .. } => (7, vec![]),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];

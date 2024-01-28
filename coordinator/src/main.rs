@@ -243,7 +243,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
       coordinator::ProcessorMessage::InvalidParticipant { id, .. } |
       coordinator::ProcessorMessage::CosignPreprocess { id, .. } |
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } |
+      coordinator::ProcessorMessage::SlashReportPreprocess { id, .. } |
       coordinator::ProcessorMessage::SubstrateShare { id, .. } => Some(id.session),
+      // This causes an action on our P2P net yet not on any Tributary
       coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
           network,
@@ -260,6 +262,55 @@ async fn handle_processor_message<D: Db, P: P2p>(
         cosigned_block.serialize(&mut buf).unwrap();
         P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
         None
+      }
+      // This causes an action on Substrate yet not on any Tributary
+      coordinator::ProcessorMessage::SignedSlashReport { session, signature } => {
+        let set = ValidatorSet { network, session: *session };
+        let signature: &[u8] = signature.as_ref();
+        let signature = serai_client::Signature(signature.try_into().unwrap());
+
+        let slashes = crate::tributary::SlashReport::get(&txn, set)
+          .expect("signed slash report despite not having slash report locally");
+        let slashes_pubs =
+          slashes.iter().map(|(address, points)| (Public(*address), *points)).collect::<Vec<_>>();
+
+        let tx = serai_client::SeraiValidatorSets::report_slashes(
+          network,
+          slashes
+            .into_iter()
+            .map(|(address, points)| (serai_client::SeraiAddress(address), points))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+          signature.clone(),
+        );
+
+        loop {
+          if serai.publish(&tx).await.is_ok() {
+            break None;
+          }
+
+          // Check if the slashes shouldn't still be reported. If not, break.
+          let Ok(serai) = serai.as_of_latest_finalized_block().await else {
+            tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+            continue;
+          };
+          let Ok(key) = serai.validator_sets().key_pending_slash_report(network).await else {
+            tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+            continue;
+          };
+          let Some(key) = key else {
+            break None;
+          };
+          // If this is the key for this slash report, then this will verify
+          use sp_application_crypto::RuntimePublic;
+          if !key.verify(
+            &serai_client::validator_sets::primitives::report_slashes_message(&set, &slashes_pubs),
+            &signature,
+          ) {
+            break None;
+          }
+        }
       }
     },
     // These don't return a relevant Tributary as there's no Tributary with action expected
@@ -553,7 +604,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // slash) and censor transactions (yet don't explicitly ban)
           vec![]
         }
-        coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } => {
+        coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } |
+        coordinator::ProcessorMessage::SlashReportPreprocess { id, preprocesses } => {
           vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
@@ -668,6 +720,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         #[allow(clippy::match_same_arms)] // Allowed to preserve layout
         coordinator::ProcessorMessage::CosignedBlock { .. } => unreachable!(),
+        #[allow(clippy::match_same_arms)]
+        coordinator::ProcessorMessage::SignedSlashReport { .. } => unreachable!(),
       },
       ProcessorMessage::Substrate(inner_msg) => match inner_msg {
         processor_messages::substrate::ProcessorMessage::Batch { .. } |

@@ -208,6 +208,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
 
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
+#[allow(clippy::too_many_arguments)]
 async fn handle_block<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -342,6 +343,7 @@ async fn handle_block<D: Db, Pro: Processors>(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_new_blocks<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,

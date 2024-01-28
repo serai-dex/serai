@@ -106,8 +106,6 @@ impl SlashReportSigner {
     let substrate_sign_id =
       SubstrateSignId { session, id: SubstrateSignableId::SlashReport, attempt };
 
-    todo!("TODO")
-    /* TODO
     Some((
       SlashReportSigner { network, session, keys, report, attempt, preprocessing, signing: None },
       ProcessorMessage::SlashReportPreprocess {
@@ -115,7 +113,6 @@ impl SlashReportSigner {
         preprocesses: serialized_preprocesses,
       },
     ))
-    */
   }
 
   #[must_use]
@@ -283,14 +280,10 @@ impl SlashReportSigner {
 
         Completed::set(txn, self.session, &());
 
-        /* TODO
-        Some(ProcessorMessage::CosignedBlock {
-          block_number: self.block_number,
-          block,
+        Some(ProcessorMessage::SignedSlashReport {
+          session: self.session,
           signature: sig.to_bytes().to_vec(),
         })
-        */
-        todo!("TODO")
       }
       CoordinatorMessage::BatchReattempt { .. } => {
         panic!("BatchReattempt passed to SlashReportSigner")
