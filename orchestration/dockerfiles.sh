@@ -14,6 +14,16 @@ cat \
   ./Dockerfile.parts/Dockerfile.alpine.start \
   ./coins/monero/Dockerfile.monero.end >> ./coins/monero/Dockerfile
 
+# Monero wallet rpc
+rm -f ./coins/monero-wallet-rpc/Dockerfile
+mkdir -p ./coins/monero-wallet-rpc/temp/
+cp ./coins/monero/temp/hashes-v* ./coins/monero-wallet-rpc/temp/
+cat \
+  ./Dockerfile.parts/mimalloc/Dockerfile.debian \
+  ./coins/monero/Dockerfile.monero \
+  ./Dockerfile.parts/Dockerfile.debian.start \
+  ./coins/monero-wallet-rpc/Dockerfile.monero-wallet-rpc.end >> ./coins/monero-wallet-rpc/Dockerfile
+
 # Message Queue
 rm ./message-queue/Dockerfile
 cat \
