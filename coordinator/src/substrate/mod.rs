@@ -208,10 +208,12 @@ async fn handle_batch_and_burns<Pro: Processors>(
 
 // Handle a specific Substrate block, returning an error when it fails to get data
 // (not blocking / holding)
+#[allow(clippy::too_many_arguments)]
 async fn handle_block<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
+  perform_slash_report: &mpsc::UnboundedSender<ValidatorSet>,
   tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
   processors: &Pro,
   serai: &Serai,
@@ -287,6 +289,27 @@ async fn handle_block<D: Db, Pro: Processors>(
     event_id += 1;
   }
 
+  for accepted_handover in serai.as_of(hash).validator_sets().accepted_handover_events().await? {
+    let ValidatorSetsEvent::AcceptedHandover { set } = accepted_handover else {
+      panic!("AcceptedHandover event wasn't AcceptedHandover: {accepted_handover:?}");
+    };
+
+    if set.network == NetworkId::Serai {
+      continue;
+    }
+
+    if HandledEvent::is_unhandled(db, hash, event_id) {
+      log::info!("found fresh accepted handover event {:?}", accepted_handover);
+      // TODO: This isn't atomic with the event handling
+      // Send a oneshot receiver so we can await the response?
+      perform_slash_report.send(set).unwrap();
+      let mut txn = db.txn();
+      HandledEvent::handle_event(&mut txn, hash, event_id);
+      txn.commit();
+    }
+    event_id += 1;
+  }
+
   for retired_set in serai.as_of(hash).validator_sets().set_retired_events().await? {
     let ValidatorSetsEvent::SetRetired { set } = retired_set else {
       panic!("SetRetired event wasn't SetRetired: {retired_set:?}");
@@ -320,10 +343,12 @@ async fn handle_block<D: Db, Pro: Processors>(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_new_blocks<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
+  perform_slash_report: &mpsc::UnboundedSender<ValidatorSet>,
   tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
   processors: &Pro,
   serai: &Serai,
@@ -349,7 +374,17 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
       .expect("couldn't get block before the latest finalized block");
 
     log::info!("handling substrate block {b}");
-    handle_block(db, key, new_tributary_spec, tributary_retired, processors, serai, block).await?;
+    handle_block(
+      db,
+      key,
+      new_tributary_spec,
+      perform_slash_report,
+      tributary_retired,
+      processors,
+      serai,
+      block,
+    )
+    .await?;
     *next_block += 1;
 
     let mut txn = db.txn();
@@ -368,6 +403,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   processors: Pro,
   serai: Arc<Serai>,
   new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
+  perform_slash_report: mpsc::UnboundedSender<ValidatorSet>,
   tributary_retired: mpsc::UnboundedSender<ValidatorSet>,
 ) {
   log::info!("scanning substrate");
@@ -443,6 +479,7 @@ pub async fn scan_task<D: Db, Pro: Processors>(
       &mut db,
       &key,
       &new_tributary_spec,
+      &perform_slash_report,
       &tributary_retired,
       &processors,
       &serai,

@@ -107,6 +107,10 @@ pub fn set_keys_message(
   (b"ValidatorSets-set_keys", set, removed_participants, key_pair).encode()
 }
 
+pub fn report_slashes_message(set: &ValidatorSet, slashes: &[(Public, u32)]) -> Vec<u8> {
+  (b"ValidatorSets-report_slashes", set, slashes).encode()
+}
+
 /// For a set of validators whose key shares may exceed the maximum, reduce until they equal the
 /// maximum.
 ///

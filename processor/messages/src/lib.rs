@@ -169,6 +169,7 @@ pub mod coordinator {
   pub enum SubstrateSignableId {
     CosigningSubstrateBlock([u8; 32]),
     Batch(u32),
+    SlashReport,
   }
 
   #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
@@ -181,6 +182,7 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     CosignSubstrateBlock { id: SubstrateSignId, block_number: u64 },
+    SignSlashReport { id: SubstrateSignId, report: Vec<([u8; 32], u32)> },
     SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, [u8; 64]> },
     SubstrateShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
     // Re-attempt a batch signing protocol.
@@ -209,8 +211,11 @@ pub mod coordinator {
     InvalidParticipant { id: SubstrateSignId, participant: Participant },
     CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
     BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<[u8; 64]> },
+    SlashReportPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
     SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
+    // TODO: Make these signatures [u8; 64]?
     CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
+    SignedSlashReport { session: Session, signature: Vec<u8> },
   }
 }
 
@@ -354,12 +359,15 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
-          // Unique since this is the entire message
+          // Unique since this ID contains the hash of the block being cosigned
           coordinator::CoordinatorMessage::CosignSubstrateBlock { id, .. } => (0, id.encode()),
+          // Unique since there's only one of these per session/attempt, and ID is inclusive to
+          // both
+          coordinator::CoordinatorMessage::SignSlashReport { id, .. } => (1, id.encode()),
           // Unique since this embeds the batch ID (including its network) and attempt
-          coordinator::CoordinatorMessage::SubstratePreprocesses { id, .. } => (1, id.encode()),
-          coordinator::CoordinatorMessage::SubstrateShares { id, .. } => (2, id.encode()),
-          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (3, id.encode()),
+          coordinator::CoordinatorMessage::SubstratePreprocesses { id, .. } => (2, id.encode()),
+          coordinator::CoordinatorMessage::SubstrateShares { id, .. } => (3, id.encode()),
+          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (4, id.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -426,8 +434,11 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
           coordinator::ProcessorMessage::CosignPreprocess { id, .. } => (2, id.encode()),
           coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (3, id.encode()),
-          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (4, id.encode()),
-          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (5, block.encode()),
+          coordinator::ProcessorMessage::SlashReportPreprocess { id, .. } => (4, id.encode()),
+          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (5, id.encode()),
+          // Unique since only one instance of a signature matters
+          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (6, block.encode()),
+          coordinator::ProcessorMessage::SignedSlashReport { .. } => (7, vec![]),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];

@@ -7,7 +7,7 @@ use ciphersuite::{group::Group, Ciphersuite, Ristretto};
 use scale::{Encode, Decode};
 use serai_client::{
   primitives::{SeraiAddress, Signature},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ValidatorSet, KeyPair},
 };
 use processor_messages::coordinator::SubstrateSignableId;
 
@@ -79,7 +79,7 @@ fn test_read_write<RW: Eq + Debug + ReadWrite>(value: &RW) {
 
 #[test]
 fn tx_size_limit() {
-  use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, MAX_KEY_LEN};
+  use serai_client::validator_sets::primitives::MAX_KEY_LEN;
 
   use tributary::TRANSACTION_SIZE_LIMIT;
 
@@ -277,4 +277,17 @@ fn serialize_transaction() {
       signature: random_signed_with_nonce(&mut OsRng, 2).signature,
     });
   }
+
+  test_read_write(&Transaction::SlashReport(
+    {
+      let amount =
+        usize::try_from(OsRng.next_u64() % u64::from(MAX_KEY_SHARES_PER_SET - 1)).unwrap();
+      let mut points = vec![];
+      for _ in 0 .. amount {
+        points.push((OsRng.next_u64() >> 32).try_into().unwrap());
+      }
+      points
+    },
+    random_signed_with_nonce(&mut OsRng, 0),
+  ));
 }

@@ -16,15 +16,19 @@ use frost_schnorrkel::Schnorrkel;
 
 use log::{info, warn};
 
-use serai_client::validator_sets::primitives::Session;
+use serai_client::{
+  Public,
+  primitives::NetworkId,
+  validator_sets::primitives::{Session, ValidatorSet, report_slashes_message},
+};
 
 use messages::coordinator::*;
 use crate::{Get, DbTxn, create_db};
 
 create_db! {
-  CosignerDb {
-    Completed: (id: [u8; 32]) -> (),
-    Attempt: (id: [u8; 32], attempt: u32) -> (),
+  SlashReportSignerDb {
+    Completed: (session: Session) -> (),
+    Attempt: (session: Session, attempt: u32) -> (),
   }
 }
 
@@ -33,12 +37,12 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
   <Schnorrkel as Algorithm<Ristretto>>::Signature,
 >>::SignatureShare;
 
-pub struct Cosigner {
+pub struct SlashReportSigner {
+  network: NetworkId,
   session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
+  report: Vec<([u8; 32], u32)>,
 
-  block_number: u64,
-  id: [u8; 32],
   attempt: u32,
   #[allow(clippy::type_complexity)]
   preprocessing: Option<(Vec<AlgorithmSignMachine<Ristretto, Schnorrkel>>, Vec<Preprocess>)>,
@@ -46,13 +50,12 @@ pub struct Cosigner {
   signing: Option<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, Vec<SignatureShare>)>,
 }
 
-impl fmt::Debug for Cosigner {
+impl fmt::Debug for SlashReportSigner {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
-      .debug_struct("Cosigner")
+      .debug_struct("SlashReportSigner")
       .field("session", &self.session)
-      .field("block_number", &self.block_number)
-      .field("id", &self.id)
+      .field("report", &self.report)
       .field("attempt", &self.attempt)
       .field("preprocessing", &self.preprocessing.is_some())
       .field("signing", &self.signing.is_some())
@@ -60,32 +63,31 @@ impl fmt::Debug for Cosigner {
   }
 }
 
-impl Cosigner {
+impl SlashReportSigner {
   pub fn new(
     txn: &mut impl DbTxn,
+    network: NetworkId,
     session: Session,
     keys: Vec<ThresholdKeys<Ristretto>>,
-    block_number: u64,
-    id: [u8; 32],
+    report: Vec<([u8; 32], u32)>,
     attempt: u32,
-  ) -> Option<(Cosigner, ProcessorMessage)> {
+  ) -> Option<(SlashReportSigner, ProcessorMessage)> {
     assert!(!keys.is_empty());
 
-    if Completed::get(txn, id).is_some() {
+    if Completed::get(txn, session).is_some() {
       return None;
     }
 
-    if Attempt::get(txn, id, attempt).is_some() {
+    if Attempt::get(txn, session, attempt).is_some() {
       warn!(
-        "already attempted cosigning {}, attempt #{}. this is an error if we didn't reboot",
-        hex::encode(id),
-        attempt,
+        "already attempted signing slash report for session {:?}, attempt #{}. {}",
+        session, attempt, "this is an error if we didn't reboot",
       );
       return None;
     }
-    Attempt::set(txn, id, attempt, &());
+    Attempt::set(txn, session, attempt, &());
 
-    info!("cosigning block {} with attempt #{}", hex::encode(id), attempt);
+    info!("signing slash report for session {:?} with attempt #{}", session, attempt);
 
     let mut machines = vec![];
     let mut preprocesses = vec![];
@@ -102,11 +104,11 @@ impl Cosigner {
     let preprocessing = Some((machines, preprocesses));
 
     let substrate_sign_id =
-      SubstrateSignId { session, id: SubstrateSignableId::CosigningSubstrateBlock(id), attempt };
+      SubstrateSignId { session, id: SubstrateSignableId::SlashReport, attempt };
 
     Some((
-      Cosigner { session, keys, block_number, id, attempt, preprocessing, signing: None },
-      ProcessorMessage::CosignPreprocess {
+      SlashReportSigner { network, session, keys, report, attempt, preprocessing, signing: None },
+      ProcessorMessage::SlashReportPreprocess {
         id: substrate_sign_id,
         preprocesses: serialized_preprocesses,
       },
@@ -121,32 +123,24 @@ impl Cosigner {
   ) -> Option<ProcessorMessage> {
     match msg {
       CoordinatorMessage::CosignSubstrateBlock { .. } => {
-        panic!("Cosigner passed CosignSubstrateBlock")
+        panic!("SlashReportSigner passed CosignSubstrateBlock")
       }
 
       CoordinatorMessage::SignSlashReport { .. } => {
-        panic!("Cosigner passed SignSlashReport")
+        panic!("SlashReportSigner passed SignSlashReport")
       }
 
       CoordinatorMessage::SubstratePreprocesses { id, preprocesses } => {
         assert_eq!(id.session, self.session);
-        let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
-          panic!("cosigner passed Batch")
-        };
-        if block != self.id {
-          panic!("given preprocesses for a distinct block than cosigner is signing")
-        }
+        assert_eq!(id.id, SubstrateSignableId::SlashReport);
         if id.attempt != self.attempt {
-          panic!("given preprocesses for a distinct attempt than cosigner is signing")
+          panic!("given preprocesses for a distinct attempt than SlashReportSigner is signing")
         }
 
         let (machines, our_preprocesses) = match self.preprocessing.take() {
           // Either rebooted or RPC error, or some invariant
           None => {
-            warn!(
-              "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(block),
-            );
+            warn!("not preprocessing. this is an error if we didn't reboot");
             return None;
           }
           Some(preprocess) => preprocess,
@@ -181,22 +175,32 @@ impl Cosigner {
             }
           }
 
-          let (machine, share) =
-            match machine.sign(preprocesses, &cosign_block_msg(self.block_number, self.id)) {
-              Ok(res) => res,
-              Err(e) => match e {
-                FrostError::InternalError(_) |
-                FrostError::InvalidParticipant(_, _) |
-                FrostError::InvalidSigningSet(_) |
-                FrostError::InvalidParticipantQuantity(_, _) |
-                FrostError::DuplicatedParticipant(_) |
-                FrostError::MissingParticipant(_) => unreachable!(),
+          let (machine, share) = match machine.sign(
+            preprocesses,
+            &report_slashes_message(
+              &ValidatorSet { network: self.network, session: self.session },
+              &self
+                .report
+                .clone()
+                .into_iter()
+                .map(|(validator, points)| (Public(validator), points))
+                .collect::<Vec<_>>(),
+            ),
+          ) {
+            Ok(res) => res,
+            Err(e) => match e {
+              FrostError::InternalError(_) |
+              FrostError::InvalidParticipant(_, _) |
+              FrostError::InvalidSigningSet(_) |
+              FrostError::InvalidParticipantQuantity(_, _) |
+              FrostError::DuplicatedParticipant(_) |
+              FrostError::MissingParticipant(_) => unreachable!(),
 
-                FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
-                  return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
-                }
-              },
-            };
+              FrostError::InvalidPreprocess(l) | FrostError::InvalidShare(l) => {
+                return Some(ProcessorMessage::InvalidParticipant { id, participant: l })
+              }
+            },
+          };
           if m == 0 {
             signature_machine = Some(machine);
           }
@@ -215,14 +219,9 @@ impl Cosigner {
 
       CoordinatorMessage::SubstrateShares { id, shares } => {
         assert_eq!(id.session, self.session);
-        let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
-          panic!("cosigner passed Batch")
-        };
-        if block != self.id {
-          panic!("given preprocesses for a distinct block than cosigner is signing")
-        }
+        assert_eq!(id.id, SubstrateSignableId::SlashReport);
         if id.attempt != self.attempt {
-          panic!("given preprocesses for a distinct attempt than cosigner is signing")
+          panic!("given preprocesses for a distinct attempt than SlashReportSigner is signing")
         }
 
         let (machine, our_shares) = match self.signing.take() {
@@ -234,10 +233,7 @@ impl Cosigner {
               panic!("never preprocessed yet signing?");
             }
 
-            warn!(
-              "not preprocessing for {}. this is an error if we didn't reboot",
-              hex::encode(block)
-            );
+            warn!("not preprocessing. this is an error if we didn't reboot");
             return None;
           }
           Some(signing) => signing,
@@ -280,17 +276,18 @@ impl Cosigner {
           },
         };
 
-        info!("cosigned {} with attempt #{}", hex::encode(block), id.attempt);
+        info!("signed slash report for session {:?} with attempt #{}", self.session, id.attempt);
 
-        Completed::set(txn, block, &());
+        Completed::set(txn, self.session, &());
 
-        Some(ProcessorMessage::CosignedBlock {
-          block_number: self.block_number,
-          block,
+        Some(ProcessorMessage::SignedSlashReport {
+          session: self.session,
           signature: sig.to_bytes().to_vec(),
         })
       }
-      CoordinatorMessage::BatchReattempt { .. } => panic!("BatchReattempt passed to Cosigner"),
+      CoordinatorMessage::BatchReattempt { .. } => {
+        panic!("BatchReattempt passed to SlashReportSigner")
+      }
     }
   }
 }

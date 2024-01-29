@@ -738,6 +738,39 @@ impl<
         };
         self.processors.send(self.spec.set().network, msg).await;
       }
+
+      Transaction::SlashReport(points, signed) => {
+        // Uses &[] as we only need the length which is independent to who else was removed
+        let signer_range = self.spec.i(&[], signed.signer).unwrap();
+        let signer_len = u16::from(signer_range.end) - u16::from(signer_range.start);
+        if points.len() != (self.spec.validators().len() - 1) {
+          self.fatal_slash(
+            signed.signer.to_bytes(),
+            "submitted a distinct amount of slash points to participants",
+          );
+          return;
+        }
+
+        if SlashReports::get(self.txn, genesis, signed.signer.to_bytes()).is_some() {
+          self.fatal_slash(signed.signer.to_bytes(), "submitted multiple slash points");
+          return;
+        }
+        SlashReports::set(self.txn, genesis, signed.signer.to_bytes(), &points);
+
+        let prior_reported = SlashReported::get(self.txn, genesis).unwrap_or(0);
+        let now_reported = prior_reported + signer_len;
+        SlashReported::set(self.txn, genesis, &now_reported);
+
+        if (prior_reported < self.spec.t()) && (now_reported >= self.spec.t()) {
+          SlashReportCutOff::set(
+            self.txn,
+            genesis,
+            // 30 minutes into the future
+            &(u64::from(self.block_number) +
+              ((30 * 60 * 1000) / u64::from(tributary::tendermint::TARGET_BLOCK_TIME))),
+          );
+        }
+      }
     }
   }
 }

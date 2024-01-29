@@ -58,7 +58,7 @@ zalloc = { path = "../common/zalloc" }
 serai-db = { path = "../common/db", optional = true }
 serai-env = { path = "../common/env", optional = true }
 # TODO: Replace with direct usage of primitives
-serai-client = { path = "../substrate/client", default-features = false }
+serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
 messages = { package = "serai-processor-messages", path = "./messages", optional = true }
 
