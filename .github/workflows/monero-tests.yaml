@@ -24,8 +24,6 @@ jobs:
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Unit Tests Without Features
         run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai --lib
@@ -45,7 +43,6 @@ jobs:
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           monero-version: ${{ matrix.version }}
 
       - name: Run Integration Tests Without Features

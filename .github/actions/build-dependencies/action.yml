@@ -1,12 +1,6 @@
 name: build-dependencies
 description: Installs build dependencies for Serai
 
-inputs:
-  github-token:
-    description: "GitHub token to install Protobuf with"
-    require: true
-    default:
-
 runs:
   using: "composite"
   steps:
