@@ -26,16 +26,10 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo apt install -y ca-certificates
+          sudo apt install -y ca-certificates protobuf-compiler
         elif [ "$RUNNER_OS" == "Windows" ]; then
           choco install protoc
         fi
-
-    - name: Install Protobuf
-      uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
-      with:
-        repo-token: ${{ inputs.github-token }}
-      if: runner.os == 'Linux'
 
     - name: Install solc
       shell: bash
