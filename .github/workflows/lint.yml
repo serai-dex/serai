@@ -26,7 +26,6 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Install nightly rust
-        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c clippy
 
       - name: Run Clippy
@@ -68,7 +67,6 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install nightly rust
-        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rustfmt
 
       - name: Run rustfmt
