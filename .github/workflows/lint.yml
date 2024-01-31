@@ -19,6 +19,7 @@ jobs:
 
       - name: Get nightly version to use
         id: nightly
+        shell: bash
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Build Dependencies
@@ -27,7 +28,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install nightly rust
-        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c clippy
 
       - name: Run Clippy
@@ -65,10 +65,10 @@ jobs:
 
       - name: Get nightly version to use
         id: nightly
+        shell: bash
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install nightly rust
-        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rustfmt
 
       - name: Run rustfmt
