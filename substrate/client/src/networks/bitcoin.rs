@@ -12,9 +12,8 @@ use bitcoin::{
 
 type BAddress = BAddressGeneric<NetworkChecked>;
 
-// TODO: Add a new so you can't create an address which can't be encoded
 #[derive(Clone, Eq, Debug)]
-pub struct Address(pub BAddress);
+pub struct Address(BAddress);
 
 impl PartialEq for Address {
   fn eq(&self, other: &Self) -> bool {
@@ -27,11 +26,12 @@ impl PartialEq for Address {
 impl FromStr for Address {
   type Err = Error;
   fn from_str(str: &str) -> Result<Address, Error> {
-    Ok(Address(
+    Address::new(
       BAddressGeneric::from_str(str)
         .map_err(|_| Error::UnrecognizedScript)?
         .require_network(Network::Bitcoin)?,
-    ))
+    )
+    .ok_or(Error::UnrecognizedScript)
   }
 }
 
@@ -77,38 +77,63 @@ impl TryFrom<Vec<u8>> for Address {
   }
 }
 
-#[allow(clippy::from_over_into)]
-impl TryInto<Vec<u8>> for Address {
-  type Error = ();
-  fn try_into(self) -> Result<Vec<u8>, ()> {
-    Ok(
-      (match self.0.payload() {
-        Payload::PubkeyHash(hash) => EncodedAddress::P2PKH(*hash.as_raw_hash().as_byte_array()),
-        Payload::ScriptHash(hash) => EncodedAddress::P2SH(*hash.as_raw_hash().as_byte_array()),
-        Payload::WitnessProgram(program) => match program.version() {
-          WitnessVersion::V0 => {
-            let program = program.program();
-            if program.len() == 20 {
-              let mut buf = [0; 20];
-              buf.copy_from_slice(program.as_ref());
-              EncodedAddress::P2WPKH(buf)
-            } else if program.len() == 32 {
-              let mut buf = [0; 32];
-              buf.copy_from_slice(program.as_ref());
-              EncodedAddress::P2WSH(buf)
-            } else {
-              Err(())?
-            }
+fn try_to_vec(addr: &Address) -> Result<Vec<u8>, ()> {
+  Ok(
+    (match addr.0.payload() {
+      Payload::PubkeyHash(hash) => EncodedAddress::P2PKH(*hash.as_raw_hash().as_byte_array()),
+      Payload::ScriptHash(hash) => EncodedAddress::P2SH(*hash.as_raw_hash().as_byte_array()),
+      Payload::WitnessProgram(program) => match program.version() {
+        WitnessVersion::V0 => {
+          let program = program.program();
+          if program.len() == 20 {
+            let mut buf = [0; 20];
+            buf.copy_from_slice(program.as_ref());
+            EncodedAddress::P2WPKH(buf)
+          } else if program.len() == 32 {
+            let mut buf = [0; 32];
+            buf.copy_from_slice(program.as_ref());
+            EncodedAddress::P2WSH(buf)
+          } else {
+            Err(())?
           }
-          WitnessVersion::V1 => {
-            let program_ref: &[u8] = program.program().as_ref();
-            EncodedAddress::P2TR(program_ref.try_into().map_err(|_| ())?)
-          }
-          _ => Err(())?,
-        },
+        }
+        WitnessVersion::V1 => {
+          let program_ref: &[u8] = program.program().as_ref();
+          EncodedAddress::P2TR(program_ref.try_into().map_err(|_| ())?)
+        }
         _ => Err(())?,
-      })
-      .encode(),
-    )
+      },
+      _ => Err(())?,
+    })
+    .encode(),
+  )
+}
+
+impl From<Address> for Vec<u8> {
+  fn from(addr: Address) -> Vec<u8> {
+    // Safe since only encodable addresses can be created
+    try_to_vec(&addr).unwrap()
+  }
+}
+
+impl From<Address> for BAddress {
+  fn from(addr: Address) -> BAddress {
+    addr.0
+  }
+}
+
+impl AsRef<BAddress> for Address {
+  fn as_ref(&self) -> &BAddress {
+    &self.0
+  }
+}
+
+impl Address {
+  pub fn new(address: BAddress) -> Option<Self> {
+    let res = Self(address);
+    if try_to_vec(&res).is_ok() {
+      return Some(res);
+    }
+    None
   }
 }

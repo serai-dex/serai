@@ -514,7 +514,7 @@ async fn mint_and_burn_test() {
         Coin::Bitcoin,
         1_000_000_00,
         ExternalAddress::new(
-          serai_client::networks::bitcoin::Address(bitcoin_addr.clone()).try_into().unwrap(),
+          serai_client::networks::bitcoin::Address::new(bitcoin_addr.clone()).unwrap().into(),
         )
         .unwrap(),
       )
