@@ -23,6 +23,8 @@ runs:
           sudo apt install -y ca-certificates protobuf-compiler
         elif [ "$RUNNER_OS" == "Windows" ]; then
           choco install protoc
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          brew install protobuf
         fi
 
     - name: Install solc
