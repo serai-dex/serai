@@ -38,7 +38,7 @@ jobs:
       # no differences present now performs the desired check
       - name: Verify lockfile
         shell: bash
-        run: git diff | wc -l | grep -P -x "( *)0"
+        run: git diff | wc -l | LC_ALL="en_US.utf8" grep -P -x "( *)0"
 
   deny:
     runs-on: ubuntu-latest
