@@ -9,12 +9,17 @@ on:
 
 jobs:
   clippy:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
 
       - name: Get nightly version to use
         id: nightly
+        shell: bash
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Build Dependencies
@@ -60,6 +65,7 @@ jobs:
 
       - name: Get nightly version to use
         id: nightly
+        shell: bash
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install nightly rust

@@ -20,15 +20,22 @@ runs:
         sudo apt autoremove -y
         sudo apt clean
         docker system prune -a --volumes
+      if: runner.os == 'Linux'
 
-    - name: Install apt dependencies
+    - name: Install dependencies
       shell: bash
-      run: sudo apt install -y ca-certificates
+      run: |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt install -y ca-certificates
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+          choco install protoc
+        fi
 
     - name: Install Protobuf
       uses: arduino/setup-protoc@a8b67ba40b37d35169e222f3bb352603327985b6
       with:
         repo-token: ${{ inputs.github-token }}
+      if: runner.os == 'Linux'
 
     - name: Install solc
       shell: bash
