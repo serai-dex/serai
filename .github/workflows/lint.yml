@@ -11,7 +11,7 @@ jobs:
   clippy:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -37,7 +37,11 @@ jobs:
       # The above clippy run will cause it to be updated, so checking there's
       # no differences present now performs the desired check
       - name: Verify lockfile
-        run: git diff | wc -l | grep -x "0"
+        shell: bash
+        run: |
+          git diff
+          git diff | wc -l
+          git diff | wc -l | grep -x "0"
 
   deny:
     runs-on: ubuntu-latest
