@@ -27,8 +27,6 @@ jobs:
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ inputs.github-token }}
 
       - name: Install RISC-V Toolchain
         run: sudo apt update && sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib && rustup target add riscv32imac-unknown-none-elf

@@ -31,8 +31,6 @@ jobs:
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ inputs.github-token }}
 
       - name: Run message-queue Docker tests
         run: cd tests/message-queue && GITHUB_CI=true RUST_BACKTRACE=1 cargo test

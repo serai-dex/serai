@@ -24,8 +24,6 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install nightly rust
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c clippy

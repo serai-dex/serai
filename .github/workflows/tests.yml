@@ -33,8 +33,6 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: |
@@ -54,8 +52,6 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: |
@@ -79,8 +75,6 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-client

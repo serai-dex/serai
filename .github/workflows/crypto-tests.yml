@@ -23,8 +23,6 @@ jobs:
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: |

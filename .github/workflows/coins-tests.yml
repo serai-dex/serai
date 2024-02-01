@@ -25,8 +25,6 @@ jobs:
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         run: |
