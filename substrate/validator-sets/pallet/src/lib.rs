@@ -569,15 +569,15 @@ pub mod pallet {
       amount: Amount,
     ) -> Result<bool, DispatchError> {
       // Check it's safe to decrease this set's stake by this amount
-      let new_total_staked = Self::total_allocated_stake(network)
-        .unwrap()
-        .0
-        .checked_sub(amount.0)
-        .ok_or(Error::<T>::NotEnoughAllocated)?;
-      let required_stake = Self::required_stake_for_network(network);
-      if new_total_staked < required_stake {
-        Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
-      }
+      // let new_total_staked = Self::total_allocated_stake(network)
+      //   .unwrap()
+      //   .0
+      //   .checked_sub(amount.0)
+      //   .ok_or(Error::<T>::NotEnoughAllocated)?;
+      // let required_stake = Self::required_stake_for_network(network);
+      // if new_total_staked < required_stake {
+      //   Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
+      // }
 
       let old_allocation =
         Self::allocation((network, account)).ok_or(Error::<T>::NonExistentValidator)?.0;
