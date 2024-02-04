@@ -20,13 +20,33 @@ use coordinator::coordinator;
 mod serai;
 use serai::serai;
 
-pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
-  if let Ok(existing) = fs::read_to_string(&path).as_ref() {
-    if existing == dockerfile {
-      return;
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
+pub enum Network {
+  Dev,
+  Testnet,
+}
+
+impl Network {
+  pub fn db(&self) -> &'static str {
+    match self {
+      Network::Dev => "parity-db",
+      Network::Testnet => "rocksdb",
     }
   }
-  fs::File::create(path).unwrap().write_all(dockerfile.as_bytes()).unwrap();
+
+  pub fn release(&self) -> bool {
+    match self {
+      Network::Dev => false,
+      Network::Testnet => true,
+    }
+  }
+
+  pub fn folder(&self) -> &'static str {
+    match self {
+      Network::Dev => "dev",
+      Network::Testnet => "testnet",
+    }
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
@@ -124,7 +144,16 @@ RUN --mount=type=cache,target=/root/.cargo \
 "#)
 }
 
-fn main() {
+pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
+  if let Ok(existing) = fs::read_to_string(&path).as_ref() {
+    if existing == dockerfile {
+      return;
+    }
+  }
+  fs::File::create(path).unwrap().write_all(dockerfile.as_bytes()).unwrap();
+}
+
+fn dockerfiles(network: Network) {
   let orchestration_path = {
     let mut repo_path = env::current_exe().unwrap();
     repo_path.pop();
@@ -135,21 +164,29 @@ fn main() {
 
     let mut orchestration_path = repo_path.clone();
     orchestration_path.push("orchestration");
+    orchestration_path.push(network.folder());
     orchestration_path
   };
 
   bitcoin(&orchestration_path);
   ethereum(&orchestration_path);
   monero(&orchestration_path);
-  monero_wallet_rpc(&orchestration_path);
+  if network == Network::Dev {
+    monero_wallet_rpc(&orchestration_path);
+  }
 
-  message_queue(&orchestration_path);
+  message_queue(&orchestration_path, network);
 
-  processor(&orchestration_path, "bitcoin");
-  processor(&orchestration_path, "ethereum");
-  processor(&orchestration_path, "monero");
+  processor(&orchestration_path, network, "bitcoin");
+  processor(&orchestration_path, network, "ethereum");
+  processor(&orchestration_path, network, "monero");
 
-  coordinator(&orchestration_path);
+  coordinator(&orchestration_path, network);
 
   serai(&orchestration_path);
+}
+
+fn main() {
+  dockerfiles(Network::Dev);
+  dockerfiles(Network::Testnet);
 }

@@ -1,10 +1,14 @@
 use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
+use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-pub fn processor(orchestration_path: &Path, coin: &'static str) {
+pub fn processor(orchestration_path: &Path, network: Network, coin: &'static str) {
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service(false, &format!("binaries parity-db {coin}"), "serai-processor");
+    &build_serai_service(
+      network.release(),
+      &format!("binaries {} {coin}", network.db()),
+      "serai-processor",
+    );
 
   const ADDITIONAL_ROOT: &str = r#"
 # Install ca-certificates

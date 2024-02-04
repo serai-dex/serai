@@ -37,7 +37,7 @@ COPY --from=bitcoin --chown=bitcoin bitcoind /bin
 EXPOSE 8332 8333
 
 ADD /orchestration/coins/bitcoin/scripts /scripts
-CMD ["/scripts/entry-dev.sh"]
+CMD ["/scripts/run.sh"]
 "#;
 
   let run = os(Os::Debian, "", "bitcoin") + RUN_BITCOIN;

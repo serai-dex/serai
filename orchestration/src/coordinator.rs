@@ -1,10 +1,16 @@
 use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
+use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-pub fn coordinator(orchestration_path: &Path) {
+pub fn coordinator(orchestration_path: &Path, network: Network) {
+  let db = network.db();
+  let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service(false, "parity-db longer-reattempts", "serai-coordinator");
+    &build_serai_service(
+      network.release(),
+      &format!("{db} {longer_reattempts}"),
+      "serai-coordinator",
+    );
 
   const ADDITIONAL_ROOT: &str = r#"
 # Install ca-certificates

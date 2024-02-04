@@ -41,4 +41,4 @@ runs:
 
     - name: Monero Wallet RPC
       shell: bash
-      run: ./monero-wallet-rpc --disable-rpc-login --rpc-bind-port 6061 --allow-mismatched-daemon-version --wallet-dir ./ --detach
+      run: ./monero-wallet-rpc --disable-rpc-login --rpc-bind-port 18082 --allow-mismatched-daemon-version --wallet-dir ./ --detach

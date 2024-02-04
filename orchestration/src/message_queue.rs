@@ -1,11 +1,10 @@
 use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
+use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-pub fn message_queue(orchestration_path: &Path) {
-  // TODO: Only use parity-db in a test environment
+pub fn message_queue(orchestration_path: &Path, network: Network) {
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service(false, "parity-db", "serai-message-queue");
+    &build_serai_service(network.release(), network.db(), "serai-message-queue");
 
   const RUN_MESSAGE_QUEUE: &str = r#"
 # Copy the Message Queue binary and relevant license

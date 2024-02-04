@@ -38,7 +38,7 @@ COPY --from=monero --chown=monero {monero_binary} /bin
 EXPOSE {ports}
 
 ADD /orchestration/coins/{folder}/scripts /scripts
-CMD ["/scripts/entry-dev.sh"]
+CMD ["/scripts/run.sh"]
 "#);
 
   let run = crate::os(

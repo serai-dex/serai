@@ -59,6 +59,7 @@ pub fn build(name: String) {
 
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
+  orchestration_path.push("dev");
 
   let mut dockerfile_path = orchestration_path.clone();
   if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {

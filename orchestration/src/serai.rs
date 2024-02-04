@@ -3,6 +3,7 @@ use std::{path::Path};
 use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn serai(orchestration_path: &Path) {
+  // Always builds in release for performance reasons
   let setup = mimalloc(Os::Debian).to_string() + &build_serai_service(true, "", "serai-node");
 
   // TODO: Review the ports exposed here
@@ -15,7 +16,7 @@ COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 EXPOSE 30333 9615 9933 9944
 
 ADD /orchestration/serai/scripts /scripts
-CMD ["/scripts/entry-dev.sh"]
+CMD ["/scripts/run.sh"]
 "#;
 
   let run = os(Os::Debian, "", "serai") + RUN_SERAI;
