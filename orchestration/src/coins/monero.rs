@@ -10,34 +10,30 @@ fn monero_internal(
   monero_binary: &str,
   ports: &str,
 ) {
-  #[rustfmt::skip]
-  const DOWNLOAD_MONERO: &str = r#"
-FROM alpine:latest as monero
+  const MONERO_VERSION: &str = "0.18.3.1";
 
-# https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.3.1.tar.bz2
-# Verification will fail if MONERO_VERSION doesn't match the latest
-# due to the way monero publishes releases. They overwrite a single hashes.txt
-# file with each release, meaning we can only grab the SHA256 of the latest
-# release.
-# Most publish a asc file for each release / build architecture ¯\_(ツ)_/¯
-ENV MONERO_VERSION=0.18.3.1
+  #[rustfmt::skip]
+  let download_monero = format!(r#"
+FROM alpine:latest as monero
 
 RUN apk --no-cache add gnupg
 
 # Download Monero
-RUN wget https://downloads.getmonero.org/cli/monero-linux-x64-v${MONERO_VERSION}.tar.bz2
+RUN wget https://downloads.getmonero.org/cli/monero-linux-x64-v{MONERO_VERSION}.tar.bz2
 
 # Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
-ADD orchestration/coins/monero/hashes-v${MONERO_VERSION}.txt .
+ADD orchestration/{}/coins/monero/hashes-v{MONERO_VERSION}.txt .
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-sigs-only --receive-keys 81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92 && \
-  gpg --verify hashes-v${MONERO_VERSION}.txt && \
-  grep "$(sha256sum monero-linux-x64-v${MONERO_VERSION}.tar.bz2 | cut -c 1-64)" hashes-v${MONERO_VERSION}.txt
+  gpg --verify hashes-v{MONERO_VERSION}.txt && \
+  grep "$(sha256sum monero-linux-x64-v{MONERO_VERSION}.tar.bz2 | cut -c 1-64)" hashes-v{MONERO_VERSION}.txt
 
 # Extract it
-RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
-"#;
+RUN tar -xvjf monero-linux-x64-v{MONERO_VERSION}.tar.bz2 --strip-components=1
+"#,
+    network.folder(),
+  );
 
-  let setup = mimalloc(os).to_string() + DOWNLOAD_MONERO;
+  let setup = mimalloc(os).to_string() + &download_monero;
 
   let run_monero = format!(
     r#"
@@ -48,7 +44,7 @@ EXPOSE {ports}
 ADD /orchestration/{}/coins/{folder}/run.sh /
 CMD ["/run.sh"]
 "#,
-    network.folder()
+    network.folder(),
   );
 
   let run =
