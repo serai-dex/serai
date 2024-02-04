@@ -1,9 +1,9 @@
 use std::{path::Path, io::Write, fs::File};
 
-use crate::{Os, mimalloc, os};
+use crate::{Os, mimalloc};
 
 #[rustfmt::skip]
-fn monero_internal(orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
+fn monero_internal(os: Os, orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
   const DOWNLOAD_MONERO: &str = r#"
 FROM alpine:latest as monero
 
@@ -30,16 +30,22 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 "#;
 
-  let setup = mimalloc(Os::Alpine).to_string() + DOWNLOAD_MONERO;
+  let setup = mimalloc(os).to_string() + DOWNLOAD_MONERO;
 
   let run_monero = format!(r#"
 COPY --from=monero --chown=monero {monero_binary} /bin
-ADD scripts /scripts
 
 EXPOSE {ports}
+
+ADD scripts /scripts
+CMD ["/scripts/entry-dev.sh"]
 "#);
 
-  let run = os(Os::Alpine, "RUN apk --no-cache add gcompat", "monero") + &run_monero;
+  let run = crate::os(
+    os,
+    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
+    "monero"
+  ) + &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();
@@ -51,9 +57,9 @@ EXPOSE {ports}
 }
 
 pub fn monero(orchestration_path: &Path) {
-  monero_internal(orchestration_path, "monero", "monerod", "18080 18081")
+  monero_internal(Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
 }
 
 pub fn monero_wallet_rpc(orchestration_path: &Path) {
-  monero_internal(orchestration_path, "monero-wallet-rpc", "monero-wallet-rpc", "6061")
+  monero_internal(Os::Debian, orchestration_path, "monero-wallet-rpc", "monero-wallet-rpc", "18082")
 }
