@@ -15,7 +15,7 @@ COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 EXPOSE 30333 9615 9933 9944
 
 ADD /orchestration/serai/scripts /scripts
-CMD ["./scripts/entry-dev.sh"]
+CMD ["/scripts/entry-dev.sh"]
 "#;
 
   let run = os(Os::Debian, "", "serai") + RUN_SERAI;
