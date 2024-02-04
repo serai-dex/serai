@@ -76,6 +76,7 @@ WORKDIR /home/{user}
 #[rustfmt::skip]
 fn build_serai_service(release: bool, features: &str, package: &str) -> String {
   let profile = if release { "release" } else { "debug" };
+  let profile_flag = if release { "--release" } else { "" };
 
   format!(r#"
 FROM rust:1.75-slim-bookworm as builder
@@ -118,7 +119,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --{profile} --features "{features}" -p {package} && \
+  cargo build {profile_flag} --features "{features}" -p {package} && \
   mv /serai/target/{profile}/{package} /serai/bin
 "#)
 }
