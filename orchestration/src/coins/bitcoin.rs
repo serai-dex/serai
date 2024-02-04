@@ -37,8 +37,8 @@ COPY --from=bitcoin --chown=bitcoin bitcoind /bin
 
 EXPOSE 8332 8333
 
-ADD /orchestration/{}/coins/bitcoin/scripts /scripts
-CMD ["/scripts/run.sh"]
+ADD /orchestration/{}/coins/bitcoin/run.sh /
+CMD ["/run.sh"]
 "#,
     network.folder()
   );

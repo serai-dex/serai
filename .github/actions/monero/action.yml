@@ -43,4 +43,4 @@ runs:
 
     - name: Monero Regtest Daemon
       shell: bash
-      run: PATH=$PATH:/usr/bin ./orchestration/dev/coins/monero/scripts/run.sh --detach
+      run: PATH=$PATH:/usr/bin ./orchestration/dev/coins/monero/run.sh --detach

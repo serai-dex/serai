@@ -16,8 +16,8 @@ COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 # Run the Serai node
 EXPOSE 30333 9615 9933 9944
 
-ADD /orchestration/{}/serai/scripts /scripts
-CMD ["/scripts/run.sh"]
+ADD /orchestration/{}/serai/run.sh /
+CMD ["/run.sh"]
 "#,
     network.folder()
   );
