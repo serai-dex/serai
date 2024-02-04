@@ -1,5 +1,6 @@
 target
 Dockerfile
+!orchestration/runtime/Dockerfile
 .test-logs
 
 .vscode
