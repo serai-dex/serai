@@ -9,20 +9,12 @@ async fn dht() {
 
   serai_docker_tests::build("serai".to_string());
 
-  let handle = |name| format!("serai_client-serai_node-{name}");
-  let composition = |name| {
+  let handle = |name: &str| format!("serai_client-serai_node-{name}");
+  let composition = |name: &str| {
     TestBodySpecification::with_image(
       Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
     )
-    .replace_cmd(vec![
-      "serai-node".to_string(),
-      "--unsafe-rpc-external".to_string(),
-      "--rpc-cors".to_string(),
-      "all".to_string(),
-      "--chain".to_string(),
-      "local".to_string(),
-      format!("--{name}"),
-    ])
+    .replace_env([("SERAI_NAME".to_string(), name.to_string())].into())
     .set_publish_all_ports(true)
     .set_handle(handle(name))
     .set_start_policy(StartPolicy::Strict)

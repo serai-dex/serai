@@ -162,14 +162,14 @@ pub fn build(name: String) {
     }
   }
 
-  dockerfile_path.pop();
-
-  println!("Building {} in directory {}...", &name, dockerfile_path.display());
+  println!("Building {}...", &name);
 
   // Version which always prints
   if !Command::new("docker")
-    .current_dir(dockerfile_path)
+    .current_dir(&repo_path)
     .arg("build")
+    .arg("-f")
+    .arg(dockerfile_path)
     .arg(".")
     .arg("-t")
     .arg(format!("serai-dev-{name}"))

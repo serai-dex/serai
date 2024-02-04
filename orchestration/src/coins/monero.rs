@@ -37,7 +37,7 @@ COPY --from=monero --chown=monero {monero_binary} /bin
 
 EXPOSE {ports}
 
-ADD scripts /scripts
+ADD /orchestration/coins/{folder}/scripts /scripts
 CMD ["/scripts/entry-dev.sh"]
 "#);
 

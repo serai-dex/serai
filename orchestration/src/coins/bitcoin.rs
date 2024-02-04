@@ -36,7 +36,7 @@ COPY --from=bitcoin --chown=bitcoin bitcoind /bin
 
 EXPOSE 8332 8333
 
-ADD scripts /scripts
+ADD /orchestration/coins/bitcoin/scripts /scripts
 CMD ["/scripts/entry-dev.sh"]
 "#;
 
