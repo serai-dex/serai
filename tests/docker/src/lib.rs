@@ -42,6 +42,21 @@ pub fn build(name: String) {
   assert!(repo_path.as_path().ends_with("target"));
   repo_path.pop();
 
+  // Run the orchestrator to ensure the most recent files exist
+  if !Command::new("cargo")
+    .current_dir(&repo_path)
+    .arg("run")
+    .arg("-p")
+    .arg("serai-orchestrator")
+    .spawn()
+    .unwrap()
+    .wait()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to run the orchestrator");
+  }
+
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
 
@@ -147,15 +162,15 @@ pub fn build(name: String) {
     }
   }
 
-  println!("Building {}...", &name);
-
   dockerfile_path.pop();
+
+  println!("Building {} in directory {}...", &name, dockerfile_path.display());
 
   // Version which always prints
   if !Command::new("docker")
-    .current_dir(orchestration_path)
+    .current_dir(dockerfile_path)
     .arg("build")
-    .arg(&dockerfile_path)
+    .arg(".")
     .arg("-t")
     .arg(format!("serai-dev-{name}"))
     .spawn()
@@ -170,10 +185,11 @@ pub fn build(name: String) {
   // Version which only prints on error
   /*
   let res = Command::new("docker")
-    .current_dir(orchestration_path)
-    .arg("compose")
+    .current_dir(dockerfile_path)
     .arg("build")
-    .arg(&name)
+    .arg(".")
+    .arg("-t")
+    .arg(format!("serai-dev-{name}"))
     .output()
     .unwrap();
   if !res.status.success() {
