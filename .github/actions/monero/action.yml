@@ -37,7 +37,9 @@ runs:
         wget https://downloads.getmonero.org/cli/$FILE
         tar -xvf $FILE
 
-        mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod /usr/bin/monerod
+        sudo mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod /usr/bin/monerod
+        sudo chmod 777 /usr/bin/monerod
+        sudo chmod +x /usr/bin/monerod
 
     - name: Monero Regtest Daemon
       shell: bash
