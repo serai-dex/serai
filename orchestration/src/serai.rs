@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service};
+use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn serai(orchestration_path: &Path) {
   let setup = mimalloc(Os::Debian).to_string() + &build_serai_service(true, "", "serai-node");
@@ -25,5 +25,5 @@ CMD ["./scripts/entry-dev.sh"]
   serai_path.push("serai");
   serai_path.push("Dockerfile");
 
-  File::create(serai_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(serai_path, &res);
 }

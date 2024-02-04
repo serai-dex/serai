@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc, os};
+use crate::{Os, mimalloc, os, write_dockerfile};
 
 #[rustfmt::skip]
 pub fn bitcoin(orchestration_path: &Path) {
@@ -48,5 +48,5 @@ CMD ["/scripts/entry-dev.sh"]
   bitcoin_path.push("bitcoin");
   bitcoin_path.push("Dockerfile");
 
-  File::create(bitcoin_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(bitcoin_path, &res);
 }

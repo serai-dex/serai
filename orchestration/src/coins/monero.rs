@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc};
+use crate::{Os, mimalloc, write_dockerfile};
 
 #[rustfmt::skip]
 fn monero_internal(os: Os, orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
@@ -53,7 +53,7 @@ CMD ["/scripts/entry-dev.sh"]
   monero_path.push(folder);
   monero_path.push("Dockerfile");
 
-  File::create(monero_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(monero_path, &res);
 }
 
 pub fn monero(orchestration_path: &Path) {

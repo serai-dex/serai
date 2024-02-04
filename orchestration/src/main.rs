@@ -1,4 +1,6 @@
-use std::env;
+// TODO: Differentiate development/testnet/mainnet (including parity-db usage)
+
+use std::{env, path::PathBuf, io::Write, fs};
 
 mod mimalloc;
 use mimalloc::mimalloc;
@@ -17,6 +19,15 @@ use coordinator::coordinator;
 
 mod serai;
 use serai::serai;
+
+pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
+  if let Ok(existing) = fs::read_to_string(&path).as_ref() {
+    if existing == dockerfile {
+      return;
+    }
+  }
+  fs::File::create(path).unwrap().write_all(dockerfile.as_bytes()).unwrap();
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
 enum Os {

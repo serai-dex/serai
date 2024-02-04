@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service};
+use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn processor(orchestration_path: &Path, coin: &'static str) {
   let setup = mimalloc(Os::Debian).to_string() +
@@ -28,5 +28,5 @@ CMD ["serai-processor"]
   processor_path.push(coin);
   processor_path.push("Dockerfile");
 
-  File::create(processor_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(processor_path, &res);
 }

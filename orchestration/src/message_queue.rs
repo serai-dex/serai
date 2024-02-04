@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service};
+use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn message_queue(orchestration_path: &Path) {
   // TODO: Only use parity-db in a test environment
@@ -24,5 +24,5 @@ CMD ["serai-message-queue"]
   message_queue_path.push("message-queue");
   message_queue_path.push("Dockerfile");
 
-  File::create(message_queue_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(message_queue_path, &res);
 }

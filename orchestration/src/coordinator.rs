@@ -1,6 +1,6 @@
-use std::{path::Path, io::Write, fs::File};
+use std::{path::Path};
 
-use crate::{Os, mimalloc, os, build_serai_service};
+use crate::{Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn coordinator(orchestration_path: &Path) {
   let setup = mimalloc(Os::Debian).to_string() +
@@ -27,5 +27,5 @@ CMD ["serai-coordinator"]
   coordinator_path.push("coordinator");
   coordinator_path.push("Dockerfile");
 
-  File::create(coordinator_path).unwrap().write_all(res.as_bytes()).unwrap();
+  write_dockerfile(coordinator_path, &res);
 }
