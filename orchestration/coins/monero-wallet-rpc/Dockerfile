@@ -1,6 +1,7 @@
-FROM debian:bookworm-slim as mimalloc
 
-RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
+FROM alpine:latest as mimalloc-alpine
+
+RUN apk update && apk upgrade && apk --no-cache add gcc g++ libc-dev make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
   cd mimalloc && \
   git checkout 43ce4bd7fd34bcc730c1c7471c99995597415488 && \
@@ -9,6 +10,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
 FROM alpine:latest as monero
 
 # https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.3.1.tar.bz2
@@ -32,18 +34,22 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 
 # Extract it
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
-FROM debian:bookworm-slim as image
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
-RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
+FROM alpine:latest as image
 
-RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
+ENV LD_PRELOAD=libmimalloc.so
+
+RUN apk update && apk upgrade
+RUN apk --no-cache add gcompat
+
 # Switch to a non-root user
 # System user (not a human), shell of nologin, no password assigned
-RUN useradd --system --create-home --shell /sbin/nologin monero
+RUN adduser -S -s /sbin/nologin -D monero
 USER monero
 
 WORKDIR /home/monero
+
 COPY --from=monero --chown=monero monero-wallet-rpc /bin
 ADD scripts /scripts
 

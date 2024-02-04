@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim as mimalloc
+
+FROM debian:bookworm-slim as mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
@@ -9,6 +10,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
 FROM alpine:latest as bitcoin
 
 ENV BITCOIN_VERSION=26.0
@@ -31,19 +33,22 @@ RUN grep bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz SHA256SUMS | sh
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
+
 FROM debian:bookworm-slim as image
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+
+
 # Switch to a non-root user
 RUN useradd --system --create-home --shell /sbin/nologin bitcoin
 USER bitcoin
+
 WORKDIR /home/bitcoin
 
 COPY --from=bitcoin --chown=bitcoin bitcoind /bin
 COPY ./scripts /scripts
 
 EXPOSE 8332 8333 18332 18333 18443 18444
-# VOLUME ["/home/bitcoin/.bitcoin"]

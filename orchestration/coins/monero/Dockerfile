@@ -1,4 +1,5 @@
-FROM alpine:latest as mimalloc
+
+FROM alpine:latest as mimalloc-alpine
 
 RUN apk update && apk upgrade && apk --no-cache add gcc g++ libc-dev make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
@@ -9,6 +10,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
 FROM alpine:latest as monero
 
 # https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.3.1.tar.bz2
@@ -32,9 +34,10 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 
 # Extract it
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
+
 FROM alpine:latest as image
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
 
 RUN apk update && apk upgrade
@@ -46,8 +49,8 @@ RUN adduser -S -s /sbin/nologin -D monero
 USER monero
 
 WORKDIR /home/monero
+
 COPY --from=monero --chown=monero monerod /bin
 ADD scripts /scripts
 
 EXPOSE 18080 18081
-# VOLUME /home/monero/.bitmonero

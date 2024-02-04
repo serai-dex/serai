@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim as mimalloc
+
+FROM debian:bookworm-slim as mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
@@ -9,9 +10,10 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
 FROM rust:1.75-slim-bookworm as builder
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
@@ -48,19 +50,22 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --features parity-db -p serai-message-queue && \
+  cargo build --debug --features "parity-db" -p serai-message-queue && \
   mv /serai/target/debug/serai-message-queue /serai/bin
+
 FROM debian:bookworm-slim as image
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+
+
 # Switch to a non-root user
-RUN useradd --system --home /home/message-queue --create-home --shell /sbin/nologin messagequeue
+RUN useradd --system --create-home --shell /sbin/nologin messagequeue
 USER messagequeue
 
-WORKDIR /home/message-queue
+WORKDIR /home/messagequeue
 
 # Copy the Message Queue binary and relevant license
 COPY --from=builder --chown=messagequeue /serai/bin/serai-message-queue /bin

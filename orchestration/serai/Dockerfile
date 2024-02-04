@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim as mimalloc
+
+FROM debian:bookworm-slim as mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
@@ -9,9 +10,10 @@ RUN git clone https://github.com/microsoft/mimalloc && \
   cmake -DMI_SECURE=ON ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
+
 FROM rust:1.75-slim-bookworm as builder
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
@@ -48,16 +50,19 @@ RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
-  cargo build --release -p serai-node && \
+  cargo build --release --features "" -p serai-node && \
   mv /serai/target/release/serai-node /serai/bin
+
 FROM debian:bookworm-slim as image
 
-COPY --from=mimalloc libmimalloc.so /usr/lib
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+
+
 # Switch to a non-root user
-RUN useradd --system --home /home/serai --shell /sbin/nologin serai
+RUN useradd --system --create-home --shell /sbin/nologin serai
 USER serai
 
 WORKDIR /home/serai
@@ -66,6 +71,6 @@ WORKDIR /home/serai
 COPY --from=builder --chown=serai /serai/bin/serai-node /bin/
 COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 
-# Run node
+# Run the Serai node
 EXPOSE 30333 9615 9933 9944
 CMD ["serai-node"]
