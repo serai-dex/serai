@@ -95,6 +95,7 @@ RUN apt install -y make protobuf-compiler
 RUN rustup target add wasm32-unknown-unknown
 
 # Add files for build
+ADD patches /serai/patches
 ADD common /serai/common
 ADD crypto /serai/crypto
 ADD coins /serai/coins
@@ -102,9 +103,9 @@ ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
+ADD orchestration /serai/orchestration
 ADD mini /serai/mini
 ADD tests /serai/tests
-ADD patches /serai/patches
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
