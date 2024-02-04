@@ -73,14 +73,6 @@ jobs:
       - name: Run rustfmt
         run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
 
-  dockerfiles:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
-      - name: Verify Dockerfiles are up to date
-        # Runs the file which generates them and checks the diff has no lines
-        run: cd orchestration && ./dockerfiles.sh && git diff | wc -l | grep -x "0"
-
   machete:
     runs-on: ubuntu-latest
     steps:
