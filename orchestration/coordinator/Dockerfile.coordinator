@@ -1,2 +1,0 @@
-  cargo build -p serai-coordinator --features "parity-db longer-reattempts" && \
-  mv /serai/target/debug/serai-coordinator /serai/bin

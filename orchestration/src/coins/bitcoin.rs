@@ -1,3 +1,10 @@
+use std::{path::Path, io::Write, fs::File};
+
+use crate::{Os, mimalloc, os};
+
+#[rustfmt::skip]
+pub fn bitcoin(orchestration_path: &Path) {
+  const DOWNLOAD_BITCOIN: &str = r#"
 FROM alpine:latest as bitcoin
 
 ENV BITCOIN_VERSION=26.0
@@ -20,3 +27,24 @@ RUN grep bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz SHA256SUMS | sh
 # Prepare Image
 RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
+"#;
+
+  let setup = mimalloc(Os::Debian).to_string() + DOWNLOAD_BITCOIN;
+
+  const RUN_BITCOIN: &str = r#"
+COPY --from=bitcoin --chown=bitcoin bitcoind /bin
+COPY ./scripts /scripts
+
+EXPOSE 8332 8333 18332 18333 18443 18444
+"#;
+
+  let run = os(Os::Debian, "", "bitcoin") + RUN_BITCOIN;
+  let res = setup + &run;
+
+  let mut bitcoin_path = orchestration_path.to_path_buf();
+  bitcoin_path.push("coins");
+  bitcoin_path.push("bitcoin");
+  bitcoin_path.push("Dockerfile");
+
+  File::create(bitcoin_path).unwrap().write_all(res.as_bytes()).unwrap();
+}

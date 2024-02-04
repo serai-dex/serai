@@ -1,3 +1,10 @@
+use std::{path::Path, io::Write, fs::File};
+
+use crate::{Os, mimalloc, os};
+
+#[rustfmt::skip]
+fn monero_internal(orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
+  const DOWNLOAD_MONERO: &str = r#"
 FROM alpine:latest as monero
 
 # https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.3.1.tar.bz2
@@ -21,3 +28,32 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 
 # Extract it
 RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
+"#;
+
+  let setup = mimalloc(Os::Alpine).to_string() + DOWNLOAD_MONERO;
+
+  let run_monero = format!(r#"
+COPY --from=monero --chown=monero {monero_binary} /bin
+ADD scripts /scripts
+
+EXPOSE {ports}
+"#);
+
+  let run = os(Os::Alpine, "RUN apk --no-cache add gcompat", "monero") + &run_monero;
+  let res = setup + &run;
+
+  let mut monero_path = orchestration_path.to_path_buf();
+  monero_path.push("coins");
+  monero_path.push(folder);
+  monero_path.push("Dockerfile");
+
+  File::create(monero_path).unwrap().write_all(res.as_bytes()).unwrap();
+}
+
+pub fn monero(orchestration_path: &Path) {
+  monero_internal(orchestration_path, "monero", "monerod", "18080 18081")
+}
+
+pub fn monero_wallet_rpc(orchestration_path: &Path) {
+  monero_internal(orchestration_path, "monero-wallet-rpc", "monero-wallet-rpc", "6061")
+}

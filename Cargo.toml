@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
+  "patches/is-terminal",
+  "patches/matches",
+  "patches/option-ext",
+  "patches/directories-next",
+  "patches/proc-macro-crate",
+
   "common/std-shims",
   "common/zalloc",
   "common/db",
@@ -57,6 +63,8 @@ members = [
 
   "substrate/client",
 
+  "orchestration",
+
   "mini",
 
   "tests/no-std",
@@ -67,12 +75,6 @@ members = [
   "tests/coordinator",
   "tests/full-stack",
   "tests/reproducible-runtime",
-
-  "patches/is-terminal",
-  "patches/matches",
-  "patches/option-ext",
-  "patches/directories-next",
-  "patches/proc-macro-crate",
 ]
 
 # Always compile Monero (and a variety of dependencies) with optimizations due

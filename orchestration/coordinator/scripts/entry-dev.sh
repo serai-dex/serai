@@ -1,9 +1,0 @@
-#!/bin/bash
-
-export MESSAGE_QUEUE_KEY="0000000000000000000000000000000000000000000000000000000000000000"
-export MESSAGE_QUEUE_RPC="http://127.0.0.1:2287"
-
-export DB_PATH="./coordinator-db"
-export SERAI_HOSTNAME="127.0.0.1"
-
-serai-coordinator

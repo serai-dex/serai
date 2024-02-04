@@ -7661,6 +7661,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-orchestrator"
+version = "0.0.1"
+
+[[package]]
 name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
