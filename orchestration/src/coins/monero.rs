@@ -2,8 +2,15 @@ use std::{path::Path};
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
 
-#[rustfmt::skip]
-fn monero_internal(network: Network, os: Os, orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
+fn monero_internal(
+  network: Network,
+  os: Os,
+  orchestration_path: &Path,
+  folder: &str,
+  monero_binary: &str,
+  ports: &str,
+) {
+  #[rustfmt::skip]
   const DOWNLOAD_MONERO: &str = r#"
 FROM alpine:latest as monero
 
@@ -32,20 +39,21 @@ RUN tar -xvjf monero-linux-x64-v${MONERO_VERSION}.tar.bz2 --strip-components=1
 
   let setup = mimalloc(os).to_string() + DOWNLOAD_MONERO;
 
-  let run_monero = format!(r#"
+  let run_monero = format!(
+    r#"
 COPY --from=monero --chown=monero {monero_binary} /bin
 
 EXPOSE {ports}
 
 ADD /orchestration/{}/coins/{folder}/scripts /scripts
 CMD ["/scripts/run.sh"]
-"#, network.folder());
+"#,
+    network.folder()
+  );
 
-  let run = crate::os(
-    os,
-    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
-    "monero"
-  ) + &run_monero;
+  let run =
+    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
+      &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();

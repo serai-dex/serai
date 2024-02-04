@@ -2,8 +2,8 @@ use std::{path::Path};
 
 use crate::{Network, Os, mimalloc, os, write_dockerfile};
 
-#[rustfmt::skip]
 pub fn bitcoin(orchestration_path: &Path, network: Network) {
+  #[rustfmt::skip]
   const DOWNLOAD_BITCOIN: &str = r#"
 FROM alpine:latest as bitcoin
 
@@ -31,14 +31,17 @@ RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 
   let setup = mimalloc(Os::Debian).to_string() + DOWNLOAD_BITCOIN;
 
-  let run_bitcoin = format!(r#"
+  let run_bitcoin = format!(
+    r#"
 COPY --from=bitcoin --chown=bitcoin bitcoind /bin
 
 EXPOSE 8332 8333
 
 ADD /orchestration/{}/coins/bitcoin/scripts /scripts
 CMD ["/scripts/run.sh"]
-"#, network.folder());
+"#,
+    network.folder()
+  );
 
   let run = os(Os::Debian, "", "bitcoin") + &run_bitcoin;
   let res = setup + &run;

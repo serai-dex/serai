@@ -1,6 +1,5 @@
 use crate::Os;
 
-#[rustfmt::skip]
 pub fn mimalloc(os: Os) -> &'static str {
   const ALPINE_MIMALLOC: &str = r#"
 FROM alpine:latest as mimalloc-alpine

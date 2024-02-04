@@ -56,10 +56,10 @@ enum Os {
   Debian,
 }
 
-#[rustfmt::skip]
 fn os(os: Os, additional_root: &str, user: &str) -> String {
   match os {
-    Os::Alpine => format!(r#"
+    Os::Alpine => format!(
+      r#"
 FROM alpine:latest as image
 
 COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
@@ -74,9 +74,11 @@ RUN adduser -S -s /sbin/nologin -D {user}
 USER {user}
 
 WORKDIR /home/{user}
-"#),
+"#
+    ),
 
-    Os::Debian => format!(r#"
+    Os::Debian => format!(
+      r#"
 FROM debian:bookworm-slim as image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
@@ -90,16 +92,17 @@ RUN useradd --system --create-home --shell /sbin/nologin {user}
 USER {user}
 
 WORKDIR /home/{user}
-"#),
+"#
+    ),
   }
 }
 
-#[rustfmt::skip]
 fn build_serai_service(release: bool, features: &str, package: &str) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
-  format!(r#"
+  format!(
+    r#"
 FROM rust:1.75-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
@@ -142,7 +145,8 @@ RUN --mount=type=cache,target=/root/.cargo \
   mkdir /serai/bin && \
   cargo build {profile_flag} --features "{features}" -p {package} && \
   mv /serai/target/{profile}/{package} /serai/bin
-"#)
+"#
+  )
 }
 
 pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
