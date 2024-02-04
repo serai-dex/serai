@@ -33,9 +33,11 @@ RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 
   const RUN_BITCOIN: &str = r#"
 COPY --from=bitcoin --chown=bitcoin bitcoind /bin
-COPY ./scripts /scripts
 
-EXPOSE 8332 8333 18332 18333 18443 18444
+EXPOSE 8332 8333
+
+ADD scripts /scripts
+CMD ["/scripts/entry-dev.sh"]
 "#;
 
   let run = os(Os::Debian, "", "bitcoin") + RUN_BITCOIN;

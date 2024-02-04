@@ -35,7 +35,7 @@ async fn make_integrated_address(rpc: &Rpc<HttpRpc>, payment_id: [u8; 8]) -> Str
 }
 
 async fn initialize_rpcs() -> (Rpc<HttpRpc>, Rpc<HttpRpc>, String) {
-  let wallet_rpc = HttpRpc::new("http://127.0.0.1:6061".to_string()).await.unwrap();
+  let wallet_rpc = HttpRpc::new("http://127.0.0.1:18082".to_string()).await.unwrap();
   let daemon_rpc = runner::rpc().await;
 
   #[derive(Debug, Deserialize)]

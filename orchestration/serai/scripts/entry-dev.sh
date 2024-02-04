@@ -1,7 +1,3 @@
 #!/bin/bash
 
-if [[ -z $VALIDATOR ]]; then
-  serai-node --tmp --chain $CHAIN --name $NAME
-else
-  serai-node --tmp --chain $CHAIN --$NAME
-fi
+serai-node --unsafe-rpc-external --rpc-cors all --chain local --$SERAI_NAME

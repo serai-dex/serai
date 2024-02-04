@@ -45,6 +45,17 @@ pub fn build(name: String) {
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
 
+  let mut dockerfile_path = orchestration_path.clone();
+  if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
+    dockerfile_path = dockerfile_path.join("coins");
+  }
+  if name.contains("-processor") {
+    dockerfile_path =
+      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
+  } else {
+    dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+  }
+
   // If this Docker image was created after this repo was last edited, return here
   // This should have better performance than Docker and allows running while offline
   if let Ok(res) = Command::new("docker")
@@ -65,22 +76,9 @@ pub fn build(name: String) {
           .0,
       );
 
-      let mut dockerfile_path = orchestration_path.clone();
-      if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
-        dockerfile_path = dockerfile_path.join("coins");
-      }
-      if name.contains("-processor") {
-        dockerfile_path = dockerfile_path
-          .join("processor")
-          .join(name.split('-').next().unwrap())
-          .join("Dockerfile");
-      } else {
-        dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
-      }
-
       // For all services, if the Dockerfile was edited after the image was built we should rebuild
       let mut last_modified =
-        fs::metadata(dockerfile_path).ok().and_then(|meta| meta.modified().ok());
+        fs::metadata(&dockerfile_path).ok().and_then(|meta| meta.modified().ok());
 
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
@@ -151,12 +149,15 @@ pub fn build(name: String) {
 
   println!("Building {}...", &name);
 
+  dockerfile_path.pop();
+
   // Version which always prints
   if !Command::new("docker")
     .current_dir(orchestration_path)
-    .arg("compose")
     .arg("build")
-    .arg(&name)
+    .arg(&dockerfile_path)
+    .arg("-t")
+    .arg(format!("serai-dev-{name}"))
     .spawn()
     .unwrap()
     .wait()

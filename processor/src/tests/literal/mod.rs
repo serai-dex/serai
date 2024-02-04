@@ -25,16 +25,6 @@ mod bitcoin {
     let composition = TestBodySpecification::with_image(
       Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
     )
-    .replace_cmd(vec![
-      "bitcoind".to_string(),
-      "-txindex".to_string(),
-      "-regtest".to_string(),
-      format!("-rpcuser=serai"),
-      format!("-rpcpassword=seraidex"),
-      "-rpcbind=0.0.0.0".to_string(),
-      "-rpcallowip=0.0.0.0/0".to_string(),
-      "-rpcport=8332".to_string(),
-    ])
     .set_start_policy(StartPolicy::Strict)
     .set_log_options(Some(LogOptions {
       action: LogAction::Forward,
@@ -79,19 +69,6 @@ mod monero {
     let composition = TestBodySpecification::with_image(
       Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
     )
-    .replace_cmd(vec![
-      "monerod".to_string(),
-      "--regtest".to_string(),
-      "--offline".to_string(),
-      "--fixed-difficulty=1".to_string(),
-      "--no-zmq".to_string(),
-      "--disable-rpc-ban".to_string(),
-      "--rpc-bind-ip=0.0.0.0".to_string(),
-      "--rpc-login=serai:seraidex".to_string(),
-      "--rpc-access-control-origins=*".to_string(),
-      "--confirm-external-bind".to_string(),
-      "--non-interactive".to_string(),
-    ])
     .set_start_policy(StartPolicy::Strict)
     .set_log_options(Some(LogOptions {
       action: LogAction::Forward,

@@ -5,6 +5,7 @@ use crate::{Os, mimalloc, os, build_serai_service};
 pub fn serai(orchestration_path: &Path) {
   let setup = mimalloc(Os::Debian).to_string() + &build_serai_service(true, "", "serai-node");
 
+  // TODO: Review the ports exposed here
   const RUN_SERAI: &str = r#"
 # Copy the Serai binary and relevant license
 COPY --from=builder --chown=serai /serai/bin/serai-node /bin/
@@ -12,7 +13,9 @@ COPY --from=builder --chown=serai /serai/AGPL-3.0 .
 
 # Run the Serai node
 EXPOSE 30333 9615 9933 9944
-CMD ["serai-node"]
+
+ADD scripts /scripts
+CMD ["./scripts/entry-dev.sh"]
 "#;
 
   let run = os(Os::Debian, "", "serai") + RUN_SERAI;

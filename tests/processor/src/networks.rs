@@ -27,16 +27,6 @@ pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
   )
-  .replace_cmd(vec![
-    "bitcoind".to_string(),
-    "-txindex".to_string(),
-    "-regtest".to_string(),
-    format!("-rpcuser={RPC_USER}"),
-    format!("-rpcpassword={RPC_PASS}"),
-    "-rpcbind=0.0.0.0".to_string(),
-    "-rpcallowip=0.0.0.0/0".to_string(),
-    "-rpcport=8332".to_string(),
-  ])
   .set_publish_all_ports(true);
   (composition, BTC_PORT)
 }
@@ -47,17 +37,6 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),
   )
-  .replace_cmd(vec![
-    "monerod".to_string(),
-    "--regtest".to_string(),
-    "--offline".to_string(),
-    "--fixed-difficulty=1".to_string(),
-    "--rpc-bind-ip=0.0.0.0".to_string(),
-    format!("--rpc-login={RPC_USER}:{RPC_PASS}"),
-    "--rpc-access-control-origins=*".to_string(),
-    "--confirm-external-bind".to_string(),
-    "--non-interactive".to_string(),
-  ])
   .set_start_policy(StartPolicy::Strict)
   .set_publish_all_ports(true);
   (composition, XMR_PORT)
