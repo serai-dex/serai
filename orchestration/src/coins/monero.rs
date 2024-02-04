@@ -1,9 +1,9 @@
 use std::{path::Path};
 
-use crate::{Os, mimalloc, write_dockerfile};
+use crate::{Network, Os, mimalloc, write_dockerfile};
 
 #[rustfmt::skip]
-fn monero_internal(os: Os, orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
+fn monero_internal(network: Network, os: Os, orchestration_path: &Path, folder: &str, monero_binary: &str, ports: &str) {
   const DOWNLOAD_MONERO: &str = r#"
 FROM alpine:latest as monero
 
@@ -37,9 +37,9 @@ COPY --from=monero --chown=monero {monero_binary} /bin
 
 EXPOSE {ports}
 
-ADD /orchestration/coins/{folder}/scripts /scripts
+ADD /orchestration/{}/coins/{folder}/scripts /scripts
 CMD ["/scripts/run.sh"]
-"#);
+"#, network.folder());
 
   let run = crate::os(
     os,
@@ -56,10 +56,17 @@ CMD ["/scripts/run.sh"]
   write_dockerfile(monero_path, &res);
 }
 
-pub fn monero(orchestration_path: &Path) {
-  monero_internal(Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
+pub fn monero(orchestration_path: &Path, network: Network) {
+  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
 }
 
 pub fn monero_wallet_rpc(orchestration_path: &Path) {
-  monero_internal(Os::Debian, orchestration_path, "monero-wallet-rpc", "monero-wallet-rpc", "18082")
+  monero_internal(
+    Network::Dev,
+    Os::Debian,
+    orchestration_path,
+    "monero-wallet-rpc",
+    "monero-wallet-rpc",
+    "18082",
+  )
 }

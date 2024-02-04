@@ -1,4 +1,5 @@
-// TODO: Differentiate development/testnet/mainnet (including parity-db usage)
+// TODO: Generate randomized RPC credentials for all services
+// TODO: Generate keys for a validator and the infra
 
 use std::{env, path::PathBuf, io::Write, fs};
 
@@ -168,9 +169,9 @@ fn dockerfiles(network: Network) {
     orchestration_path
   };
 
-  bitcoin(&orchestration_path);
+  bitcoin(&orchestration_path, network);
   ethereum(&orchestration_path);
-  monero(&orchestration_path);
+  monero(&orchestration_path, network);
   if network == Network::Dev {
     monero_wallet_rpc(&orchestration_path);
   }
@@ -183,7 +184,7 @@ fn dockerfiles(network: Network) {
 
   coordinator(&orchestration_path, network);
 
-  serai(&orchestration_path);
+  serai(&orchestration_path, network);
 }
 
 fn main() {
