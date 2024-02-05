@@ -122,6 +122,9 @@ pub enum TransactionKind<'a> {
   /// If a supermajority of validators produce a commit for a block with a provided transaction
   /// which isn't locally held, the block will be added to the local chain. When the transaction is
   /// locally provided, it will be compared for correctness to the on-chain version
+  ///
+  /// In order to ensure TXs aren't accidentally provided multiple times, all provided transactions
+  /// must have a unique hash which is also unique to all Unsigned transactions.
   Provided(&'static str),
 
   /// An unsigned transaction, only able to be included by the block producer.
@@ -129,6 +132,8 @@ pub enum TransactionKind<'a> {
   /// Once an Unsigned transaction is included on-chain, it may not be included again. In order to
   /// have multiple Unsigned transactions with the same values included on-chain, some distinct
   /// nonce must be included in order to cause a distinct hash.
+  ///
+  /// The hash must also be unique with all Provided transactions.
   Unsigned,
 
   /// A signed transaction.
