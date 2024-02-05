@@ -3,18 +3,17 @@ use std::{sync::Arc, collections::HashMap};
 use log::debug;
 use parity_scale_codec::Encode;
 
-use crate::{ext::*, RoundNumber, Step, Data, DataFor, TendermintError, SignedMessageFor, Evidence};
+use crate::{ext::*, RoundNumber, Step, DataFor, TendermintError, SignedMessageFor, Evidence};
 
 type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, SignedMessageFor<N>>>;
 pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
-  precommitted: HashMap<N::ValidatorId, SignedMessageFor<N>>,
   pub(crate) log: HashMap<RoundNumber, RoundLog<N>>,
 }
 
 impl<N: Network> MessageLog<N> {
   pub(crate) fn new(weights: Arc<N::Weights>) -> MessageLog<N> {
-    MessageLog { weights, precommitted: HashMap::new(), log: HashMap::new() }
+    MessageLog { weights, log: HashMap::new() }
   }
 
   // Returns true if it's a new message
@@ -38,24 +37,6 @@ impl<N: Network> MessageLog<N> {
         ))?;
       }
       return Ok(false);
-    }
-
-    // If they already precommitted to a distinct hash, error
-    if let Data::Precommit(Some((hash, _))) = msg.data {
-      if let Some(prev) = self.precommitted.get(&msg.sender) {
-        if let Data::Precommit(Some((prev_hash, _))) = prev.msg.data {
-          if hash != prev_hash {
-            debug!(target: "tendermint", "Validator precommitted to multiple blocks");
-            Err(TendermintError::Malicious(
-              msg.sender,
-              Some(Evidence::ConflictingPrecommit(prev.encode(), signed.encode())),
-            ))?;
-          }
-        } else {
-          panic!("message in precommitted wasn't Precommit");
-        }
-      }
-      self.precommitted.insert(msg.sender, signed.clone());
     }
 
     msgs.insert(step, signed);
