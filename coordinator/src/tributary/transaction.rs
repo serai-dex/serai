@@ -190,6 +190,8 @@ pub enum Transaction {
     first_signer: <Ristretto as Ciphersuite>::G,
     signature: SchnorrSignature<Ristretto>,
   },
+
+  SlashReport(Vec<u32>, Signed),
 }
 
 impl Debug for Transaction {
@@ -244,6 +246,11 @@ impl Debug for Transaction {
         .field("plan", &hex::encode(plan))
         .field("tx_hash", &hex::encode(tx_hash))
         .finish_non_exhaustive(),
+      Transaction::SlashReport(points, signed) => fmt
+        .debug_struct("Transaction::SignCompleted")
+        .field("points", points)
+        .field("signed", signed)
+        .finish(),
     }
   }
 }
@@ -413,6 +420,25 @@ impl ReadWrite for Transaction {
         Ok(Transaction::SignCompleted { plan, tx_hash, first_signer, signature })
       }
 
+      11 => {
+        let mut len = [0];
+        reader.read_exact(&mut len)?;
+        let len = len[0];
+        // If the set has as many validators as MAX_KEY_SHARES_PER_SET, then the amount of distinct
+        // validators (the amount of validators reported on) will be at most
+        // `MAX_KEY_SHARES_PER_SET - 1`
+        if u32::from(len) > (serai_client::validator_sets::primitives::MAX_KEY_SHARES_PER_SET - 1) {
+          Err(io::Error::other("more points reported than allowed validator"))?;
+        }
+        let mut points = vec![0u32; len.into()];
+        for points in &mut points {
+          let mut these_points = [0; 4];
+          reader.read_exact(&mut these_points)?;
+          *points = u32::from_le_bytes(these_points);
+        }
+        Ok(Transaction::SlashReport(points, Signed::read_without_nonce(reader, 0)?))
+      }
+
       _ => Err(io::Error::other("invalid transaction type")),
     }
   }
@@ -529,6 +555,14 @@ impl ReadWrite for Transaction {
         writer.write_all(&first_signer.to_bytes())?;
         signature.write(writer)
       }
+      Transaction::SlashReport(points, signed) => {
+        writer.write_all(&[11])?;
+        writer.write_all(&[u8::try_from(points.len()).unwrap()])?;
+        for points in points {
+          writer.write_all(&points.to_le_bytes())?;
+        }
+        signed.write_without_nonce(writer)
+      }
     }
   }
 }
@@ -559,6 +593,10 @@ impl TransactionTrait for Transaction {
         TransactionKind::Signed((b"sign", data.plan, data.attempt).encode(), &data.signed)
       }
       Transaction::SignCompleted { .. } => TransactionKind::Unsigned,
+
+      Transaction::SlashReport(_, signed) => {
+        TransactionKind::Signed(b"slash_report".to_vec(), signed)
+      }
     }
   }
 
@@ -622,10 +660,13 @@ impl Transaction {
         Transaction::Sign(data) => data.label.nonce(),
 
         Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
+
+        Transaction::SlashReport(_, _) => 0,
       };
 
       (
         nonce,
+        #[allow(clippy::match_same_arms)]
         match tx {
           Transaction::RemoveParticipantDueToDkg { ref mut signed, .. } |
           Transaction::DkgCommitments { ref mut signed, .. } |
@@ -642,6 +683,8 @@ impl Transaction {
           Transaction::Sign(ref mut data) => &mut data.signed,
 
           Transaction::SignCompleted { .. } => panic!("signing SignCompleted"),
+
+          Transaction::SlashReport(_, ref mut signed) => signed,
         },
       )
     }

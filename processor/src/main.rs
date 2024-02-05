@@ -55,6 +55,9 @@ use cosigner::Cosigner;
 mod batch_signer;
 use batch_signer::BatchSigner;
 
+mod slash_report_signer;
+use slash_report_signer::SlashReportSigner;
+
 mod multisigs;
 use multisigs::{MultisigEvent, MultisigManager};
 
@@ -101,6 +104,7 @@ struct TributaryMutable<N: Network, D: Db> {
 
   // Solely mutated by the tributary.
   cosigner: Option<Cosigner>,
+  slash_report_signer: Option<SlashReportSigner>,
 }
 
 // Items which are mutably borrowed by Substrate.
@@ -233,59 +237,86 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
       }
     }
 
-    CoordinatorMessage::Coordinator(msg) => {
-      let is_batch = match msg {
-        CoordinatorCoordinatorMessage::CosignSubstrateBlock { .. } => false,
-        CoordinatorCoordinatorMessage::SubstratePreprocesses { ref id, .. } |
-        CoordinatorCoordinatorMessage::SubstrateShares { ref id, .. } => {
-          matches!(&id.id, SubstrateSignableId::Batch(_))
-        }
-        CoordinatorCoordinatorMessage::BatchReattempt { .. } => true,
-      };
-      if is_batch {
-        if let Some(msg) = tributary_mutable
-          .batch_signer
-          .as_mut()
-          .expect(
-            "coordinator told us to sign a batch when we don't currently have a Substrate signer",
-          )
-          .handle(txn, msg)
+    CoordinatorMessage::Coordinator(msg) => match msg {
+      CoordinatorCoordinatorMessage::CosignSubstrateBlock { id, block_number } => {
+        let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
+          panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
+        };
+        let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_session(id.session) else {
+          panic!("didn't have key shares for the key we were told to cosign with");
+        };
+        if let Some((cosigner, msg)) =
+          Cosigner::new(txn, id.session, keys, block_number, block, id.attempt)
         {
+          tributary_mutable.cosigner = Some(cosigner);
           coordinator.send(msg).await;
+        } else {
+          log::warn!("Cosigner::new returned None");
         }
-      } else {
-        match msg {
-          CoordinatorCoordinatorMessage::CosignSubstrateBlock { id, block_number } => {
-            let SubstrateSignableId::CosigningSubstrateBlock(block) = id.id else {
-              panic!("CosignSubstrateBlock id didn't have a CosigningSubstrateBlock")
-            };
-            let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_session(id.session) else {
-              panic!("didn't have key shares for the key we were told to cosign with");
-            };
-            if let Some((cosigner, msg)) =
-              Cosigner::new(txn, id.session, keys, block_number, block, id.attempt)
-            {
-              tributary_mutable.cosigner = Some(cosigner);
+      }
+      CoordinatorCoordinatorMessage::SignSlashReport { id, report } => {
+        assert_eq!(id.id, SubstrateSignableId::SlashReport);
+        let Some(keys) = tributary_mutable.key_gen.substrate_keys_by_session(id.session) else {
+          panic!("didn't have key shares for the key we were told to perform a slash report with");
+        };
+        if let Some((slash_report_signer, msg)) =
+          SlashReportSigner::new(txn, N::NETWORK, id.session, keys, report, id.attempt)
+        {
+          tributary_mutable.slash_report_signer = Some(slash_report_signer);
+          coordinator.send(msg).await;
+        } else {
+          log::warn!("SlashReportSigner::new returned None");
+        }
+      }
+      _ => {
+        let (is_cosign, is_batch, is_slash_report) = match msg {
+          CoordinatorCoordinatorMessage::CosignSubstrateBlock { .. } |
+          CoordinatorCoordinatorMessage::SignSlashReport { .. } => (false, false, false),
+          CoordinatorCoordinatorMessage::SubstratePreprocesses { ref id, .. } |
+          CoordinatorCoordinatorMessage::SubstrateShares { ref id, .. } => (
+            matches!(&id.id, SubstrateSignableId::CosigningSubstrateBlock(_)),
+            matches!(&id.id, SubstrateSignableId::Batch(_)),
+            matches!(&id.id, SubstrateSignableId::SlashReport),
+          ),
+          CoordinatorCoordinatorMessage::BatchReattempt { .. } => (false, true, false),
+        };
+
+        if is_cosign {
+          if let Some(cosigner) = tributary_mutable.cosigner.as_mut() {
+            if let Some(msg) = cosigner.handle(txn, msg) {
               coordinator.send(msg).await;
-            } else {
-              log::warn!("Cosigner::new returned None");
             }
+          } else {
+            log::warn!(
+              "received message for cosigner yet didn't have a cosigner. {}",
+              "this is an error if we didn't reboot",
+            );
           }
-          _ => {
-            if let Some(cosigner) = tributary_mutable.cosigner.as_mut() {
-              if let Some(msg) = cosigner.handle(txn, msg) {
-                coordinator.send(msg).await;
-              }
-            } else {
-              log::warn!(
-                "received message for cosigner yet didn't have a cosigner. {}",
-                "this is an error if we didn't reboot",
-              );
+        } else if is_batch {
+          if let Some(msg) = tributary_mutable
+            .batch_signer
+            .as_mut()
+            .expect(
+              "coordinator told us to sign a batch when we don't currently have a Substrate signer",
+            )
+            .handle(txn, msg)
+          {
+            coordinator.send(msg).await;
+          }
+        } else if is_slash_report {
+          if let Some(slash_report_signer) = tributary_mutable.slash_report_signer.as_mut() {
+            if let Some(msg) = slash_report_signer.handle(txn, msg) {
+              coordinator.send(msg).await;
             }
+          } else {
+            log::warn!(
+              "received message for slash report signer yet didn't have {}",
+              "a slash report signer. this is an error if we didn't reboot",
+            );
           }
         }
       }
-    }
+    },
 
     CoordinatorMessage::Substrate(msg) => {
       match msg {
@@ -540,7 +571,7 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
 
   (
     raw_db.clone(),
-    TributaryMutable { key_gen, batch_signer, cosigner: None, signers },
+    TributaryMutable { key_gen, batch_signer, cosigner: None, slash_report_signer: None, signers },
     multisig_manager,
   )
 }

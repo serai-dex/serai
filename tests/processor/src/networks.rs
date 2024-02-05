@@ -389,9 +389,9 @@ impl Wallet {
       Wallet::Bitcoin { public_key, .. } => {
         use bitcoin_serai::bitcoin::{Network, Address};
         ExternalAddress::new(
-          networks::bitcoin::Address(Address::p2pkh(public_key, Network::Regtest))
-            .try_into()
-            .unwrap(),
+          networks::bitcoin::Address::new(Address::p2pkh(public_key, Network::Regtest))
+            .unwrap()
+            .into(),
         )
         .unwrap()
       }

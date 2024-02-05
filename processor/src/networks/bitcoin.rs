@@ -134,8 +134,7 @@ impl OutputTrait<Bitcoin> for Output {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.kind.write(writer)?;
-    let presumed_origin: Option<Vec<u8>> =
-      self.presumed_origin.clone().map(|presumed_origin| presumed_origin.try_into().unwrap());
+    let presumed_origin: Option<Vec<u8>> = self.presumed_origin.clone().map(Into::into);
     writer.write_all(&presumed_origin.encode())?;
     self.output.write(writer)?;
     writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
@@ -415,7 +414,7 @@ impl Bitcoin {
       .iter()
       .map(|payment| {
         (
-          payment.address.0.clone(),
+          payment.address.clone().into(),
           // If we're solely estimating the fee, don't specify the actual amount
           // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
           // error
@@ -427,7 +426,7 @@ impl Bitcoin {
     match BSignableTransaction::new(
       inputs.iter().map(|input| input.output.clone()).collect(),
       &payments,
-      change.as_ref().map(|change| &change.0),
+      change.as_ref().map(AsRef::as_ref),
       None,
       fee.0,
     ) {
@@ -532,7 +531,8 @@ impl Network for Bitcoin {
   }
 
   fn external_address(key: ProjectivePoint) -> Address {
-    Address(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
+    Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
+      .unwrap()
   }
 
   fn branch_address(key: ProjectivePoint) -> Address {
@@ -603,17 +603,9 @@ impl Network for Bitcoin {
             }
             tx.unwrap().output.swap_remove(usize::try_from(spent_output.vout).unwrap())
           };
-          BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin).ok().and_then(
-            |address| {
-              let address = Address(address);
-              let encoded: Result<Vec<u8>, _> = address.clone().try_into();
-              if encoded.is_ok() {
-                Some(address)
-              } else {
-                None
-              }
-            },
-          )
+          BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin)
+            .ok()
+            .and_then(Address::new)
         };
 
         let output = Output { kind, presumed_origin, output, data };
@@ -802,7 +794,7 @@ impl Network for Bitcoin {
       }],
       output: vec![TxOut {
         value: tx.output[0].value - BAmount::from_sat(10000),
-        script_pubkey: address.0.script_pubkey(),
+        script_pubkey: address.as_ref().script_pubkey(),
       }],
     };
 

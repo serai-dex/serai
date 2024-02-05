@@ -28,7 +28,7 @@ fn new_mempool<T: TransactionTrait>() -> ([u8; 32], MemDb, Mempool<MemDb, T>) {
 #[tokio::test]
 async fn mempool_addition() {
   let (genesis, db, mut mempool) = new_mempool::<SignedTransaction>();
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
   let unsigned_in_chain = |_: [u8; 32]| false;
@@ -160,7 +160,7 @@ async fn mempool_addition() {
 fn too_many_mempool() {
   let (genesis, _, mut mempool) = new_mempool::<SignedTransaction>();
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
   let unsigned_in_chain = |_: [u8; 32]| false;

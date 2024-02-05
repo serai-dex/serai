@@ -182,7 +182,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let validators = Arc::new(Validators::new(genesis, validators)?);
 
     let mut blockchain = Blockchain::new(db.clone(), genesis, &validators_vec);
-    let block_number = BlockNumber(blockchain.block_number().into());
+    let block_number = BlockNumber(blockchain.block_number());
 
     let start_time = if let Some(commit) = blockchain.commit(&blockchain.tip()) {
       Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time
@@ -240,7 +240,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     self.genesis
   }
 
-  pub async fn block_number(&self) -> u32 {
+  pub async fn block_number(&self) -> u64 {
     self.network.blockchain.read().await.block_number()
   }
   pub async fn tip(&self) -> [u8; 32] {
@@ -314,7 +314,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       return false;
     }
 
-    let number = BlockNumber((block_number + 1).into());
+    let number = BlockNumber(block_number + 1);
     self.synced_block.write().await.send(SyncedBlock { number, block, commit }).await.unwrap();
     result.next().await.unwrap()
   }

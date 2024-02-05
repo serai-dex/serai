@@ -275,8 +275,30 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
 
 pub const BLOCK_PROCESSING_TIME: u32 = 999;
 pub const LATENCY_TIME: u32 = 1667;
-// TODO: Add test asserting this
 pub const TARGET_BLOCK_TIME: u32 = BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME);
+
+#[test]
+fn assert_target_block_time() {
+  use serai_db::MemDb;
+
+  #[derive(Clone, Debug)]
+  pub struct DummyP2p;
+
+  #[async_trait::async_trait]
+  impl P2p for DummyP2p {
+    async fn broadcast(&self, _: [u8; 32], _: Vec<u8>) {
+      unimplemented!()
+    }
+  }
+
+  // Type paremeters don't matter here since we only need to call the block_time()
+  // and it only relies on the constants of the trait implementation. block_time() is in seconds,
+  // TARGET_BLOCK_TIME is in milliseconds.
+  assert_eq!(
+    <TendermintNetwork<MemDb, TendermintTx, DummyP2p> as Network>::block_time(),
+    TARGET_BLOCK_TIME / 1000
+  )
+}
 
 #[async_trait]
 impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> {
@@ -342,7 +364,6 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     };
 
     // add tx to blockchain and broadcast to peers
-    // TODO: Make a function out of this following block
     let mut to_broadcast = vec![TRANSACTION_MESSAGE];
     tx.write(&mut to_broadcast).unwrap();
     if self.blockchain.write().await.add_transaction::<Self>(

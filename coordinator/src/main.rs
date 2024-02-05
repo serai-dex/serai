@@ -9,7 +9,10 @@ use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
 use ciphersuite::{
-  group::ff::{Field, PrimeField},
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
@@ -240,7 +243,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
       coordinator::ProcessorMessage::InvalidParticipant { id, .. } |
       coordinator::ProcessorMessage::CosignPreprocess { id, .. } |
       coordinator::ProcessorMessage::BatchPreprocess { id, .. } |
+      coordinator::ProcessorMessage::SlashReportPreprocess { id, .. } |
       coordinator::ProcessorMessage::SubstrateShare { id, .. } => Some(id.session),
+      // This causes an action on our P2P net yet not on any Tributary
       coordinator::ProcessorMessage::CosignedBlock { block_number, block, signature } => {
         let cosigned_block = CosignedBlock {
           network,
@@ -257,6 +262,55 @@ async fn handle_processor_message<D: Db, P: P2p>(
         cosigned_block.serialize(&mut buf).unwrap();
         P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
         None
+      }
+      // This causes an action on Substrate yet not on any Tributary
+      coordinator::ProcessorMessage::SignedSlashReport { session, signature } => {
+        let set = ValidatorSet { network, session: *session };
+        let signature: &[u8] = signature.as_ref();
+        let signature = serai_client::Signature(signature.try_into().unwrap());
+
+        let slashes = crate::tributary::SlashReport::get(&txn, set)
+          .expect("signed slash report despite not having slash report locally");
+        let slashes_pubs =
+          slashes.iter().map(|(address, points)| (Public(*address), *points)).collect::<Vec<_>>();
+
+        let tx = serai_client::SeraiValidatorSets::report_slashes(
+          network,
+          slashes
+            .into_iter()
+            .map(|(address, points)| (serai_client::SeraiAddress(address), points))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+          signature.clone(),
+        );
+
+        loop {
+          if serai.publish(&tx).await.is_ok() {
+            break None;
+          }
+
+          // Check if the slashes shouldn't still be reported. If not, break.
+          let Ok(serai) = serai.as_of_latest_finalized_block().await else {
+            tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+            continue;
+          };
+          let Ok(key) = serai.validator_sets().key_pending_slash_report(network).await else {
+            tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+            continue;
+          };
+          let Some(key) = key else {
+            break None;
+          };
+          // If this is the key for this slash report, then this will verify
+          use sp_application_crypto::RuntimePublic;
+          if !key.verify(
+            &serai_client::validator_sets::primitives::report_slashes_message(&set, &slashes_pubs),
+            &signature,
+          ) {
+            break None;
+          }
+        }
       }
     },
     // These don't return a relevant Tributary as there's no Tributary with action expected
@@ -550,7 +604,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
           // slash) and censor transactions (yet don't explicitly ban)
           vec![]
         }
-        coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } => {
+        coordinator::ProcessorMessage::CosignPreprocess { id, preprocesses } |
+        coordinator::ProcessorMessage::SlashReportPreprocess { id, preprocesses } => {
           vec![Transaction::SubstrateSign(SignData {
             plan: id.id,
             attempt: id.attempt,
@@ -665,6 +720,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
         }
         #[allow(clippy::match_same_arms)] // Allowed to preserve layout
         coordinator::ProcessorMessage::CosignedBlock { .. } => unreachable!(),
+        #[allow(clippy::match_same_arms)]
+        coordinator::ProcessorMessage::SignedSlashReport { .. } => unreachable!(),
       },
       ProcessorMessage::Substrate(inner_msg) => match inner_msg {
         processor_messages::substrate::ProcessorMessage::Batch { .. } |
@@ -963,6 +1020,8 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     new_tributary_spec_send.send(spec).unwrap();
   }
 
+  let (perform_slash_report_send, mut perform_slash_report_recv) = mpsc::unbounded_channel();
+
   let (tributary_retired_send, mut tributary_retired_recv) = mpsc::unbounded_channel();
 
   // Handle new Substrate blocks
@@ -972,6 +1031,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     processors.clone(),
     serai.clone(),
     new_tributary_spec_send,
+    perform_slash_report_send,
     tributary_retired_send,
   ));
 
@@ -1026,10 +1086,12 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     let raw_db = raw_db.clone();
     let key = key.clone();
 
+    let specs = Arc::new(RwLock::new(HashMap::new()));
     let tributaries = Arc::new(RwLock::new(HashMap::new()));
     // Spawn a task to maintain a local view of the tributaries for whenever recognized_id is
     // called
     tokio::spawn({
+      let specs = specs.clone();
       let tributaries = tributaries.clone();
       let mut set_to_genesis = HashMap::new();
       async move {
@@ -1038,9 +1100,11 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
             Ok(TributaryEvent::NewTributary(tributary)) => {
               set_to_genesis.insert(tributary.spec.set(), tributary.spec.genesis());
               tributaries.write().await.insert(tributary.spec.genesis(), tributary.tributary);
+              specs.write().await.insert(tributary.spec.set(), tributary.spec);
             }
             Ok(TributaryEvent::TributaryRetired(set)) => {
               if let Some(genesis) = set_to_genesis.remove(&set) {
+                specs.write().await.remove(&set);
                 tributaries.write().await.remove(&genesis);
               }
             }
@@ -1048,6 +1112,84 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
               panic!("recognized_id lagged to handle tributary_event")
             }
             Err(broadcast::error::RecvError::Closed) => panic!("tributary_event sender closed"),
+          }
+        }
+      }
+    });
+
+    // Also spawn a task to handle slash reports, as this needs such a view of tributaries
+    tokio::spawn({
+      let mut raw_db = raw_db.clone();
+      let key = key.clone();
+      let tributaries = tributaries.clone();
+      async move {
+        'task_loop: loop {
+          match perform_slash_report_recv.recv().await {
+            Some(set) => {
+              let (genesis, validators) = loop {
+                let specs = specs.read().await;
+                let Some(spec) = specs.get(&set) else {
+                  // If we don't have this Tributary because it's retired, break and move on
+                  if RetiredTributaryDb::get(&raw_db, set).is_some() {
+                    continue 'task_loop;
+                  }
+
+                  // This may happen if the task above is simply slow
+                  log::warn!("tributary we don't have yet is supposed to perform a slash report");
+                  continue;
+                };
+                break (spec.genesis(), spec.validators());
+              };
+
+              let mut slashes = vec![];
+              for (validator, _) in validators {
+                if validator == (<Ristretto as Ciphersuite>::generator() * key.deref()) {
+                  continue;
+                }
+                let validator = validator.to_bytes();
+
+                let fatally = tributary::FatallySlashed::get(&raw_db, genesis, validator).is_some();
+                // TODO: Properly type this
+                let points = if fatally {
+                  u32::MAX
+                } else {
+                  tributary::SlashPoints::get(&raw_db, genesis, validator).unwrap_or(0)
+                };
+                slashes.push(points);
+              }
+
+              let mut tx = Transaction::SlashReport(slashes, Transaction::empty_signed());
+              tx.sign(&mut OsRng, genesis, &key);
+
+              let mut first = true;
+              loop {
+                if !first {
+                  sleep(Duration::from_millis(100)).await;
+                }
+                first = false;
+
+                let tributaries = tributaries.read().await;
+                let Some(tributary) = tributaries.get(&genesis) else {
+                  // If we don't have this Tributary because it's retired, break and move on
+                  if RetiredTributaryDb::get(&raw_db, set).is_some() {
+                    break;
+                  }
+
+                  // This may happen if the task above is simply slow
+                  log::warn!("tributary we don't have yet is supposed to perform a slash report");
+                  continue;
+                };
+                // This is safe to perform multiple times and solely needs atomicity with regards
+                // to itself
+                // TODO: Should this not take a txn accordingly? It's best practice to take a txn,
+                // yet taking a txn fails to declare its achieved independence
+                let mut txn = raw_db.txn();
+                tributary::publish_signed_transaction(&mut txn, tributary, tx).await;
+                txn.commit();
+                break;
+              }
+            }
+            None => panic!("perform slash report sender closed"),
           }
         }
       }

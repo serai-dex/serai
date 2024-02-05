@@ -19,6 +19,7 @@ pub mod time;
 use time::{sys_time, CanonicalInstant};
 
 pub mod round;
+use round::RoundData;
 
 mod block;
 use block::BlockData;
@@ -103,10 +104,11 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-enum TendermintError<N: Network> {
+pub enum TendermintError<N: Network> {
   Malicious(N::ValidatorId, Option<Evidence>),
   Temporal,
   AlreadyHandled,
+  InvalidEvidence,
 }
 
 // Type aliases to abstract over generic hell
@@ -137,6 +139,113 @@ pub enum Evidence {
   ConflictingPrecommit(Vec<u8>, Vec<u8>),
   InvalidPrecommit(Vec<u8>),
   InvalidValidRound(Vec<u8>),
+}
+
+pub fn decode_signed_message<N: Network>(mut data: &[u8]) -> Option<SignedMessageFor<N>> {
+  SignedMessageFor::<N>::decode(&mut data).ok()
+}
+
+fn decode_and_verify_signed_message<N: Network>(
+  data: &[u8],
+  schema: &N::SignatureScheme,
+) -> Result<SignedMessageFor<N>, TendermintError<N>> {
+  let msg = decode_signed_message::<N>(data).ok_or(TendermintError::InvalidEvidence)?;
+
+  // verify that evidence messages are signed correctly
+  if !msg.verify_signature(schema) {
+    Err(TendermintError::InvalidEvidence)?;
+  }
+
+  Ok(msg)
+}
+
+pub fn verify_tendermint_evience<N: Network>(
+  evidence: &Evidence,
+  schema: &N::SignatureScheme,
+  commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
+) -> Result<(), TendermintError<N>> {
+  match evidence {
+    Evidence::ConflictingMessages(first, second) => {
+      let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
+      let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
+
+      // Make sure they're distinct messages, from the same sender, within the same block
+      if (first == second) || (first.sender != second.sender) || (first.block != second.block) {
+        Err(TendermintError::InvalidEvidence)?;
+      }
+
+      // Distinct messages within the same step
+      if !((first.round == second.round) && (first.data.step() == second.data.step())) {
+        Err(TendermintError::InvalidEvidence)?;
+      }
+    }
+    Evidence::ConflictingPrecommit(first, second) => {
+      let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
+      let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
+
+      if (first.sender != second.sender) || (first.block != second.block) {
+        Err(TendermintError::InvalidEvidence)?;
+      }
+
+      // check whether messages are precommits to different blocks
+      // The inner signatures don't need to be verified since the outer signatures were
+      // While the inner signatures may be invalid, that would've yielded a invalid precommit
+      // signature slash instead of distinct precommit slash
+      if let Data::Precommit(Some((h1, _))) = first.data {
+        if let Data::Precommit(Some((h2, _))) = second.data {
+          if h1 == h2 {
+            Err(TendermintError::InvalidEvidence)?;
+          }
+          return Ok(());
+        }
+      }
+
+      // No fault identified
+      Err(TendermintError::InvalidEvidence)?;
+    }
+    Evidence::InvalidPrecommit(msg) => {
+      let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
+
+      let Data::Precommit(Some((id, sig))) = &msg.data else {
+        Err(TendermintError::InvalidEvidence)?
+      };
+      // TODO: We need to be passed in the genesis time to handle this edge case
+      if msg.block.0 == 0 {
+        todo!("invalid precommit signature on first block")
+      }
+
+      // get the last commit
+      let prior_commit = match commit(msg.block.0 - 1) {
+        Some(c) => c,
+        // If we have yet to sync the block in question, we will return InvalidContent based
+        // on our own temporal ambiguity
+        // This will also cause an InvalidContent for anything using a non-existent block,
+        // yet that's valid behavior
+        // TODO: Double check the ramifications of this
+        _ => Err(TendermintError::InvalidEvidence)?,
+      };
+
+      // calculate the end time till the msg round
+      let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
+      for r in 0 ..= msg.round.0 {
+        last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
+      }
+
+      // verify that the commit was actually invalid
+      if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
+        Err(TendermintError::InvalidEvidence)?
+      }
+    }
+    Evidence::InvalidValidRound(msg) => {
+      let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
+
+      let Data::Proposal(Some(vr), _) = &msg.data else { Err(TendermintError::InvalidEvidence)? };
+      if vr.0 < msg.round.0 {
+        Err(TendermintError::InvalidEvidence)?
+      }
+    }
+  }
+  Ok(())
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -543,7 +652,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
             self.slash(sender, slash).await
           }
-          Err(TendermintError::Temporal | TendermintError::AlreadyHandled) => (),
+          Err(
+            TendermintError::Temporal |
+            TendermintError::AlreadyHandled |
+            TendermintError::InvalidEvidence,
+          ) => (),
         }
       }
     }

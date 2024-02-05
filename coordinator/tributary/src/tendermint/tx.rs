@@ -12,14 +12,11 @@ use crate::{
 };
 
 use tendermint::{
-  SignedMessageFor, Data,
-  round::RoundData,
-  time::CanonicalInstant,
-  commit_msg,
-  ext::{Network, Commit, RoundNumber, SignatureScheme},
+  verify_tendermint_evience,
+  ext::{Network, Commit},
 };
 
-pub use tendermint::Evidence;
+pub use tendermint::{Evidence, decode_signed_message};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -63,127 +60,16 @@ impl Transaction for TendermintTx {
   }
 }
 
-pub fn decode_signed_message<N: Network>(
-  mut data: &[u8],
-) -> Result<SignedMessageFor<N>, TransactionError> {
-  SignedMessageFor::<N>::decode(&mut data).map_err(|_| TransactionError::InvalidContent)
-}
-
-fn decode_and_verify_signed_message<N: Network>(
-  data: &[u8],
-  schema: &N::SignatureScheme,
-) -> Result<SignedMessageFor<N>, TransactionError> {
-  let msg = decode_signed_message::<N>(data)?;
-
-  // verify that evidence messages are signed correctly
-  if !msg.verify_signature(schema) {
-    Err(TransactionError::InvalidSignature)?
-  }
-  Ok(msg)
-}
-
-// TODO: Move this into tendermint-machine
-// TODO: Strongly type Evidence, instead of having two messages and no idea what's supposedly
-// wrong with them. Doing so will massively simplify the auditability of this (as this
-// re-implements an entire foreign library's checks for malicious behavior).
 pub(crate) fn verify_tendermint_tx<N: Network>(
   tx: &TendermintTx,
   schema: &N::SignatureScheme,
-  commit: impl Fn(u32) -> Option<Commit<N::SignatureScheme>>,
+  commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
   tx.verify()?;
 
   match tx {
-    // TODO: Only allow one evidence per validator, since evidence is fatal
-    TendermintTx::SlashEvidence(ev) => {
-      match ev {
-        Evidence::ConflictingMessages(first, second) => {
-          let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
-          let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
-
-          // Make sure they're distinct messages, from the same sender, within the same block
-          if (first == second) || (first.sender != second.sender) || (first.block != second.block) {
-            Err(TransactionError::InvalidContent)?;
-          }
-
-          // Distinct messages within the same step
-          if !((first.round == second.round) && (first.data.step() == second.data.step())) {
-            Err(TransactionError::InvalidContent)?;
-          }
-        }
-        Evidence::ConflictingPrecommit(first, second) => {
-          let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
-          let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
-
-          if (first.sender != second.sender) || (first.block != second.block) {
-            Err(TransactionError::InvalidContent)?;
-          }
-
-          // check whether messages are precommits to different blocks
-          // The inner signatures don't need to be verified since the outer signatures were
-          // While the inner signatures may be invalid, that would've yielded a invalid precommit
-          // signature slash instead of distinct precommit slash
-          if let Data::Precommit(Some((h1, _))) = first.data {
-            if let Data::Precommit(Some((h2, _))) = second.data {
-              if h1 == h2 {
-                Err(TransactionError::InvalidContent)?;
-              }
-              return Ok(());
-            }
-          }
-
-          // No fault identified
-          Err(TransactionError::InvalidContent)?
-        }
-        Evidence::InvalidPrecommit(msg) => {
-          let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
-
-          let Data::Precommit(Some((id, sig))) = &msg.data else {
-            Err(TransactionError::InvalidContent)?
-          };
-          // TODO: We need to be passed in the genesis time to handle this edge case
-          if msg.block.0 == 0 {
-            todo!("invalid precommit signature on first block")
-          }
-
-          // get the last commit
-          // TODO: Why do we use u32 when Tendermint uses u64?
-          let prior_commit = match u32::try_from(msg.block.0 - 1) {
-            Ok(n) => match commit(n) {
-              Some(c) => c,
-              // If we have yet to sync the block in question, we will return InvalidContent based
-              // on our own temporal ambiguity
-              // This will also cause an InvalidContent for anything using a non-existent block,
-              // yet that's valid behavior
-              // TODO: Double check the ramifications of this
-              _ => Err(TransactionError::InvalidContent)?,
-            },
-            _ => Err(TransactionError::InvalidContent)?,
-          };
-
-          // calculate the end time till the msg round
-          let mut last_end_time = CanonicalInstant::new(prior_commit.end_time);
-          for r in 0 ..= msg.round.0 {
-            last_end_time = RoundData::<N>::new(RoundNumber(r), last_end_time).end_time();
-          }
-
-          // verify that the commit was actually invalid
-          if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
-            Err(TransactionError::InvalidContent)?
-          }
-        }
-        Evidence::InvalidValidRound(msg) => {
-          let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;
-
-          let Data::Proposal(Some(vr), _) = &msg.data else {
-            Err(TransactionError::InvalidContent)?
-          };
-          if vr.0 < msg.round.0 {
-            Err(TransactionError::InvalidContent)?
-          }
-        }
-      }
-    }
+    TendermintTx::SlashEvidence(ev) => verify_tendermint_evience::<N>(ev, schema, commit)
+      .map_err(|_| TransactionError::InvalidContent)?,
   }
 
   Ok(())

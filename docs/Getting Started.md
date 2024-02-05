@@ -69,7 +69,7 @@ Running tests requires:
 - [A rootless Docker setup](https://docs.docker.com/engine/security/rootless/)
 - A properly configured Bitcoin regtest node (available via Docker)
 - A properly configured Monero regtest node (available via Docker)
-- A properly configured monero-wallet-rpc instance
+- A properly configured monero-wallet-rpc instance (available via Docker)
 - A debug Serai node (`cd substrate/node && cargo build`)
 
 ```

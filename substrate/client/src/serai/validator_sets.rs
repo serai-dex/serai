@@ -69,6 +69,23 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn accepted_handover_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
+    self
+      .0
+      .events(|event| {
+        if let serai_abi::Event::ValidatorSets(event) = event {
+          if matches!(event, ValidatorSetsEvent::AcceptedHandover { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      })
+      .await
+  }
+
   pub async fn set_retired_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0
@@ -131,6 +148,13 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
   }
 
+  pub async fn key_pending_slash_report(
+    &self,
+    network: NetworkId,
+  ) -> Result<Option<Public>, SeraiError> {
+    self.0.storage(PALLET, "PendingSlashReport", network).await
+  }
+
   pub fn set_keys(
     network: NetworkId,
     removed_participants: Vec<SeraiAddress>,
@@ -143,5 +167,18 @@ impl<'a> SeraiValidatorSets<'a> {
       key_pair,
       signature,
     }))
+  }
+
+  pub fn report_slashes(
+    network: NetworkId,
+    slashes: sp_runtime::BoundedVec<
+      (SeraiAddress, u32),
+      sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
+    >,
+    signature: Signature,
+  ) -> Transaction {
+    Serai::unsigned(serai_abi::Call::ValidatorSets(
+      serai_abi::validator_sets::Call::report_slashes { network, slashes, signature },
+    ))
   }
 }

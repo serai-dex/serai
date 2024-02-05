@@ -52,6 +52,20 @@ services:
     ports:
       - "18081:18081"
 
+  monero-wallet-rpc:
+    profiles:
+      - monero
+      - coins
+    build:
+      context: ./coins/monero-wallet-rpc/
+    restart: unless-stopped
+    volumes:
+      - "./coins/monero-wallet-rpc/scripts:/scripts"
+    entrypoint: /scripts/entry-dev.sh
+    # TODO: Use expose, not ports
+    ports:
+      - "6061:6061"
+
   # Infrastructure
 
   message-queue:

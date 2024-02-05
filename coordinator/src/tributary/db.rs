@@ -51,10 +51,13 @@ create_db!(
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
 
+    // TODO: Revisit the point of this
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     RemovedAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
     OfflineDuringDkg: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
+    // TODO: Combine these two
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
+    SlashPoints: (genesis: [u8; 32], account: [u8; 32]) -> u32,
 
     VotedToRemove: (genesis: [u8; 32], voter: [u8; 32], to_remove: [u8; 32]) -> (),
     VotesToRemove: (genesis: [u8; 32], to_remove: [u8; 32]) -> u16,
@@ -73,6 +76,11 @@ create_db!(
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
 
     SignedTransactionDb: (order: &[u8], nonce: u32) -> Vec<u8>,
+
+    SlashReports: (genesis: [u8; 32], signer: [u8; 32]) -> Vec<u32>,
+    SlashReported: (genesis: [u8; 32]) -> u16,
+    SlashReportCutOff: (genesis: [u8; 32]) -> u64,
+    SlashReport: (set: ValidatorSet) -> Vec<([u8; 32], u32)>,
   }
 );
 
@@ -116,7 +124,13 @@ impl AttemptDb {
   pub fn attempt(getter: &impl Get, genesis: [u8; 32], topic: Topic) -> Option<u32> {
     let attempt = Self::get(getter, genesis, &topic);
     // Don't require explicit recognition of the Dkg topic as it starts when the chain does
-    if attempt.is_none() && ((topic == Topic::Dkg) || (topic == Topic::DkgConfirmation)) {
+    // Don't require explicit recognition of the SlashReport topic as it isn't a DoS risk and it
+    // should always happen (eventually)
+    if attempt.is_none() &&
+      ((topic == Topic::Dkg) ||
+        (topic == Topic::DkgConfirmation) ||
+        (topic == Topic::SubstrateSign(SubstrateSignableId::SlashReport)))
+    {
       return Some(0);
     }
     attempt
