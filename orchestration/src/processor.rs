@@ -15,16 +15,32 @@ pub fn processor(orchestration_path: &Path, network: Network, coin: &'static str
 RUN apt install -y ca-certificates
 "#;
 
-  const RUN_PROCESSOR: &str = r#"
+  let env_vars = [
+    ("MESSAGE_QUEUE_KEY", ""),
+    ("ENTROPY", ""),
+    ("NETWORK", ""),
+    ("NETWORK_RPC_LOGIN", ""),
+    ("NETWORK_RPC_PORT", ""),
+    ("DB_PATH", "./processor-db"),
+    ("RUST_LOG", "serai_processor=debug"),
+  ];
+  let mut env_vars_str = String::new();
+  for (env_var, value) in env_vars {
+    env_vars_str += &format!(r#"{env_var}="${{{env_var}:='{value}'}}" "#);
+  }
+
+  let run_processor = format!(
+    r#"
 # Copy the Processor binary and relevant license
 COPY --from=builder --chown=processor /serai/bin/serai-processor /bin/
 COPY --from=builder --chown=processor /serai/AGPL-3.0 .
 
 # Run processor
-CMD ["serai-processor"]
-"#;
+CMD {env_vars_str} serai-processor
+"#
+  );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "processor") + RUN_PROCESSOR;
+  let run = os(Os::Debian, ADDITIONAL_ROOT, "processor") + &run_processor;
   let res = setup + &run;
 
   let mut processor_path = orchestration_path.to_path_buf();

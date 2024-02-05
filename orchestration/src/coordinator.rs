@@ -17,16 +17,29 @@ pub fn coordinator(orchestration_path: &Path, network: Network) {
 RUN apt install -y ca-certificates
 "#;
 
-  const RUN_COORDINATOR: &str = r#"
+  let env_vars = [
+    ("MESSAGE_QUEUE_KEY", ""),
+    ("DB_PATH", "./coordinator-db"),
+    ("SERAI_KEY", ""),
+    ("RUST_LOG", "serai_coordinator=debug,tributary_chain=debug,tendermint=debug"),
+  ];
+  let mut env_vars_str = String::new();
+  for (env_var, value) in env_vars {
+    env_vars_str += &format!(r#"{env_var}="${{{env_var}:='{value}'}}" "#);
+  }
+
+  let run_coordinator = format!(
+    r#"
 # Copy the Coordinator binary and relevant license
 COPY --from=builder --chown=coordinator /serai/bin/serai-coordinator /bin/
 COPY --from=builder --chown=coordinator /serai/AGPL-3.0 .
 
 # Run coordinator
-CMD ["serai-coordinator"]
-"#;
+CMD {env_vars_str} serai-coordinator
+"#
+  );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "coordinator") + RUN_COORDINATOR;
+  let run = os(Os::Debian, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
   let res = setup + &run;
 
   let mut coordinator_path = orchestration_path.to_path_buf();
