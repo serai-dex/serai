@@ -21,7 +21,8 @@ ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
-ADD orchestration /serai/orchestration
+ADD orchestration/Cargo.toml /serai/orchestration/Cargo.toml
+ADD orchestration/src /serai/orchestration/src
 ADD mini /serai/mini
 ADD tests /serai/tests
 ADD Cargo.toml /serai
