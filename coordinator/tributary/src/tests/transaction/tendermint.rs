@@ -42,7 +42,7 @@ async fn serialize_tendermint() {
 async fn invalid_valid_round() {
   // signer
   let (_, signer, signer_id, validators) = tendermint_meta().await;
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
 
@@ -78,7 +78,7 @@ async fn invalid_valid_round() {
 #[tokio::test]
 async fn invalid_precommit_signature() {
   let (_, signer, signer_id, validators) = tendermint_meta().await;
-  let commit = |i: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |i: u64| -> Option<Commit<Arc<Validators>>> {
     assert_eq!(i, 0);
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
@@ -127,7 +127,7 @@ async fn invalid_precommit_signature() {
 #[tokio::test]
 async fn evidence_with_prevote() {
   let (_, signer, signer_id, validators) = tendermint_meta().await;
-  let commit = |_: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
 
@@ -180,7 +180,7 @@ async fn evidence_with_prevote() {
 #[tokio::test]
 async fn conflicting_msgs_evidence_tx() {
   let (genesis, signer, signer_id, validators) = tendermint_meta().await;
-  let commit = |i: u32| -> Option<Commit<Arc<Validators>>> {
+  let commit = |i: u64| -> Option<Commit<Arc<Validators>>> {
     assert_eq!(i, 0);
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
