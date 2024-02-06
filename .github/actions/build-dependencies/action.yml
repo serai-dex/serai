@@ -24,7 +24,6 @@ runs:
         brew uninstall --force "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
         brew uninstall --force "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
         brew cleanup
-        docker system prune -a --volumes
       if: runner.os == 'macOS'
 
     - name: Install dependencies
