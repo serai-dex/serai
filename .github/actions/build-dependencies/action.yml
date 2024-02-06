@@ -16,6 +16,17 @@ runs:
         docker system prune -a --volumes
       if: runner.os == 'Linux'
 
+    - name: Remove unused packages
+      shell: bash
+      run: |
+        brew uninstall --force "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        brew uninstall --force "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
+        brew uninstall --force "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+        brew uninstall --force "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+        brew cleanup
+        docker system prune -a --volumes
+      if: runner.os == 'macOS'
+
     - name: Install dependencies
       shell: bash
       run: |
