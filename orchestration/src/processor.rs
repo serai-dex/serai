@@ -1,8 +1,20 @@
 use std::{path::Path};
 
+use zeroize::Zeroizing;
+
+use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-pub fn processor(orchestration_path: &Path, network: Network, coin: &'static str) {
+#[allow(clippy::needless_pass_by_value)]
+pub fn processor(
+  orchestration_path: &Path,
+  network: Network,
+  coin: &'static str,
+  _coordinator_key: <Ristretto as Ciphersuite>::G,
+  coin_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  entropy: Zeroizing<[u8; 32]>,
+) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
       network.release(),
@@ -15,14 +27,27 @@ pub fn processor(orchestration_path: &Path, network: Network, coin: &'static str
 RUN apt install -y ca-certificates
 "#;
 
+  // TODO: Randomly generate these
+  const RPC_USER: &str = "serai";
+  const RPC_PASS: &str = "seraidex";
+  // TODO: Isolate networks
+  let hostname = format!("{coin}-{}", network.label());
+  let port = match coin {
+    "bitcoin" => 8332,
+    "ethereum" => return, // TODO
+    "monero" => 18081,
+    _ => panic!("unrecognized external network"),
+  };
+
   let env_vars = [
-    ("MESSAGE_QUEUE_KEY", ""),
-    ("ENTROPY", ""),
-    ("NETWORK", ""),
-    ("NETWORK_RPC_LOGIN", ""),
-    ("NETWORK_RPC_PORT", ""),
-    ("DB_PATH", "./processor-db"),
-    ("RUST_LOG", "serai_processor=debug"),
+    ("MESSAGE_QUEUE_KEY", hex::encode(coin_key.to_repr())),
+    ("ENTROPY", hex::encode(entropy.as_ref())),
+    ("NETWORK", coin.to_string()),
+    ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
+    ("NETWORK_RPC_HOSTNAME", hostname),
+    ("NETWORK_RPC_PORT", format!("{port}")),
+    ("DB_PATH", "./processor-db".to_string()),
+    ("RUST_LOG", "serai_processor=debug".to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {

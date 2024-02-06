@@ -40,7 +40,7 @@ EXPOSE 8332 8333
 ADD /orchestration/{}/coins/bitcoin/run.sh /
 CMD ["/run.sh"]
 "#,
-    network.folder()
+    network.label()
   );
 
   let run = os(Os::Debian, "", "bitcoin") + &run_bitcoin;

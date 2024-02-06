@@ -7663,6 +7663,15 @@ dependencies = [
 [[package]]
 name = "serai-orchestrator"
 version = "0.0.1"
+dependencies = [
+ "ciphersuite",
+ "flexible-transcript",
+ "hex",
+ "rand_chacha",
+ "rand_core",
+ "zalloc",
+ "zeroize",
+]
 
 [[package]]
 name = "serai-primitives"

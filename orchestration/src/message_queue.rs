@@ -1,18 +1,27 @@
 use std::{path::Path};
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-pub fn message_queue(orchestration_path: &Path, network: Network) {
+pub fn message_queue(
+  orchestration_path: &Path,
+  network: Network,
+  coordinator_key: <Ristretto as Ciphersuite>::G,
+  bitcoin_key: <Ristretto as Ciphersuite>::G,
+  ethereum_key: <Ristretto as Ciphersuite>::G,
+  monero_key: <Ristretto as Ciphersuite>::G,
+) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [
-    ("COORDINATOR_KEY", ""),
-    ("BITCOIN_KEY", ""),
-    ("ETHEREUM_KEY", ""),
-    ("MONERO_KEY", ""),
-    ("DB_PATH", "./message-queue-db"),
-    ("RUST_LOG", "serai_message_queue=trace"),
+    ("COORDINATOR_KEY", hex::encode(coordinator_key.to_bytes())),
+    ("BITCOIN_KEY", hex::encode(bitcoin_key.to_bytes())),
+    ("ETHEREUM_KEY", hex::encode(ethereum_key.to_bytes())),
+    ("MONERO_KEY", hex::encode(monero_key.to_bytes())),
+    ("DB_PATH", "./message-queue-db".to_string()),
+    ("RUST_LOG", "serai_message_queue=trace".to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {

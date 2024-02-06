@@ -16,3 +16,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+
+zeroize = { version = "1", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+
+zalloc = { path = "../common/zalloc" }

@@ -1,7 +1,17 @@
 // TODO: Generate randomized RPC credentials for all services
 // TODO: Generate keys for a validator and the infra
 
+use core::ops::Deref;
 use std::{env, path::PathBuf, io::Write, fs};
+
+use zeroize::Zeroizing;
+
+use rand_core::{RngCore, SeedableRng, OsRng};
+use rand_chacha::ChaCha20Rng;
+
+use transcript::{Transcript, RecommendedTranscript};
+
+use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 mod mimalloc;
 use mimalloc::mimalloc;
@@ -20,6 +30,10 @@ use coordinator::coordinator;
 
 mod serai;
 use serai::serai;
+
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
 pub enum Network {
@@ -42,7 +56,7 @@ impl Network {
     }
   }
 
-  pub fn folder(&self) -> &'static str {
+  pub fn label(&self) -> &'static str {
     match self {
       Network::Dev => "dev",
       Network::Testnet => "testnet",
@@ -170,7 +184,7 @@ fn dockerfiles(network: Network) {
 
     let mut orchestration_path = repo_path.clone();
     orchestration_path.push("orchestration");
-    orchestration_path.push(network.folder());
+    orchestration_path.push(network.label());
     orchestration_path
   };
 
@@ -181,13 +195,58 @@ fn dockerfiles(network: Network) {
     monero_wallet_rpc(&orchestration_path);
   }
 
-  message_queue(&orchestration_path, network);
+  // Generate entropy for the infrastructure keys
+  let mut entropy = [0; 32];
+  OsRng.fill_bytes(&mut entropy);
+  let mut transcript = RecommendedTranscript::new(b"Serai Orchestrator Transcript");
+  transcript.append_message(b"entropy", entropy);
+  let mut new_rng = |label| ChaCha20Rng::from_seed(transcript.rng_seed(label));
 
-  processor(&orchestration_path, network, "bitcoin");
-  processor(&orchestration_path, network, "ethereum");
-  processor(&orchestration_path, network, "monero");
+  let mut message_queue_keys_rng = new_rng(b"message_queue_keys");
+  let mut key_pair = || {
+    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut message_queue_keys_rng));
+    let public = Ristretto::generator() * key.deref();
+    (key, public)
+  };
+  let coordinator_key = key_pair();
+  let bitcoin_key = key_pair();
+  let ethereum_key = key_pair();
+  let monero_key = key_pair();
 
-  coordinator(&orchestration_path, network);
+  message_queue(
+    &orchestration_path,
+    network,
+    coordinator_key.1,
+    bitcoin_key.1,
+    ethereum_key.1,
+    monero_key.1,
+  );
+
+  let mut processor_entropy_rng = new_rng(b"processor_entropy");
+  let mut new_entropy = || {
+    let mut res = Zeroizing::new([0; 32]);
+    processor_entropy_rng.fill_bytes(res.as_mut());
+    res
+  };
+  processor(
+    &orchestration_path,
+    network,
+    "bitcoin",
+    coordinator_key.1,
+    bitcoin_key.0,
+    new_entropy(),
+  );
+  processor(
+    &orchestration_path,
+    network,
+    "ethereum",
+    coordinator_key.1,
+    ethereum_key.0,
+    new_entropy(),
+  );
+  processor(&orchestration_path, network, "monero", coordinator_key.1, monero_key.0, new_entropy());
+
+  coordinator(&orchestration_path, network, coordinator_key.0);
 
   serai(&orchestration_path, network);
 }

@@ -38,7 +38,7 @@ RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-si
 # Extract it
 RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
 "#,
-    network.folder(),
+    network.label(),
   );
 
   let setup = mimalloc(os).to_string() + &download_monero;
@@ -52,7 +52,7 @@ EXPOSE {ports}
 ADD /orchestration/{}/coins/{folder}/run.sh /
 CMD ["/run.sh"]
 "#,
-    network.folder(),
+    network.label(),
   );
 
   let run =
