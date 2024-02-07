@@ -70,24 +70,7 @@ Running tests requires:
 - A properly configured Bitcoin regtest node (available via Docker)
 - A properly configured Monero regtest node (available via Docker)
 - A properly configured monero-wallet-rpc instance (available via Docker)
-- A debug Serai node (`cd substrate/node && cargo build`)
 
 ```
 cargo test --all-features
 ```
-
-### Run Serai in Development Mode
-
-```
-./target/release/serai-node --dev
-```
-
-### Run Serai with Orchestration
-
-Under `/orchestration`, you can find our orchestration components for running
-the entire infrastructure of Serai in a local environment using Docker Compose
-or Kubernetes.
-
-[Run Serai with Docker Compose](../orchestration/README.md)
-
-[Run Serai with Kubernetes](../orchestration/kubernetes/README.md)
