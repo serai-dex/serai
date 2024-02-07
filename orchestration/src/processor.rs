@@ -31,7 +31,7 @@ RUN apt install -y ca-certificates
   const RPC_USER: &str = "serai";
   const RPC_PASS: &str = "seraidex";
   // TODO: Isolate networks
-  let hostname = format!("{coin}-{}", network.label());
+  let hostname = format!("serai-{}-{coin}", network.label());
   let port = match coin {
     "bitcoin" => 8332,
     "ethereum" => return, // TODO
@@ -40,6 +40,7 @@ RUN apt install -y ca-certificates
   };
 
   let env_vars = [
+    ("MESSAGE_QUEUE_RPC", format!("serai-{}-message_queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coin_key.to_repr())),
     ("ENTROPY", hex::encode(entropy.as_ref())),
     ("NETWORK", coin.to_string()),

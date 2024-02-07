@@ -2,7 +2,7 @@
 // TODO: Generate keys for a validator and the infra
 
 use core::ops::Deref;
-use std::{env, path::PathBuf, io::Write, fs};
+use std::{collections::HashSet, env, path::PathBuf, io::Write, fs, process::Command};
 
 use zeroize::Zeroizing;
 
@@ -11,7 +11,13 @@ use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
+  Ciphersuite, Ristretto,
+};
 
 mod mimalloc;
 use mimalloc::mimalloc;
@@ -30,6 +36,8 @@ use coordinator::coordinator;
 
 mod serai;
 use serai::serai;
+
+mod docker;
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
@@ -173,20 +181,22 @@ pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
   fs::File::create(path).unwrap().write_all(dockerfile.as_bytes()).unwrap();
 }
 
-fn dockerfiles(network: Network) {
-  let orchestration_path = {
-    let mut repo_path = env::current_exe().unwrap();
-    repo_path.pop();
-    assert!(repo_path.as_path().ends_with("debug"));
-    repo_path.pop();
-    assert!(repo_path.as_path().ends_with("target"));
-    repo_path.pop();
+fn orchestration_path(network: Network) -> PathBuf {
+  let mut repo_path = env::current_exe().unwrap();
+  repo_path.pop();
+  assert!(repo_path.as_path().ends_with("debug"));
+  repo_path.pop();
+  assert!(repo_path.as_path().ends_with("target"));
+  repo_path.pop();
 
-    let mut orchestration_path = repo_path.clone();
-    orchestration_path.push("orchestration");
-    orchestration_path.push(network.label());
-    orchestration_path
-  };
+  let mut orchestration_path = repo_path.clone();
+  orchestration_path.push("orchestration");
+  orchestration_path.push(network.label());
+  orchestration_path
+}
+
+fn dockerfiles(network: Network) {
+  let orchestration_path = orchestration_path(network);
 
   bitcoin(&orchestration_path, network);
   ethereum(&orchestration_path);
@@ -195,9 +205,14 @@ fn dockerfiles(network: Network) {
     monero_wallet_rpc(&orchestration_path);
   }
 
+  // TODO: Generate infra keys in key_gen, yet service entropy here?
+
   // Generate entropy for the infrastructure keys
-  let mut entropy = [0; 32];
-  OsRng.fill_bytes(&mut entropy);
+  let mut entropy = Zeroizing::new([0; 32]);
+  // Only use actual entropy if this isn't a development environment
+  if network != Network::Dev {
+    OsRng.fill_bytes(entropy.as_mut());
+  }
   let mut transcript = RecommendedTranscript::new(b"Serai Orchestrator Transcript");
   transcript.append_message(b"entropy", entropy);
   let mut new_rng = |label| ChaCha20Rng::from_seed(transcript.rng_seed(label));
@@ -246,12 +261,153 @@ fn dockerfiles(network: Network) {
   );
   processor(&orchestration_path, network, "monero", coordinator_key.1, monero_key.0, new_entropy());
 
-  coordinator(&orchestration_path, network, coordinator_key.0);
+  let serai_key = {
+    let serai_key = Zeroizing::new(
+      fs::read(home::home_dir().unwrap().join(".serai").join(network.label()).join("key"))
+        .expect("couldn't read key for this network"),
+    );
+    let mut serai_key_repr =
+      Zeroizing::new(<<Ristretto as Ciphersuite>::F as PrimeField>::Repr::default());
+    serai_key_repr.as_mut().copy_from_slice(serai_key.as_ref());
+    Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(*serai_key_repr).unwrap())
+  };
+
+  coordinator(&orchestration_path, network, coordinator_key.0, serai_key);
 
   serai(&orchestration_path, network);
 }
 
+fn key_gen(network: Network) {
+  let key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+  let serai_dir = home::home_dir().unwrap().join(".serai");
+  fs::create_dir(&serai_dir).expect("couldn't create ~/.serai");
+
+  fs::create_dir(serai_dir.join(network.label())).expect("couldn't create ~/.serai/{network}");
+  fs::write(serai_dir.join(network.label()).join("key"), key.to_repr())
+    .expect("couldn't write key");
+  println!(
+    "Public Key: {}",
+    hex::encode((<Ristretto as Ciphersuite>::generator() * key).to_bytes())
+  );
+}
+
+fn start(network: Network, services: HashSet<String>) {
+  for service in services {
+    println!("Starting {service}");
+    let name = match service.as_ref() {
+      "serai" => "serai",
+      "coordinator" => "coordinator",
+      "message-queue" => "message-queue",
+      "bitcoin-daemon" => "bitcoin",
+      "bitcoin-processor" => "bitcoin-processor",
+      "monero-daemon" => "monero",
+      "monero-processor" => "monero-processor",
+      "monero-wallet-rpc" => "monero-wallet-rpc",
+      _ => panic!("starting unrecognized service"),
+    };
+
+    // Build it, if it wasn't already built
+    let docker_name = format!("serai-{}-{name}", network.label());
+    let docker_image = format!("{docker_name}-img");
+    if !Command::new("docker")
+      .arg("inspect")
+      .arg("-f")
+      .arg("{{ .Metadata.LastTagTime }}")
+      .arg(&docker_image)
+      .status()
+      .unwrap()
+      .success()
+    {
+      println!("Building {service}");
+      docker::build(&orchestration_path(network), network, name);
+    }
+
+    if !Command::new("docker").arg("inspect").arg(&docker_name).status().unwrap().success() {
+      // Create the docker container
+      println!("Creating new container for {service}");
+      assert!(
+        Command::new("docker")
+          .arg("create")
+          .arg("--name")
+          .arg(&docker_name)
+          .arg("--network")
+          .arg("bridge")
+          .arg(docker_image)
+          .status()
+          .unwrap()
+          .success(),
+        "couldn't create the container"
+      );
+    }
+
+    // Start it
+    // TODO: Check it successfully started
+    println!("Starting existing container for {service}");
+    let _ = Command::new("docker").arg("start").arg(docker_name).output();
+  }
+}
+
 fn main() {
-  dockerfiles(Network::Dev);
-  dockerfiles(Network::Testnet);
+  let help = || -> ! {
+    println!(
+      r#"
+Serai Orchestrator v0.0.1
+
+Commands:
+  key_gen *network*
+    Generates a key for the validator.
+
+  setup *network*
+    Generate infrastructure keys and the Dockerfiles for every Serai service.
+
+  start *network* [service1, service2...]
+    Start the specified services for the specified network ("dev" or "testnet").
+
+    - `serai`
+    - `coordinator`
+    - `message-queue`
+    - `bitcoin-daemon`
+    - `bitcoin-processor`
+    - `monero-daemon`
+    - `monero-processor`
+    - `monero-wallet-rpc` (if "dev")
+
+    are valid services.
+
+    `*network*-processor` will automatically start `*network*-daemon`.
+"#
+    );
+    std::process::exit(1);
+  };
+
+  let mut args = env::args();
+  args.next();
+  let command = args.next();
+  let network = match args.next().as_ref().map(AsRef::as_ref) {
+    Some("dev") => Network::Dev,
+    Some("testnet") => Network::Testnet,
+    Some(_) => panic!(r#"unrecognized network. only "dev" and "testnet" are recognized"#),
+    None => help(),
+  };
+
+  match command.as_ref().map(AsRef::as_ref) {
+    Some("key_gen") => {
+      key_gen(network);
+    }
+    Some("setup") => {
+      dockerfiles(network);
+    }
+    Some("start") => {
+      let mut services = HashSet::new();
+      for arg in args {
+        if let Some(ext_network) = arg.strip_suffix("-processor") {
+          services.insert(ext_network.to_string() + "-daemon");
+        }
+        services.insert(arg);
+      }
+
+      start(network, services);
+    }
+    _ => help(),
+  }
 }

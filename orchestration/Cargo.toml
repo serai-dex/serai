@@ -26,3 +26,5 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", d
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
 
 zalloc = { path = "../common/zalloc" }
+
+home = "0.5"

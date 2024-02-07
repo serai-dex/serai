@@ -7667,6 +7667,7 @@ dependencies = [
  "ciphersuite",
  "flexible-transcript",
  "hex",
+ "home",
  "rand_chacha",
  "rand_core",
  "zalloc",

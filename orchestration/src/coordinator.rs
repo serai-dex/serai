@@ -11,6 +11,7 @@ pub fn coordinator(
   orchestration_path: &Path,
   network: Network,
   coordinator_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
@@ -27,9 +28,10 @@ RUN apt install -y ca-certificates
 "#;
 
   let env_vars = [
+    ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coordinator_key.to_repr())),
     ("DB_PATH", "./coordinator-db".to_string()),
-    ("SERAI_KEY", String::new()), // TODO
+    ("SERAI_KEY", hex::encode(serai_key.to_repr())),
     ("SERAI_HOSTNAME", format!("serai-{}", network.label())),
     ("RUST_LOG", "serai_coordinator=debug,tributary_chain=debug,tendermint=debug".to_string()),
   ];
