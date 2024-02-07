@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 RPC_USER="${RPC_USER:=serai}"
 RPC_PASS="${RPC_PASS:=seraidex}"
