@@ -3,7 +3,6 @@ use std::{collections::HashSet, path::Path, env, process::Command};
 use crate::Network;
 
 pub fn build(orchestration_path: &Path, network: Network, name: &str) {
-  // Else, hold the lock while we build
   let mut repo_path = env::current_exe().unwrap();
   repo_path.pop();
   if repo_path.as_path().ends_with("deps") {
