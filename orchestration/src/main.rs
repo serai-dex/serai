@@ -88,11 +88,13 @@ COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
 
 RUN apk update && apk upgrade
+
+# System user (not a human), shell of nologin, no password assigned
+RUN adduser -S -s /sbin/nologin -D {user}
+
 {additional_root}
 
 # Switch to a non-root user
-# System user (not a human), shell of nologin, no password assigned
-RUN adduser -S -s /sbin/nologin -D {user}
 USER {user}
 
 WORKDIR /home/{user}
@@ -107,10 +109,12 @@ COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
+
+RUN useradd --system --create-home --shell /sbin/nologin {user}
+
 {additional_root}
 
 # Switch to a non-root user
-RUN useradd --system --create-home --shell /sbin/nologin {user}
 USER {user}
 
 WORKDIR /home/{user}
@@ -327,16 +331,41 @@ fn start(network: Network, services: HashSet<String>) {
 
     let docker_name = format!("serai-{}-{name}", network.label());
     let docker_image = format!("{docker_name}-img");
-    if !Command::new("docker").arg("inspect").arg(&docker_name).status().unwrap().success() {
+    if !Command::new("docker")
+      .arg("container")
+      .arg("inspect")
+      .arg(&docker_name)
+      .status()
+      .unwrap()
+      .success()
+    {
       // Create the docker container
       println!("Creating new container for {service}");
+      let volume = format!("serai-{}-{name}-volume:/volume", network.label());
       let mut command = Command::new("docker");
       let command = command.arg("create").arg("--name").arg(&docker_name);
       let command = command.arg("--network").arg("serai");
       let command = match name {
-        "bitcoin" => command.arg("-p").arg("8332:8332"),
-        "monero" => command.arg("-p").arg("18081:18081"),
-        "monero-wallet-rpc" => command.arg("-p").arg("18082:18082"),
+        "bitcoin" => {
+          let command = command.arg("--volume").arg(volume);
+          if network == Network::Dev {
+            command.arg("-p").arg("8332:8332")
+          } else {
+            command
+          }
+        }
+        "monero" => {
+          let command = command.arg("--volume").arg(volume);
+          if network == Network::Dev {
+            command.arg("-p").arg("18081:18081")
+          } else {
+            command
+          }
+        }
+        "monero-wallet-rpc" => {
+          assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
+          command.arg("-p").arg("18082:18082")
+        }
         _ => command,
       };
       assert!(

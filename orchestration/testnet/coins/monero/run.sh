@@ -7,4 +7,5 @@ RPC_PASS="${RPC_PASS:=seraidex}"
 monerod --non-interactive --stagenet \
   --no-zmq --rpc-bind-ip=0.0.0.0 --rpc-bind-port=18081 --confirm-external-bind \
   --rpc-access-control-origins "*" --disable-rpc-ban \
-  --rpc-login=$RPC_USER:$RPC_PASS
+  --rpc-login=$RPC_USER:$RPC_PASS \
+  --data-dir=/volume
