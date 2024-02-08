@@ -14,7 +14,7 @@ pub fn build(orchestration_path: &Path, network: Network, name: &str) {
   repo_path.pop();
 
   let mut dockerfile_path = orchestration_path.to_path_buf();
-  if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name) {
+  if HashSet::from(["bitcoin", "ethereum", "monero", "monero-wallet-rpc"]).contains(name) {
     dockerfile_path = dockerfile_path.join("coins");
   }
   if name.contains("-processor") {

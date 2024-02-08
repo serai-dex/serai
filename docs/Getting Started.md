@@ -71,6 +71,21 @@ Running tests requires:
 - A properly configured Monero regtest node (available via Docker)
 - A properly configured monero-wallet-rpc instance (available via Docker)
 
+To start the required daemons, one may run:
+
+```
+cargo run -p serai-orchestrator -- key_gen dev
+cargo run -p serai-orchestrator -- setup dev
+```
+
+and then:
+
+```
+cargo run -p serai-orchestrator -- start dev bitcoin-daemon monero-daemon monero-wallet-rpc
+```
+
+Finally, to run the tests:
+
 ```
 cargo test --all-features
 ```

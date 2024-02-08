@@ -321,36 +321,26 @@ fn start(network: Network, services: HashSet<String>) {
       _ => panic!("starting unrecognized service"),
     };
 
-    // Build it, if it wasn't already built
+    // Build it
+    println!("Building {service}");
+    docker::build(&orchestration_path(network), network, name);
+
     let docker_name = format!("serai-{}-{name}", network.label());
     let docker_image = format!("{docker_name}-img");
-    if !Command::new("docker")
-      .arg("inspect")
-      .arg("-f")
-      .arg("{{ .Metadata.LastTagTime }}")
-      .arg(&docker_image)
-      .status()
-      .unwrap()
-      .success()
-    {
-      println!("Building {service}");
-      docker::build(&orchestration_path(network), network, name);
-    }
-
     if !Command::new("docker").arg("inspect").arg(&docker_name).status().unwrap().success() {
       // Create the docker container
       println!("Creating new container for {service}");
+      let mut command = Command::new("docker");
+      let command = command.arg("create").arg("--name").arg(&docker_name);
+      let command = command.arg("--network").arg("serai");
+      let command = match name {
+        "bitcoin" => command.arg("-p").arg("8332:8332"),
+        "monero" => command.arg("-p").arg("18081:18081"),
+        "monero-wallet-rpc" => command.arg("-p").arg("18082:18082"),
+        _ => command,
+      };
       assert!(
-        Command::new("docker")
-          .arg("create")
-          .arg("--name")
-          .arg(&docker_name)
-          .arg("--network")
-          .arg("serai")
-          .arg(docker_image)
-          .status()
-          .unwrap()
-          .success(),
+        command.arg(docker_image).status().unwrap().success(),
         "couldn't create the container"
       );
     }
