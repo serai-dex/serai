@@ -7628,8 +7628,10 @@ dependencies = [
  "clap",
  "frame-benchmarking",
  "futures-util",
+ "hex",
  "jsonrpsee",
  "pallet-transaction-payment-rpc",
+ "rand_core",
  "sc-authority-discovery",
  "sc-basic-authorship",
  "sc-cli",
@@ -7646,6 +7648,8 @@ dependencies = [
  "sc-telemetry",
  "sc-transaction-pool",
  "sc-transaction-pool-api",
+ "schnorrkel",
+ "serai-env",
  "serai-runtime",
  "sp-api",
  "sp-block-builder",
@@ -7653,10 +7657,12 @@ dependencies = [
  "sp-consensus-babe",
  "sp-core",
  "sp-io",
+ "sp-keystore",
  "sp-timestamp",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

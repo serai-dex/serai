@@ -1,3 +1,5 @@
+mod keystore;
+
 mod chain_spec;
 mod service;
 
