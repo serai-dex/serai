@@ -32,7 +32,7 @@ RUN apt install -y ca-certificates
     ("MESSAGE_QUEUE_KEY", hex::encode(coordinator_key.to_repr())),
     ("DB_PATH", "./coordinator-db".to_string()),
     ("SERAI_KEY", hex::encode(serai_key.to_repr())),
-    ("SERAI_HOSTNAME", format!("serai-{}", network.label())),
+    ("SERAI_HOSTNAME", format!("serai-{}-serai", network.label())),
     ("RUST_LOG", "serai_coordinator=debug,tributary_chain=debug,tendermint=debug".to_string()),
   ];
   let mut env_vars_str = String::new();

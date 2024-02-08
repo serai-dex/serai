@@ -297,6 +297,16 @@ fn key_gen(network: Network) {
 }
 
 fn start(network: Network, services: HashSet<String>) {
+  // Create the serai network
+  Command::new("docker")
+    .arg("network")
+    .arg("create")
+    .arg("--driver")
+    .arg("bridge")
+    .arg("serai")
+    .output()
+    .unwrap();
+
   for service in services {
     println!("Starting {service}");
     let name = match service.as_ref() {
@@ -336,7 +346,7 @@ fn start(network: Network, services: HashSet<String>) {
           .arg("--name")
           .arg(&docker_name)
           .arg("--network")
-          .arg("bridge")
+          .arg("serai")
           .arg(docker_image)
           .status()
           .unwrap()
