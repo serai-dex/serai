@@ -347,19 +347,17 @@ fn start(network: Network, services: HashSet<String>) {
       let command = command.arg("--network").arg("serai");
       let command = match name {
         "bitcoin" => {
-          let command = command.arg("--volume").arg(volume);
           if network == Network::Dev {
             command.arg("-p").arg("8332:8332")
           } else {
-            command
+            command.arg("--volume").arg(volume)
           }
         }
         "monero" => {
-          let command = command.arg("--volume").arg(volume);
           if network == Network::Dev {
             command.arg("-p").arg("18081:18081")
           } else {
-            command
+            command.arg("--volume").arg(volume)
           }
         }
         "monero-wallet-rpc" => {

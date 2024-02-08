@@ -6,5 +6,4 @@ RPC_PASS="${RPC_PASS:=seraidex}"
 bitcoind -txindex -regtest --port=8333 \
   -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS \
   -rpcbind=0.0.0.0 -rpcallowip=0.0.0.0/0 -rpcport=8332 \
-  --datadir=/volume \
   $1
