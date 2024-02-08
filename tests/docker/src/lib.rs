@@ -22,6 +22,7 @@ pub fn fresh_logs_folder(first: bool, label: &str) -> String {
   logs_path.to_str().unwrap().to_string()
 }
 
+// TODO: Merge this with what's in serai-orchestrator/have serai-orchestrator perform building
 static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 pub fn build(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
@@ -48,6 +49,26 @@ pub fn build(name: String) {
     .arg("run")
     .arg("-p")
     .arg("serai-orchestrator")
+    .arg("--")
+    .arg("key_gen")
+    .arg("dev")
+    .spawn()
+    .unwrap()
+    .wait()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to run the orchestrator");
+  }
+
+  if !Command::new("cargo")
+    .current_dir(&repo_path)
+    .arg("run")
+    .arg("-p")
+    .arg("serai-orchestrator")
+    .arg("--")
+    .arg("setup")
+    .arg("dev")
     .spawn()
     .unwrap()
     .wait()
