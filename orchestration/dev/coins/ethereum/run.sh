@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 geth --dev --networkid 5208 --datadir "eth-devnet" \
   --http --http.api "web3,net,eth,miner" \

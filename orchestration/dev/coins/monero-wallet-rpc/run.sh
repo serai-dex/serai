@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 monero-wallet-rpc \
   --allow-mismatched-daemon-version \
