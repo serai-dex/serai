@@ -278,13 +278,18 @@ fn dockerfiles(network: Network) {
 }
 
 fn key_gen(network: Network) {
-  let key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-  let serai_dir = home::home_dir().unwrap().join(".serai");
-  fs::create_dir(&serai_dir).expect("couldn't create ~/.serai");
+  let serai_dir = home::home_dir().unwrap().join(".serai").join(network.label());
+  let key_file = serai_dir.join("key");
+  if fs::File::open(&key_file).is_ok() {
+    println!("already created key");
+    return;
+  }
 
-  fs::create_dir(serai_dir.join(network.label())).expect("couldn't create ~/.serai/{network}");
-  fs::write(serai_dir.join(network.label()).join("key"), key.to_repr())
-    .expect("couldn't write key");
+  let key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+
+  let _ = fs::create_dir_all(&serai_dir);
+  fs::write(key_file, key.to_repr()).expect("couldn't write key");
+
   println!(
     "Public Key: {}",
     hex::encode((<Ristretto as Ciphersuite>::generator() * key).to_bytes())
