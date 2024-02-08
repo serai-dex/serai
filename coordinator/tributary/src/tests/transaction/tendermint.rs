@@ -156,14 +156,6 @@ async fn evidence_with_prevote() {
           .await
           .encode(),
       )));
-      txs.push(TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
-        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
-          .await
-          .encode(),
-        signed_from_data::<N>(signer.clone().into(), signer_id, 0, 0, Data::Prevote(block_id))
-          .await
-          .encode(),
-      )));
       txs
     }
   };
@@ -261,34 +253,6 @@ async fn conflicting_msgs_evidence_tx() {
       signed_2.encode(),
     ));
     verify_tendermint_tx::<N>(&tx, &validators, commit).unwrap_err();
-  }
-
-  // Precommit
-  {
-    let sig = signer.sign(&[]).await; // the inner signature doesn't matter
-
-    let signed_1 = signed_for_b_r(0, 0, Data::Precommit(Some(([0x11; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
-      signed_1.encode(),
-      signed_1.encode(),
-    ));
-    assert!(verify_tendermint_tx::<N>(&tx, &validators, commit).is_err());
-
-    // For precommit, the round number is ignored
-    let signed_2 = signed_for_b_r(0, 1, Data::Precommit(Some(([0x22; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
-      signed_1.encode(),
-      signed_2.encode(),
-    ));
-    verify_tendermint_tx::<N>(&tx, &validators, commit).unwrap();
-
-    // Yet the block number isn't
-    let signed_2 = signed_for_b_r(1, 0, Data::Precommit(Some(([0x22; 32], sig)))).await;
-    let tx = TendermintTx::SlashEvidence(Evidence::ConflictingPrecommit(
-      signed_1.encode(),
-      signed_2.encode(),
-    ));
-    assert!(verify_tendermint_tx::<N>(&tx, &validators, commit).is_err());
   }
 
   // msgs from different senders should fail

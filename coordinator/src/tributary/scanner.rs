@@ -216,8 +216,7 @@ impl<
           // Since the evidence is on the chain, it should already have been validated
           // We can just punish the signer
           let data = match ev {
-            Evidence::ConflictingMessages(first, second) |
-            Evidence::ConflictingPrecommit(first, second) => (first, Some(second)),
+            Evidence::ConflictingMessages(first, second) => (first, Some(second)),
             Evidence::InvalidPrecommit(first) | Evidence::InvalidValidRound(first) => (first, None),
           };
           let msgs = (
