@@ -123,12 +123,13 @@ WORKDIR /home/{user}
   }
 }
 
-fn build_serai_service(release: bool, features: &str, package: &str) -> String {
+fn build_serai_service(os: Os, release: bool, features: &str, package: &str) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
-  format!(
-    r#"
+  let os_str = match os {
+    Os::Debian => {
+      r#"
 FROM rust:1.76-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
@@ -141,6 +142,23 @@ RUN apt install -y pkg-config clang
 
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler
+"#
+    }
+    Os::Alpine => {
+      r#"
+FROM rust:1.76.0-alpine3.19 as builder
+
+COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
+ENV LD_PRELOAD=libmimalloc.so
+
+RUN apk update && apk upgrade && apk add musl-dev
+"#
+    }
+  };
+
+  format!(
+    r#"
+{os_str}
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown

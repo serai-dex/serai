@@ -17,6 +17,7 @@ pub fn processor(
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
+      Os::Debian,
       network.release(),
       &format!("binaries {} {coin}", network.db()),
       "serai-processor",

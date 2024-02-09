@@ -4,7 +4,8 @@ use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn serai(orchestration_path: &Path, network: Network) {
   // Always builds in release for performance reasons
-  let setup = mimalloc(Os::Debian).to_string() + &build_serai_service(true, "", "serai-node");
+  let setup =
+    mimalloc(Os::Debian).to_string() + &build_serai_service(Os::Debian, true, "", "serai-node");
 
   // TODO: Review the ports exposed here
   let run_serai = format!(
