@@ -13,6 +13,7 @@ macro_rules! serai_test {
           PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
           TestBodySpecification, DockerTest,
         };
+        use std::collections::HashMap;
 
         serai_docker_tests::build("serai".to_string());
 
@@ -28,6 +29,7 @@ macro_rules! serai_test {
           "--rpc-cors".to_string(),
           "all".to_string(),
         ])
+        .replace_env(HashMap::from([("RUST_LOG=runtime".to_string(), "debug".to_string())]))
         .set_publish_all_ports(true)
         .set_handle(handle)
         .set_start_policy(StartPolicy::Strict)

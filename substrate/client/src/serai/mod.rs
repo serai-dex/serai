@@ -3,7 +3,7 @@ use thiserror::Error;
 use async_lock::RwLock;
 use simple_request::{hyper, Request, Client};
 
-use scale::{Encode, Decode, Compact};
+use scale::{decode_from_bytes, Compact, Decode, Encode};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 pub use sp_core::{
@@ -193,6 +193,19 @@ impl Serai {
     // If we are to return something, it should be block included in and position within block
     let _: String = self.call("author_submitExtrinsic", [hex::encode(tx.encode())]).await?;
     Ok(())
+  }
+
+  pub async fn active_network_validators(
+    &self,
+    network: NetworkId,
+  ) -> Result<Vec<Public>, SeraiError> {
+    let hash: String = self
+      .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
+      .await?;
+    let bytes = Self::hex_decode(hash)?;
+    let r = decode_from_bytes::<Vec<Public>>(bytes.into())
+      .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
+    Ok(r)
   }
 
   pub async fn latest_finalized_block_hash(&self) -> Result<[u8; 32], SeraiError> {

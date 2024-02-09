@@ -35,6 +35,23 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn extrinsic_failed(&self) -> Result<Vec<serai_abi::system::Event>, SeraiError> {
+    self
+      .0
+      .events(|event| {
+        if let serai_abi::Event::System(event) = event {
+          if matches!(event, serai_abi::system::Event::ExtrinsicFailed { .. }) {
+            Some(event.clone())
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      })
+      .await
+  }
+
   pub async fn participant_removed_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0
@@ -167,6 +184,14 @@ impl<'a> SeraiValidatorSets<'a> {
       key_pair,
       signature,
     }))
+  }
+
+  pub fn allocate(network: NetworkId, amount: Amount) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::allocate { network, amount })
+  }
+
+  pub fn deallocate(network: NetworkId, amount: Amount) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::deallocate { network, amount })
   }
 
   pub fn report_slashes(

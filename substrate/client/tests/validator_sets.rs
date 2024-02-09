@@ -8,11 +8,13 @@ use serai_client::{
     primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
-  Serai,
+  Amount, Serai,
 };
 
 mod common;
-use common::validator_sets::set_keys;
+use common::validator_sets::{set_keys, allocate_stake, deallocate_stake};
+
+const EPOCH_INTERVAL: u64 = 5;
 
 serai_test!(
   set_keys_test: (|serai: Serai| async move {
@@ -73,3 +75,126 @@ serai_test!(
     assert_eq!(serai.keys(set).await.unwrap(), Some(key_pair));
   })
 );
+
+#[tokio::test]
+async fn validator_set_rotation() {
+  use dockertest::{
+    PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
+    TestBodySpecification, DockerTest,
+  };
+
+  serai_docker_tests::build("serai".to_string());
+  let handle = |name| format!("serai_client-serai_node-{name}");
+  let composition = |name| {
+    TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
+    )
+    .replace_cmd(vec![
+      "serai-node".to_string(),
+      "--unsafe-rpc-external".to_string(),
+      "--rpc-cors".to_string(),
+      "all".to_string(),
+      "--chain".to_string(),
+      "local".to_string(),
+      format!("--{name}"),
+    ])
+    .set_publish_all_ports(true)
+    .set_handle(handle(name))
+    .set_start_policy(StartPolicy::Strict)
+    .set_log_options(Some(LogOptions {
+      action: LogAction::Forward,
+      policy: LogPolicy::Always,
+      source: LogSource::Both,
+    }))
+  };
+
+  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
+  test.provide_container(composition("alice"));
+  test.provide_container(composition("bob"));
+  test.provide_container(composition("charlie"));
+  test.provide_container(composition("dave"));
+  test
+    .run_async(|ops| async move {
+      // Sleep until the Substrate RPC starts
+      let alice = handle("alice");
+      let alice_rpc = ops.handle(&alice).host_port(9944).unwrap();
+      let alice_rpc = format!("http://{}:{}", alice_rpc.0, alice_rpc.1);
+
+      // Sleep for a minute
+      tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+      let serai = Serai::new(alice_rpc.clone()).await.unwrap();
+
+      // taken from testnet config
+      let pair1 = insecure_pair_from_name("Alice");
+      let pair2 = insecure_pair_from_name("Bob");
+      let pair3 = insecure_pair_from_name("Charlie");
+      let pair4 = insecure_pair_from_name("Dave");
+      let single_key_share = Amount(50_000 * 10_u64.pow(8));
+
+      // Make sure the genesis is as expected
+      let network = NetworkId::Serai;
+      assert_eq!(
+        serai
+          .as_of(serai.finalized_block_by_number(0).await.unwrap().unwrap().hash())
+          .validator_sets()
+          .new_set_events()
+          .await
+          .unwrap(),
+        NETWORKS
+          .iter()
+          .copied()
+          .map(|network| ValidatorSetsEvent::NewSet {
+            set: ValidatorSet { session: Session(0), network }
+          })
+          .collect::<Vec<_>>(),
+      );
+
+      // we start the chain with 4 default participants that has a single key share each
+      let mut participants = vec![pair1.public(), pair2.public(), pair3.public(), pair4.public()];
+      participants.sort();
+      verfiy_session_and_active_validators(&serai, network, 0, &participants).await;
+
+      // remove 1 participant
+      let hash = deallocate_stake(&serai, network, single_key_share, &pair2, 0).await;
+      participants.remove(1);
+
+      // TODO: check pending deallocations
+
+      // verify for 2 epoch later(it takes 1 extra session for serai net to make the changes active)
+      // and since we removed a participant, we also need 1 extra session for cool down period.
+      let block_number = serai.block(hash).await.unwrap().unwrap().header.number;
+      let epoch_number = block_number / EPOCH_INTERVAL;
+      participants.sort();
+      verfiy_session_and_active_validators(&serai, network, epoch_number + 3, &participants).await;
+
+      // TODO: test add valiators
+    })
+    .await;
+}
+
+async fn verfiy_session_and_active_validators(
+  serai: &Serai,
+  network: NetworkId,
+  session: u64,
+  participants: &[Public],
+) {
+  // wait untill the epoch block finalized
+  let epoch_block = (session * EPOCH_INTERVAL) + 1;
+  while serai.finalized_block_by_number(epoch_block).await.unwrap().is_none() {
+    // sleep 1 block
+    tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
+  }
+  let serai_for_block =
+    serai.as_of(serai.finalized_block_by_number(epoch_block).await.unwrap().unwrap().hash());
+
+  // verfiy session
+  let s = serai_for_block.validator_sets().session(network).await.unwrap().unwrap();
+  assert_eq!(u64::from(s.0), session);
+
+  // verify participants
+  let mut validators = serai.active_network_validators(network).await.unwrap();
+  validators.sort();
+  assert_eq!(validators, participants);
+
+  // TODO: verfiy key shares as well?
+}

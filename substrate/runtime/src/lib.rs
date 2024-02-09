@@ -302,7 +302,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[allow(clippy::identity_op)]
-  type EpochDuration = ConstU64<{ 1 * DAYS }>;
+  type EpochDuration = ConstU64<{ DAYS / (24 * 60 * 2) }>; // 30 seconds
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
   type EpochChangeTrigger = babe::ExternalTrigger;
   type DisabledValidators = ValidatorSets;
