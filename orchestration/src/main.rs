@@ -129,7 +129,7 @@ fn build_serai_service(release: bool, features: &str, package: &str) -> String {
 
   format!(
     r#"
-FROM rust:1.75-slim-bookworm as builder
+FROM rust:1.76-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload

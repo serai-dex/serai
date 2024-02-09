@@ -1,9 +1,9 @@
-FROM --platform=linux/amd64 rust:1.75.0-slim-bookworm as builder
+FROM --platform=linux/amd64 rust:1.76.0-slim-bookworm as builder
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   rm -rf /var/lib/apt/lists/* && \
-  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20231201T000000Z bookworm main" > /etc/apt/sources.list && \
+  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20240201T000000Z bookworm main" > /etc/apt/sources.list && \
   apt update
 
 # Install dependencies
