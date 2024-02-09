@@ -15,18 +15,26 @@ pub fn processor(
   coin_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   entropy: Zeroizing<[u8; 32]>,
 ) {
-  let setup = mimalloc(Os::Alpine).to_string() +
+  let os_to_use = if network.db() == "parity-db" { Os::Alpine } else { Os::Debian };
+  let setup = mimalloc(os_to_use).to_string() +
     &build_serai_service(
-      Os::Alpine,
+      os_to_use,
       network.release(),
       &format!("binaries {} {coin}", network.db()),
       "serai-processor",
     );
 
-  const ADDITIONAL_ROOT: &str = r#"
+  let additional_root = if os_to_use == Os::Alpine {
+    r#"
 # Install ca-certificates
 RUN apk add ca-certificates
-"#;
+"#
+  } else {
+    r#"
+# Install ca-certificates
+RUN apt install -y ca-certificates
+"#
+  };
 
   // TODO: Randomly generate these
   const RPC_USER: &str = "serai";
@@ -67,7 +75,7 @@ CMD {env_vars_str} serai-processor
 "#
   );
 
-  let run = os(Os::Alpine, ADDITIONAL_ROOT, "processor") + &run_processor;
+  let run = os(os_to_use, additional_root, "processor") + &run_processor;
   let res = setup + &run;
 
   let mut processor_path = orchestration_path.to_path_buf();

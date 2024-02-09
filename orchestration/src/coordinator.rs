@@ -14,19 +14,27 @@ pub fn coordinator(
   serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
 ) {
   let db = network.db();
+  let os_to_use = if db == "parity-db" { Os::Alpine } else { Os::Debian };
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
-  let setup = mimalloc(Os::Alpine).to_string() +
+  let setup = mimalloc(os_to_use).to_string() +
     &build_serai_service(
-      Os::Alpine,
+      os_to_use,
       network.release(),
       &format!("{db} {longer_reattempts}"),
       "serai-coordinator",
     );
 
-  const ADDITIONAL_ROOT: &str = r#"
+  let additional_root = if os_to_use == Os::Alpine {
+    r#"
 # Install ca-certificates
 RUN apk add ca-certificates
-"#;
+"#
+  } else {
+    r#"
+# Install ca-certificates
+RUN apt install -y ca-certificates
+"#
+  };
 
   let env_vars = [
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
@@ -52,7 +60,7 @@ CMD {env_vars_str} serai-coordinator
 "#
   );
 
-  let run = os(Os::Alpine, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
+  let run = os(os_to_use, additional_root, "coordinator") + &run_coordinator;
   let res = setup + &run;
 
   let mut coordinator_path = orchestration_path.to_path_buf();

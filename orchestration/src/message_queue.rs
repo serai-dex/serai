@@ -12,8 +12,9 @@ pub fn message_queue(
   ethereum_key: <Ristretto as Ciphersuite>::G,
   monero_key: <Ristretto as Ciphersuite>::G,
 ) {
-  let setup = mimalloc(Os::Alpine).to_string() +
-    &build_serai_service(Os::Alpine, network.release(), network.db(), "serai-message-queue");
+  let os_to_use = if network.db() == "parity-db" { Os::Alpine } else { Os::Debian };
+  let setup = mimalloc(os_to_use).to_string() +
+    &build_serai_service(os_to_use, network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [
     ("COORDINATOR_KEY", hex::encode(coordinator_key.to_bytes())),
@@ -40,7 +41,7 @@ CMD {env_vars_str} serai-message-queue
 "#
   );
 
-  let run = os(Os::Alpine, "", "messagequeue") + &run_message_queue;
+  let run = os(os_to_use, "", "messagequeue") + &run_message_queue;
   let res = setup + &run;
 
   let mut message_queue_path = orchestration_path.to_path_buf();
