@@ -8,7 +8,7 @@ on:
       - "common/**"
       - "crypto/**"
       - "message-queue/**"
-      - "orchestration/message-queue/**"
+      - "orchestration/**"
       - "tests/docker/**"
       - "tests/message-queue/**"
 
@@ -17,7 +17,7 @@ on:
       - "common/**"
       - "crypto/**"
       - "message-queue/**"
-      - "orchestration/message-queue/**"
+      - "orchestration/**"
       - "tests/docker/**"
       - "tests/message-queue/**"
 

@@ -9,9 +9,8 @@ on:
       - "crypto/**"
       - "coins/**"
       - "message-queue/**"
-      - "orchestration/message-queue/**"
       - "coordinator/**"
-      - "orchestration/coordinator/**"
+      - "orchestration/**"
       - "tests/docker/**"
       - "tests/coordinator/**"
 
@@ -21,9 +20,8 @@ on:
       - "crypto/**"
       - "coins/**"
       - "message-queue/**"
-      - "orchestration/message-queue/**"
       - "coordinator/**"
-      - "orchestration/coordinator/**"
+      - "orchestration/**"
       - "tests/docker/**"
       - "tests/coordinator/**"
 

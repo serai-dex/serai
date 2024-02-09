@@ -1,0 +1,17 @@
+[package]
+name = "zstd"
+version = "0.11.2+zstd.1.5.2"
+description = "zstd which patches to the latest update"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/zstd"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.70"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+zstd = "0.12"

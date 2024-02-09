@@ -37,11 +37,4 @@ runs:
 
     - name: Bitcoin Regtest Daemon
       shell: bash
-      run: |
-        RPC_USER=serai
-        RPC_PASS=seraidex
-
-        bitcoind -txindex -regtest \
-          -rpcuser=$RPC_USER -rpcpassword=$RPC_PASS \
-          -rpcbind=127.0.0.1 -rpcbind=$(hostname) -rpcallowip=0.0.0.0/0 \
-          -daemon
+      run: PATH=$PATH:/usr/bin ./orchestration/dev/coins/bitcoin/run.sh -daemon

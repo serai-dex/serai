@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: v0.18.2.0
+    default: v0.18.3.1
 
 runs:
   using: "composite"
@@ -41,4 +41,9 @@ runs:
 
     - name: Monero Wallet RPC
       shell: bash
-      run: ./monero-wallet-rpc --disable-rpc-login --rpc-bind-port 6061 --allow-mismatched-daemon-version --wallet-dir ./ --detach
+      run: |
+        ./monero-wallet-rpc --allow-mismatched-daemon-version \
+          --daemon-address 0.0.0.0:18081 --daemon-login serai:seraidex \
+          --disable-rpc-login --rpc-bind-port 18082 \
+          --wallet-dir ./ \
+          --detach

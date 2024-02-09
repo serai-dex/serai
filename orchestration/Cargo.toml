@@ -1,0 +1,30 @@
+[package]
+name = "serai-orchestrator"
+version = "0.0.1"
+description = "Generates Dockerfiles for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/orchestration/"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+
+zeroize = { version = "1", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+
+zalloc = { path = "../common/zalloc" }
+
+home = "0.5"

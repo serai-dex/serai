@@ -20,7 +20,14 @@ workspace = true
 name = "serai-node"
 
 [dependencies]
+zeroize = "1"
+rand_core = "0.6"
+hex = "0.4"
+
+schnorrkel = "0.11"
+
 sp-core = { git = "https://github.com/serai-dex/substrate" }
+sp-keystore = { git = "https://github.com/serai-dex/substrate" }
 sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
 sp-io = { git = "https://github.com/serai-dex/substrate" }
 sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
@@ -60,6 +67,8 @@ sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
 
 substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
+
+serai-env = { path = "../../common/env" }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }

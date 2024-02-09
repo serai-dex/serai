@@ -58,7 +58,9 @@ fn create_inherent_data_providers(
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 
-pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceError> {
+pub fn new_partial(
+  config: &Configuration,
+) -> Result<(PartialComponents, Arc<dyn sp_keystore::Keystore>), ServiceError> {
   let telemetry = config
     .telemetry_endpoints
     .clone()
@@ -86,6 +88,13 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
       executor,
     )?;
   let client = Arc::new(client);
+
+  let keystore: Arc<dyn sp_keystore::Keystore> =
+    if let Some(keystore) = crate::keystore::Keystore::from_env() {
+      Arc::new(keystore)
+    } else {
+      keystore_container.keystore()
+    };
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
     task_manager.spawn_handle().spawn("telemetry", None, worker.run());
@@ -137,29 +146,35 @@ pub fn new_partial(config: &Configuration) -> Result<PartialComponents, ServiceE
   // This won't grow in size, so forgetting this isn't a disastrous memleak
   std::mem::forget(babe_handle);
 
-  Ok(sc_service::PartialComponents {
-    client,
-    backend,
-    task_manager,
-    keystore_container,
-    select_chain,
-    import_queue,
-    transaction_pool,
-    other: (block_import, babe_link, grandpa_link, grandpa::SharedVoterState::empty(), telemetry),
-  })
+  Ok((
+    sc_service::PartialComponents {
+      client,
+      backend,
+      task_manager,
+      keystore_container,
+      select_chain,
+      import_queue,
+      transaction_pool,
+      other: (block_import, babe_link, grandpa_link, grandpa::SharedVoterState::empty(), telemetry),
+    },
+    keystore,
+  ))
 }
 
 pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
-  let sc_service::PartialComponents {
-    client,
-    backend,
-    mut task_manager,
-    import_queue,
+  let (
+    sc_service::PartialComponents {
+      client,
+      backend,
+      mut task_manager,
+      keystore_container: _,
+      import_queue,
+      select_chain,
+      transaction_pool,
+      other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
+    },
     keystore_container,
-    select_chain,
-    transaction_pool,
-    other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
-  } = new_partial(&config)?;
+  ) = new_partial(&config)?;
 
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
@@ -195,7 +210,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
         runtime_api_provider: client.clone(),
         is_validator: config.role.is_authority(),
-        keystore: Some(keystore_container.keystore()),
+        keystore: Some(keystore_container.clone()),
         offchain_db: backend.offchain_storage(),
         transaction_pool: Some(OffchainTransactionPoolFactory::new(transaction_pool.clone())),
         network_provider: network.clone(),
@@ -207,7 +222,7 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   }
 
   let role = config.role.clone();
-  let keystore = keystore_container.keystore();
+  let keystore = keystore_container;
   let prometheus_registry = config.prometheus_registry().cloned();
 
   // TODO: Ensure we're considered as an authority is a validator of an external network

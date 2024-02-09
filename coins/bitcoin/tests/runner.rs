@@ -12,7 +12,7 @@ pub fn SEQUENTIAL() -> &'static Mutex<()> {
 
 #[allow(dead_code)]
 pub(crate) async fn rpc() -> Rpc {
-  let rpc = Rpc::new("http://serai:seraidex@127.0.0.1:18443".to_string()).await.unwrap();
+  let rpc = Rpc::new("http://serai:seraidex@127.0.0.1:8332".to_string()).await.unwrap();
 
   // If this node has already been interacted with, clear its chain
   if rpc.get_latest_block_number().await.unwrap() > 0 {

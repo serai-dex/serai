@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: v0.18.2.0
+    default: v0.18.3.1
 
 runs:
   using: "composite"
@@ -14,7 +14,7 @@ runs:
       id: cache-monerod
       uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2
       with:
-        path: monerod
+        path: /usr/bin/monerod
         key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
     - name: Download the Monero Daemon
@@ -37,8 +37,10 @@ runs:
         wget https://downloads.getmonero.org/cli/$FILE
         tar -xvf $FILE
 
-        mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod monerod
+        sudo mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod /usr/bin/monerod
+        sudo chmod 777 /usr/bin/monerod
+        sudo chmod +x /usr/bin/monerod
 
     - name: Monero Regtest Daemon
       shell: bash
-      run: ./monerod --regtest --offline --fixed-difficulty=1 --detach
+      run: PATH=$PATH:/usr/bin ./orchestration/dev/coins/monero/run.sh --detach

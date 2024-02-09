@@ -1,2 +1,0 @@
-  cargo build --features parity-db -p serai-message-queue && \
-  mv /serai/target/debug/serai-message-queue /serai/bin
