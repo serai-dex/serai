@@ -345,6 +345,7 @@ fn start(network: Network, services: HashSet<String>) {
       let mut command = Command::new("docker");
       let command = command.arg("create").arg("--name").arg(&docker_name);
       let command = command.arg("--network").arg("serai");
+      let command = command.arg("--restart").arg("always");
       let command = match name {
         "bitcoin" => {
           if network == Network::Dev {
