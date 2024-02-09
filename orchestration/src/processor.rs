@@ -15,9 +15,9 @@ pub fn processor(
   coin_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
   entropy: Zeroizing<[u8; 32]>,
 ) {
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Alpine).to_string() +
     &build_serai_service(
-      Os::Debian,
+      Os::Alpine,
       network.release(),
       &format!("binaries {} {coin}", network.db()),
       "serai-processor",
@@ -25,7 +25,7 @@ pub fn processor(
 
   const ADDITIONAL_ROOT: &str = r#"
 # Install ca-certificates
-RUN apt install -y ca-certificates
+RUN apk add ca-certificates
 "#;
 
   // TODO: Randomly generate these
@@ -67,7 +67,7 @@ CMD {env_vars_str} serai-processor
 "#
   );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "processor") + &run_processor;
+  let run = os(Os::Alpine, ADDITIONAL_ROOT, "processor") + &run_processor;
   let res = setup + &run;
 
   let mut processor_path = orchestration_path.to_path_buf();

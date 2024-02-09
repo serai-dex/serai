@@ -151,7 +151,13 @@ FROM rust:1.76.0-alpine3.19 as builder
 COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
 
-RUN apk update && apk upgrade && apk add musl-dev
+RUN apk update && apk upgrade
+
+# Add dev dependencies
+RUN apk add musl-dev
+
+# Dependencies for the Serai node
+RUN apk add make protoc
 "#
     }
   };

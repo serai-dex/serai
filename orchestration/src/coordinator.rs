@@ -15,9 +15,9 @@ pub fn coordinator(
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Alpine).to_string() +
     &build_serai_service(
-      Os::Debian,
+      Os::Alpine,
       network.release(),
       &format!("{db} {longer_reattempts}"),
       "serai-coordinator",
@@ -25,7 +25,7 @@ pub fn coordinator(
 
   const ADDITIONAL_ROOT: &str = r#"
 # Install ca-certificates
-RUN apt install -y ca-certificates
+RUN apk add ca-certificates
 "#;
 
   let env_vars = [
@@ -52,7 +52,7 @@ CMD {env_vars_str} serai-coordinator
 "#
   );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
+  let run = os(Os::Alpine, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
   let res = setup + &run;
 
   let mut coordinator_path = orchestration_path.to_path_buf();
