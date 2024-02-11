@@ -45,7 +45,7 @@ RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
 
   let run_monero = format!(
     r#"
-COPY --from=monero --chown=monero {monero_binary} /bin
+COPY --from=monero --chown=monero:nogroup {monero_binary} /bin
 
 EXPOSE {ports}
 
