@@ -72,7 +72,14 @@ CMD ["/run.sh"]
 }
 
 pub fn monero(orchestration_path: &Path, network: Network) {
-  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
+  monero_internal(
+    network,
+    if network == Network::Dev { Os::Alpine } else { Os::Debian },
+    orchestration_path,
+    "monero",
+    "monerod",
+    "18080 18081",
+  )
 }
 
 pub fn monero_wallet_rpc(orchestration_path: &Path) {
