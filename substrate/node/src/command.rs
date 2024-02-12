@@ -58,23 +58,23 @@ pub fn run() -> sc_cli::Result<()> {
 
     Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?;
+        service::new_partial(&config)?.0;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
     Some(Subcommand::ExportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.0;
       Ok((cmd.run(client, config.database), task_manager))
     }),
 
     Some(Subcommand::ExportState(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, .. } = service::new_partial(&config)?.0;
       Ok((cmd.run(client, config.chain_spec), task_manager))
     }),
 
     Some(Subcommand::ImportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&config)?;
+        service::new_partial(&config)?.0;
       Ok((cmd.run(client, import_queue), task_manager))
     }),
 
@@ -83,7 +83,8 @@ pub fn run() -> sc_cli::Result<()> {
     }
 
     Some(Subcommand::Revert(cmd)) => cli.create_runner(cmd)?.async_run(|config| {
-      let PartialComponents { client, task_manager, backend, .. } = service::new_partial(&config)?;
+      let PartialComponents { client, task_manager, backend, .. } =
+        service::new_partial(&config)?.0;
       let aux_revert = Box::new(|client: Arc<FullClient>, backend, blocks| {
         sc_consensus_babe::revert(client.clone(), backend, blocks)?;
         sc_consensus_grandpa::revert(client, blocks)?;

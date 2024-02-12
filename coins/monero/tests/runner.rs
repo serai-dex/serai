@@ -86,7 +86,7 @@ pub fn check_weight_and_fee(tx: &Transaction, fee_rate: Fee) {
 }
 
 pub async fn rpc() -> Rpc<HttpRpc> {
-  let rpc = HttpRpc::new("http://127.0.0.1:18081".to_string()).await.unwrap();
+  let rpc = HttpRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
   // Only run once
   if rpc.get_height().await.unwrap() != 1 {

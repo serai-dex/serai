@@ -63,15 +63,7 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
   TestBodySpecification::with_image(
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
-  .replace_cmd(vec![
-    "serai-node".to_string(),
-    "--unsafe-rpc-external".to_string(),
-    "--rpc-cors".to_string(),
-    "all".to_string(),
-    "--chain".to_string(),
-    "local".to_string(),
-    format!("--{}", name.to_lowercase()),
-  ])
+  .replace_env([("SERAI_NAME".to_string(), name.to_lowercase())].into())
   .set_publish_all_ports(true)
 }
 

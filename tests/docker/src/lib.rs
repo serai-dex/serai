@@ -22,6 +22,7 @@ pub fn fresh_logs_folder(first: bool, label: &str) -> String {
   logs_path.to_str().unwrap().to_string()
 }
 
+// TODO: Merge this with what's in serai-orchestrator/have serai-orchestrator perform building
 static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 pub fn build(name: String) {
   let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
@@ -42,8 +43,59 @@ pub fn build(name: String) {
   assert!(repo_path.as_path().ends_with("target"));
   repo_path.pop();
 
+  // Run the orchestrator to ensure the most recent files exist
+  if !Command::new("cargo")
+    .current_dir(&repo_path)
+    .arg("run")
+    .arg("-p")
+    .arg("serai-orchestrator")
+    .arg("--")
+    .arg("key_gen")
+    .arg("dev")
+    .spawn()
+    .unwrap()
+    .wait()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to run the orchestrator");
+  }
+
+  if !Command::new("cargo")
+    .current_dir(&repo_path)
+    .arg("run")
+    .arg("-p")
+    .arg("serai-orchestrator")
+    .arg("--")
+    .arg("setup")
+    .arg("dev")
+    .spawn()
+    .unwrap()
+    .wait()
+    .unwrap()
+    .success()
+  {
+    panic!("failed to run the orchestrator");
+  }
+
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
+  if name != "runtime" {
+    orchestration_path.push("dev");
+  }
+
+  let mut dockerfile_path = orchestration_path.clone();
+  if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
+    dockerfile_path = dockerfile_path.join("coins");
+  }
+  if name.contains("-processor") {
+    dockerfile_path =
+      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
+  } else if name == "serai-fast-epoch" {
+    dockerfile_path = dockerfile_path.join("serai").join("Dockerfile.fast-epoch");
+  } else {
+    dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+  }
 
   // If this Docker image was created after this repo was last edited, return here
   // This should have better performance than Docker and allows running while offline
@@ -65,24 +117,9 @@ pub fn build(name: String) {
           .0,
       );
 
-      let mut dockerfile_path = orchestration_path.clone();
-      if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
-        dockerfile_path = dockerfile_path.join("coins");
-      }
-      if name.contains("-processor") {
-        dockerfile_path = dockerfile_path
-          .join("processor")
-          .join(name.split('-').next().unwrap())
-          .join("Dockerfile");
-      } else if name == "serai-fast-epoch" {
-        dockerfile_path = dockerfile_path.join("serai").join("Dockerfile.fast-epoch");
-      } else {
-        dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
-      }
-
       // For all services, if the Dockerfile was edited after the image was built we should rebuild
       let mut last_modified =
-        fs::metadata(dockerfile_path).ok().and_then(|meta| meta.modified().ok());
+        fs::metadata(&dockerfile_path).ok().and_then(|meta| meta.modified().ok());
 
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
@@ -155,10 +192,13 @@ pub fn build(name: String) {
 
   // Version which always prints
   if !Command::new("docker")
-    .current_dir(orchestration_path)
-    .arg("compose")
+    .current_dir(&repo_path)
     .arg("build")
-    .arg(&name)
+    .arg("-f")
+    .arg(dockerfile_path)
+    .arg(".")
+    .arg("-t")
+    .arg(format!("serai-dev-{name}"))
     .spawn()
     .unwrap()
     .wait()
@@ -171,10 +211,11 @@ pub fn build(name: String) {
   // Version which only prints on error
   /*
   let res = Command::new("docker")
-    .current_dir(orchestration_path)
-    .arg("compose")
+    .current_dir(dockerfile_path)
     .arg("build")
-    .arg(&name)
+    .arg(".")
+    .arg("-t")
+    .arg(format!("serai-dev-{name}"))
     .output()
     .unwrap();
   if !res.status.success() {

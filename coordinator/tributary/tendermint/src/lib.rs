@@ -136,7 +136,6 @@ pub enum SlashReason {
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub enum Evidence {
   ConflictingMessages(Vec<u8>, Vec<u8>),
-  ConflictingPrecommit(Vec<u8>, Vec<u8>),
   InvalidPrecommit(Vec<u8>),
   InvalidValidRound(Vec<u8>),
 }
@@ -178,30 +177,6 @@ pub fn verify_tendermint_evience<N: Network>(
       if !((first.round == second.round) && (first.data.step() == second.data.step())) {
         Err(TendermintError::InvalidEvidence)?;
       }
-    }
-    Evidence::ConflictingPrecommit(first, second) => {
-      let first = decode_and_verify_signed_message::<N>(first, schema)?.msg;
-      let second = decode_and_verify_signed_message::<N>(second, schema)?.msg;
-
-      if (first.sender != second.sender) || (first.block != second.block) {
-        Err(TendermintError::InvalidEvidence)?;
-      }
-
-      // check whether messages are precommits to different blocks
-      // The inner signatures don't need to be verified since the outer signatures were
-      // While the inner signatures may be invalid, that would've yielded a invalid precommit
-      // signature slash instead of distinct precommit slash
-      if let Data::Precommit(Some((h1, _))) = first.data {
-        if let Data::Precommit(Some((h2, _))) = second.data {
-          if h1 == h2 {
-            Err(TendermintError::InvalidEvidence)?;
-          }
-          return Ok(());
-        }
-      }
-
-      // No fault identified
-      Err(TendermintError::InvalidEvidence)?;
     }
     Evidence::InvalidPrecommit(msg) => {
       let msg = decode_and_verify_signed_message::<N>(msg, schema)?.msg;

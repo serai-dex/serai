@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-configmap
-data:
-  entry-dev.sh: |
-{{ .Values.configMapFile | b64dec | indent 4}}

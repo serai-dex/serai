@@ -1,6 +1,0 @@
-FROM alpine:latest as image
-
-COPY --from=mimalloc libmimalloc.so /usr/lib
-ENV LD_PRELOAD=libmimalloc.so
-
-RUN apk update && apk upgrade

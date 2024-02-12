@@ -1,2 +1,0 @@
-  cargo build --release -p serai-node && \
-  mv /serai/target/release/serai-node /serai/bin
