@@ -82,12 +82,14 @@ async fn validator_set_rotation() {
     PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
     TestBodySpecification, DockerTest,
   };
+  use std::collections::HashMap;
 
-  serai_docker_tests::build("serai".to_string());
+  serai_docker_tests::build("serai-fast-epoch".to_string());
+
   let handle = |name| format!("serai_client-serai_node-{name}");
   let composition = |name| {
     TestBodySpecification::with_image(
-      Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
+      Image::with_repository("serai-dev-serai-fast-epoch").pull_policy(PullPolicy::Never),
     )
     .replace_cmd(vec![
       "serai-node".to_string(),
@@ -98,6 +100,7 @@ async fn validator_set_rotation() {
       "local".to_string(),
       format!("--{name}"),
     ])
+    .replace_env(HashMap::from([("RUST_LOG=runtime".to_string(), "debug".to_string())]))
     .set_publish_all_ports(true)
     .set_handle(handle(name))
     .set_start_policy(StartPolicy::Strict)
@@ -113,6 +116,7 @@ async fn validator_set_rotation() {
   test.provide_container(composition("bob"));
   test.provide_container(composition("charlie"));
   test.provide_container(composition("dave"));
+  test.provide_container(composition("eve"));
   test
     .run_async(|ops| async move {
       // Sleep until the Substrate RPC starts
@@ -121,18 +125,10 @@ async fn validator_set_rotation() {
       let alice_rpc = format!("http://{}:{}", alice_rpc.0, alice_rpc.1);
 
       // Sleep for a minute
-      tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+      tokio::time::sleep(core::time::Duration::from_secs(20)).await;
       let serai = Serai::new(alice_rpc.clone()).await.unwrap();
 
-      // taken from testnet config
-      let pair1 = insecure_pair_from_name("Alice");
-      let pair2 = insecure_pair_from_name("Bob");
-      let pair3 = insecure_pair_from_name("Charlie");
-      let pair4 = insecure_pair_from_name("Dave");
-      let single_key_share = Amount(50_000 * 10_u64.pow(8));
-
       // Make sure the genesis is as expected
-      let network = NetworkId::Serai;
       assert_eq!(
         serai
           .as_of(serai.finalized_block_by_number(0).await.unwrap().unwrap().hash())
@@ -149,25 +145,77 @@ async fn validator_set_rotation() {
           .collect::<Vec<_>>(),
       );
 
-      // we start the chain with 4 default participants that has a single key share each
-      let mut participants = vec![pair1.public(), pair2.public(), pair3.public(), pair4.public()];
-      participants.sort();
-      verfiy_session_and_active_validators(&serai, network, 0, &participants).await;
+      // genesis accounts
+      let pair1 = insecure_pair_from_name("Alice");
+      let pair2 = insecure_pair_from_name("Bob");
+      let pair3 = insecure_pair_from_name("Charlie");
+      let pair4 = insecure_pair_from_name("Dave");
+      let pair5 = insecure_pair_from_name("Eve");
 
-      // remove 1 participant
-      let hash = deallocate_stake(&serai, network, single_key_share, &pair2, 0).await;
-      participants.remove(1);
+      // amounts for single key share per network
+      let key_shares = HashMap::from([
+        (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
+        (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
+        (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
+        (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+      ]);
 
-      // TODO: check pending deallocations
+      // genesis participants per network
+      let default_participants =
+        vec![pair1.public(), pair2.public(), pair3.public(), pair4.public()];
+      let mut participants = HashMap::from([
+        (NetworkId::Serai, default_participants.clone()),
+        (NetworkId::Bitcoin, default_participants.clone()),
+        (NetworkId::Monero, default_participants.clone()),
+        (NetworkId::Ethereum, default_participants),
+      ]);
 
-      // verify for 2 epoch later(it takes 1 extra session for serai net to make the changes active)
-      // and since we removed a participant, we also need 1 extra session for cool down period.
-      let block_number = serai.block(hash).await.unwrap().unwrap().header.number;
-      let epoch_number = block_number / EPOCH_INTERVAL;
-      participants.sort();
-      verfiy_session_and_active_validators(&serai, network, epoch_number + 3, &participants).await;
+      // test the set rotation
+      for (i, network) in NETWORKS.into_iter().enumerate() {
+        let participants = participants.get_mut(&network).unwrap();
 
-      // TODO: test add valiators
+        // we start the chain with 4 default participants that has a single key share each
+        participants.sort();
+        verfiy_session_and_active_validators(&serai, network, 0, &participants).await;
+
+        // add 1 participant & verify
+        let hash =
+          allocate_stake(&serai, network, key_shares[&network], &pair5, i.try_into().unwrap())
+            .await;
+        participants.push(pair5.public());
+        participants.sort();
+        verfiy_session_and_active_validators(
+          &serai,
+          network,
+          get_active_session(&serai, network, hash).await,
+          &participants,
+        )
+        .await;
+
+        // remove 1 participant & verify
+        let hash =
+          deallocate_stake(&serai, network, key_shares[&network], &pair2, i.try_into().unwrap())
+            .await;
+        participants.swap_remove(participants.iter().position(|k| *k == pair2.public()).unwrap());
+        let active_session = get_active_session(&serai, network, hash).await;
+        participants.sort();
+        verfiy_session_and_active_validators(&serai, network, active_session, &participants).await;
+
+        // check pending deallocations
+        let pending = serai
+          .as_of_latest_finalized_block()
+          .await
+          .unwrap()
+          .validator_sets()
+          .pending_deallocations(
+            network,
+            pair2.public(),
+            Session(u32::try_from(active_session + 1).unwrap()),
+          )
+          .await
+          .unwrap();
+        assert_eq!(pending, Some(key_shares[&network]));
+      }
     })
     .await;
 }
@@ -196,5 +244,29 @@ async fn verfiy_session_and_active_validators(
   validators.sort();
   assert_eq!(validators, participants);
 
+  // make sure finalization continues as usual after the changes
+  tokio::time::timeout(tokio::time::Duration::from_secs(60), async move {
+    let mut finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
+    while finalized_block <= epoch_block + 2 {
+      tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
+      finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
+    }
+  })
+  .await
+  .unwrap();
+
   // TODO: verfiy key shares as well?
+}
+
+async fn get_active_session(serai: &Serai, network: NetworkId, hash: [u8; 32]) -> u64 {
+  let block_number = serai.block(hash).await.unwrap().unwrap().header.number;
+  let epoch = block_number / EPOCH_INTERVAL;
+
+  // changes should be active in the next session
+  if network == NetworkId::Serai {
+    // it takes 1 extra session for serai net to make the changes active.
+    epoch + 2
+  } else {
+    epoch + 1
+  }
 }

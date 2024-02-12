@@ -2,8 +2,6 @@
 
 use core::marker::PhantomData;
 
-use sp_runtime::print;
-
 use scale::{Encode, Decode};
 use scale_info::TypeInfo;
 
@@ -570,7 +568,6 @@ pub mod pallet {
       account: T::AccountId,
       amount: Amount,
     ) -> Result<bool, DispatchError> {
-      print("in daellocate");
       // Check it's safe to decrease this set's stake by this amount
       let new_total_staked = Self::total_allocated_stake(network)
         .unwrap()
@@ -581,8 +578,6 @@ pub mod pallet {
       if new_total_staked < required_stake {
         Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
       }
-
-      print("passed stake req");
 
       let old_allocation =
         Self::allocation((network, account)).ok_or(Error::<T>::NonExistentValidator)?.0;
@@ -595,8 +590,6 @@ pub mod pallet {
       if (new_allocation != 0) && (new_allocation < allocation_per_key_share) {
         Err(Error::<T>::DeallocationWouldRemoveParticipant)?;
       }
-
-      print("passed DeallocationWouldRemoveParticipant");
 
       let decreased_key_shares =
         (old_allocation / allocation_per_key_share) > (new_allocation / allocation_per_key_share);
@@ -620,8 +613,6 @@ pub mod pallet {
         }
       }
 
-      print("passed bft");
-
       // If we're not in-set, allow immediate deallocation
       if !Self::in_set(network, account) {
         Self::deposit_event(Event::AllocationDecreased {
@@ -630,11 +621,8 @@ pub mod pallet {
           amount,
           delayed_until: None,
         });
-        print("returning ok true");
         return Ok(true);
       }
-
-      print("passed in set");
 
       // Set it to PendingDeallocations, letting it be released upon a future session
       // This unwrap should be fine as this account is active, meaning a session has occurred
@@ -647,8 +635,6 @@ pub mod pallet {
         Some(Amount(existing.0 + amount.0)),
       );
 
-      print("passed PendingDeallocations");
-
       Self::deposit_event(Event::AllocationDecreased {
         validator: account,
         network,
@@ -656,7 +642,6 @@ pub mod pallet {
         delayed_until: Some(to_unlock_on),
       });
 
-      print("return ok false at the end");
       Ok(false)
     }
 
@@ -745,11 +730,6 @@ pub mod pallet {
         .expect("no Serai participants upon rotate_session");
       let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
 
-      print("now session:");
-      print(prior_serai_session.0);
-      print("now validators: ");
-      print(now_validators.len());
-
       // TODO: T::SessionHandler::on_before_session_ending() was here.
       // end the current serai session.
       Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
@@ -760,10 +740,6 @@ pub mod pallet {
       // Update Babe and Grandpa
       let session = prior_serai_session.0 + 1;
       let next_validators = Participants::<T>::get(NetworkId::Serai).unwrap();
-      print("next session:");
-      print(session);
-      print("next validators: ");
-      print(next_validators.len());
       Babe::<T>::enact_epoch_change(
         WeakBoundedVec::force_from(
           now_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),

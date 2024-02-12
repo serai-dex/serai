@@ -143,6 +143,24 @@ services:
     volumes:
       - "./serai/scripts:/scripts"
 
+  serai-fast-epoch:
+    restart: unless-stopped
+    # image: serai:dev
+    profiles:
+      - serai
+    build:
+      context: ../
+      dockerfile: ./orchestration/serai/Dockerfile.fast-epoch
+      args:
+        TAG: serai
+    entrypoint: /scripts/entry-dev.sh
+    volumes:
+      - "./serai/scripts:/scripts"
+    hostname: serai
+    environment:
+      CHAIN: local
+      NAME: node
+
   serai:
     <<: *serai_defaults
     hostname: serai

@@ -35,23 +35,6 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
-  pub async fn extrinsic_failed(&self) -> Result<Vec<serai_abi::system::Event>, SeraiError> {
-    self
-      .0
-      .events(|event| {
-        if let serai_abi::Event::System(event) = event {
-          if matches!(event, serai_abi::system::Event::ExtrinsicFailed { .. }) {
-            Some(event.clone())
-          } else {
-            None
-          }
-        } else {
-          None
-        }
-      })
-      .await
-  }
-
   pub async fn participant_removed_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0
@@ -156,6 +139,22 @@ impl<'a> SeraiValidatorSets<'a> {
         PALLET,
         "Allocations",
         (sp_core::hashing::blake2_128(&(network, key).encode()), (network, key)),
+      )
+      .await
+  }
+
+  pub async fn pending_deallocations(
+    &self,
+    network: NetworkId,
+    account: Public,
+    session: Session,
+  ) -> Result<Option<Amount>, SeraiError> {
+    self
+      .0
+      .storage(
+        PALLET,
+        "PendingDeallocations",
+        (sp_core::hashing::blake2_128(&(network, account).encode()), (network, account, session)),
       )
       .await
   }
