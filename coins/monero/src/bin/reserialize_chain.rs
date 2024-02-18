@@ -2,10 +2,7 @@
 mod binaries {
   pub(crate) use std::sync::Arc;
 
-  pub(crate) use curve25519_dalek::{
-    scalar::Scalar,
-    edwards::{CompressedEdwardsY, EdwardsPoint},
-  };
+  pub(crate) use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
   pub(crate) use multiexp::BatchVerifier;
 
@@ -19,6 +16,8 @@ mod binaries {
     block::Block,
     rpc::{RpcError, Rpc, HttpRpc},
   };
+
+  pub(crate) use monero_generators::decompress_point;
 
   pub(crate) use tokio::task::JoinHandle;
 
@@ -201,13 +200,12 @@ mod binaries {
                 };
 
                 let rpc_point = |point: &str| {
-                  CompressedEdwardsY(
+                  decompress_point(
                     hex::decode(point)
                       .expect("invalid hex for ring member")
                       .try_into()
                       .expect("invalid point len for ring member"),
                   )
-                  .decompress()
                   .expect("invalid point for ring member")
                 };
 

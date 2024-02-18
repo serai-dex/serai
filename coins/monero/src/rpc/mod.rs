@@ -9,7 +9,9 @@ use std_shims::{
 
 use async_trait::async_trait;
 
-use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use curve25519_dalek::edwards::EdwardsPoint;
+
+use monero_generators::decompress_point;
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -86,10 +88,9 @@ fn hash_hex(hash: &str) -> Result<[u8; 32], RpcError> {
 }
 
 fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
-  CompressedEdwardsY(
+  decompress_point(
     rpc_hex(point)?.try_into().map_err(|_| RpcError::InvalidPoint(point.to_string()))?,
   )
-  .decompress()
   .ok_or_else(|| RpcError::InvalidPoint(point.to_string()))
 }
 
@@ -585,12 +586,11 @@ impl<R: RpcConnection> Rpc<R> {
         // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
         // invalid keys may honestly exist on the blockchain
         // Only a recent hard fork checked output keys were valid points
-        let Some(key) = CompressedEdwardsY(
+        let Some(key) = decompress_point(
           rpc_hex(&out.key)?
             .try_into()
             .map_err(|_| RpcError::InvalidNode("non-32-byte point".to_string()))?,
-        )
-        .decompress() else {
+        ) else {
           return Ok(None);
         };
         Ok(
