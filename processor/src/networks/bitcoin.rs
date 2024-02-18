@@ -668,10 +668,16 @@ impl Network for Bitcoin {
         continue;
       }
 
-      // populate the rest of the outputs
+      // populate the outputs with the origin and data
       let presumed_origin = {
+        // This may identify the P2WSH output *embedding the InInstruction* as the origin, which
+        // would be a bit trickier to spend that a traditional output...
+        // There's no risk of the InInstruction going missing as it'd already be on-chain though
+        // We *could* parse out the script *without the InInstruction prefix* and declare that the
+        // origin
+        // TODO
         let spent_output = {
-          let input = &tx.input[0]; // TODO: why use 0?
+          let input = &tx.input[0];
           let mut spent_tx = input.previous_output.txid.as_raw_hash().to_byte_array();
           spent_tx.reverse();
           let mut tx;
