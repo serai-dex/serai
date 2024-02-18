@@ -25,7 +25,7 @@ use crate as dex;
 
 use frame_support::{
   construct_runtime,
-  traits::{ConstU32, ConstU64},
+  traits::{ConstU16, ConstU32, ConstU64},
 };
 
 use sp_core::{H256, sr25519::Public};
@@ -40,7 +40,7 @@ pub use coins_pallet as coins;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
-pub const ORACLE_WINDOWS_SIZE: u32 = 10;
+pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = 10;
 
 construct_runtime!(
   pub enum Test
@@ -95,7 +95,7 @@ impl Config for Test {
   type LPFee = ConstU32<3>; // means 0.3%
   type MaxSwapPathLength = ConstU32<4>;
 
-  type OracleWindowSize = ConstU32<{ ORACLE_WINDOWS_SIZE }>;
+  type MedianPriceWindowLength = ConstU16<{ MEDIAN_PRICE_WINDOW_LENGTH }>;
 
   // 100 is good enough when the main currency has 12 decimals.
   type MintMinLiquidity = ConstU64<100>;

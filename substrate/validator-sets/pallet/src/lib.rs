@@ -759,7 +759,7 @@ pub mod pallet {
       use dex_pallet::HigherPrecisionBalance;
 
       // This is inclusive to an increase in accuracy
-      let sri_per_coin = Dex::<T>::oracle_value(balance.coin).unwrap_or(Amount(0));
+      let sri_per_coin = Dex::<T>::security_oracle_value(balance.coin).unwrap_or(Amount(0));
 
       // See dex-pallet for the reasoning on these
       let coin_decimals = balance.coin.decimals().max(5);

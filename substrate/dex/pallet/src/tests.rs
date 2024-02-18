@@ -1274,37 +1274,46 @@ fn test_median_price() {
     use rand_core::{RngCore, OsRng};
 
     let mut prices = vec![];
-    for _ in 0 .. 100 {
-      prices.push(OsRng.next_u64());
+    for i in 0 .. 100 {
+      // Randomly use an active number
+      if (i != 0) && (OsRng.next_u64() % u64::from(MEDIAN_PRICE_WINDOW_LENGTH / 3) == 0) {
+        let old_index = usize::try_from(
+          OsRng.next_u64() %
+            u64::from(MEDIAN_PRICE_WINDOW_LENGTH) %
+            u64::try_from(prices.len()).unwrap(),
+        )
+        .unwrap();
+        let window_base = prices.len().saturating_sub(MEDIAN_PRICE_WINDOW_LENGTH.into());
+        prices.push(prices[window_base + old_index]);
+      } else {
+        prices.push(OsRng.next_u64());
+      }
     }
     let coin = Coin::Bitcoin;
 
-    let window_size = usize::try_from(ORACLE_WINDOWS_SIZE).unwrap();
-    assert!(prices.len() >= (2 * window_size));
+    assert!(prices.len() >= (2 * usize::from(MEDIAN_PRICE_WINDOW_LENGTH)));
     for i in 0 .. prices.len() {
-      let price = prices[i];
+      let price = Amount(prices[i]);
+
       let n = BlockNumberFor::<Test>::from(u32::try_from(i).unwrap());
-      SpotPriceForBlock::<Test>::set(n, coin, price.to_be_bytes());
+      SpotPriceForBlock::<Test>::set(n, coin, Some(price));
+      Dex::insert_into_median(coin, price);
+      if SpotPricesLength::<Test>::get(coin).unwrap() > MEDIAN_PRICE_WINDOW_LENGTH {
+        let old = n - u64::from(MEDIAN_PRICE_WINDOW_LENGTH);
+        let old_price = SpotPriceForBlock::<Test>::get(old, coin).unwrap();
+        SpotPriceForBlock::<Test>::remove(old, coin);
+        Dex::remove_from_median(coin, old_price);
+      }
 
-      // update oracle prices with this new price
-      let (current_set_size, removed) = Dex::update_oracle_prices(&coin, price, n);
-
-      // get the current window(we clone from prices so our sort doesn't affect the original array)
-      let mut window = if i >= window_size {
-        Vec::from(&prices[(i - window_size + 1) ..= i])
-      } else {
-        Vec::from(&prices[0 ..= i])
-      };
+      // get the current window (cloning so our sort doesn't affect the original array)
+      let window_base = (i + 1).saturating_sub(MEDIAN_PRICE_WINDOW_LENGTH.into());
+      let mut window = Vec::from(&prices[window_base ..= i]);
+      assert!(window.len() <= MEDIAN_PRICE_WINDOW_LENGTH.into());
 
       // get the median
       window.sort();
-      let median_index =
-        if window.len() % 2 == 0 { (window.len() / 2) - 1 } else { window.len() / 2 };
-
-      // update the median price & check
-      Dex::update_median_price(&coin, price, removed, current_set_size, n);
-      let median = Dex::median_price(coin).unwrap_or(Amount(0));
-      assert_eq!(median.0, window[median_index]);
+      let median_index = window.len() / 2;
+      assert_eq!(Dex::median_price(coin).unwrap(), Amount(window[median_index]));
     }
   });
 }

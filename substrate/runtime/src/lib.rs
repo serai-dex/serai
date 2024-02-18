@@ -50,7 +50,7 @@ use sp_runtime::{
 use primitives::{PublicKey, AccountLookup, SubstrateAmount};
 
 use support::{
-  traits::{ConstU8, ConstU32, ConstU64, Contains},
+  traits::{ConstU8, ConstU16, ConstU32, ConstU64, Contains},
   weights::{
     constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
     IdentityFee, Weight,
@@ -124,14 +124,15 @@ pub const DAYS: BlockNumber = HOURS * 24;
 
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 
-/// This needs to be long enough for arbitrage to occur and make holding
-/// any fake price up sufficiently unprofitable.
-pub const ORACLE_WINDOW_SIZE: u32 = 1000;
+/// This needs to be long enough for arbitrage to occur and make holding any fake price up
+/// sufficiently unrealistic.
+#[allow(clippy::cast_possible_truncation)]
+pub const ARBITRAGE_TIME: u16 = (2 * HOURS) as u16;
 
-/// Since median price is the middle price in our window, we have to double
-/// the duration to wait 'ORACLE_WINDOW_SIZE' times and +1 to make it odd, so we don't constantly
-/// end up with 2 possible median prices.
-pub const MEDIAN_PRICE_WINDOW_SIZE: u32 = (2 * ORACLE_WINDOW_SIZE) + 1;
+/// Since we use the median price, double the window length.
+///
+/// We additionally +1 so there is a true median.
+pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = (2 * ARBITRAGE_TIME) + 1;
 
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
@@ -255,7 +256,7 @@ impl dex::Config for Runtime {
 
   type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
 
-  type OracleWindowSize = ConstU32<{ MEDIAN_PRICE_WINDOW_SIZE }>;
+  type MedianPriceWindowLength = ConstU16<{ MEDIAN_PRICE_WINDOW_LENGTH }>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
 }

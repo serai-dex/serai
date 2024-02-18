@@ -9,11 +9,11 @@ macro_rules! serai_test {
     $(
       #[tokio::test]
       async fn $name() {
+        use std::collections::HashMap;
         use dockertest::{
           PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
           TestBodySpecification, DockerTest,
         };
-        use std::collections::HashMap;
 
         serai_docker_tests::build("serai".to_string());
 

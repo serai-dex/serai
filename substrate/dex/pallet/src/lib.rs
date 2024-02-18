@@ -146,7 +146,7 @@ pub mod pallet {
 
     /// Last N number of blocks that oracle keeps track of the prices.
     #[pallet::constant]
-    type OracleWindowSize: Get<u32>;
+    type MedianPriceWindowLength: Get<u16>;
 
     /// Weight information for extrinsics in this pallet.
     type WeightInfo: WeightInfo;
@@ -160,98 +160,154 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn spot_price_for_block)]
   pub type SpotPriceForBlock<T: Config> =
-    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, [u8; 8], ValueQuery>;
+    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, Amount, OptionQuery>;
 
-  /// Moving window of oracle prices.
+  /// Moving window of prices from each block.
   ///
-  /// The second [u8; 8] key is the amount's big endian bytes, and u16 is the amount of inclusions
-  /// in this multi-set. Since the underlying map is lexicographically sorted, this map stores
-  /// amounts from low to high.
+  /// The [u8; 8] key is the amount's big endian bytes, and u16 is the amount of inclusions in this
+  /// multi-set. Since the underlying map is lexicographically sorted, this map stores amounts from
+  /// low to high.
   #[pallet::storage]
-  pub type OraclePrices<T: Config> =
+  pub type SpotPrices<T: Config> =
     StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], u16, OptionQuery>;
 
-  /// Same as `OraclePrices` but in reverse order, since the keys we save to this map are
-  /// lexicographically reversed. Hence this map stores the amounts from high to low.
+  // SpotPrices, yet with keys stored in reverse lexicographic order.
   #[pallet::storage]
-  pub type OraclePricesReverse<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], u16, OptionQuery>;
+  pub type ReverseSpotPrices<T: Config> =
+    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], (), OptionQuery>;
 
-  /// Current size of the `OraclePrices` and `OraclePricesReverse` maps.
+  /// Current length of the `SpotPrices` map.
   #[pallet::storage]
-  #[pallet::getter(fn oracle_set_size)]
-  pub type OracleSetSize<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
+  pub type SpotPricesLength<T: Config> = StorageMap<_, Identity, Coin, u16, OptionQuery>;
 
+  /// Current position of the median within the `SpotPrices` map;
   #[pallet::storage]
-  #[pallet::getter(fn oracle_value)]
-  pub type OracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+  pub type CurrentMedianPosition<T: Config> = StorageMap<_, Identity, Coin, u16, OptionQuery>;
 
-  /// Current median price of the prices in the oracle prices maps at any given time.
+  /// Current median price of the prices in the `SpotPrices` map at any given time.
   #[pallet::storage]
   #[pallet::getter(fn median_price)]
   pub type MedianPrice<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
-  impl<T: Config> Pallet<T> {
-    /// Update the current median according to new state of oracle prices.
-    pub fn update_median_price(
-      coin: &Coin,
-      inserted: u64,
-      removed: Option<u64>,
-      current_size: u64,
-      n: BlockNumberFor<T>,
-    ) {
-      let current = Self::median_price(coin).unwrap_or(Amount(0)).0;
 
-      // if we didn't remove  an amount from the window, just means we still didn't hit
-      // the full size of the window.
-      let next = if removed.is_none() {
-        if current_size == 1 {
-          let raw_key = OraclePrices::<T>::hashed_key_for(coin, current.to_be_bytes());
-          OraclePrices::<T>::iter_key_prefix_from(coin, raw_key).next()
-        } else if current_size % 2 == 1 {
-          let prev = u64::from_be_bytes(Self::spot_price_for_block(n - 1u32.into(), coin));
-          if prev >= current && inserted >= current {
-            let raw_key = OraclePrices::<T>::hashed_key_for(coin, current.to_be_bytes());
-            OraclePrices::<T>::iter_key_prefix_from(coin, raw_key).next()
-          } else if prev <= current && inserted <= current {
-            let reversed = reverse_lexicographic_order(current.to_be_bytes());
-            let raw_key = OraclePricesReverse::<T>::hashed_key_for(coin, reversed);
-            OraclePricesReverse::<T>::iter_key_prefix_from(coin, raw_key)
-              .next()
-              .map(reverse_lexicographic_order)
-          } else {
-            // no change if prev was smaller and inserted was bigger
-            Some(current.to_be_bytes())
-          }
-        } else {
-          // if there is even amount of elements, there's two candidates and the current one
-          // remains a valid candidate.
-          Some(current.to_be_bytes())
+  /// The price used for evaluating economic security, which is the highest observed median price.
+  #[pallet::storage]
+  #[pallet::getter(fn security_oracle_value)]
+  pub type SecurityOracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+
+  impl<T: Config> Pallet<T> {
+    fn restore_median(
+      coin: Coin,
+      mut current_median_pos: u16,
+      mut current_median: Amount,
+      length: u16,
+    ) {
+      // 1 -> 0 (the only value)
+      // 2 -> 1 (the higher element), 4 -> 2 (the higher element)
+      // 3 -> 1 (the true median)
+      let target_median_pos = length / 2;
+      while current_median_pos < target_median_pos {
+        // Get the amount of presences for the current element
+        let key = current_median.0.to_be_bytes();
+        let presences = SpotPrices::<T>::get(coin, key).unwrap();
+        // > is correct, not >=.
+        // Consider:
+        // - length = 1, current_median_pos = 0, presences = 1, target_median_pos = 0
+        // - length = 2, current_median_pos = 0, presences = 2, target_median_pos = 1
+        // - length = 2, current_median_pos = 0, presences = 1, target_median_pos = 1
+        if (current_median_pos + presences) > target_median_pos {
+          break;
         }
-      } else {
-        let removed = removed.unwrap();
-        // if inserted is higher and removed is lower, we just need to go to the next key on the
-        // low to high map to find the current median.
-        if inserted > current && removed <= current {
-          let raw_key = OraclePrices::<T>::hashed_key_for(coin, current.to_be_bytes());
-          OraclePrices::<T>::iter_key_prefix_from(coin, raw_key).next()
-        } else if inserted < current && removed >= current {
-          // if inserted is lower and removed is higher, we go to next key on the reverse map.
-          let reversed = reverse_lexicographic_order(current.to_be_bytes());
-          let raw_key = OraclePricesReverse::<T>::hashed_key_for(coin, reversed);
-          OraclePricesReverse::<T>::iter_key_prefix_from(coin, raw_key)
-            .next()
-            .map(reverse_lexicographic_order)
-        } else {
-          // no change if inserted and removed both in same side(both smaller or bigger).
-          Some(current.to_be_bytes())
+        current_median_pos += presences;
+
+        let key = SpotPrices::<T>::hashed_key_for(coin, key);
+        let next_price = SpotPrices::<T>::iter_key_prefix_from(coin, key).next().unwrap();
+        current_median = Amount(u64::from_be_bytes(next_price));
+      }
+
+      while current_median_pos > target_median_pos {
+        // Get the next element
+        let key = reverse_lexicographic_order(current_median.0.to_be_bytes());
+        let key = ReverseSpotPrices::<T>::hashed_key_for(coin, key);
+        let next_price = ReverseSpotPrices::<T>::iter_key_prefix_from(coin, key).next().unwrap();
+        let next_price = reverse_lexicographic_order(next_price);
+        current_median = Amount(u64::from_be_bytes(next_price));
+
+        // Get its amount of presences
+        let presences = SpotPrices::<T>::get(coin, current_median.0.to_be_bytes()).unwrap();
+        // Adjust from next_value_first_pos to this_value_first_pos by substracting this value's
+        // amount of times present
+        current_median_pos -= presences;
+
+        if current_median_pos <= target_median_pos {
+          break;
         }
+      }
+
+      CurrentMedianPosition::<T>::set(coin, Some(current_median_pos));
+      MedianPrice::<T>::set(coin, Some(current_median));
+    }
+
+    pub(crate) fn insert_into_median(coin: Coin, amount: Amount) {
+      let new_quantity_of_presences =
+        SpotPrices::<T>::get(coin, amount.0.to_be_bytes()).unwrap_or(0) + 1;
+      SpotPrices::<T>::set(coin, amount.0.to_be_bytes(), Some(new_quantity_of_presences));
+      if new_quantity_of_presences == 1 {
+        ReverseSpotPrices::<T>::set(
+          coin,
+          reverse_lexicographic_order(amount.0.to_be_bytes()),
+          Some(()),
+        );
+      }
+
+      let new_length = SpotPricesLength::<T>::get(coin).unwrap_or(0) + 1;
+      SpotPricesLength::<T>::set(coin, Some(new_length));
+
+      let Some(current_median) = MedianPrice::<T>::get(coin) else {
+        MedianPrice::<T>::set(coin, Some(amount));
+        CurrentMedianPosition::<T>::set(coin, Some(0));
+        return;
       };
 
-      // We should always have a next since we are follwing the items in the key lists except
-      // very specific scenario which `current_size` is `1` and inserted value and current is the
-      // same value, in which next is already the current.
-      let next = next.unwrap_or(current.to_be_bytes());
-      MedianPrice::<T>::set(coin, Some(Amount(u64::from_be_bytes(next))));
+      let mut current_median_pos = CurrentMedianPosition::<T>::get(coin).unwrap();
+      // If this is being inserted before the current median, the current median's position has
+      // increased
+      if amount < current_median {
+        current_median_pos += 1;
+      }
+      Self::restore_median(coin, current_median_pos, current_median, new_length);
+    }
+
+    pub(crate) fn remove_from_median(coin: Coin, amount: Amount) {
+      let mut current_median = MedianPrice::<T>::get(coin).unwrap();
+
+      let mut current_median_pos = CurrentMedianPosition::<T>::get(coin).unwrap();
+      if amount < current_median {
+        current_median_pos -= 1;
+      }
+
+      let new_quantity_of_presences =
+        SpotPrices::<T>::get(coin, amount.0.to_be_bytes()).unwrap() - 1;
+      if new_quantity_of_presences == 0 {
+        let normal_key = amount.0.to_be_bytes();
+        SpotPrices::<T>::remove(coin, normal_key);
+        ReverseSpotPrices::<T>::remove(coin, reverse_lexicographic_order(amount.0.to_be_bytes()));
+
+        // If we've removed the current item at this position, update to the item now at this
+        // position
+        if amount == current_median {
+          let key = SpotPrices::<T>::hashed_key_for(coin, normal_key);
+          current_median = Amount(u64::from_be_bytes(
+            SpotPrices::<T>::iter_key_prefix_from(coin, key).next().unwrap(),
+          ));
+        }
+      } else {
+        SpotPrices::<T>::set(coin, amount.0.to_be_bytes(), Some(new_quantity_of_presences));
+      }
+
+      let new_length = SpotPricesLength::<T>::get(coin).unwrap() - 1;
+      SpotPricesLength::<T>::set(coin, Some(new_length));
+
+      Self::restore_median(coin, current_median_pos, current_median, new_length);
     }
   }
 
@@ -335,12 +391,6 @@ pub mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
-      // assert that median price windows size can fit into u16. Otherwise number of observants
-      // for a price in the `OraclePrices` map can overflow
-      // We don't want to make this const directly a u16 because it is used the block number
-      // calculations (which are done as u32s)
-      u16::try_from(T::OracleWindowSize::get()).unwrap();
-
       // create the pools
       for coin in &self.pools {
         Pallet::<T>::create_pool(*coin).unwrap();
@@ -433,20 +483,22 @@ pub mod pallet {
           } else {
             0
           };
-        let sri_per_coin_bytes = sri_per_coin.to_be_bytes();
-        SpotPriceForBlock::<T>::set(n, coin, sri_per_coin_bytes);
 
-        // update oracle prices with this new price
-        let (current_set_size, removed) = Self::update_oracle_prices(&coin, sri_per_coin, n);
-
-        // update the median price
-        Self::update_median_price(&coin, sri_per_coin, removed, current_set_size, n);
+        let sri_per_coin = Amount(sri_per_coin);
+        SpotPriceForBlock::<T>::set(n, coin, Some(sri_per_coin));
+        Self::insert_into_median(coin, sri_per_coin);
+        if SpotPricesLength::<T>::get(coin).unwrap() > T::MedianPriceWindowLength::get() {
+          let old = n - T::MedianPriceWindowLength::get().into();
+          let old_price = SpotPriceForBlock::<T>::get(old, coin).unwrap();
+          SpotPriceForBlock::<T>::remove(old, coin);
+          Self::remove_from_median(coin, old_price);
+        }
 
         // update the oracle value
         let median = Self::median_price(coin).unwrap_or(Amount(0));
-        let oracle_value = Self::oracle_value(coin).unwrap_or(Amount(0));
+        let oracle_value = Self::security_oracle_value(coin).unwrap_or(Amount(0));
         if median > oracle_value {
-          OracleValue::<T>::set(coin, Some(median));
+          SecurityOracleValue::<T>::set(coin, Some(median));
         }
       }
     }
@@ -478,64 +530,8 @@ pub mod pallet {
     pub fn on_new_session(network: NetworkId) {
       // reset the oracle value
       for coin in network.coins() {
-        OracleValue::<T>::set(*coin, Self::median_price(coin));
+        SecurityOracleValue::<T>::set(*coin, Self::median_price(coin));
       }
-    }
-
-    /// Updates the oracle price lists for the new price
-    pub(crate) fn update_oracle_prices(
-      coin: &Coin,
-      price: u64,
-      n: BlockNumberFor<T>,
-    ) -> (u64, Option<u64>) {
-      let price_bytes = price.to_be_bytes();
-
-      // Include this spot price into low-to-high multiset
-      {
-        let observed = OraclePrices::<T>::get(coin, price_bytes).unwrap_or(0);
-        OraclePrices::<T>::set(coin, price_bytes, Some(observed + 1));
-      }
-
-      // into high-to-low multiset
-      {
-        let reverse = reverse_lexicographic_order(price_bytes);
-        let observed = OraclePricesReverse::<T>::get(coin, reverse).unwrap_or(0);
-        OraclePricesReverse::<T>::set(coin, reverse, Some(observed + 1));
-      }
-
-      // get the current set size
-      let current_set_size = Self::oracle_set_size(coin).unwrap_or(0) + 1;
-
-      // pop the earliest key from the window once we reach its full size.
-      let removed = if current_set_size > T::OracleWindowSize::get().into() {
-        let start_of_window = n - T::OracleWindowSize::get().into();
-        let start_spot_price = Self::spot_price_for_block(start_of_window, coin);
-        SpotPriceForBlock::<T>::remove(start_of_window, coin);
-        // Remove this price from the low-to-high multiset
-        OraclePrices::<T>::mutate_exists(coin, start_spot_price, |v| {
-          *v = Some(v.unwrap() - 1);
-          if *v == Some(0) {
-            *v = None;
-          }
-        });
-
-        // Remove this price from the high-to-low multiset
-        let reverse = reverse_lexicographic_order(start_spot_price);
-        OraclePricesReverse::<T>::mutate_exists(coin, reverse, |v| {
-          *v = Some(v.unwrap() - 1);
-          if *v == Some(0) {
-            *v = None;
-          }
-        });
-        Some(u64::from_be_bytes(start_spot_price))
-      } else {
-        // we only save the set size when it is actually changed, since it doesn't change
-        // once it reached it is full size.
-        OracleSetSize::<T>::set(coin, Some(current_set_size));
-        None
-      };
-
-      (current_set_size, removed)
     }
   }
 

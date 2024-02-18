@@ -7687,6 +7687,7 @@ dependencies = [
  "borsh",
  "frame-support",
  "parity-scale-codec",
+ "rand_core",
  "scale-info",
  "serde",
  "sp-application-crypto",

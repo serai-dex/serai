@@ -40,6 +40,9 @@ pub use account::*;
 mod tx;
 pub use tx::*;
 
+pub type BlockNumber = u64;
+pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
+
 #[cfg(feature = "borsh")]
 pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const B: u32>(
   bounded: &BoundedVec<T, ConstU32<B>>,
@@ -160,137 +163,39 @@ pub fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
 #[test]
 fn test_reverse_lexicographic_order() {
   TestExternalities::default().execute_with(|| {
-    // Set up Storage
+    use rand_core::{RngCore, OsRng};
+
     struct Storage;
     impl StorageInstance for Storage {
       fn pallet_prefix() -> &'static str {
         "LexicographicOrder"
       }
 
-      const STORAGE_PREFIX: &'static str = "storaage";
+      const STORAGE_PREFIX: &'static str = "storage";
     }
+    type Map = StorageMap<Storage, Identity, [u8; 8], (), OptionQuery>;
+
     struct StorageReverse;
     impl StorageInstance for StorageReverse {
       fn pallet_prefix() -> &'static str {
         "LexicographicOrder"
       }
 
-      const STORAGE_PREFIX: &'static str = "storaagereverse";
+      const STORAGE_PREFIX: &'static str = "storagereverse";
     }
-
-    // Maps
-    type Map = StorageMap<Storage, Identity, [u8; 8], u16, OptionQuery>;
-    type MapReverse = StorageMap<StorageReverse, Identity, [u8; 8], u16, OptionQuery>;
+    type MapReverse = StorageMap<StorageReverse, Identity, [u8; 8], (), OptionQuery>;
 
     // populate the maps
-    let amounts: Vec<u64> = vec![
-      89094597672602079,
-      9812545476752143188,
-      735020655991311,
-      9285083041886385685,
-      53762221139194,
-      13946534802749779967,
-      109372747683,
-      11819301306422986078,
-      737471142364463,
-      5198787146240868890,
-      12664490967510575660,
-      17980533125308,
-      13875105403707512416,
-      8588894095664203595,
-      4339496150923070988,
-      4231647914743370582,
-      10647602703415832559,
-      14880694170381462414,
-      6096962179554666106,
-      6659285945129437525,
-      16456564335889698351,
-      13845959324357347,
-      1648569167474441524,
-      13133695496521888158,
-      7616461337984068322,
-      12726729663511294792,
-      8000797058089650061,
-      15005828517346690662,
-      1793588,
-      7220477668898016104,
-      16181904040794627088,
-      14797634045215342682,
-      19639150764444,
-      8177870148422964533,
-      581491679308004752,
-      4314801822544279657,
-      94651700756056691,
-      96186224808132,
-      8410150218145059327,
-      14985557922391323432,
-      11352279857984687689,
-      34328309207209,
-      5611615379596223089,
-      18125943563248874553,
-      17533195941173182568,
-      18169879009154892725,
-      6008387172344065013,
-      2998266057356919988,
-      2644053484132935149,
-      11547298436182772089,
-      4586345667609119481,
-      6172439446948403799,
-      10626959711571315184,
-      12907610780314711856,
-      17196831155500322373,
-      15974476473205372690,
-      14655680501878891324,
-      6726170126210474968,
-      57886895824576419,
-      4617815046373141865,
-      17316901742166242228,
-      13898507508355951049,
-      10252715777491496804,
-      8757446702634329168,
-      3825982926411780397,
-      5429203804114305693,
-      14146937173155582346,
-      4166019698606353622,
-      11249167927606315147,
-      18015207767097956850,
-      13660375940391754802,
-      564863094733853289,
-      9530638362187710906,
-      3188632306609925749,
-      18113494183422781593,
-      1835777136545799569,
-      6632144245864749829,
-      8626951292883317778,
-      8029065522637372030,
-      5223975568957781514,
-      8948791824790231783,
-      8608930334805227719,
-      4018500067378149536,
-      3096559742628404701,
-      12236725434494870905,
-      1073499773668488616,
-      10723113063135353762,
-      13242954556652696261,
-      13691823023000210372,
-      12624898660330224628,
-      3250859179908177396,
-      13075208133426449118,
-      18011040994576979536,
-      1915235854583868831,
-      12468256923643148798,
-      95752683624580217,
-      1724650070088393290,
-      8239892706949648329,
-      7652806705326215966,
-      82960,
-    ];
+    let mut amounts = vec![];
+    for _ in 0 .. 100 {
+      amounts.push(OsRng.next_u64());
+    }
 
-    let mut amounts_sorted: Vec<u64> = amounts.clone();
+    let mut amounts_sorted = amounts.clone();
     amounts_sorted.sort();
     for a in amounts {
-      Map::set(a.to_be_bytes(), Some(1));
-      MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(1));
+      Map::set(a.to_be_bytes(), Some(()));
+      MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(()));
     }
 
     // retrive back and check whether they are sorted as expected
@@ -309,6 +214,3 @@ fn test_reverse_lexicographic_order() {
     }
   });
 }
-
-pub type BlockNumber = u64;
-pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
