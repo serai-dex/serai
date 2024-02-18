@@ -7,13 +7,9 @@ use dockertest::{
 mod bitcoin {
   use std::sync::Arc;
 
-  use super::*;
-  use crate::{
-    networks::{Network, Bitcoin, Output, OutputType, Block},
-    tests::scanner::new_scanner,
-    multisigs::scanner::ScannerEvent,
-  };
-  use sp_application_crypto::Pair;
+  use rand_core::OsRng;
+
+  use frost::Participant;
 
   use bitcoin_serai::bitcoin::{
     secp256k1::{SECP256K1, SecretKey, Message},
@@ -28,14 +24,22 @@ mod bitcoin {
     opcodes::all::{OP_SHA256, OP_EQUALVERIFY},
   };
 
-  use frost::Participant;
-  use rand_core::OsRng;
   use scale::Encode;
+  use sp_application_crypto::Pair;
   use serai_client::{in_instructions::primitives::Shorthand, primitives::insecure_pair_from_name};
-  use serai_db::MemDb;
+
   use tokio::{
     time::{timeout, Duration},
     sync::Mutex,
+  };
+
+  use serai_db::MemDb;
+
+  use super::*;
+  use crate::{
+    networks::{Network, Bitcoin, Output, OutputType, Block},
+    tests::scanner::new_scanner,
+    multisigs::scanner::ScannerEvent,
   };
 
   #[test]
@@ -55,20 +59,20 @@ mod bitcoin {
     docker.run(|ops| async move {
       let btc = bitcoin(&ops).await;
 
-      // generate a musig address to receive the funds
+      // generate a multisig address to receive the coins
       let mut keys = frost::tests::key_gen::<_, <Bitcoin as Network>::Curve>(&mut OsRng)
         .remove(&Participant::new(1).unwrap())
         .unwrap();
       <Bitcoin as Network>::tweak_keys(&mut keys);
       let group_key = keys.group_key();
-      let address = <Bitcoin as Network>::external_address(group_key);
+      let serai_btc_address = <Bitcoin as Network>::external_address(group_key);
 
-      // btc key pair to spend from.
+      // btc key pair to send from
       let private_key = PrivateKey::new(SecretKey::new(&mut rand_core::OsRng), BNetwork::Regtest);
       let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
       let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
 
-      // make some funds to spent
+      // get unlocked coins
       let new_block = btc.get_latest_block_number().await.unwrap() + 1;
       btc
         .rpc
@@ -81,7 +85,7 @@ mod bitcoin {
       let mut scanner = new_scanner(&btc, &db, group_key, &Arc::new(Mutex::new(true))).await;
 
       // make a transfer instruction & hash it for script.
-      let serai_address = insecure_pair_from_name("dadadadada").public();
+      let serai_address = insecure_pair_from_name("alice").public();
       let message = Shorthand::transfer(None, serai_address.into()).encode();
       let mut data = Sha256::engine();
       data.input(&message);
@@ -97,8 +101,8 @@ mod bitcoin {
         script.push_instruction(i.unwrap());
       }
 
+      // Create the first transaction
       let tx = btc.get_block(new_block).await.unwrap().txdata.swap_remove(0);
-      let dust = BAmount::from_sat(bitcoin_serai::wallet::DUST);
       let mut tx = Transaction {
         version: Version(2),
         lock_time: LockTime::ZERO,
@@ -108,52 +112,40 @@ mod bitcoin {
           sequence: Sequence(u32::MAX),
           witness: Witness::default(),
         }],
-        output: vec![
-          TxOut {
-            value: tx.output[0].value - dust - BAmount::from_sat(10000),
-            script_pubkey: main_addr.script_pubkey(),
-          },
-          TxOut { value: dust, script_pubkey: ScriptBuf::new_p2wsh(&script.wscript_hash()) },
-        ],
+        output: vec![TxOut {
+          value: tx.output[0].value - BAmount::from_sat(10000),
+          script_pubkey: ScriptBuf::new_p2wsh(&script.wscript_hash()),
+        }],
       };
       tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, 0, &private_key);
-      let witness_value = tx.output[1].value;
+      let initial_output_value = tx.output[0].value;
 
       // send it
       btc.rpc.send_raw_transaction(&tx).await.unwrap();
 
-      // make another tx that spends both outputs
+      // Chain a transaction spending it with the InInstruction embedded in the input
       let mut tx = Transaction {
         version: Version(2),
         lock_time: LockTime::ZERO,
-        input: vec![
-          TxIn {
-            previous_output: OutPoint { txid: tx.txid(), vout: 0 },
-            script_sig: Script::new().into(),
-            sequence: Sequence(u32::MAX),
-            witness: Witness::default(),
-          },
-          TxIn {
-            previous_output: OutPoint { txid: tx.txid(), vout: 1 },
-            script_sig: Script::new().into(),
-            sequence: Sequence(u32::MAX),
-            witness: Witness::new(),
-          },
-        ],
+        input: vec![TxIn {
+          previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+          script_sig: Script::new().into(),
+          sequence: Sequence(u32::MAX),
+          witness: Witness::new(),
+        }],
         output: vec![TxOut {
-          value: tx.output[0].value + witness_value - BAmount::from_sat(10000),
-          script_pubkey: address.as_ref().script_pubkey(),
+          value: tx.output[0].value - BAmount::from_sat(10000),
+          script_pubkey: serai_btc_address.as_ref().script_pubkey(),
         }],
       };
-      // sign the first input
-      tx.input[0].script_sig = Bitcoin::sign_btc_input_for_p2pkh(&tx, 0, &private_key);
 
       // add the witness script
+      // This is the standard script with an extra argument of the InInstruction
       let mut sig = SECP256K1
         .sign_ecdsa_low_r(
           &Message::from(
             SighashCache::new(&tx)
-              .p2wsh_signature_hash(1, &script, witness_value, EcdsaSighashType::All)
+              .p2wsh_signature_hash(0, &script, initial_output_value, EcdsaSighashType::All)
               .unwrap()
               .to_raw_hash(),
           ),
@@ -162,14 +154,16 @@ mod bitcoin {
         .serialize_der()
         .to_vec();
       sig.push(1);
-      tx.input[1].witness.push(sig);
-      tx.input[1].witness.push(public_key.inner.serialize());
-      tx.input[1].witness.push(message.clone());
-      tx.input[1].witness.push(script);
+      tx.input[0].witness.push(sig);
+      tx.input[0].witness.push(public_key.inner.serialize());
+      tx.input[0].witness.push(message.clone());
+      tx.input[0].witness.push(script);
 
-      // send it
-      let block_number = btc.get_latest_block_number().await.unwrap() + 1;
+      // Send it immediately, as Bitcoin allows mempool chaining
       btc.rpc.send_raw_transaction(&tx).await.unwrap();
+
+      // Mine enough confirmations
+      let block_number = btc.get_latest_block_number().await.unwrap() + 1;
       for _ in 0 .. <Bitcoin as Network>::CONFIRMATIONS {
         btc.mine_block().await;
       }
@@ -189,7 +183,8 @@ mod bitcoin {
           _ => panic!("unexpectedly got eventuality completion"),
         };
 
-      // verify that message is correct
+      // verify that the amount and message are correct
+      assert_eq!(outputs[0].balance().amount.0, tx.output[0].value.to_sat());
       assert_eq!(outputs[0].data(), message);
     });
   }

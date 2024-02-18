@@ -396,39 +396,6 @@ impl Bitcoin {
     Ok(Fee(fee.max(1)))
   }
 
-  #[cfg(test)]
-  pub fn sign_btc_input_for_p2pkh(
-    tx: &Transaction,
-    input_index: usize,
-    private_key: &PrivateKey,
-  ) -> ScriptBuf {
-    let public_key = PublicKey::from_private_key(SECP256K1, private_key);
-    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
-
-    let mut der = SECP256K1
-      .sign_ecdsa_low_r(
-        &Message::from(
-          SighashCache::new(tx)
-            .legacy_signature_hash(
-              input_index,
-              &main_addr.script_pubkey(),
-              EcdsaSighashType::All.to_u32(),
-            )
-            .unwrap()
-            .to_raw_hash(),
-        ),
-        &private_key.inner,
-      )
-      .serialize_der()
-      .to_vec();
-    der.push(1);
-
-    ScriptBuf::builder()
-      .push_slice(PushBytesBuf::try_from(der).unwrap())
-      .push_key(&public_key)
-      .into_script()
-  }
-
   async fn make_signable_transaction(
     &self,
     block_number: usize,
@@ -534,6 +501,39 @@ impl Bitcoin {
 
     data.truncate(MAX_DATA_LEN.try_into().unwrap());
     data
+  }
+
+  #[cfg(test)]
+  pub fn sign_btc_input_for_p2pkh(
+    tx: &Transaction,
+    input_index: usize,
+    private_key: &PrivateKey,
+  ) -> ScriptBuf {
+    let public_key = PublicKey::from_private_key(SECP256K1, private_key);
+    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+
+    let mut der = SECP256K1
+      .sign_ecdsa_low_r(
+        &Message::from(
+          SighashCache::new(tx)
+            .legacy_signature_hash(
+              input_index,
+              &main_addr.script_pubkey(),
+              EcdsaSighashType::All.to_u32(),
+            )
+            .unwrap()
+            .to_raw_hash(),
+        ),
+        &private_key.inner,
+      )
+      .serialize_der()
+      .to_vec();
+    der.push(1);
+
+    ScriptBuf::builder()
+      .push_slice(PushBytesBuf::try_from(der).unwrap())
+      .push_key(&public_key)
+      .into_script()
   }
 }
 
