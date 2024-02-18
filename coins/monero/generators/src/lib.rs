@@ -9,7 +9,7 @@ use std_shims::{sync::OnceLock, vec::Vec};
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint, CompressedEdwardsY};
+use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint};
 
 use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
@@ -18,7 +18,10 @@ mod varint;
 use varint::write_varint;
 
 mod hash_to_point;
-pub use hash_to_point::hash_to_point;
+pub use hash_to_point::{hash_to_point, decompress_point};
+
+#[cfg(test)]
+mod tests;
 
 fn hash(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
@@ -29,10 +32,7 @@ static H_CELL: OnceLock<DalekPoint> = OnceLock::new();
 #[allow(non_snake_case)]
 pub fn H() -> DalekPoint {
   *H_CELL.get_or_init(|| {
-    CompressedEdwardsY(hash(&EdwardsPoint::generator().to_bytes()))
-      .decompress()
-      .unwrap()
-      .mul_by_cofactor()
+    decompress_point(hash(&EdwardsPoint::generator().to_bytes())).unwrap().mul_by_cofactor()
   })
 }
 

@@ -1,7 +1,8 @@
 use hex_literal::hex;
 use rand_core::OsRng;
 
-use curve25519_dalek::{scalar::Scalar, edwards::CompressedEdwardsY};
+use curve25519_dalek::scalar::Scalar;
+use monero_generators::decompress_point;
 use multiexp::BatchVerifier;
 
 use crate::{
@@ -14,7 +15,7 @@ mod plus;
 #[test]
 fn bulletproofs_vector() {
   let scalar = |scalar| Scalar::from_canonical_bytes(scalar).unwrap();
-  let point = |point| CompressedEdwardsY(point).decompress().unwrap();
+  let point = |point| decompress_point(point).unwrap();
 
   // Generated from Monero
   assert!(Bulletproofs::Original(OriginalStruct {

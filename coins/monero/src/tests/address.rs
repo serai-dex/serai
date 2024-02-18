@@ -2,7 +2,9 @@ use hex_literal::hex;
 
 use rand_core::{RngCore, OsRng};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY};
+use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+
+use monero_generators::decompress_point;
 
 use crate::{
   random_scalar,
@@ -142,14 +144,8 @@ fn featured_vectors() {
       }
       _ => panic!("Unknown network"),
     };
-    let spend = CompressedEdwardsY::from_slice(&hex::decode(vector.spend).unwrap())
-      .unwrap()
-      .decompress()
-      .unwrap();
-    let view = CompressedEdwardsY::from_slice(&hex::decode(vector.view).unwrap())
-      .unwrap()
-      .decompress()
-      .unwrap();
+    let spend = decompress_point(hex::decode(vector.spend).unwrap().try_into().unwrap()).unwrap();
+    let view = decompress_point(hex::decode(vector.view).unwrap().try_into().unwrap()).unwrap();
 
     let addr = MoneroAddress::from_str(network, &vector.address).unwrap();
     assert_eq!(addr.spend, spend);

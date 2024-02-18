@@ -16,7 +16,7 @@ use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-pub use monero_generators::H;
+pub use monero_generators::{H, decompress_point};
 
 mod merkle;
 
