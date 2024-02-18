@@ -1,0 +1,21 @@
+[package]
+name = "rocksdb"
+version = "0.21.0"
+description = "rocksdb which patches to the latest update"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/rocksdb"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.63"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rocksdb = "0.22"
+
+[features]
+jemalloc = ["rocksdb/jemalloc"]
+snappy = ["rocksdb/snappy"]

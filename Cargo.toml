@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   # Version patches
   "patches/zstd",
+  "patches/rocksdb",
   "patches/proc-macro-crate",
 
   # std patches
@@ -112,6 +113,8 @@ dockertest = { git = "https://github.com/kayabaNerve/dockertest-rs", branch = "a
 
 # wasmtime pulls in an old version for this
 zstd = { path = "patches/zstd" }
+# substrate pulls in an old version for this
+rocksdb = { path = "patches/rocksdb" }
 # proc-macro-crate 2 binds to an old version of toml for msrv so we patch to 3
 proc-macro-crate = { path = "patches/proc-macro-crate" }
 
