@@ -346,9 +346,9 @@ impl Processor {
 
   /// Receive a message from the coordinator as a processor.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    // Set a timeout of 15 minutes to allow effectively any protocol to occur without a fear of
+    // Set a timeout of 20 minutes to allow effectively any protocol to occur without a fear of
     // an arbitrary timeout cutting it short
-    tokio::time::timeout(Duration::from_secs(15 * 60), self.recv_message_inner()).await.unwrap()
+    tokio::time::timeout(Duration::from_secs(20 * 60), self.recv_message_inner()).await.unwrap()
   }
 
   pub async fn set_substrate_key(
