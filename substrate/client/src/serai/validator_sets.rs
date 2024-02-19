@@ -159,6 +159,13 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn active_network_validators(
+    &self,
+    network: NetworkId,
+  ) -> Result<Vec<Public>, SeraiError> {
+    self.0.serai.active_network_validators(network).await
+  }
+
   // TODO: Store these separately since we almost never need both at once?
   pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await

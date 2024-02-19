@@ -688,7 +688,7 @@ pub mod pallet {
     }
 
     pub fn retire_set(set: ValidatorSet) {
-      // If the prior set didn't report, emit they're retired now
+      // If the prior prior set didn't report, emit they're retired now
       if PendingSlashReport::<T>::get(set.network).is_some() {
         Self::deposit_event(Event::SetRetired {
           set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },

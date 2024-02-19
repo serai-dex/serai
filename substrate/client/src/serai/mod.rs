@@ -3,7 +3,7 @@ use thiserror::Error;
 use async_lock::RwLock;
 use simple_request::{hyper, Request, Client};
 
-use scale::{decode_from_bytes, Compact, Decode, Encode};
+use scale::{Compact, Decode, Encode};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 pub use sp_core::{
@@ -195,15 +195,12 @@ impl Serai {
     Ok(())
   }
 
-  pub async fn active_network_validators(
-    &self,
-    network: NetworkId,
-  ) -> Result<Vec<Public>, SeraiError> {
+  async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
     let hash: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
     let bytes = Self::hex_decode(hash)?;
-    let r = decode_from_bytes::<Vec<Public>>(bytes.into())
+    let r = Vec::<Public>::decode(&mut bytes.as_slice())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(r)
   }

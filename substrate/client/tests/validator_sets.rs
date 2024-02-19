@@ -124,7 +124,7 @@ async fn validator_set_rotation() {
       let alice_rpc = ops.handle(&alice).host_port(9944).unwrap();
       let alice_rpc = format!("http://{}:{}", alice_rpc.0, alice_rpc.1);
 
-      // Sleep for a minute
+      // Sleep for some time
       tokio::time::sleep(core::time::Duration::from_secs(20)).await;
       let serai = Serai::new(alice_rpc.clone()).await.unwrap();
 
@@ -176,7 +176,7 @@ async fn validator_set_rotation() {
 
         // we start the chain with 4 default participants that has a single key share each
         participants.sort();
-        verfiy_session_and_active_validators(&serai, network, 0, &participants).await;
+        verify_session_and_active_validators(&serai, network, 0, &participants).await;
 
         // add 1 participant & verify
         let hash =
@@ -184,7 +184,7 @@ async fn validator_set_rotation() {
             .await;
         participants.push(pair5.public());
         participants.sort();
-        verfiy_session_and_active_validators(
+        verify_session_and_active_validators(
           &serai,
           network,
           get_active_session(&serai, network, hash).await,
@@ -199,7 +199,7 @@ async fn validator_set_rotation() {
         participants.swap_remove(participants.iter().position(|k| *k == pair2.public()).unwrap());
         let active_session = get_active_session(&serai, network, hash).await;
         participants.sort();
-        verfiy_session_and_active_validators(&serai, network, active_session, &participants).await;
+        verify_session_and_active_validators(&serai, network, active_session, &participants).await;
 
         // check pending deallocations
         let pending = serai
@@ -220,7 +220,7 @@ async fn validator_set_rotation() {
     .await;
 }
 
-async fn verfiy_session_and_active_validators(
+async fn verify_session_and_active_validators(
   serai: &Serai,
   network: NetworkId,
   session: u64,
@@ -235,12 +235,13 @@ async fn verfiy_session_and_active_validators(
   let serai_for_block =
     serai.as_of(serai.finalized_block_by_number(epoch_block).await.unwrap().unwrap().hash());
 
-  // verfiy session
+  // verify session
   let s = serai_for_block.validator_sets().session(network).await.unwrap().unwrap();
   assert_eq!(u64::from(s.0), session);
 
   // verify participants
-  let mut validators = serai.active_network_validators(network).await.unwrap();
+  let mut validators =
+    serai_for_block.validator_sets().active_network_validators(network).await.unwrap();
   validators.sort();
   assert_eq!(validators, participants);
 
@@ -255,7 +256,7 @@ async fn verfiy_session_and_active_validators(
   .await
   .unwrap();
 
-  // TODO: verfiy key shares as well?
+  // TODO: verify key shares as well?
 }
 
 async fn get_active_session(serai: &Serai, network: NetworkId, hash: [u8; 32]) -> u64 {
