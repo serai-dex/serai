@@ -64,6 +64,20 @@ mod shims {
     }
   }
 
+  pub trait BufRead: Read {
+    fn fill_buf(&mut self) -> Result<&[u8]>;
+    fn consume(&mut self, amt: usize);
+  }
+
+  impl BufRead for &[u8] {
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+      Ok(*self)
+    }
+    fn consume(&mut self, amt: usize) {
+      *self = &self[amt ..];
+    }
+  }
+
   pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
     fn write_all(&mut self, buf: &[u8]) -> Result<()> {
