@@ -1,11 +1,8 @@
 use core::ops::BitXor;
 use std_shims::{
   vec::Vec,
-  io::{self, Read, Write},
+  io::{self, Read, BufRead, Write},
 };
-
-// TODO: implement std_shim::io::BufRead
-use std::io::BufRead;
 
 use zeroize::Zeroize;
 
