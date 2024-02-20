@@ -244,8 +244,8 @@ serai_test!(
     // add liquidity
     common_add_liquidity(&serai,
       coin,
-      Amount(50_000_000_000_000),
-      Amount(50_000_000_000_000),
+      Amount(5_000_000_000_000),
+      Amount(500_000_000_000),
       0,
       pair.clone()
     ).await;
@@ -274,8 +274,8 @@ serai_test!(
         mint_to: pair.public().into(),
         pool_id: Coin::Bitcoin,
         coin_amount: 10_000_000_000_000, // half of sent amount
-        sri_amount: 6_947_918_403_646,
-        lp_token_minted: 8333333333332
+        sri_amount: 111_333_778_668,
+        lp_token_minted: 1_054_092_553_383
       }]
     );
   })
@@ -290,7 +290,7 @@ serai_test!(
     // mint coins
     mint_coin(
       &serai,
-      Balance { coin: coin1, amount: Amount(100_000_000_000_000) },
+      Balance { coin: coin1, amount: Amount(10_000_000_000_000_000) },
       NetworkId::Monero,
       coin1_batch_id,
       pair.clone().public().into(),
@@ -310,15 +310,15 @@ serai_test!(
     // add liquidity to pools
     common_add_liquidity(&serai,
       coin1,
-      Amount(50_000_000_000_000),
-      Amount(50_000_000_000_000),
+      Amount(5_000_000_000_000_000), // monero has 12 decimals
+      Amount(50_000_000_000),
       0,
       pair.clone()
     ).await;
     common_add_liquidity(&serai,
       coin2,
-      Amount(50_000_000_000_000),
-      Amount(50_000_000_000_000),
+      Amount(5_000_000_000_000), // ether still has 8 in our codebase
+      Amount(500_000_000_000),
       1,
       pair.clone()
     ).await;
@@ -344,7 +344,7 @@ serai_test!(
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address)),
-          balance: Balance { coin: coin1, amount: Amount(20_000_000_000_000) },
+          balance: Balance { coin: coin1, amount: Amount(200_000_000_000_000) },
         }],
       };
 
@@ -360,8 +360,8 @@ serai_test!(
           who: IN_INSTRUCTION_EXECUTOR,
           send_to: IN_INSTRUCTION_EXECUTOR,
           path,
-          amount_in: 20_000_000_000_000,
-          amount_out: 11066655622377
+          amount_in: 200_000_000_000_000,
+          amount_out: 19_044_944_233
         }]
       );
     }
@@ -384,7 +384,7 @@ serai_test!(
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
-          balance: Balance { coin: coin2, amount: Amount(20_000_000_000_000) },
+          balance: Balance { coin: coin2, amount: Amount(200_000_000_000) },
         }],
       };
 
@@ -399,8 +399,8 @@ serai_test!(
           who: IN_INSTRUCTION_EXECUTOR,
           send_to: out_address.as_native().unwrap(),
           path,
-          amount_in: 20_000_000_000_000,
-          amount_out: 26440798801319
+          amount_in: 200_000_000_000,
+          amount_out: 1487294253782353
         }]
       );
     }
@@ -422,7 +422,7 @@ serai_test!(
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
-          balance: Balance { coin: coin1, amount: Amount(10_000_000_000_000) },
+          balance: Balance { coin: coin1, amount: Amount(100_000_000_000_000) },
         }],
       };
 
@@ -437,8 +437,8 @@ serai_test!(
           who: IN_INSTRUCTION_EXECUTOR,
           send_to: out_address.as_native().unwrap(),
           path,
-          amount_in: 10_000_000_000_000,
-          amount_out: 10711005507065
+          amount_in: 100_000_000_000_000,
+          amount_out: 1_762_662_819
         }]
       );
     }

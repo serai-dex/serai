@@ -13,8 +13,13 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use sp_core::{ConstU32, bounded::BoundedVec};
+#[cfg(test)]
+use sp_io::TestExternalities;
 
+#[cfg(test)]
+use frame_support::{pallet_prelude::*, Identity, traits::StorageInstance};
+
+use sp_core::{ConstU32, bounded::BoundedVec};
 pub use sp_application_crypto as crypto;
 
 mod amount;
@@ -34,6 +39,9 @@ pub use account::*;
 
 mod tx;
 pub use tx::*;
+
+pub type BlockNumber = u64;
+pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
 
 #[cfg(feature = "borsh")]
 pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const B: u32>(
@@ -143,5 +151,66 @@ impl AsRef<[u8]> for Data {
   }
 }
 
-pub type BlockNumber = u64;
-pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
+/// Lexicographically reverses a given byte array.
+pub fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
+  let mut res = [0u8; N];
+  for (i, byte) in bytes.iter().enumerate() {
+    res[i] = !*byte;
+  }
+  res
+}
+
+#[test]
+fn test_reverse_lexicographic_order() {
+  TestExternalities::default().execute_with(|| {
+    use rand_core::{RngCore, OsRng};
+
+    struct Storage;
+    impl StorageInstance for Storage {
+      fn pallet_prefix() -> &'static str {
+        "LexicographicOrder"
+      }
+
+      const STORAGE_PREFIX: &'static str = "storage";
+    }
+    type Map = StorageMap<Storage, Identity, [u8; 8], (), OptionQuery>;
+
+    struct StorageReverse;
+    impl StorageInstance for StorageReverse {
+      fn pallet_prefix() -> &'static str {
+        "LexicographicOrder"
+      }
+
+      const STORAGE_PREFIX: &'static str = "storagereverse";
+    }
+    type MapReverse = StorageMap<StorageReverse, Identity, [u8; 8], (), OptionQuery>;
+
+    // populate the maps
+    let mut amounts = vec![];
+    for _ in 0 .. 100 {
+      amounts.push(OsRng.next_u64());
+    }
+
+    let mut amounts_sorted = amounts.clone();
+    amounts_sorted.sort();
+    for a in amounts {
+      Map::set(a.to_be_bytes(), Some(()));
+      MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(()));
+    }
+
+    // retrive back and check whether they are sorted as expected
+    let total_size = amounts_sorted.len();
+    let mut map_iter = Map::iter_keys();
+    let mut reverse_map_iter = MapReverse::iter_keys();
+    for i in 0 .. amounts_sorted.len() {
+      let first = map_iter.next().unwrap();
+      let second = reverse_map_iter.next().unwrap();
+
+      assert_eq!(u64::from_be_bytes(first), amounts_sorted[i]);
+      assert_eq!(
+        u64::from_be_bytes(reverse_lexicographic_order(second)),
+        amounts_sorted[total_size - (i + 1)]
+      );
+    }
+  });
+}

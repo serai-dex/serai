@@ -9,6 +9,7 @@ macro_rules! serai_test {
     $(
       #[tokio::test]
       async fn $name() {
+        use std::collections::HashMap;
         use dockertest::{
           PullPolicy, StartPolicy, LogOptions, LogAction, LogPolicy, LogSource, Image,
           TestBodySpecification, DockerTest,
@@ -28,6 +29,7 @@ macro_rules! serai_test {
           "--rpc-cors".to_string(),
           "all".to_string(),
         ])
+        .replace_env(HashMap::from([("RUST_LOG".to_string(), "runtime=debug".to_string())]))
         .set_publish_all_ports(true)
         .set_handle(handle)
         .set_start_policy(StartPolicy::Strict)

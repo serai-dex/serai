@@ -20,10 +20,6 @@
 
 use super::*;
 
-/// This needs to be long enough for arbitrage to occur and make holding
-/// any fake price up sufficiently unprofitable.
-pub const ORACLE_WINDOW_SIZE: u32 = 1000;
-
 /// Trait for providing methods to swap between the various coin classes.
 pub trait Swap<AccountId, Balance, MultiCoinId> {
   /// Swap exactly `amount_in` of coin `path[0]` for coin `path[1]`.
