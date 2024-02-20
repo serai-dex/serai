@@ -15,7 +15,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, _| async move {
+    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 2000000000000);
       SpendableOutput::from(&rpc, output).await.unwrap()
@@ -92,7 +92,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, _| async move {
+    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 2000000000000);
       SpendableOutput::from(&rpc, output).await.unwrap()
