@@ -178,6 +178,7 @@ fn valid_entropy(entropy: &Zeroizing<[u8; 32]>) -> bool {
   }
   res.into()
 }
+
 impl Polyseed {
   // TODO: Clean this
   fn to_poly(&self) -> Poly {
