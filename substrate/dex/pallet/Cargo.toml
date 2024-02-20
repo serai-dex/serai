@@ -36,6 +36,9 @@ coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", de
 
 serai-primitives = { path = "../../primitives", default-features = false }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+
 [features]
 default = ["std"]
 std = [
