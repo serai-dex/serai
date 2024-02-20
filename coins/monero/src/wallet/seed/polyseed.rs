@@ -389,10 +389,7 @@ impl Polyseed {
 
     let res = from_internal(lang, features, birthday, entropy);
     if let Ok(res) = res.as_ref() {
-      if res.checksum != checksum {
-        // This should never trigger
-        Err(SeedError::InvalidSeed)?;
-      }
+      debug_assert_eq!(res.checksum, checksum);
     }
     res
   }

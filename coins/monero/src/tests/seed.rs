@@ -408,6 +408,7 @@ fn test_polyseed() {
 
 #[test]
 fn test_invalid_polyseed() {
+  // This seed includes unsupported features bits and should error on decode
   let seed = "include domain claim resemble urban hire lunch bird \
     crucial fire best wife ring warm ignore model"
     .into();
