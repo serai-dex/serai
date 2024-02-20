@@ -120,16 +120,20 @@ impl SignableTransaction {
 
     for payment in &self.payments {
       match payment {
-        InternalPayment::Payment(payment) => {
+        InternalPayment::Payment(payment, need_dummy_payment_id) => {
           transcript.append_message(b"payment_address", payment.0.to_string().as_bytes());
           transcript.append_message(b"payment_amount", payment.1.to_le_bytes());
+          transcript.append_message(
+            b"need_dummy_payment_id",
+            [if *need_dummy_payment_id { 1u8 } else { 0u8 }],
+          );
         }
-        InternalPayment::Change(change, amount) => {
+        InternalPayment::Change(change, change_view) => {
           transcript.append_message(b"change_address", change.0.to_string().as_bytes());
-          if let Some(view) = change.1.as_ref() {
+          transcript.append_message(b"change_amount", change.1.to_le_bytes());
+          if let Some(view) = change_view.as_ref() {
             transcript.append_message(b"change_view_key", Zeroizing::new(view.to_bytes()));
           }
-          transcript.append_message(b"change_amount", amount.to_le_bytes());
         }
       }
     }
