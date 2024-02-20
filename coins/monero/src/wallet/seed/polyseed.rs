@@ -178,32 +178,6 @@ fn valid_entropy(entropy: &Zeroizing<[u8; 32]>) -> bool {
   }
   res.into()
 }
-
-fn from_internal(
-  language: Language,
-  masked_features: u8,
-  encoded_birthday: u16,
-  entropy: Zeroizing<[u8; 32]>,
-) -> Result<Polyseed, SeedError> {
-  if !polyseed_features_supported(masked_features) {
-    Err(SeedError::UnsupportedFeatures)?;
-  }
-
-  if !valid_entropy(&entropy) {
-    Err(SeedError::InvalidEntropy)?;
-  }
-
-  let mut res = Polyseed {
-    language,
-    birthday: encoded_birthday,
-    features: masked_features,
-    entropy,
-    checksum: 0,
-  };
-  res.checksum = poly_eval(&res.to_poly());
-  Ok(res)
-}
-
 impl Polyseed {
   // TODO: Clean this
   fn to_poly(&self) -> Poly {
@@ -242,6 +216,31 @@ impl Polyseed {
     poly
   }
 
+  fn from_internal(
+    language: Language,
+    masked_features: u8,
+    encoded_birthday: u16,
+    entropy: Zeroizing<[u8; 32]>,
+  ) -> Result<Polyseed, SeedError> {
+    if !polyseed_features_supported(masked_features) {
+      Err(SeedError::UnsupportedFeatures)?;
+    }
+
+    if !valid_entropy(&entropy) {
+      Err(SeedError::InvalidEntropy)?;
+    }
+
+    let mut res = Polyseed {
+      language,
+      birthday: encoded_birthday,
+      features: masked_features,
+      entropy,
+      checksum: 0,
+    };
+    res.checksum = poly_eval(&res.to_poly());
+    Ok(res)
+  }
+
   /// Create a new `Polyseed` with specific internals.
   ///
   /// `birthday` is defined in seconds since the Unix epoch.
@@ -251,7 +250,7 @@ impl Polyseed {
     birthday: u64,
     entropy: Zeroizing<[u8; 32]>,
   ) -> Result<Polyseed, SeedError> {
-    from_internal(language, user_features(features), birthday_encode(birthday), entropy)
+    Self::from_internal(language, user_features(features), birthday_encode(birthday), entropy)
   }
 
   /// Create a new `Polyseed`.
@@ -387,7 +386,7 @@ impl Polyseed {
     let features =
       u8::try_from(extra >> DATE_BITS).expect("couldn't convert extra >> DATE_BITS to u8");
 
-    let res = from_internal(lang, features, birthday, entropy);
+    let res = Self::from_internal(lang, features, birthday, entropy);
     if let Ok(res) = res.as_ref() {
       debug_assert_eq!(res.checksum, checksum);
     }
