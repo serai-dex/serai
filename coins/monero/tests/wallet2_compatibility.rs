@@ -90,9 +90,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // TODO: Needs https://github.com/monero-project/monero/pull/8882
   // let fee_rate = daemon_rpc
-  //   // Uses `FeePriority::Low` instead of `FeePriority::Lowest` because wallet RPC
-  //   // adjusts `monero_rpc::TransferPriority::Default` up by 1
-  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Low)
+  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
   //   .await
   //   .unwrap();
 

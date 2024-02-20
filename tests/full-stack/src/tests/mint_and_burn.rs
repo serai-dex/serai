@@ -389,7 +389,7 @@ async fn mint_and_burn_test() {
         )],
         &Change::new(&view_pair, false),
         vec![Shorthand::transfer(None, serai_addr).encode()],
-        rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
+        rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
       )
       .unwrap()
       .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))

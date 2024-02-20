@@ -274,20 +274,22 @@ impl Fee {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum FeePriority {
-  Lowest,
-  Low,
-  Medium,
-  High,
+  Unimportant,
+  Normal,
+  Elevated,
+  Priority,
   Custom { priority: u32 },
 }
 
+/// https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
+///   src/simplewallet/simplewallet.cpp#L161
 impl FeePriority {
   pub(crate) fn fee_priority(&self) -> u32 {
     match self {
-      FeePriority::Lowest => 0,
-      FeePriority::Low => 1,
-      FeePriority::Medium => 2,
-      FeePriority::High => 3,
+      FeePriority::Unimportant => 1,
+      FeePriority::Normal => 2,
+      FeePriority::Elevated => 3,
+      FeePriority::Priority => 4,
       FeePriority::Custom { priority, .. } => *priority,
     }
   }
