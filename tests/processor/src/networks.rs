@@ -308,11 +308,11 @@ impl Wallet {
               .expect("prior transaction was never published"),
           );
         }
-        let mut decoys = Decoys::select(
+        let mut decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng,
           &rpc,
           Protocol::v16.ring_len(),
-          rpc.get_height().await.unwrap() - 1,
+          rpc.get_height().await.unwrap(),
           &these_inputs,
         )
         .await

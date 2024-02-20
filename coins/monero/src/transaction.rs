@@ -161,7 +161,9 @@ impl Timelock {
 impl PartialOrd for Timelock {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     match (self, other) {
+      (Timelock::None, Timelock::None) => Some(Ordering::Equal),
       (Timelock::None, _) => Some(Ordering::Less),
+      (_, Timelock::None) => Some(Ordering::Greater),
       (Timelock::Block(a), Timelock::Block(b)) => a.partial_cmp(b),
       (Timelock::Time(a), Timelock::Time(b)) => a.partial_cmp(b),
       _ => None,

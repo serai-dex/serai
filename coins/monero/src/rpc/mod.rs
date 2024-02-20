@@ -54,6 +54,15 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct OutputResponse {
+  pub height: usize,
+  pub unlocked: bool,
+  key: String,
+  mask: String,
+  txid: String,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum RpcError {
@@ -534,29 +543,15 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(distributions.distributions.swap_remove(0).distribution)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
-  /// timelock has been satisfied.
-  ///
-  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
-  /// Monero transactions.
-  pub async fn get_unlocked_outputs(
-    &self,
-    indexes: &[u64],
-    height: usize,
-  ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
+  /// Get the specified outputs from the RingCT (zero-amount) pool
+  pub async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
     #[derive(Deserialize, Debug)]
-    struct Out {
-      key: String,
-      mask: String,
-      txid: String,
+    struct OutsResponse {
+      status: String,
+      outs: Vec<OutputResponse>,
     }
 
-    #[derive(Deserialize, Debug)]
-    struct Outs {
-      outs: Vec<Out>,
-    }
-
-    let outs: Outs = self
+    let res: OutsResponse = self
       .rpc_call(
         "get_outs",
         Some(json!({
@@ -569,15 +564,39 @@ impl<R: RpcConnection> Rpc<R> {
       )
       .await?;
 
-    let txs = self
-      .get_transactions(
-        &outs.outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
-      )
-      .await?;
+    if res.status != "OK" {
+      Err(RpcError::InvalidNode("bad response to get_outs".to_string()))?;
+    }
+
+    Ok(res.outs)
+  }
+
+  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
+  /// timelock has been satisfied.
+  ///
+  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
+  /// Monero transactions.
+  pub async fn get_unlocked_outputs(
+    &self,
+    indexes: &[u64],
+    height: usize,
+    fingerprintable_canonical: bool,
+  ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
+    let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
+
+    // Only need to fetch txs to do canonical check on timelock
+    let txs = if fingerprintable_canonical {
+      self
+        .get_transactions(
+          &outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
+        )
+        .await?
+    } else {
+      Vec::new()
+    };
 
     // TODO: https://github.com/serai-dex/serai/issues/104
     outs
-      .outs
       .iter()
       .enumerate()
       .map(|(i, out)| {
@@ -593,10 +612,13 @@ impl<R: RpcConnection> Rpc<R> {
         ) else {
           return Ok(None);
         };
-        Ok(
-          Some([key, rpc_point(&out.mask)?])
-            .filter(|_| Timelock::Block(height) >= txs[i].prefix.timelock),
-        )
+        Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
+          if fingerprintable_canonical {
+            Timelock::Block(height) >= txs[i].prefix.timelock
+          } else {
+            out.unlocked
+          }
+        }))
       })
       .collect()
   }
@@ -713,13 +735,14 @@ impl<R: RpcConnection> Rpc<R> {
     &self,
     address: &str,
     block_count: usize,
-  ) -> Result<Vec<[u8; 32]>, RpcError> {
+  ) -> Result<(Vec<[u8; 32]>, usize), RpcError> {
     #[derive(Debug, Deserialize)]
     struct BlocksResponse {
       blocks: Vec<String>,
+      height: usize,
     }
 
-    let block_strs = self
+    let res = self
       .json_rpc_call::<BlocksResponse>(
         "generateblocks",
         Some(json!({
@@ -727,13 +750,12 @@ impl<R: RpcConnection> Rpc<R> {
           "amount_of_blocks": block_count
         })),
       )
-      .await?
-      .blocks;
+      .await?;
 
-    let mut blocks = Vec::with_capacity(block_strs.len());
-    for block in block_strs {
+    let mut blocks = Vec::with_capacity(res.blocks.len());
+    for block in res.blocks {
       blocks.push(hash_hex(&block)?);
     }
-    Ok(blocks)
+    Ok((blocks, res.height))
   }
 }
