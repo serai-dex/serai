@@ -476,6 +476,7 @@ fn test_invalid_polyseed() {
   let seed = "include domain claim resemble urban hire lunch bird \
     crucial fire best wife ring warm ignore model"
     .into();
-  let res = Seed::from_string(Zeroizing::new(seed));
+  let res =
+    Seed::from_string(SeedType::Polyseed(polyseed::Language::English), Zeroizing::new(seed));
   assert_eq!(res, Err(SeedError::UnsupportedFeatures));
 }
