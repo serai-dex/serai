@@ -270,7 +270,6 @@ impl Fee {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum FeePriority {
-  Default,
   Unimportant,
   Normal,
   Elevated,
@@ -283,7 +282,6 @@ pub enum FeePriority {
 impl FeePriority {
   pub(crate) fn fee_priority(&self) -> u32 {
     match self {
-      FeePriority::Default => 0,
       FeePriority::Unimportant => 1,
       FeePriority::Normal => 2,
       FeePriority::Elevated => 3,
