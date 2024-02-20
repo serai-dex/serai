@@ -101,10 +101,18 @@ pub struct Metadata {
   /// The subaddress this output was sent to.
   pub subaddress: Option<SubaddressIndex>,
   /// The payment ID included with this output.
-  /// This will be gibberish if the payment ID wasn't intended for the recipient or wasn't included.
-  // Could be an Option, as extra doesn't necessarily have a payment ID, yet all Monero TXs should
-  // have this making it simplest for it to be as-is.
-  pub payment_id: [u8; 8],
+  /// There are 2 circumstances in which the reference wallet2 ignores the payment ID
+  /// but the payment ID will be returned here anyway:
+  ///
+  /// 1) If the payment ID is tied to an output received by a subaddress account
+  /// that spent Monero in the transaction (the received output is considered
+  /// "change" and is not considered a "payment" in this case). If there are multiple
+  /// spending subaddress accounts in a transaction, the highest index spent key image
+  /// is used to determine the spending subaddress account.
+  ///
+  /// 2) If the payment ID is the unencrypted variant and the block's hf version is
+  /// v12 or higher (https://github.com/serai-dex/serai/issues/512)
+  pub payment_id: Option<PaymentId>,
   /// Arbitrary data encoded in TX extra.
   pub arbitrary_data: Vec<Vec<u8>>,
 }
@@ -114,7 +122,7 @@ impl core::fmt::Debug for Metadata {
     fmt
       .debug_struct("Metadata")
       .field("subaddress", &self.subaddress)
-      .field("payment_id", &hex::encode(self.payment_id))
+      .field("payment_id", &self.payment_id)
       .field("arbitrary_data", &self.arbitrary_data.iter().map(hex::encode).collect::<Vec<_>>())
       .finish()
   }
@@ -129,7 +137,13 @@ impl Metadata {
     } else {
       w.write_all(&[0])?;
     }
-    w.write_all(&self.payment_id)?;
+
+    if let Some(payment_id) = self.payment_id {
+      w.write_all(&[1])?;
+      payment_id.write(w)?;
+    } else {
+      w.write_all(&[0])?;
+    }
 
     w.write_all(&u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes())?;
     for part in &self.arbitrary_data {
@@ -157,7 +171,7 @@ impl Metadata {
 
     Ok(Metadata {
       subaddress,
-      payment_id: read_bytes(r)?,
+      payment_id: if read_byte(r)? == 1 { PaymentId::read(r).ok() } else { None },
       arbitrary_data: {
         let mut data = vec![];
         for _ in 0 .. read_u32(r)? {
@@ -377,12 +391,7 @@ impl Scanner {
           o,
         );
 
-        let payment_id =
-          if let Some(PaymentId::Encrypted(id)) = payment_id.map(|id| id ^ payment_id_xor) {
-            id
-          } else {
-            payment_id_xor
-          };
+        let payment_id = payment_id.map(|id| id ^ payment_id_xor);
 
         if let Some(actual_view_tag) = output.view_tag {
           if actual_view_tag != view_tag {

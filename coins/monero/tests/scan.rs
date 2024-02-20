@@ -1,6 +1,9 @@
 use rand::RngCore;
 
-use monero_serai::{transaction::Transaction, wallet::address::SubaddressIndex};
+use monero_serai::{
+  transaction::Transaction,
+  wallet::{address::SubaddressIndex, extra::PaymentId},
+};
 
 mod runner;
 
@@ -16,6 +19,8 @@ test!(
     |_, tx: Transaction, _, mut state: Scanner| async move {
       let output = state.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
+      let dummy_payment_id = PaymentId::Encrypted([0u8; 8]);
+      assert_eq!(output.metadata.payment_id, Some(dummy_payment_id));
     },
   ),
 );
@@ -57,7 +62,7 @@ test!(
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8])| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.payment_id, state.1);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(state.1)));
     },
   ),
 );
@@ -140,7 +145,7 @@ test!(
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8])| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.payment_id, state.1);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(state.1)));
     },
   ),
 );
@@ -174,7 +179,7 @@ test!(
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.payment_id, state.1);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(state.1)));
       assert_eq!(output.metadata.subaddress, Some(state.2));
     },
   ),
@@ -259,7 +264,7 @@ test!(
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8])| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.payment_id, state.1);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(state.1)));
     },
   ),
 );
@@ -293,7 +298,7 @@ test!(
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8], SubaddressIndex)| async move {
       let output = state.0.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.metadata.payment_id, state.1);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(state.1)));
       assert_eq!(output.metadata.subaddress, Some(state.2));
     },
   ),

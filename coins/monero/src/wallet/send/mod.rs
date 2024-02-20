@@ -69,15 +69,22 @@ impl SendOutput {
   #[allow(non_snake_case)]
   fn internal(
     unique: [u8; 32],
-    output: (usize, (MoneroAddress, u64)),
+    output: (usize, (MoneroAddress, u64), bool),
     ecdh: EdwardsPoint,
     R: EdwardsPoint,
   ) -> (SendOutput, Option<[u8; 8]>) {
     let o = output.0;
+    let need_dummy_payment_id = output.2;
     let output = output.1;
 
     let (view_tag, shared_key, payment_id_xor) =
       shared_key(Some(unique).filter(|_| output.0.is_guaranteed()), ecdh, o);
+
+    let payment_id = output
+      .0
+      .payment_id()
+      .or(if need_dummy_payment_id { Some([0u8; 8]) } else { None })
+      .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes());
 
     (
       SendOutput {
@@ -87,17 +94,14 @@ impl SendOutput {
         commitment: Commitment::new(commitment_mask(shared_key), output.1),
         amount: amount_encryption(output.1, shared_key),
       },
-      output
-        .0
-        .payment_id()
-        .map(|id| (u64::from_le_bytes(id) ^ u64::from_le_bytes(payment_id_xor)).to_le_bytes()),
+      payment_id,
     )
   }
 
   fn new(
     r: &Zeroizing<Scalar>,
     unique: [u8; 32],
-    output: (usize, (MoneroAddress, u64)),
+    output: (usize, (MoneroAddress, u64), bool),
   ) -> (SendOutput, Option<[u8; 8]>) {
     let address = output.1 .0;
     SendOutput::internal(
@@ -115,7 +119,7 @@ impl SendOutput {
   fn change(
     ecdh: EdwardsPoint,
     unique: [u8; 32],
-    output: (usize, (MoneroAddress, u64)),
+    output: (usize, (MoneroAddress, u64), bool),
   ) -> (SendOutput, Option<[u8; 8]>) {
     SendOutput::internal(unique, output, ecdh, ED25519_BASEPOINT_POINT)
   }
@@ -291,8 +295,8 @@ impl FeePriority {
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) enum InternalPayment {
-  Payment((MoneroAddress, u64)),
-  Change((MoneroAddress, Option<Zeroizing<Scalar>>), u64),
+  Payment((MoneroAddress, u64), bool),
+  Change((MoneroAddress, u64), Option<Zeroizing<Scalar>>),
 }
 
 /// The eventual output of a SignableTransaction.
@@ -352,6 +356,14 @@ impl Change {
 
   /// Create a fingerprintable change output specification which will harm privacy. Only use this
   /// if you know what you're doing.
+  ///
+  /// If the change address is None, there are 2 potential fingerprints:
+  ///
+  /// 1) The change in the tx is shunted to the fee (fingerprintable fee).
+  ///
+  /// 2) If there are 2 outputs in the tx, there would be no payment ID as is the case when the
+  /// reference wallet creates 2 output txs, since monero-serai doesn't know which output
+  /// to tie the dummy payment ID to.
   pub fn fingerprintable(address: Option<MoneroAddress>) -> Change {
     Change { address, view: None }
   }
@@ -362,9 +374,9 @@ fn need_additional(payments: &[InternalPayment]) -> (bool, bool) {
   let subaddresses = payments
     .iter()
     .filter(|payment| match *payment {
-      InternalPayment::Payment(payment) => payment.0.is_subaddress(),
-      InternalPayment::Change(change, _) => {
-        if change.1.is_some() {
+      InternalPayment::Payment(payment, _) => payment.0.is_subaddress(),
+      InternalPayment::Change(change, change_view) => {
+        if change_view.is_some() {
           has_change_view = true;
           // It should not be possible to construct a change specification to a subaddress with a
           // view key
@@ -391,7 +403,7 @@ fn sanity_check_change_payment_quantity(payments: &[InternalPayment], has_change
     payments
       .iter()
       .filter(|payment| match *payment {
-        InternalPayment::Payment(_) => false,
+        InternalPayment::Payment(_, _) => false,
         InternalPayment::Change(_, _) => true,
       })
       .count(),
@@ -463,6 +475,13 @@ impl SignableTransaction {
       Err(TransactionError::NoChange)?;
     }
 
+    // All 2 output txs created by the reference wallet have payment IDs to avoid
+    // fingerprinting integrated addresses. Note: we won't create a dummy payment
+    // ID if we create a 0-change 2-output tx since we don't know which output should
+    // receive the payment ID and such a tx is fingerprintable to monero-serai anyway
+    let need_dummy_payment_id = !has_payment_id && payments.len() == 1;
+    has_payment_id |= need_dummy_payment_id;
+
     // Get the outgoing amount ignoring fees
     let out_amount = payments.iter().map(|payment| payment.1).sum::<u64>();
 
@@ -472,18 +491,20 @@ impl SignableTransaction {
     }
 
     // Collect payments in a container that includes a change output if a change address is provided
-    let mut payments = payments.into_iter().map(InternalPayment::Payment).collect::<Vec<_>>();
+    let mut payments = payments
+      .into_iter()
+      .map(|payment| InternalPayment::Payment(payment, need_dummy_payment_id))
+      .collect::<Vec<_>>();
+    debug_assert!(!need_dummy_payment_id || (payments.len() == 1 && change.address.is_some()));
+
     if let Some(change_address) = change.address.as_ref() {
       // Push a 0 amount change output that we'll use to do fee calculations.
       // We'll modify the change amount after calculating the fee
-      payments.push(InternalPayment::Change((*change_address, change.view.clone()), 0));
+      payments.push(InternalPayment::Change((*change_address, 0), change.view.clone()));
     }
 
     // Determine if we'll need additional pub keys in tx extra
     let (_, additional) = need_additional(&payments);
-
-    // Add a dummy payment ID if there's only 2 payments
-    has_payment_id |= outputs == 2;
 
     // Calculate the extra length
     let extra = Extra::fee_weight(outputs, additional, has_payment_id, data.as_ref());
@@ -524,8 +545,8 @@ impl SignableTransaction {
       let change_payment = payments.last_mut().unwrap();
       debug_assert!(matches!(change_payment, InternalPayment::Change(_, _)));
       *change_payment = InternalPayment::Change(
-        (*change_address, change.view.clone()),
-        in_amount - out_amount - fee,
+        (*change_address, in_amount - out_amount - fee),
+        change.view.clone(),
       );
     }
 
@@ -538,8 +559,8 @@ impl SignableTransaction {
         payments
           .iter()
           .map(|payment| match *payment {
-            InternalPayment::Payment(payment) => payment.1,
-            InternalPayment::Change(_, amount) => amount,
+            InternalPayment::Payment(payment, _) => payment.1,
+            InternalPayment::Change(change, _) => change.1,
           })
           .sum::<u64>() +
           fee,
@@ -606,7 +627,7 @@ impl SignableTransaction {
     if modified_change_ecdh {
       for payment in &*payments {
         match payment {
-          InternalPayment::Payment(payment) => {
+          InternalPayment::Payment(payment, _) => {
             // This should be the only payment and it should be a subaddress
             debug_assert!(payment.0.is_subaddress());
             tx_public_key = tx_key.deref() * payment.0.spend;
@@ -625,8 +646,8 @@ impl SignableTransaction {
       // Downcast the change output to a payment output if it doesn't require special handling
       // regarding it's view key
       payment = if !modified_change_ecdh {
-        if let InternalPayment::Change(change, amount) = &payment {
-          InternalPayment::Payment((change.0, *amount))
+        if let InternalPayment::Change(change, _) = &payment {
+          InternalPayment::Payment(*change, false)
         } else {
           payment
         }
@@ -635,13 +656,14 @@ impl SignableTransaction {
       };
 
       let (output, payment_id) = match payment {
-        InternalPayment::Payment(payment) => {
+        InternalPayment::Payment(payment, need_dummy_payment_id) => {
           // If this is a subaddress, generate a dedicated r. Else, reuse the TX key
           let dedicated = Zeroizing::new(random_scalar(&mut rng));
           let use_dedicated = additional && payment.0.is_subaddress();
           let r = if use_dedicated { &dedicated } else { &tx_key };
 
-          let (mut output, payment_id) = SendOutput::new(r, uniqueness, (o, payment));
+          let (mut output, payment_id) =
+            SendOutput::new(r, uniqueness, (o, payment, need_dummy_payment_id));
           if modified_change_ecdh {
             debug_assert_eq!(tx_public_key, output.R);
           }
@@ -655,26 +677,16 @@ impl SignableTransaction {
           }
           (output, payment_id)
         }
-        InternalPayment::Change(change, amount) => {
+        InternalPayment::Change(change, change_view) => {
           // Instead of rA, use Ra, where R is r * subaddress_spend_key
           // change.view must be Some as if it's None, this payment would've been downcast
-          let ecdh = tx_public_key * change.1.unwrap().deref();
-          SendOutput::change(ecdh, uniqueness, (o, (change.0, amount)))
+          let ecdh = tx_public_key * change_view.unwrap().deref();
+          SendOutput::change(ecdh, uniqueness, (o, change, false))
         }
       };
 
       outputs.push(output);
       id = id.or(payment_id);
-    }
-
-    // Include a random payment ID if we don't actually have one
-    // It prevents transactions from leaking if they're sending to integrated addresses or not
-    // Only do this if we only have two outputs though, as Monero won't add a dummy if there's
-    // more than two outputs
-    if outputs.len() <= 2 {
-      let mut rand = [0; 8];
-      rng.fill_bytes(&mut rand);
-      id = id.or(Some(rand));
     }
 
     (tx_public_key, additional_keys, outputs, id)
@@ -949,21 +961,26 @@ impl Eventuality {
 
     fn write_payment<W: io::Write>(payment: &InternalPayment, w: &mut W) -> io::Result<()> {
       match payment {
-        InternalPayment::Payment(payment) => {
+        InternalPayment::Payment(payment, need_dummy_payment_id) => {
           w.write_all(&[0])?;
           write_vec(write_byte, payment.0.to_string().as_bytes(), w)?;
-          w.write_all(&payment.1.to_le_bytes())
+          w.write_all(&payment.1.to_le_bytes())?;
+          if *need_dummy_payment_id {
+            w.write_all(&[1])
+          } else {
+            w.write_all(&[0])
+          }
         }
-        InternalPayment::Change(change, amount) => {
+        InternalPayment::Change(change, change_view) => {
           w.write_all(&[1])?;
           write_vec(write_byte, change.0.to_string().as_bytes(), w)?;
-          if let Some(view) = change.1.as_ref() {
+          w.write_all(&change.1.to_le_bytes())?;
+          if let Some(view) = change_view.as_ref() {
             w.write_all(&[1])?;
-            write_scalar(view, w)?;
+            write_scalar(view, w)
           } else {
-            w.write_all(&[0])?;
+            w.write_all(&[0])
           }
-          w.write_all(&amount.to_le_bytes())
         }
       }
     }
@@ -988,17 +1005,21 @@ impl Eventuality {
 
     fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
       Ok(match read_byte(r)? {
-        0 => InternalPayment::Payment((read_address(r)?, read_u64(r)?)),
+        0 => InternalPayment::Payment(
+          (read_address(r)?, read_u64(r)?),
+          match read_byte(r)? {
+            0 => false,
+            1 => true,
+            _ => Err(io::Error::other("invalid need additional"))?,
+          },
+        ),
         1 => InternalPayment::Change(
-          (
-            read_address(r)?,
-            match read_byte(r)? {
-              0 => None,
-              1 => Some(Zeroizing::new(read_scalar(r)?)),
-              _ => Err(io::Error::other("invalid change payment"))?,
-            },
-          ),
-          read_u64(r)?,
+          (read_address(r)?, read_u64(r)?),
+          match read_byte(r)? {
+            0 => None,
+            1 => Some(Zeroizing::new(read_scalar(r)?)),
+            _ => Err(io::Error::other("invalid change view"))?,
+          },
         ),
         _ => Err(io::Error::other("invalid payment"))?,
       })

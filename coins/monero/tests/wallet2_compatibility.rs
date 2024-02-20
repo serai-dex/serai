@@ -10,7 +10,7 @@ use monero_serai::{
   rpc::{EmptyResponse, HttpRpc, Rpc},
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
-    extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra},
+    extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
     Scanner,
   },
 };
@@ -113,13 +113,17 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
   // runner::check_weight_and_fee(&tx, fee_rate);
 
   match spec {
-    AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, Some(index)),
+    AddressSpec::Subaddress(index) => {
+      assert_eq!(output.metadata.subaddress, Some(index));
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
+    }
     AddressSpec::Integrated(payment_id) => {
-      assert_eq!(output.metadata.payment_id, payment_id);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(payment_id)));
       assert_eq!(output.metadata.subaddress, None);
     }
     AddressSpec::Standard | AddressSpec::Featured { .. } => {
-      assert_eq!(output.metadata.subaddress, None)
+      assert_eq!(output.metadata.subaddress, None);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
     }
   }
   assert_eq!(output.commitment().amount, 1000000000000);
@@ -181,6 +185,7 @@ test!(
         .unwrap();
       assert_eq!(transfer.transfer.subaddr_index, Index { major: 0, minor: 0 });
       assert_eq!(transfer.transfer.amount, 1000000);
+      assert_eq!(transfer.transfer.payment_id, hex::encode([0u8; 8]));
     },
   ),
 );
@@ -218,6 +223,7 @@ test!(
         .unwrap();
       assert_eq!(transfer.transfer.subaddr_index, Index { major: data.1, minor: 0 });
       assert_eq!(transfer.transfer.amount, 1000000);
+      assert_eq!(transfer.transfer.payment_id, hex::encode([0u8; 8]));
 
       // Make sure only one R was included in TX extra
       assert!(Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
