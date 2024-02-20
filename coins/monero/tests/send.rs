@@ -24,11 +24,11 @@ async fn add_inputs(
     spendable_outputs.push(SpendableOutput::from(rpc, output).await.unwrap());
   }
 
-  let decoys = Decoys::select(
+  let decoys = Decoys::fingerprintable_canonical_select(
     &mut OsRng,
     rpc,
     protocol.ring_len(),
-    rpc.get_height().await.unwrap() - 1,
+    rpc.get_height().await.unwrap(),
     &spendable_outputs,
   )
   .await

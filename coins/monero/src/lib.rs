@@ -46,6 +46,10 @@ pub mod wallet;
 #[cfg(test)]
 mod tests;
 
+pub const DEFAULT_LOCK_WINDOW: usize = 10;
+pub const COINBASE_LOCK_WINDOW: usize = 60;
+pub const BLOCK_TIME: usize = 120;
+
 static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
 #[allow(non_snake_case)]
 pub(crate) fn INV_EIGHT() -> Scalar {

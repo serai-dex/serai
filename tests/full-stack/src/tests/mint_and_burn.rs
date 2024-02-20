@@ -100,7 +100,7 @@ async fn mint_and_burn_test() {
         let rpc = producer_handles.monero(ops).await;
         let mut res = Vec::with_capacity(count);
         for _ in 0 .. count {
-          let block = rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap()[0]).await.unwrap();
+          let block = rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap().0[0]).await.unwrap();
 
           let mut txs = Vec::with_capacity(block.txs.len());
           for tx in &block.txs {
@@ -360,11 +360,11 @@ async fn mint_and_burn_test() {
         .unwrap()
         .swap_remove(0);
 
-      let decoys = Decoys::select(
+      let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
         Protocol::v16.ring_len(),
-        rpc.get_height().await.unwrap() - 1,
+        rpc.get_height().await.unwrap(),
         &[output.clone()],
       )
       .await
