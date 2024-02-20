@@ -342,7 +342,7 @@ impl Wallet {
           vec![(to_addr, AMOUNT)],
           &Change::new(view_pair, false),
           data,
-          rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
+          rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)

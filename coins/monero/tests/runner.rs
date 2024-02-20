@@ -212,7 +212,7 @@ macro_rules! test {
 
           let builder = SignableTransactionBuilder::new(
             protocol,
-            rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+            rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
             Change::new(
               &ViewPair::new(
                 &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
