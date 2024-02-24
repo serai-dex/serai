@@ -678,16 +678,20 @@ pub mod pallet {
     }
 
     pub fn retire_set(set: ValidatorSet) {
-      let keys = Keys::<T>::take(set).unwrap();
       // If the prior prior set didn't report, emit they're retired now
       if PendingSlashReport::<T>::get(set.network).is_some() {
         Self::deposit_event(Event::SetRetired {
           set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
         });
       }
-      // This overwrites the prior value as the prior to-report set's stake presumably just
-      // unlocked, making their report unenforceable
-      PendingSlashReport::<T>::set(set.network, Some(keys.0));
+
+      // Serai network slashes are handled by BABE/GRANDPA
+      if set.network != NetworkId::Serai {
+        // This overwrites the prior value as the prior to-report set's stake presumably just
+        // unlocked, making their report unenforceable
+        let keys = Keys::<T>::take(set).unwrap();
+        PendingSlashReport::<T>::set(set.network, Some(keys.0));
+      }
 
       // We're retiring this set because the set after it accepted the handover
       Self::deposit_event(Event::AcceptedHandover {
@@ -740,7 +744,7 @@ pub mod pallet {
       Grandpa::<T>::new_session(
         true,
         session,
-        next_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+        now_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
       );
 
       // Clear SeraiDisabledIndices, only preserving keys still present in the new session

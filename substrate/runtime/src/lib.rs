@@ -313,8 +313,14 @@ pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_
 pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
+  #[cfg(feature = "fast-epoch")]
   #[allow(clippy::identity_op)]
-  type EpochDuration = ConstU64<{ 1 * DAYS }>;
+  type EpochDuration = ConstU64<{ DAYS / (24 * 60 * 2) }>; // 30 seconds
+
+  #[cfg(not(feature = "fast-epoch"))]
+  #[allow(clippy::identity_op)]
+  type EpochDuration = ConstU64<{ DAYS }>;
+
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
   type EpochChangeTrigger = babe::ExternalTrigger;
   type DisabledValidators = ValidatorSets;

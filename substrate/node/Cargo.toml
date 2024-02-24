@@ -75,6 +75,7 @@ substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" 
 
 [features]
 default = []
+fast-epoch = ["serai-runtime/fast-epoch"]
 runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
 

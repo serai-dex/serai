@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
+use serai_abi::primitives::NetworkId;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use sp_core::{Pair, sr25519::Signature};
+use sp_core::{
+  sr25519::{Pair, Signature},
+  Pair as PairTrait,
+};
 
 use ciphersuite::{Ciphersuite, Ristretto};
 use frost::dkg::musig::musig;
@@ -15,7 +19,7 @@ use serai_client::{
     primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
   },
-  SeraiValidatorSets, Serai,
+  Amount, Serai, SeraiValidatorSets,
 };
 
 use crate::common::tx::publish_tx;
@@ -58,4 +62,30 @@ pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u
   assert_eq!(serai.as_of(block).validator_sets().keys(set).await.unwrap(), Some(key_pair));
 
   block
+}
+
+#[allow(dead_code)]
+pub async fn allocate_stake(
+  serai: &Serai,
+  network: NetworkId,
+  amount: Amount,
+  pair: &Pair,
+  nonce: u32,
+) -> [u8; 32] {
+  // get the call
+  let tx = serai.sign(&pair, SeraiValidatorSets::allocate(network, amount), nonce, 0);
+  publish_tx(serai, &tx).await
+}
+
+#[allow(dead_code)]
+pub async fn deallocate_stake(
+  serai: &Serai,
+  network: NetworkId,
+  amount: Amount,
+  pair: &Pair,
+  nonce: u32,
+) -> [u8; 32] {
+  // get the call
+  let tx = serai.sign(&pair, SeraiValidatorSets::deallocate(network, amount), nonce, 0);
+  publish_tx(serai, &tx).await
 }
