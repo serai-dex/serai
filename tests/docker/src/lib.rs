@@ -91,6 +91,8 @@ pub fn build(name: String) {
   if name.contains("-processor") {
     dockerfile_path =
       dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
+  } else if name == "serai-fast-epoch" {
+    dockerfile_path = dockerfile_path.join("serai").join("Dockerfile.fast-epoch");
   } else {
     dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
   }
@@ -145,7 +147,7 @@ pub fn build(name: String) {
           meta(repo_path.join("message-queue")),
           meta(repo_path.join("coordinator")),
         ],
-        "runtime" | "serai" => vec![
+        "runtime" | "serai" | "serai-fast-epoch" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
           meta(repo_path.join("substrate")),

@@ -124,6 +124,8 @@ std = [
   "pallet-transaction-payment-rpc-runtime-api/std",
 ]
 
+fast-epoch = []
+
 runtime-benchmarks = [
   "sp-runtime/runtime-benchmarks",
 

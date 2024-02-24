@@ -143,6 +143,29 @@ impl<'a> SeraiValidatorSets<'a> {
       .await
   }
 
+  pub async fn pending_deallocations(
+    &self,
+    network: NetworkId,
+    account: Public,
+    session: Session,
+  ) -> Result<Option<Amount>, SeraiError> {
+    self
+      .0
+      .storage(
+        PALLET,
+        "PendingDeallocations",
+        (sp_core::hashing::blake2_128(&(network, account).encode()), (network, account, session)),
+      )
+      .await
+  }
+
+  pub async fn active_network_validators(
+    &self,
+    network: NetworkId,
+  ) -> Result<Vec<Public>, SeraiError> {
+    self.0.serai.active_network_validators(network).await
+  }
+
   // TODO: Store these separately since we almost never need both at once?
   pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
@@ -167,6 +190,14 @@ impl<'a> SeraiValidatorSets<'a> {
       key_pair,
       signature,
     }))
+  }
+
+  pub fn allocate(network: NetworkId, amount: Amount) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::allocate { network, amount })
+  }
+
+  pub fn deallocate(network: NetworkId, amount: Amount) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::deallocate { network, amount })
   }
 
   pub fn report_slashes(
