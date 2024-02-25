@@ -176,7 +176,7 @@ async fn validator_set_rotation() {
 
         // we start the chain with 4 default participants that has a single key share each
         participants.sort();
-        verify_session_and_active_validators(&serai, network, 0, &participants).await;
+        verify_session_and_active_validators(&serai, network, 0, participants).await;
 
         // add 1 participant & verify
         let hash =
@@ -188,7 +188,7 @@ async fn validator_set_rotation() {
           &serai,
           network,
           get_active_session(&serai, network, hash).await,
-          &participants,
+          participants,
         )
         .await;
 
@@ -199,7 +199,7 @@ async fn validator_set_rotation() {
         participants.swap_remove(participants.iter().position(|k| *k == pair2.public()).unwrap());
         let active_session = get_active_session(&serai, network, hash).await;
         participants.sort();
-        verify_session_and_active_validators(&serai, network, active_session, &participants).await;
+        verify_session_and_active_validators(&serai, network, active_session, participants).await;
 
         // check pending deallocations
         let pending = serai
