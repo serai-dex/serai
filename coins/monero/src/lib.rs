@@ -16,7 +16,7 @@ use sha3::{Digest, Keccak256};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-pub use monero_generators::H;
+pub use monero_generators::{H, decompress_point};
 
 mod merkle;
 
@@ -45,6 +45,10 @@ pub mod wallet;
 
 #[cfg(test)]
 mod tests;
+
+pub const DEFAULT_LOCK_WINDOW: usize = 10;
+pub const COINBASE_LOCK_WINDOW: usize = 60;
+pub const BLOCK_TIME: usize = 120;
 
 static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
 #[allow(non_snake_case)]

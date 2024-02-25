@@ -338,7 +338,7 @@ impl Monero {
 
     // All signers need to select the same decoys
     // All signers use the same height and a seeded RNG to make sure they do so.
-    let decoys = Decoys::select(
+    let decoys = Decoys::fingerprintable_canonical_select(
       &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
       &self.rpc,
       protocol.ring_len(),
@@ -742,11 +742,11 @@ impl Network for Monero {
 
     let protocol = self.rpc.get_protocol().await.unwrap();
 
-    let decoys = Decoys::select(
+    let decoys = Decoys::fingerprintable_canonical_select(
       &mut OsRng,
       &self.rpc,
       protocol.ring_len(),
-      self.rpc.get_height().await.unwrap() - 1,
+      self.rpc.get_height().await.unwrap(),
       &outputs,
     )
     .await
@@ -761,7 +761,7 @@ impl Network for Monero {
       vec![(address.into(), amount - fee)],
       &Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
-      self.rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+      self.rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
     )
     .unwrap()
     .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))

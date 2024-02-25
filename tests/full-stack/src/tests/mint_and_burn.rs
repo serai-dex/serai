@@ -100,7 +100,8 @@ async fn mint_and_burn_test() {
         let rpc = producer_handles.monero(ops).await;
         let mut res = Vec::with_capacity(count);
         for _ in 0 .. count {
-          let block = rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap()[0]).await.unwrap();
+          let block =
+            rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap().0[0]).await.unwrap();
 
           let mut txs = Vec::with_capacity(block.txs.len());
           for tx in &block.txs {
@@ -336,9 +337,7 @@ async fn mint_and_burn_test() {
 
     // Send in XMR
     {
-      use curve25519_dalek::{
-        constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwards::CompressedEdwardsY,
-      };
+      use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
       use monero_serai::{
         Protocol,
         transaction::Timelock,
@@ -346,6 +345,7 @@ async fn mint_and_burn_test() {
           ViewPair, Scanner, Decoys, Change, FeePriority, SignableTransaction,
           address::{Network, AddressType, AddressMeta, MoneroAddress},
         },
+        decompress_point,
       };
 
       // Grab the first output on the chain
@@ -361,11 +361,11 @@ async fn mint_and_burn_test() {
         .unwrap()
         .swap_remove(0);
 
-      let decoys = Decoys::select(
+      let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
         Protocol::v16.ring_len(),
-        rpc.get_height().await.unwrap() - 1,
+        rpc.get_height().await.unwrap(),
         &[output.clone()],
       )
       .await
@@ -382,9 +382,7 @@ async fn mint_and_burn_test() {
               Network::Mainnet,
               AddressType::Featured { guaranteed: true, subaddress: false, payment_id: None },
             ),
-            CompressedEdwardsY(monero_key_pair.1.to_vec().try_into().unwrap())
-              .decompress()
-              .unwrap(),
+            decompress_point(monero_key_pair.1.to_vec().try_into().unwrap()).unwrap(),
             ED25519_BASEPOINT_POINT *
               processor::additional_key::<processor::networks::monero::Monero>(0).0,
           ),
@@ -392,7 +390,7 @@ async fn mint_and_burn_test() {
         )],
         &Change::new(&view_pair, false),
         vec![Shorthand::transfer(None, serai_addr).encode()],
-        rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
+        rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
       )
       .unwrap()
       .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))

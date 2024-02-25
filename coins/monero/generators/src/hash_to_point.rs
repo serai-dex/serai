@@ -7,7 +7,16 @@ use dalek_ff_group::FieldElement;
 
 use crate::hash;
 
-/// Monero's hash to point function, as named `ge_fromfe_frombytes_vartime`.
+/// Decompress canonically encoded ed25519 point
+/// It does not check if the point is in the prime order subgroup
+pub fn decompress_point(bytes: [u8; 32]) -> Option<EdwardsPoint> {
+  CompressedEdwardsY(bytes)
+    .decompress()
+    // Ban points which are either unreduced or -0
+    .filter(|point| point.compress().to_bytes() == bytes)
+}
+
+/// Monero's hash to point function, as named `hash_to_ec`.
 pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let A = FieldElement::from(486662u64);
@@ -47,5 +56,5 @@ pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   let mut bytes = Y.to_repr();
   bytes[31] |= sign.unwrap_u8() << 7;
 
-  CompressedEdwardsY(bytes).decompress().unwrap().mul_by_cofactor()
+  decompress_point(bytes).unwrap().mul_by_cofactor()
 }

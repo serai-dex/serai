@@ -1,7 +1,7 @@
 use core::ops::BitXor;
 use std_shims::{
   vec::Vec,
-  io::{self, Read, Write},
+  io::{self, Read, BufRead, Write},
 };
 
 use zeroize::Zeroize;
@@ -13,6 +13,7 @@ use crate::serialize::{
   write_point, write_vec,
 };
 
+pub const MAX_TX_EXTRA_PADDING_COUNT: usize = 255;
 pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
 pub const PAYMENT_ID_MARKER: u8 = 0;
@@ -70,15 +71,23 @@ impl PaymentId {
 // Doesn't bother with padding nor MinerGate
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub enum ExtraField {
+  Padding(usize),
   PublicKey(EdwardsPoint),
   Nonce(Vec<u8>),
   MergeMining(usize, [u8; 32]),
   PublicKeys(Vec<EdwardsPoint>),
+  MysteriousMinergate(Vec<u8>),
 }
 
 impl ExtraField {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
+      ExtraField::Padding(size) => {
+        w.write_all(&[0])?;
+        for _ in 1 .. *size {
+          write_byte(&0u8, w)?;
+        }
+      }
       ExtraField::PublicKey(key) => {
         w.write_all(&[1])?;
         w.write_all(&key.compress().to_bytes())?;
@@ -96,12 +105,39 @@ impl ExtraField {
         w.write_all(&[4])?;
         write_vec(write_point, keys, w)?;
       }
+      ExtraField::MysteriousMinergate(data) => {
+        w.write_all(&[0xDE])?;
+        write_vec(write_byte, data, w)?;
+      }
     }
     Ok(())
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<ExtraField> {
+  pub fn read<R: BufRead>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
+      0 => ExtraField::Padding({
+        // Read until either non-zero, max padding count, or end of buffer
+        let mut size: usize = 1;
+        loop {
+          let buf = r.fill_buf()?;
+          let mut n_consume = 0;
+          for v in buf {
+            if *v != 0u8 {
+              Err(io::Error::other("non-zero value after padding"))?
+            }
+            n_consume += 1;
+            size += 1;
+            if size > MAX_TX_EXTRA_PADDING_COUNT {
+              Err(io::Error::other("padding exceeded max count"))?
+            }
+          }
+          if n_consume == 0 {
+            break;
+          }
+          r.consume(n_consume);
+        }
+        size
+      }),
       1 => ExtraField::PublicKey(read_point(r)?),
       2 => ExtraField::Nonce({
         let nonce = read_vec(read_byte, r)?;
@@ -112,20 +148,21 @@ impl ExtraField {
       }),
       3 => ExtraField::MergeMining(read_varint(r)?, read_bytes(r)?),
       4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
+      0xDE => ExtraField::MysteriousMinergate(read_vec(read_byte, r)?),
       _ => Err(io::Error::other("unknown extra field"))?,
     })
   }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct Extra(Vec<ExtraField>);
+pub struct Extra(pub(crate) Vec<ExtraField>);
 impl Extra {
-  pub fn keys(&self) -> Option<(EdwardsPoint, Option<Vec<EdwardsPoint>>)> {
-    let mut key = None;
+  pub fn keys(&self) -> Option<(Vec<EdwardsPoint>, Option<Vec<EdwardsPoint>>)> {
+    let mut keys = vec![];
     let mut additional = None;
     for field in &self.0 {
       match field.clone() {
-        ExtraField::PublicKey(this_key) => key = key.or(Some(this_key)),
+        ExtraField::PublicKey(this_key) => keys.push(this_key),
         ExtraField::PublicKeys(these_additional) => {
           additional = additional.or(Some(these_additional))
         }
@@ -133,7 +170,11 @@ impl Extra {
       }
     }
     // Don't return any keys if this was non-standard and didn't include the primary key
-    key.map(|key| (key, additional))
+    if keys.is_empty() {
+      None
+    } else {
+      Some((keys, additional))
+    }
   }
 
   pub fn payment_id(&self) -> Option<PaymentId> {
@@ -200,7 +241,7 @@ impl Extra {
     buf
   }
 
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Extra> {
+  pub fn read<R: BufRead>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;
     while {

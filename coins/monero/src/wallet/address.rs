@@ -3,7 +3,9 @@ use std_shims::string::{String, ToString};
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use curve25519_dalek::edwards::EdwardsPoint;
+
+use monero_generators::decompress_point;
 
 use base58_monero::base58::{encode_check, decode_check};
 
@@ -240,12 +242,10 @@ impl<B: AddressBytes> Address<B> {
     }
 
     let mut meta = AddressMeta::from_byte(raw[0])?;
-    let spend = CompressedEdwardsY(raw[1 .. 33].try_into().unwrap())
-      .decompress()
-      .ok_or(AddressError::InvalidKey)?;
-    let view = CompressedEdwardsY(raw[33 .. 65].try_into().unwrap())
-      .decompress()
-      .ok_or(AddressError::InvalidKey)?;
+    let spend =
+      decompress_point(raw[1 .. 33].try_into().unwrap()).ok_or(AddressError::InvalidKey)?;
+    let view =
+      decompress_point(raw[33 .. 65].try_into().unwrap()).ok_or(AddressError::InvalidKey)?;
     let mut read = 65;
 
     if matches!(meta.kind, AddressType::Featured { .. }) {

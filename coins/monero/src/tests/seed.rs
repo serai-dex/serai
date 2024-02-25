@@ -7,7 +7,7 @@ use curve25519_dalek::scalar::Scalar;
 use crate::{
   hash,
   wallet::seed::{
-    Seed, SeedType,
+    Seed, SeedType, SeedError,
     classic::{self, trim_by_lang},
     polyseed,
   },
@@ -468,4 +468,15 @@ fn test_polyseed() {
       );
     }
   }
+}
+
+#[test]
+fn test_invalid_polyseed() {
+  // This seed includes unsupported features bits and should error on decode
+  let seed = "include domain claim resemble urban hire lunch bird \
+    crucial fire best wife ring warm ignore model"
+    .into();
+  let res =
+    Seed::from_string(SeedType::Polyseed(polyseed::Language::English), Zeroizing::new(seed));
+  assert_eq!(res, Err(SeedError::UnsupportedFeatures));
 }

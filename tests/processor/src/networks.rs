@@ -283,7 +283,7 @@ impl Wallet {
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
-        use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, edwards::CompressedEdwardsY};
+        use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
         use monero_serai::{
           Protocol,
           wallet::{
@@ -291,6 +291,7 @@ impl Wallet {
             SpendableOutput, Decoys, Change, FeePriority, Scanner, SignableTransaction,
           },
           rpc::HttpRpc,
+          decompress_point,
         };
         use processor::{additional_key, networks::Monero};
 
@@ -307,18 +308,17 @@ impl Wallet {
               .expect("prior transaction was never published"),
           );
         }
-        let mut decoys = Decoys::select(
+        let mut decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng,
           &rpc,
           Protocol::v16.ring_len(),
-          rpc.get_height().await.unwrap() - 1,
+          rpc.get_height().await.unwrap(),
           &these_inputs,
         )
         .await
         .unwrap();
 
-        let to_spend_key =
-          CompressedEdwardsY(<[u8; 32]>::try_from(to.as_ref()).unwrap()).decompress().unwrap();
+        let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
         let to_addr = Address::new(
           AddressMeta::new(
@@ -342,7 +342,7 @@ impl Wallet {
           vec![(to_addr, AMOUNT)],
           &Change::new(view_pair, false),
           data,
-          rpc.get_fee(Protocol::v16, FeePriority::Low).await.unwrap(),
+          rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)

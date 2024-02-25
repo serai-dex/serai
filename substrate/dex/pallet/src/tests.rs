@@ -1267,3 +1267,53 @@ fn cannot_block_pool_creation() {
     assert_ok!(Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 100, 9900, 10, 9900, user,));
   });
 }
+
+#[test]
+fn test_median_price() {
+  new_test_ext().execute_with(|| {
+    use rand_core::{RngCore, OsRng};
+
+    let mut prices = vec![];
+    for i in 0 .. 100 {
+      // Randomly use an active number
+      if (i != 0) && (OsRng.next_u64() % u64::from(MEDIAN_PRICE_WINDOW_LENGTH / 3) == 0) {
+        let old_index = usize::try_from(
+          OsRng.next_u64() %
+            u64::from(MEDIAN_PRICE_WINDOW_LENGTH) %
+            u64::try_from(prices.len()).unwrap(),
+        )
+        .unwrap();
+        let window_base = prices.len().saturating_sub(MEDIAN_PRICE_WINDOW_LENGTH.into());
+        prices.push(prices[window_base + old_index]);
+      } else {
+        prices.push(OsRng.next_u64());
+      }
+    }
+    let coin = Coin::Bitcoin;
+
+    assert!(prices.len() >= (2 * usize::from(MEDIAN_PRICE_WINDOW_LENGTH)));
+    for i in 0 .. prices.len() {
+      let price = Amount(prices[i]);
+
+      let n = BlockNumberFor::<Test>::from(u32::try_from(i).unwrap());
+      SpotPriceForBlock::<Test>::set(n, coin, Some(price));
+      Dex::insert_into_median(coin, price);
+      if SpotPricesLength::<Test>::get(coin).unwrap() > MEDIAN_PRICE_WINDOW_LENGTH {
+        let old = n - u64::from(MEDIAN_PRICE_WINDOW_LENGTH);
+        let old_price = SpotPriceForBlock::<Test>::get(old, coin).unwrap();
+        SpotPriceForBlock::<Test>::remove(old, coin);
+        Dex::remove_from_median(coin, old_price);
+      }
+
+      // get the current window (cloning so our sort doesn't affect the original array)
+      let window_base = (i + 1).saturating_sub(MEDIAN_PRICE_WINDOW_LENGTH.into());
+      let mut window = Vec::from(&prices[window_base ..= i]);
+      assert!(window.len() <= MEDIAN_PRICE_WINDOW_LENGTH.into());
+
+      // get the median
+      window.sort();
+      let median_index = window.len() / 2;
+      assert_eq!(Dex::median_price(coin).unwrap(), Amount(window[median_index]));
+    }
+  });
+}

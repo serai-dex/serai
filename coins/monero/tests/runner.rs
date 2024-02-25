@@ -17,6 +17,7 @@ use monero_serai::{
     SpendableOutput, Fee,
   },
   transaction::Transaction,
+  DEFAULT_LOCK_WINDOW,
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
@@ -36,7 +37,6 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
 
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
-// TODO: mine as much as needed instead of default 10 blocks
 pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 32]) {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
@@ -46,15 +46,23 @@ pub async fn mine_until_unlocked(rpc: &Rpc<HttpRpc>, addr: &str, tx_hash: [u8; 3
     found = match block.txs.iter().find(|&&x| x == tx_hash) {
       Some(_) => true,
       None => {
-        rpc.generate_blocks(addr, 1).await.unwrap();
-        height += 1;
+        height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
         false
       }
     }
   }
 
-  // mine 9 more blocks to unlock the tx
-  rpc.generate_blocks(addr, 9).await.unwrap();
+  // Mine until tx's outputs are unlocked
+  let o_indexes: Vec<u64> = rpc.get_o_indexes(tx_hash).await.unwrap();
+  while rpc
+    .get_outs(&o_indexes)
+    .await
+    .unwrap()
+    .into_iter()
+    .all(|o| (!(o.unlocked && height >= (o.height + DEFAULT_LOCK_WINDOW))))
+  {
+    height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
+  }
 }
 
 // Mines 60 blocks and returns an unlocked miner TX output.
@@ -212,7 +220,7 @@ macro_rules! test {
 
           let builder = SignableTransactionBuilder::new(
             protocol,
-            rpc.get_fee(protocol, FeePriority::Low).await.unwrap(),
+            rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
             Change::new(
               &ViewPair::new(
                 &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
@@ -260,12 +268,12 @@ macro_rules! test {
           let temp = Box::new({
             let mut builder = builder.clone();
 
-            let decoys = Decoys::select(
+            let decoys = Decoys::fingerprintable_canonical_select(
               &mut OsRng,
               &rpc,
               protocol.ring_len(),
-              rpc.get_height().await.unwrap() - 1,
-              &[miner_tx.clone()]
+              rpc.get_height().await.unwrap(),
+              &[miner_tx.clone()],
             )
             .await
             .unwrap();

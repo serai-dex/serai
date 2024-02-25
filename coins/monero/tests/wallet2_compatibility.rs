@@ -10,7 +10,7 @@ use monero_serai::{
   rpc::{EmptyResponse, HttpRpc, Rpc},
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
-    extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra},
+    extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
     Scanner,
   },
 };
@@ -90,9 +90,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // TODO: Needs https://github.com/monero-project/monero/pull/8882
   // let fee_rate = daemon_rpc
-  //   // Uses `FeePriority::Low` instead of `FeePriority::Lowest` because wallet RPC
-  //   // adjusts `monero_rpc::TransferPriority::Default` up by 1
-  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Low)
+  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
   //   .await
   //   .unwrap();
 
@@ -113,13 +111,17 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
   // runner::check_weight_and_fee(&tx, fee_rate);
 
   match spec {
-    AddressSpec::Subaddress(index) => assert_eq!(output.metadata.subaddress, Some(index)),
+    AddressSpec::Subaddress(index) => {
+      assert_eq!(output.metadata.subaddress, Some(index));
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
+    }
     AddressSpec::Integrated(payment_id) => {
-      assert_eq!(output.metadata.payment_id, payment_id);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(payment_id)));
       assert_eq!(output.metadata.subaddress, None);
     }
     AddressSpec::Standard | AddressSpec::Featured { .. } => {
-      assert_eq!(output.metadata.subaddress, None)
+      assert_eq!(output.metadata.subaddress, None);
+      assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
     }
   }
   assert_eq!(output.commitment().amount, 1000000000000);
@@ -157,6 +159,7 @@ struct Transfer {
 #[derive(Debug, Deserialize)]
 struct TransfersResponse {
   transfer: Transfer,
+  transfers: Vec<Transfer>,
 }
 
 test!(
@@ -180,6 +183,7 @@ test!(
         .unwrap();
       assert_eq!(transfer.transfer.subaddr_index, Index { major: 0, minor: 0 });
       assert_eq!(transfer.transfer.amount, 1000000);
+      assert_eq!(transfer.transfer.payment_id, hex::encode([0u8; 8]));
     },
   ),
 );
@@ -217,6 +221,7 @@ test!(
         .unwrap();
       assert_eq!(transfer.transfer.subaddr_index, Index { major: data.1, minor: 0 });
       assert_eq!(transfer.transfer.amount, 1000000);
+      assert_eq!(transfer.transfer.payment_id, hex::encode([0u8; 8]));
 
       // Make sure only one R was included in TX extra
       assert!(Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
@@ -225,6 +230,62 @@ test!(
         .unwrap()
         .1
         .is_none());
+    },
+  ),
+);
+
+test!(
+  send_to_wallet_rpc_subaddresses,
+  (
+    |_, mut builder: Builder, _| async move {
+      // initialize rpc
+      let (wallet_rpc, daemon_rpc, _) = initialize_rpcs().await;
+
+      // make the subaddress
+      #[derive(Debug, Deserialize)]
+      struct AddressesResponse {
+        addresses: Vec<String>,
+        address_index: u32,
+      }
+      let addrs: AddressesResponse = wallet_rpc
+        .json_rpc_call("create_address", Some(json!({ "account_index": 0, "count": 2 })))
+        .await
+        .unwrap();
+      assert!(addrs.address_index != 0);
+      assert!(addrs.addresses.len() == 2);
+
+      builder.add_payments(&[
+        (MoneroAddress::from_str(Network::Mainnet, &addrs.addresses[0]).unwrap(), 1000000),
+        (MoneroAddress::from_str(Network::Mainnet, &addrs.addresses[1]).unwrap(), 2000000),
+      ]);
+      (builder.build().unwrap(), (wallet_rpc, daemon_rpc, addrs.address_index))
+    },
+    |_, tx: Transaction, _, data: (Rpc<HttpRpc>, Rpc<HttpRpc>, u32)| async move {
+      // confirm receipt
+      let _: EmptyResponse = data.0.json_rpc_call("refresh", None).await.unwrap();
+      let transfer: TransfersResponse = data
+        .0
+        .json_rpc_call(
+          "get_transfer_by_txid",
+          Some(json!({ "txid": hex::encode(tx.hash()), "account_index": 0 })),
+        )
+        .await
+        .unwrap();
+
+      assert_eq!(transfer.transfers.len(), 2);
+      for t in transfer.transfers {
+        match t.amount {
+          1000000 => assert_eq!(t.subaddr_index, Index { major: 0, minor: data.2 }),
+          2000000 => assert_eq!(t.subaddr_index, Index { major: 0, minor: data.2 + 1 }),
+          _ => unreachable!(),
+        }
+      }
+
+      // Make sure 3 additional pub keys are included in TX extra
+      let keys =
+        Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref()).unwrap().keys().unwrap().1.unwrap();
+
+      assert_eq!(keys.len(), 3);
     },
   ),
 );
