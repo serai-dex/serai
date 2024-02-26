@@ -195,6 +195,48 @@ pub fn local_config() -> Result<ChainSpec, &'static str> {
 pub fn testnet_config() -> Result<ChainSpec, &'static str> {
   let wasm_binary = WASM_BINARY.ok_or("Testnet wasm not available")?;
 
+  let bootnode_multiaddrs: Vec<libp2p::Multiaddr> = vec![
+    "/ip6/2604:180:f1::70/tcp/30333".parse().unwrap(),
+    "/ip4/103.18.20.202/tcp/30333".parse().unwrap(),
+    "/ip4/37.60.255.101/tcp/30333".parse().unwrap(),
+    "/ip4/23.227.173.218/tcp/30333".parse().unwrap(),
+    "/ip4/65.21.156.202/tcp/30333".parse().unwrap(),
+    "/ip4/174.3.203.20/tcp/30333".parse().unwrap(),
+    "/ip4/51.195.60.217/tcp/30333".parse().unwrap(),
+  ];
+  // Transforms the above Multiaddrs into MultiaddrWithPeerIds
+  // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
+  // time and this fine for a testnet
+  let bootnodes = || async {
+    #[rustfmt::skip]
+    use libp2p::{
+      Transport as TransportTrait, OutboundUpgrade, tcp::tokio::Transport, noise::Config
+    };
+    let mut tasks = vec![];
+    for multiaddr in bootnode_multiaddrs {
+      tasks.push(tokio::time::timeout(
+        core::time::Duration::from_secs(30),
+        tokio::task::spawn(async {
+          let Ok(transport) = Transport::default().dial(multiaddr.clone()) else { None? };
+          let Ok(transport) = transport.await else { None? };
+          // Uses a random key pair as we only care about their ID
+          let Ok(noise) = Config::new(&sc_network::Keypair::generate_ed25519()) else { None? };
+          let Ok(result) = noise.upgrade_outbound(transport, "/ipfs/id/1.0.0").await else { None? };
+          let peer_id = result.0;
+          Some(sc_network::config::MultiaddrWithPeerId { multiaddr, peer_id })
+        }),
+      ));
+    }
+
+    let mut res = vec![];
+    for task in tasks {
+      if let Ok(Ok(Some(bootnode))) = task.await {
+        res.push(bootnode);
+      }
+    }
+    res
+  };
+
   Ok(ChainSpec::from_genesis(
     // Name
     "Test Network 0",
@@ -312,7 +354,7 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
       )
     },
     // Bootnodes
-    vec![todo!()],
+    tokio::runtime::Handle::current().block_on(bootnodes()),
     // Telemetry
     None,
     // Protocol ID
