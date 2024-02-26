@@ -199,6 +199,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     l: Participant,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
+    // TODO: This check is faulty if two shares are additive inverses
     if self.image.is_identity().into() {
       self.transcript.domain_separate(b"CLSAG");
       self.input().transcript(&mut self.transcript);
