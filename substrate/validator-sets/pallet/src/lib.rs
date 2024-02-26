@@ -652,7 +652,7 @@ pub mod pallet {
         // If not Serai, check the prior session had its keys cleared, which happens once its
         // retired
         return (network == NetworkId::Serai) ||
-          (!Keys::<T>::contains_key(ValidatorSet {
+          (Keys::<T>::contains_key(ValidatorSet {
             network,
             session: Session(current_session.0 - 1),
           }));

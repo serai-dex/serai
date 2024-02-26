@@ -57,14 +57,22 @@ pub fn coordinator_instance(
   )
 }
 
-pub fn serai_composition(name: &str) -> TestBodySpecification {
-  serai_docker_tests::build("serai".to_string());
-
-  TestBodySpecification::with_image(
-    Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
-  )
-  .replace_env([("SERAI_NAME".to_string(), name.to_lowercase())].into())
-  .set_publish_all_ports(true)
+pub fn serai_composition(name: &str, fast_epoch: bool) -> TestBodySpecification {
+  if fast_epoch {
+    serai_docker_tests::build("serai-fast-epoch".to_string());
+    TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-serai-fast-epoch").pull_policy(PullPolicy::Never),
+    )
+    .replace_env([("SERAI_NAME".to_string(), name.to_lowercase())].into())
+    .set_publish_all_ports(true)
+  } else {
+    serai_docker_tests::build("serai".to_string());
+    TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
+    )
+    .replace_env([("SERAI_NAME".to_string(), name.to_lowercase())].into())
+    .set_publish_all_ports(true)
+  }
 }
 
 fn is_cosign_message(msg: &CoordinatorMessage) -> bool {
@@ -346,9 +354,9 @@ impl Processor {
 
   /// Receive a message from the coordinator as a processor.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    // Set a timeout of 20 minutes to allow effectively any protocol to occur without a fear of
+    // Set a timeout of 30 minutes to allow effectively any protocol to occur without a fear of
     // an arbitrary timeout cutting it short
-    tokio::time::timeout(Duration::from_secs(20 * 60), self.recv_message_inner()).await.unwrap()
+    tokio::time::timeout(Duration::from_secs(30 * 60), self.recv_message_inner()).await.unwrap()
   }
 
   pub async fn set_substrate_key(

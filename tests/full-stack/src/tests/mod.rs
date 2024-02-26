@@ -65,7 +65,7 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
       processor_instance(NetworkId::Monero, monero_port, message_queue_keys[&NetworkId::Monero]);
 
     let coordinator_composition = coordinator_instance(name, coord_key);
-    let serai_composition = serai_composition(name);
+    let serai_composition = serai_composition(name, false);
 
     // Give every item in this stack a unique ID
     // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
