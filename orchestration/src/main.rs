@@ -276,9 +276,9 @@ fn dockerfiles(network: Network) {
     Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(*serai_key_repr).unwrap())
   };
 
-  coordinator(&orchestration_path, network, coordinator_key.0, serai_key);
+  coordinator(&orchestration_path, network, coordinator_key.0, &serai_key);
 
-  serai(&orchestration_path, network);
+  serai(&orchestration_path, network, &serai_key);
 }
 
 fn key_gen(network: Network) {
@@ -364,6 +364,20 @@ fn start(network: Network, services: HashSet<String>) {
         "monero-wallet-rpc" => {
           assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
           command.arg("-p").arg("18082:18082")
+        }
+        "coordinator" => {
+          if network != Network::Dev {
+            command.arg("-p").arg("30563:30563")
+          } else {
+            command
+          }
+        }
+        "serai" => {
+          if network != Network::Dev {
+            command.arg("-p").arg("30333:30333")
+          } else {
+            command
+          }
         }
         _ => command,
       };

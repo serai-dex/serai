@@ -11,7 +11,7 @@ pub fn coordinator(
   orchestration_path: &Path,
   network: Network,
   coordinator_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
