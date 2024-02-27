@@ -200,7 +200,7 @@ pub async fn key_gen<C: Ciphersuite>(
           assert_eq!(key_pair.0 .0, substrate_key);
           assert_eq!(&key_pair.1, &network_key);
         }
-        _ => panic!("coordinator didn't respond with ConfirmKeyPair msg: {:?} ", msg),
+        _ => panic!("coordinator didn't respond with ConfirmKeyPair msg: {msg:?}"),
       }
       message = Some(msg);
     } else {

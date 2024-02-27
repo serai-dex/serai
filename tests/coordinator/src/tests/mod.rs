@@ -23,8 +23,6 @@ mod sign;
 pub use sign::sign;
 
 mod rotation;
-#[allow(unused_imports)]
-pub use rotation::rotate;
 
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;

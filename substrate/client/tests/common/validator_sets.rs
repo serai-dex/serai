@@ -73,7 +73,7 @@ pub async fn allocate_stake(
   nonce: u32,
 ) -> [u8; 32] {
   // get the call
-  let tx = serai.sign(&pair, SeraiValidatorSets::allocate(network, amount), nonce, 0);
+  let tx = serai.sign(pair, SeraiValidatorSets::allocate(network, amount), nonce, 0);
   publish_tx(serai, &tx).await
 }
 
@@ -86,6 +86,6 @@ pub async fn deallocate_stake(
   nonce: u32,
 ) -> [u8; 32] {
   // get the call
-  let tx = serai.sign(&pair, SeraiValidatorSets::deallocate(network, amount), nonce, 0);
+  let tx = serai.sign(pair, SeraiValidatorSets::deallocate(network, amount), nonce, 0);
   publish_tx(serai, &tx).await
 }
