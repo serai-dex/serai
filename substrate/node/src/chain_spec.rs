@@ -196,7 +196,7 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
   let wasm_binary = WASM_BINARY.ok_or("Testnet wasm not available")?;
 
   let bootnode_multiaddrs: Vec<libp2p::Multiaddr> = vec![
-    "/ip6/2604:180:f1::70/tcp/30333".parse().unwrap(),
+    "/ip4/107.161.20.133/tcp/30333".parse().unwrap(),
     "/ip4/103.18.20.202/tcp/30333".parse().unwrap(),
     "/ip4/37.60.255.101/tcp/30333".parse().unwrap(),
     "/ip4/23.227.173.218/tcp/30333".parse().unwrap(),
@@ -207,22 +207,21 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
   // Transforms the above Multiaddrs into MultiaddrWithPeerIds
   // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
   // time and this fine for a testnet
+
   let bootnodes = || async {
-    #[rustfmt::skip]
-    use libp2p::{
-      Transport as TransportTrait, OutboundUpgrade, tcp::tokio::Transport, noise::Config
-    };
+    use libp2p::{Transport as TransportTrait, tcp::tokio::Transport, noise::Config};
     let mut tasks = vec![];
     for multiaddr in bootnode_multiaddrs {
       tasks.push(tokio::time::timeout(
-        core::time::Duration::from_secs(30),
-        tokio::task::spawn(async {
-          let Ok(transport) = Transport::default().dial(multiaddr.clone()) else { None? };
-          let Ok(transport) = transport.await else { None? };
-          // Uses a random key pair as we only care about their ID
+        core::time::Duration::from_secs(10),
+        tokio::task::spawn(async move {
           let Ok(noise) = Config::new(&sc_network::Keypair::generate_ed25519()) else { None? };
-          let Ok(result) = noise.upgrade_outbound(transport, "/ipfs/id/1.0.0").await else { None? };
-          let peer_id = result.0;
+          let mut transport = Transport::default()
+            .upgrade(libp2p::core::upgrade::Version::V1)
+            .authenticate(noise)
+            .multiplex(libp2p::yamux::Config::default());
+          let Ok(transport) = transport.dial(multiaddr.clone()) else { None? };
+          let Ok((peer_id, _)) = transport.await else { None? };
           Some(sc_network::config::MultiaddrWithPeerId { multiaddr, peer_id })
         }),
       ));
