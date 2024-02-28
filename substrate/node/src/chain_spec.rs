@@ -30,7 +30,7 @@ fn devnet_genesis(
     coins: CoinsConfig {
       accounts: endowed_accounts
         .into_iter()
-        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 56) }))
+        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
       _ignore: Default::default(),
     },
@@ -81,7 +81,7 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
     coins: CoinsConfig {
       accounts: validators
         .iter()
-        .map(|a| (*a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
+        .map(|a| (*a, Balance { coin: Coin::Serai, amount: Amount(5_000_000 * 10_u64.pow(8)) }))
         .collect(),
       _ignore: Default::default(),
     },
