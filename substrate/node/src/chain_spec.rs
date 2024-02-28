@@ -237,6 +237,9 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
     res
   };
 
+  let runtime = tokio::runtime::Runtime::new().unwrap();
+  let bootnodes = runtime.block_on(bootnodes());
+  runtime.shutdown_background();
   Ok(ChainSpec::from_genesis(
     // Name
     "Test Network 0",
@@ -354,7 +357,7 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
       )
     },
     // Bootnodes
-    tokio::runtime::Handle::current().block_on(bootnodes()),
+    bootnodes,
     // Telemetry
     None,
     // Protocol ID

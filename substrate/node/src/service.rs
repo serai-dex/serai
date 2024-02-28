@@ -179,7 +179,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
   config.network.node_name = "serai".to_string();
   config.network.client_version = "0.1.0".to_string();
   config.network.listen_addresses =
-    vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/0.0.0.0/tcp/30333".parse().unwrap()];
+    vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
 
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
