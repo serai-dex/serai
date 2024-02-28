@@ -66,6 +66,16 @@ fn devnet_genesis(
 }
 
 fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> RuntimeGenesisConfig {
+  {
+    use std::time::{Duration, SystemTime};
+    let secs_since_epoch = SystemTime::now()
+      .duration_since(SystemTime::UNIX_EPOCH)
+      .expect("current time is before the epoch")
+      .as_secs();
+    let secs_till_start = 1709744400_u64.saturating_sub(secs_since_epoch);
+    std::thread::sleep(Duration::from_secs(secs_till_start));
+  }
+
   let validators = validators
     .into_iter()
     .map(|validator| Public::decode(&mut hex::decode(validator).unwrap().as_slice()).unwrap())
