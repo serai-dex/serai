@@ -30,7 +30,7 @@ fn devnet_genesis(
     coins: CoinsConfig {
       accounts: endowed_accounts
         .into_iter()
-        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
+        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 56) }))
         .collect(),
       _ignore: Default::default(),
     },
