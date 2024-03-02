@@ -112,7 +112,7 @@ impl AggregateRangeStatement {
     let mut d = ScalarVector::new(mn);
     for j in 1 ..= V.len() {
       z_pow.push(z.pow(Scalar::from(2 * u64::try_from(j).unwrap()))); // TODO: Optimize this
-      d = d.add_vec(&Self::d_j(j, V.len()).mul(z_pow[j - 1]));
+      d = d + &(Self::d_j(j, V.len()) * (z_pow[j - 1]));
     }
 
     let mut ascending_y = ScalarVector(vec![y]);
@@ -124,7 +124,8 @@ impl AggregateRangeStatement {
     let mut descending_y = ascending_y.clone();
     descending_y.0.reverse();
 
-    let d_descending_y = d.mul_vec(&descending_y);
+    let d_descending_y = d.clone() * &descending_y;
+    let d_descending_y_plus_z = d_descending_y + z;
 
     let y_mn_plus_one = descending_y[0] * y;
 
@@ -135,9 +136,9 @@ impl AggregateRangeStatement {
 
     let neg_z = -z;
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 2);
-    for (i, d_y_z) in d_descending_y.add(z).0.drain(..).enumerate() {
+    for (i, d_y_z) in d_descending_y_plus_z.0.iter().enumerate() {
       A_terms.push((neg_z, generators.generator(GeneratorsList::GBold1, i)));
-      A_terms.push((d_y_z, generators.generator(GeneratorsList::HBold1, i)));
+      A_terms.push((*d_y_z, generators.generator(GeneratorsList::HBold1, i)));
     }
     A_terms.push((y_mn_plus_one, commitment_accum));
     A_terms.push((
@@ -145,7 +146,14 @@ impl AggregateRangeStatement {
       Generators::g(),
     ));
 
-    (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
+    (
+      y,
+      d_descending_y_plus_z,
+      y_mn_plus_one,
+      z,
+      ScalarVector(z_pow),
+      A + multiexp_vartime(&A_terms),
+    )
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -191,7 +199,7 @@ impl AggregateRangeStatement {
       a_l.0.append(&mut u64_decompose(*witness.values.get(j - 1).unwrap_or(&0)).0);
     }
 
-    let a_r = a_l.sub(Scalar::ONE);
+    let a_r = a_l.clone() - Scalar::ONE;
 
     let alpha = Scalar::random(&mut *rng);
 
@@ -209,11 +217,11 @@ impl AggregateRangeStatement {
     // Multiply by INV_EIGHT per earlier commentary
     A.0 *= crate::INV_EIGHT();
 
-    let (y, d_descending_y, y_mn_plus_one, z, z_pow, A_hat) =
+    let (y, d_descending_y_plus_z, y_mn_plus_one, z, z_pow, A_hat) =
       Self::compute_A_hat(PointVector(V), &generators, &mut transcript, A);
 
-    let a_l = a_l.sub(z);
-    let a_r = a_r.add_vec(&d_descending_y).add(z);
+    let a_l = a_l - z;
+    let a_r = a_r + &d_descending_y_plus_z;
     let mut alpha = alpha;
     for j in 1 ..= witness.gammas.len() {
       alpha += z_pow[j - 1] * witness.gammas[j - 1] * y_mn_plus_one;
