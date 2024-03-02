@@ -273,8 +273,8 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) p2p: P,
 }
 
-pub const BLOCK_PROCESSING_TIME: u32 = 999;
-pub const LATENCY_TIME: u32 = 1667;
+pub const BLOCK_PROCESSING_TIME: u32 = 1000;
+pub const LATENCY_TIME: u32 = 3000;
 pub const TARGET_BLOCK_TIME: u32 = BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME);
 
 #[test]
@@ -307,7 +307,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   type Weights = Arc<Validators>;
   type Block = TendermintBlock;
 
-  // These are in milliseconds and create a six-second block time.
+  // These are in milliseconds and create a ten-second block time.
   // The block time is the latency on message delivery (where a message is some piece of data
   // embedded in a transaction) times three plus the block processing time, hence why it should be
   // kept low.
