@@ -218,7 +218,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       TendermintNetwork { genesis, signer, validators, blockchain, to_rebroadcast, p2p };
 
     let TendermintHandle { synced_block, synced_block_result, messages, machine } =
-      TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
+      TendermintMachine::new(db.clone(), network.clone(), block_number, start_time, proposal).await;
     tokio::spawn(machine.run());
 
     Some(Self {

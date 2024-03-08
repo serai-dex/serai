@@ -346,6 +346,8 @@ fn start(network: Network, services: HashSet<String>) {
       let command = command.arg("create").arg("--name").arg(&docker_name);
       let command = command.arg("--network").arg("serai");
       let command = command.arg("--restart").arg("always");
+      let command = command.arg("--log-opt").arg("max-size=100m");
+      let command = command.arg("--log-opt").arg("max-file=3");
       let command = match name {
         "bitcoin" => {
           if network == Network::Dev {

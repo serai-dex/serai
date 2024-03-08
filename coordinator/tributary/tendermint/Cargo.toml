@@ -27,5 +27,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tokio = { version = "1", default-features = false, features = ["time"] }
 
+serai-db = { path = "../../../common/db", version = "0.1", default-features = false }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }

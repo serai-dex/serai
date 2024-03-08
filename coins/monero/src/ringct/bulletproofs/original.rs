@@ -9,7 +9,7 @@ use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as D
 use group::{ff::Field, Group};
 use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
 
-use multiexp::BatchVerifier;
+use multiexp::{BatchVerifier, multiexp};
 
 use crate::{Commitment, ringct::bulletproofs::core::*};
 
@@ -17,7 +17,20 @@ include!(concat!(env!("OUT_DIR"), "/generators.rs"));
 
 static IP12_CELL: OnceLock<Scalar> = OnceLock::new();
 pub(crate) fn IP12() -> Scalar {
-  *IP12_CELL.get_or_init(|| inner_product(&ScalarVector(vec![Scalar::ONE; N]), TWO_N()))
+  *IP12_CELL.get_or_init(|| ScalarVector(vec![Scalar::ONE; N]).inner_product(TWO_N()))
+}
+
+pub(crate) fn hadamard_fold(
+  l: &[EdwardsPoint],
+  r: &[EdwardsPoint],
+  a: Scalar,
+  b: Scalar,
+) -> Vec<EdwardsPoint> {
+  let mut res = Vec::with_capacity(l.len() / 2);
+  for i in 0 .. l.len() {
+    res.push(multiexp(&[(a, l[i]), (b, r[i])]));
+  }
+  res
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -57,7 +70,7 @@ impl OriginalStruct {
     let mut cache = hash_to_scalar(&y.to_bytes());
     let z = cache;
 
-    let l0 = &aL - z;
+    let l0 = aL - z;
     let l1 = sL;
 
     let mut zero_twos = Vec::with_capacity(MN);
@@ -69,12 +82,12 @@ impl OriginalStruct {
     }
 
     let yMN = ScalarVector::powers(y, MN);
-    let r0 = (&(aR + z) * &yMN) + ScalarVector(zero_twos);
-    let r1 = yMN * sR;
+    let r0 = ((aR + z) * &yMN) + &ScalarVector(zero_twos);
+    let r1 = yMN * &sR;
 
     let (T1, T2, x, mut taux) = {
-      let t1 = inner_product(&l0, &r1) + inner_product(&l1, &r0);
-      let t2 = inner_product(&l1, &r1);
+      let t1 = l0.clone().inner_product(&r1) + r0.clone().inner_product(&l1);
+      let t2 = l1.clone().inner_product(&r1);
 
       let mut tau1 = Scalar::random(&mut *rng);
       let mut tau2 = Scalar::random(&mut *rng);
@@ -100,10 +113,10 @@ impl OriginalStruct {
       taux += zpow[i + 2] * gamma;
     }
 
-    let l = &l0 + &(l1 * x);
-    let r = &r0 + &(r1 * x);
+    let l = l0 + &(l1 * x);
+    let r = r0 + &(r1 * x);
 
-    let t = inner_product(&l, &r);
+    let t = l.clone().inner_product(&r);
 
     let x_ip =
       hash_cache(&mut cache, &[x.to_bytes(), taux.to_bytes(), mu.to_bytes(), t.to_bytes()]);
@@ -126,8 +139,8 @@ impl OriginalStruct {
       let (aL, aR) = a.split();
       let (bL, bR) = b.split();
 
-      let cL = inner_product(&aL, &bR);
-      let cR = inner_product(&aR, &bL);
+      let cL = aL.clone().inner_product(&bR);
+      let cR = aR.clone().inner_product(&bL);
 
       let (G_L, G_R) = G_proof.split_at(aL.len());
       let (H_L, H_R) = H_proof.split_at(aL.len());
@@ -140,8 +153,8 @@ impl OriginalStruct {
       let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
       let winv = w.invert().unwrap();
 
-      a = (aL * w) + (aR * winv);
-      b = (bL * winv) + (bR * w);
+      a = (aL * w) + &(aR * winv);
+      b = (bL * winv) + &(bR * w);
 
       if a.len() != 1 {
         G_proof = hadamard_fold(G_L, G_R, winv, w);

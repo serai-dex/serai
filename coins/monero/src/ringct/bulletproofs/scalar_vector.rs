@@ -1,85 +1,17 @@
-use core::ops::{Add, Sub, Mul, Index};
+use core::{
+  borrow::Borrow,
+  ops::{Index, IndexMut, Add, Sub, Mul},
+};
 use std_shims::vec::Vec;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::ff::Field;
 use dalek_ff_group::{Scalar, EdwardsPoint};
-
 use multiexp::multiexp;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);
-macro_rules! math_op {
-  ($Op: ident, $op: ident, $f: expr) => {
-    #[allow(clippy::redundant_closure_call)]
-    impl $Op<Scalar> for ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: Scalar) -> ScalarVector {
-        ScalarVector(self.0.iter().map(|a| $f((a, &b))).collect())
-      }
-    }
-
-    #[allow(clippy::redundant_closure_call)]
-    impl $Op<Scalar> for &ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: Scalar) -> ScalarVector {
-        ScalarVector(self.0.iter().map(|a| $f((a, &b))).collect())
-      }
-    }
-
-    #[allow(clippy::redundant_closure_call)]
-    impl $Op<ScalarVector> for ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: ScalarVector) -> ScalarVector {
-        debug_assert_eq!(self.len(), b.len());
-        ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
-      }
-    }
-
-    #[allow(clippy::redundant_closure_call)]
-    impl $Op<&ScalarVector> for &ScalarVector {
-      type Output = ScalarVector;
-      fn $op(self, b: &ScalarVector) -> ScalarVector {
-        debug_assert_eq!(self.len(), b.len());
-        ScalarVector(self.0.iter().zip(b.0.iter()).map($f).collect())
-      }
-    }
-  };
-}
-math_op!(Add, add, |(a, b): (&Scalar, &Scalar)| *a + *b);
-math_op!(Sub, sub, |(a, b): (&Scalar, &Scalar)| *a - *b);
-math_op!(Mul, mul, |(a, b): (&Scalar, &Scalar)| *a * *b);
-
-impl ScalarVector {
-  pub(crate) fn new(len: usize) -> ScalarVector {
-    ScalarVector(vec![Scalar::ZERO; len])
-  }
-
-  pub(crate) fn powers(x: Scalar, len: usize) -> ScalarVector {
-    debug_assert!(len != 0);
-
-    let mut res = Vec::with_capacity(len);
-    res.push(Scalar::ONE);
-    for i in 1 .. len {
-      res.push(res[i - 1] * x);
-    }
-    ScalarVector(res)
-  }
-
-  pub(crate) fn sum(mut self) -> Scalar {
-    self.0.drain(..).sum()
-  }
-
-  pub(crate) fn len(&self) -> usize {
-    self.0.len()
-  }
-
-  pub(crate) fn split(self) -> (ScalarVector, ScalarVector) {
-    let (l, r) = self.0.split_at(self.0.len() / 2);
-    (ScalarVector(l.to_vec()), ScalarVector(r.to_vec()))
-  }
-}
 
 impl Index<usize> for ScalarVector {
   type Output = Scalar;
@@ -87,28 +19,120 @@ impl Index<usize> for ScalarVector {
     &self.0[index]
   }
 }
+impl IndexMut<usize> for ScalarVector {
+  fn index_mut(&mut self, index: usize) -> &mut Scalar {
+    &mut self.0[index]
+  }
+}
 
-pub(crate) fn inner_product(a: &ScalarVector, b: &ScalarVector) -> Scalar {
-  (a * b).sum()
+impl<S: Borrow<Scalar>> Add<S> for ScalarVector {
+  type Output = ScalarVector;
+  fn add(mut self, scalar: S) -> ScalarVector {
+    for s in &mut self.0 {
+      *s += scalar.borrow();
+    }
+    self
+  }
+}
+impl<S: Borrow<Scalar>> Sub<S> for ScalarVector {
+  type Output = ScalarVector;
+  fn sub(mut self, scalar: S) -> ScalarVector {
+    for s in &mut self.0 {
+      *s -= scalar.borrow();
+    }
+    self
+  }
+}
+impl<S: Borrow<Scalar>> Mul<S> for ScalarVector {
+  type Output = ScalarVector;
+  fn mul(mut self, scalar: S) -> ScalarVector {
+    for s in &mut self.0 {
+      *s *= scalar.borrow();
+    }
+    self
+  }
+}
+
+impl Add<&ScalarVector> for ScalarVector {
+  type Output = ScalarVector;
+  fn add(mut self, other: &ScalarVector) -> ScalarVector {
+    debug_assert_eq!(self.len(), other.len());
+    for (s, o) in self.0.iter_mut().zip(other.0.iter()) {
+      *s += o;
+    }
+    self
+  }
+}
+impl Sub<&ScalarVector> for ScalarVector {
+  type Output = ScalarVector;
+  fn sub(mut self, other: &ScalarVector) -> ScalarVector {
+    debug_assert_eq!(self.len(), other.len());
+    for (s, o) in self.0.iter_mut().zip(other.0.iter()) {
+      *s -= o;
+    }
+    self
+  }
+}
+impl Mul<&ScalarVector> for ScalarVector {
+  type Output = ScalarVector;
+  fn mul(mut self, other: &ScalarVector) -> ScalarVector {
+    debug_assert_eq!(self.len(), other.len());
+    for (s, o) in self.0.iter_mut().zip(other.0.iter()) {
+      *s *= o;
+    }
+    self
+  }
 }
 
 impl Mul<&[EdwardsPoint]> for &ScalarVector {
   type Output = EdwardsPoint;
   fn mul(self, b: &[EdwardsPoint]) -> EdwardsPoint {
     debug_assert_eq!(self.len(), b.len());
-    multiexp(&self.0.iter().copied().zip(b.iter().copied()).collect::<Vec<_>>())
+    let mut multiexp_args = self.0.iter().copied().zip(b.iter().copied()).collect::<Vec<_>>();
+    let res = multiexp(&multiexp_args);
+    multiexp_args.zeroize();
+    res
   }
 }
 
-pub(crate) fn hadamard_fold(
-  l: &[EdwardsPoint],
-  r: &[EdwardsPoint],
-  a: Scalar,
-  b: Scalar,
-) -> Vec<EdwardsPoint> {
-  let mut res = Vec::with_capacity(l.len() / 2);
-  for i in 0 .. l.len() {
-    res.push(multiexp(&[(a, l[i]), (b, r[i])]));
+impl ScalarVector {
+  pub(crate) fn new(len: usize) -> Self {
+    ScalarVector(vec![Scalar::ZERO; len])
   }
-  res
+
+  pub(crate) fn powers(x: Scalar, len: usize) -> Self {
+    debug_assert!(len != 0);
+
+    let mut res = Vec::with_capacity(len);
+    res.push(Scalar::ONE);
+    res.push(x);
+    for i in 2 .. len {
+      res.push(res[i - 1] * x);
+    }
+    res.truncate(len);
+    ScalarVector(res)
+  }
+
+  pub(crate) fn len(&self) -> usize {
+    self.0.len()
+  }
+
+  pub(crate) fn sum(mut self) -> Scalar {
+    self.0.drain(..).sum()
+  }
+
+  pub(crate) fn inner_product(self, vector: &Self) -> Scalar {
+    (self * vector).sum()
+  }
+
+  pub(crate) fn weighted_inner_product(self, vector: &Self, y: &Self) -> Scalar {
+    (self * vector * y).sum()
+  }
+
+  pub(crate) fn split(mut self) -> (Self, Self) {
+    debug_assert!(self.len() > 1);
+    let r = self.0.split_off(self.0.len() / 2);
+    debug_assert_eq!(self.len(), r.len());
+    (self, ScalarVector(r))
+  }
 }

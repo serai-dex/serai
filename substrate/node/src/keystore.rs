@@ -1,5 +1,4 @@
 use zeroize::Zeroize;
-use rand_core::RngCore;
 
 use sp_core::{crypto::*, ed25519, sr25519};
 use sp_keystore::*;
@@ -13,8 +12,7 @@ impl Keystore {
     key_hex.zeroize();
 
     assert_eq!(key.len(), 32, "KEY from environment wasn't 32 bytes");
-    key.extend([0; 32]);
-    rand_core::OsRng.fill_bytes(&mut key[32 ..]);
+    key.extend(sp_core::blake2_256(&key));
 
     let res = Self(sr25519::Pair::from(schnorrkel::SecretKey::from_bytes(&key).unwrap()));
     key.zeroize();

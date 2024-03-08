@@ -3,6 +3,9 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
+use parity_scale_codec::Encode;
+use serai_db::{Get, DbTxn, Db};
+
 use crate::{
   time::CanonicalInstant,
   ext::{RoundNumber, BlockNumber, Block, Network},
@@ -12,6 +15,8 @@ use crate::{
 };
 
 pub(crate) struct BlockData<N: Network> {
+  db: N::Db,
+
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
   pub(crate) proposal: Option<N::Block>,
@@ -32,12 +37,15 @@ pub(crate) struct BlockData<N: Network> {
 
 impl<N: Network> BlockData<N> {
   pub(crate) fn new(
+    db: N::Db,
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
     proposal: Option<N::Block>,
   ) -> BlockData<N> {
     BlockData {
+      db,
+
       number,
       validator_id,
       proposal,
@@ -128,12 +136,34 @@ impl<N: Network> BlockData<N> {
     // 27, 33, 41, 46, 60, 64
     self.round_mut().step = data.step();
 
-    // Only return a message to if we're actually a current validator
-    self.validator_id.map(|validator_id| Message {
+    // Only return a message to if we're actually a current validator and haven't prior posted a
+    // message
+    let round_number = self.round().number;
+    let step = data.step();
+    let res = self.validator_id.map(|validator_id| Message {
       sender: validator_id,
       block: self.number,
-      round: self.round().number,
+      round: round_number,
       data,
-    })
+    });
+
+    if res.is_some() {
+      let mut txn = self.db.txn();
+      let key = [
+        b"tendermint-machine_already_sent_message".as_ref(),
+        &self.number.0.to_le_bytes(),
+        &round_number.0.to_le_bytes(),
+        &step.encode(),
+      ]
+      .concat();
+      // If we've already sent a message, return
+      if txn.get(&key).is_some() {
+        None?;
+      }
+      txn.put(&key, []);
+      txn.commit();
+    }
+
+    res
   }
 }
