@@ -231,6 +231,8 @@ pub enum SlashEvent {
 
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
+  db: N::Db,
+
   network: N,
   signer: <N::SignatureScheme as SignatureScheme>::Signer,
   validators: N::SignatureScheme,
@@ -322,6 +324,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
     // Create the new block
     self.block = BlockData::new(
+      self.db.clone(),
       self.weights.clone(),
       BlockNumber(self.block.number.0 + 1),
       self.signer.validator_id().await,
@@ -370,6 +373,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   /// the machine itself. The machine should have `run` called from an asynchronous task.
   #[allow(clippy::new_ret_no_self)]
   pub async fn new(
+    db: N::Db,
     network: N,
     last_block: BlockNumber,
     last_time: u64,
@@ -409,6 +413,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
         let validator_id = signer.validator_id().await;
         // 01-10
         let mut machine = TendermintMachine {
+          db: db.clone(),
+
           network,
           signer,
           validators,
@@ -420,6 +426,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           synced_block_result_send,
 
           block: BlockData::new(
+            db,
             weights,
             BlockNumber(last_block.0 + 1),
             validator_id,

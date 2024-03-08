@@ -212,6 +212,9 @@ pub trait Block: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode 
 /// Trait representing the distributed system Tendermint is providing consensus over.
 #[async_trait]
 pub trait Network: Sized + Send + Sync {
+  /// The database used to back this.
+  type Db: serai_db::Db;
+
   // Type used to identify validators.
   type ValidatorId: ValidatorId;
   /// Signature scheme used by validators.

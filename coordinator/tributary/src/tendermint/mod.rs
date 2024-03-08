@@ -302,6 +302,8 @@ fn assert_target_block_time() {
 
 #[async_trait]
 impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> {
+  type Db = D;
+
   type ValidatorId = [u8; 32];
   type SignatureScheme = Arc<Validators>;
   type Weights = Arc<Validators>;

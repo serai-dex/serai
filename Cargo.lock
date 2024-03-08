@@ -9105,6 +9105,7 @@ dependencies = [
  "hex",
  "log",
  "parity-scale-codec",
+ "serai-db",
  "thiserror",
  "tokio",
 ]
