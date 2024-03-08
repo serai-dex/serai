@@ -16,6 +16,7 @@ use crate::{
 
 pub(crate) struct BlockData<N: Network> {
   db: N::Db,
+  genesis: [u8; 32],
 
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
@@ -38,6 +39,7 @@ pub(crate) struct BlockData<N: Network> {
 impl<N: Network> BlockData<N> {
   pub(crate) fn new(
     db: N::Db,
+    genesis: [u8; 32],
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
@@ -45,6 +47,7 @@ impl<N: Network> BlockData<N> {
   ) -> BlockData<N> {
     BlockData {
       db,
+      genesis,
 
       number,
       validator_id,
@@ -151,6 +154,7 @@ impl<N: Network> BlockData<N> {
       let mut txn = self.db.txn();
       let key = [
         b"tendermint-machine_already_sent_message".as_ref(),
+        &self.genesis,
         &self.number.0.to_le_bytes(),
         &round_number.0.to_le_bytes(),
         &step.encode(),

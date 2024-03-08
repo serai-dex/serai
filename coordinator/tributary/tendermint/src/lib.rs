@@ -232,6 +232,7 @@ pub enum SlashEvent {
 /// A machine executing the Tendermint protocol.
 pub struct TendermintMachine<N: Network> {
   db: N::Db,
+  genesis: [u8; 32],
 
   network: N,
   signer: <N::SignatureScheme as SignatureScheme>::Signer,
@@ -325,6 +326,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // Create the new block
     self.block = BlockData::new(
       self.db.clone(),
+      self.genesis,
       self.weights.clone(),
       BlockNumber(self.block.number.0 + 1),
       self.signer.validator_id().await,
@@ -375,6 +377,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub async fn new(
     db: N::Db,
     network: N,
+    genesis: [u8; 32],
     last_block: BlockNumber,
     last_time: u64,
     proposal: N::Block,
@@ -414,6 +417,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // 01-10
         let mut machine = TendermintMachine {
           db: db.clone(),
+          genesis,
 
           network,
           signer,
@@ -427,6 +431,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           block: BlockData::new(
             db,
+            genesis,
             weights,
             BlockNumber(last_block.0 + 1),
             validator_id,

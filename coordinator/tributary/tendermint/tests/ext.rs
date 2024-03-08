@@ -176,6 +176,7 @@ impl TestNetwork {
           TendermintMachine::new(
             MemDb::new(),
             TestNetwork(i, arc.clone()),
+            [0; 32],
             BlockNumber(1),
             start_time,
             TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
