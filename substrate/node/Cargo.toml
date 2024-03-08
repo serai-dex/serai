@@ -21,7 +21,6 @@ name = "serai-node"
 
 [dependencies]
 zeroize = "1"
-rand_core = "0.6"
 hex = "0.4"
 
 schnorrkel = "0.11"

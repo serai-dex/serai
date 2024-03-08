@@ -7625,7 +7625,6 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "pallet-transaction-payment-rpc",
- "rand_core",
  "sc-authority-discovery",
  "sc-basic-authorship",
  "sc-cli",
