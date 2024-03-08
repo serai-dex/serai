@@ -38,5 +38,12 @@ pub fn new_rocksdb(path: &str) -> RocksDB {
   let mut options = Options::default();
   options.create_if_missing(true);
   options.set_compression_type(DBCompressionType::Lz4);
+  options.set_wal_size_limit_mb(128);
+  // 1 GB
+  options.set_max_total_wal_size(1 << 30);
+  // 128 MB
+  options.set_max_log_file_size(1 << 27);
+  options.set_recycle_log_file_num(5);
+  options.set_keep_log_file_num(5);
   Arc::new(TransactionDB::open(&options, &Default::default(), path).unwrap())
 }
