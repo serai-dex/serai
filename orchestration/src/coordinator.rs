@@ -33,7 +33,7 @@ RUN apt install -y ca-certificates
     ("DB_PATH", "./coordinator-db".to_string()),
     ("SERAI_KEY", hex::encode(serai_key.to_repr())),
     ("SERAI_HOSTNAME", format!("serai-{}-serai", network.label())),
-    ("RUST_LOG", "serai_coordinator=debug,tributary_chain=debug,tendermint=debug".to_string()),
+    ("RUST_LOG", "info,serai_coordinator=debug,tributary_chain=debug,tendermint=debug".to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
