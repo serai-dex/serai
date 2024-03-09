@@ -41,6 +41,7 @@ enum HasEvents {
 
 create_db!(
   SubstrateCosignDb {
+    ScanCosignFrom: () -> u64,
     IntendedCosign: () -> (u64, Option<u64>),
     BlockHasEvents: (block: u64) -> HasEvents,
     LatestCosignedBlock: () -> u64,
@@ -178,7 +179,7 @@ async fn potentially_cosign_block(
   which should be cosigned). Accordingly, it is necessary to call multiple times even if
   `latest_number` doesn't change.
 */
-pub async fn advance_cosign_protocol(
+async fn advance_cosign_protocol_inner(
   db: &mut impl Db,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
@@ -227,7 +228,16 @@ pub async fn advance_cosign_protocol(
   // A list of sets which are cosigning, along with a boolean of if we're in the set
   let mut cosigning = vec![];
 
-  for block in (last_intended_to_cosign_block + 1) ..= latest_number {
+  // The consensus rules for this are `last_intended_to_cosign_block + 1`
+  let scan_start_block = last_intended_to_cosign_block + 1;
+  // As a practical optimization, we don't re-scan old blocks since old blocks are independent to
+  // new state
+  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(0));
+  for block in scan_start_block ..= latest_number {
+    // This TX is committed, always re-run this loop from immediately before this block
+    // That allows the below loop to break out on a block it wants to revisit later
+    ScanCosignFrom::set(&mut txn, &(scan_start_block - 1));
+
     let actual_block = serai
       .finalized_block_by_number(block)
       .await?
@@ -295,5 +305,24 @@ pub async fn advance_cosign_protocol(
   }
   txn.commit();
 
+  Ok(())
+}
+
+pub async fn advance_cosign_protocol(
+  db: &mut impl Db,
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai: &Serai,
+  latest_number: u64,
+) -> Result<(), SeraiError> {
+  loop {
+    let scan_from = ScanCosignFrom::get(db).unwrap_or(0);
+    // Only scan 1000 blocks at a time to limit a massive txn from forming
+    let scan_to = latest_number.min(scan_from + 1000);
+    advance_cosign_protocol_inner(db, key, serai, scan_to).await?;
+    // If we didn't limit the scan_to, break
+    if scan_to == latest_number {
+      break;
+    }
+  }
   Ok(())
 }
