@@ -109,7 +109,7 @@ async fn block_has_events(
       let has_events = if has_no_events { HasEvents::No } else { HasEvents::Yes };
 
       BlockHasEvents::set(txn, block, &has_events);
-      Ok(HasEvents::Yes)
+      Ok(has_events)
     }
     Some(code) => Ok(code),
   }
