@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use rocksdb::{DBCompressionType, ThreadMode, SingleThreaded, Options, Transaction, TransactionDB};
+use rocksdb::{
+  DBCompressionType, ThreadMode, SingleThreaded, LogLevel, Options, Transaction, TransactionDB,
+};
 
 use crate::*;
 
@@ -37,13 +39,16 @@ pub type RocksDB = Arc<TransactionDB<SingleThreaded>>;
 pub fn new_rocksdb(path: &str) -> RocksDB {
   let mut options = Options::default();
   options.create_if_missing(true);
-  options.set_compression_type(DBCompressionType::Lz4);
-  options.set_wal_size_limit_mb(128);
-  // 1 GB
-  options.set_max_total_wal_size(1 << 30);
+  options.set_compression_type(DBCompressionType::Zstd);
+
   // 128 MB
-  options.set_max_log_file_size(1 << 27);
-  options.set_recycle_log_file_num(5);
-  options.set_keep_log_file_num(5);
+  options.set_wal_compression_type(DBCompressionType::Zstd);
+  options.set_max_total_wal_size(128 * 1024 * 1024);
+
+  // 1 MB
+  options.set_log_level(LogLevel::Warn);
+  options.set_max_log_file_size(1024 * 1024);
+  options.set_recycle_log_file_num(1);
+
   Arc::new(TransactionDB::open(&options, &Default::default(), path).unwrap())
 }
