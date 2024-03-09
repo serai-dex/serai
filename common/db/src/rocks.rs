@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use rocksdb::{DBCompressionType, ThreadMode, SingleThreaded, Options, Transaction, TransactionDB};
+use rocksdb::{
+  DBCompressionType, ThreadMode, SingleThreaded, LogLevel, WriteOptions, Transaction, Options,
+  TransactionDB,
+};
 
 use crate::*;
 
@@ -29,7 +32,9 @@ impl<T: ThreadMode> Get for Arc<TransactionDB<T>> {
 impl<T: ThreadMode + 'static> Db for Arc<TransactionDB<T>> {
   type Transaction<'a> = Transaction<'a, TransactionDB<T>>;
   fn txn(&mut self) -> Self::Transaction<'_> {
-    self.transaction()
+    let mut opts = WriteOptions::default();
+    opts.set_sync(true);
+    self.transaction_opt(&opts, &Default::default())
   }
 }
 
@@ -37,13 +42,17 @@ pub type RocksDB = Arc<TransactionDB<SingleThreaded>>;
 pub fn new_rocksdb(path: &str) -> RocksDB {
   let mut options = Options::default();
   options.create_if_missing(true);
-  options.set_compression_type(DBCompressionType::Lz4);
-  options.set_wal_size_limit_mb(128);
-  // 1 GB
-  options.set_max_total_wal_size(1 << 30);
-  // 128 MB
-  options.set_max_log_file_size(1 << 27);
-  options.set_recycle_log_file_num(5);
-  options.set_keep_log_file_num(5);
+  options.set_compression_type(DBCompressionType::Zstd);
+
+  options.set_wal_compression_type(DBCompressionType::Zstd);
+  // 10 MB
+  options.set_max_total_wal_size(10 * 1024 * 1024);
+  options.set_wal_size_limit_mb(10);
+
+  options.set_log_level(LogLevel::Warn);
+  // 1 MB
+  options.set_max_log_file_size(1024 * 1024);
+  options.set_recycle_log_file_num(1);
+
   Arc::new(TransactionDB::open(&options, &Default::default(), path).unwrap())
 }
