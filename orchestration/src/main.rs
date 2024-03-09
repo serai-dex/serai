@@ -53,7 +53,7 @@ impl Network {
   pub fn db(&self) -> &'static str {
     match self {
       Network::Dev => "parity-db",
-      Network::Testnet => "rocksdb",
+      Network::Testnet => "parity-db",
     }
   }
 
