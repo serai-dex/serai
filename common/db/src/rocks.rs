@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use rocksdb::{
-  DBCompressionType, ThreadMode, SingleThreaded, LogLevel, Options, Transaction, TransactionDB,
+  DBCompressionType, ThreadMode, SingleThreaded, LogLevel, WriteOptions, Transaction, Options,
+  TransactionDB,
 };
 
 use crate::*;
@@ -31,7 +32,9 @@ impl<T: ThreadMode> Get for Arc<TransactionDB<T>> {
 impl<T: ThreadMode + 'static> Db for Arc<TransactionDB<T>> {
   type Transaction<'a> = Transaction<'a, TransactionDB<T>>;
   fn txn(&mut self) -> Self::Transaction<'_> {
-    self.transaction()
+    let mut opts = WriteOptions::default();
+    opts.set_sync(true);
+    self.transaction_opt(&opts, &Default::default())
   }
 }
 
