@@ -207,13 +207,19 @@ async fn advance_cosign_protocol_inner(
     window_end_exclusive = 0;
   }
 
+  // The consensus rules for this are `last_intended_to_cosign_block + 1`
+  let scan_start_block = last_intended_to_cosign_block + 1;
+  // As a practical optimization, we don't re-scan old blocks since old blocks are independent to
+  // new state
+  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(0));
+
   // Check all blocks within the window to see if they should be cosigned
   // If so, we're skipping them and need to flag them as skipped so that once the window closes, we
   // do cosign them
   // We only perform this check if we haven't already marked a block as skipped since the cosign
   // the skipped block will cause will cosign all other blocks within this window
   if skipped_block.is_none() {
-    for b in (last_intended_to_cosign_block + 1) .. window_end_exclusive.min(latest_number) {
+    for b in scan_start_block .. window_end_exclusive.min(latest_number) {
       if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
         skipped_block = Some(b);
         log::debug!("skipping cosigning {b} due to proximity to prior cosign");
@@ -228,16 +234,7 @@ async fn advance_cosign_protocol_inner(
   // A list of sets which are cosigning, along with a boolean of if we're in the set
   let mut cosigning = vec![];
 
-  // The consensus rules for this are `last_intended_to_cosign_block + 1`
-  let scan_start_block = last_intended_to_cosign_block + 1;
-  // As a practical optimization, we don't re-scan old blocks since old blocks are independent to
-  // new state
-  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(0));
   for block in scan_start_block ..= latest_number {
-    // This TX is committed, always re-run this loop from immediately before this block
-    // That allows the below loop to break out on a block it wants to revisit later
-    ScanCosignFrom::set(&mut txn, &(scan_start_block - 1));
-
     let actual_block = serai
       .finalized_block_by_number(block)
       .await?
@@ -286,6 +283,9 @@ async fn advance_cosign_protocol_inner(
 
       break;
     }
+
+    // If this TX is committed, always start future scanning from the next block
+    ScanCosignFrom::set(&mut txn, &(scan_start_block + 1));
   }
 
   if let Some((number, hash)) = to_cosign {
