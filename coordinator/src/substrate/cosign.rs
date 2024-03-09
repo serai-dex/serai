@@ -136,6 +136,7 @@ async fn potentially_cosign_block(
   if (block_has_events == HasEvents::No) &&
     (LatestCosignedBlock::latest_cosigned_block(txn) == (block - 1))
   {
+    log::debug!("automatically co-signing next block ({block}) since it has no events");
     LatestCosignedBlock::set(txn, &block);
   }
 
@@ -219,7 +220,8 @@ async fn advance_cosign_protocol_inner(
   // We only perform this check if we haven't already marked a block as skipped since the cosign
   // the skipped block will cause will cosign all other blocks within this window
   if skipped_block.is_none() {
-    for b in scan_start_block .. window_end_exclusive.min(latest_number) {
+    let window_end_inclusive = window_end_exclusive - 1;
+    for b in scan_start_block ..= window_end_inclusive.min(latest_number) {
       if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
         skipped_block = Some(b);
         log::debug!("skipping cosigning {b} due to proximity to prior cosign");
@@ -285,7 +287,7 @@ async fn advance_cosign_protocol_inner(
     }
 
     // If this TX is committed, always start future scanning from the next block
-    ScanCosignFrom::set(&mut txn, &(scan_start_block + 1));
+    ScanCosignFrom::set(&mut txn, &(block + 1));
   }
 
   if let Some((number, hash)) = to_cosign {
