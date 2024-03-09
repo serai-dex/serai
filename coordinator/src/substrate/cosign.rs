@@ -205,14 +205,14 @@ async fn advance_cosign_protocol_inner(
   let mut window_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
   // If we've never triggered a cosign, don't skip any cosigns based on proximity
   if last_intended_to_cosign_block == INITIAL_INTENDED_COSIGN {
-    window_end_exclusive = 0;
+    window_end_exclusive = 1;
   }
 
   // The consensus rules for this are `last_intended_to_cosign_block + 1`
   let scan_start_block = last_intended_to_cosign_block + 1;
   // As a practical optimization, we don't re-scan old blocks since old blocks are independent to
   // new state
-  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(0));
+  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(1));
 
   // Check all blocks within the window to see if they should be cosigned
   // If so, we're skipping them and need to flag them as skipped so that once the window closes, we
@@ -317,7 +317,7 @@ pub async fn advance_cosign_protocol(
   latest_number: u64,
 ) -> Result<(), SeraiError> {
   loop {
-    let scan_from = ScanCosignFrom::get(db).unwrap_or(0);
+    let scan_from = ScanCosignFrom::get(db).unwrap_or(1);
     // Only scan 1000 blocks at a time to limit a massive txn from forming
     let scan_to = latest_number.min(scan_from + 1000);
     advance_cosign_protocol_inner(db, key, serai, scan_to).await?;
