@@ -44,12 +44,13 @@ pub fn new_rocksdb(path: &str) -> RocksDB {
   options.create_if_missing(true);
   options.set_compression_type(DBCompressionType::Zstd);
 
-  // 128 MB
   options.set_wal_compression_type(DBCompressionType::Zstd);
-  options.set_max_total_wal_size(128 * 1024 * 1024);
+  // 10 MB
+  options.set_max_total_wal_size(10 * 1024 * 1024);
+  options.set_wal_size_limit_mb(10);
 
-  // 1 MB
   options.set_log_level(LogLevel::Warn);
+  // 1 MB
   options.set_max_log_file_size(1024 * 1024);
   options.set_recycle_log_file_num(1);
 
