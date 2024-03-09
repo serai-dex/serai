@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 rocksdb = { version = "0.22", default-features = false }
 
 [features]
-jemalloc = ["rocksdb/jemalloc"]
+jemalloc = []
 snappy = ["rocksdb/snappy"]
 lz4 = ["rocksdb/lz4"]
 zstd = ["rocksdb/zstd"]
