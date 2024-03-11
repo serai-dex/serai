@@ -43,7 +43,7 @@ create_db!(
   SubstrateCosignDb {
     ScanCosignFrom: () -> u64,
     IntendedCosign: () -> (u64, Option<u64>),
-    BlockHasEvents: (block: u64) -> HasEvents,
+    BlockHasEventsCache: (block: u64) -> HasEvents,
     LatestCosignedBlock: () -> u64,
   }
 );
@@ -86,7 +86,7 @@ async fn block_has_events(
   serai: &Serai,
   block: u64,
 ) -> Result<HasEvents, SeraiError> {
-  let cached = BlockHasEvents::get(txn, block);
+  let cached = BlockHasEventsCache::get(txn, block);
   match cached {
     None => {
       let serai = serai.as_of(
@@ -108,7 +108,7 @@ async fn block_has_events(
 
       let has_events = if has_no_events { HasEvents::No } else { HasEvents::Yes };
 
-      BlockHasEvents::set(txn, block, &has_events);
+      BlockHasEventsCache::set(txn, block, &has_events);
       Ok(has_events)
     }
     Some(code) => Ok(code),
@@ -288,6 +288,8 @@ async fn advance_cosign_protocol_inner(
 
     // If this TX is committed, always start future scanning from the next block
     ScanCosignFrom::set(&mut txn, &(block + 1));
+    // Since we're scanning *from* the next block, tidy the cache
+    BlockHasEventsCache::del(&mut txn, &block);
   }
 
   if let Some((number, hash)) = to_cosign {
