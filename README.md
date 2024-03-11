@@ -11,7 +11,10 @@ wallet.
 
 - `audits`: Audits for various parts of Serai.
 
-- `docs`: Documentation on the Serai protocol.
+- `spec`: The specification of the Serai protocol, both internally and as
+  networked.
+
+- `docs`: User-facing documentation on the Serai protocol.
 
 - `common`: Crates containing utilities common to a variety of areas under
   Serai, none neatly fitting under another category.
