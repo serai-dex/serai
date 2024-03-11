@@ -289,7 +289,7 @@ async fn advance_cosign_protocol_inner(
     // If this TX is committed, always start future scanning from the next block
     ScanCosignFrom::set(&mut txn, &(block + 1));
     // Since we're scanning *from* the next block, tidy the cache
-    BlockHasEventsCache::del(&mut txn, &block);
+    BlockHasEventsCache::del(&mut txn, block);
   }
 
   if let Some((number, hash)) = to_cosign {
