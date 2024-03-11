@@ -2,4 +2,5 @@ title: Serai Documentation
 description: Documentation for the Serai protocol.
 theme: just-the-docs
 
-url: https://serai-dex.github.io/serai
+url: https://serai.exchange/docs
+baseurl: /docs
