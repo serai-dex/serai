@@ -5,11 +5,15 @@ nav_order: 1
 parent: Infrastructure
 ---
 
+# Message Queue
+
 The Message Queue is a microservice to authenticate and relay messages between
 services. It offers just three functions:
 
 1) Queue a message.
+
 2) Receive the next message.
+
 3) Acknowledge a message, removing it from the queue.
 
 This ensures messages are delivered between services, with their order

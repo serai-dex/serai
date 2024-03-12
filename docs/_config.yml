@@ -3,3 +3,12 @@ description: Documentation for the Serai protocol.
 theme: just-the-docs
 
 url: https://docs.serai.exchange
+
+callouts:
+  warning:
+    title: Warning
+    color: red
+
+  definition:
+    title: Definition
+    color: blue

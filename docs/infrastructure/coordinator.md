@@ -5,6 +5,8 @@ nav_order: 3
 parent: Infrastructure
 ---
 
+# Coordinator
+
 The coordinator is a local service which communicates with other validators'
 coordinators. It provides a verifiable broadcast layer for various consensus
 messages, such as agreement on external blockchains, key generation and signing

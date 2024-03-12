@@ -4,6 +4,8 @@ layout: default
 nav_order: 2
 ---
 
+# Automatic Market Makers
+
 *text on how AMMs work*
 
 Serai uses a symmetric liquidity pool with the `xy=k` formula.

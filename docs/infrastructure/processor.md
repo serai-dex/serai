@@ -5,15 +5,17 @@ nav_order: 2
 parent: Infrastructure
 ---
 
+# Processor
+
 The processor performs several important tasks with regards to the external
 network. Each of them are documented in the following sections.
 
-# Key Generation
+## Key Generation
 
-# Scanning
+## Scanning
 
-# Signing Batches
+## Signing Batches
 
-# Planning Transactions
+## Planning Transactions
 
-# Cosigning
+## Cosigning
