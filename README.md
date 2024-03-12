@@ -5,7 +5,7 @@ Bitcoin, Ethereum, DAI, and Monero, offering a liquidity-pool-based trading
 experience. Funds are stored in an economically secured threshold-multisig
 wallet.
 
-[Getting Started](docs/Getting%20Started.md)
+[Getting Started](spec/Getting%20Started.md)
 
 ### Layout
 
