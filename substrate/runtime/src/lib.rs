@@ -315,7 +315,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
   #[allow(clippy::identity_op)]
-  type EpochDuration = ConstU64<{ DAYS / (24 * 60 * 2) }>; // 30 seconds
+  type EpochDuration = ConstU64<{ DAYS / (24 * 2) }>; // 30 minutes
 
   #[cfg(not(feature = "fast-epoch"))]
   #[allow(clippy::identity_op)]

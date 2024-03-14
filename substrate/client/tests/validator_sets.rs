@@ -14,7 +14,9 @@ use serai_client::{
 mod common;
 use common::validator_sets::{set_keys, allocate_stake, deallocate_stake};
 
-const EPOCH_INTERVAL: u64 = 5;
+// TODO: get rid of this is constant and retrive the epoch numbers from sthe node directly
+// since epochs doesn't always change at the exact intervals.
+const EPOCH_INTERVAL: u64 = 300;
 
 serai_test!(
   set_keys_test: (|serai: Serai| async move {
