@@ -52,6 +52,10 @@ pub mod pallet {
   pub enum Error<T> {
     /// Coin and OutAddress types don't match.
     InvalidAddressForCoin,
+    /// SRI minting is not allowed.
+    CantMintSRI,
+    /// There is too much coin that is not in the pool.
+    TooMuchCoinOutOfPool,
   }
 
   #[pallet::pallet]
@@ -85,6 +89,34 @@ pub mod pallet {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), DispatchError> {
       match instruction.instruction {
         InInstruction::Transfer(address) => {
+          let coin = instruction.balance.coin;
+          if coin == Coin::Serai {
+            Err(Error::<T>::CantMintSRI)?;
+          }
+
+          // check how much in-pool vs out-of-pool if we have a pool and has certain amount of
+          // liquidty available.
+          let pool_id = Dex::<T>::get_pool_id(coin, Coin::Serai).unwrap();
+          if Dex::<T>::pools(pool_id).is_some() {
+            let pool_account = Dex::<T>::get_pool_account(pool_id);
+            let in_pool_sri = Coins::<T>::balance(pool_account, Coin::Serai).0;
+
+            // TODO: should be a const where?
+            if in_pool_sri >= 10_000 * 10_u64.pow(8) {
+              let in_pool = Coins::<T>::balance(pool_account, coin).0;
+
+              // get out-of-pool
+              let total = Coins::<T>::supply(coin);
+              let out_of_pool = total - in_pool;
+              let new_out_of_pool = out_of_pool.saturating_add(instruction.balance.amount.0);
+
+              // only allow if out-of-pool is less than 20% of pool value
+              if new_out_of_pool > in_pool / 5 {
+                Err(Error::<T>::TooMuchCoinOutOfPool)?;
+              }
+            }
+          }
+
           Coins::<T>::mint(address.into(), instruction.balance)?;
         }
         InInstruction::Dex(call) => {
@@ -93,11 +125,11 @@ pub mod pallet {
           // called directly from Serai with a native transaction.
           match call {
             DexCall::SwapAndAddLiquidity(address) => {
-              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              let origin = RawOrigin::Signed(ADD_LIQUIDITY_ACCOUNT.into());
               let coin = instruction.balance.coin;
 
               // mint the given coin on the account
-              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+              Coins::<T>::mint(ADD_LIQUIDITY_ACCOUNT.into(), instruction.balance)?;
 
               // swap half of it for SRI
               let half = instruction.balance.amount.0 / 2;
@@ -107,11 +139,11 @@ pub mod pallet {
                 path,
                 half,
                 1, // minimum out, so we accept whatever we get.
-                IN_INSTRUCTION_EXECUTOR.into(),
+                ADD_LIQUIDITY_ACCOUNT.into(),
               )?;
 
               // get how much we got for our swap
-              let sri_amount = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai).0;
+              let sri_amount = Coins::<T>::balance(ADD_LIQUIDITY_ACCOUNT.into(), Coin::Serai).0;
 
               // add liquidity
               Dex::<T>::add_liquidity(
@@ -127,18 +159,18 @@ pub mod pallet {
               // TODO: minimums are set to 1 above to guarantee successful adding liq call.
               // Ideally we either get this info from user or send the leftovers back to user.
               // Let's send the leftovers back to user for now.
-              let coin_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), coin);
-              let sri_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai);
+              let coin_balance = Coins::<T>::balance(ADD_LIQUIDITY_ACCOUNT.into(), coin);
+              let sri_balance = Coins::<T>::balance(ADD_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
               if coin_balance != Amount(0) {
                 Coins::<T>::transfer_internal(
-                  IN_INSTRUCTION_EXECUTOR.into(),
+                  ADD_LIQUIDITY_ACCOUNT.into(),
                   address.into(),
                   Balance { coin, amount: coin_balance },
                 )?;
               }
               if sri_balance != Amount(0) {
                 Coins::<T>::transfer_internal(
-                  IN_INSTRUCTION_EXECUTOR.into(),
+                  ADD_LIQUIDITY_ACCOUNT.into(),
                   address.into(),
                   Balance { coin: Coin::Serai, amount: sri_balance },
                 )?;
@@ -154,7 +186,7 @@ pub mod pallet {
               }
 
               // mint the given coin on our account
-              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+              Coins::<T>::mint(SWAP_ACCOUNT.into(), instruction.balance)?;
 
               // get the path
               let mut path = vec![instruction.balance.coin, Coin::Serai];
@@ -166,13 +198,13 @@ pub mod pallet {
               // if the address is internal, we can directly swap to it. if not, we swap to
               // ourselves and burn the coins to send them back on the external chain.
               let send_to = if send_to_external {
-                IN_INSTRUCTION_EXECUTOR
+                SWAP_ACCOUNT
               } else {
                 out_address.clone().as_native().unwrap()
               };
 
               // do the swap
-              let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              let origin = RawOrigin::Signed(SWAP_ACCOUNT.into());
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.clone().into(),
                 BoundedVec::try_from(path).unwrap(),
@@ -185,8 +217,7 @@ pub mod pallet {
               // if it is requested to an external address.
               if send_to_external {
                 // see how much we got
-                let coin_balance =
-                  Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), out_balance.coin);
+                let coin_balance = Coins::<T>::balance(SWAP_ACCOUNT.into(), out_balance.coin);
                 let instruction = OutInstructionWithBalance {
                   instruction: OutInstruction {
                     address: out_address.as_external().unwrap(),

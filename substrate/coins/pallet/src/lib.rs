@@ -3,11 +3,11 @@
 use serai_primitives::{Coin, SubstrateAmount, Balance};
 
 pub trait AllowMint {
-  fn is_allowed(balance: &Balance) -> bool;
+  fn is_allowed(balance: &Balance, for_swap: bool) -> bool;
 }
 
 impl AllowMint for () {
-  fn is_allowed(_: &Balance) -> bool {
+  fn is_allowed(_: &Balance, _: bool) -> bool {
     true
   }
 }
@@ -32,6 +32,8 @@ pub mod pallet {
   use serai_primitives::*;
   pub use coins_primitives as primitives;
   use primitives::*;
+
+  use in_ins_primitives::SWAP_ACCOUNT;
 
   type LiquidityTokensInstance = crate::Instance1;
 
@@ -159,7 +161,7 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
-      if !T::AllowMint::is_allowed(&balance) {
+      if !T::AllowMint::is_allowed(&balance, to == SWAP_ACCOUNT.into()) {
         Err(Error::<T, I>::MintNotAllowed)?;
       }
 

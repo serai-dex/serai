@@ -27,8 +27,11 @@ pub use shorthand::*;
 
 pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 
-// This is the account which will be the origin for any dispatched `InInstruction`s.
-pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructions-executor");
+// This is the account which will be the origin for add liquidity instructions.
+pub const ADD_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"add-liquidty-account");
+
+// This is the account which will be the origin for swap intructions.
+pub const SWAP_ACCOUNT: SeraiAddress = system_address(b"swap-account");
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
