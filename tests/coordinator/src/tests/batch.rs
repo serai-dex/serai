@@ -245,7 +245,7 @@ pub async fn batch(
       )
     );
 
-    // Send the ack as expected, though it shouldn't trigger any observable behavior
+    // Send the ack as expected
     processor
       .send_message(messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SubstrateBlockAck {
