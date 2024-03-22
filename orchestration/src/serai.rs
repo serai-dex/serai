@@ -21,7 +21,7 @@ EXPOSE 30333 9615 9933 9944
 ADD /orchestration/{}/serai/run.sh /
 CMD ["/run.sh"]
 "#,
-    network.label()
+    network.label(),
   );
 
   let run = os(Os::Debian, "", "serai") + &run_serai;

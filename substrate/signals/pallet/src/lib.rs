@@ -142,6 +142,7 @@ pub mod pallet {
   }
 
   // 80% threshold
+  // TODO: Use 34% for halting a set (not 80%)
   const REQUIREMENT_NUMERATOR: u64 = 4;
   const REQUIREMENT_DIVISOR: u64 = 5;
 

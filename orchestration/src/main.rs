@@ -325,6 +325,87 @@ fn start(network: Network, services: HashSet<String>) {
       _ => panic!("starting unrecognized service"),
     };
 
+    // If we're building the Serai service, first build the runtime
+    let serai_runtime_volume = format!("serai-{}-runtime-volume", network.label());
+    if name == "serai" {
+      // Check if it's built by checking if the volume has the expected runtime file
+      let built = || {
+        if let Ok(path) = Command::new("docker")
+          .arg("volume")
+          .arg("inspect")
+          .arg("-f")
+          .arg("{{ .Mountpoint }}")
+          .arg(&serai_runtime_volume)
+          .output()
+        {
+          if let Ok(path) = String::from_utf8(path.stdout) {
+            if let Ok(iter) = std::fs::read_dir(PathBuf::from(path.trim())) {
+              for item in iter.flatten() {
+                if item.file_name() == "serai.wasm" {
+                  return true;
+                }
+              }
+            }
+          }
+        }
+        false
+      };
+
+      if !built() {
+        let mut repo_path = env::current_exe().unwrap();
+        repo_path.pop();
+        if repo_path.as_path().ends_with("deps") {
+          repo_path.pop();
+        }
+        assert!(repo_path.as_path().ends_with("debug") || repo_path.as_path().ends_with("release"));
+        repo_path.pop();
+        assert!(repo_path.as_path().ends_with("target"));
+        repo_path.pop();
+
+        // Build the image to build the runtime
+        if !Command::new("docker")
+          .current_dir(&repo_path)
+          .arg("build")
+          .arg("-f")
+          .arg("orchestration/runtime/Dockerfile")
+          .arg(".")
+          .arg("-t")
+          .arg(format!("serai-{}-runtime-img", network.label()))
+          .spawn()
+          .unwrap()
+          .wait()
+          .unwrap()
+          .success()
+        {
+          panic!("failed to build runtime image");
+        }
+
+        // Run the image, building the runtime
+        println!("Building the Serai runtime");
+        let container_name = format!("serai-{}-runtime", network.label());
+        let _ =
+          Command::new("docker").arg("rm").arg("-f").arg(&container_name).spawn().unwrap().wait();
+        let _ = Command::new("docker")
+          .arg("run")
+          .arg("--name")
+          .arg(container_name)
+          .arg("--volume")
+          .arg(format!("{serai_runtime_volume}:/volume"))
+          .arg(format!("serai-{}-runtime-img", network.label()))
+          .spawn();
+
+        // Wait until its built
+        let mut ticks = 0;
+        while !built() {
+          std::thread::sleep(core::time::Duration::from_secs(60));
+          ticks += 1;
+          if ticks > 6 * 60 {
+            panic!("couldn't build the runtime after 6 hours")
+          }
+        }
+      }
+    }
+
     // Build it
     println!("Building {service}");
     docker::build(&orchestration_path(network), network, name);
@@ -367,6 +448,7 @@ fn start(network: Network, services: HashSet<String>) {
           assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
           command.arg("-p").arg("18082:18082")
         }
+        "serai" => command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime")),
         _ => command,
       };
       assert!(
