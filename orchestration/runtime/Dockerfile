@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 rust:1.76.0-slim-bookworm as builder
+FROM --platform=linux/amd64 rust:1.77.0-slim-bookworm as builder
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
