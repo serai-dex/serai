@@ -1,0 +1,50 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+# This GPG-signed message exists to confirm the SHA256 sums of Monero binaries.
+#
+# Please verify the signature against the key for binaryFate in the
+# source code repository (/utils/gpg_keys).
+#
+#
+## CLI
+e61bf3d80de1d7ce92074570ce4d87316f7083de338e92d83f8987b4e3f4496d  monero-android-armv7-v0.18.3.2.tar.bz2
+7598672d552af3b711c3811683315c9661ff4c8059574afbbbf57abb71d029cd  monero-android-armv8-v0.18.3.2.tar.bz2
+0a07ff7697dad610d7b65ad7f2b083e4a50ce2d9c56736d20823786540840abc  monero-freebsd-x64-v0.18.3.2.tar.bz2
+5df3a1390960c1632c797b8dfb46e93ebb2e93498e4e5e517be0bda6ff5b719b  monero-linux-armv7-v0.18.3.2.tar.bz2
+72f5c90955a736d99c1a645850984535050ebddd42c39a27eec1df82bd972126  monero-linux-armv8-v0.18.3.2.tar.bz2
+43bcb395cff51d90016bd34d75c7a339b1f0c3ea369b2258057d2b8ef972df81  monero-linux-riscv64-v0.18.3.2.tar.bz2
+9dafd70230a7b3a73101b624f3b5f439cc5b84a19b12c17c24e6aab94b678cbb  monero-linux-x64-v0.18.3.2.tar.bz2
+9857719c4dc35c3e38a7289b49f890d25ad62aba44a82fbcde194db1720d5cb2  monero-linux-x86-v0.18.3.2.tar.bz2
+1e43364b18edd2be913f80cd9ed4c7c42d61873c9557486a4c59b74366a1c5a0  monero-mac-armv8-v0.18.3.2.tar.bz2
+994d4ef86dde41ef6c61083806a8a2e4ae5c37cd56375f24e950c8765368e236  monero-mac-x64-v0.18.3.2.tar.bz2
+61ae870024036f2000eaa0da72dfddbbfc494d7c0b9432ef656183e6ba3978cf  monero-win-x64-v0.18.3.2.zip
+c84d94208cfdcd6af9ec541f8b2ea66fcfc8911c56dd21d7e313e8384c45b205  monero-win-x86-v0.18.3.2.zip
+4bebfc0afc0ff3e5b5940119a1ca6bb7b0e269e7f5a82014419f5b1bdb78e2d0  monero-source-v0.18.3.2.tar.bz2
+#
+## GUI
+e6a1f267d6e07ee72576bc942cfa74c7eeaa47b73a5d30291eb03e722448b79e  monero-gui-install-win-x64-v0.18.3.2.exe
+98772e56afe5509ed4bd3d36ee2ea3c70c019cb4325c18d3508291fcdc784d4f  monero-gui-linux-x64-v0.18.3.2.tar.bz2
+3c48b77e0b5258350a40d8cf23c2f6fda56a7ba0193fc368473ce1e0bf59342f  monero-gui-mac-armv8-v0.18.3.2.dmg
+8f18d3a63f0f52c6ae61de1881e420c6c8c2bf3296084c3d30b529430cdd9896  monero-gui-mac-x64-v0.18.3.2.dmg
+42f14a477524e60b7fb6addef8b18f6a99a0008755c56aaa0628fd611a7f6909  monero-gui-win-x64-v0.18.3.2.zip
+0a94dce72969fbebe43b46038ecd8c5df0166278c4f50fa7fece67ba51d2554b  monero-gui-source-v0.18.3.2.tar.bz2
+#
+#
+# ~binaryFate
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCAAdFiEEgaxZH+nEtlxYBq/D8K9NRioL35IFAmXtzwYACgkQ8K9NRioL
+35KsbA/8CIE7b3XKRcEjPhWFQ+rEULrfVGZXpSWVA7jnwYQy7EymQEBzjdTr5bny
+zpJDphA6XOhcf+gpNvWUr1okin23+lQo1WEJCKxtIvCpfwyuuFEs9AyrAaJrc0At
+aeNXlQE082Jpa53TJfStFyBt4l6DFEOp/4kCcIbtKpQZigBlUu4PTMkUrqPXJ2HQ
+noOY5IWhmNG2eGsqSZtfu+6vr6N7am+oeO74iGggORAXqHZGJ8eGbsKX1BIBw54d
+aoT3WDpb/xyHB7xhqlvAF7xNBhAw7jI5qKWeap+R0v8TQL3a1BZnuQP785kNYjT8
+zSk7Shm+VCciULGLBNlDf/b9MZLmIWJL4zJbE8r5GQTURH0NZXiVohTseKFsog1V
+baonRBC0Uedd6UIgE2Zsby6EQ23JvvQX1uTam0plsw5/CwCAd89iakVGmU6UG9li
+SAeww0zrA0FHXAdNUpmOv1nFOe+yrlnmf90BT0/zLRiv+gw2qoskPYjtqr5WZ87C
+nVXf2SuIE4EftQic8p+3ZAO3jxtevJWntVFEhETGQtXZnV2K5Nm3At47nPxechED
+9TsC9rzlAYW6YWrTaf9J3RRZK5p8KhYfU/wga30waT2t9FGMxhMVHNKmFC+/sPsL
+MvjwlMGrDVB8iTGNSKy/xDSDLqQmmUGZHjPQdPvAg5D0FATbfCk=
+=CFZC
+-----END PGP SIGNATURE-----

@@ -11,7 +11,7 @@ use monero_serai::{
   wallet::{
     address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
     extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
-    Scanner,
+    FeePriority, Scanner,
   },
 };
 
@@ -88,11 +88,10 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
     .unwrap();
   let tx_hash = hex::decode(tx.tx_hash).unwrap().try_into().unwrap();
 
-  // TODO: Needs https://github.com/monero-project/monero/pull/8882
-  // let fee_rate = daemon_rpc
-  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
-  //   .await
-  //   .unwrap();
+  let fee_rate = daemon_rpc
+    .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
+    .await
+    .unwrap();
 
   // unlock it
   runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr, tx_hash).await;
@@ -107,8 +106,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
   let tx = daemon_rpc.get_transaction(tx_hash).await.unwrap();
   let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
 
-  // TODO: Needs https://github.com/monero-project/monero/pull/8882
-  // runner::check_weight_and_fee(&tx, fee_rate);
+  runner::check_weight_and_fee(&tx, fee_rate);
 
   match spec {
     AddressSpec::Subaddress(index) => {
