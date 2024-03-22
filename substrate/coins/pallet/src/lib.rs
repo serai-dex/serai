@@ -159,9 +159,11 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+      /*
       if !T::AllowMint::is_allowed(&balance) {
         Err(Error::<T, I>::MintNotAllowed)?;
       }
+      */
 
       // update the balance
       Self::increase_balance_internal(to, balance)?;
