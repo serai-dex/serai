@@ -18,7 +18,7 @@ pub fn serai(
   let env_vars = [("KEY", hex::encode(serai_key.to_repr()))];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}}}:="{value}"}} "#);
+    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
   }
 
   let run_serai = format!(
