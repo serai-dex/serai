@@ -207,7 +207,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
             for msg in to_rebroadcast {
               p2p.broadcast(genesis, msg).await;
             }
-            tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(core::time::Duration::from_secs(60)).await;
           }
         }
       })
