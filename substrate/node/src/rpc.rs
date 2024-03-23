@@ -1,5 +1,7 @@
 use std::{sync::Arc, collections::HashSet};
 
+use rand_core::{RngCore, OsRng};
+
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
@@ -72,14 +74,19 @@ where
             .get_addresses_by_authority_id(validator.into())
             .await
             .unwrap_or_else(HashSet::new)
-            .into_iter();
-          // Only take a single address
+            .into_iter()
+            .collect::<Vec<_>>();
+          // Randomly select an address
           // There should be one, there may be two if their IP address changed, and more should only
           // occur if they have multiple proxies/an IP address changing frequently/some issue
           // preventing consistent self-identification
           // It isn't beneficial to use multiple addresses for a single peer here
-          if let Some(address) = returned_addresses.next() {
-            all_p2p_addresses.push(address);
+          if !returned_addresses.is_empty() {
+            all_p2p_addresses.push(
+              returned_addresses.remove(
+                usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len(),
+              ),
+            );
           }
         }
         Ok(all_p2p_addresses)
