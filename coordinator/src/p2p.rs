@@ -394,6 +394,7 @@ impl LibP2p {
 
       async move {
         let mut set_for_genesis = HashMap::new();
+        let mut connected_peers = 0;
         loop {
           let time_since_last = Instant::now().duration_since(time_of_last_p2p_message);
           tokio::select! {
@@ -437,15 +438,25 @@ impl LibP2p {
                 }
                 Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
                   if &peer_id == swarm.local_peer_id() {
+                    log::warn!("established a libp2p connection to ourselves");
                     swarm.close_connection(connection_id);
-                  } else if swarm.is_connected(&peer_id) {} else {
-                    log::debug!(
-                      "connection established to peer {} in connection ID {}",
-                      &peer_id,
-                      &connection_id,
-                    );
-                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
+                    continue;
                   }
+
+                  connected_peers += 1;
+                  log::debug!(
+                    "connection established to peer {} in connection ID {}, connected peers: {}",
+                    &peer_id,
+                    &connection_id,
+                    connected_peers,
+                  );
+                }
+                Some(SwarmEvent::ConnectionClosed { peer_id, .. }) => {
+                  connected_peers -= 1;
+                  log::debug!(
+                    "connection with peer {peer_id} closed, connected peers: {}",
+                    connected_peers,
+                  );
                 }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
