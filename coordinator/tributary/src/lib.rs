@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::{sync::Arc, io};
+use std::{sync::Arc, io, collections::VecDeque};
 
 use async_trait::async_trait;
 
@@ -194,7 +194,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
-    let to_rebroadcast = Arc::new(RwLock::new(vec![]));
+    let to_rebroadcast = Arc::new(RwLock::new(VecDeque::new()));
     // Actively rebroadcast consensus messages to ensure they aren't prematurely dropped from the
     // P2P layer
     let p2p_meta_task_handle = Arc::new(
