@@ -435,18 +435,18 @@ impl LibP2p {
                 Some(SwarmEvent::Dialing { connection_id, .. }) => {
                   log::debug!("dialing to peer in connection ID {}", &connection_id);
                 }
-                  Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
-                    if &peer_id == swarm.local_peer_id() {
-                      swarm.close_connection(connection_id);
-                    } else {
-                      log::debug!(
-                        "connection established to peer {} in connection ID {}",
-                        &peer_id,
-                        &connection_id,
-                      );
-                      swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
-                    }
+                Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
+                  if &peer_id == swarm.local_peer_id() {
+                    swarm.close_connection(connection_id);
+                  } else if swarm.is_connected(&peer_id) {} else {
+                    log::debug!(
+                      "connection established to peer {} in connection ID {}",
+                      &peer_id,
+                      &connection_id,
+                    );
+                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
                   }
+                }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
                 ))) => {
