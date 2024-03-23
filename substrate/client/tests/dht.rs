@@ -14,7 +14,9 @@ async fn dht() {
     TestBodySpecification::with_image(
       Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
     )
-    .replace_env([("SERAI_NAME".to_string(), name.to_string())].into())
+    .replace_env(
+      [("SERAI_NAME".to_string(), name.to_string()), ("KEY".to_string(), String::new())].into(),
+    )
     .set_publish_all_ports(true)
     .set_handle(handle(name))
     .set_start_policy(StartPolicy::Strict)

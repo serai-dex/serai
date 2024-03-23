@@ -29,7 +29,12 @@ macro_rules! serai_test {
           "--rpc-cors".to_string(),
           "all".to_string(),
         ])
-        .replace_env(HashMap::from([("RUST_LOG".to_string(), "runtime=debug".to_string())]))
+        .replace_env(
+          HashMap::from([
+            ("RUST_LOG".to_string(), "runtime=debug".to_string()),
+            ("KEY".to_string(), String::new()),
+          ])
+        )
         .set_publish_all_ports(true)
         .set_handle(handle)
         .set_start_policy(StartPolicy::Strict)
