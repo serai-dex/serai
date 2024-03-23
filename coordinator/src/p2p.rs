@@ -322,6 +322,7 @@ impl LibP2p {
               to_dial_send.send(addr).unwrap();
             };
 
+            let mut to_retry = vec![];
             while let Some(network) = pending_p2p_connections_recv.recv().await {
               if let Ok(mut nodes) = serai.p2p_validators(network).await {
                 // If there's an insufficient amount of nodes known, connect to all yet add it
@@ -332,11 +333,11 @@ impl LibP2p {
                     network,
                     nodes.len()
                   );
-                  pending_p2p_connections_send.send(network).unwrap();
+                  to_retry.push(network);
                   for node in nodes {
                     connect(node);
                   }
-                  break;
+                  continue;
                 }
 
                 // Randomly select up to 5
@@ -350,6 +351,9 @@ impl LibP2p {
                   }
                 }
               }
+            }
+            for to_retry in to_retry {
+              pending_p2p_connections_send.send(to_retry).unwrap();
             }
           }
           // Sleep 60 seconds before moving to the next iteration
@@ -432,12 +436,16 @@ impl LibP2p {
                   log::debug!("dialing to peer in connection ID {}", &connection_id);
                 }
                   Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
-                    log::debug!(
-                      "connection established to peer {} in connection ID {}",
-                      &peer_id,
-                      &connection_id,
-                    );
-                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
+                    if &peer_id == swarm.local_peer_id() {
+                      swarm.close_connection(connection_id);
+                    } else {
+                      log::debug!(
+                        "connection established to peer {} in connection ID {}",
+                        &peer_id,
+                        &connection_id,
+                      );
+                      swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
+                    }
                   }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
