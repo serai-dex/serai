@@ -67,7 +67,7 @@ pub fn serai_composition(name: &str) -> TestBodySpecification {
     Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
   )
   .replace_env(
-    [("SERAI_NAME".to_string(), name.to_lowercase()), ("KEY".to_string(), String::new())].into(),
+    [("SERAI_NAME".to_string(), name.to_lowercase()), ("KEY".to_string(), " ".to_string())].into(),
   )
   .set_publish_all_ports(true)
 }

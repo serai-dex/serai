@@ -15,7 +15,7 @@ async fn dht() {
       Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
     )
     .replace_env(
-      [("SERAI_NAME".to_string(), name.to_string()), ("KEY".to_string(), String::new())].into(),
+      [("SERAI_NAME".to_string(), name.to_string()), ("KEY".to_string(), " ".to_string())].into(),
     )
     .set_publish_all_ports(true)
     .set_handle(handle(name))

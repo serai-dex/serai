@@ -8,7 +8,7 @@ pub struct Keystore(sr25519::Pair);
 impl Keystore {
   pub fn from_env() -> Option<Self> {
     let mut key_hex = serai_env::var("KEY")?;
-    if key_hex.is_empty() {
+    if key_hex.trim().is_empty() {
       None?;
     }
     let mut key = hex::decode(&key_hex).expect("KEY from environment wasn't hex");
