@@ -47,7 +47,7 @@ RUN apt install -y ca-certificates
     ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
     ("NETWORK_RPC_HOSTNAME", hostname),
     ("NETWORK_RPC_PORT", format!("{port}")),
-    ("DB_PATH", "./processor-db".to_string()),
+    ("DB_PATH", "/volume/processor-db".to_string()),
     ("RUST_LOG", "info,serai_processor=debug".to_string()),
   ];
   let mut env_vars_str = String::new();

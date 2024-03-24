@@ -57,8 +57,7 @@ CMD ["/run.sh"]
 
   let run = crate::os(
     os,
-    &("RUN mkdir /volume && chown monero /volume\r\n".to_string() +
-      if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }),
+    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
     "monero",
   ) + &run_monero;
   let res = setup + &run;
