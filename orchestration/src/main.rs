@@ -3,7 +3,7 @@
 
 use core::ops::Deref;
 use std::{
-  collections::HashSet,
+  collections::{HashSet, HashMap},
   env,
   path::PathBuf,
   io::Write,
@@ -212,6 +212,55 @@ fn orchestration_path(network: Network) -> PathBuf {
   orchestration_path
 }
 
+type InfrastructureKeys =
+  HashMap<&'static str, (Zeroizing<<Ristretto as Ciphersuite>::F>, <Ristretto as Ciphersuite>::G)>;
+fn infrastructure_keys(network: Network) -> InfrastructureKeys {
+  // Generate entropy for the infrastructure keys
+
+  let entropy = if network == Network::Dev {
+    // Don't use actual entropy if this is a dev environment
+    Zeroizing::new([0; 32])
+  } else {
+    let path = home::home_dir()
+      .unwrap()
+      .join(".serai")
+      .join(network.label())
+      .join("infrastructure_keys_entropy");
+    // Check if there's existing entropy
+    if let Ok(entropy) = fs::read(&path).map(Zeroizing::new) {
+      assert_eq!(entropy.len(), 32, "entropy saved to disk wasn't 32 bytes");
+      let mut res = Zeroizing::new([0; 32]);
+      res.copy_from_slice(entropy.as_ref());
+      res
+    } else {
+      // If there isn't, generate fresh entropy
+      let mut res = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(res.as_mut());
+      fs::write(&path, &res).unwrap();
+      res
+    }
+  };
+
+  let mut transcript =
+    RecommendedTranscript::new(b"Serai Orchestrator Infrastructure Keys Transcript");
+  transcript.append_message(b"network", network.label().as_bytes());
+  transcript.append_message(b"entropy", entropy);
+  let mut rng = ChaCha20Rng::from_seed(transcript.rng_seed(b"infrastructure_keys"));
+
+  let mut key_pair = || {
+    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut rng));
+    let public = Ristretto::generator() * key.deref();
+    (key, public)
+  };
+
+  HashMap::from([
+    ("coordinator", key_pair()),
+    ("bitcoin", key_pair()),
+    ("ethereum", key_pair()),
+    ("monero", key_pair()),
+  ])
+}
+
 fn dockerfiles(network: Network) {
   let orchestration_path = orchestration_path(network);
 
@@ -222,28 +271,11 @@ fn dockerfiles(network: Network) {
     monero_wallet_rpc(&orchestration_path);
   }
 
-  // TODO: Generate infra keys in key_gen, yet service entropy here?
-
-  // Generate entropy for the infrastructure keys
-  let mut entropy = Zeroizing::new([0; 32]);
-  // Only use actual entropy if this isn't a development environment
-  if network != Network::Dev {
-    OsRng.fill_bytes(entropy.as_mut());
-  }
-  let mut transcript = RecommendedTranscript::new(b"Serai Orchestrator Transcript");
-  transcript.append_message(b"entropy", entropy);
-  let mut new_rng = |label| ChaCha20Rng::from_seed(transcript.rng_seed(label));
-
-  let mut message_queue_keys_rng = new_rng(b"message_queue_keys");
-  let mut key_pair = || {
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut message_queue_keys_rng));
-    let public = Ristretto::generator() * key.deref();
-    (key, public)
-  };
-  let coordinator_key = key_pair();
-  let bitcoin_key = key_pair();
-  let ethereum_key = key_pair();
-  let monero_key = key_pair();
+  let mut infrastructure_keys = infrastructure_keys(network);
+  let coordinator_key = infrastructure_keys.remove("coordinator").unwrap();
+  let bitcoin_key = infrastructure_keys.remove("bitcoin").unwrap();
+  let ethereum_key = infrastructure_keys.remove("ethereum").unwrap();
+  let monero_key = infrastructure_keys.remove("monero").unwrap();
 
   message_queue(
     &orchestration_path,
@@ -254,10 +286,9 @@ fn dockerfiles(network: Network) {
     monero_key.1,
   );
 
-  let mut processor_entropy_rng = new_rng(b"processor_entropy");
-  let mut new_entropy = || {
+  let new_entropy = || {
     let mut res = Zeroizing::new([0; 32]);
-    processor_entropy_rng.fill_bytes(res.as_mut());
+    OsRng.fill_bytes(res.as_mut());
     res
   };
   processor(
@@ -514,10 +545,10 @@ Serai Orchestrator v0.0.1
 
 Commands:
   key_gen *network*
-    Generates a key for the validator.
+    Generate a key for the validator.
 
   setup *network*
-    Generate infrastructure keys and the Dockerfiles for every Serai service.
+    Generate the Dockerfiles for every Serai service.
 
   start *network* [service1, service2...]
     Start the specified services for the specified network ("dev" or "testnet").
