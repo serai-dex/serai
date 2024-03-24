@@ -11,10 +11,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use serai_client::{
   SeraiError, Block, Serai, TemporalSerai,
   primitives::{BlockHash, NetworkId},
-  validator_sets::{
-    primitives::{ValidatorSet, amortize_excess_key_shares},
-    ValidatorSetsEvent,
-  },
+  validator_sets::{primitives::ValidatorSet, ValidatorSetsEvent},
   in_instructions::InInstructionsEvent,
   coins::CoinsEvent,
 };
@@ -69,12 +66,7 @@ async fn handle_new_set<D: Db>(
       let set_participants =
         serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 
-      let mut set_data = set_participants
-        .into_iter()
-        .map(|(k, w)| (k, u16::try_from(w).unwrap()))
-        .collect::<Vec<_>>();
-      amortize_excess_key_shares(&mut set_data);
-      set_data
+      set_participants.into_iter().map(|(k, w)| (k, u16::try_from(w).unwrap())).collect::<Vec<_>>()
     };
 
     let time = if let Ok(time) = block.time() {
