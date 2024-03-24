@@ -33,7 +33,7 @@ RUN apt install -y ca-certificates
   let env_vars = [
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coordinator_key.to_repr())),
-    ("DB_PATH", "./coordinator-db".to_string()),
+    ("DB_PATH", "/volume/coordinator-db".to_string()),
     ("SERAI_KEY", hex::encode(serai_key.to_repr())),
     ("SERAI_HOSTNAME", format!("serai-{}-serai", network.label())),
     ("RUST_LOG", DEFAULT_RUST_LOG.to_string()),

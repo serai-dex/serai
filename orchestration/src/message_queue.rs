@@ -20,7 +20,7 @@ pub fn message_queue(
     ("BITCOIN_KEY", hex::encode(bitcoin_key.to_bytes())),
     ("ETHEREUM_KEY", hex::encode(ethereum_key.to_bytes())),
     ("MONERO_KEY", hex::encode(monero_key.to_bytes())),
-    ("DB_PATH", "./message-queue-db".to_string()),
+    ("DB_PATH", "/volume/message-queue-db".to_string()),
     ("RUST_LOG", "info,serai_message_queue=trace".to_string()),
   ];
   let mut env_vars_str = String::new();

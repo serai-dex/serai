@@ -92,6 +92,9 @@ RUN apk update && apk upgrade
 # System user (not a human), shell of nologin, no password assigned
 RUN adduser -S -s /sbin/nologin -D {user}
 
+# Make the /volume directory and transfer it to the user
+RUN mkdir /volume && chown {user}:{user} /volume
+
 {additional_root}
 
 # Switch to a non-root user
@@ -111,6 +114,9 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 RUN useradd --system --create-home --shell /sbin/nologin {user}
+
+# Make the /volume directory and transfer it to the user
+RUN mkdir /volume && chown {user}:{user} /volume
 
 {additional_root}
 
@@ -416,6 +422,10 @@ fn start(network: Network, services: HashSet<String>) {
       .arg("container")
       .arg("inspect")
       .arg(&docker_name)
+      // Use null for all IO to silence 'container does not exist'
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null())
       .status()
       .unwrap()
       .success()
@@ -429,38 +439,46 @@ fn start(network: Network, services: HashSet<String>) {
       let command = command.arg("--restart").arg("always");
       let command = command.arg("--log-opt").arg("max-size=100m");
       let command = command.arg("--log-opt").arg("max-file=3");
+      let command = if network == Network::Dev {
+        command
+      } else {
+        // Assign a persistent volume if this isn't for Dev
+        command.arg("--volume").arg(volume);
+      }
       let command = match name {
         "bitcoin" => {
+          // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("8332:8332")
-          } else {
-            command.arg("--volume").arg(volume)
           }
         }
         "monero" => {
+          // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("18081:18081")
-          } else {
-            command.arg("--volume").arg(volume)
           }
         }
         "monero-wallet-rpc" => {
           assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
+          // Expose the RPC for tests
           command.arg("-p").arg("18082:18082")
         }
         "coordinator" => {
-          if network != Network::Dev {
-            command.arg("-p").arg("30563:30563")
-          } else {
+          if network == Network::Dev {
             command
+          else {
+            // Publish the port
+            command.arg("-p").arg("30563:30563")
           }
         }
         "serai" => {
-          let mut command = command;
-          if network != Network::Dev {
-            command = command.arg("-p").arg("30333:30333");
+          let mut command = command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime");
+          if network == Network::Dev {
+            command
+          } else {
+            // Publish the port
+            command.arg("-p").arg("30333:30333")
           }
-          command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime"))
         }
         _ => command,
       };
