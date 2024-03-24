@@ -322,6 +322,8 @@ impl LibP2p {
               to_dial_send.send(addr).unwrap();
             };
 
+            // TODO: We should also connect to random peers from random nets as needed for
+            // cosigning
             let mut to_retry = vec![];
             while let Some(network) = pending_p2p_connections_recv.recv().await {
               if let Ok(mut nodes) = serai.p2p_validators(network).await {
