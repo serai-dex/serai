@@ -2,7 +2,14 @@
 // TODO: Generate keys for a validator and the infra
 
 use core::ops::Deref;
-use std::{collections::HashSet, env, path::PathBuf, io::Write, fs, process::Command};
+use std::{
+  collections::HashSet,
+  env,
+  path::PathBuf,
+  io::Write,
+  fs,
+  process::{Stdio, Command},
+};
 
 use zeroize::Zeroizing;
 
@@ -443,19 +450,23 @@ fn start(network: Network, services: HashSet<String>) {
         command
       } else {
         // Assign a persistent volume if this isn't for Dev
-        command.arg("--volume").arg(volume);
-      }
+        command.arg("--volume").arg(volume)
+      };
       let command = match name {
         "bitcoin" => {
           // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("8332:8332")
+          } else {
+            command
           }
         }
         "monero" => {
           // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("18081:18081")
+          } else {
+            command
           }
         }
         "monero-wallet-rpc" => {
@@ -466,13 +477,13 @@ fn start(network: Network, services: HashSet<String>) {
         "coordinator" => {
           if network == Network::Dev {
             command
-          else {
+          } else {
             // Publish the port
             command.arg("-p").arg("30563:30563")
           }
         }
         "serai" => {
-          let mut command = command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime");
+          let command = command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime"));
           if network == Network::Dev {
             command
           } else {

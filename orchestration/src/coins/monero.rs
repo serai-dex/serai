@@ -55,11 +55,9 @@ CMD ["/run.sh"]
     network.label(),
   );
 
-  let run = crate::os(
-    os,
-    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
-    "monero",
-  ) + &run_monero;
+  let run =
+    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
+      &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();
