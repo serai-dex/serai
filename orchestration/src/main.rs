@@ -96,8 +96,8 @@ ENV LD_PRELOAD=libmimalloc.so
 
 RUN apk update && apk upgrade
 
-# System user (not a human), shell of nologin, no password assigned
-RUN adduser -S -s /sbin/nologin -D {user}
+RUN adduser --system --shell /sbin/nologin --disabled-password {user}
+RUN addgroup {user} {user}
 
 # Make the /volume directory and transfer it to the user
 RUN mkdir /volume && chown {user}:{user} /volume
@@ -120,7 +120,7 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
-RUN useradd --system --create-home --shell /sbin/nologin {user}
+RUN useradd --system --user-group --create-home --shell /sbin/nologin {user}
 
 # Make the /volume directory and transfer it to the user
 RUN mkdir /volume && chown {user}:{user} /volume
