@@ -1,2 +1,0 @@
-mod contract;
-mod crypto;

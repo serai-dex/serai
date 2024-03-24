@@ -1,3 +1,7 @@
-# solidity build outputs
+# Solidity build outputs
 cache
 artifacts
+
+# Auto-generated ABI files
+src/abi/schnorr.rs
+src/abi/router.rs
