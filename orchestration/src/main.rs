@@ -97,6 +97,7 @@ ENV LD_PRELOAD=libmimalloc.so
 RUN apk update && apk upgrade
 
 RUN adduser --system --shell /sbin/nologin --disabled-password {user}
+RUN addgroup {user}
 RUN addgroup {user} {user}
 
 # Make the /volume directory and transfer it to the user
