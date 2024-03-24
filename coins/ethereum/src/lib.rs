@@ -1,4 +1,16 @@
+use thiserror::Error;
+
 pub mod crypto;
-pub mod errors;
-pub mod router_contract;
-pub mod schnorr_contract;
+
+pub(crate) mod abi;
+pub mod schnorr;
+pub mod router;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Error, Debug)]
+pub enum Error {
+  #[error("failed to verify Schnorr signature")]
+  InvalidSignature,
+}

@@ -30,6 +30,9 @@ ethers-core = { version = "2", default-features = false }
 ethers-providers = { version = "2", default-features = false }
 ethers-contract = { version = "2", default-features = false, features = ["abigen", "providers"] }
 
+[build-dependencies]
+ethers-contract = { version = "2", default-features = false, features = ["abigen", "providers"] }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
