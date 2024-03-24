@@ -115,11 +115,11 @@ pub fn report_slashes_message(set: &ValidatorSet, slashes: &[(Public, u32)]) -> 
 /// maximum.
 ///
 /// Reduction occurs by reducing each validator in a reverse round-robin.
-pub fn amortize_excess_key_shares(validators: &mut [(Public, u16)]) {
-  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u16>();
-  for i in 0 .. usize::from(
-    total_key_shares.saturating_sub(u16::try_from(MAX_KEY_SHARES_PER_SET).unwrap()),
-  ) {
+pub fn amortize_excess_key_shares(validators: &mut [(Public, u64)]) {
+  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u64>();
+  for i in 0 .. usize::try_from(total_key_shares.saturating_sub(u64::from(MAX_KEY_SHARES_PER_SET)))
+    .unwrap()
+  {
     validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
   }
 }
