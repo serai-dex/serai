@@ -203,43 +203,6 @@ pub fn local_config() -> ChainSpec {
 pub fn testnet_config() -> ChainSpec {
   let wasm_binary = wasm_binary();
 
-  let bootnode_multiaddrs: Vec<libp2p::Multiaddr> =
-    vec!["/ip4/107.161.20.133/tcp/30333".parse().unwrap()];
-
-  // Transforms the above Multiaddrs into MultiaddrWithPeerIds
-  // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
-  // time and this fine for a testnet
-  let bootnodes = || async {
-    use libp2p::{Transport as TransportTrait, tcp::tokio::Transport, noise::Config};
-    let mut tasks = vec![];
-    for multiaddr in bootnode_multiaddrs {
-      tasks.push(tokio::time::timeout(
-        core::time::Duration::from_secs(10),
-        tokio::task::spawn(async move {
-          let Ok(noise) = Config::new(&sc_network::Keypair::generate_ed25519()) else { None? };
-          let mut transport = Transport::default()
-            .upgrade(libp2p::core::upgrade::Version::V1)
-            .authenticate(noise)
-            .multiplex(libp2p::yamux::Config::default());
-          let Ok(transport) = transport.dial(multiaddr.clone()) else { None? };
-          let Ok((peer_id, _)) = transport.await else { None? };
-          Some(sc_network::config::MultiaddrWithPeerId { multiaddr, peer_id })
-        }),
-      ));
-    }
-
-    let mut res = vec![];
-    for task in tasks {
-      if let Ok(Ok(Some(bootnode))) = task.await {
-        res.push(bootnode);
-      }
-    }
-    res
-  };
-  let runtime = tokio::runtime::Runtime::new().unwrap();
-  let bootnodes = runtime.block_on(bootnodes());
-  runtime.shutdown_background();
-
   ChainSpec::from_genesis(
     // Name
     "Internal Test Network 0",
@@ -260,7 +223,7 @@ pub fn testnet_config() -> ChainSpec {
       )
     },
     // Bootnodes
-    bootnodes,
+    vec![],
     // Telemetry
     None,
     // Protocol ID
@@ -272,4 +235,12 @@ pub fn testnet_config() -> ChainSpec {
     // Extensions
     None,
   )
+}
+
+pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
+  if id == "testnet-internal-0" {
+    vec!["/ip4/107.161.20.133/tcp/30333".parse().unwrap()]
+  } else {
+    vec![]
+  }
 }
