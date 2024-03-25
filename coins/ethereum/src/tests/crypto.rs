@@ -22,13 +22,14 @@ pub fn hash_to_scalar(data: &[u8]) -> Scalar {
   Scalar::reduce(U256::from_be_slice(&keccak256(data)))
 }
 
-pub(crate) fn ecrecover(message: Scalar, v: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
-  if r.is_zero().into() || s.is_zero().into() || !((v == 27) || (v == 28)) {
+// The ecrecover opcode, yet with parity replacing v
+pub(crate) fn ecrecover(message: Scalar, parity: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
+  if r.is_zero().into() || s.is_zero().into() || !((parity == 0) || (parity == 1)) {
     return None;
   }
 
   #[allow(non_snake_case)]
-  let R = AffinePoint::decompress(&r.to_bytes(), (v - 27).into());
+  let R = AffinePoint::decompress(&r.to_bytes(), parity.into());
   #[allow(non_snake_case)]
   if let Some(R) = Option::<AffinePoint>::from(R) {
     #[allow(non_snake_case)]
@@ -68,7 +69,7 @@ fn test_ecrecover() {
   assert_eq!(
     ecrecover(
       hash_to_scalar(MESSAGE),
-      u8::from(recovery_id.unwrap().is_y_odd()) + 27,
+      u8::from(recovery_id.unwrap().is_y_odd()),
       *sig.r(),
       *sig.s()
     )
@@ -113,6 +114,6 @@ fn test_ecrecover_hack() {
     sign(&mut OsRng, &algo, keys.clone(), algorithm_machines(&mut OsRng, &algo, &keys), MESSAGE);
 
   let (sa, ca) = preprocess_signature_for_ecrecover(sig.R, &public_key, MESSAGE, sig.s);
-  let q = ecrecover(sa, 27, public_key.px, ca).unwrap();
+  let q = ecrecover(sa, 0, public_key.px, ca).unwrap();
   assert_eq!(q, address(&sig.R));
 }

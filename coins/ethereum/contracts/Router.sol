@@ -4,10 +4,6 @@ pragma solidity ^0.8.0;
 import "./Schnorr.sol";
 
 contract Router {
-  // Contract initializer
-  // TODO: Replace with a MuSig of the genesis validators
-  address public initializer;
-
   // Nonce is incremented for each batch of transactions executed
   uint256 public nonce;
 
@@ -30,22 +26,22 @@ contract Router {
   event Executed(uint256 nonce, bytes32 batch, uint256 success);
 
   // error types
-  error NotInitializer();
   error AlreadyInitialized();
   error InvalidKey();
   error InvalidSignature();
   error TooManyTransactions();
 
-  constructor() {
-    initializer = msg.sender;
-  }
+  constructor() {}
 
-  // initialize can be called by the contract initializer to set the first
-  // public key, only if the public key has yet to be set.
+  // TODO: Limit to a MuSig of the genesis validators
   function initialize(bytes32 _seraiKey) external {
-    if (msg.sender != initializer) revert NotInitializer();
     if (seraiKey != 0) revert AlreadyInitialized();
-    if (_seraiKey == bytes32(0)) revert InvalidKey();
+    if (
+      (_seraiKey == bytes32(0)) ||
+      ((bytes32(uint256(_seraiKey) % Schnorr.Q)) != _seraiKey)
+    ) {
+      revert InvalidKey();
+    }
     seraiKey = _seraiKey;
   }
 
