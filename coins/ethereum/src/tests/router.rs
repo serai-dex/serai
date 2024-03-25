@@ -2,7 +2,6 @@ use std::{convert::TryFrom, sync::Arc, collections::HashMap};
 
 use rand_core::OsRng;
 
-use group::ff::PrimeField;
 use frost::{
   curve::Secp256k1,
   Participant, ThresholdKeys,
@@ -18,18 +17,13 @@ use ethers_core::{
 use ethers_providers::{Middleware, Provider, Http};
 
 use crate::{
-  crypto::{keccak256, PublicKey, EthereumHram, Signature},
-  router::{self, *},
+  crypto::{PublicKey, EthereumHram, Signature},
+  router::{Router, abi as router},
   tests::{key_gen, deploy_contract},
 };
 
-async fn setup_test() -> (
-  u32,
-  AnvilInstance,
-  Router<Provider<Http>>,
-  HashMap<Participant, ThresholdKeys<Secp256k1>>,
-  PublicKey,
-) {
+async fn setup_test(
+) -> (u32, AnvilInstance, Router, HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
   let anvil = Anvil::new().spawn();
 
   let provider = Provider::<Http>::try_from(anvil.endpoint()).unwrap();
@@ -39,12 +33,12 @@ async fn setup_test() -> (
 
   let contract_address =
     deploy_contract(chain_id, client.clone(), &wallet, "Router").await.unwrap();
-  let contract = Router::new(contract_address, client.clone());
+  let contract = Router::new(client.clone(), contract_address.into());
 
   let (keys, public_key) = key_gen();
 
   // Set the key to the threshold keys
-  let tx = contract.init_serai_key(public_key.px.to_repr().into()).gas(100_000);
+  let tx = contract.initialize(&public_key);
   let pending_tx = tx.send().await.unwrap();
   let receipt = pending_tx.await.unwrap().unwrap();
   assert!(receipt.status == Some(1.into()));
@@ -60,25 +54,13 @@ async fn test_deploy_contract() {
 pub fn hash_and_sign(
   keys: &HashMap<Participant, ThresholdKeys<Secp256k1>>,
   public_key: &PublicKey,
-  chain_id: U256,
   message: &[u8],
 ) -> Signature {
-  let hashed_message = keccak256(message);
-
-  let mut chain_id_bytes = [0; 32];
-  chain_id.to_big_endian(&mut chain_id_bytes);
-  let full_message = &[chain_id_bytes.as_slice(), &hashed_message].concat();
-
   let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
-  let sig = sign(
-    &mut OsRng,
-    &algo,
-    keys.clone(),
-    algorithm_machines(&mut OsRng, &algo, keys),
-    full_message,
-  );
+  let sig =
+    sign(&mut OsRng, &algo, keys.clone(), algorithm_machines(&mut OsRng, &algo, keys), message);
 
-  Signature::new(public_key, k256::U256::from_words(chain_id.0), message, sig).unwrap()
+  Signature::new(public_key, message, sig).unwrap()
 }
 
 #[tokio::test]
@@ -88,18 +70,15 @@ async fn test_router_execute() {
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
   let data = Bytes::from([0]);
-  let tx = OutInstruction { to, value, data: data.clone() };
+  let tx = router::OutInstruction { to, value, data: data.clone() };
+  let txs = vec![tx];
 
-  let nonce_call = contract.nonce();
-  let nonce = nonce_call.call().await.unwrap();
+  let nonce = contract.nonce().await.unwrap();
 
-  let encoded =
-    ("execute".to_string(), nonce, vec![router::OutInstruction { to, value, data }]).encode();
-  let sig = hash_and_sign(&keys, &public_key, chain_id.into(), &encoded);
+  let encoded = ("execute".to_string(), U256::from(chain_id), nonce, txs.clone()).encode();
+  let sig = hash_and_sign(&keys, &public_key, &encoded);
 
-  let tx = contract
-    .execute(vec![tx], router::Signature { c: sig.c.to_repr().into(), s: sig.s.to_repr().into() })
-    .gas(300_000);
+  let tx = contract.execute(txs, &sig).gas(300_000);
   let pending_tx = tx.send().await.unwrap();
   let receipt = dbg!(pending_tx.await.unwrap().unwrap());
   assert!(receipt.status == Some(1.into()));

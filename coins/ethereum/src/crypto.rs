@@ -2,9 +2,7 @@ use sha3::{Digest, Keccak256};
 
 use group::ff::PrimeField;
 use k256::{
-  elliptic_curve::{
-    bigint::ArrayEncoding, ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint,
-  },
+  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
   ProjectivePoint, Scalar, U256,
 };
 
@@ -28,15 +26,15 @@ pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
 pub struct PublicKey {
   pub A: ProjectivePoint,
   pub px: Scalar,
-  pub parity: u8,
 }
 
 impl PublicKey {
   #[allow(non_snake_case)]
   pub fn new(A: ProjectivePoint) -> Option<PublicKey> {
     let affine = A.to_affine();
-    let parity = u8::from(bool::from(affine.y_is_odd())) + 27;
-    if parity != 27 {
+    // Only allow even keys to save a word within Ethereum
+    let is_odd = bool::from(affine.y_is_odd());
+    if is_odd {
       None?;
     }
 
@@ -47,7 +45,7 @@ impl PublicKey {
       None?;
     }
 
-    Some(PublicKey { A, px: x_coord_scalar, parity })
+    Some(PublicKey { A, px: x_coord_scalar })
   }
 }
 
@@ -56,13 +54,12 @@ pub struct EthereumHram {}
 impl Hram<Secp256k1> for EthereumHram {
   #[allow(non_snake_case)]
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-    let a_encoded_point = A.to_encoded_point(true);
-    let mut a_encoded = a_encoded_point.as_ref().to_owned();
-    a_encoded[0] += 25; // Ethereum uses 27/28 for point parity
-    assert!((a_encoded[0] == 27) || (a_encoded[0] == 28));
+    let x_coord = A.to_affine().x();
+
     let mut data = address(R).to_vec();
-    data.append(&mut a_encoded);
+    data.extend(x_coord.as_slice());
     data.extend(m);
+
     Scalar::reduce(U256::from_be_slice(&keccak256(&data)))
   }
 }
@@ -74,15 +71,10 @@ pub struct Signature {
 impl Signature {
   pub fn new(
     public_key: &PublicKey,
-    chain_id: U256,
-    m: &[u8],
+    message: &[u8],
     signature: SchnorrSignature<Secp256k1>,
   ) -> Option<Signature> {
-    let c = EthereumHram::hram(
-      &signature.R,
-      &public_key.A,
-      &[chain_id.to_be_byte_array().as_slice(), &keccak256(m)].concat(),
-    );
+    let c = EthereumHram::hram(&signature.R, &public_key.A, message);
     if !signature.verify(public_key.A, c) {
       None?;
     }

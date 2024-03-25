@@ -6,7 +6,7 @@ use sha3::{Digest, Keccak256};
 use group::Group;
 use k256::{
   ecdsa::{hazmat::SignPrimitive, signature::DigestVerifier, SigningKey, VerifyingKey},
-  elliptic_curve::{bigint::ArrayEncoding, ops::Reduce, point::DecompressPoint},
+  elliptic_curve::{ops::Reduce, point::DecompressPoint},
   U256, Scalar, AffinePoint, ProjectivePoint,
 };
 
@@ -93,18 +93,13 @@ fn test_signing() {
 pub fn preprocess_signature_for_ecrecover(
   R: ProjectivePoint,
   public_key: &PublicKey,
-  chain_id: U256,
   m: &[u8],
   s: Scalar,
-) -> (u8, Scalar, Scalar) {
-  let c = EthereumHram::hram(
-    &R,
-    &public_key.A,
-    &[chain_id.to_be_byte_array().as_slice(), &keccak256(m)].concat(),
-  );
+) -> (Scalar, Scalar) {
+  let c = EthereumHram::hram(&R, &public_key.A, m);
   let sa = -(s * public_key.px);
   let ca = -(c * public_key.px);
-  (public_key.parity, sa, ca)
+  (sa, ca)
 }
 
 #[test]
@@ -112,21 +107,12 @@ fn test_ecrecover_hack() {
   let (keys, public_key) = key_gen();
 
   const MESSAGE: &[u8] = b"Hello, World!";
-  let hashed_message = keccak256(MESSAGE);
-  let chain_id = U256::ONE;
-  let full_message = &[chain_id.to_be_byte_array().as_slice(), &hashed_message].concat();
 
   let algo = IetfSchnorr::<Secp256k1, EthereumHram>::ietf();
-  let sig = sign(
-    &mut OsRng,
-    &algo,
-    keys.clone(),
-    algorithm_machines(&mut OsRng, &algo, &keys),
-    full_message,
-  );
+  let sig =
+    sign(&mut OsRng, &algo, keys.clone(), algorithm_machines(&mut OsRng, &algo, &keys), MESSAGE);
 
-  let (parity, sa, ca) =
-    preprocess_signature_for_ecrecover(sig.R, &public_key, chain_id, MESSAGE, sig.s);
-  let q = ecrecover(sa, parity, public_key.px, ca).unwrap();
+  let (sa, ca) = preprocess_signature_for_ecrecover(sig.R, &public_key, MESSAGE, sig.s);
+  let q = ecrecover(sa, 27, public_key.px, ca).unwrap();
   assert_eq!(q, address(&sig.R));
 }
