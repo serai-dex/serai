@@ -11,6 +11,8 @@ use frost::{
   curve::Secp256k1,
 };
 
+use crate::abi::router::{Signature as AbiSignature};
+
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
@@ -47,6 +49,10 @@ impl PublicKey {
 
     Some(PublicKey { A, px: x_coord_scalar })
   }
+
+  pub(crate) fn eth_repr(&self) -> [u8; 32] {
+    self.px.to_repr().into()
+  }
 }
 
 #[derive(Clone, Default)]
@@ -79,5 +85,11 @@ impl Signature {
       None?;
     }
     Some(Signature { c, s: signature.s })
+  }
+}
+
+impl From<&Signature> for AbiSignature {
+  fn from(sig: &Signature) -> AbiSignature {
+    AbiSignature { c: sig.c.to_repr().into(), s: sig.s.to_repr().into() }
   }
 }
