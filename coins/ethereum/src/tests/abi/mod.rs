@@ -1,3 +1,3 @@
 #[rustfmt::skip]
 #[allow(clippy::all)]
-pub mod router;
+pub(crate) mod schnorr;

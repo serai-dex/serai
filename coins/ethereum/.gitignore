@@ -3,5 +3,5 @@ cache
 artifacts
 
 # Auto-generated ABI files
-src/abi/schnorr.rs
+src/tests/abi/schnorr.rs
 src/abi/router.rs

@@ -26,11 +26,11 @@ fn main() {
   ];
   assert!(Command::new("solc").args(args).status().unwrap().success());
 
-  Abigen::new("Schnorr", "./artifacts/Schnorr.abi")
+  Abigen::new("TestSchnorr", "./artifacts/TestSchnorr.abi")
     .unwrap()
     .generate()
     .unwrap()
-    .write_to_file("./src/abi/schnorr.rs")
+    .write_to_file("./src/tests/abi/schnorr.rs")
     .unwrap();
 
   Abigen::new("Router", "./artifacts/Router.abi")
