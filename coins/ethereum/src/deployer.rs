@@ -14,9 +14,19 @@ use crate::{
 };
 pub use crate::abi::deployer as abi;
 
+/// The Deployer contract for the Router contract.
+///
+/// This Deployer has a deterministic address, letting it be immediately identified on any
+/// compatible chain. It then supports retrieving the Router contract's address (which isn't
+/// deterministic) using a single log query.
 #[derive(Clone, Debug)]
 pub struct Deployer(abi::Deployer<Provider<Http>>);
 impl Deployer {
+  /// Obtain the transaction to deploy this contract, already signed.
+  ///
+  /// The account this transaction is sent from (which is populated in `from`) must be sufficiently
+  /// funded for this transaction to be submitted. This account has no known private key to anyone,
+  /// so ETH sent can be neither misappropriated nor returned.
   pub fn deployment_tx(chain_id: u64) -> Result<Transaction, Error> {
     let bytecode = include_str!("../artifacts/Deployer.bin");
     let bytecode =
@@ -38,11 +48,13 @@ impl Deployer {
     crypto::deterministically_sign(chain_id, &tx_request)
   }
 
+  /// Obtain the deterministic address for this contract.
   pub fn address(chain_id: u64) -> Result<[u8; 20], Error> {
     let deployer_deployer = Self::deployment_tx(chain_id)?.from;
     Ok(ethers_core::utils::get_contract_address(deployer_deployer, U256::zero()).0)
   }
 
+  /// Construct a new view of the `Deployer`.
   pub async fn new(provider: Arc<Provider<Http>>) -> Result<Option<Self>, Error> {
     let chain_id = provider.get_chainid().await.map_err(|_| Error::ConnectionError)?;
     if chain_id > U256::from(u64::MAX) {
@@ -57,22 +69,26 @@ impl Deployer {
     Ok(Some(Self(abi::Deployer::new(address, provider))))
   }
 
+  /// Yield the `ContractCall` necessary to deploy the Router.
   pub fn deploy_router(&self, key: &PublicKey) -> ContractCall<Provider<Http>, ()> {
     self.0.deploy(Router::init_code(key).into()).gas(1_000_000)
   }
 
+  /// Find the first Router deployed with the specified key as its first key.
+  ///
+  /// This is the Router Serai will use, and is the only way to construct a `Router`.
   pub async fn find_router(
     &self,
-    provider: &Arc<Provider<Http>>,
+    provider: Arc<Provider<Http>>,
     key: &PublicKey,
-  ) -> Result<Option<[u8; 20]>, Error> {
+  ) -> Result<Option<Router>, Error> {
     let init_code = Router::init_code(key);
     let init_code_hash = keccak256(&init_code);
 
+    // Find the first log using this init code (where the init code is binding to the key)
     let mut filter = self.0.deployment_filter().filter.from_block(0);
     filter.topics[1] = Some(Topic::Value(Some(init_code_hash.into())));
 
-    // Get the first instance of the Router to be deployed
     let Some(logs) = provider.get_logs_paginated(&filter, 1).next().await else { return Ok(None) };
     let first_log = logs.map_err(|_| Error::ConnectionError)?;
 
@@ -83,6 +99,6 @@ impl Deployer {
     let mut router = [0; 20];
     router.copy_from_slice(&first_log.data[12 ..]);
 
-    Ok(Some(router))
+    Ok(Some(Router::new(provider, router)))
   }
 }

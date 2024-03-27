@@ -14,6 +14,7 @@ pub use crate::{
   abi::router as abi,
 };
 
+/// The contract Serai uses to manage its state.
 #[derive(Clone, Debug)]
 pub struct Router(pub(crate) abi::Router<Provider<Http>>);
 impl Router {
@@ -33,11 +34,12 @@ impl Router {
     .unwrap()
   }
 
-  pub fn new(provider: Arc<Provider<Http>>, address: [u8; 20]) -> Self {
+  // This isn't pub in order to force users to use `Deployer::find_router`.
+  pub(crate) fn new(provider: Arc<Provider<Http>>, address: [u8; 20]) -> Self {
     Self(abi::Router::new(address, provider))
   }
 
-  /// Returns the current nonce for the published batches.
+  /// Get the current key for Serai.
   pub async fn serai_key(&self) -> Result<PublicKey, Error> {
     self
       .0
@@ -49,6 +51,7 @@ impl Router {
       .ok_or(Error::ConnectionError)
   }
 
+  /// Get the message to be signed in order to update the key for Serai.
   pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
     ("updateSeraiKey".to_string(), chain_id, key.eth_repr()).encode()
   }
@@ -62,16 +65,17 @@ impl Router {
     self.0.update_serai_key(public_key.eth_repr(), sig.into()).gas(100_000)
   }
 
-  /// Returns the current nonce for the published batches.
+  /// Get the current nonce for the published batches.
   pub async fn nonce(&self) -> Result<U256, Error> {
     self.0.nonce().call().await.map_err(|_| Error::ConnectionError)
   }
 
+  /// Get the message to be signed in order to update the key for Serai.
   pub fn execute_message(chain_id: U256, nonce: U256, outs: Vec<abi::OutInstruction>) -> Vec<u8> {
     ("execute".to_string(), chain_id, nonce, outs).encode()
   }
 
-  /// Execute a batch of OutInstructions.
+  /// Execute a batch of `OutInstruction`s.
   pub fn execute(
     &self,
     outs: Vec<abi::OutInstruction>,
