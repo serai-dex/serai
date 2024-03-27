@@ -71,6 +71,7 @@ pub(crate) fn deterministically_sign(
 
 /// The public key for a Schnorr-signing account.
 #[allow(non_snake_case)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PublicKey {
   pub(crate) A: ProjectivePoint,
   pub(crate) px: Scalar,
@@ -131,6 +132,7 @@ impl Hram<Secp256k1> for EthereumHram {
 }
 
 /// A signature for the Schnorr contract.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signature {
   pub(crate) c: Scalar,
   pub(crate) s: Scalar,

@@ -2,6 +2,8 @@ use std::{convert::TryFrom, sync::Arc, collections::HashMap};
 
 use rand_core::OsRng;
 
+use group::Group;
+use k256::ProjectivePoint;
 use frost::{
   curve::Secp256k1,
   Participant, ThresholdKeys,
@@ -23,7 +25,7 @@ use crate::{
 };
 
 async fn setup_test(
-) -> (u64, AnvilInstance, Router, HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
+) -> (AnvilInstance, u64, Router, HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
   let anvil = Anvil::new().spawn();
 
   let provider = Provider::<Http>::try_from(anvil.endpoint()).unwrap();
@@ -47,12 +49,16 @@ async fn setup_test(
   );
   let contract = deployer.find_router(client, &public_key).await.unwrap().unwrap();
 
-  (chain_id, anvil, contract, keys, public_key)
+  (anvil, chain_id, contract, keys, public_key)
 }
 
 #[tokio::test]
 async fn test_deploy_contract() {
-  setup_test().await;
+  let (_anvil, _, router, _, public_key) = setup_test().await;
+
+  assert_eq!(router.serai_key().await.unwrap(), public_key);
+  assert_eq!(router.nonce().await.unwrap(), 0.into());
+  // TODO: Check it emitted SeraiKeyUpdated(public_key) at its genesis
 }
 
 pub fn hash_and_sign(
@@ -68,8 +74,32 @@ pub fn hash_and_sign(
 }
 
 #[tokio::test]
+async fn test_router_update_serai_key() {
+  let (_anvil, chain_id, contract, keys, public_key) = setup_test().await;
+
+  let next_key = loop {
+    let point = ProjectivePoint::random(&mut OsRng);
+    let Some(next_key) = PublicKey::new(point) else { continue };
+    break next_key;
+  };
+
+  let message = Router::update_serai_key_message(chain_id.into(), &next_key);
+  let sig = hash_and_sign(&keys, &public_key, &message);
+
+  let receipt =
+    contract.update_serai_key(&next_key, &sig).send().await.unwrap().await.unwrap().unwrap();
+  assert_eq!(receipt.status, Some(1.into()));
+
+  assert_eq!(contract.serai_key().await.unwrap(), next_key);
+  // TODO: Check logs
+
+  println!("gas used: {:?}", receipt.cumulative_gas_used);
+  println!("logs: {:?}", receipt.logs);
+}
+
+#[tokio::test]
 async fn test_router_execute() {
-  let (chain_id, _anvil, contract, keys, public_key) = setup_test().await;
+  let (_anvil, chain_id, contract, keys, public_key) = setup_test().await;
 
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
@@ -78,14 +108,18 @@ async fn test_router_execute() {
   let txs = vec![tx];
 
   let nonce = contract.nonce().await.unwrap();
+  assert_eq!(nonce, 0.into());
 
   let message = Router::execute_message(chain_id.into(), nonce, txs.clone());
   let sig = hash_and_sign(&keys, &public_key, &message);
 
-  let tx = contract.execute(txs, &sig).gas(300_000);
+  let tx = contract.execute(txs, &sig);
   let pending_tx = tx.send().await.unwrap();
   let receipt = pending_tx.await.unwrap().unwrap();
-  assert!(receipt.status == Some(1.into()));
+  assert_eq!(receipt.status, Some(1.into()));
+
+  assert_eq!(contract.nonce().await.unwrap(), 1.into());
+  // TODO: Check logs
 
   println!("gas used: {:?}", receipt.cumulative_gas_used);
   println!("logs: {:?}", receipt.logs);

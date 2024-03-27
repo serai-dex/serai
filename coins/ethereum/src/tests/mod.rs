@@ -73,7 +73,7 @@ pub async fn fund_account(
 
   let pending_tx = provider.send_raw_transaction(funding_tx).await.ok()?;
   let receipt = pending_tx.await.ok()??;
-  assert!(receipt.status == Some(1.into()));
+  assert_eq!(receipt.status, Some(1.into()));
   Some(())
 }
 
@@ -119,7 +119,7 @@ pub async fn deploy_contract(
 
   let pending_tx = client.send_raw_transaction(deployment_tx.rlp()).await.ok()?;
   let receipt = pending_tx.await.ok()??;
-  assert!(receipt.status == Some(1.into()));
+  assert_eq!(receipt.status, Some(1.into()));
 
   Some(receipt.contract_address.unwrap())
 }

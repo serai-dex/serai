@@ -62,6 +62,7 @@ impl Router {
     public_key: &PublicKey,
     sig: &Signature,
   ) -> ContractCall<Provider<Http>, ()> {
+    // TODO: Set a saner gas
     self.0.update_serai_key(public_key.eth_repr(), sig.into()).gas(100_000)
   }
 
@@ -81,7 +82,7 @@ impl Router {
     outs: Vec<abi::OutInstruction>,
     sig: &Signature,
   ) -> ContractCall<Provider<Http>, ()> {
-    let gas = 100_000 + ((200_000 + 10_000) * outs.len());
+    let gas = 100_000 + ((200_000 + 10_000) * outs.len()); // TODO
     self.0.execute(outs, sig.into()).gas(gas)
   }
 }

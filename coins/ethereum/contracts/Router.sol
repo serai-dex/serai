@@ -27,7 +27,7 @@ contract Router {
   event Executed(uint256 nonce, bytes32 batch, uint256 success);
 
   // error types
-  error InvalidKey(bytes32 key);
+  error InvalidKey();
   error InvalidSignature();
 
   modifier _updateSeraiKey(bytes32 key) {
@@ -35,7 +35,7 @@ contract Router {
       (key == bytes32(0)) ||
       ((bytes32(uint256(key) % Schnorr.Q)) != key)
     ) {
-      revert InvalidKey(key);
+      revert InvalidKey();
     }
 
     _;
@@ -51,11 +51,11 @@ contract Router {
   // given one.
   function updateSeraiKey(
     bytes32 _seraiKey,
-    Signature memory sig
-  ) public _updateSeraiKey(_seraiKey) {
+    Signature calldata sig
+  ) external _updateSeraiKey(_seraiKey) {
     // TODO: If this updates to an old key, this can be replayed
     bytes memory message =
-      abi.encodePacked("updateSeraiKey", block.chainid, _seraiKey);
+      abi.encode("updateSeraiKey", block.chainid, _seraiKey);
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }
@@ -66,8 +66,8 @@ contract Router {
   // if signature verification fails, this function will revert.
   function execute(
     OutInstruction[] calldata transactions,
-    Signature memory sig
-  ) public {
+    Signature calldata sig
+  ) external {
     bytes memory message =
       abi.encode("execute", block.chainid, nonce, transactions);
     // This prevents re-entrancy from causing double spends yet does allow
