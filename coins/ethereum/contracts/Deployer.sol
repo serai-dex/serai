@@ -18,7 +18,8 @@ The expected deployment process of the Router is as follows:
 
 This doesn't have any denial-of-service risks and will resolve once anyone steps
 forward as deployer. This does fail to guarantee an identical address across
-every chain, though that will naturally occur so long as it isn't griefed.
+every chain, though it enables letting anyone efficiently ask the Deployer for
+the address (with the Deployer having an identical address on every chain).
 
 Unfortunately, guaranteeing identical addresses aren't feasible. We'd need the
 Deployer contract to use a consistent salt for the Router, yet the Router must
@@ -33,18 +34,14 @@ the council not publishing the correct key/not publishing any key.
 */
 
 contract Deployer {
-  uint256 public nonce;
-
-  event Deployment(uint256 indexed nonce, bytes32 indexed init_code_hash, address created);
+  event Deployment(bytes32 indexed init_code_hash, address created);
 
   function deploy(bytes memory init_code) external {
-    uint256 local_nonce = nonce;
-    nonce += 1;
     address created;
     assembly {
-      created := create2(0, add(init_code, 0x20), mload(init_code), local_nonce)
+      created := create(0, add(init_code, 0x20), mload(init_code))
     }
     // These may be emitted out of order upon re-entrancy
-    emit Deployment(local_nonce, keccak256(init_code), created);
+    emit Deployment(keccak256(init_code), created);
   }
 }

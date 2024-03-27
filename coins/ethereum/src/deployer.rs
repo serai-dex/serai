@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ethers_core::{
-  types::{BigEndianHash, U256, H160, Topic, Bytes, Transaction},
-  utils::{hex::FromHex, rlp},
+  types::{U256, H160, Topic, Bytes, Transaction},
+  utils::hex::FromHex,
 };
 use ethers_providers::{StreamExt, Middleware, Provider, Http};
 use ethers_contract::ContractCall;
@@ -40,17 +40,7 @@ impl Deployer {
 
   pub fn address(chain_id: u64) -> Result<[u8; 20], Error> {
     let deployer_deployer = Self::deployment_tx(chain_id)?.from;
-
-    let mut address = [0; 20];
-    address.copy_from_slice(
-      &{
-        let mut stream = rlp::RlpStream::new_list(2);
-        stream.append(&deployer_deployer);
-        stream.append(&U256::zero());
-        keccak256(stream.as_raw())
-      }[12 ..],
-    );
-    Ok(address)
+    Ok(ethers_core::utils::get_contract_address(deployer_deployer, U256::zero()).0)
   }
 
   pub async fn new(provider: Arc<Provider<Http>>) -> Result<Option<Self>, Error> {
@@ -67,22 +57,8 @@ impl Deployer {
     Ok(Some(Self(abi::Deployer::new(address, provider))))
   }
 
-  pub async fn nonce(&self) -> Result<U256, Error> {
-    self.0.nonce().call().await.map_err(|_| Error::ConnectionError)
-  }
-
   pub fn deploy_router(&self, key: &PublicKey) -> ContractCall<Provider<Http>, ()> {
     self.0.deploy(Router::init_code(key).into()).gas(1_000_000)
-  }
-
-  pub(crate) fn deployment_address(
-    chain_id: u64,
-    nonce: U256,
-    init_code: &[u8],
-  ) -> Result<[u8; 20], Error> {
-    let mut nonce_bytes = [0; 32];
-    nonce.to_big_endian(&mut nonce_bytes);
-    Ok(ethers_core::utils::get_create2_address(Self::address(chain_id)?, nonce_bytes, init_code).0)
   }
 
   pub async fn find_router(
@@ -90,17 +66,11 @@ impl Deployer {
     provider: &Arc<Provider<Http>>,
     key: &PublicKey,
   ) -> Result<Option<[u8; 20]>, Error> {
-    let chain_id = provider.get_chainid().await.map_err(|_| Error::ConnectionError)?;
-    if chain_id > U256::from(u64::MAX) {
-      Err(Error::ChainIdExceedsBounds)?;
-    }
-    let chain_id = chain_id.as_u64();
-
     let init_code = Router::init_code(key);
     let init_code_hash = keccak256(&init_code);
 
     let mut filter = self.0.deployment_filter().filter.from_block(0);
-    filter.topics[2] = Some(Topic::Value(Some(init_code_hash.into())));
+    filter.topics[1] = Some(Topic::Value(Some(init_code_hash.into())));
 
     // Get the first instance of the Router to be deployed
     let Some(logs) = provider.get_logs_paginated(&filter, 1).next().await else { return Ok(None) };
@@ -112,12 +82,6 @@ impl Deployer {
     }
     let mut router = [0; 20];
     router.copy_from_slice(&first_log.data[12 ..]);
-
-    // Verify it against the expected derivation for this nonce
-    let nonce = first_log.topics[1];
-    if router != Self::deployment_address(chain_id, nonce.into_uint(), &init_code)? {
-      Err(Error::ConnectionError)?;
-    }
 
     Ok(Some(router))
   }
