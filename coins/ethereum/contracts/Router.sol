@@ -55,7 +55,7 @@ contract Router {
   ) external _updateSeraiKey(_seraiKey) {
     // TODO: If this updates to an old key, this can be replayed
     bytes memory message =
-      abi.encode("updateSeraiKey", block.chainid, _seraiKey);
+      abi.encodePacked("updateSeraiKey", block.chainid, _seraiKey);
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }

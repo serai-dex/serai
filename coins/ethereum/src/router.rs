@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ethers_core::{
-  types::{U256, Bytes},
+  types::{BigEndianHash, H256, U256, Bytes},
   utils::hex::FromHex,
   abi::{self as eth_abi, AbiEncode},
 };
@@ -53,7 +53,7 @@ impl Router {
 
   /// Get the message to be signed in order to update the key for Serai.
   pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
-    ("updateSeraiKey".to_string(), chain_id, key.eth_repr()).encode()
+    [b"updateSeraiKey".as_slice(), &H256::from_uint(&chain_id).0, &key.eth_repr()].concat()
   }
 
   /// Update the key representing Serai.
