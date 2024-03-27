@@ -22,15 +22,17 @@ fn main() {
     "-o", "./artifacts", "--overwrite",
     "--bin", "--abi",
     "--optimize",
-    "./contracts/Schnorr.sol", "./contracts/Router.sol",
+    "./contracts/Schnorr.sol", "./contracts/Deployer.sol", "./contracts/Router.sol",
   ];
-  assert!(Command::new("solc").args(args).status().unwrap().success());
+  let solc = Command::new("solc").args(args).output().unwrap();
+  assert!(solc.status.success());
+  assert!(solc.stderr.is_empty());
 
-  Abigen::new("TestSchnorr", "./artifacts/TestSchnorr.abi")
+  Abigen::new("Deployer", "./artifacts/Deployer.abi")
     .unwrap()
     .generate()
     .unwrap()
-    .write_to_file("./src/tests/abi/schnorr.rs")
+    .write_to_file("./src/abi/deployer.rs")
     .unwrap();
 
   Abigen::new("Router", "./artifacts/Router.abi")
@@ -38,5 +40,12 @@ fn main() {
     .generate()
     .unwrap()
     .write_to_file("./src/abi/router.rs")
+    .unwrap();
+
+  Abigen::new("TestSchnorr", "./artifacts/TestSchnorr.abi")
+    .unwrap()
+    .generate()
+    .unwrap()
+    .write_to_file("./src/tests/abi/schnorr.rs")
     .unwrap();
 }

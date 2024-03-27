@@ -29,11 +29,6 @@ impl Router {
       .ok_or(Error::ConnectionError)
   }
 
-  /// Initialize the smart contract.
-  pub fn initialize(&self, public_key: &PublicKey) -> ContractCall<Provider<Http>, ()> {
-    self.0.initialize(public_key.eth_repr()).gas(100_000)
-  }
-
   pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
     ("updateSeraiKey".to_string(), chain_id, key.eth_repr()).encode()
   }

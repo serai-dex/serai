@@ -7,7 +7,7 @@ use k256::{
     point::{AffineCoordinates, DecompressPoint},
     sec1::ToEncodedPoint,
   },
-  AffinePoint, ProjectivePoint, Scalar, U256,
+  AffinePoint, ProjectivePoint, Scalar, U256 as KU256,
 };
 
 use frost::{
@@ -15,10 +15,22 @@ use frost::{
   curve::Secp256k1,
 };
 
-use crate::abi::router::{Signature as AbiSignature};
+use ethers_core::{
+  types::{Signature as EthersSignature, Transaction},
+  utils::rlp::{Rlp, Decodable},
+};
+
+use crate::{
+  Error, TransactionRequest,
+  abi::router::{Signature as AbiSignature},
+};
 
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
+}
+
+pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
+  <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(data).into())
 }
 
 pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
@@ -26,6 +38,35 @@ pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
   // Last 20 bytes of the hash of the concatenated x and y coordinates
   // We obtain the concatenated x and y coordinates via the uncompressed encoding of the point
   keccak256(&encoded_point.as_ref()[1 .. 65])[12 ..].try_into().unwrap()
+}
+
+pub(crate) fn deterministically_sign(
+  chain_id: u64,
+  tx: &TransactionRequest,
+) -> Result<Transaction, Error> {
+  let sig_hash = tx.sighash().0;
+  let mut r = hash_to_scalar(&[sig_hash.as_slice(), b"r"].concat());
+  let mut s = hash_to_scalar(&[sig_hash.as_slice(), b"s"].concat());
+  loop {
+    // EIP-155 v
+    let v = chain_id
+      .checked_mul(2)
+      .and_then(|id| id.checked_add(35))
+      .ok_or(Error::ChainIdExceedsBounds)?;
+    let tx = tx.rlp_signed(&EthersSignature {
+      v,
+      r: r.to_repr().as_slice().into(),
+      s: s.to_repr().as_slice().into(),
+    });
+    let mut tx = Transaction::decode(&Rlp::new(&tx)).unwrap();
+    if tx.recover_from_mut().is_ok() {
+      return Ok(tx);
+    }
+
+    // Re-hash until valid
+    r = hash_to_scalar(r.to_repr().as_ref());
+    s = hash_to_scalar(s.to_repr().as_ref());
+  }
 }
 
 #[allow(non_snake_case)]
@@ -45,7 +86,7 @@ impl PublicKey {
     }
 
     let x_coord = affine.x();
-    let x_coord_scalar = <Scalar as Reduce<U256>>::reduce_bytes(&x_coord);
+    let x_coord_scalar = <Scalar as Reduce<KU256>>::reduce_bytes(&x_coord);
     // Return None if a reduction would occur
     if x_coord_scalar.to_repr() != x_coord {
       None?;
@@ -76,7 +117,7 @@ impl Hram<Secp256k1> for EthereumHram {
     data.extend(x_coord.as_slice());
     data.extend(m);
 
-    <Scalar as Reduce<U256>>::reduce_bytes(&keccak256(&data).into())
+    <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(&data).into())
   }
 }
 
