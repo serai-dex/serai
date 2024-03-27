@@ -75,22 +75,14 @@ impl Deployer {
     self.0.deploy(Router::init_code(key).into()).gas(1_000_000)
   }
 
-  pub fn deployment_address(
+  pub(crate) fn deployment_address(
     chain_id: u64,
     nonce: U256,
-    init_code_hash: [u8; 32],
+    init_code: &[u8],
   ) -> Result<[u8; 20], Error> {
     let mut nonce_bytes = [0; 32];
     nonce.to_big_endian(&mut nonce_bytes);
-
-    // CREATE2 derivation
-    Ok(
-      keccak256(
-        &[[0xff].as_slice(), &Self::address(chain_id)?, &nonce_bytes, &init_code_hash].concat(),
-      )[12 ..]
-        .try_into()
-        .unwrap(),
-    )
+    Ok(ethers_core::utils::get_create2_address(Self::address(chain_id)?, nonce_bytes, init_code).0)
   }
 
   pub async fn find_router(
@@ -104,23 +96,29 @@ impl Deployer {
     }
     let chain_id = chain_id.as_u64();
 
-    let init_code_hash = keccak256(&Router::init_code(key));
+    let init_code = Router::init_code(key);
+    let init_code_hash = keccak256(&init_code);
 
     let mut filter = self.0.deployment_filter().filter.from_block(0);
     filter.topics[2] = Some(Topic::Value(Some(init_code_hash.into())));
 
+    // Get the first instance of the Router to be deployed
     let Some(logs) = provider.get_logs_paginated(&filter, 1).next().await else { return Ok(None) };
     let first_log = logs.map_err(|_| Error::ConnectionError)?;
-    let nonce = first_log.topics[1];
 
+    // Read the address from its data
     if (first_log.data.len() != 32) || (first_log.data[.. 12] != [0; 12]) {
       Err(Error::ConnectionError)?;
     }
     let mut router = [0; 20];
     router.copy_from_slice(&first_log.data[12 ..]);
-    if router != Self::deployment_address(chain_id, nonce.into_uint(), init_code_hash)? {
+
+    // Verify it against the expected derivation for this nonce
+    let nonce = first_log.topics[1];
+    if router != Self::deployment_address(chain_id, nonce.into_uint(), &init_code)? {
       Err(Error::ConnectionError)?;
     }
+
     Ok(Some(router))
   }
 }
