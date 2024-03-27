@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ethers_core::types::U256;
+use ethers_core::{types::U256, abi::AbiEncode};
 use ethers_providers::{Provider, Http};
 use ethers_contract::ContractCall;
 
@@ -17,9 +17,25 @@ impl Router {
     Self(abi::Router::new(address, provider))
   }
 
+  /// Returns the current nonce for the published batches.
+  pub async fn serai_key(&self) -> Result<PublicKey, Error> {
+    self
+      .0
+      .serai_key()
+      .call()
+      .await
+      .ok()
+      .and_then(PublicKey::from_eth_repr)
+      .ok_or(Error::ConnectionError)
+  }
+
   /// Initialize the smart contract.
   pub fn initialize(&self, public_key: &PublicKey) -> ContractCall<Provider<Http>, ()> {
     self.0.initialize(public_key.eth_repr()).gas(100_000)
+  }
+
+  pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
+    ("updateSeraiKey".to_string(), chain_id, key.eth_repr()).encode()
   }
 
   /// Update the key representing Serai.
@@ -34,6 +50,10 @@ impl Router {
   /// Returns the current nonce for the published batches.
   pub async fn nonce(&self) -> Result<U256, Error> {
     self.0.nonce().call().await.map_err(|_| Error::ConnectionError)
+  }
+
+  pub fn execute_message(chain_id: U256, nonce: U256, outs: Vec<abi::OutInstruction>) -> Vec<u8> {
+    ("execute".to_string(), chain_id, nonce, outs).encode()
   }
 
   /// Execute a batch of OutInstructions.
