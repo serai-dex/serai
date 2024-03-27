@@ -16,31 +16,48 @@ use ethers_core::{
 use ethers_providers::{Middleware, Provider, Http};
 
 use crate::{
-  crypto::{PublicKey, EthereumHram, Signature},
+  crypto::*,
+  deployer::Deployer,
   router::{Router, abi as router},
-  tests::{key_gen, deploy_contract},
+  tests::{key_gen, fund_account},
 };
 
 async fn setup_test(
-) -> (u32, AnvilInstance, Router, HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
+) -> (u64, AnvilInstance, Router, HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
   let anvil = Anvil::new().spawn();
 
   let provider = Provider::<Http>::try_from(anvil.endpoint()).unwrap();
-  let chain_id = provider.get_chainid().await.unwrap().as_u32();
+  let chain_id = provider.get_chainid().await.unwrap().as_u64();
   let wallet = anvil.keys()[0].clone().into();
   let client = Arc::new(provider);
 
-  let contract_address =
-    deploy_contract(chain_id, client.clone(), &wallet, "Router").await.unwrap();
-  let contract = Router::new(client.clone(), contract_address.into());
+  assert!(Deployer::new(client.clone()).await.unwrap().is_none());
+  let tx = Deployer::deployment_tx(chain_id).unwrap();
+  fund_account(&client, &wallet, tx.from, tx.gas * tx.gas_price.unwrap()).await.unwrap();
+  let pending_tx = client.send_raw_transaction(tx.rlp()).await.unwrap();
+  let receipt = pending_tx.await.unwrap().unwrap();
+  assert_eq!(receipt.status, Some(1.into()));
+
+  let deployer = Deployer::new(client.clone()).await.unwrap().unwrap();
 
   let (keys, public_key) = key_gen();
-
-  // Set the key to the threshold keys
-  let tx = contract.initialize(&public_key);
-  let pending_tx = tx.send().await.unwrap();
-  let receipt = pending_tx.await.unwrap().unwrap();
-  assert!(receipt.status == Some(1.into()));
+  assert_eq!(
+    deployer.deploy_router(&public_key).send().await.unwrap().await.unwrap().unwrap().status,
+    Some(1.into())
+  );
+  // CREATE2 derivation
+  let router_address = keccak256(
+    &[
+      [0xff].as_slice(),
+      &receipt.contract_address.unwrap().0,
+      &[0; 32],
+      &keccak256(&Deployer::router_init_code(&public_key)),
+    ]
+    .concat(),
+  )[12 ..]
+    .try_into()
+    .unwrap();
+  let contract = Router::new(client, router_address);
 
   (chain_id, anvil, contract, keys, public_key)
 }
@@ -79,7 +96,7 @@ async fn test_router_execute() {
 
   let tx = contract.execute(txs, &sig).gas(300_000);
   let pending_tx = tx.send().await.unwrap();
-  let receipt = dbg!(pending_tx.await.unwrap().unwrap());
+  let receipt = pending_tx.await.unwrap().unwrap();
   assert!(receipt.status == Some(1.into()));
 
   println!("gas used: {:?}", receipt.cumulative_gas_used);

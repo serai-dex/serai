@@ -22,28 +22,29 @@ contract Router {
     bytes32 s;
   }
 
+  event SeraiKeyUpdated(bytes32 key);
   // success is a uint256 representing a bitfield of transaction successes
   event Executed(uint256 nonce, bytes32 batch, uint256 success);
 
   // error types
-  error AlreadyInitialized();
-  error InvalidKey();
+  error InvalidKey(bytes32 key);
   error InvalidSignature();
-  error TooManyTransactions();
 
-  constructor() {}
-
-  // TODO: Limit to a MuSig of the genesis validators
-  function initialize(bytes32 _seraiKey) external {
-    if (seraiKey != 0) revert AlreadyInitialized();
+  modifier _updateSeraiKey(bytes32 key) {
     if (
-      (_seraiKey == bytes32(0)) ||
-      ((bytes32(uint256(_seraiKey) % Schnorr.Q)) != _seraiKey)
+      (key == bytes32(0)) ||
+      ((bytes32(uint256(key) % Schnorr.Q)) != key)
     ) {
-      revert InvalidKey();
+      revert InvalidKey(key);
     }
-    seraiKey = _seraiKey;
+
+    _;
+
+    seraiKey = key;
+    emit SeraiKeyUpdated(key);
   }
+
+  constructor(bytes32 _seraiKey) _updateSeraiKey(_seraiKey) {}
 
   // updateSeraiKey validates the given Schnorr signature against the current
   // public key, and if successful, updates the contract's public key to the
@@ -51,20 +52,13 @@ contract Router {
   function updateSeraiKey(
     bytes32 _seraiKey,
     Signature memory sig
-  ) public {
-    if (
-      (_seraiKey == bytes32(0)) ||
-      ((bytes32(uint256(_seraiKey) % Schnorr.Q)) != _seraiKey)
-    ) {
-      revert InvalidKey();
-    }
-
+  ) public _updateSeraiKey(_seraiKey) {
+    // TODO: If this updates to an old key, this can be replayed
     bytes memory message =
       abi.encodePacked("updateSeraiKey", block.chainid, _seraiKey);
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }
-    seraiKey = _seraiKey;
   }
 
   // execute accepts a list of transactions to execute as well as a signature.
@@ -74,8 +68,6 @@ contract Router {
     OutInstruction[] calldata transactions,
     Signature memory sig
   ) public {
-    if (transactions.length > 256) revert TooManyTransactions();
-
     bytes memory message =
       abi.encode("execute", block.chainid, nonce, transactions);
     // This prevents re-entrancy from causing double spends yet does allow

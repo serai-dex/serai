@@ -13,7 +13,7 @@ use ethers_core::{
 use ethers_contract::ContractFactory;
 use ethers_providers::{Middleware, Provider, Http};
 
-use crate::crypto::PublicKey;
+use crate::crypto::{hash_to_scalar, PublicKey};
 
 mod crypto;
 use crypto::ecrecover;
@@ -37,6 +37,44 @@ pub fn key_gen() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) 
   let public_key = PublicKey::new(group_key).unwrap();
 
   (keys, public_key)
+}
+
+pub async fn fund_account(
+  provider: &Provider<Http>,
+  wallet: &k256::ecdsa::SigningKey,
+  address: H160,
+  value: U256,
+) -> Option<()> {
+  let chain_id = provider.get_chainid().await.unwrap().as_u64();
+
+  let mut funding_tx =
+    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(Default::default());
+  funding_tx.set_chain_id(chain_id);
+  funding_tx.set_gas(21_000);
+  let (max_fee_per_gas, max_priority_fee_per_gas) =
+    provider.estimate_eip1559_fees(None).await.ok()?;
+  funding_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
+  funding_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
+  funding_tx.set_to(address);
+  funding_tx.set_value(value);
+
+  let (sig, rid) = wallet.sign_prehash_recoverable(funding_tx.sighash().as_ref()).unwrap();
+
+  // EIP-155 v
+  let mut v = u64::from(rid.to_byte());
+  assert!((v == 0) || (v == 1));
+  v += (chain_id * 2) + 35;
+
+  let funding_tx = funding_tx.rlp_signed(&EthersSignature {
+    v,
+    r: sig.r().to_repr().as_slice().into(),
+    s: sig.s().to_repr().as_slice().into(),
+  });
+
+  let pending_tx = provider.send_raw_transaction(funding_tx).await.ok()?;
+  let receipt = pending_tx.await.ok()??;
+  assert!(receipt.status == Some(1.into()));
+  Some(())
 }
 
 // TODO:
@@ -71,8 +109,8 @@ pub async fn deploy_contract(
   let sig_hash = deployment_tx.sighash();
 
   // EIP-155 v
-  let mut r = crypto::hash_to_scalar(&[bin.as_slice(), b"r"].concat());
-  let mut s = crypto::hash_to_scalar(&[bin.as_slice(), b"s"].concat());
+  let mut r = hash_to_scalar(&[bin.as_slice(), b"r"].concat());
+  let mut s = hash_to_scalar(&[bin.as_slice(), b"s"].concat());
   let (deployment_tx, deployment_address) = loop {
     let v = (u64::from(chain_id) * 2) + 35;
     let deployment_tx = deployment_tx.rlp_signed(&EthersSignature {
@@ -83,48 +121,21 @@ pub async fn deploy_contract(
     let Some(deployment_address) =
       ecrecover(<Scalar as Reduce<k256::U256>>::reduce_bytes(&sig_hash.0.into()), 0, r, s)
     else {
-      r = crypto::hash_to_scalar(r.to_repr().as_ref());
-      s = crypto::hash_to_scalar(s.to_repr().as_ref());
+      r = hash_to_scalar(r.to_repr().as_ref());
+      s = hash_to_scalar(s.to_repr().as_ref());
       continue;
     };
     break (deployment_tx, deployment_address);
   };
 
   // Fund the deployer address
-  {
-    let mut funding_tx =
-      ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(Default::default());
-    funding_tx.set_chain_id(chain_id);
-    funding_tx.set_gas(21_000);
-    funding_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
-    funding_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
-    funding_tx.set_to(H160::from(deployment_address));
-    funding_tx.set_value(U256::from(1_000_000) * (max_fee_per_gas + max_fee_per_gas));
-
-    let (sig, rid) = wallet.sign_prehash_recoverable(funding_tx.sighash().as_ref()).unwrap();
-
-    // EIP-155 v
-    let mut v = u64::from(rid.to_byte());
-    assert!((v == 0) || (v == 1));
-    v += u64::from((chain_id * 2) + 35);
-
-    let funding_tx = funding_tx.rlp_signed(&EthersSignature {
-      v,
-      r: sig.r().to_repr().as_slice().into(),
-      s: sig.s().to_repr().as_slice().into(),
-    });
-
-    let pending_tx = client.send_raw_transaction(funding_tx).await.ok()?;
-    let mut receipt;
-    while {
-      receipt = client.get_transaction_receipt(pending_tx.tx_hash()).await.ok()?;
-      receipt.is_none()
-    } {
-      tokio::time::sleep(Duration::from_secs(6)).await;
-    }
-    let receipt = receipt.unwrap();
-    assert!(receipt.status == Some(1.into()));
-  }
+  fund_account(
+    &client,
+    wallet,
+    deployment_address.into(),
+    U256::from(1_000_000) * (max_fee_per_gas + max_fee_per_gas),
+  )
+  .await?;
 
   let pending_tx = client.send_raw_transaction(deployment_tx).await.ok()?;
   let mut receipt;

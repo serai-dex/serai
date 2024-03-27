@@ -6,8 +6,8 @@ use sha3::{Digest, Keccak256};
 use group::Group;
 use k256::{
   ecdsa::{hazmat::SignPrimitive, signature::DigestVerifier, SigningKey, VerifyingKey},
-  elliptic_curve::{ops::Reduce, point::DecompressPoint},
-  U256, Scalar, AffinePoint, ProjectivePoint,
+  elliptic_curve::point::DecompressPoint,
+  Scalar, AffinePoint, ProjectivePoint,
 };
 
 use frost::{
@@ -17,10 +17,6 @@ use frost::{
 };
 
 use crate::{crypto::*, tests::key_gen};
-
-pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar::reduce(U256::from_be_slice(&keccak256(data)))
-}
 
 // The ecrecover opcode, yet with parity replacing v
 pub(crate) fn ecrecover(message: Scalar, parity: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
