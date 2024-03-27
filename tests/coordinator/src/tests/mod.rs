@@ -135,7 +135,6 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
   *OUTER_OPS.get_or_init(|| Mutex::new(None)).lock().await = None;
 
   // Spawns a coordinator, if one has yet to be spawned, or else runs the test.
-  #[async_recursion::async_recursion]
   async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
     // If the outer operations have yet to be set, these *are* the outer operations
     let outer_ops = OUTER_OPS.get().unwrap();
@@ -178,7 +177,10 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
       test.provide_container(composition);
 
       drop(context_lock);
-      test.run_async(spawn_coordinator_or_run_test).await;
+      fn recurse(ops: DockerOperations) -> core::pin::Pin<Box<impl Send + Future<Output = ()>>> {
+        Box::pin(spawn_coordinator_or_run_test(ops))
+      }
+      test.run_async(recurse).await;
     } else {
       let outer_ops = outer_ops.lock().await.take().unwrap();
 
