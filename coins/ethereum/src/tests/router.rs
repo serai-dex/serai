@@ -11,7 +11,6 @@ use frost::{
 
 use ethers_core::{
   types::{H160, U256, Bytes},
-  abi::AbiEncode,
   utils::{Anvil, AnvilInstance},
 };
 use ethers_providers::{Middleware, Provider, Http};
@@ -75,8 +74,8 @@ async fn test_router_execute() {
 
   let nonce = contract.nonce().await.unwrap();
 
-  let encoded = ("execute".to_string(), U256::from(chain_id), nonce, txs.clone()).encode();
-  let sig = hash_and_sign(&keys, &public_key, &encoded);
+  let message = Router::execute_message(chain_id.into(), nonce, txs.clone());
+  let sig = hash_and_sign(&keys, &public_key, &message);
 
   let tx = contract.execute(txs, &sig).gas(300_000);
   let pending_tx = tx.send().await.unwrap();

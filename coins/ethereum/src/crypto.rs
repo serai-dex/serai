@@ -2,8 +2,12 @@ use sha3::{Digest, Keccak256};
 
 use group::ff::PrimeField;
 use k256::{
-  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
-  ProjectivePoint, Scalar, U256,
+  elliptic_curve::{
+    ops::Reduce,
+    point::{AffineCoordinates, DecompressPoint},
+    sec1::ToEncodedPoint,
+  },
+  AffinePoint, ProjectivePoint, Scalar, U256,
 };
 
 use frost::{
@@ -53,6 +57,12 @@ impl PublicKey {
   pub(crate) fn eth_repr(&self) -> [u8; 32] {
     self.px.to_repr().into()
   }
+
+  pub(crate) fn from_eth_repr(repr: [u8; 32]) -> Option<Self> {
+    #[allow(non_snake_case)]
+    let A = Option::<AffinePoint>::from(AffinePoint::decompress(&repr.into(), 0.into()))?.into();
+    Option::from(Scalar::from_repr(repr.into())).map(|px| PublicKey { A, px })
+  }
 }
 
 #[derive(Clone, Default)]
@@ -66,7 +76,7 @@ impl Hram<Secp256k1> for EthereumHram {
     data.extend(x_coord.as_slice());
     data.extend(m);
 
-    Scalar::reduce(U256::from_be_slice(&keccak256(&data)))
+    <Scalar as Reduce<U256>>::reduce_bytes(&keccak256(&data).into())
   }
 }
 
@@ -87,7 +97,6 @@ impl Signature {
     Some(Signature { c, s: signature.s })
   }
 }
-
 impl From<&Signature> for AbiSignature {
   fn from(sig: &Signature) -> AbiSignature {
     AbiSignature { c: sig.c.to_repr().into(), s: sig.s.to_repr().into() }
