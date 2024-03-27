@@ -7527,6 +7527,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-genesis-liquidity-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-coins-pallet",
+ "serai-dex-pallet",
+ "serai-genesis-liquidity-primitives",
+ "serai-primitives",
+ "sp-std",
+]
+
+[[package]]
+name = "serai-genesis-liquidity-primitives"
+version = "0.1.0"
+dependencies = [
+ "serai-primitives",
+]
+
+[[package]]
 name = "serai-in-instructions-pallet"
 version = "0.1.0"
 dependencies = [
@@ -7536,6 +7558,7 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
+ "serai-genesis-liquidity-pallet",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-pallet",
@@ -7797,6 +7820,7 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
+ "serai-genesis-liquidity-pallet",
  "serai-in-instructions-pallet",
  "serai-primitives",
  "serai-signals-pallet",
