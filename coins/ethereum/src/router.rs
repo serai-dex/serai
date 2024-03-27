@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ethers_core::{
-  types::{BigEndianHash, H256, U256, Bytes},
+  types::{U256, BlockId, Bytes},
   utils::hex::FromHex,
   abi::{self as eth_abi, AbiEncode},
 };
@@ -39,11 +39,12 @@ impl Router {
     Self(abi::Router::new(address, provider))
   }
 
-  /// Get the current key for Serai.
-  pub async fn serai_key(&self) -> Result<PublicKey, Error> {
+  /// Get the key for Serai at the specified block.
+  pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, Error> {
     self
       .0
       .serai_key()
+      .block(BlockId::Hash(at.into()))
       .call()
       .await
       .ok()
@@ -53,7 +54,12 @@ impl Router {
 
   /// Get the message to be signed in order to update the key for Serai.
   pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
-    [b"updateSeraiKey".as_slice(), &H256::from_uint(&chain_id).0, &key.eth_repr()].concat()
+    let mut buffer = b"updateSeraiKey".to_vec();
+    let mut chain_id_bytes = [0; 32];
+    chain_id.to_big_endian(&mut chain_id_bytes);
+    buffer.extend(&chain_id_bytes);
+    buffer.extend(&key.eth_repr());
+    buffer
   }
 
   /// Update the key representing Serai.
@@ -67,8 +73,8 @@ impl Router {
   }
 
   /// Get the current nonce for the published batches.
-  pub async fn nonce(&self) -> Result<U256, Error> {
-    self.0.nonce().call().await.map_err(|_| Error::ConnectionError)
+  pub async fn nonce(&self, at: [u8; 32]) -> Result<U256, Error> {
+    self.0.nonce().block(BlockId::Hash(at.into())).call().await.map_err(|_| Error::ConnectionError)
   }
 
   /// Get the message to be signed in order to update the key for Serai.
