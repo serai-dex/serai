@@ -17,10 +17,10 @@ The expected deployment process of the Router is as follows:
    prevents that.
 
 This doesn't have any denial-of-service risks and will resolve once anyone steps
-forward as deployer. This does fail to create a deterministic address across
-every chain.
+forward as deployer. This does fail to guarantee an identical address across
+every chain, though that will naturally occur so long as it isn't griefed.
 
-Unfortunately, creating deterministic addresses aren't feasible. We'd need the
+Unfortunately, guaranteeing identical addresses aren't feasible. We'd need the
 Deployer contract to use a consistent salt for the Router, yet the Router must
 be deployed with a specific public key for Serai. Since Ethereum isn't able to
 determine a valid public key (one the result of a Serai DKG) from a dishonest
@@ -35,11 +35,16 @@ the council not publishing the correct key/not publishing any key.
 contract Deployer {
   uint256 public nonce;
 
-  function deploy(bytes memory bytecode) external {
+  event Deployment(uint256 indexed nonce, bytes32 indexed init_code_hash, address created);
+
+  function deploy(bytes memory init_code) external {
     uint256 local_nonce = nonce;
     nonce += 1;
+    address created;
     assembly {
-      pop(create2(0, add(bytecode, 0x20), mload(bytecode), local_nonce))
+      created := create2(0, add(init_code, 0x20), mload(init_code), local_nonce)
     }
+    // These may be emitted out of order upon re-entrancy
+    emit Deployment(local_nonce, keccak256(init_code), created);
   }
 }

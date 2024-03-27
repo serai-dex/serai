@@ -45,18 +45,7 @@ async fn setup_test(
     deployer.deploy_router(&public_key).send().await.unwrap().await.unwrap().unwrap().status,
     Some(1.into())
   );
-  // CREATE2 derivation
-  let router_address = keccak256(
-    &[
-      [0xff].as_slice(),
-      &receipt.contract_address.unwrap().0,
-      &[0; 32],
-      &keccak256(&Deployer::router_init_code(&public_key)),
-    ]
-    .concat(),
-  )[12 ..]
-    .try_into()
-    .unwrap();
+  let router_address = deployer.find_router(&client, &public_key).await.unwrap().unwrap();
   let contract = Router::new(client, router_address);
 
   (chain_id, anvil, contract, keys, public_key)

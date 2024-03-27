@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use ethers_core::{types::U256, abi::AbiEncode};
+use ethers_core::{
+  types::{U256, Bytes},
+  utils::hex::FromHex,
+  abi::{self as eth_abi, AbiEncode},
+};
 use ethers_providers::{Provider, Http};
 use ethers_contract::ContractCall;
 
@@ -11,8 +15,24 @@ pub use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Router(abi::Router<Provider<Http>>);
+pub struct Router(pub(crate) abi::Router<Provider<Http>>);
 impl Router {
+  pub(crate) fn code() -> Vec<u8> {
+    let bytecode = include_str!("../artifacts/Router.bin");
+    Bytes::from_hex(bytecode).expect("compiled-in Router bytecode wasn't valid hex").to_vec()
+  }
+
+  pub(crate) fn init_code(key: &PublicKey) -> Vec<u8> {
+    let bytecode = Router::code();
+
+    // Append the constructor arguments
+    eth_abi::encode_packed(&[
+      eth_abi::Token::Bytes(bytecode.as_slice().to_vec()),
+      eth_abi::Token::Bytes(key.eth_repr().encode()),
+    ])
+    .unwrap()
+  }
+
   pub fn new(provider: Arc<Provider<Http>>, address: [u8; 20]) -> Self {
     Self(abi::Router::new(address, provider))
   }
