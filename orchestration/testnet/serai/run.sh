@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exit 1
+serai-node --base-path /volume --unsafe-rpc-external --rpc-cors all --chain testnet --validator

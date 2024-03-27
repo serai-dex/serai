@@ -2,7 +2,14 @@
 // TODO: Generate keys for a validator and the infra
 
 use core::ops::Deref;
-use std::{collections::HashSet, env, path::PathBuf, io::Write, fs, process::Command};
+use std::{
+  collections::{HashSet, HashMap},
+  env,
+  path::PathBuf,
+  io::Write,
+  fs,
+  process::{Stdio, Command},
+};
 
 use zeroize::Zeroizing;
 
@@ -89,8 +96,12 @@ ENV LD_PRELOAD=libmimalloc.so
 
 RUN apk update && apk upgrade
 
-# System user (not a human), shell of nologin, no password assigned
-RUN adduser -S -s /sbin/nologin -D {user}
+RUN adduser --system --shell /sbin/nologin --disabled-password {user}
+RUN addgroup {user}
+RUN addgroup {user} {user}
+
+# Make the /volume directory and transfer it to the user
+RUN mkdir /volume && chown {user}:{user} /volume
 
 {additional_root}
 
@@ -110,7 +121,10 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
-RUN useradd --system --create-home --shell /sbin/nologin {user}
+RUN useradd --system --user-group --create-home --shell /sbin/nologin {user}
+
+# Make the /volume directory and transfer it to the user
+RUN mkdir /volume && chown {user}:{user} /volume
 
 {additional_root}
 
@@ -129,7 +143,7 @@ fn build_serai_service(release: bool, features: &str, package: &str) -> String {
 
   format!(
     r#"
-FROM rust:1.76-slim-bookworm as builder
+FROM rust:1.77-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -199,6 +213,55 @@ fn orchestration_path(network: Network) -> PathBuf {
   orchestration_path
 }
 
+type InfrastructureKeys =
+  HashMap<&'static str, (Zeroizing<<Ristretto as Ciphersuite>::F>, <Ristretto as Ciphersuite>::G)>;
+fn infrastructure_keys(network: Network) -> InfrastructureKeys {
+  // Generate entropy for the infrastructure keys
+
+  let entropy = if network == Network::Dev {
+    // Don't use actual entropy if this is a dev environment
+    Zeroizing::new([0; 32])
+  } else {
+    let path = home::home_dir()
+      .unwrap()
+      .join(".serai")
+      .join(network.label())
+      .join("infrastructure_keys_entropy");
+    // Check if there's existing entropy
+    if let Ok(entropy) = fs::read(&path).map(Zeroizing::new) {
+      assert_eq!(entropy.len(), 32, "entropy saved to disk wasn't 32 bytes");
+      let mut res = Zeroizing::new([0; 32]);
+      res.copy_from_slice(entropy.as_ref());
+      res
+    } else {
+      // If there isn't, generate fresh entropy
+      let mut res = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(res.as_mut());
+      fs::write(&path, &res).unwrap();
+      res
+    }
+  };
+
+  let mut transcript =
+    RecommendedTranscript::new(b"Serai Orchestrator Infrastructure Keys Transcript");
+  transcript.append_message(b"network", network.label().as_bytes());
+  transcript.append_message(b"entropy", entropy);
+  let mut rng = ChaCha20Rng::from_seed(transcript.rng_seed(b"infrastructure_keys"));
+
+  let mut key_pair = || {
+    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut rng));
+    let public = Ristretto::generator() * key.deref();
+    (key, public)
+  };
+
+  HashMap::from([
+    ("coordinator", key_pair()),
+    ("bitcoin", key_pair()),
+    ("ethereum", key_pair()),
+    ("monero", key_pair()),
+  ])
+}
+
 fn dockerfiles(network: Network) {
   let orchestration_path = orchestration_path(network);
 
@@ -209,28 +272,11 @@ fn dockerfiles(network: Network) {
     monero_wallet_rpc(&orchestration_path);
   }
 
-  // TODO: Generate infra keys in key_gen, yet service entropy here?
-
-  // Generate entropy for the infrastructure keys
-  let mut entropy = Zeroizing::new([0; 32]);
-  // Only use actual entropy if this isn't a development environment
-  if network != Network::Dev {
-    OsRng.fill_bytes(entropy.as_mut());
-  }
-  let mut transcript = RecommendedTranscript::new(b"Serai Orchestrator Transcript");
-  transcript.append_message(b"entropy", entropy);
-  let mut new_rng = |label| ChaCha20Rng::from_seed(transcript.rng_seed(label));
-
-  let mut message_queue_keys_rng = new_rng(b"message_queue_keys");
-  let mut key_pair = || {
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut message_queue_keys_rng));
-    let public = Ristretto::generator() * key.deref();
-    (key, public)
-  };
-  let coordinator_key = key_pair();
-  let bitcoin_key = key_pair();
-  let ethereum_key = key_pair();
-  let monero_key = key_pair();
+  let mut infrastructure_keys = infrastructure_keys(network);
+  let coordinator_key = infrastructure_keys.remove("coordinator").unwrap();
+  let bitcoin_key = infrastructure_keys.remove("bitcoin").unwrap();
+  let ethereum_key = infrastructure_keys.remove("ethereum").unwrap();
+  let monero_key = infrastructure_keys.remove("monero").unwrap();
 
   message_queue(
     &orchestration_path,
@@ -241,10 +287,9 @@ fn dockerfiles(network: Network) {
     monero_key.1,
   );
 
-  let mut processor_entropy_rng = new_rng(b"processor_entropy");
-  let mut new_entropy = || {
+  let new_entropy = || {
     let mut res = Zeroizing::new([0; 32]);
-    processor_entropy_rng.fill_bytes(res.as_mut());
+    OsRng.fill_bytes(res.as_mut());
     res
   };
   processor(
@@ -276,9 +321,9 @@ fn dockerfiles(network: Network) {
     Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(*serai_key_repr).unwrap())
   };
 
-  coordinator(&orchestration_path, network, coordinator_key.0, serai_key);
+  coordinator(&orchestration_path, network, coordinator_key.0, &serai_key);
 
-  serai(&orchestration_path, network);
+  serai(&orchestration_path, network, &serai_key);
 }
 
 fn key_gen(network: Network) {
@@ -325,6 +370,87 @@ fn start(network: Network, services: HashSet<String>) {
       _ => panic!("starting unrecognized service"),
     };
 
+    // If we're building the Serai service, first build the runtime
+    let serai_runtime_volume = format!("serai-{}-runtime-volume", network.label());
+    if name == "serai" {
+      // Check if it's built by checking if the volume has the expected runtime file
+      let built = || {
+        if let Ok(path) = Command::new("docker")
+          .arg("volume")
+          .arg("inspect")
+          .arg("-f")
+          .arg("{{ .Mountpoint }}")
+          .arg(&serai_runtime_volume)
+          .output()
+        {
+          if let Ok(path) = String::from_utf8(path.stdout) {
+            if let Ok(iter) = std::fs::read_dir(PathBuf::from(path.trim())) {
+              for item in iter.flatten() {
+                if item.file_name() == "serai.wasm" {
+                  return true;
+                }
+              }
+            }
+          }
+        }
+        false
+      };
+
+      if !built() {
+        let mut repo_path = env::current_exe().unwrap();
+        repo_path.pop();
+        if repo_path.as_path().ends_with("deps") {
+          repo_path.pop();
+        }
+        assert!(repo_path.as_path().ends_with("debug") || repo_path.as_path().ends_with("release"));
+        repo_path.pop();
+        assert!(repo_path.as_path().ends_with("target"));
+        repo_path.pop();
+
+        // Build the image to build the runtime
+        if !Command::new("docker")
+          .current_dir(&repo_path)
+          .arg("build")
+          .arg("-f")
+          .arg("orchestration/runtime/Dockerfile")
+          .arg(".")
+          .arg("-t")
+          .arg(format!("serai-{}-runtime-img", network.label()))
+          .spawn()
+          .unwrap()
+          .wait()
+          .unwrap()
+          .success()
+        {
+          panic!("failed to build runtime image");
+        }
+
+        // Run the image, building the runtime
+        println!("Building the Serai runtime");
+        let container_name = format!("serai-{}-runtime", network.label());
+        let _ =
+          Command::new("docker").arg("rm").arg("-f").arg(&container_name).spawn().unwrap().wait();
+        let _ = Command::new("docker")
+          .arg("run")
+          .arg("--name")
+          .arg(container_name)
+          .arg("--volume")
+          .arg(format!("{serai_runtime_volume}:/volume"))
+          .arg(format!("serai-{}-runtime-img", network.label()))
+          .spawn();
+
+        // Wait until its built
+        let mut ticks = 0;
+        while !built() {
+          std::thread::sleep(core::time::Duration::from_secs(60));
+          ticks += 1;
+          if ticks > 6 * 60 {
+            panic!("couldn't build the runtime after 6 hours")
+          }
+        }
+      }
+    }
+
     // Build it
     println!("Building {service}");
     docker::build(&orchestration_path(network), network, name);
@@ -335,6 +461,10 @@ fn start(network: Network, services: HashSet<String>) {
       .arg("container")
       .arg("inspect")
       .arg(&docker_name)
+      // Use null for all IO to silence 'container does not exist'
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null())
       .status()
       .unwrap()
       .success()
@@ -348,24 +478,50 @@ fn start(network: Network, services: HashSet<String>) {
       let command = command.arg("--restart").arg("always");
       let command = command.arg("--log-opt").arg("max-size=100m");
       let command = command.arg("--log-opt").arg("max-file=3");
+      let command = if network == Network::Dev {
+        command
+      } else {
+        // Assign a persistent volume if this isn't for Dev
+        command.arg("--volume").arg(volume)
+      };
       let command = match name {
         "bitcoin" => {
+          // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("8332:8332")
           } else {
-            command.arg("--volume").arg(volume)
+            command
           }
         }
         "monero" => {
+          // Expose the RPC for tests
           if network == Network::Dev {
             command.arg("-p").arg("18081:18081")
           } else {
-            command.arg("--volume").arg(volume)
+            command
           }
         }
         "monero-wallet-rpc" => {
           assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
+          // Expose the RPC for tests
           command.arg("-p").arg("18082:18082")
+        }
+        "coordinator" => {
+          if network == Network::Dev {
+            command
+          } else {
+            // Publish the port
+            command.arg("-p").arg("30563:30563")
+          }
+        }
+        "serai" => {
+          let command = command.arg("--volume").arg(format!("{serai_runtime_volume}:/runtime"));
+          if network == Network::Dev {
+            command
+          } else {
+            // Publish the port
+            command.arg("-p").arg("30333:30333")
+          }
         }
         _ => command,
       };
@@ -390,10 +546,10 @@ Serai Orchestrator v0.0.1
 
 Commands:
   key_gen *network*
-    Generates a key for the validator.
+    Generate a key for the validator.
 
   setup *network*
-    Generate infrastructure keys and the Dockerfiles for every Serai service.
+    Generate the Dockerfiles for every Serai service.
 
   start *network* [service1, service2...]
     Start the specified services for the specified network ("dev" or "testnet").

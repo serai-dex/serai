@@ -14,4 +14,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-zstd = "0.12"
+zstd = "0.13"

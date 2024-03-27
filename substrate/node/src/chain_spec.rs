@@ -15,6 +15,14 @@ fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
 }
 
+fn wasm_binary() -> Vec<u8> {
+  // TODO: Accept a config of runtime path
+  if let Ok(binary) = std::fs::read("/runtime/serai.wasm") {
+    return binary;
+  }
+  WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
+}
+
 fn testnet_genesis(
   wasm_binary: &[u8],
   validators: &[&'static str],
@@ -64,18 +72,18 @@ fn testnet_genesis(
   }
 }
 
-pub fn development_config() -> Result<ChainSpec, &'static str> {
-  let wasm_binary = WASM_BINARY.ok_or("Development wasm not available")?;
+pub fn development_config() -> ChainSpec {
+  let wasm_binary = wasm_binary();
 
-  Ok(ChainSpec::from_genesis(
+  ChainSpec::from_genesis(
     // Name
     "Development Network",
     // ID
     "devnet",
     ChainType::Development,
-    || {
+    move || {
       testnet_genesis(
-        wasm_binary,
+        &wasm_binary,
         &["Alice"],
         vec![
           account_from_name("Alice"),
@@ -99,21 +107,21 @@ pub fn development_config() -> Result<ChainSpec, &'static str> {
     None,
     // Extensions
     None,
-  ))
+  )
 }
 
-pub fn testnet_config() -> Result<ChainSpec, &'static str> {
-  let wasm_binary = WASM_BINARY.ok_or("Testnet wasm not available")?;
+pub fn testnet_config() -> ChainSpec {
+  let wasm_binary = wasm_binary();
 
-  Ok(ChainSpec::from_genesis(
+  ChainSpec::from_genesis(
     // Name
     "Local Test Network",
     // ID
     "local",
     ChainType::Local,
-    || {
+    move || {
       testnet_genesis(
-        wasm_binary,
+        &wasm_binary,
         &["Alice", "Bob", "Charlie", "Dave"],
         vec![
           account_from_name("Alice"),
@@ -137,5 +145,5 @@ pub fn testnet_config() -> Result<ChainSpec, &'static str> {
     None,
     // Extensions
     None,
-  ))
+  )
 }

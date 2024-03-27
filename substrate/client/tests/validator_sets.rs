@@ -100,7 +100,10 @@ async fn validator_set_rotation() {
       "local".to_string(),
       format!("--{name}"),
     ])
-    .replace_env(HashMap::from([("RUST_LOG=runtime".to_string(), "debug".to_string())]))
+    .replace_env(HashMap::from([
+      ("RUST_LOG".to_string(), "runtime=debug".to_string()),
+      ("KEY".to_string(), " ".to_string()),
+    ]))
     .set_publish_all_ports(true)
     .set_handle(handle(name))
     .set_start_policy(StartPolicy::Strict)

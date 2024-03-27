@@ -40,15 +40,15 @@ RUN apt install -y ca-certificates
   };
 
   let env_vars = [
-    ("MESSAGE_QUEUE_RPC", format!("serai-{}-message_queue", network.label())),
+    ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coin_key.to_repr())),
     ("ENTROPY", hex::encode(entropy.as_ref())),
     ("NETWORK", coin.to_string()),
     ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
     ("NETWORK_RPC_HOSTNAME", hostname),
     ("NETWORK_RPC_PORT", format!("{port}")),
-    ("DB_PATH", "./processor-db".to_string()),
-    ("RUST_LOG", "serai_processor=debug".to_string()),
+    ("DB_PATH", "/volume/processor-db".to_string()),
+    ("RUST_LOG", "info,serai_processor=debug".to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {

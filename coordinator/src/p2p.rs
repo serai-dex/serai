@@ -290,6 +290,81 @@ impl LibP2p {
       IdentTopic::new(format!("{LIBP2P_TOPIC}-{}", hex::encode(set.encode())))
     }
 
+    // Find and connect to peers
+    let (pending_p2p_connections_send, mut pending_p2p_connections_recv) =
+      tokio::sync::mpsc::unbounded_channel();
+    let (to_dial_send, mut to_dial_recv) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn({
+      let pending_p2p_connections_send = pending_p2p_connections_send.clone();
+      async move {
+        loop {
+          // TODO: Add better peer management logic?
+          {
+            let connect = |addr: Multiaddr| {
+              log::info!("found peer from substrate: {addr}");
+
+              let protocols = addr.iter().filter_map(|piece| match piece {
+                // Drop PeerIds from the Substrate P2p network
+                Protocol::P2p(_) => None,
+                // Use our own TCP port
+                Protocol::Tcp(_) => Some(Protocol::Tcp(PORT)),
+                other => Some(other),
+              });
+
+              let mut new_addr = Multiaddr::empty();
+              for protocol in protocols {
+                new_addr.push(protocol);
+              }
+              let addr = new_addr;
+              log::debug!("transformed found peer: {addr}");
+
+              // TODO: Check this isn't a duplicate
+              to_dial_send.send(addr).unwrap();
+            };
+
+            // TODO: We should also connect to random peers from random nets as needed for
+            // cosigning
+            let mut to_retry = vec![];
+            while let Some(network) = pending_p2p_connections_recv.recv().await {
+              if let Ok(mut nodes) = serai.p2p_validators(network).await {
+                // If there's an insufficient amount of nodes known, connect to all yet add it
+                // back and break
+                if nodes.len() < 3 {
+                  log::warn!(
+                    "insufficient amount of P2P nodes known for {:?}: {}",
+                    network,
+                    nodes.len()
+                  );
+                  to_retry.push(network);
+                  for node in nodes {
+                    connect(node);
+                  }
+                  continue;
+                }
+
+                // Randomly select up to 5
+                for _ in 0 .. 5 {
+                  if !nodes.is_empty() {
+                    let to_connect = nodes.swap_remove(
+                      usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
+                        .unwrap(),
+                    );
+                    connect(to_connect);
+                  }
+                }
+              }
+            }
+            for to_retry in to_retry {
+              pending_p2p_connections_send.send(to_retry).unwrap();
+            }
+          }
+          // Sleep 60 seconds before moving to the next iteration
+          tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+        }
+      }
+    });
+
+    // Manage the actual swarm
     tokio::spawn({
       let mut time_of_last_p2p_message = Instant::now();
 
@@ -321,66 +396,8 @@ impl LibP2p {
 
       async move {
         let mut set_for_genesis = HashMap::new();
-        let mut pending_p2p_connections = vec![];
-        // Run this task ad-infinitum
+        let mut connected_peers = 0;
         loop {
-          // Handle pending P2P connections
-          // TODO: Break this out onto its own task with better peer management logic?
-          {
-            let mut connect = |addr: Multiaddr| {
-              log::info!("found peer from substrate: {addr}");
-
-              let protocols = addr.iter().filter_map(|piece| match piece {
-                // Drop PeerIds from the Substrate P2p network
-                Protocol::P2p(_) => None,
-                // Use our own TCP port
-                Protocol::Tcp(_) => Some(Protocol::Tcp(PORT)),
-                other => Some(other),
-              });
-
-              let mut new_addr = Multiaddr::empty();
-              for protocol in protocols {
-                new_addr.push(protocol);
-              }
-              let addr = new_addr;
-              log::debug!("transformed found peer: {addr}");
-
-              if let Err(e) = swarm.dial(addr) {
-                log::warn!("dialing peer failed: {e:?}");
-              }
-            };
-
-            while let Some(network) = pending_p2p_connections.pop() {
-              if let Ok(mut nodes) = serai.p2p_validators(network).await {
-                // If there's an insufficient amount of nodes known, connect to all yet add it back
-                // and break
-                if nodes.len() < 3 {
-                  log::warn!(
-                    "insufficient amount of P2P nodes known for {:?}: {}",
-                    network,
-                    nodes.len()
-                  );
-                  pending_p2p_connections.push(network);
-                  for node in nodes {
-                    connect(node);
-                  }
-                  break;
-                }
-
-                // Randomly select up to 5
-                for _ in 0 .. 5 {
-                  if !nodes.is_empty() {
-                    let to_connect = nodes.swap_remove(
-                      usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
-                        .unwrap(),
-                    );
-                    connect(to_connect);
-                  }
-                }
-              }
-            }
-          }
-
           let time_since_last = Instant::now().duration_since(time_of_last_p2p_message);
           tokio::select! {
             biased;
@@ -392,7 +409,7 @@ impl LibP2p {
               let topic = topic_for_set(set);
               if subscribe {
                 log::info!("subscribing to p2p messages for {set:?}");
-                pending_p2p_connections.push(set.network);
+                pending_p2p_connections_send.send(set.network).unwrap();
                 set_for_genesis.insert(genesis, set);
                 swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
               } else {
@@ -421,14 +438,28 @@ impl LibP2p {
                 Some(SwarmEvent::Dialing { connection_id, .. }) => {
                   log::debug!("dialing to peer in connection ID {}", &connection_id);
                 }
-                  Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
-                    log::debug!(
-                      "connection established to peer {} in connection ID {}",
-                      &peer_id,
-                      &connection_id,
-                    );
-                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
+                Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
+                  if &peer_id == swarm.local_peer_id() {
+                    log::warn!("established a libp2p connection to ourselves");
+                    swarm.close_connection(connection_id);
+                    continue;
                   }
+
+                  connected_peers += 1;
+                  log::debug!(
+                    "connection established to peer {} in connection ID {}, connected peers: {}",
+                    &peer_id,
+                    &connection_id,
+                    connected_peers,
+                  );
+                }
+                Some(SwarmEvent::ConnectionClosed { peer_id, .. }) => {
+                  connected_peers -= 1;
+                  log::debug!(
+                    "connection with peer {peer_id} closed, connected peers: {}",
+                    connected_peers,
+                  );
+                }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
                 ))) => {
@@ -437,6 +468,14 @@ impl LibP2p {
                     .expect("receive_send closed. are we shutting down?");
                 }
                 _ => {}
+              }
+            }
+
+            // Handle peers to dial
+            addr = to_dial_recv.recv() => {
+              let addr = addr.expect("received address was None (sender dropped?)");
+              if let Err(e) = swarm.dial(addr) {
+                log::warn!("dialing peer failed: {e:?}");
               }
             }
 

@@ -43,8 +43,7 @@ CMD ["/run.sh"]
     network.label()
   );
 
-  let run =
-    os(Os::Debian, "RUN mkdir /volume && chown bitcoin:bitcoin /volume", "bitcoin") + &run_bitcoin;
+  let run = os(Os::Debian, "", "bitcoin") + &run_bitcoin;
   let res = setup + &run;
 
   let mut bitcoin_path = orchestration_path.to_path_buf();
