@@ -108,6 +108,10 @@ pub mod pallet {
             GENESIS_LIQUIDITY_ACCOUNT.into(),
           )
           .unwrap();
+          Self::deposit_event(Event::GenesisLiquidityAddedToPool {
+            coin1: Balance { coin: *coin, amount: Amount(*amount) },
+            coin2: Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
+          });
 
           // set liquidity tokens per account
           let tokens = LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), *coin).0;
