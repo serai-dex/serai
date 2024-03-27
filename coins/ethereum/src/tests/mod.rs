@@ -1,22 +1,17 @@
-use std::{sync::Arc, time::Duration, fs::File, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 
 use rand_core::OsRng;
 
 use group::ff::PrimeField;
-use k256::{Scalar, ProjectivePoint, elliptic_curve::ops::Reduce};
+use k256::{Scalar, ProjectivePoint};
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, tests::key_gen as frost_key_gen};
 
-use ethers_core::{
-  types::{U256, H160, Signature as EthersSignature},
-  abi::Abi,
-};
-use ethers_contract::ContractFactory;
+use ethers_core::types::{U256, H160, Signature as EthersSignature, TransactionRequest};
 use ethers_providers::{Middleware, Provider, Http};
 
-use crate::crypto::{hash_to_scalar, PublicKey};
+use crate::crypto::{address, deterministically_sign, PublicKey};
 
 mod crypto;
-use crypto::ecrecover;
 
 mod abi;
 mod schnorr;
@@ -42,21 +37,26 @@ pub fn key_gen() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) 
 pub async fn fund_account(
   provider: &Provider<Http>,
   wallet: &k256::ecdsa::SigningKey,
-  address: H160,
+  to_fund: H160,
   value: U256,
 ) -> Option<()> {
   let chain_id = provider.get_chainid().await.unwrap().as_u64();
 
-  let mut funding_tx =
-    ethers_core::types::transaction::eip2718::TypedTransaction::Eip1559(Default::default());
-  funding_tx.set_chain_id(chain_id);
-  funding_tx.set_gas(21_000);
-  let (max_fee_per_gas, max_priority_fee_per_gas) =
-    provider.estimate_eip1559_fees(None).await.ok()?;
-  funding_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
-  funding_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
-  funding_tx.set_to(address);
-  funding_tx.set_value(value);
+  let verifying_key = *wallet.verifying_key().as_affine();
+
+  let funding_tx = TransactionRequest {
+    from: None,
+    to: Some(to_fund.into()),
+    gas: Some(21_000.into()),
+    // 100 gwei
+    gas_price: Some(100_000_000_000u64.into()),
+    value: Some(value),
+    data: None,
+    nonce: Some(
+      provider.get_transaction_count(H160(address(&verifying_key.into())), None).await.unwrap(),
+    ),
+    chain_id: Some(chain_id.into()),
+  };
 
   let (sig, rid) = wallet.sign_prehash_recoverable(funding_tx.sighash().as_ref()).unwrap();
 
@@ -89,63 +89,36 @@ pub async fn deploy_contract(
   wallet: &k256::ecdsa::SigningKey,
   name: &str,
 ) -> Option<H160> {
-  let abi: Abi =
-    serde_json::from_reader(File::open(format!("./artifacts/{name}.abi")).unwrap()).unwrap();
-
   let hex_bin_buf = std::fs::read_to_string(format!("./artifacts/{name}.bin")).unwrap();
   let hex_bin =
     if let Some(stripped) = hex_bin_buf.strip_prefix("0x") { stripped } else { &hex_bin_buf };
   let bin = hex::decode(hex_bin).unwrap();
-  let factory = ContractFactory::new(abi, bin.clone().into(), client.clone());
 
-  let mut deployment_tx = factory.deploy(()).ok()?.tx;
-  deployment_tx.set_chain_id(chain_id);
-  deployment_tx.set_gas(1_000_000);
-  let (max_fee_per_gas, max_priority_fee_per_gas) =
-    client.estimate_eip1559_fees(None).await.ok()?;
-  deployment_tx.as_eip1559_mut().unwrap().max_fee_per_gas = Some(max_fee_per_gas);
-  deployment_tx.as_eip1559_mut().unwrap().max_priority_fee_per_gas = Some(max_priority_fee_per_gas);
-
-  let sig_hash = deployment_tx.sighash();
-
-  // EIP-155 v
-  let mut r = hash_to_scalar(&[bin.as_slice(), b"r"].concat());
-  let mut s = hash_to_scalar(&[bin.as_slice(), b"s"].concat());
-  let (deployment_tx, deployment_address) = loop {
-    let v = (u64::from(chain_id) * 2) + 35;
-    let deployment_tx = deployment_tx.rlp_signed(&EthersSignature {
-      v,
-      r: r.to_repr().as_slice().into(),
-      s: s.to_repr().as_slice().into(),
-    });
-    let Some(deployment_address) =
-      ecrecover(<Scalar as Reduce<k256::U256>>::reduce_bytes(&sig_hash.0.into()), 0, r, s)
-    else {
-      r = hash_to_scalar(r.to_repr().as_ref());
-      s = hash_to_scalar(s.to_repr().as_ref());
-      continue;
-    };
-    break (deployment_tx, deployment_address);
+  let deployment_tx = TransactionRequest {
+    from: None,
+    to: None,
+    gas: Some(1_000_000u64.into()),
+    // 100 gwei
+    gas_price: Some(100_000_000_000u64.into()),
+    value: Some(U256::zero()),
+    data: Some(bin.into()),
+    nonce: Some(U256::zero()),
+    chain_id: Some(chain_id.into()),
   };
+
+  let deployment_tx = deterministically_sign(chain_id.into(), &deployment_tx).unwrap();
 
   // Fund the deployer address
   fund_account(
     &client,
     wallet,
-    deployment_address.into(),
-    U256::from(1_000_000) * (max_fee_per_gas + max_fee_per_gas),
+    deployment_tx.from,
+    deployment_tx.gas * deployment_tx.gas_price.unwrap(),
   )
   .await?;
 
-  let pending_tx = client.send_raw_transaction(deployment_tx).await.ok()?;
-  let mut receipt;
-  while {
-    receipt = client.get_transaction_receipt(pending_tx.tx_hash()).await.ok()?;
-    receipt.is_none()
-  } {
-    tokio::time::sleep(Duration::from_secs(6)).await;
-  }
-  let receipt = receipt.unwrap();
+  let pending_tx = client.send_raw_transaction(deployment_tx.rlp()).await.ok()?;
+  let receipt = pending_tx.await.ok()??;
   assert!(receipt.status == Some(1.into()));
 
   Some(receipt.contract_address.unwrap())
