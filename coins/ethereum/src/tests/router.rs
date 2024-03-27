@@ -45,8 +45,7 @@ async fn setup_test(
     deployer.deploy_router(&public_key).send().await.unwrap().await.unwrap().unwrap().status,
     Some(1.into())
   );
-  let router_address = deployer.find_router(&client, &public_key).await.unwrap().unwrap();
-  let contract = Router::new(client, router_address);
+  let contract = deployer.find_router(client, &public_key).await.unwrap().unwrap();
 
   (chain_id, anvil, contract, keys, public_key)
 }

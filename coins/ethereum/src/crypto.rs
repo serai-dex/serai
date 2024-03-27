@@ -69,13 +69,18 @@ pub(crate) fn deterministically_sign(
   }
 }
 
+/// The public key for a Schnorr-signing account.
 #[allow(non_snake_case)]
 pub struct PublicKey {
-  pub A: ProjectivePoint,
-  pub px: Scalar,
+  pub(crate) A: ProjectivePoint,
+  pub(crate) px: Scalar,
 }
 
 impl PublicKey {
+  /// Construct a new `PublicKey`.
+  ///
+  /// This will return None if the provided point isn't eligible to be a public key (due to
+  /// bounds such as parity).
   #[allow(non_snake_case)]
   pub fn new(A: ProjectivePoint) -> Option<PublicKey> {
     let affine = A.to_affine();
@@ -88,6 +93,9 @@ impl PublicKey {
     let x_coord = affine.x();
     let x_coord_scalar = <Scalar as Reduce<KU256>>::reduce_bytes(&x_coord);
     // Return None if a reduction would occur
+    // Reductions would be incredibly unlikely and shouldn't be an issue, yet it's one less
+    // headache/concern to have
+    // This does ban a trivial amoount of public keys
     if x_coord_scalar.to_repr() != x_coord {
       None?;
     }
@@ -106,6 +114,7 @@ impl PublicKey {
   }
 }
 
+/// The HRAm to use for the Schnorr contract.
 #[derive(Clone, Default)]
 pub struct EthereumHram {}
 impl Hram<Secp256k1> for EthereumHram {
@@ -121,11 +130,15 @@ impl Hram<Secp256k1> for EthereumHram {
   }
 }
 
+/// A signature for the Schnorr contract.
 pub struct Signature {
   pub(crate) c: Scalar,
   pub(crate) s: Scalar,
 }
 impl Signature {
+  /// Construct a new `Signature`.
+  ///
+  /// This will return None if the signature is invalid.
   pub fn new(
     public_key: &PublicKey,
     message: &[u8],
