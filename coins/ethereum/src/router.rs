@@ -5,18 +5,34 @@ use ethers_core::{
   utils::hex::FromHex,
   abi::{self as eth_abi, AbiEncode},
 };
-use ethers_providers::{Provider, Http};
-use ethers_contract::ContractCall;
+use ethers_providers::{Provider, Middleware, Http};
+use ethers_contract::{EthLogDecode, ContractCall};
 
 pub use crate::{
   Error,
   crypto::{PublicKey, Signature},
   abi::router as abi,
 };
+use abi::InInstructionFilter;
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Coin {
+  Ether,
+  Erc20([u8; 20]),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct InInstruction {
+  pub id: ([u8; 32], u64),
+  pub from: [u8; 20],
+  pub coin: Coin,
+  pub amount: U256,
+  pub data: Vec<u8>,
+}
 
 /// The contract Serai uses to manage its state.
 #[derive(Clone, Debug)]
-pub struct Router(pub(crate) abi::Router<Provider<Http>>);
+pub struct Router(Arc<Provider<Http>>, [u8; 20], abi::Router<Provider<Http>>);
 impl Router {
   pub(crate) fn code() -> Vec<u8> {
     let bytecode = include_str!("../artifacts/Router.bin");
@@ -36,13 +52,13 @@ impl Router {
 
   // This isn't pub in order to force users to use `Deployer::find_router`.
   pub(crate) fn new(provider: Arc<Provider<Http>>, address: [u8; 20]) -> Self {
-    Self(abi::Router::new(address, provider))
+    Self(provider.clone(), address, abi::Router::new(address, provider))
   }
 
   /// Get the key for Serai at the specified block.
   pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, Error> {
     self
-      .0
+      .2
       .serai_key()
       .block(BlockId::Hash(at.into()))
       .call()
@@ -69,12 +85,12 @@ impl Router {
     sig: &Signature,
   ) -> ContractCall<Provider<Http>, ()> {
     // TODO: Set a saner gas
-    self.0.update_serai_key(public_key.eth_repr(), sig.into()).gas(100_000)
+    self.2.update_serai_key(public_key.eth_repr(), sig.into()).gas(100_000)
   }
 
   /// Get the current nonce for the published batches.
   pub async fn nonce(&self, at: [u8; 32]) -> Result<U256, Error> {
-    self.0.nonce().block(BlockId::Hash(at.into())).call().await.map_err(|_| Error::ConnectionError)
+    self.2.nonce().block(BlockId::Hash(at.into())).call().await.map_err(|_| Error::ConnectionError)
   }
 
   /// Get the message to be signed in order to update the key for Serai.
@@ -89,6 +105,63 @@ impl Router {
     sig: &Signature,
   ) -> ContractCall<Provider<Http>, ()> {
     let gas = 100_000 + ((200_000 + 10_000) * outs.len()); // TODO
-    self.0.execute(outs, sig.into()).gas(gas)
+    self.2.execute(outs, sig.into()).gas(gas)
+  }
+
+  pub async fn in_instructions(&self, block: u64) -> Result<Vec<InInstruction>, Error> {
+    let filter = self.2.in_instruction_filter().filter;
+    let filter = filter.from_block(block).to_block(block);
+    let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
+
+    let mut in_instructions = vec![];
+    for log in logs {
+      // Double check the address which emitted this log
+      if log.address.0 != self.1 {
+        Err(Error::ConnectionError)?;
+      }
+
+      let id = (
+        log.block_hash.ok_or(Error::ConnectionError)?.into(),
+        log.log_index.ok_or(Error::ConnectionError)?.as_u64(),
+      );
+
+      let tx = self
+        .0
+        .get_transaction(log.transaction_hash.ok_or(Error::ConnectionError)?)
+        .await
+        .map_err(|_| Error::ConnectionError)?
+        .ok_or(Error::ConnectionError)?;
+
+      let log = InInstructionFilter::decode_log(&log.into()).map_err(|_| Error::ConnectionError)?;
+
+      let coin = if log.coin.0 == [0; 20] {
+        Coin::Ether
+      } else {
+        let token = log.coin.0;
+
+        // If this also counts as a top-level transfer via the token, drop it
+        //
+        // Necessary in order to handle a potential edge case with some theoretical token
+        // implementations
+        //
+        // This will either let it be handled by the top-level transfer hook or will drop it
+        // entirely on the side of caution
+        if tx.to == Some(token.into()) {
+          continue;
+        }
+
+        Coin::Erc20(token)
+      };
+
+      in_instructions.push(InInstruction {
+        id,
+        from: log.from.0,
+        coin,
+        amount: log.amount,
+        data: log.instruction.as_ref().to_vec(),
+      });
+    }
+
+    Ok(in_instructions)
   }
 }

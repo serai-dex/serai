@@ -22,7 +22,17 @@ fn main() {
     "-o", "./artifacts", "--overwrite",
     "--bin", "--abi",
     "--optimize",
-    "./contracts/Schnorr.sol", "./contracts/Deployer.sol", "./contracts/Router.sol",
+
+    "./contracts/IERC20.sol",
+
+    "./contracts/Schnorr.sol",
+    "./contracts/Deployer.sol",
+    "./contracts/Sandbox.sol",
+    "./contracts/Router.sol",
+
+    "./src/tests/contracts/Schnorr.sol",
+    "./src/tests/contracts/ERC20.sol",
+
     "--no-color",
   ];
   let solc = Command::new("solc").args(args).output().unwrap();
@@ -43,6 +53,13 @@ fn main() {
     .generate()
     .unwrap()
     .write_to_file("./src/abi/router.rs")
+    .unwrap();
+
+  Abigen::new("ERC20", "./artifacts/IERC20.abi")
+    .unwrap()
+    .generate()
+    .unwrap()
+    .write_to_file("./src/abi/erc20.rs")
     .unwrap();
 
   Abigen::new("TestSchnorr", "./artifacts/TestSchnorr.abi")

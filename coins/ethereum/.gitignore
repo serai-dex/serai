@@ -3,6 +3,7 @@ cache
 artifacts
 
 # Auto-generated ABI files
+src/abi/erc20.rs
 src/abi/deployer.rs
 src/abi/router.rs
 src/tests/abi/schnorr.rs

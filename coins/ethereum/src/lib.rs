@@ -5,6 +5,7 @@ pub(crate) use ethers_core::types::transaction::request::TransactionRequest;
 pub mod crypto;
 
 pub(crate) mod abi;
+pub mod erc20;
 pub mod deployer;
 pub mod router;
 
