@@ -127,8 +127,7 @@ async fn test_router_execute() {
 
   let to = H160([0u8; 20]);
   let value = U256([0u64; 4]);
-  let data = Bytes::from([0]);
-  let tx = router::OutInstruction { to, value, data: data.clone() };
+  let tx = router::OutInstruction { to, value, calls: vec![] };
   let txs = vec![tx];
 
   let first_block_hash = latest_block_hash(&client).await;
