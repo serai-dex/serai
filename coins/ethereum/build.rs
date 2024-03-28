@@ -21,7 +21,7 @@ fn main() {
     "--base-path", ".",
     "-o", "./artifacts", "--overwrite",
     "--bin", "--abi",
-    "--optimize",
+    "--via-ir", "--optimize",
 
     "./contracts/IERC20.sol",
 
