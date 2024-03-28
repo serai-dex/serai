@@ -25,6 +25,7 @@ contract Router {
   }
 
   event SeraiKeyUpdated(bytes32 key);
+  event InInstruction(address indexed from, address indexed coin, uint256 amount, bytes instruction);
   // success is a uint256 representing a bitfield of transaction successes
   event Executed(uint256 nonce, bytes32 batch, uint256 success);
 

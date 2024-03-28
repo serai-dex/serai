@@ -12,7 +12,7 @@ use frost::{
 };
 
 use ethers_core::{
-  types::{H160, U256, Bytes},
+  types::{H160, U256},
   utils::{Anvil, AnvilInstance},
 };
 use ethers_providers::{Middleware, Provider, Http};

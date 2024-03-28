@@ -42,14 +42,3 @@ library Schnorr {
     return c == keccak256(abi.encodePacked(R, px, message));
   }
 }
-
-contract TestSchnorr {
-  function verify(
-    bytes32 px,
-    bytes calldata message,
-    bytes32 c,
-    bytes32 s
-  ) external pure returns (bool) {
-    return Schnorr.verify(px, message, c, s);
-  }
-}
