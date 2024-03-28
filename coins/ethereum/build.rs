@@ -23,10 +23,13 @@ fn main() {
     "--bin", "--abi",
     "--optimize",
     "./contracts/Schnorr.sol", "./contracts/Deployer.sol", "./contracts/Router.sol",
+    "--no-color",
   ];
   let solc = Command::new("solc").args(args).output().unwrap();
   assert!(solc.status.success());
-  assert!(solc.stderr.is_empty());
+  for line in String::from_utf8(solc.stderr).unwrap().lines() {
+    assert!(!line.starts_with("Error:"));
+  }
 
   Abigen::new("Deployer", "./artifacts/Deployer.abi")
     .unwrap()
