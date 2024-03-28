@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPLv3
 pragma solidity ^0.8.0;
 
+import "./IERC20.sol";
+
 import "./Schnorr.sol";
 import "./Sandbox.sol";
 
@@ -25,13 +27,20 @@ contract Router {
   }
 
   event SeraiKeyUpdated(bytes32 key);
-  event InInstruction(address indexed from, address indexed coin, uint256 amount, bytes instruction);
+  event InInstruction(
+    address indexed from,
+    address indexed coin,
+    uint256 amount,
+    bytes instruction
+  );
   // success is a uint256 representing a bitfield of transaction successes
   event Executed(uint256 nonce, bytes32 batch, uint256 success);
 
   // error types
   error InvalidKey();
   error InvalidSignature();
+  error InvalidAmount();
+  error FailedTransfer();
   error TooManyTransactions();
 
   modifier _updateSeraiKey(bytes32 key) {
@@ -63,6 +72,62 @@ contract Router {
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }
+  }
+
+  function inInstruction(
+    address coin,
+    uint256 amount,
+    bytes memory instruction
+  ) external payable {
+    if (coin == address(0)) {
+      if (amount != msg.value) {
+        revert InvalidAmount();
+      }
+    } else {
+      (bool success, bytes memory res) =
+        address(coin).call(
+          abi.encodeWithSelector(
+            IERC20.transferFrom.selector,
+            msg.sender,
+            address(this),
+            amount
+          )
+        );
+
+      // Require there was nothing returned, which is done by some non-standard
+      // tokens, or that the ERC20 contract did in fact return true
+      bool nonStandardResOrTrue =
+        (res.length == 0) || abi.decode(res, (bool));
+      if (!(success && nonStandardResOrTrue)) {
+        revert FailedTransfer();
+      }
+    }
+
+    /*
+    Due to fee-on-transfer tokens, emitting the amount directly is frowned upon.
+    The amount instructed to transfer may not actually be the amount
+    transferred.
+
+    If we add nonReentrant to every single function which can effect the
+    balance, we can check the amount exactly matches. This prevents transfers of
+    less value than expected occurring, at least, not without an additional
+    transfer to top up the difference (which isn't routed through this contract
+    and accordingly isn't trying to artificially create events).
+
+    If we don't add nonReentrant, a transfer can be started, and then a new
+    transfer for the difference can follow it up (again and again until a
+    rounding error is reached). This contract would believe all transfers were
+    done in full, despite each only being done in part (except for the last
+    one).
+
+    Given fee-on-transfer tokens aren't intended to be supported, the only
+    token planned to be supported is Dai and it doesn't have any fee-on-transfer
+    logic, fee-on-transfer tokens aren't even able to be supported at this time,
+    we simply classify this entire class of tokens as non-standard
+    implementations which induce undefined behavior. It is the Serai network's
+    role not to add support for any non-standard implementations.
+    */
+    emit InInstruction(msg.sender, coin, amount, instruction);
   }
 
   // execute accepts a list of transactions to execute as well as a signature.

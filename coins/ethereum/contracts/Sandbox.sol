@@ -15,8 +15,6 @@ contract Sandbox {
   error AlreadyCalled();
   error CallsFailed();
 
-  receive() external payable {}
-
   function sandbox(Call[] calldata calls) external payable {
     // Prevent re-entrancy due to this executing arbitrary calls from anyone
     // and anywhere
