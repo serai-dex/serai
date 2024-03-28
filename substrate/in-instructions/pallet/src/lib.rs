@@ -33,10 +33,14 @@ pub mod pallet {
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
 
+  use genesis_liquidity_pallet::{Pallet as GenesisLiq, Config as GenesisLiqConfig};
+
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig {
+  pub trait Config:
+    frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig + GenesisLiqConfig
+  {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -200,6 +204,14 @@ pub mod pallet {
             }
           }
         }
+        InInstruction::GenesisLiquidity(ops) => match ops {
+          GenesisLiquidityOperation::Add(address, balance) => {
+            GenesisLiq::<T>::add_coin_liquidity(address.into(), balance)?;
+          }
+          GenesisLiquidityOperation::Remove(address, balance, out_address) => {
+            GenesisLiq::<T>::remove_coin_liquidity(address.into(), balance, out_address)?;
+          }
+        },
       }
       Ok(())
     }

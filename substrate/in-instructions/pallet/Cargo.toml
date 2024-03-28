@@ -37,6 +37,7 @@ in-instructions-primitives = { package = "serai-in-instructions-primitives", pat
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 
 [features]
 std = [
@@ -58,5 +59,6 @@ std = [
   "coins-pallet/std",
   "dex-pallet/std",
   "validator-sets-pallet/std",
+  "genesis-liquidity-pallet/std",
 ]
 default = ["std"]
