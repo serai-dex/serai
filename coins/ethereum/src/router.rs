@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashSet};
 
 use ethers_core::{
   types::{U256, BlockId, Bytes},
@@ -11,7 +11,7 @@ use ethers_contract::{EthLogDecode, ContractCall};
 pub use crate::{
   Error,
   crypto::{PublicKey, Signature},
-  abi::router as abi,
+  abi::{erc20::TransferFilter, router as abi},
 };
 use abi::InInstructionFilter;
 
@@ -108,11 +108,16 @@ impl Router {
     self.2.execute(outs, sig.into()).gas(gas)
   }
 
-  pub async fn in_instructions(&self, block: u64) -> Result<Vec<InInstruction>, Error> {
+  pub async fn in_instructions(
+    &self,
+    block: u64,
+    allowed_tokens: &HashSet<[u8; 20]>,
+  ) -> Result<Vec<InInstruction>, Error> {
     let filter = self.2.in_instruction_filter().filter;
     let filter = filter.from_block(block).to_block(block);
     let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
 
+    let mut transfer_check = HashSet::new();
     let mut in_instructions = vec![];
     for log in logs {
       // Double check the address which emitted this log
@@ -125,9 +130,10 @@ impl Router {
         log.log_index.ok_or(Error::ConnectionError)?.as_u64(),
       );
 
+      let tx_hash = log.transaction_hash.ok_or(Error::ConnectionError)?;
       let tx = self
         .0
-        .get_transaction(log.transaction_hash.ok_or(Error::ConnectionError)?)
+        .get_transaction(tx_hash)
         .await
         .map_err(|_| Error::ConnectionError)?
         .ok_or(Error::ConnectionError)?;
@@ -139,6 +145,10 @@ impl Router {
       } else {
         let token = log.coin.0;
 
+        if !allowed_tokens.contains(&token) {
+          continue;
+        }
+
         // If this also counts as a top-level transfer via the token, drop it
         //
         // Necessary in order to handle a potential edge case with some theoretical token
@@ -148,6 +158,45 @@ impl Router {
         // entirely on the side of caution
         if tx.to == Some(token.into()) {
           continue;
+        }
+
+        // Get all logs for this TX
+        let receipt = self
+          .0
+          .get_transaction_receipt(tx_hash)
+          .await
+          .map_err(|_| Error::ConnectionError)?
+          .ok_or(Error::ConnectionError)?;
+        let tx_logs = receipt.logs;
+
+        // Find a matching transfer log
+        let mut found_transfer = false;
+        for tx_log in tx_logs {
+          let log_index = tx_log.log_index.ok_or(Error::ConnectionError)?.as_u64();
+          // Ensure we didn't already use this transfer to check a distinct InInstruction event
+          if transfer_check.contains(&log_index) {
+            continue;
+          }
+
+          // Check if this log is from the token we expected to be transferred
+          if tx_log.address.0 != token {
+            continue;
+          }
+          // Check if this is a transfer log
+          let Ok(transfer) = TransferFilter::decode_log(&tx_log.into()) else { continue };
+          // Check if this is a transfer to us for the expected amount
+          if (transfer.to.0 == self.1) && (transfer.value == log.amount) {
+            transfer_check.insert(log_index);
+            found_transfer = true;
+            break;
+          }
+        }
+        if !found_transfer {
+          // This shouldn't be a ConnectionError
+          // This is an exploit, a non-conforming ERC20, or an invalid connection
+          // This should halt the process which is sufficient, yet this is sub-optimal
+          // TODO
+          Err(Error::ConnectionError)?;
         }
 
         Coin::Erc20(token)
