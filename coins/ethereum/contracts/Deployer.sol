@@ -36,10 +36,15 @@ the council not publishing the correct key/not publishing any key.
 contract Deployer {
   event Deployment(bytes32 indexed init_code_hash, address created);
 
+  error DeploymentFailed();
+
   function deploy(bytes memory init_code) external {
     address created;
     assembly {
       created := create(0, add(init_code, 0x20), mload(init_code))
+    }
+    if (created == address(0)) {
+      revert DeploymentFailed();
     }
     // These may be emitted out of order upon re-entrancy
     emit Deployment(keccak256(init_code), created);
