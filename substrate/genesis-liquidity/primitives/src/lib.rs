@@ -13,5 +13,5 @@ pub const GENESIS_SRI_TRICKLE_FEED: u64 = 10 * 60 * 24 * 180;
 // 100 Million SRI
 pub const GENESIS_SRI: u64 = 100_000_000 * 10_u64.pow(8);
 
-// This is the account which will be the origin for any dispatched `InInstruction`s.
+// This is the account to hold and manage the genesis liquidity.
 pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");

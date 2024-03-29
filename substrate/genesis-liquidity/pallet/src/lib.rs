@@ -247,9 +247,9 @@ pub mod pallet {
       Ok(())
     }
 
-    // Returns the number of blocks since the coin's network reached economic security first time.
-    // If the network is yet to be reached that threshold 0 is returned, and maximum of
-    // GENESIS_SRI_TRICKLE_FEED returned.
+    /// Returns the number of blocks since the coin's network reached economic security first time.
+    /// If the network is yet to be reached that threshold, 0 is returned. And maximum of
+    /// `GENESIS_SRI_TRICKLE_FEED` returned.
     fn blocks_since_ec_security(coin: &Coin) -> u64 {
       let ec_security_block =
         EconomicSecurityReached::<T>::get(coin.network()).saturated_into::<u64>();

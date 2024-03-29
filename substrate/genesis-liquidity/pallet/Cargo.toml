@@ -36,11 +36,19 @@ genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives",
 
 [features]
 std = [
+  "scale/std",
+  "scale-info/std",
+
   "frame-system/std",
   "frame-support/std",
 
+  "sp-std/std",
+
   "coins-pallet/std",
   "dex-pallet/std",
+
+  "serai-primitives/std",
+  "genesis-liquidity-primitives/std",
 ]
 
 default = ["std"]
