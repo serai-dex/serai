@@ -154,7 +154,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   assert!((outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount));
 
   for eventuality in eventualities {
-    assert!(network.confirm_completion(&eventuality, &tx));
+    assert_eq!(network.confirm_completion(&eventuality, &txid).await.unwrap(), Some(tx.clone()));
   }
 
   for _ in 1 .. N::CONFIRMATIONS {

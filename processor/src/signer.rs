@@ -2,7 +2,6 @@ use core::{marker::PhantomData, fmt};
 use std::collections::HashMap;
 
 use rand_core::OsRng;
-use ciphersuite::group::GroupEncoding;
 use frost::{
   ThresholdKeys, FrostError,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
@@ -289,46 +288,44 @@ impl<N: Network, D: Db> Signer<N, D> {
     tx_id: &<N::Transaction as Transaction<N>>::Id,
   ) -> Option<ProcessorMessage> {
     if let Some(eventuality) = EventualityDb::eventuality::<N>(txn, id) {
-      // Transaction hasn't hit our mempool/was dropped for a different signature
-      // The latter can happen given certain latency conditions/a single malicious signer
-      // In the case of a single malicious signer, they can drag multiple honest validators down
-      // with them, so we unfortunately can't slash on this case
-      let Ok(tx) = self.network.get_transaction(tx_id).await else {
-        warn!(
-          "a validator claimed {} completed {} yet we didn't have that TX in our mempool {}",
-          hex::encode(tx_id),
-          hex::encode(id),
-          "(or had another connectivity issue)",
-        );
-        return None;
-      };
+      match self.network.confirm_completion(&eventuality, tx_id).await {
+        Ok(Some(tx)) => {
+          info!("signer eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
 
-      if self.network.confirm_completion(&eventuality, &tx) {
-        info!("signer eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
+          let first_completion = !Self::already_completed(txn, id);
 
-        let first_completion = !Self::already_completed(txn, id);
+          // Save this completion to the DB
+          CompletionsDb::complete::<N>(txn, id, &tx);
 
-        // Save this completion to the DB
-        CompletionsDb::complete::<N>(txn, id, &tx);
-
-        if first_completion {
-          return Some(self.complete(id, &tx.id()));
+          if first_completion {
+            return Some(self.complete(id, &tx.id()));
+          }
         }
-      } else {
-        warn!(
-          "a validator claimed {} completed {} when it did not",
-          hex::encode(tx_id),
-          hex::encode(id)
-        );
+        Ok(None) => {
+          warn!(
+            "a validator claimed {} completed {} when it did not",
+            hex::encode(tx_id),
+            hex::encode(id),
+          );
+        }
+        Err(_) => {
+          // Transaction hasn't hit our mempool/was dropped for a different signature
+          // The latter can happen given certain latency conditions/a single malicious signer
+          // In the case of a single malicious signer, they can drag multiple honest validators down
+          // with them, so we unfortunately can't slash on this case
+          warn!(
+            "a validator claimed {} completed {} yet we didn't have that TX in our mempool {}",
+            hex::encode(tx_id),
+            hex::encode(id),
+            "(or had another connectivity issue)",
+          );
+        }
       }
     } else {
-      // If we don't have this in RAM, it should be because we already finished signing it
-      assert!(!CompletionsDb::completions::<N>(txn, id).is_empty());
-      info!(
-        "signer {} informed of the eventuality completion for plan {}, {}",
-        hex::encode(self.keys[0].group_key().to_bytes()),
+      warn!(
+        "informed of completion {} for eventuality {}, which we didn't have",
+        hex::encode(tx_id),
         hex::encode(id),
-        "which we already marked as completed",
       );
     }
     None

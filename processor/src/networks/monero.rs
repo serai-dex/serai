@@ -274,7 +274,8 @@ impl Monero {
   async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
     let mut fees = vec![];
     for tx_hash in &block.txs {
-      let tx = self.get_transaction(tx_hash).await?;
+      let tx =
+        self.rpc.get_transaction(*tx_hash).await.map_err(|_| NetworkError::ConnectionError)?;
       // Only consider fees from RCT transactions, else the fee property read wouldn't be accurate
       if tx.rct_signatures.rct_type() != RctType::Null {
         continue;
@@ -574,7 +575,7 @@ impl Network for Monero {
         let tx = {
           let mut tx;
           while {
-            tx = network.get_transaction(hash).await;
+            tx = network.rpc.get_transaction(*hash).await;
             tx.is_err()
           } {
             log::error!("couldn't get transaction {}: {}", hex::encode(hash), tx.err().unwrap());
@@ -682,17 +683,27 @@ impl Network for Monero {
     }
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(*id).await.map_err(map_rpc_err)
-  }
-
-  fn confirm_completion(&self, eventuality: &Eventuality, tx: &Transaction) -> bool {
-    eventuality.matches(tx)
+  async fn confirm_completion(
+    &self,
+    eventuality: &Eventuality,
+    id: &[u8; 32],
+  ) -> Result<Option<Transaction>, NetworkError> {
+    let tx = self.rpc.get_transaction(*id).await.map_err(map_rpc_err)?;
+    if eventuality.matches(&tx) {
+      Ok(Some(tx))
+    } else {
+      Ok(None)
+    }
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block(*id).await.unwrap().number().unwrap().try_into().unwrap()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
+    self.rpc.get_transaction(*id).await.map_err(|_| NetworkError::ConnectionError)
   }
 
   #[cfg(test)]

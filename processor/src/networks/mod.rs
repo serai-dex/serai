@@ -118,7 +118,7 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 }
 
 #[async_trait]
-pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
+pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + PartialEq + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
   fn serialize(&self) -> Vec<u8>;
@@ -555,21 +555,27 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Publish a transaction.
   async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError>;
 
-  /// Get a transaction by its ID.
-  async fn get_transaction(
+  /// Confirm a plan was completed by the specified transaction, per our bounds.
+  ///
+  /// Returns Err if there was an error with the confirmation methodology.
+  /// Returns Ok(None) if this is not a valid completion.
+  /// Returns Ok(Some(_)) with the completion if it's valid.
+  async fn confirm_completion(
     &self,
-    id: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<Self::Transaction, NetworkError>;
-
-  /// Confirm a plan was completed by the specified transaction.
-  // This is allowed to take shortcuts.
-  // This may assume an honest multisig, solely checking the inputs specified were spent.
-  // This may solely check the outputs are equivalent *so long as it's locked to the plan ID*.
-  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Self::Transaction) -> bool;
+    eventuality: &Self::Eventuality,
+    tx: &<Self::Transaction as Transaction<Self>>::Id,
+  ) -> Result<Option<Self::Transaction>, NetworkError>;
 
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
+
+  /// Get a transaction by its ID.
+  #[cfg(test)]
+  async fn get_transaction(
+    &self,
+    id: &<Self::Transaction as Transaction<Self>>::Id,
+  ) -> Result<Self::Transaction, NetworkError>;
 
   #[cfg(test)]
   async fn mine_block(&self);

@@ -212,6 +212,6 @@ pub async fn test_signer<N: Network>(network: N) {
 
   // Check the eventualities pass
   for eventuality in eventualities {
-    assert!(network.confirm_completion(&eventuality, &tx));
+    assert_eq!(network.confirm_completion(&eventuality, &txid).await.unwrap(), Some(tx.clone()));
   }
 }

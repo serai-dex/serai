@@ -374,8 +374,12 @@ impl Bitcoin {
         for input in &tx.input {
           let mut input_tx = input.previous_output.txid.to_raw_hash().to_byte_array();
           input_tx.reverse();
-          in_value += self.get_transaction(&input_tx).await?.output
-            [usize::try_from(input.previous_output.vout).unwrap()]
+          in_value += self
+            .rpc
+            .get_transaction(&input_tx)
+            .await
+            .map_err(|_| NetworkError::ConnectionError)?
+            .output[usize::try_from(input.previous_output.vout).unwrap()]
           .value
           .to_sat();
         }
@@ -682,7 +686,7 @@ impl Network for Bitcoin {
           spent_tx.reverse();
           let mut tx;
           while {
-            tx = self.get_transaction(&spent_tx).await;
+            tx = self.rpc.get_transaction(&spent_tx).await;
             tx.is_err()
           } {
             log::error!("couldn't get transaction from bitcoin node: {tx:?}");
@@ -828,17 +832,28 @@ impl Network for Bitcoin {
     Ok(())
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
-  }
-
-  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Transaction) -> bool {
-    eventuality.0 == tx.id()
+  async fn confirm_completion(
+    &self,
+    eventuality: &Self::Eventuality,
+    id: &[u8; 32],
+  ) -> Result<Option<Transaction>, NetworkError> {
+    // If this is a different TX than expected, return
+    if eventuality.0 != *id {
+      return Ok(None);
+    }
+    // Check the TX exists
+    let tx = self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)?;
+    Ok(Some(tx))
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block_number(id).await.unwrap()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
+    self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
   }
 
   #[cfg(test)]
