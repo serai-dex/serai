@@ -2,13 +2,11 @@ use sha3::{Digest, Keccak256};
 
 use group::ff::PrimeField;
 use k256::{
-  elliptic_curve::{
-    ops::Reduce,
-    point::{AffineCoordinates, DecompressPoint},
-    sec1::ToEncodedPoint,
-  },
-  AffinePoint, ProjectivePoint, Scalar, U256 as KU256,
+  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
+  ProjectivePoint, Scalar, U256 as KU256,
 };
+#[cfg(test)]
+use k256::{elliptic_curve::point::DecompressPoint, AffinePoint};
 
 use frost::{
   algorithm::{Hram, SchnorrSignature},
@@ -108,6 +106,7 @@ impl PublicKey {
     self.px.to_repr().into()
   }
 
+  #[cfg(test)]
   pub(crate) fn from_eth_repr(repr: [u8; 32]) -> Option<Self> {
     #[allow(non_snake_case)]
     let A = Option::<AffinePoint>::from(AffinePoint::decompress(&repr.into(), 0.into()))?.into();

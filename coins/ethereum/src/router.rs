@@ -1,10 +1,12 @@
 use std::{sync::Arc, collections::HashSet};
 
 use ethers_core::{
-  types::{U256, BlockId, Bytes},
+  types::{U256, Bytes},
   utils::hex::FromHex,
   abi::{self as eth_abi, AbiEncode},
 };
+#[cfg(test)]
+use ethers_core::types::BlockId;
 use ethers_providers::{Provider, Middleware, Http};
 use ethers_contract::{EthLogDecode, ContractCall};
 
@@ -56,6 +58,7 @@ impl Router {
   }
 
   /// Get the key for Serai at the specified block.
+  #[cfg(test)]
   pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, Error> {
     self
       .2
@@ -89,6 +92,7 @@ impl Router {
   }
 
   /// Get the current nonce for the published batches.
+  #[cfg(test)]
   pub async fn nonce(&self, at: [u8; 32]) -> Result<U256, Error> {
     self.2.nonce().block(BlockId::Hash(at.into())).call().await.map_err(|_| Error::ConnectionError)
   }

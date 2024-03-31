@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+pub use ethers_core;
+pub use ethers_providers;
 pub(crate) use ethers_core::types::transaction::request::TransactionRequest;
 
 pub mod crypto;
