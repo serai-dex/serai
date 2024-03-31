@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Scheduler<N: Network>(<N::Curve as Ciphersuite>::G, HashSet<Coin>);
+pub struct Scheduler<N: Network>(<N::Curve as Ciphersuite>::G, HashSet<Coin>, bool);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct Nonce(pub u64);
@@ -28,7 +28,7 @@ where
 {
   /// Check if this Scheduler is empty.
   fn empty(&self) -> bool {
-    true
+    self.2
   }
 
   /// Create a new Scheduler.
@@ -37,16 +37,20 @@ where
     key: <N::Curve as Ciphersuite>::G,
     network: NetworkId,
   ) -> Self {
-    Scheduler(key, network.coins().iter().copied().collect())
+    Scheduler(key, network.coins().iter().copied().collect(), false)
   }
 
   /// Load a Scheduler from the DB.
   fn from_db<D: Db>(
-    _db: &D,
+    db: &D,
     key: <N::Curve as Ciphersuite>::G,
     network: NetworkId,
   ) -> io::Result<Self> {
-    Ok(Scheduler(key, network.coins().iter().copied().collect()))
+    Ok(Scheduler(
+      key,
+      network.coins().iter().copied().collect(),
+      UpdatedKey::get(db, key.to_bytes().as_ref()).is_some(),
+    ))
   }
 
   fn can_use_branch(&self, _balance: Balance) -> bool {
@@ -57,12 +61,27 @@ where
     &mut self,
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
-    payments: Vec<Payment<N>>,
+    mut payments: Vec<Payment<N>>,
     key_for_any_change: <N::Curve as Ciphersuite>::G,
     force_spend: bool,
   ) -> Vec<Plan<N>> {
     for utxo in utxos {
       assert!(self.1.contains(&utxo.balance().coin));
+    }
+
+    // Drop payments to addresses which aren't our external address (and aren't used here)
+    {
+      let branch_address = N::branch_address(self.0);
+      let change_address = N::change_address(self.0);
+      let forward_address = N::forward_address(self.0);
+      payments = payments
+        .drain(..)
+        .filter(|payment| {
+          (payment.address != branch_address) &&
+            (payment.address != change_address) &&
+            (payment.address != forward_address)
+        })
+        .collect::<Vec<_>>();
     }
 
     let mut nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);
@@ -80,13 +99,14 @@ where
 
     // If we're supposed to rotate to the new key, create an empty Plan which will signify the key
     // update
-    if force_spend && UpdatedKey::get(txn, self.0.to_bytes().as_ref()).is_none() {
+    if force_spend && (!self.2) {
       plans.push(Plan {
         key: self.0,
         inputs: vec![],
         payments: vec![],
         change: Some(N::external_address(key_for_any_change)),
       });
+      self.2 = true;
       UpdatedKey::set(txn, self.0.to_bytes().as_ref(), &());
     }
 
