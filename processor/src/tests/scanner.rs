@@ -71,7 +71,7 @@ pub async fn test_scanner<N: Network>(network: N) {
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
-        ScannerEvent::Completed(_, _, _, _) => {
+        ScannerEvent::Completed(_, _, _, _, _) => {
           panic!("unexpectedly got eventuality completion");
         }
       };
@@ -142,14 +142,14 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
         assert!(!is_retirement_block);
         block
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };
 
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block { .. } => {}
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   };

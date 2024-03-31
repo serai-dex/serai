@@ -209,7 +209,23 @@ impl TransactionTrait<Bitcoin> for Transaction {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Eventuality([u8; 32]);
 
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+pub struct EmptyClaim;
+impl AsRef<[u8]> for EmptyClaim {
+  fn as_ref(&self) -> &[u8] {
+    &[]
+  }
+}
+impl AsMut<[u8]> for EmptyClaim {
+  fn as_mut(&mut self) -> &mut [u8] {
+    &mut []
+  }
+}
+
 impl EventualityTrait for Eventuality {
+  type Claim = EmptyClaim;
+  type Completion = Transaction;
+
   fn lookup(&self) -> Vec<u8> {
     self.0.to_vec()
   }
@@ -223,6 +239,16 @@ impl EventualityTrait for Eventuality {
   }
   fn serialize(&self) -> Vec<u8> {
     self.0.to_vec()
+  }
+
+  fn claim(_: &Transaction) -> EmptyClaim {
+    EmptyClaim
+  }
+  fn serialize_completion(completion: &Transaction) -> Vec<u8> {
+    completion.serialize()
+  }
+  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Transaction> {
+    Transaction::consensus_decode(completion).map_err(|e| io::Error::other(format!("{e}")))
   }
 }
 
@@ -714,7 +740,7 @@ impl Network for Bitcoin {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], (usize, Transaction)> {
+  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -723,11 +749,11 @@ impl Network for Bitcoin {
     fn check_block(
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
+      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
     ) {
       for tx in &block.txdata[1 ..] {
         if let Some((plan, _)) = eventualities.map.remove(tx.id().as_slice()) {
-          res.insert(plan, (eventualities.block_number, tx.clone()));
+          res.insert(plan, (eventualities.block_number, tx.id(), tx.clone()));
         }
       }
 
@@ -821,7 +847,7 @@ impl Network for Bitcoin {
     )
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
+  async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
       Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
@@ -835,15 +861,11 @@ impl Network for Bitcoin {
   async fn confirm_completion(
     &self,
     eventuality: &Self::Eventuality,
-    id: &[u8; 32],
+    _: &EmptyClaim,
   ) -> Result<Option<Transaction>, NetworkError> {
-    // If this is a different TX than expected, return
-    if eventuality.0 != *id {
-      return Ok(None);
-    }
-    // Check the TX exists
-    let tx = self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)?;
-    Ok(Some(tx))
+    Ok(Some(
+      self.rpc.get_transaction(&eventuality.0).await.map_err(|_| NetworkError::ConnectionError)?,
+    ))
   }
 
   #[cfg(test)]
@@ -852,8 +874,17 @@ impl Network for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
+  async fn check_eventuality_by_claim(
+    &self,
+    eventuality: &Self::Eventuality,
+    _: &EmptyClaim,
+  ) -> bool {
+    self.rpc.get_transaction(&eventuality.0).await.is_ok()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(&self, _: usize, id: &Eventuality) -> Transaction {
+    self.rpc.get_transaction(&id.0).await.unwrap()
   }
 
   #[cfg(test)]

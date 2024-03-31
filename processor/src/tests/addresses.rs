@@ -70,7 +70,7 @@ async fn spend<N: Network, D: Db>(
       scanner.release_lock().await;
       txn.commit();
     }
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }
@@ -123,7 +123,7 @@ pub async fn test_addresses<N: Network>(network: N) {
         txn.commit();
         received_outputs.extend(outputs);
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };

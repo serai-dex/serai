@@ -15,7 +15,7 @@ use serai_client::{
 
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Block, Network},
+  networks::{Output, Transaction, Eventuality, Block, Network},
   multisigs::{
     scanner::{ScannerEvent, Scanner},
     scheduler::Scheduler,
@@ -58,7 +58,7 @@ pub async fn test_wallet<N: Network>(network: N) {
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     }
@@ -143,10 +143,10 @@ pub async fn test_wallet<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  let txid = sign(network.clone(), Session(0), keys_txs).await;
-  let tx = network.get_transaction(&txid).await.unwrap();
+  let claim = sign(network.clone(), Session(0), keys_txs).await;
   network.mine_block().await;
   let block_number = network.get_latest_block_number().await.unwrap();
+  let tx = network.get_transaction_by_eventuality(block_number, &eventualities[0]).await;
   let block = network.get_block(block_number).await.unwrap();
   let outputs = network.get_outputs(&block, key).await;
   assert_eq!(outputs.len(), 2);
@@ -154,7 +154,8 @@ pub async fn test_wallet<N: Network>(network: N) {
   assert!((outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount));
 
   for eventuality in eventualities {
-    assert_eq!(network.confirm_completion(&eventuality, &txid).await.unwrap(), Some(tx.clone()));
+    let completion = network.confirm_completion(&eventuality, &claim).await.unwrap().unwrap();
+    assert_eq!(N::Eventuality::claim(&completion), claim);
   }
 
   for _ in 1 .. N::CONFIRMATIONS {
@@ -168,7 +169,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }

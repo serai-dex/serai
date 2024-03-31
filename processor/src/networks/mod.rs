@@ -105,7 +105,7 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
-  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id;
+  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id; // TODO: Review use of
   fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
   fn presumed_origin(&self) -> Option<N::Address>;
@@ -132,11 +132,18 @@ pub trait SignableTransaction: Send + Sync + Clone + Debug {
   fn fee(&self) -> u64;
 }
 
-pub trait Eventuality: Send + Sync + Clone + Debug {
+pub trait Eventuality: Send + Sync + Clone + PartialEq + Debug {
+  type Claim: Send + Sync + Clone + PartialEq + Default + AsRef<[u8]> + AsMut<[u8]> + Debug;
+  type Completion: Send + Sync + Clone + PartialEq + Debug;
+
   fn lookup(&self) -> Vec<u8>;
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
   fn serialize(&self) -> Vec<u8>;
+
+  fn claim(completion: &Self::Completion) -> Self::Claim;
+  fn serialize_completion(completion: &Self::Completion) -> Vec<u8>;
+  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Self::Completion>;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -232,7 +239,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   type Curve: Curve;
 
   /// The type representing the transaction for this network.
-  type Transaction: Transaction<Self>;
+  type Transaction: Transaction<Self>; // TODO: Review use of
   /// The type representing the block for this network.
   type Block: Block<Self>;
 
@@ -246,7 +253,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// This must be binding to both the outputs expected and the plan ID.
   type Eventuality: Eventuality;
   /// The FROST machine to sign a transaction.
-  type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
+  type TransactionMachine: PreprocessMachine<
+    Signature = <Self::Eventuality as Eventuality>::Completion,
+  >;
 
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
@@ -355,7 +364,14 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], (usize, Self::Transaction)>;
+  ) -> HashMap<
+    [u8; 32],
+    (
+      usize,
+      <Self::Transaction as Transaction<Self>>::Id,
+      <Self::Eventuality as Eventuality>::Completion,
+    ),
+  >;
 
   /// Returns the needed fee to fulfill this Plan at this fee rate.
   ///
@@ -552,8 +568,11 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError>;
 
-  /// Publish a transaction.
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError>;
+  /// Publish a completion.
+  async fn publish_completion(
+    &self,
+    completion: &<Self::Eventuality as Eventuality>::Completion,
+  ) -> Result<(), NetworkError>;
 
   /// Confirm a plan was completed by the specified transaction, per our bounds.
   ///
@@ -563,19 +582,28 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn confirm_completion(
     &self,
     eventuality: &Self::Eventuality,
-    tx: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<Option<Self::Transaction>, NetworkError>;
+    claim: &<Self::Eventuality as Eventuality>::Claim,
+  ) -> Result<Option<<Self::Eventuality as Eventuality>::Completion>, NetworkError>;
 
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
 
-  /// Get a transaction by its ID.
+  /// Check an Eventuality is fulfilled by a claim.
   #[cfg(test)]
-  async fn get_transaction(
+  async fn check_eventuality_by_claim(
     &self,
-    id: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<Self::Transaction, NetworkError>;
+    eventuality: &Self::Eventuality,
+    claim: &<Self::Eventuality as Eventuality>::Claim,
+  ) -> bool;
+
+  /// Get a transaction by the Eventuality it completes.
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(
+    &self,
+    block: usize,
+    eventuality: &Self::Eventuality,
+  ) -> Self::Transaction;
 
   #[cfg(test)]
   async fn mine_block(&self);

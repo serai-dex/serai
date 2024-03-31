@@ -131,6 +131,9 @@ impl TransactionTrait<Monero> for Transaction {
 }
 
 impl EventualityTrait for Eventuality {
+  type Claim = [u8; 32];
+  type Completion = Transaction;
+
   // Use the TX extra to look up potential matches
   // While anyone can forge this, a transaction with distinct outputs won't actually match
   // Extra includess the one time keys which are derived from the plan ID, so a collision here is a
@@ -144,6 +147,16 @@ impl EventualityTrait for Eventuality {
   }
   fn serialize(&self) -> Vec<u8> {
     self.serialize()
+  }
+
+  fn claim(tx: &Transaction) -> [u8; 32] {
+    tx.id()
+  }
+  fn serialize_completion(completion: &Transaction) -> Vec<u8> {
+    completion.serialize()
+  }
+  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Transaction> {
+    Transaction::read(completion)
   }
 }
 
@@ -559,7 +572,7 @@ impl Network for Monero {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Block,
-  ) -> HashMap<[u8; 32], (usize, Transaction)> {
+  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -569,7 +582,7 @@ impl Network for Monero {
       network: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
+      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
     ) {
       for hash in &block.txs {
         let tx = {
@@ -588,7 +601,7 @@ impl Network for Monero {
           if eventuality.matches(&tx) {
             res.insert(
               eventualities.map.remove(&tx.prefix.extra).unwrap().0,
-              (usize::try_from(block.number().unwrap()).unwrap(), tx),
+              (usize::try_from(block.number().unwrap()).unwrap(), tx.id(), tx),
             );
           }
         }
@@ -670,7 +683,7 @@ impl Network for Monero {
     }
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
+  async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {
     match self.rpc.publish_transaction(tx).await {
       Ok(()) => Ok(()),
       Err(RpcError::ConnectionError(e)) => {
@@ -702,8 +715,28 @@ impl Network for Monero {
   }
 
   #[cfg(test)]
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(*id).await.map_err(|_| NetworkError::ConnectionError)
+  async fn check_eventuality_by_claim(
+    &self,
+    eventuality: &Self::Eventuality,
+    claim: &[u8; 32],
+  ) -> bool {
+    return eventuality.matches(&self.rpc.get_transaction(*claim).await.unwrap());
+  }
+
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(
+    &self,
+    block: usize,
+    eventuality: &Eventuality,
+  ) -> Transaction {
+    let block = self.rpc.get_block_by_number(block).await.unwrap();
+    for tx in &block.txs {
+      let tx = self.rpc.get_transaction(*tx).await.unwrap();
+      if eventuality.matches(&tx) {
+        return tx;
+      }
+    }
+    panic!("block didn't have a transaction for this eventuality")
   }
 
   #[cfg(test)]

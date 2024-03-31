@@ -36,7 +36,7 @@ use scheduler::Scheduler;
 
 use crate::{
   Get, Db, Payment, Plan,
-  networks::{OutputType, Output, Transaction, SignableTransaction, Block, PreparedSend, Network},
+  networks::{OutputType, Output, SignableTransaction, Eventuality, Block, PreparedSend, Network},
 };
 
 // InInstructionWithBalance from an external output
@@ -131,7 +131,7 @@ pub enum MultisigEvent<N: Network> {
   // Batches to publish
   Batches(Option<(<N::Curve as Ciphersuite>::G, <N::Curve as Ciphersuite>::G)>, Vec<Batch>),
   // Eventuality completion found on-chain
-  Completed(Vec<u8>, [u8; 32], N::Transaction),
+  Completed(Vec<u8>, [u8; 32], <N::Eventuality as Eventuality>::Completion),
 }
 
 pub struct MultisigManager<D: Db, N: Network> {
@@ -999,9 +999,9 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
       // This must be emitted before ScannerEvent::Block for all completions of known Eventualities
       // within the block. Unknown Eventualities may have their Completed events emitted after
       // ScannerEvent::Block however.
-      ScannerEvent::Completed(key, block_number, id, tx) => {
-        ResolvedDb::resolve_plan::<N>(txn, &key, id, &tx.id());
-        (block_number, MultisigEvent::Completed(key, id, tx))
+      ScannerEvent::Completed(key, block_number, id, tx_id, completion) => {
+        ResolvedDb::resolve_plan::<N>(txn, &key, id, &tx_id);
+        (block_number, MultisigEvent::Completed(key, id, completion))
       }
     };
 
