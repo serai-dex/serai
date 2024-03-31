@@ -5,7 +5,7 @@ use std::{
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
-use serai_client::primitives::{Coin, Amount, Balance};
+use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
 
 use crate::{
   networks::{OutputType, Output, Network},
@@ -144,8 +144,14 @@ impl<N: Network> Scheduler<N> {
   pub fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    coin: Coin,
+    network: NetworkId,
   ) -> Self {
+    let coin = {
+      let coins = network.coins();
+      assert_eq!(coins.len(), 1);
+      coins[0]
+    };
+
     let res = Scheduler {
       key,
       coin,
@@ -159,7 +165,17 @@ impl<N: Network> Scheduler<N> {
     res
   }
 
-  pub fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G, coin: Coin) -> io::Result<Self> {
+  pub fn from_db<D: Db>(
+    db: &D,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> io::Result<Self> {
+    let coin = {
+      let coins = network.coins();
+      assert_eq!(coins.len(), 1);
+      coins[0]
+    };
+
     let scheduler = db.get(scheduler_key::<D, _>(&key)).unwrap_or_else(|| {
       panic!("loading scheduler from DB without scheduler for {}", hex::encode(key.to_bytes()))
     });

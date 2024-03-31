@@ -3,11 +3,12 @@ use std::io;
 
 use ciphersuite::Ciphersuite;
 
-use serai_client::primitives::{Coin, Balance};
+use serai_client::primitives::{NetworkId, Balance};
 
 use crate::{networks::Network, Db, Payment, Plan};
 
 pub(crate) mod utxo;
+pub(crate) mod account;
 
 pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
   /// Check if this Scheduler is empty.
@@ -17,11 +18,15 @@ pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
   fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    coin: Coin,
+    network: NetworkId,
   ) -> Self;
 
   /// Load a Scheduler from the DB.
-  fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G, coin: Coin) -> io::Result<Self>;
+  fn from_db<D: Db>(
+    db: &D,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> io::Result<Self>;
 
   /// Check if a branch is usable.
   fn can_use_branch(&self, balance: Balance) -> bool;
@@ -59,14 +64,18 @@ impl<N: Network> Scheduler<N> for utxo::Scheduler<N> {
   fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    coin: Coin,
+    network: NetworkId,
   ) -> Self {
-    utxo::Scheduler::new::<D>(txn, key, coin)
+    utxo::Scheduler::new::<D>(txn, key, network)
   }
 
   /// Load a Scheduler from the DB.
-  fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G, coin: Coin) -> io::Result<Self> {
-    utxo::Scheduler::from_db::<D>(db, key, coin)
+  fn from_db<D: Db>(
+    db: &D,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> io::Result<Self> {
+    utxo::Scheduler::from_db::<D>(db, key, network)
   }
 
   /// Check if a branch is usable.
@@ -93,6 +102,7 @@ impl<N: Network> Scheduler<N> for utxo::Scheduler<N> {
 
   /// Note a branch output as having been created, with the amount it was actually created with,
   /// or not having been created due to being too small.
+  // TODO: Move this to Balance.
   fn created_output<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,

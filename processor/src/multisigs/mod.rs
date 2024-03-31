@@ -7,7 +7,7 @@ use scale::{Encode, Decode};
 use messages::SubstrateContext;
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, NetworkId, Coin, ExternalAddress, BlockHash, Data},
+  primitives::{MAX_DATA_LEN, ExternalAddress, BlockHash, Data},
   in_instructions::primitives::{
     InInstructionWithBalance, Batch, RefundableInInstruction, Shorthand, MAX_BATCH_SIZE,
   },
@@ -154,20 +154,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     assert!(current_keys.len() <= 2);
     let mut actively_signing = vec![];
     for (_, key) in &current_keys {
-      schedulers.push(
-        N::Scheduler::from_db(
-          raw_db,
-          *key,
-          match N::NETWORK {
-            NetworkId::Serai => panic!("adding a key for Serai"),
-            NetworkId::Bitcoin => Coin::Bitcoin,
-            // TODO: This is incomplete to DAI
-            NetworkId::Ethereum => Coin::Ether,
-            NetworkId::Monero => Coin::Monero,
-          },
-        )
-        .unwrap(),
-      );
+      schedulers.push(N::Scheduler::from_db(raw_db, *key, N::NETWORK).unwrap());
 
       // Load any TXs being actively signed
       let key = key.to_bytes();
@@ -242,17 +229,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let viewer = Some(MultisigViewer {
       activation_block,
       key: external_key,
-      scheduler: N::Scheduler::new::<D>(
-        txn,
-        external_key,
-        match N::NETWORK {
-          NetworkId::Serai => panic!("adding a key for Serai"),
-          NetworkId::Bitcoin => Coin::Bitcoin,
-          // TODO: This is incomplete to DAI
-          NetworkId::Ethereum => Coin::Ether,
-          NetworkId::Monero => Coin::Monero,
-        },
-      ),
+      scheduler: N::Scheduler::new::<D>(txn, external_key, N::NETWORK),
     });
 
     if self.existing.is_none() {

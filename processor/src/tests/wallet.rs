@@ -69,16 +69,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   txn.commit();
 
   let mut txn = db.txn();
-  let mut scheduler = N::Scheduler::new::<MemDb>(
-    &mut txn,
-    key,
-    match N::NETWORK {
-      NetworkId::Serai => panic!("test_wallet called with Serai"),
-      NetworkId::Bitcoin => Coin::Bitcoin,
-      NetworkId::Ethereum => Coin::Ether,
-      NetworkId::Monero => Coin::Monero,
-    },
-  );
+  let mut scheduler = N::Scheduler::new::<MemDb>(&mut txn, key, N::NETWORK);
   let amount = 2 * N::DUST;
   let plans = scheduler.schedule::<MemDb>(
     &mut txn,
