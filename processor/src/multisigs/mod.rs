@@ -28,10 +28,7 @@ use scanner::{ScannerEvent, ScannerHandle, Scanner};
 mod db;
 use db::*;
 
-#[cfg(not(test))]
-mod scheduler;
-#[cfg(test)]
-pub mod scheduler;
+pub(crate) mod scheduler;
 use scheduler::Scheduler;
 
 use crate::{
@@ -122,7 +119,7 @@ async fn prepare_send<N: Network>(
 pub struct MultisigViewer<N: Network> {
   activation_block: usize,
   key: <N::Curve as Ciphersuite>::G,
-  scheduler: Scheduler<N>,
+  scheduler: N::Scheduler,
 }
 
 #[allow(clippy::type_complexity)]
@@ -158,7 +155,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let mut actively_signing = vec![];
     for (_, key) in &current_keys {
       schedulers.push(
-        Scheduler::from_db(
+        N::Scheduler::from_db(
           raw_db,
           *key,
           match N::NETWORK {
@@ -245,7 +242,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     let viewer = Some(MultisigViewer {
       activation_block,
       key: external_key,
-      scheduler: Scheduler::<N>::new::<D>(
+      scheduler: N::Scheduler::new::<D>(
         txn,
         external_key,
         match N::NETWORK {

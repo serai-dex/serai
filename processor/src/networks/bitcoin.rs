@@ -55,6 +55,7 @@ use crate::{
     Eventuality as EventualityTrait, EventualitiesTracker, Network,
   },
   Payment,
+  multisigs::scheduler::utxo::Scheduler,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -578,6 +579,8 @@ impl Network for Bitcoin {
   type SignableTransaction = SignableTransaction;
   type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
+
+  type Scheduler = Scheduler<Bitcoin>;
 
   type Address = Address;
 

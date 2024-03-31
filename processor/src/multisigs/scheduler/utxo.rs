@@ -435,9 +435,6 @@ impl<N: Network> Scheduler<N> {
 
   // Note a branch output as having been created, with the amount it was actually created with,
   // or not having been created due to being too small
-  // This can be called whenever, so long as it's properly ordered
-  // (it's independent to Serai/the chain we're scheduling over, yet still expects outputs to be
-  // created in the same order Plans are returned in)
   pub fn created_output<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,

@@ -69,7 +69,7 @@ pub async fn test_wallet<N: Network>(network: N) {
   txn.commit();
 
   let mut txn = db.txn();
-  let mut scheduler = Scheduler::new::<MemDb>(
+  let mut scheduler = N::Scheduler::new::<MemDb>(
     &mut txn,
     key,
     match N::NETWORK {

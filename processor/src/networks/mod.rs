@@ -26,7 +26,7 @@ pub mod monero;
 #[cfg(feature = "monero")]
 pub use monero::Monero;
 
-use crate::{Payment, Plan};
+use crate::{Payment, Plan, multisigs::scheduler::Scheduler};
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum NetworkError {
@@ -256,6 +256,9 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   type TransactionMachine: PreprocessMachine<
     Signature = <Self::Eventuality as Eventuality>::Completion,
   >;
+
+  /// The scheduler for this network.
+  type Scheduler: Scheduler<Self>;
 
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,

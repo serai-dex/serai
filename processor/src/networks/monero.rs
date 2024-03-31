@@ -41,6 +41,7 @@ use crate::{
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
     Eventuality as EventualityTrait, EventualitiesTracker, Network,
   },
+  multisigs::scheduler::utxo::Scheduler,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -467,6 +468,8 @@ impl Network for Monero {
   type SignableTransaction = SignableTransaction;
   type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
+
+  type Scheduler = Scheduler<Monero>;
 
   type Address = Address;
 
