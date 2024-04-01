@@ -118,12 +118,6 @@ impl TransactionTrait<Monero> for Transaction {
   fn id(&self) -> Self::Id {
     self.hash()
   }
-  fn serialize(&self) -> Vec<u8> {
-    self.serialize()
-  }
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Transaction::read(reader)
-  }
 
   #[cfg(test)]
   async fn fee(&self, _: &Monero) -> u64 {
@@ -675,7 +669,7 @@ impl Network for Monero {
     )
   }
 
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,

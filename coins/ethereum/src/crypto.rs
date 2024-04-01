@@ -151,6 +151,13 @@ impl Signature {
     }
     Some(Signature { c, s: signature.s })
   }
+
+  pub fn c(&self) -> Scalar {
+    self.c
+  }
+  pub fn s(&self) -> Scalar {
+    self.s
+  }
 }
 impl From<&Signature> for AbiSignature {
   fn from(sig: &Signature) -> AbiSignature {

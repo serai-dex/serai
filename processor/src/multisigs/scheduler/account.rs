@@ -15,6 +15,9 @@ pub struct Scheduler<N: Network>(<N::Curve as Ciphersuite>::G, HashSet<Coin>, bo
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct Nonce(pub u64);
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct RotateTo<N: Network>(pub <N::Curve as Ciphersuite>::G);
+
 create_db! {
   SchedulerDb {
     LastNonce: () -> u64,
@@ -24,7 +27,7 @@ create_db! {
 
 impl<N: Network> crate::multisigs::scheduler::Scheduler<N> for Scheduler<N>
 where
-  N::Output: From<Nonce>,
+  N::Output: From<Nonce> + From<RotateTo<N>>,
 {
   /// Check if this Scheduler is empty.
   fn empty(&self) -> bool {
@@ -102,9 +105,9 @@ where
     if force_spend && (!self.2) {
       plans.push(Plan {
         key: self.0,
-        inputs: vec![],
+        inputs: vec![N::Output::from(RotateTo::<N>(key_for_any_change))],
         payments: vec![],
-        change: Some(N::external_address(key_for_any_change)),
+        change: None,
       });
       self.2 = true;
       UpdatedKey::set(txn, self.0.to_bytes().as_ref(), &());

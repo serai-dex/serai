@@ -16,6 +16,21 @@ pub(crate) mod multisigs {
       pub struct Scheduler<N>(core::marker::PhantomData<N>);
       impl<N: Network> crate::multisigs::scheduler::Scheduler<N> for Scheduler<N> {}
     }
+
+    pub(crate) mod account {
+      use ciphersuite::Ciphersuite;
+      use crate::networks::Network;
+
+      #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+      pub(crate) struct Nonce(pub u64);
+
+      #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+      pub(crate) struct RotateTo<N: Network>(pub <N::Curve as Ciphersuite>::G);
+
+      #[derive(PartialEq, Debug)]
+      pub struct Scheduler<N>(core::marker::PhantomData<N>);
+      impl<N: Network> crate::multisigs::scheduler::Scheduler<N> for Scheduler<N> {}
+    }
   }
 }
 

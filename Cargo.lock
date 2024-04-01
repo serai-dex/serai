@@ -7690,6 +7690,7 @@ dependencies = [
  "dalek-ff-group",
  "dockertest",
  "env_logger",
+ "ethereum-serai",
  "flexible-transcript",
  "frost-schnorrkel",
  "hex",

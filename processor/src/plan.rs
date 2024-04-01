@@ -90,6 +90,8 @@ pub struct Plan<N: Network> {
   /// This MUST contain a Serai address. Operating costs may be deducted from the payments in this
   /// Plan on the premise that the change address is Serai's, and accordingly, Serai will recoup
   /// the operating costs.
+  //
+  // TODO: Consider moving to ::G?
   pub change: Option<N::Address>,
 }
 impl<N: Network> core::fmt::Debug for Plan<N> {

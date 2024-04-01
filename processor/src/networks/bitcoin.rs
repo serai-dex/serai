@@ -179,14 +179,6 @@ impl TransactionTrait<Bitcoin> for Transaction {
     hash.reverse();
     hash
   }
-  fn serialize(&self) -> Vec<u8> {
-    let mut buf = vec![];
-    self.consensus_encode(&mut buf).unwrap();
-    buf
-  }
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
-  }
 
   #[cfg(test)]
   async fn fee(&self, network: &Bitcoin) -> u64 {
@@ -246,7 +238,9 @@ impl EventualityTrait for Eventuality {
     EmptyClaim
   }
   fn serialize_completion(completion: &Transaction) -> Vec<u8> {
-    completion.serialize()
+    let mut buf = vec![];
+    completion.consensus_encode(&mut buf).unwrap();
+    buf
   }
   fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Transaction> {
     Transaction::consensus_decode(completion).map_err(|e| io::Error::other(format!("{e}")))
@@ -836,7 +830,7 @@ impl Network for Bitcoin {
     ))
   }
 
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,

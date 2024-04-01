@@ -40,10 +40,15 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", d
 frost = { package = "modular-frost", path = "../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../crypto/schnorrkel", default-features = false }
 
+# Bitcoin/Ethereum
+k256 = { version = "^0.13.1", default-features = false, features = ["std"], optional = true }
+
 # Bitcoin
 secp256k1 = { version = "0.28", default-features = false, features = ["std", "global-context", "rand-std"], optional = true }
-k256 = { version = "^0.13.1", default-features = false, features = ["std"], optional = true }
 bitcoin-serai = { path = "../coins/bitcoin", default-features = false, features = ["std"], optional = true }
+
+# Ethereum
+ethereum-serai = { path = "../coins/ethereum", default-features = false, optional = true }
 
 # Monero
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
@@ -75,6 +80,8 @@ serai-docker-tests = { path = "../tests/docker" }
 [features]
 secp256k1 = ["k256", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
+
+ethereum = ["secp256k1", "ethereum-serai"]
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]

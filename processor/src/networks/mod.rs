@@ -21,6 +21,11 @@ pub mod bitcoin;
 #[cfg(feature = "bitcoin")]
 pub use self::bitcoin::Bitcoin;
 
+#[cfg(feature = "ethereum")]
+pub mod ethereum;
+#[cfg(feature = "ethereum")]
+pub use ethereum::Ethereum;
+
 #[cfg(feature = "monero")]
 pub mod monero;
 #[cfg(feature = "monero")]
@@ -121,9 +126,6 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + PartialEq + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
-  fn serialize(&self) -> Vec<u8>;
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
-
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;
 }
@@ -142,6 +144,8 @@ pub trait Eventuality: Send + Sync + Clone + PartialEq + Debug {
   fn serialize(&self) -> Vec<u8>;
 
   fn claim(completion: &Self::Completion) -> Self::Claim;
+
+  // TODO: Make a dedicated Completion trait
   fn serialize_completion(completion: &Self::Completion) -> Vec<u8>;
   fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Self::Completion>;
 }
@@ -234,7 +238,7 @@ pub struct PreparedSend<N: Network> {
 }
 
 #[async_trait]
-pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
+pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// The elliptic curve used for this network.
   type Curve: Curve;
 
@@ -363,6 +367,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// This may panic if not fed a block greater than the tracker's block number.
   // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
   // code
+  // TODO: Consider having this return the Transaction + the Completion?
+  // Or Transaction with extract_completion?
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
@@ -565,7 +571,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   }
 
   /// Attempt to sign a SignableTransaction.
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,

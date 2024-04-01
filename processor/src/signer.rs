@@ -432,7 +432,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     let mut preprocesses = vec![];
     let mut serialized_preprocesses = vec![];
     for keys in &self.keys {
-      let machine = match self.network.attempt_send(keys.clone(), tx.clone()).await {
+      let machine = match self.network.attempt_sign(keys.clone(), tx.clone()).await {
         Err(e) => {
           error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
           return None;
