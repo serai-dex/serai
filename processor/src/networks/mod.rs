@@ -126,11 +126,13 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + PartialEq + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
+  // TODO: Move to Balance
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;
 }
 
 pub trait SignableTransaction: Send + Sync + Clone + Debug {
+  // TODO: Move to Balance
   fn fee(&self) -> u64;
 }
 
@@ -308,6 +310,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// Tweak keys for this network.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
+  // TODO: Move these into an extension trait
   /// Address for the given group key to receive external coins to.
   fn external_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.

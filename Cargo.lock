@@ -1841,6 +1841,7 @@ dependencies = [
  "ethers-contract",
  "ethers-core",
  "ethers-providers",
+ "flexible-transcript",
  "group",
  "hex",
  "k256",

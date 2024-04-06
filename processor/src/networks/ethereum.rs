@@ -11,6 +11,7 @@ use ethereum_serai::{
   ethers_core::types::Transaction,
   ethers_providers::{Http, Provider},
   crypto::{PublicKey, Signature},
+  machine::*,
 };
 
 use tokio::time::sleep;
@@ -20,8 +21,8 @@ use serai_client::primitives::{Coin, Amount, Balance, NetworkId};
 use crate::{
   Payment,
   networks::{
-    OutputType, Output, Transaction as TransactionTrait, Block, Eventuality as EventualityTrait,
-    EventualitiesTracker, NetworkError, Network,
+    OutputType, Output, Transaction as TransactionTrait, SignableTransaction, Block,
+    Eventuality as EventualityTrait, EventualitiesTracker, NetworkError, Network,
   },
   multisigs::scheduler::account::{Nonce, RotateTo, Scheduler},
 };
@@ -48,6 +49,12 @@ impl TryInto<Vec<u8>> for Address {
 impl ToString for Address {
   fn to_string(&self) -> String {
     ethereum_serai::ethers_core::types::H160(self.0).to_string()
+  }
+}
+
+impl SignableTransaction for RouterCommand {
+  fn fee(&self) -> u64 {
+    todo!("TODO")
   }
 }
 
@@ -93,6 +100,7 @@ impl Block<Ethereum> for Epoch {
 
 // Taking the role of an Output, this is an Input, an instruction easiest to cram into here,
 // and an actual received Output.
+// TODO: Extend Plan such that this isn't needed
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum MetaEvent {
   NonceToUse(u64),
@@ -140,8 +148,9 @@ impl Output<Ethereum> for MetaEvent {
 
   fn balance(&self) -> Balance {
     match self {
-      MetaEvent::NonceToUse(_) => Balance { coin: Coin::Ether, amount: Amount(0) },
-      MetaEvent::RotateTo(_) => Balance { coin: Coin::Ether, amount: Amount(0) },
+      MetaEvent::NonceToUse(_) | MetaEvent::RotateTo(_) => {
+        Balance { coin: Coin::Ether, amount: Amount(0) }
+      }
       MetaEvent::EmittedEvent { balance, .. } => *balance,
     }
   }
@@ -158,18 +167,7 @@ impl Output<Ethereum> for MetaEvent {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-enum Message {
-  Execute(u64, Vec<()>),
-  RotateTo(ProjectivePoint),
-}
-#[derive(Clone, PartialEq, Eq, Debug)]
-struct SignedMessage {
-  message: Message,
-  signature: Signature,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-struct Claim {
+pub struct Claim {
   signature: [u8; 64],
 }
 impl AsRef<[u8]> for Claim {
@@ -197,10 +195,10 @@ impl From<&Signature> for Claim {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Eventuality(Message);
+pub struct Eventuality(RouterCommand);
 impl EventualityTrait for Eventuality {
   type Claim = Claim;
-  type Completion = SignedMessage;
+  type Completion = SignedRouterCommand;
 
   fn lookup(&self) -> Vec<u8> {
     todo!("TODO")
@@ -214,7 +212,7 @@ impl EventualityTrait for Eventuality {
   }
 
   fn claim(completion: &Self::Completion) -> Self::Claim {
-    Claim::from(&completion.signature)
+    Claim::from(completion.signature())
   }
   fn serialize_completion(completion: &Self::Completion) -> Vec<u8> {
     todo!("TODO")
@@ -253,9 +251,9 @@ impl Network for Ethereum {
   type Block = Epoch;
 
   type Output = MetaEvent;
-  type SignableTransaction = ();
+  type SignableTransaction = RouterCommand;
   type Eventuality = Eventuality;
-  type TransactionMachine = ();
+  type TransactionMachine = RouterCommandMachine;
 
   type Scheduler = Scheduler<Self>;
 
@@ -279,19 +277,19 @@ impl Network for Ethereum {
     }
   }
 
-  fn external_address(key: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
-    todo!("TODO")
-  }
-
-  fn branch_address(key: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
+  fn external_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
     Address([0; 20])
   }
 
-  fn change_address(key: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
+  fn branch_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
     Address([0; 20])
   }
 
-  fn forward_address(key: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
+  fn change_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
+    Address([0; 20])
+  }
+
+  fn forward_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
     Address([0; 20])
   }
 
