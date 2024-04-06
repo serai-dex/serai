@@ -307,7 +307,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
   /// Address for the given group key to receive external coins to.
-  fn external_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  #[cfg(test)]
+  async fn external_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
   fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for the given group key to use for change.

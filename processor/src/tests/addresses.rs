@@ -101,7 +101,7 @@ pub async fn test_addresses<N: UtxoNetwork>(network: N) {
   // Receive funds to the various addresses and make sure they're properly identified
   let mut received_outputs = vec![];
   for (kind, address) in [
-    (OutputType::External, N::external_address(&network, key)),
+    (OutputType::External, N::external_address(&network, key).await),
     (OutputType::Branch, N::branch_address(key).unwrap()),
     (OutputType::Change, N::change_address(key).unwrap()),
     (OutputType::Forwarded, N::forward_address(key).unwrap()),

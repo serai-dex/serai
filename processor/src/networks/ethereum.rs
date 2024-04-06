@@ -239,7 +239,9 @@ impl Ethereum {
       sleep(Duration::from_secs(5)).await;
       provider = Provider::<Http>::try_from(&url);
     }
-    Ethereum { provider: Arc::new(provider.unwrap()) }
+    let provider = Arc::new(provider.unwrap());
+
+    Ethereum { provider }
   }
 }
 
@@ -276,8 +278,18 @@ impl Network for Ethereum {
     }
   }
 
-  fn external_address(&self, _: <Secp256k1 as Ciphersuite>::G) -> Address {
-    todo!("TODO")
+  #[cfg(test)]
+  async fn external_address(&self, key: <Secp256k1 as Ciphersuite>::G) -> Address {
+    use ethereum_serai::deployer::Deployer;
+
+    let deployer: Option<_> = Deployer::new(self.provider.clone()).await.unwrap();
+    let deployer = deployer.expect("deployer wasn't prior deployed");
+
+    // TODO: This uses the current key as the first key
+    let router: Option<_> =
+      deployer.find_router(self.provider.clone(), &PublicKey::new(key).unwrap()).await.unwrap();
+    let router = router.expect("router wasn't prior deployed");
+    Address(router.address())
   }
 
   fn branch_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {

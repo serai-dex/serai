@@ -56,7 +56,7 @@ pub async fn test_scanner<N: UtxoNetwork>(network: N) {
   let scanner = new_scanner(&network, &db, group_key, &first).await;
 
   // Receive funds
-  let block = network.test_send(N::external_address(&network, keys.group_key())).await;
+  let block = network.test_send(N::external_address(&network, keys.group_key()).await).await;
   let block_id = block.id();
 
   // Verify the Scanner picked them up

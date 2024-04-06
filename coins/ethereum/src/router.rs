@@ -57,6 +57,10 @@ impl Router {
     Self(provider.clone(), address, abi::Router::new(address, provider))
   }
 
+  pub fn address(&self) -> [u8; 20] {
+    self.1
+  }
+
   /// Get the key for Serai at the specified block.
   #[cfg(test)]
   pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, Error> {

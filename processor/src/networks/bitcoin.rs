@@ -652,7 +652,8 @@ impl Network for Bitcoin {
     scanner(keys.group_key());
   }
 
-  fn external_address(&self, key: ProjectivePoint) -> Address {
+  #[cfg(test)]
+  async fn external_address(&self, key: ProjectivePoint) -> Address {
     address_from_key(key)
   }
 
