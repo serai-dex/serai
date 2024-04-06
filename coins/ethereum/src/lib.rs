@@ -11,6 +11,8 @@ pub mod erc20;
 pub mod deployer;
 pub mod router;
 
+pub mod machine;
+
 #[cfg(test)]
 mod tests;
 

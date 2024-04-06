@@ -19,11 +19,14 @@ workspace = true
 [dependencies]
 thiserror = { version = "1", default-features = false }
 
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
 sha3 = { version = "0.10", default-features = false, features = ["std"] }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["recommended"] }
 
 group = { version = "0.13", default-features = false }
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", features = ["secp256k1", "tests"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["secp256k1"] }
 
 ethers-core = { version = "2", default-features = false }
 ethers-providers = { version = "2", default-features = false }
@@ -40,5 +43,7 @@ serde = { version = "1", default-features = false, features = ["std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 sha2 = { version = "0.10", default-features = false, features = ["std"] }
+
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["tests"] }
 
 tokio = { version = "1", features = ["macros"] }

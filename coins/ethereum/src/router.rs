@@ -72,7 +72,11 @@ impl Router {
   }
 
   /// Get the message to be signed in order to update the key for Serai.
-  pub fn update_serai_key_message(chain_id: U256, session: U256, key: &PublicKey) -> Vec<u8> {
+  pub(crate) fn update_serai_key_message(
+    chain_id: U256,
+    session: U256,
+    key: &PublicKey,
+  ) -> Vec<u8> {
     let mut buffer = b"updateSeraiKey".to_vec();
 
     let mut chain_id_bytes = [0; 32];
@@ -104,7 +108,11 @@ impl Router {
   }
 
   /// Get the message to be signed in order to update the key for Serai.
-  pub fn execute_message(chain_id: U256, nonce: U256, outs: Vec<abi::OutInstruction>) -> Vec<u8> {
+  pub(crate) fn execute_message(
+    chain_id: U256,
+    nonce: U256,
+    outs: Vec<abi::OutInstruction>,
+  ) -> Vec<u8> {
     ("execute".to_string(), chain_id, nonce, outs).encode()
   }
 
