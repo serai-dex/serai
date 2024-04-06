@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub(crate) mod utxo;
-pub(crate) mod account;
+pub(crate) mod smart_contract;
 
 pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
   /// Check if this Scheduler is empty.

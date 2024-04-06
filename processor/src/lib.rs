@@ -17,7 +17,7 @@ pub(crate) mod multisigs {
       impl<N: Network> crate::multisigs::scheduler::Scheduler<N> for Scheduler<N> {}
     }
 
-    pub(crate) mod account {
+    pub(crate) mod smart_contract {
       use ciphersuite::Ciphersuite;
       use crate::networks::Network;
 

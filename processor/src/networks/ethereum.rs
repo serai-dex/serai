@@ -24,7 +24,7 @@ use crate::{
     OutputType, Output, Transaction as TransactionTrait, SignableTransaction, Block,
     Eventuality as EventualityTrait, EventualitiesTracker, NetworkError, Network,
   },
-  multisigs::scheduler::account::{Nonce, RotateTo, Scheduler},
+  multisigs::scheduler::smart_contract::{Nonce, RotateTo, Scheduler},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

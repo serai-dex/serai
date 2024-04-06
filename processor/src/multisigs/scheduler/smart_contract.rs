@@ -115,6 +115,6 @@ where
     _expected: u64,
     _actual: Option<u64>,
   ) {
-    panic!("Account Scheduler created a Branch output")
+    panic!("Smart Contract Scheduler created a Branch output")
   }
 }
