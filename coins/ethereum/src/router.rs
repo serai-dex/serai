@@ -72,11 +72,17 @@ impl Router {
   }
 
   /// Get the message to be signed in order to update the key for Serai.
-  pub fn update_serai_key_message(chain_id: U256, key: &PublicKey) -> Vec<u8> {
+  pub fn update_serai_key_message(chain_id: U256, session: U256, key: &PublicKey) -> Vec<u8> {
     let mut buffer = b"updateSeraiKey".to_vec();
+
     let mut chain_id_bytes = [0; 32];
     chain_id.to_big_endian(&mut chain_id_bytes);
     buffer.extend(&chain_id_bytes);
+
+    let mut session_bytes = [0; 32];
+    session.to_big_endian(&mut session_bytes);
+    buffer.extend(&session_bytes);
+
     buffer.extend(&key.eth_repr());
     buffer
   }

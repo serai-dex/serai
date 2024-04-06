@@ -10,6 +10,8 @@ contract Router {
   // Nonce is incremented for each batch of transactions executed
   uint256 public nonce;
 
+  // The current session
+  uint256 public session;
   // Current public key's x-coordinate
   // This key must always have the parity defined within the Schnorr contract
   bytes32 public seraiKey;
@@ -43,7 +45,7 @@ contract Router {
   error FailedTransfer();
   error TooManyTransactions();
 
-  modifier _updateSeraiKey(bytes32 key) {
+  modifier _updateSeraiKeyAtEndOfFn(bytes32 key) {
     if (
       (key == bytes32(0)) ||
       ((bytes32(uint256(key) % Schnorr.Q)) != key)
@@ -57,7 +59,7 @@ contract Router {
     emit SeraiKeyUpdated(key);
   }
 
-  constructor(bytes32 _seraiKey) _updateSeraiKey(_seraiKey) {}
+  constructor(bytes32 _seraiKey) _updateSeraiKeyAtEndOfFn(_seraiKey) {}
 
   // updateSeraiKey validates the given Schnorr signature against the current
   // public key, and if successful, updates the contract's public key to the
@@ -65,13 +67,14 @@ contract Router {
   function updateSeraiKey(
     bytes32 _seraiKey,
     Signature calldata sig
-  ) external _updateSeraiKey(_seraiKey) {
-    // TODO: If this updates to an old key, this can be replayed
+  ) external _updateSeraiKeyAtEndOfFn(_seraiKey) {
     bytes memory message =
-      abi.encodePacked("updateSeraiKey", block.chainid, _seraiKey);
+      abi.encodePacked("updateSeraiKey", block.chainid, session, _seraiKey);
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }
+
+    session += 1;
   }
 
   function inInstruction(

@@ -101,7 +101,7 @@ async fn test_router_update_serai_key() {
     break next_key;
   };
 
-  let message = Router::update_serai_key_message(chain_id.into(), &next_key);
+  let message = Router::update_serai_key_message(chain_id.into(), 0.into(), &next_key);
   let sig = hash_and_sign(&keys, &public_key, &message);
 
   let first_block_hash = latest_block_hash(&client).await;
