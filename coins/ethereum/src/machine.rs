@@ -41,6 +41,12 @@ pub struct SignedRouterCommand {
   signature: Signature,
 }
 
+impl SignedRouterCommand {
+  pub fn signature(&self) -> &Signature {
+    &self.signature
+  }
+}
+
 pub struct RouterCommandMachine {
   key: PublicKey,
   command: RouterCommand,

@@ -339,34 +339,36 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     }
   }
 
-  fn forward_plan(&self, output: N::Output) -> Plan<N> {
-    log::info!("creating forwarding plan for {}", hex::encode(output.id()));
+  // Returns the plan for forwarding if one is needed. Returns one if one is not needed to forward
+  // this output.
+  fn forward_plan(&self, output: N::Output) -> Option<Plan<N>> {
+    if let Some(forward) = N::forward_address(self.new.as_ref().unwrap().key) {
+      log::info!("creating forwarding plan for {}", hex::encode(output.id()));
 
-    /*
-      Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
-      a flow for networks which drop their data to still embed arbitrary data. It'd also have
-      edge cases causing failures (we'd need to manually provide the origin if it was implied,
-      which may exceed the encoding limit).
+      /*
+        Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
+        a flow for networks which drop their data to still embed arbitrary data. It'd also have
+        edge cases causing failures (we'd need to manually provide the origin if it was implied,
+        which may exceed the encoding limit).
 
-      Instead, we save the InInstruction as we scan this output. Then, when the output is
-      successfully forwarded, we simply read it from the local database. This also saves the
-      costs of embedding arbitrary data.
+        Instead, we save the InInstruction as we scan this output. Then, when the output is
+        successfully forwarded, we simply read it from the local database. This also saves the
+        costs of embedding arbitrary data.
 
-      Since we can't rely on the Eventuality system to detect if it's a forwarded transaction,
-      due to the asynchonicity of the Eventuality system, we instead interpret an Forwarded
-      output which has an amount associated with an InInstruction which was forwarded as having
-      been forwarded.
-    */
+        Since we can't rely on the Eventuality system to detect if it's a forwarded transaction,
+        due to the asynchonicity of the Eventuality system, we instead interpret an Forwarded
+        output which has an amount associated with an InInstruction which was forwarded as having
+        been forwarded.
+      */
 
-    Plan {
-      key: self.existing.as_ref().unwrap().key,
-      payments: vec![Payment {
-        address: N::forward_address(self.new.as_ref().unwrap().key),
-        data: None,
-        balance: output.balance(),
-      }],
-      inputs: vec![output],
-      change: None,
+      Some(Plan {
+        key: self.existing.as_ref().unwrap().key,
+        payments: vec![Payment { address: forward, data: None, balance: output.balance() }],
+        inputs: vec![output],
+        change: None,
+      })
+    } else {
+      None
     }
   }
 
@@ -639,13 +641,15 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     });
 
     for plan in &plans {
-      if plan.change == Some(N::change_address(plan.key)) {
-        // Assert these are only created during the expected step
-        match *step {
-          RotationStep::UseExisting => {}
-          RotationStep::NewAsChange |
-          RotationStep::ForwardFromExisting |
-          RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+      if let Some(change) = N::change_address(plan.key) {
+        if plan.change == Some(change) {
+          // Assert these are only created during the expected step
+          match *step {
+            RotationStep::UseExisting => {}
+            RotationStep::NewAsChange |
+            RotationStep::ForwardFromExisting |
+            RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+          }
         }
       }
     }
@@ -828,7 +832,10 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
               let (refund_to, instruction) = instruction_from_output::<N>(output);
               if let Some(mut instruction) = instruction {
                 // Build a dedicated Plan forwarding this
-                let forward_plan = self.forward_plan(output.clone());
+                let Some(forward_plan) = self.forward_plan(output.clone()) else {
+                  // If there's no forwarding plan, report it now
+                  return true;
+                };
                 plans.push(forward_plan.clone());
 
                 // Set the instruction for this output to be returned

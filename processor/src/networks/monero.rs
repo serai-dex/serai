@@ -39,7 +39,7 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network,
+    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
   },
   multisigs::scheduler::utxo::Scheduler,
 };
@@ -472,11 +472,6 @@ impl Network for Monero {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
 
-  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
-  // larger than 150kb. This fits within the 100kb mark
-  // Technically, it can be ~124, yet a small bit of buffer is appreciated
-  // TODO: Test creating a TX this big
-  const MAX_INPUTS: usize = 120;
   const MAX_OUTPUTS: usize = 16;
 
   // 0.01 XMR
@@ -489,20 +484,20 @@ impl Network for Monero {
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
-  fn external_address(key: EdwardsPoint) -> Address {
+  fn external_address(&self, key: EdwardsPoint) -> Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
-  fn branch_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, BRANCH_SUBADDRESS)
+  fn branch_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, BRANCH_SUBADDRESS))
   }
 
-  fn change_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, CHANGE_SUBADDRESS)
+  fn change_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, CHANGE_SUBADDRESS))
   }
 
-  fn forward_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, FORWARD_SUBADDRESS)
+  fn forward_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, FORWARD_SUBADDRESS))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -815,4 +810,12 @@ impl Network for Monero {
     }
     self.get_block(block).await.unwrap()
   }
+}
+
+impl UtxoNetwork for Monero {
+  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
+  // larger than 150kb. This fits within the 100kb mark
+  // Technically, it can be ~124, yet a small bit of buffer is appreciated
+  // TODO: Test creating a TX this big
+  const MAX_INPUTS: usize = 120;
 }

@@ -5,7 +5,10 @@ use ciphersuite::Ciphersuite;
 
 use serai_client::primitives::{NetworkId, Balance};
 
-use crate::{networks::Network, Db, Payment, Plan};
+use crate::{
+  networks::{Network, UtxoNetwork},
+  Db, Payment, Plan,
+};
 
 pub(crate) mod utxo;
 pub(crate) mod account;
@@ -54,7 +57,7 @@ pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
   );
 }
 
-impl<N: Network> Scheduler<N> for utxo::Scheduler<N> {
+impl<N: UtxoNetwork> Scheduler<N> for utxo::Scheduler<N> {
   /// Check if this Scheduler is empty.
   fn empty(&self) -> bool {
     utxo::Scheduler::empty(self)

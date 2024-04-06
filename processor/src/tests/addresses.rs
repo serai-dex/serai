@@ -13,12 +13,12 @@ use serai_db::{DbTxn, MemDb};
 
 use crate::{
   Plan, Db,
-  networks::{OutputType, Output, Block, Network},
+  networks::{OutputType, Output, Block, UtxoNetwork},
   multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
   tests::sign,
 };
 
-async fn spend<N: Network, D: Db>(
+async fn spend<N: UtxoNetwork, D: Db>(
   db: &mut D,
   network: &N,
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
@@ -41,7 +41,7 @@ async fn spend<N: Network, D: Db>(
               key,
               inputs: outputs.clone(),
               payments: vec![],
-              change: Some(N::change_address(key)),
+              change: Some(N::change_address(key).unwrap()),
             },
             0,
           )
@@ -76,7 +76,7 @@ async fn spend<N: Network, D: Db>(
   }
 }
 
-pub async fn test_addresses<N: Network>(network: N) {
+pub async fn test_addresses<N: UtxoNetwork>(network: N) {
   let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
@@ -101,10 +101,10 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Receive funds to the various addresses and make sure they're properly identified
   let mut received_outputs = vec![];
   for (kind, address) in [
-    (OutputType::External, N::external_address(key)),
-    (OutputType::Branch, N::branch_address(key)),
-    (OutputType::Change, N::change_address(key)),
-    (OutputType::Forwarded, N::forward_address(key)),
+    (OutputType::External, N::external_address(&network, key)),
+    (OutputType::Branch, N::branch_address(key).unwrap()),
+    (OutputType::Change, N::change_address(key).unwrap()),
+    (OutputType::Forwarded, N::forward_address(key).unwrap()),
   ] {
     let block_id = network.test_send(address).await.id();
 

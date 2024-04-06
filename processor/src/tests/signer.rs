@@ -17,12 +17,12 @@ use serai_client::{
 use messages::sign::*;
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Eventuality, Network},
+  networks::{Output, Transaction, Eventuality, UtxoNetwork},
   signer::Signer,
 };
 
 #[allow(clippy::type_complexity)]
-pub async fn sign<N: Network>(
+pub async fn sign<N: UtxoNetwork>(
   network: N,
   session: Session,
   mut keys_txs: HashMap<
@@ -152,14 +152,15 @@ pub async fn sign<N: Network>(
   typed_claim
 }
 
-pub async fn test_signer<N: Network>(network: N) {
+pub async fn test_signer<N: UtxoNetwork>(network: N) {
   let mut keys = key_gen(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
-  let outputs = network.get_outputs(&network.test_send(N::external_address(key)).await, key).await;
+  let outputs =
+    network.get_outputs(&network.test_send(N::external_address(&network, key)).await, key).await;
   let sync_block = network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS;
 
   let amount = 2 * N::DUST;
@@ -173,7 +174,7 @@ pub async fn test_signer<N: Network>(network: N) {
           key,
           inputs: outputs.clone(),
           payments: vec![Payment {
-            address: N::external_address(key),
+            address: N::external_address(&network, key),
             data: None,
             balance: Balance {
               coin: match N::NETWORK {
@@ -185,7 +186,7 @@ pub async fn test_signer<N: Network>(network: N) {
               amount: Amount(amount),
             },
           }],
-          change: Some(N::change_address(key)),
+          change: Some(N::change_address(key).unwrap()),
         },
         0,
       )

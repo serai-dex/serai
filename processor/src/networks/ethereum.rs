@@ -268,7 +268,6 @@ impl Network for Ethereum {
 
   const COST_TO_AGGREGATE: u64 = 0;
 
-  const MAX_INPUTS: usize = 1;
   const MAX_OUTPUTS: usize = 256;
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
@@ -277,20 +276,20 @@ impl Network for Ethereum {
     }
   }
 
-  fn external_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
-    Address([0; 20])
+  fn external_address(&self, _: <Secp256k1 as Ciphersuite>::G) -> Address {
+    todo!("TODO")
   }
 
-  fn branch_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
-    Address([0; 20])
+  fn branch_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+    None
   }
 
-  fn change_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
-    Address([0; 20])
+  fn change_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+    None
   }
 
-  fn forward_address(_: <Secp256k1 as Ciphersuite>::G) -> Self::Address {
-    Address([0; 20])
+  fn forward_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+    None
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {

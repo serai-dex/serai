@@ -8,13 +8,13 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
 
 use crate::{
-  networks::{OutputType, Output, Network},
+  networks::{OutputType, Output, Network, UtxoNetwork},
   DbTxn, Db, Payment, Plan,
 };
 
-/// Stateless, deterministic output/payment manager.
+/// Deterministic output/payment manager.
 #[derive(PartialEq, Eq, Debug)]
-pub struct Scheduler<N: Network> {
+pub struct Scheduler<N: UtxoNetwork> {
   key: <N::Curve as Ciphersuite>::G,
   coin: Coin,
 
@@ -46,7 +46,7 @@ fn scheduler_key<D: Db, G: GroupEncoding>(key: &G) -> Vec<u8> {
   D::key(b"SCHEDULER", b"scheduler", key.to_bytes())
 }
 
-impl<N: Network> Scheduler<N> {
+impl<N: UtxoNetwork> Scheduler<N> {
   pub fn empty(&self) -> bool {
     self.queued_plans.is_empty() &&
       self.plans.is_empty() &&
@@ -146,6 +146,10 @@ impl<N: Network> Scheduler<N> {
     key: <N::Curve as Ciphersuite>::G,
     network: NetworkId,
   ) -> Self {
+    assert!(N::branch_address(key).is_some());
+    assert!(N::change_address(key).is_some());
+    assert!(N::forward_address(key).is_some());
+
     let coin = {
       let coins = network.coins();
       assert_eq!(coins.len(), 1);
@@ -217,7 +221,7 @@ impl<N: Network> Scheduler<N> {
       amount
     };
 
-    let branch_address = N::branch_address(self.key);
+    let branch_address = N::branch_address(self.key).unwrap();
 
     // If we have more payments than we can handle in a single TX, create plans for them
     // TODO2: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
@@ -253,7 +257,7 @@ impl<N: Network> Scheduler<N> {
       key: self.key,
       inputs,
       payments,
-      change: Some(N::change_address(key_for_any_change)).filter(|_| change),
+      change: Some(N::change_address(key_for_any_change).unwrap()).filter(|_| change),
     }
   }
 
@@ -321,7 +325,7 @@ impl<N: Network> Scheduler<N> {
       its *own* branch address, since created_output is called on the signer's Scheduler.
     */
     {
-      let branch_address = N::branch_address(self.key);
+      let branch_address = N::branch_address(self.key).unwrap();
       payments =
         payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
     }
@@ -373,7 +377,7 @@ impl<N: Network> Scheduler<N> {
         key: self.key,
         inputs: chunk,
         payments: vec![],
-        change: Some(N::change_address(key_for_any_change)),
+        change: Some(N::change_address(key_for_any_change).unwrap()),
       })
     }
 
@@ -419,7 +423,7 @@ impl<N: Network> Scheduler<N> {
         key: self.key,
         inputs: self.utxos.drain(..).collect::<Vec<_>>(),
         payments: vec![],
-        change: Some(N::change_address(key_for_any_change)),
+        change: Some(N::change_address(key_for_any_change).unwrap()),
       });
     }
 

@@ -11,11 +11,11 @@ use tokio::{sync::Mutex, time::timeout};
 use serai_db::{DbTxn, Db, MemDb};
 
 use crate::{
-  networks::{OutputType, Output, Block, Network},
+  networks::{OutputType, Output, Block, UtxoNetwork},
   multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
-pub async fn new_scanner<N: Network, D: Db>(
+pub async fn new_scanner<N: UtxoNetwork, D: Db>(
   network: &N,
   db: &D,
   group_key: <N::Curve as Ciphersuite>::G,
@@ -40,7 +40,7 @@ pub async fn new_scanner<N: Network, D: Db>(
   scanner
 }
 
-pub async fn test_scanner<N: Network>(network: N) {
+pub async fn test_scanner<N: UtxoNetwork>(network: N) {
   let mut keys =
     frost::tests::key_gen::<_, N::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
   N::tweak_keys(&mut keys);
@@ -56,7 +56,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   let scanner = new_scanner(&network, &db, group_key, &first).await;
 
   // Receive funds
-  let block = network.test_send(N::external_address(keys.group_key())).await;
+  let block = network.test_send(N::external_address(&network, keys.group_key())).await;
   let block_id = block.id();
 
   // Verify the Scanner picked them up
@@ -101,7 +101,7 @@ pub async fn test_scanner<N: Network>(network: N) {
   .is_err());
 }
 
-pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
+pub async fn test_no_deadlock_in_multisig_completed<N: UtxoNetwork>(network: N) {
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;

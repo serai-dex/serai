@@ -40,6 +40,10 @@ where
     key: <N::Curve as Ciphersuite>::G,
     network: NetworkId,
   ) -> Self {
+    assert!(N::branch_address(key).is_none());
+    assert!(N::change_address(key).is_none());
+    assert!(N::forward_address(key).is_none());
+
     Scheduler(key, network.coins().iter().copied().collect(), false)
   }
 
@@ -64,27 +68,12 @@ where
     &mut self,
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
-    mut payments: Vec<Payment<N>>,
+    payments: Vec<Payment<N>>,
     key_for_any_change: <N::Curve as Ciphersuite>::G,
     force_spend: bool,
   ) -> Vec<Plan<N>> {
     for utxo in utxos {
       assert!(self.1.contains(&utxo.balance().coin));
-    }
-
-    // Drop payments to addresses which aren't our external address (and aren't used here)
-    {
-      let branch_address = N::branch_address(self.0);
-      let change_address = N::change_address(self.0);
-      let forward_address = N::forward_address(self.0);
-      payments = payments
-        .drain(..)
-        .filter(|payment| {
-          (payment.address != branch_address) &&
-            (payment.address != change_address) &&
-            (payment.address != forward_address)
-        })
-        .collect::<Vec<_>>();
     }
 
     let mut nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);

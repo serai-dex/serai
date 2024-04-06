@@ -52,7 +52,7 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network,
+    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
   },
   Payment,
   multisigs::scheduler::utxo::Scheduler,
@@ -562,6 +562,25 @@ impl Bitcoin {
   }
 }
 
+// Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
+// A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
+// While our inputs are entirely SegWit, such fine tuning is not necessary and could create
+// issues in the future (if the size decreases or we misevaluate it)
+// It also offers a minimal amount of benefit when we are able to logarithmically accumulate
+// inputs
+// For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
+// 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
+// bytes
+// 100,000 / 192 = 520
+// 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
+const MAX_INPUTS: usize = 520;
+const MAX_OUTPUTS: usize = 520;
+
+fn address_from_key(key: ProjectivePoint) -> Address {
+  Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
+    .unwrap()
+}
+
 #[async_trait]
 impl Network for Bitcoin {
   type Curve = Secp256k1;
@@ -625,19 +644,7 @@ impl Network for Bitcoin {
   // aggregation TX
   const COST_TO_AGGREGATE: u64 = 800;
 
-  // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
-  // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
-  // While our inputs are entirely SegWit, such fine tuning is not necessary and could create
-  // issues in the future (if the size decreases or we misevaluate it)
-  // It also offers a minimal amount of benefit when we are able to logarithmically accumulate
-  // inputs
-  // For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
-  // 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
-  // bytes
-  // 100,000 / 192 = 520
-  // 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
-  const MAX_INPUTS: usize = 520;
-  const MAX_OUTPUTS: usize = 520;
+  const MAX_OUTPUTS: usize = MAX_OUTPUTS;
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
     *keys = tweak_keys(keys);
@@ -645,24 +652,23 @@ impl Network for Bitcoin {
     scanner(keys.group_key());
   }
 
-  fn external_address(key: ProjectivePoint) -> Address {
-    Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
-      .unwrap()
+  fn external_address(&self, key: ProjectivePoint) -> Address {
+    address_from_key(key)
   }
 
-  fn branch_address(key: ProjectivePoint) -> Address {
+  fn branch_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch])))
   }
 
-  fn change_address(key: ProjectivePoint) -> Address {
+  fn change_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])))
   }
 
-  fn forward_address(key: ProjectivePoint) -> Address {
+  fn forward_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded])))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -934,4 +940,8 @@ impl Network for Bitcoin {
     }
     self.get_block(block).await.unwrap()
   }
+}
+
+impl UtxoNetwork for Bitcoin {
+  const MAX_INPUTS: usize = MAX_INPUTS;
 }

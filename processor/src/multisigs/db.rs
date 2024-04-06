@@ -80,7 +80,11 @@ impl PlanDb {
   ) -> bool {
     let plan = Plan::<N>::read::<&[u8]>(&mut &Self::get(getter, &id).unwrap()[8 ..]).unwrap();
     assert_eq!(plan.id(), id);
-    (key == plan.key) && (Some(N::change_address(plan.key)) == plan.change)
+    if let Some(change) = N::change_address(plan.key) {
+      (key == plan.key) && (Some(change) == plan.change)
+    } else {
+      false
+    }
   }
 }
 

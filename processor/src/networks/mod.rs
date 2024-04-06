@@ -224,7 +224,7 @@ fn drop_branches<N: Network>(
 ) -> Vec<PostFeeBranch> {
   let mut branch_outputs = vec![];
   for payment in payments {
-    if payment.address == N::branch_address(key) {
+    if Some(&payment.address) == N::branch_address(key).as_ref() {
       branch_outputs.push(PostFeeBranch { expected: payment.balance.amount.0, actual: None });
     }
   }
@@ -287,10 +287,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize;
   /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
-  /// The maximum amount of inputs which will fit in a TX.
-  /// This should be equal to MAX_OUTPUTS unless one is specifically limited.
-  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
-  const MAX_INPUTS: usize;
   /// The maximum amount of outputs which will fit in a TX.
   /// This should be equal to MAX_INPUTS unless one is specifically limited.
   /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
@@ -310,15 +306,16 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// Tweak keys for this network.
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
-  // TODO: Move these into an extension trait
   /// Address for the given group key to receive external coins to.
-  fn external_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn external_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
-  fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for the given group key to use for change.
-  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for forwarded outputs from prior multisigs.
-  fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  ///
+  /// forward_address should only return None if explicit forwarding isn't necessary.
+  fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
 
   /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
@@ -494,7 +491,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
       // Note the branch outputs' new values
       let mut branch_outputs = vec![];
       for (initial_amount, payment) in initial_payment_amounts.into_iter().zip(&payments) {
-        if payment.address == Self::branch_address(key) {
+        if Some(&payment.address) == Self::branch_address(key).as_ref() {
           branch_outputs.push(PostFeeBranch {
             expected: initial_amount,
             actual: if payment.balance.amount.0 == 0 {
@@ -624,4 +621,11 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address) -> Self::Block;
+}
+
+pub trait UtxoNetwork: Network {
+  /// The maximum amount of inputs which will fit in a TX.
+  /// This should be equal to MAX_OUTPUTS unless one is specifically limited.
+  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
+  const MAX_INPUTS: usize;
 }

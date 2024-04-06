@@ -15,7 +15,7 @@ use serai_client::{
 
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Eventuality, Block, Network},
+  networks::{Output, Transaction, Eventuality, Block, UtxoNetwork},
   multisigs::{
     scanner::{ScannerEvent, Scanner},
     scheduler::Scheduler,
@@ -24,7 +24,7 @@ use crate::{
 };
 
 // Tests the Scanner, Scheduler, and Signer together
-pub async fn test_wallet<N: Network>(network: N) {
+pub async fn test_wallet<N: UtxoNetwork>(network: N) {
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
@@ -47,7 +47,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       network.mine_block().await;
     }
 
-    let block = network.test_send(N::external_address(key)).await;
+    let block = network.test_send(N::external_address(&network, key)).await;
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
@@ -75,7 +75,7 @@ pub async fn test_wallet<N: Network>(network: N) {
     &mut txn,
     outputs.clone(),
     vec![Payment {
-      address: N::external_address(key),
+      address: N::external_address(&network, key),
       data: None,
       balance: Balance {
         coin: match N::NETWORK {
@@ -97,7 +97,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       key,
       inputs: outputs.clone(),
       payments: vec![Payment {
-        address: N::external_address(key),
+        address: N::external_address(&network, key),
         data: None,
         balance: Balance {
           coin: match N::NETWORK {
@@ -109,7 +109,7 @@ pub async fn test_wallet<N: Network>(network: N) {
           amount: Amount(amount),
         }
       }],
-      change: Some(N::change_address(key)),
+      change: Some(N::change_address(key).unwrap()),
     }]
   );
 
