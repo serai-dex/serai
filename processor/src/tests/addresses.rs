@@ -14,7 +14,10 @@ use serai_db::{DbTxn, MemDb};
 use crate::{
   Plan, Db,
   networks::{OutputType, Output, Block, UtxoNetwork},
-  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
+  multisigs::{
+    scheduler::Scheduler,
+    scanner::{ScannerEvent, Scanner, ScannerHandle},
+  },
   tests::sign,
 };
 
@@ -24,7 +27,9 @@ async fn spend<N: UtxoNetwork, D: Db>(
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
   outputs: Vec<N::Output>,
-) {
+) where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut keys_txs = HashMap::new();
@@ -42,6 +47,7 @@ async fn spend<N: UtxoNetwork, D: Db>(
               inputs: outputs.clone(),
               payments: vec![],
               change: Some(N::change_address(key).unwrap()),
+              scheduler_addendum: ().into(),
             },
             0,
           )
@@ -76,7 +82,10 @@ async fn spend<N: UtxoNetwork, D: Db>(
   }
 }
 
-pub async fn test_addresses<N: UtxoNetwork>(network: N) {
+pub async fn test_addresses<N: UtxoNetwork>(network: N)
+where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);

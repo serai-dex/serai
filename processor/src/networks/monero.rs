@@ -652,6 +652,7 @@ impl Network for Monero {
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
+    (): &(),
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(
       self

@@ -315,7 +315,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for forwarded outputs from prior multisigs.
   ///
-  /// forward_address should only return None if explicit forwarding isn't necessary.
+  /// forward_address must only return None if explicit forwarding isn't necessary.
   fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
 
   /// Get the latest block's number.
@@ -408,9 +408,12 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
+    scheduler_addendum: &<Self::Scheduler as Scheduler<Self>>::Addendum,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError>;
 
   /// Prepare a SignableTransaction for a transaction.
+  ///
+  /// This must not persistent anything as we will prepare Plans we never intend to execute.
   async fn prepare_send(
     &self,
     block_number: usize,
@@ -421,7 +424,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
     let plan_id = plan.id();
-    let Plan { key, inputs, mut payments, change } = plan;
+    let Plan { key, inputs, mut payments, change, scheduler_addendum } = plan;
     let theoretical_change_amount =
       inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
         payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
@@ -534,11 +537,19 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
       )
     })();
 
-    let Some(tx) =
-      self.signable_transaction(block_number, &plan_id, &inputs, &payments, &change).await?
+    let Some(tx) = self
+      .signable_transaction(
+        block_number,
+        &plan_id,
+        &inputs,
+        &payments,
+        &change,
+        &scheduler_addendum,
+      )
+      .await?
     else {
       panic!(
-        "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}",
+        "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}, {}: {:?}",
         "signable_transaction returned None for a TX we prior successfully calculated the fee for",
         "id",
         hex::encode(plan_id),
@@ -550,6 +561,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
         change,
         "successfully amoritized fee",
         tx_fee,
+        "scheduler's addendum",
+        scheduler_addendum,
       )
     };
 

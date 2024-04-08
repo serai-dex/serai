@@ -91,27 +91,26 @@ pub async fn test_wallet<N: UtxoNetwork>(network: N) {
     false,
   );
   txn.commit();
+  assert_eq!(plans.len(), 1);
+  assert_eq!(plans[0].key, key);
+  assert_eq!(plans[0].inputs, outputs);
   assert_eq!(
-    plans,
-    vec![Plan {
-      key,
-      inputs: outputs.clone(),
-      payments: vec![Payment {
-        address: N::external_address(&network, key).await,
-        data: None,
-        balance: Balance {
-          coin: match N::NETWORK {
-            NetworkId::Serai => panic!("test_wallet called with Serai"),
-            NetworkId::Bitcoin => Coin::Bitcoin,
-            NetworkId::Ethereum => Coin::Ether,
-            NetworkId::Monero => Coin::Monero,
-          },
-          amount: Amount(amount),
-        }
-      }],
-      change: Some(N::change_address(key).unwrap()),
+    plans[0].payments,
+    vec![Payment {
+      address: N::external_address(&network, key).await,
+      data: None,
+      balance: Balance {
+        coin: match N::NETWORK {
+          NetworkId::Serai => panic!("test_wallet called with Serai"),
+          NetworkId::Bitcoin => Coin::Bitcoin,
+          NetworkId::Ethereum => Coin::Ether,
+          NetworkId::Monero => Coin::Monero,
+        },
+        amount: Amount(amount),
+      }
     }]
   );
+  assert_eq!(plans[0].change, Some(N::change_address(key).unwrap()));
 
   {
     let mut buf = vec![];

@@ -824,6 +824,7 @@ impl Network for Bitcoin {
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
+    (): &(),
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
       |signable| {

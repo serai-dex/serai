@@ -92,6 +92,8 @@ enum RotationStep {
   ClosingExisting,
 }
 
+// This explicitly shouldn't take the database as we prepare Plans we won't execute for fee
+// estimates
 async fn prepare_send<N: Network>(
   network: &N,
   block_number: usize,
@@ -326,50 +328,30 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     (existing_outputs, new_outputs)
   }
 
-  fn refund_plan(output: N::Output, refund_to: N::Address) -> Plan<N> {
+  fn refund_plan(
+    scheduler: &mut N::Scheduler,
+    txn: &mut D::Transaction<'_>,
+    output: N::Output,
+    refund_to: N::Address,
+  ) -> Plan<N> {
     log::info!("creating refund plan for {}", hex::encode(output.id()));
     assert_eq!(output.kind(), OutputType::External);
-    Plan {
-      key: output.key(),
-      // Uses a payment as this will still be successfully sent due to fee amortization,
-      // and because change is currently always a Serai key
-      payments: vec![Payment { address: refund_to, data: None, balance: output.balance() }],
-      inputs: vec![output],
-      change: None,
-    }
+    scheduler.refund_plan::<D>(txn, output, refund_to)
   }
 
-  // Returns the plan for forwarding if one is needed. Returns one if one is not needed to forward
-  // this output.
-  fn forward_plan(&self, output: N::Output) -> Option<Plan<N>> {
-    if let Some(forward) = N::forward_address(self.new.as_ref().unwrap().key) {
-      log::info!("creating forwarding plan for {}", hex::encode(output.id()));
-
-      /*
-        Sending a Plan, with arbitrary data proxying the InInstruction, would require adding
-        a flow for networks which drop their data to still embed arbitrary data. It'd also have
-        edge cases causing failures (we'd need to manually provide the origin if it was implied,
-        which may exceed the encoding limit).
-
-        Instead, we save the InInstruction as we scan this output. Then, when the output is
-        successfully forwarded, we simply read it from the local database. This also saves the
-        costs of embedding arbitrary data.
-
-        Since we can't rely on the Eventuality system to detect if it's a forwarded transaction,
-        due to the asynchonicity of the Eventuality system, we instead interpret an Forwarded
-        output which has an amount associated with an InInstruction which was forwarded as having
-        been forwarded.
-      */
-
-      Some(Plan {
-        key: self.existing.as_ref().unwrap().key,
-        payments: vec![Payment { address: forward, data: None, balance: output.balance() }],
-        inputs: vec![output],
-        change: None,
-      })
-    } else {
-      None
+  // Returns the plan for forwarding if one is needed.
+  // Returns None if one is not needed to forward this output.
+  fn forward_plan(&mut self, txn: &mut D::Transaction<'_>, output: &N::Output) -> Option<Plan<N>> {
+    log::info!("creating forwarding plan for {}", hex::encode(output.id()));
+    let res = self.existing.as_mut().unwrap().scheduler.forward_plan::<D>(
+      txn,
+      output.clone(),
+      self.new.as_ref().expect("forwarding plan yet no new multisig").key,
+    );
+    if res.is_none() {
+      log::info!("no forwarding plan was necessary for {}", hex::encode(output.id()));
     }
+    res
   }
 
   // Filter newly received outputs due to the step being RotationStep::ClosingExisting.
@@ -581,7 +563,31 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
         block_number
       {
         // Load plans crated when we scanned the block
-        plans = PlansFromScanningDb::take_plans_from_scanning::<N>(txn, block_number).unwrap();
+        let scanning_plans =
+          PlansFromScanningDb::take_plans_from_scanning::<N>(txn, block_number).unwrap();
+        // Expand into actual plans
+        plans = scanning_plans
+          .into_iter()
+          .map(|plan| match plan {
+            PlanFromScanning::Refund(output, refund_to) => {
+              let existing = self.existing.as_mut().unwrap();
+              if output.key() == existing.key {
+                Self::refund_plan(&mut existing.scheduler, txn, output, refund_to)
+              } else {
+                let new = self
+                  .new
+                  .as_mut()
+                  .expect("new multisig didn't expect yet output wasn't for existing multisig");
+                assert_eq!(output.key(), new.key, "output wasn't for existing nor new multisig");
+                Self::refund_plan(&mut new.scheduler, txn, output, refund_to)
+              }
+            }
+            PlanFromScanning::Forward(output) => self
+              .forward_plan(txn, &output)
+              .expect("supposed to forward an output yet no forwarding plan"),
+          })
+          .collect();
+
         for plan in &plans {
           plans_from_scanning.insert(plan.id());
         }
@@ -831,18 +837,20 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
               let plans_at_start = plans.len();
               let (refund_to, instruction) = instruction_from_output::<N>(output);
               if let Some(mut instruction) = instruction {
-                // Build a dedicated Plan forwarding this
-                let Some(forward_plan) = self.forward_plan(output.clone()) else {
-                  // If there's no forwarding plan, report it now
+                let Some(shimmed_plan) = N::Scheduler::shim_forward_plan(
+                  output.clone(),
+                  self.new.as_ref().expect("forwarding from existing yet no new multisig").key,
+                ) else {
+                  // If this network doesn't need forwarding, report the output now
                   return true;
                 };
-                plans.push(forward_plan.clone());
+                plans.push(PlanFromScanning::<N>::Forward(output.clone()));
 
                 // Set the instruction for this output to be returned
                 // We need to set it under the amount it's forwarded with, so prepare its forwarding
                 // TX to determine the fees involved
                 let PreparedSend { tx, post_fee_branches: _, operating_costs } =
-                  prepare_send(network, block_number, forward_plan, 0).await;
+                  prepare_send(network, block_number, shimmed_plan, 0).await;
                 // operating_costs should not increase in a forwarding TX
                 assert_eq!(operating_costs, 0);
 
@@ -853,12 +861,28 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
                 // letting it die out
                 if let Some(tx) = &tx {
                   instruction.balance.amount.0 -= tx.0.fee();
+
+                  /*
+                    Sending a Plan, with arbitrary data proxying the InInstruction, would require
+                    adding a flow for networks which drop their data to still embed arbitrary data.
+                    It'd also have edge cases causing failures (we'd need to manually provide the
+                    origin if it was implied, which may exceed the encoding limit).
+
+                    Instead, we save the InInstruction as we scan this output. Then, when the
+                    output is successfully forwarded, we simply read it from the local database.
+                    This also saves the costs of embedding arbitrary data.
+
+                    Since we can't rely on the Eventuality system to detect if it's a forwarded
+                    transaction, due to the asynchonicity of the Eventuality system, we instead
+                    interpret an Forwarded output which has an amount associated with an
+                    InInstruction which was forwarded as having been forwarded.
+                  */
                   ForwardedOutputDb::save_forwarded_output(txn, &instruction);
                 }
               } else if let Some(refund_to) = refund_to {
                 if let Ok(refund_to) = refund_to.consume().try_into() {
                   // Build a dedicated Plan refunding this
-                  plans.push(Self::refund_plan(output.clone(), refund_to));
+                  plans.push(PlanFromScanning::Refund(output.clone(), refund_to));
                 }
               }
 
@@ -890,7 +914,7 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
           let Some(instruction) = instruction else {
             if let Some(refund_to) = refund_to {
               if let Ok(refund_to) = refund_to.consume().try_into() {
-                plans.push(Self::refund_plan(output.clone(), refund_to));
+                plans.push(PlanFromScanning::Refund(output.clone(), refund_to));
               }
             }
             continue;

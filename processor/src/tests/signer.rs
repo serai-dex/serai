@@ -18,6 +18,7 @@ use messages::sign::*;
 use crate::{
   Payment, Plan,
   networks::{Output, Transaction, Eventuality, UtxoNetwork},
+  multisigs::scheduler::Scheduler,
   signer::Signer,
 };
 
@@ -152,7 +153,10 @@ pub async fn sign<N: UtxoNetwork>(
   typed_claim
 }
 
-pub async fn test_signer<N: UtxoNetwork>(network: N) {
+pub async fn test_signer<N: UtxoNetwork>(network: N)
+where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let mut keys = key_gen(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
@@ -188,6 +192,7 @@ pub async fn test_signer<N: UtxoNetwork>(network: N) {
             },
           }],
           change: Some(N::change_address(key).unwrap()),
+          scheduler_addendum: ().into(),
         },
         0,
       )

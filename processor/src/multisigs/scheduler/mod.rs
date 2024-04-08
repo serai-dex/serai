@@ -5,15 +5,28 @@ use ciphersuite::Ciphersuite;
 
 use serai_client::primitives::{NetworkId, Balance};
 
-use crate::{
-  networks::{Network, UtxoNetwork},
-  Db, Payment, Plan,
-};
+use crate::{networks::Network, Db, Payment, Plan};
 
 pub(crate) mod utxo;
 pub(crate) mod smart_contract;
 
-pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
+pub trait SchedulerAddendum: Send + Clone + PartialEq + Debug {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
+}
+
+impl SchedulerAddendum for () {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(())
+  }
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    Ok(())
+  }
+}
+
+pub trait Scheduler<N: Network>: Sized + Clone + PartialEq + Debug {
+  type Addendum: SchedulerAddendum;
+
   /// Check if this Scheduler is empty.
   fn empty(&self) -> bool;
 
@@ -55,63 +68,28 @@ pub trait Scheduler<N: Network>: Sized + PartialEq + Debug {
     expected: u64,
     actual: Option<u64>,
   );
-}
 
-impl<N: UtxoNetwork> Scheduler<N> for utxo::Scheduler<N> {
-  /// Check if this Scheduler is empty.
-  fn empty(&self) -> bool {
-    utxo::Scheduler::empty(self)
-  }
-
-  /// Create a new Scheduler.
-  fn new<D: Db>(
-    txn: &mut D::Transaction<'_>,
-    key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
-  ) -> Self {
-    utxo::Scheduler::new::<D>(txn, key, network)
-  }
-
-  /// Load a Scheduler from the DB.
-  fn from_db<D: Db>(
-    db: &D,
-    key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
-  ) -> io::Result<Self> {
-    utxo::Scheduler::from_db::<D>(db, key, network)
-  }
-
-  /// Check if a branch is usable.
-  fn can_use_branch(&self, balance: Balance) -> bool {
-    utxo::Scheduler::can_use_branch(self, balance)
-  }
-
-  /// Schedule a series of outputs/payments.
-  fn schedule<D: Db>(
+  /// Refund a specific output.
+  fn refund_plan<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    utxos: Vec<N::Output>,
-    payments: Vec<Payment<N>>,
-    key_for_any_change: <N::Curve as Ciphersuite>::G,
-    force_spend: bool,
-  ) -> Vec<Plan<N>> {
-    utxo::Scheduler::schedule::<D>(self, txn, utxos, payments, key_for_any_change, force_spend)
-  }
+    output: N::Output,
+    refund_to: N::Address,
+  ) -> Plan<N>;
 
-  /// Consume all payments still pending within this Scheduler, without scheduling them.
-  fn consume_payments<D: Db>(&mut self, txn: &mut D::Transaction<'_>) -> Vec<Payment<N>> {
-    utxo::Scheduler::consume_payments::<D>(self, txn)
-  }
+  /// Shim the forwarding Plan as necessary to obtain a fee estimate.
+  ///
+  /// If this Scheduler is for a Network which requires forwarding, this must return Some with a
+  /// plan with identical fee behavior. If forwarding isn't necessary, returns None.
+  fn shim_forward_plan(output: N::Output, to: <N::Curve as Ciphersuite>::G) -> Option<Plan<N>>;
 
-  /// Note a branch output as having been created, with the amount it was actually created with,
-  /// or not having been created due to being too small.
-  // TODO: Move this to Balance.
-  fn created_output<D: Db>(
+  /// Forward a specific output to the new multisig.
+  ///
+  /// Returns None if no forwarding is necessary. Must return Some if forwarding is necessary.
+  fn forward_plan<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,
-    expected: u64,
-    actual: Option<u64>,
-  ) {
-    utxo::Scheduler::created_output::<D>(self, txn, expected, actual)
-  }
+    output: N::Output,
+    to: <N::Curve as Ciphersuite>::G,
+  ) -> Option<Plan<N>>;
 }
