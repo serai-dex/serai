@@ -10,7 +10,7 @@ use k256::{elliptic_curve::point::DecompressPoint, AffinePoint};
 
 use frost::{
   algorithm::{Hram, SchnorrSignature},
-  curve::Secp256k1,
+  curve::{Ciphersuite, Secp256k1},
 };
 
 use ethers_core::{
@@ -137,6 +137,12 @@ pub struct Signature {
   pub(crate) s: Scalar,
 }
 impl Signature {
+  pub fn verify(&self, public_key: &PublicKey, message: &[u8]) -> bool {
+    #[allow(non_snake_case)]
+    let R = (Secp256k1::generator() * self.s) - (public_key.A * self.c);
+    EthereumHram::hram(&R, &public_key.A, message) == self.c
+  }
+
   /// Construct a new `Signature`.
   ///
   /// This will return None if the signature is invalid.
@@ -149,7 +155,10 @@ impl Signature {
     if !signature.verify(public_key.A, c) {
       None?;
     }
-    Some(Signature { c, s: signature.s })
+
+    let res = Signature { c, s: signature.s };
+    assert!(res.verify(public_key, message));
+    Some(res)
   }
 
   pub fn c(&self) -> Scalar {
@@ -157,6 +166,13 @@ impl Signature {
   }
   pub fn s(&self) -> Scalar {
     self.s
+  }
+
+  pub fn to_bytes(&self) -> [u8; 64] {
+    let mut res = [0; 64];
+    res[.. 32].copy_from_slice(self.c.to_repr().as_ref());
+    res[32 ..].copy_from_slice(self.s.to_repr().as_ref());
+    res
   }
 }
 impl From<&Signature> for AbiSignature {

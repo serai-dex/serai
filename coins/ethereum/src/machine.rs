@@ -7,7 +7,12 @@ use rand_core::{RngCore, CryptoRng};
 
 use transcript::RecommendedTranscript;
 
-use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, algorithm::Schnorr, sign::*};
+use frost::{
+  curve::{Ciphersuite, Secp256k1},
+  Participant, ThresholdKeys, FrostError,
+  algorithm::Schnorr,
+  sign::*,
+};
 
 use ethers_core::types::U256;
 
@@ -23,7 +28,7 @@ pub enum RouterCommand {
 }
 
 impl RouterCommand {
-  fn msg(&self) -> Vec<u8> {
+  pub fn msg(&self) -> Vec<u8> {
     match self {
       RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
         Router::update_serai_key_message(*chain_id, *session, key)
@@ -42,6 +47,17 @@ pub struct SignedRouterCommand {
 }
 
 impl SignedRouterCommand {
+  pub fn new(key: &PublicKey, command: RouterCommand, signature: &[u8; 64]) -> Option<Self> {
+    let c = Secp256k1::read_F(&mut &signature[.. 32]).ok()?;
+    let s = Secp256k1::read_F(&mut &signature[32 ..]).ok()?;
+    let signature = Signature { c, s };
+
+    if !signature.verify(key, &command.msg()) {
+      None?
+    }
+    Some(SignedRouterCommand { command, signature })
+  }
+
   pub fn signature(&self) -> &Signature {
     &self.signature
   }

@@ -1,30 +1,44 @@
-use core::time::Duration;
-use std::{sync::Arc, collections::HashMap, io};
+use core::{fmt::Debug, time::Duration};
+use std::{
+  sync::Arc,
+  collections::{HashSet, HashMap},
+  io,
+};
 
 use async_trait::async_trait;
 
-use k256::ProjectivePoint;
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Secp256k1};
+use ciphersuite::{Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
 use ethereum_serai::{
-  ethers_core::types::Transaction,
-  ethers_providers::{Http, Provider},
+  ethers_core::types::{BlockNumber, Transaction},
+  ethers_providers::{Http, Provider, Middleware},
   crypto::{PublicKey, Signature},
+  deployer::Deployer,
+  router::{Router, InInstruction as EthereumInInstruction},
   machine::*,
 };
+#[cfg(test)]
+use ethereum_serai::ethers_core::types::H256;
 
-use tokio::time::sleep;
+use tokio::{
+  time::sleep,
+  sync::{RwLock, RwLockReadGuard},
+};
 
-use serai_client::primitives::{Coin, Amount, Balance, NetworkId};
+use serai_client::{
+  primitives::{Balance, NetworkId},
+  validator_sets::primitives::Session,
+};
 
 use crate::{
-  Payment,
+  Db, Payment,
   networks::{
     OutputType, Output, Transaction as TransactionTrait, SignableTransaction, Block,
     Eventuality as EventualityTrait, EventualitiesTracker, NetworkError, Network,
   },
-  multisigs::scheduler::smart_contract::{Nonce, RotateTo, Scheduler},
+  key_gen::NetworkKeyDb,
+  multisigs::scheduler::{Scheduler as SchedulerTrait, smart_contract::Scheduler},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -54,21 +68,22 @@ impl ToString for Address {
 
 impl SignableTransaction for RouterCommand {
   fn fee(&self) -> u64 {
-    todo!("TODO")
+    // Return a fee of 0 as we'll handle amortization on our end
+    0
   }
 }
 
 #[async_trait]
-impl TransactionTrait<Ethereum> for Transaction {
+impl<D: Debug + Db> TransactionTrait<Ethereum<D>> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.hash.0
   }
 
-  // TODO: Move to Balance
   #[cfg(test)]
-  async fn fee(&self, network: &Ethereum) -> u64 {
-    todo!("TODO")
+  async fn fee(&self, network: &Ethereum<D>) -> u64 {
+    // Return a fee of 0 as we'll handle amortization on our end
+    0
   }
 }
 
@@ -85,7 +100,7 @@ pub struct Epoch {
   time: u64,
 }
 #[async_trait]
-impl Block<Ethereum> for Epoch {
+impl<D: Debug + Db> Block<Ethereum<D>> for Epoch {
   type Id = [u8; 32];
   fn id(&self) -> [u8; 32] {
     self.end_hash
@@ -93,31 +108,12 @@ impl Block<Ethereum> for Epoch {
   fn parent(&self) -> [u8; 32] {
     self.prior_end_hash
   }
-  async fn time(&self, _: &Ethereum) -> u64 {
+  async fn time(&self, _: &Ethereum<D>) -> u64 {
     self.time
   }
 }
 
-// Taking the role of an Output, this is an Input, an instruction easiest to cram into here,
-// and an actual received Output.
-// TODO: Extend Plan such that this isn't needed
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum MetaEvent {
-  NonceToUse(u64),
-  RotateTo(ProjectivePoint),
-  EmittedEvent { tx: [u8; 32], balance: Balance },
-}
-impl From<Nonce> for MetaEvent {
-  fn from(nonce: Nonce) -> MetaEvent {
-    MetaEvent::NonceToUse(nonce.0)
-  }
-}
-impl From<RotateTo<Ethereum>> for MetaEvent {
-  fn from(rotate_to: RotateTo<Ethereum>) -> MetaEvent {
-    MetaEvent::RotateTo(rotate_to.0)
-  }
-}
-impl Output<Ethereum> for MetaEvent {
+impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
   type Id = [u8; 32];
 
   fn kind(&self) -> OutputType {
@@ -128,15 +124,7 @@ impl Output<Ethereum> for MetaEvent {
     todo!("TODO")
   }
   fn tx_id(&self) -> [u8; 32] {
-    match self {
-      MetaEvent::NonceToUse(_) => {
-        panic!("requesting the tx_id of an input we use to pass messages (NonceToUse)")
-      }
-      MetaEvent::RotateTo(_) => {
-        panic!("requesting the tx_id of an input we use to pass messages (RotateTo)")
-      }
-      MetaEvent::EmittedEvent { tx, .. } => *tx,
-    }
+    todo!("TODO")
   }
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
     todo!("TODO")
@@ -147,12 +135,7 @@ impl Output<Ethereum> for MetaEvent {
   }
 
   fn balance(&self) -> Balance {
-    match self {
-      MetaEvent::NonceToUse(_) | MetaEvent::RotateTo(_) => {
-        Balance { coin: Coin::Ether, amount: Amount(0) }
-      }
-      MetaEvent::EmittedEvent { balance, .. } => *balance,
-    }
+    todo!("TODO")
   }
   fn data(&self) -> &[u8] {
     todo!("TODO")
@@ -187,15 +170,12 @@ impl Default for Claim {
 }
 impl From<&Signature> for Claim {
   fn from(sig: &Signature) -> Self {
-    let mut res = Self::default();
-    res.signature[.. 32].copy_from_slice(sig.c().to_repr().as_ref());
-    res.signature[32 ..].copy_from_slice(sig.s().to_repr().as_ref());
-    res
+    Self { signature: sig.to_bytes() }
   }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Eventuality(RouterCommand);
+pub struct Eventuality(PublicKey, RouterCommand);
 impl EventualityTrait for Eventuality {
   type Claim = Claim;
   type Completion = SignedRouterCommand;
@@ -223,16 +203,22 @@ impl EventualityTrait for Eventuality {
 }
 
 #[derive(Clone, Debug)]
-pub struct Ethereum {
+pub struct Ethereum<D: Debug + Db> {
+  // This DB is solely used to access the first key generated, as needed to determine the Router's
+  // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
+  // first key (regardless of local state), and this is safe.
+  db: D,
   provider: Arc<Provider<Http>>,
+  deployer: Deployer,
+  router: Arc<RwLock<Option<Router>>>,
 }
-impl PartialEq for Ethereum {
-  fn eq(&self, _other: &Ethereum) -> bool {
+impl<D: Debug + Db> PartialEq for Ethereum<D> {
+  fn eq(&self, _other: &Ethereum<D>) -> bool {
     true
   }
 }
-impl Ethereum {
-  pub async fn new(url: String) -> Ethereum {
+impl<D: Debug + Db> Ethereum<D> {
+  pub async fn new(db: D, url: String) -> Self {
     let mut provider = Provider::<Http>::try_from(&url);
     while let Err(e) = provider {
       log::error!("couldn't connect to Ethereum node: {e:?}");
@@ -241,18 +227,67 @@ impl Ethereum {
     }
     let provider = Arc::new(provider.unwrap());
 
-    Ethereum { provider }
+    let mut deployer = Deployer::new(provider.clone()).await;
+    while !matches!(deployer, Ok(Some(_))) {
+      log::error!("Deployer wasn't deployed yet or networking error");
+      sleep(Duration::from_secs(5)).await;
+      deployer = Deployer::new(provider.clone()).await;
+    }
+    let deployer = deployer.unwrap().unwrap();
+
+    Ethereum { db, provider, deployer, router: Arc::new(RwLock::new(None)) }
+  }
+
+  pub async fn router(&self) -> RwLockReadGuard<'_, Option<Router>> {
+    // If we've already instantiated the Router, return a read reference
+    {
+      let router = self.router.read().await;
+      if router.is_some() {
+        return router;
+      }
+    }
+
+    // Instantiate it
+    let mut router = self.router.write().await;
+    // If another attempt beat us to it, return
+    if router.is_some() {
+      drop(router);
+      return self.router.read().await;
+    }
+
+    // Get the first key from the DB
+    let first_key =
+      NetworkKeyDb::get(&self.db, Session(0)).expect("getting outputs before confirming a key");
+    let key = Secp256k1::read_G(&mut first_key.as_slice()).unwrap();
+    let public_key = PublicKey::new(key).unwrap();
+
+    // Find the router
+    let mut found = self.deployer.find_router(self.provider.clone(), &public_key).await;
+    while !matches!(found, Ok(Some(_))) {
+      log::error!("Router wasn't deployed yet or networking error");
+      sleep(Duration::from_secs(5)).await;
+      found = self.deployer.find_router(self.provider.clone(), &public_key).await;
+    }
+
+    // Set it
+    *router = Some(found.unwrap().unwrap());
+
+    // Downgrade to a read lock
+    // Explicitly doesn't use `downgrade` so that another pending write txn can realize it's no
+    // longer necessary
+    drop(router);
+    self.router.read().await
   }
 }
 
 #[async_trait]
-impl Network for Ethereum {
+impl<D: Debug + Db> Network for Ethereum<D> {
   type Curve = Secp256k1;
 
   type Transaction = Transaction;
   type Block = Epoch;
 
-  type Output = MetaEvent;
+  type Output = EthereumInInstruction;
   type SignableTransaction = RouterCommand;
   type Eventuality = Eventuality;
   type TransactionMachine = RouterCommandMachine;
@@ -280,16 +315,7 @@ impl Network for Ethereum {
 
   #[cfg(test)]
   async fn external_address(&self, key: <Secp256k1 as Ciphersuite>::G) -> Address {
-    use ethereum_serai::deployer::Deployer;
-
-    let deployer: Option<_> = Deployer::new(self.provider.clone()).await.unwrap();
-    let deployer = deployer.expect("deployer wasn't prior deployed");
-
-    // TODO: This uses the current key as the first key
-    let router: Option<_> =
-      deployer.find_router(self.provider.clone(), &PublicKey::new(key).unwrap()).await.unwrap();
-    let router = router.expect("router wasn't prior deployed");
-    Address(router.address())
+    Address(self.router().await.as_ref().unwrap().address())
   }
 
   fn branch_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
@@ -305,19 +331,79 @@ impl Network for Ethereum {
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
-    todo!("TODO")
+    let actual_number = self
+      .provider
+      .get_block(BlockNumber::Finalized)
+      .await
+      .map_err(|_| NetworkError::ConnectionError)?
+      .expect("no blocks were finalized")
+      .number
+      .unwrap()
+      .as_u64();
+    // Error if there hasn't been a full epoch yet
+    if actual_number < 32 {
+      Err(NetworkError::ConnectionError)?
+    }
+    // If this is 33, the division will return 1, yet 1 is the epoch in progress
+    let latest_full_epoch = (actual_number / 32).saturating_sub(1);
+    Ok(latest_full_epoch.try_into().unwrap())
   }
 
   async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
-    todo!("TODO")
+    let latest_finalized = self.get_latest_block_number().await?;
+    if number > latest_finalized {
+      Err(NetworkError::ConnectionError)?
+    }
+
+    let start = number * 32;
+    let prior_end_hash = if start == 0 {
+      [0; 32]
+    } else {
+      self
+        .provider
+        .get_block(u64::try_from(start - 1).unwrap())
+        .await
+        .ok()
+        .flatten()
+        .ok_or(NetworkError::ConnectionError)?
+        .hash
+        .unwrap()
+        .into()
+    };
+
+    let end_header = self
+      .provider
+      .get_block(u64::try_from(start + 31).unwrap())
+      .await
+      .ok()
+      .flatten()
+      .ok_or(NetworkError::ConnectionError)?;
+
+    let end_hash = end_header.hash.unwrap().into();
+    let time = end_header.timestamp.try_into().unwrap();
+
+    Ok(Epoch { prior_end_hash, start: start.try_into().unwrap(), end_hash, time })
   }
 
   async fn get_outputs(
     &self,
     block: &Self::Block,
-    key: <Secp256k1 as Ciphersuite>::G,
+    _: <Secp256k1 as Ciphersuite>::G,
   ) -> Vec<Self::Output> {
-    todo!("TODO")
+    let router = self.router().await;
+    let router = router.as_ref().unwrap();
+
+    let mut all_events = vec![];
+    for block in block.start .. (block.start + 32) {
+      let mut events = router.in_instructions(block, &HashSet::new()).await; // TODO re: tokens
+      while let Err(e) = events {
+        log::error!("couldn't connect to Ethereum node for the Router's events: {e:?}");
+        sleep(Duration::from_secs(5)).await;
+        events = router.in_instructions(block, &HashSet::new()).await; // TODO re: tokens
+      }
+      all_events.extend(events.unwrap());
+    }
+    all_events
   }
 
   async fn get_eventuality_completions(
@@ -343,7 +429,8 @@ impl Network for Ethereum {
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
   ) -> Result<Option<u64>, NetworkError> {
-    todo!("TODO")
+    // Claim no fee is needed so we can perform amortization ourselves
+    Ok(Some(0))
   }
 
   async fn signable_transaction(
@@ -353,6 +440,7 @@ impl Network for Ethereum {
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
+    scheduler_addendum: &<Self::Scheduler as SchedulerTrait<Self>>::Addendum,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     todo!("TODO")
   }
@@ -377,12 +465,22 @@ impl Network for Ethereum {
     eventuality: &Self::Eventuality,
     claim: &<Self::Eventuality as EventualityTrait>::Claim,
   ) -> Result<Option<<Self::Eventuality as EventualityTrait>::Completion>, NetworkError> {
-    todo!("TODO")
+    Ok(SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &claim.signature))
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
-    todo!("TODO")
+    self
+      .provider
+      .get_block(H256(*id))
+      .await
+      .unwrap()
+      .unwrap()
+      .number
+      .unwrap()
+      .as_u64()
+      .try_into()
+      .unwrap()
   }
 
   #[cfg(test)]
@@ -391,7 +489,7 @@ impl Network for Ethereum {
     eventuality: &Self::Eventuality,
     claim: &<Self::Eventuality as EventualityTrait>::Claim,
   ) -> bool {
-    todo!("TODO")
+    SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &claim.signature).is_some()
   }
 
   #[cfg(test)]
@@ -405,6 +503,7 @@ impl Network for Ethereum {
 
   #[cfg(test)]
   async fn mine_block(&self) {
+    // anvil_mine
     todo!("TODO")
   }
 
