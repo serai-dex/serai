@@ -65,7 +65,7 @@ pub mod pallet {
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
       // Distribute the genesis sri to pools after a month
-      if n > BLOCKS_PER_MONTH.into() {
+      if n == BLOCKS_PER_MONTH.into() {
         // mint the SRI
         Coins::<T>::mint(
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -84,19 +84,19 @@ pub mod pallet {
           account_values.insert(coin, vec![]);
           let mut pool_amount: u64 = 0;
           for (account, amount) in Liquidity::<T>::iter_prefix(coin) {
-            pool_amount += amount;
-            let value_this_addr = amount * value;
+            pool_amount = pool_amount.saturating_add(amount);
+            let value_this_addr = amount.saturating_mul(value);
             account_values.get_mut(&coin).unwrap().push((account, value_this_addr))
           }
 
-          let pool_value = pool_amount * value;
-          total_value += pool_value;
+          let pool_value = pool_amount.saturating_mul(value);
+          total_value = total_value.saturating_add(pool_value);
           pool_values.insert(coin, (pool_amount, pool_value));
         }
 
         // add the liquidity per pool
         for (coin, (amount, value)) in &pool_values {
-          let sri_amount = (GENESIS_SRI * value) / total_value;
+          let sri_amount = GENESIS_SRI.saturating_mul(*value) / total_value;
           let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
           Dex::<T>::add_liquidity(
             origin.into(),
@@ -117,8 +117,8 @@ pub mod pallet {
           let tokens = LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), *coin).0;
           let mut total_tokens_this_coin: u64 = 0;
           for (acc, value) in account_values.get(coin).unwrap() {
-            let liq_tokens_this_acc = (tokens * value) / pool_values.get(coin).unwrap().1;
-            total_tokens_this_coin += liq_tokens_this_acc;
+            let liq_tokens_this_acc = tokens.saturating_mul(*value) / pool_values.get(coin).unwrap().1;
+            total_tokens_this_coin = total_tokens_this_coin.saturating_add(liq_tokens_this_acc);
             LiquidityTokensPerAddress::<T>::set(coin, acc, Some(liq_tokens_this_acc));
           }
           assert_eq!(tokens, total_tokens_this_coin);
@@ -195,10 +195,10 @@ pub mod pallet {
         let current_coin = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin);
 
         // burn the SRI if necessary
-        let mut sri = current_sri.0 - prev_sri.0;
-        let burn_sri_amount = (sri *
-          (GENESIS_SRI_TRICKLE_FEED - Self::blocks_since_ec_security(&balance.coin))) /
-          GENESIS_SRI_TRICKLE_FEED;
+        let mut sri = current_sri.0.saturating_sub(prev_sri.0);
+        let burn_sri_amount = sri.saturating_mul(
+          GENESIS_SRI_TRICKLE_FEED - Self::blocks_since_ec_security(&balance.coin),
+        ) / GENESIS_SRI_TRICKLE_FEED;
         Coins::<T>::burn(
           origin.clone().into(),
           Balance { coin: Coin::Serai, amount: Amount(burn_sri_amount) },
