@@ -9,7 +9,7 @@ use std_shims::{
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use subtle::{ConstantTimeEq, Choice, CtOption};
+use subtle::{ConstantTimeEq, ConditionallySelectable};
 
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_TABLE,
@@ -169,13 +169,8 @@ fn core(
   }
 
   // Perform the core loop
-  let mut c1 = CtOption::new(Scalar::ZERO, Choice::from(0));
+  let mut c1 = c;
   for i in (start .. end).map(|i| i % n) {
-    // This will only execute once and shouldn't need to be constant time. Making it constant time
-    // removes the risk of branch prediction creating timing differences depending on ring index
-    // however
-    c1 = c1.or_else(|| CtOption::new(c, i.ct_eq(&0)));
-
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
@@ -188,10 +183,15 @@ fn core(
     to_hash.extend(L.compress().to_bytes());
     to_hash.extend(R.compress().to_bytes());
     c = hash_to_scalar(&to_hash);
+
+    // This will only execute once and shouldn't need to be constant time. Making it constant time
+    // removes the risk of branch prediction creating timing differences depending on ring index
+    // however
+    c1.conditional_assign(&c, i.ct_eq(&(n - 1)));
   }
 
   // This first tuple is needed to continue signing, the latter is the c to be tested/worked with
-  ((D, c * mu_P, c * mu_C), c1.unwrap_or(c))
+  ((D, c * mu_P, c * mu_C), c1)
 }
 
 /// CLSAG signature, as used in Monero.
