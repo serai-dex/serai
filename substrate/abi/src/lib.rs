@@ -12,6 +12,7 @@ pub mod in_instructions;
 pub mod signals;
 
 pub mod genesis_liquidity;
+pub mod emissions;
 
 pub mod babe;
 pub mod grandpa;
@@ -26,8 +27,9 @@ pub enum Call {
   Coins(coins::Call),
   LiquidityTokens(coins::Call),
   Dex(dex::Call),
-  GenesisLiquidity(genesis_liquidity::Call),
   ValidatorSets(validator_sets::Call),
+  GenesisLiquidity(genesis_liquidity::Call),
+  Emissions(emissions::Call),
   InInstructions(in_instructions::Call),
   Signals(signals::Call),
   Babe(babe::Call),
@@ -48,8 +50,9 @@ pub enum Event {
   Coins(coins::Event),
   LiquidityTokens(coins::Event),
   Dex(dex::Event),
-  GenesisLiquidity(genesis_liquidity::Event),
   ValidatorSets(validator_sets::Event),
+  GenesisLiquidity(genesis_liquidity::Event),
+  Emissions(emissions::Event),
   InInstructions(in_instructions::Event),
   Signals(signals::Event),
   Babe,

@@ -33,6 +33,7 @@ pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
 
 pub use genesis_liquidity_pallet as genesis_liquidity;
+pub use emissions_pallet as emissions;
 
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
@@ -294,6 +295,10 @@ impl genesis_liquidity::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl emissions::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
 // for publishing equivocation evidences.
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
@@ -368,9 +373,10 @@ construct_runtime!(
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
-    GenesisLiquidity: genesis_liquidity,
 
     ValidatorSets: validator_sets,
+    GenesisLiquidity: genesis_liquidity,
+    Emissions: emissions,
 
     InInstructions: in_instructions,
 

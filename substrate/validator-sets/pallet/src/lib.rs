@@ -489,11 +489,12 @@ pub mod pallet {
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
+      block_reward: bool,
     ) -> DispatchResult {
       let old_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0;
       let new_allocation = old_allocation + amount.0;
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      if new_allocation < allocation_per_key_share {
+      if new_allocation < allocation_per_key_share && !block_reward {
         Err(Error::<T>::InsufficientAllocation)?;
       }
 
@@ -796,6 +797,15 @@ pub mod pallet {
       total_required
     }
 
+    pub fn deposit_stake(
+      network: NetworkId,
+      account: T::AccountId,
+      amount: Amount,
+    ) -> DispatchResult {
+      // TODO: make the increase_allocation public instead?
+      Self::increase_allocation(network, account, amount, true)
+    }
+
     fn can_slash_serai_validator(validator: Public) -> bool {
       // Checks if they're active or actively deallocating (letting us still slash them)
       // We could check if they're upcoming/still allocating, yet that'd mean the equivocation is
@@ -936,7 +946,7 @@ pub mod pallet {
         Self::account(),
         Balance { coin: Coin::Serai, amount },
       )?;
-      Self::increase_allocation(network, validator, amount)
+      Self::increase_allocation(network, validator, amount, false)
     }
 
     #[pallet::call_index(3)]
