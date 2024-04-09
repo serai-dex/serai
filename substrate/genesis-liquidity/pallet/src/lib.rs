@@ -117,7 +117,8 @@ pub mod pallet {
           let tokens = LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), *coin).0;
           let mut total_tokens_this_coin: u64 = 0;
           for (acc, value) in account_values.get(coin).unwrap() {
-            let liq_tokens_this_acc = tokens.saturating_mul(*value) / pool_values.get(coin).unwrap().1;
+            let liq_tokens_this_acc =
+              tokens.saturating_mul(*value) / pool_values.get(coin).unwrap().1;
             total_tokens_this_coin = total_tokens_this_coin.saturating_add(liq_tokens_this_acc);
             LiquidityTokensPerAddress::<T>::set(coin, acc, Some(liq_tokens_this_acc));
           }
@@ -196,9 +197,9 @@ pub mod pallet {
 
         // burn the SRI if necessary
         let mut sri = current_sri.0.saturating_sub(prev_sri.0);
-        let burn_sri_amount = sri.saturating_mul(
-          GENESIS_SRI_TRICKLE_FEED - Self::blocks_since_ec_security(&balance.coin),
-        ) / GENESIS_SRI_TRICKLE_FEED;
+        let distance_to_full_pay =
+          GENESIS_SRI_TRICKLE_FEED - Self::blocks_since_ec_security(&balance.coin);
+        let burn_sri_amount = sri.saturating_mul(distance_to_full_pay) / GENESIS_SRI_TRICKLE_FEED;
         Coins::<T>::burn(
           origin.clone().into(),
           Balance { coin: Coin::Serai, amount: Amount(burn_sri_amount) },
