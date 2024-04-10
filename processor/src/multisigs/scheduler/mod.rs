@@ -16,10 +16,10 @@ pub trait SchedulerAddendum: Send + Clone + PartialEq + Debug {
 }
 
 impl SchedulerAddendum for () {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read<R: io::Read>(_: &mut R) -> io::Result<Self> {
     Ok(())
   }
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write<W: io::Write>(&self, _: &mut W) -> io::Result<()> {
     Ok(())
   }
 }
