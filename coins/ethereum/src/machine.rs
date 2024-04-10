@@ -15,7 +15,10 @@ use frost::{
   sign::*,
 };
 
-use ethers_core::{types::U256, abi::AbiEncode};
+use ethers_core::{
+  types::U256,
+  abi::{AbiEncode, AbiDecode},
+};
 
 use crate::{
   crypto::{PublicKey, EthereumHram, Signature},
@@ -37,6 +40,58 @@ impl RouterCommand {
       RouterCommand::Execute { chain_id, nonce, outs } => {
         Router::execute_message(*chain_id, *nonce, outs.clone())
       }
+    }
+  }
+
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+
+    match kind[0] {
+      0 => {
+        let mut chain_id = [0; 32];
+        reader.read_exact(&mut chain_id)?;
+
+        let mut session = [0; 32];
+        reader.read_exact(&mut session)?;
+
+        let key = PublicKey::new(Secp256k1::read_G(reader)?)
+          .ok_or(io::Error::other("key for RouterCommand doesn't have an eth representation"))?;
+        Ok(RouterCommand::UpdateSeraiKey {
+          chain_id: U256::from_little_endian(&chain_id),
+          session: U256::from_little_endian(&session),
+          key,
+        })
+      }
+      1 => {
+        let mut chain_id = [0; 32];
+        reader.read_exact(&mut chain_id)?;
+        let chain_id = U256::from_little_endian(&chain_id);
+
+        let mut nonce = [0; 32];
+        reader.read_exact(&mut nonce)?;
+        let nonce = U256::from_little_endian(&nonce);
+
+        let mut outs_len = [0; 4];
+        reader.read_exact(&mut outs_len)?;
+        let mut outs_len = u32::from_le_bytes(outs_len);
+
+        let mut outs = vec![];
+        while outs_len > 0 {
+          // Read in 1024-byte chunks so we don't pre-allocate more than actual present upon a
+          // malicious length being specified
+          let chunk_len = outs_len.min(1024);
+          let mut chunk = vec![0; usize::try_from(chunk_len).unwrap()];
+          reader.read_exact(&mut chunk)?;
+          outs.extend(chunk);
+          outs_len -= chunk_len;
+        }
+        let outs = AbiDecode::decode(outs)
+          .map_err(|e| io::Error::other(format!("invalid ABI encoding of outs: {e}")))?;
+
+        Ok(RouterCommand::Execute { chain_id, nonce, outs })
+      }
+      _ => Err(io::Error::other("reading unknown type of RouterCommand"))?,
     }
   }
 
