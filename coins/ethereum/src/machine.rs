@@ -5,8 +5,9 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use transcript::RecommendedTranscript;
+use transcript::{Transcript, RecommendedTranscript};
 
+use group::GroupEncoding;
 use frost::{
   curve::{Ciphersuite, Secp256k1},
   Participant, ThresholdKeys, FrostError,
@@ -14,7 +15,7 @@ use frost::{
   sign::*,
 };
 
-use ethers_core::types::U256;
+use ethers_core::{types::U256, abi::AbiEncode};
 
 use crate::{
   crypto::{PublicKey, EthereumHram, Signature},
@@ -37,6 +38,47 @@ impl RouterCommand {
         Router::execute_message(*chain_id, *nonce, outs.clone())
       }
     }
+  }
+
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    match self {
+      RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
+        writer.write_all(&[0])?;
+
+        let mut chain_id_bytes = [0; 32];
+        chain_id.to_little_endian(&mut chain_id_bytes);
+        writer.write_all(&chain_id_bytes)?;
+
+        let mut session_bytes = [0; 32];
+        session.to_little_endian(&mut session_bytes);
+        writer.write_all(&session_bytes)?;
+
+        writer.write_all(&key.A.to_bytes())
+      }
+      RouterCommand::Execute { chain_id, nonce, outs } => {
+        writer.write_all(&[1])?;
+
+        let mut chain_id_bytes = [0; 32];
+        chain_id.to_little_endian(&mut chain_id_bytes);
+        writer.write_all(&chain_id_bytes)?;
+
+        let mut nonce_bytes = [0; 32];
+        nonce.to_little_endian(&mut nonce_bytes);
+        writer.write_all(&nonce_bytes)?;
+
+        let outs = outs.clone().encode();
+        writer.write_all(&u32::try_from(outs.len()).unwrap().to_le_bytes())?;
+        writer.write_all(&outs)?;
+
+        Ok(())
+      }
+    }
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = vec![];
+    self.write(&mut res).unwrap();
+    res
   }
 }
 
@@ -67,6 +109,23 @@ pub struct RouterCommandMachine {
   key: PublicKey,
   command: RouterCommand,
   machine: AlgorithmMachine<Secp256k1, Schnorr<Secp256k1, RecommendedTranscript, EthereumHram>>,
+}
+
+impl RouterCommandMachine {
+  pub fn new(keys: ThresholdKeys<Secp256k1>, command: RouterCommand) -> Option<Self> {
+    // The Schnorr algorithm should be fine without this, even when using the IETF variant
+    // If this is better and more comprehensive, we should do it, even if not necessary
+    let mut transcript = RecommendedTranscript::new(b"ethereum-serai RouterCommandMachine v0.1");
+    let key = keys.group_key();
+    transcript.append_message(b"key", key.to_bytes());
+    transcript.append_message(b"command", command.serialize());
+
+    Some(Self {
+      key: PublicKey::new(key)?,
+      command,
+      machine: AlgorithmMachine::new(Schnorr::new(transcript), keys),
+    })
+  }
 }
 
 impl PreprocessMachine for RouterCommandMachine {

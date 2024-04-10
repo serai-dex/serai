@@ -121,24 +121,27 @@ impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
   }
 
   fn id(&self) -> Self::Id {
-    todo!("TODO")
+    let mut id = [0; 40];
+    id[.. 32].copy_from_slice(&self.id.0);
+    id[32 ..].copy_from_slice(&self.id.1.to_le_bytes());
+    ethereum_serai::ethers_core::utils::keccak256(id)
   }
   fn tx_id(&self) -> [u8; 32] {
-    todo!("TODO")
+    self.id.0
   }
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
     todo!("TODO")
   }
 
   fn presumed_origin(&self) -> Option<Address> {
-    todo!("TODO")
+    Some(Address(self.from))
   }
 
   fn balance(&self) -> Balance {
     todo!("TODO")
   }
   fn data(&self) -> &[u8] {
-    todo!("TODO")
+    &self.data
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -181,7 +184,18 @@ impl EventualityTrait for Eventuality {
   type Completion = SignedRouterCommand;
 
   fn lookup(&self) -> Vec<u8> {
-    todo!("TODO")
+    match self.1 {
+      RouterCommand::UpdateSeraiKey { session, .. } => {
+        let mut res = vec![0];
+        res.extend(session.as_u64().to_le_bytes());
+        res
+      }
+      RouterCommand::Execute { nonce, .. } => {
+        let mut res = vec![1];
+        res.extend(nonce.as_u64().to_le_bytes());
+        res
+      }
+    }
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
@@ -450,7 +464,10 @@ impl<D: Debug + Db> Network for Ethereum<D> {
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    todo!("TODO")
+    Ok(
+      RouterCommandMachine::new(keys, transaction)
+        .expect("keys weren't usable to sign router commands"),
+    )
   }
 
   async fn publish_completion(
