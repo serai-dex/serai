@@ -7,7 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 
-use ciphersuite::{Ciphersuite, Secp256k1};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
 use ethereum_serai::{
@@ -199,20 +199,30 @@ impl EventualityTrait for Eventuality {
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    todo!("TODO")
+    let point = Secp256k1::read_G(reader)?;
+    let command = RouterCommand::read(reader)?;
+    Ok(Eventuality(
+      PublicKey::new(point).ok_or(io::Error::other("unusable key within Eventuality"))?,
+      command,
+    ))
   }
   fn serialize(&self) -> Vec<u8> {
-    todo!("TODO")
+    let mut res = vec![];
+    res.extend(self.0.point().to_bytes().as_slice());
+    self.1.write(&mut res).unwrap();
+    res
   }
 
   fn claim(completion: &Self::Completion) -> Self::Claim {
     Claim::from(completion.signature())
   }
   fn serialize_completion(completion: &Self::Completion) -> Vec<u8> {
-    todo!("TODO")
+    let mut res = vec![];
+    completion.write(&mut res).unwrap();
+    res
   }
-  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Self::Completion> {
-    todo!("TODO")
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Self::Completion> {
+    SignedRouterCommand::read(reader)
   }
 }
 

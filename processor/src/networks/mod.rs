@@ -149,7 +149,7 @@ pub trait Eventuality: Send + Sync + Clone + PartialEq + Debug {
 
   // TODO: Make a dedicated Completion trait
   fn serialize_completion(completion: &Self::Completion) -> Vec<u8>;
-  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Self::Completion>;
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Self::Completion>;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

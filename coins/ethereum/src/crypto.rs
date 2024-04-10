@@ -102,6 +102,10 @@ impl PublicKey {
     Some(PublicKey { A, px: x_coord_scalar })
   }
 
+  pub fn point(&self) -> ProjectivePoint {
+    self.A
+  }
+
   pub(crate) fn eth_repr(&self) -> [u8; 32] {
     self.px.to_repr().into()
   }
@@ -173,6 +177,13 @@ impl Signature {
     res[.. 32].copy_from_slice(self.c.to_repr().as_ref());
     res[32 ..].copy_from_slice(self.s.to_repr().as_ref());
     res
+  }
+
+  pub fn from_bytes(bytes: [u8; 64]) -> std::io::Result<Self> {
+    let mut reader = bytes.as_slice();
+    let c = Secp256k1::read_F(&mut reader)?;
+    let s = Secp256k1::read_F(&mut reader)?;
+    Ok(Signature { c, s })
   }
 }
 impl From<&Signature> for AbiSignature {

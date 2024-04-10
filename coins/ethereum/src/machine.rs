@@ -158,6 +158,21 @@ impl SignedRouterCommand {
   pub fn signature(&self) -> &Signature {
     &self.signature
   }
+
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let command = RouterCommand::read(reader)?;
+
+    let mut sig = [0; 64];
+    reader.read_exact(&mut sig)?;
+    let signature = Signature::from_bytes(sig)?;
+
+    Ok(SignedRouterCommand { command, signature })
+  }
+
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    self.command.write(writer)?;
+    writer.write_all(&self.signature.to_bytes())
+  }
 }
 
 pub struct RouterCommandMachine {

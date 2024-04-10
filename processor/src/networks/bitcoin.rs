@@ -242,8 +242,8 @@ impl EventualityTrait for Eventuality {
     completion.consensus_encode(&mut buf).unwrap();
     buf
   }
-  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Transaction> {
-    Transaction::consensus_decode(completion).map_err(|e| io::Error::other(format!("{e}")))
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
+    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
   }
 }
 

@@ -150,8 +150,8 @@ impl EventualityTrait for Eventuality {
   fn serialize_completion(completion: &Transaction) -> Vec<u8> {
     completion.serialize()
   }
-  fn read_completion<R: io::Read>(completion: &mut R) -> io::Result<Transaction> {
-    Transaction::read(completion)
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
+    Transaction::read(reader)
   }
 }
 
