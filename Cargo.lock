@@ -7613,6 +7613,7 @@ dependencies = [
  "futures-util",
  "hex",
  "jsonrpsee",
+ "libp2p",
  "pallet-transaction-payment-rpc",
  "rand_core",
  "sc-authority-discovery",
