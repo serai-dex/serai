@@ -74,7 +74,7 @@ impl TributarySpec {
 
   pub fn genesis(&self) -> [u8; 32] {
     // Calculate the genesis for this Tributary
-    let mut genesis = RecommendedTranscript::new(b"Serai Tributary Genesis");
+    let mut genesis = RecommendedTranscript::new(b"Serai Tributary Genesis Testnet 2");
     // This locks it to a specific Serai chain
     genesis.append_message(b"serai_block", self.serai_block);
     genesis.append_message(b"session", self.set.session.0.to_le_bytes());
