@@ -295,6 +295,8 @@ pub fn testnet_config() -> ChainSpec {
           "b0e62f04f625447673a840d9c5f0e5867b355a67b0dee322334dc00925547b71",
           // R0BC0D3R
           "7e32cebc21b7979c36e477f0a849df1830cc052c879baf13107888654c0be654",
+          // worksmarter
+          "c4f2f6ffead84fcaa2e3c894d57c342a24c461eab5d1d17cae3d1a9e61d73e46",
         ],
       )
     },
@@ -325,6 +327,8 @@ pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
       "/ip4/65.21.156.202/tcp/30333".parse().unwrap(),
       // ART3MIS.CLOUD
       "/ip4/51.195.60.217/tcp/30333".parse().unwrap(),
+      // worksmarter
+      "/ip4/37.60.255.101/tcp/30333".parse().unwrap(),
     ],
     _ => panic!("requesting bootnodes for an unrecognized network"),
   }
