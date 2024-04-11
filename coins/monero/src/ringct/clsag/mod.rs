@@ -12,9 +12,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use subtle::{ConstantTimeEq, ConditionallySelectable};
 
 use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
+  constants::{ED25519_BASEPOINT_TABLE, ED25519_BASEPOINT_POINT},
   scalar::Scalar,
-  traits::{IsIdentity, VartimePrecomputedMultiscalarMul},
+  traits::{IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
 };
 
@@ -100,6 +100,7 @@ fn core(
 ) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
+  let base_precomp = VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]);
   let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
   let D = D * INV_EIGHT();
 
@@ -174,10 +175,24 @@ fn core(
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
-    let L = (&s[i] * ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
+    // (s_i * G) + (c_p * P_i) + (c_c * C_i)
+    let L = match A_c1 {
+      Mode::Sign(..) => {
+        EdwardsPoint::multiscalar_mul([s[i], c_p, c_c], [ED25519_BASEPOINT_POINT, P[i], C[i]])
+      }
+      Mode::Verify(..) => {
+        base_precomp.vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
+      }
+    };
+
     let PH = hash_to_point(&P[i]);
-    // Shouldn't be an issue as all of the variables in this vartime statement are public
-    let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul([c_p, c_c]);
+
+    // (c_p * I) + (c_c * D) + (s_i * PH)
+    let R = match A_c1 {
+      // Shouldn't be an issue as all of the variables in the sign vartime statement are public
+      Mode::Sign(..) => images_precomp.vartime_multiscalar_mul([c_p, c_c]) + (s[i] * PH),
+      Mode::Verify(..) => images_precomp.vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH]),
+    };
 
     to_hash.truncate(((2 * n) + 3) * 32);
     to_hash.extend(L.compress().to_bytes());
