@@ -317,8 +317,8 @@ pub fn testnet_config() -> ChainSpec {
 
 pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
   match id {
-    "serai-local" | "serai-devnet" => vec![],
-    "serai-testnet-2" => vec![
+    "local" | "devnet" => vec![],
+    "testnet-2" => vec![
       // Kayaba
       "/ip4/107.161.20.133/tcp/30333".parse().unwrap(),
       // lemon_respector
