@@ -101,8 +101,11 @@ fn core(
   let n = ring.len();
 
   let base_precomp = VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]);
-  let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
-  let D = D * INV_EIGHT();
+  let images_precomp = match A_c1 {
+    Mode::Sign(..) => None,
+    Mode::Verify(..) => Some(VartimeEdwardsPrecomputation::new([I, D])),
+  };
+  let D_INV_EIGHT = D * INV_EIGHT();
 
   // Generate the transcript
   // Instead of generating multiple, a single transcript is created and then edited as needed
@@ -131,7 +134,7 @@ fn core(
   }
 
   to_hash.extend(I.compress().to_bytes());
-  to_hash.extend(D.compress().to_bytes());
+  to_hash.extend(D_INV_EIGHT.compress().to_bytes());
   to_hash.extend(pseudo_out.compress().to_bytes());
   // mu_P with agg_0
   let mu_P = hash_to_scalar(&to_hash);
@@ -189,9 +192,10 @@ fn core(
 
     // (c_p * I) + (c_c * D) + (s_i * PH)
     let R = match A_c1 {
-      // Shouldn't be an issue as all of the variables in the sign vartime statement are public
-      Mode::Sign(..) => images_precomp.vartime_multiscalar_mul([c_p, c_c]) + (s[i] * PH),
-      Mode::Verify(..) => images_precomp.vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH]),
+      Mode::Sign(..) => EdwardsPoint::multiscalar_mul([c_p, c_c, s[i]], [I, D, &PH]),
+      Mode::Verify(..) => {
+        images_precomp.as_ref().unwrap().vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH])
+      }
     };
 
     to_hash.truncate(((2 * n) + 3) * 32);
@@ -206,7 +210,7 @@ fn core(
   }
 
   // This first tuple is needed to continue signing, the latter is the c to be tested/worked with
-  ((D, c * mu_P, c * mu_C), c1)
+  ((D_INV_EIGHT, c * mu_P, c * mu_C), c1)
 }
 
 /// CLSAG signature, as used in Monero.
