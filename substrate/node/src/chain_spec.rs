@@ -209,7 +209,10 @@ pub fn testnet_config() -> ChainSpec {
     // ID
     "testnet-2",
     ChainType::Live,
-    move || { let _ = testnet_genesis(&wasm_binary, vec![]); todo!() },
+    move || {
+      let _ = testnet_genesis(&wasm_binary, vec![]);
+      todo!()
+    },
     // Bootnodes
     vec![],
     // Telemetry
