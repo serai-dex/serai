@@ -19,7 +19,7 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  INV_EIGHT, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
+  INV_EIGHT, BASEPOINT_PRECOMP, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
   ringct::hash_to_point, serialize::*,
 };
 
@@ -100,7 +100,6 @@ fn core(
 ) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
-  let base_precomp = VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]);
   let images_precomp = match A_c1 {
     Mode::Sign(..) => None,
     Mode::Verify(..) => Some(VartimeEdwardsPrecomputation::new([I, D])),
@@ -184,7 +183,7 @@ fn core(
         EdwardsPoint::multiscalar_mul([s[i], c_p, c_c], [ED25519_BASEPOINT_POINT, P[i], C[i]])
       }
       Mode::Verify(..) => {
-        base_precomp.vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
+        BASEPOINT_PRECOMP().vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
       }
     };
 
