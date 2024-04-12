@@ -209,10 +209,7 @@ pub fn testnet_config() -> ChainSpec {
     // ID
     "testnet-2",
     ChainType::Live,
-    move || {
-      let _ = testnet_genesis(&wasm_binary, vec![]);
-      todo!()
-    },
+    move || { let _ = testnet_genesis(&wasm_binary, vec![]); todo!() },
     // Bootnodes
     vec![],
     // Telemetry
@@ -230,8 +227,8 @@ pub fn testnet_config() -> ChainSpec {
 
 pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
   match id {
-    "serai-devnet" | "serai-local" => vec![],
-    "serai-testnet-2" => todo!(),
+    "devnet" | "local" => vec![],
+    "testnet-2" => todo!(),
     _ => panic!("unrecognized network ID"),
   }
 }
