@@ -12,14 +12,14 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use subtle::{ConstantTimeEq, ConditionallySelectable};
 
 use curve25519_dalek::{
-  constants::ED25519_BASEPOINT_TABLE,
+  constants::{ED25519_BASEPOINT_TABLE, ED25519_BASEPOINT_POINT},
   scalar::Scalar,
-  traits::{IsIdentity, VartimePrecomputedMultiscalarMul},
+  traits::{IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
 };
 
 use crate::{
-  INV_EIGHT, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
+  INV_EIGHT, BASEPOINT_PRECOMP, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
   ringct::hash_to_point, serialize::*,
 };
 
@@ -100,8 +100,11 @@ fn core(
 ) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
-  let images_precomp = VartimeEdwardsPrecomputation::new([I, D]);
-  let D = D * INV_EIGHT();
+  let images_precomp = match A_c1 {
+    Mode::Sign(..) => None,
+    Mode::Verify(..) => Some(VartimeEdwardsPrecomputation::new([I, D])),
+  };
+  let D_INV_EIGHT = D * INV_EIGHT();
 
   // Generate the transcript
   // Instead of generating multiple, a single transcript is created and then edited as needed
@@ -130,7 +133,7 @@ fn core(
   }
 
   to_hash.extend(I.compress().to_bytes());
-  to_hash.extend(D.compress().to_bytes());
+  to_hash.extend(D_INV_EIGHT.compress().to_bytes());
   to_hash.extend(pseudo_out.compress().to_bytes());
   // mu_P with agg_0
   let mu_P = hash_to_scalar(&to_hash);
@@ -174,10 +177,25 @@ fn core(
     let c_p = mu_P * c;
     let c_c = mu_C * c;
 
-    let L = (&s[i] * ED25519_BASEPOINT_TABLE) + (c_p * P[i]) + (c_c * C[i]);
+    // (s_i * G) + (c_p * P_i) + (c_c * C_i)
+    let L = match A_c1 {
+      Mode::Sign(..) => {
+        EdwardsPoint::multiscalar_mul([s[i], c_p, c_c], [ED25519_BASEPOINT_POINT, P[i], C[i]])
+      }
+      Mode::Verify(..) => {
+        BASEPOINT_PRECOMP().vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
+      }
+    };
+
     let PH = hash_to_point(&P[i]);
-    // Shouldn't be an issue as all of the variables in this vartime statement are public
-    let R = (s[i] * PH) + images_precomp.vartime_multiscalar_mul([c_p, c_c]);
+
+    // (c_p * I) + (c_c * D) + (s_i * PH)
+    let R = match A_c1 {
+      Mode::Sign(..) => EdwardsPoint::multiscalar_mul([c_p, c_c, s[i]], [I, D, &PH]),
+      Mode::Verify(..) => {
+        images_precomp.as_ref().unwrap().vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH])
+      }
+    };
 
     to_hash.truncate(((2 * n) + 3) * 32);
     to_hash.extend(L.compress().to_bytes());
@@ -191,7 +209,7 @@ fn core(
   }
 
   // This first tuple is needed to continue signing, the latter is the c to be tested/worked with
-  ((D, c * mu_P, c * mu_C), c1)
+  ((D_INV_EIGHT, c * mu_P, c * mu_C), c1)
 }
 
 /// CLSAG signature, as used in Monero.
