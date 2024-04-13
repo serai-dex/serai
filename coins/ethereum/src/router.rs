@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashSet};
+use std::{sync::Arc, io, collections::HashSet};
 
 use k256::{
   elliptic_curve::{group::GroupEncoding, sec1},
@@ -28,6 +28,32 @@ pub enum Coin {
   Erc20([u8; 20]),
 }
 
+impl Coin {
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+    Ok(match kind[0] {
+      0 => Coin::Ether,
+      1 => {
+        let mut address = [0; 20];
+        reader.read_exact(&mut address)?;
+        Coin::Erc20(address)
+      }
+      _ => Err(io::Error::other("unrecognized Coin type"))?,
+    })
+  }
+
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    match self {
+      Coin::Ether => writer.write_all(&[0]),
+      Coin::Erc20(token) => {
+        writer.write_all(&[1])?;
+        writer.write_all(token)
+      }
+    }
+  }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct InInstruction {
   pub id: ([u8; 32], u64),
@@ -36,6 +62,64 @@ pub struct InInstruction {
   pub amount: U256,
   pub data: Vec<u8>,
   pub key_at_end_of_block: ProjectivePoint,
+}
+
+impl InInstruction {
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let id = {
+      let mut id_hash = [0; 32];
+      reader.read_exact(&mut id_hash)?;
+      let mut id_pos = [0; 8];
+      reader.read_exact(&mut id_pos)?;
+      let id_pos = u64::from_le_bytes(id_pos);
+      (id_hash, id_pos)
+    };
+
+    let mut from = [0; 20];
+    reader.read_exact(&mut from)?;
+
+    let coin = Coin::read(reader)?;
+    let mut amount = [0; 32];
+    reader.read_exact(&mut amount)?;
+    let amount = U256::from_little_endian(&amount);
+
+    let mut data_len = [0; 4];
+    reader.read_exact(&mut data_len)?;
+    let data_len = usize::try_from(u32::from_le_bytes(data_len))
+      .map_err(|_| io::Error::other("InInstruction data exceeded 2**32 in length"))?;
+    let mut data = vec![0; data_len];
+    reader.read_exact(&mut data)?;
+
+    let mut key_at_end_of_block = <ProjectivePoint as GroupEncoding>::Repr::default();
+    reader.read_exact(&mut key_at_end_of_block)?;
+    let key_at_end_of_block = Option::from(ProjectivePoint::from_bytes(&key_at_end_of_block))
+      .ok_or(io::Error::other("InInstruction had key at end of block which wasn't valid"))?;
+
+    Ok(InInstruction { id, from, coin, amount, data, key_at_end_of_block })
+  }
+
+  pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.id.0)?;
+    writer.write_all(&self.id.1.to_le_bytes())?;
+
+    writer.write_all(&self.from)?;
+
+    self.coin.write(writer)?;
+    let mut amount = [0; 32];
+    self.amount.to_little_endian(&mut amount);
+    writer.write_all(&amount)?;
+
+    writer.write_all(
+      &u32::try_from(self.data.len())
+        .map_err(|_| {
+          io::Error::other("InInstruction being written had data exceeding 2**32 in length")
+        })?
+        .to_le_bytes(),
+    )?;
+    writer.write_all(&self.data)?;
+
+    writer.write_all(&self.key_at_end_of_block.to_bytes())
+  }
 }
 
 /// The contract Serai uses to manage its state.

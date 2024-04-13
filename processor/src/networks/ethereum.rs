@@ -145,10 +145,10 @@ impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    todo!("TODO")
+    EthereumInInstruction::write(self, writer)
   }
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    todo!("TODO")
+    EthereumInInstruction::read(reader)
   }
 }
 
@@ -329,6 +329,7 @@ impl<D: Debug + Db> Network for Ethereum<D> {
 
   const COST_TO_AGGREGATE: u64 = 0;
 
+  // TODO: usize::max, with a merkle tree in the router
   const MAX_OUTPUTS: usize = 256;
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
