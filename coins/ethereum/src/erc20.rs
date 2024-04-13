@@ -51,7 +51,7 @@ impl ERC20 {
     let mut to_topic = [0; 32];
     to_topic[12 ..].copy_from_slice(&to);
     let filter = self.2.transfer_filter().filter;
-    let filter = filter.from_block(block).to_block(block);
+    let filter = filter.from_block(block).to_block(block).address(self.2.address());
     let filter = filter.topic2(ethers_core::types::ValueOrArray::Value(Some(to_topic.into())));
     let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
 

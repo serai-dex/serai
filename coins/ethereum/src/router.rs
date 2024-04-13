@@ -1,5 +1,10 @@
 use std::{sync::Arc, collections::HashSet};
 
+use k256::{
+  elliptic_curve::{group::GroupEncoding, sec1},
+  ProjectivePoint,
+};
+
 use ethers_core::{
   types::{U256, Bytes},
   utils::hex::FromHex,
@@ -30,6 +35,7 @@ pub struct InInstruction {
   pub coin: Coin,
   pub amount: U256,
   pub data: Vec<u8>,
+  pub key_at_end_of_block: ProjectivePoint,
 }
 
 /// The contract Serai uses to manage its state.
@@ -135,8 +141,23 @@ impl Router {
     block: u64,
     allowed_tokens: &HashSet<[u8; 20]>,
   ) -> Result<Vec<InInstruction>, Error> {
+    let key_at_end_of_block = {
+      let filter = self.2.serai_key_updated_filter();
+      let filter = filter.from_block(0).to_block(block).address(self.2.address().into());
+      let all_keys = filter.query().await.map_err(|_| Error::ConnectionError)?;
+
+      let last_key_x_coordinate =
+        all_keys.last().expect("Router existed yet never updated its key").key;
+
+      let mut compressed_point = <ProjectivePoint as GroupEncoding>::Repr::default();
+      compressed_point[0] = u8::from(sec1::Tag::CompressedEvenY);
+      compressed_point[1 ..].copy_from_slice(&last_key_x_coordinate);
+
+      ProjectivePoint::from_bytes(&compressed_point).expect("router's last key wasn't a valid key")
+    };
+
     let filter = self.2.in_instruction_filter().filter;
-    let filter = filter.from_block(block).to_block(block);
+    let filter = filter.from_block(block).to_block(block).address(self.2.address());
     let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
 
     let mut transfer_check = HashSet::new();
@@ -230,6 +251,7 @@ impl Router {
         coin,
         amount: log.amount,
         data: log.instruction.as_ref().to_vec(),
+        key_at_end_of_block,
       });
     }
 

@@ -130,7 +130,7 @@ impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
     self.id.0
   }
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
-    todo!("TODO")
+    self.key_at_end_of_block
   }
 
   fn presumed_origin(&self) -> Option<Address> {
