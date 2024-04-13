@@ -477,7 +477,7 @@ pub mod pallet {
 
       let Some(top) = top else { return false };
 
-      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause an off-chain reduction of
+      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause a round robin reduction of
       // each validator's key shares until their sum is MAX_KEY_SHARES_PER_SET
       // post_amortization_key_shares_for_top_validator yields what the top validator's key shares
       // would be after such a reduction, letting us evaluate this correctly
