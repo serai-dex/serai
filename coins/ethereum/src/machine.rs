@@ -15,15 +15,162 @@ use frost::{
   sign::*,
 };
 
-use ethers_core::{
-  types::U256,
-  abi::{AbiEncode, AbiDecode},
-};
+use ethers_core::types::U256;
 
 use crate::{
   crypto::{PublicKey, EthereumHram, Signature},
-  router::{abi::OutInstruction, Router},
+  router::{
+    abi::{Call as AbiCall, OutInstruction as AbiOutInstruction},
+    Router,
+  },
 };
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Call {
+  to: [u8; 20],
+  value: U256,
+  data: Vec<u8>,
+}
+impl Call {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut to = [0; 20];
+    reader.read_exact(&mut to)?;
+
+    let value = {
+      let mut value_bytes = [0; 32];
+      reader.read_exact(&mut value_bytes)?;
+      U256::from_little_endian(&value_bytes)
+    };
+
+    let mut data_len = {
+      let mut data_len = [0; 4];
+      reader.read_exact(&mut data_len)?;
+      usize::try_from(u32::from_le_bytes(data_len)).expect("u32 couldn't fit within a usize")
+    };
+
+    // A valid DoS would be to claim a 4 GB data is present for only 4 bytes
+    // We read this in 1 KB chunks to only read data actually present (with a max DoS of 1 KB)
+    let mut data = vec![];
+    while data_len > 0 {
+      let chunk_len = data_len.min(1024);
+      let mut chunk = vec![0; chunk_len];
+      reader.read_exact(&mut chunk)?;
+      data.extend(&chunk);
+      data_len -= chunk_len;
+    }
+
+    Ok(Call { to, value, data })
+  }
+
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.to)?;
+
+    let mut value_bytes = [0; 32];
+    self.value.to_little_endian(&mut value_bytes);
+    writer.write_all(&value_bytes)?;
+
+    let data_len = u32::try_from(self.data.len())
+      .map_err(|_| io::Error::other("call data length exceeded 2**32"))?;
+    writer.write_all(&data_len.to_le_bytes())?;
+    writer.write_all(&self.data)
+  }
+}
+impl From<Call> for AbiCall {
+  fn from(call: Call) -> AbiCall {
+    AbiCall { to: call.to.into(), value: call.value, data: call.data.into() }
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum OutInstructionTarget {
+  Direct([u8; 20]),
+  Calls(Vec<Call>),
+}
+impl OutInstructionTarget {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+
+    match kind[0] {
+      0 => {
+        let mut addr = [0; 20];
+        reader.read_exact(&mut addr)?;
+        Ok(OutInstructionTarget::Direct(addr))
+      }
+      1 => {
+        let mut calls_len = [0; 4];
+        reader.read_exact(&mut calls_len)?;
+        let calls_len = u32::from_le_bytes(calls_len);
+
+        let mut calls = vec![];
+        for _ in 0 .. calls_len {
+          calls.push(Call::read(reader)?);
+        }
+        Ok(OutInstructionTarget::Calls(calls))
+      }
+      _ => Err(io::Error::other("unrecognized OutInstructionTarget"))?,
+    }
+  }
+
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    match self {
+      OutInstructionTarget::Direct(addr) => {
+        writer.write_all(&[0])?;
+        writer.write_all(addr)?;
+      }
+      OutInstructionTarget::Calls(calls) => {
+        writer.write_all(&[1])?;
+        let call_len = u32::try_from(calls.len())
+          .map_err(|_| io::Error::other("amount of calls exceeded 2**32"))?;
+        writer.write_all(&call_len.to_le_bytes())?;
+        for call in calls {
+          call.write(writer)?;
+        }
+      }
+    }
+    Ok(())
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct OutInstruction {
+  target: OutInstructionTarget,
+  value: U256,
+}
+impl OutInstruction {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let target = OutInstructionTarget::read(reader)?;
+
+    let value = {
+      let mut value_bytes = [0; 32];
+      reader.read_exact(&mut value_bytes)?;
+      U256::from_little_endian(&value_bytes)
+    };
+
+    Ok(OutInstruction { target, value })
+  }
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    self.target.write(writer)?;
+
+    let mut value_bytes = [0; 32];
+    self.value.to_little_endian(&mut value_bytes);
+    writer.write_all(&value_bytes)
+  }
+}
+impl From<OutInstruction> for AbiOutInstruction {
+  fn from(instruction: OutInstruction) -> AbiOutInstruction {
+    match instruction.target {
+      OutInstructionTarget::Direct(addr) => {
+        AbiOutInstruction { to: addr.into(), calls: vec![], value: instruction.value }
+      }
+      OutInstructionTarget::Calls(calls) => AbiOutInstruction {
+        to: [0; 20].into(),
+        calls: calls.into_iter().map(Into::into).collect(),
+        value: instruction.value,
+      },
+    }
+  }
+}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RouterCommand {
@@ -37,9 +184,11 @@ impl RouterCommand {
       RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
         Router::update_serai_key_message(*chain_id, *session, key)
       }
-      RouterCommand::Execute { chain_id, nonce, outs } => {
-        Router::execute_message(*chain_id, *nonce, outs.clone())
-      }
+      RouterCommand::Execute { chain_id, nonce, outs } => Router::execute_message(
+        *chain_id,
+        *nonce,
+        outs.iter().map(|out| out.clone().into()).collect(),
+      ),
     }
   }
 
@@ -74,20 +223,12 @@ impl RouterCommand {
 
         let mut outs_len = [0; 4];
         reader.read_exact(&mut outs_len)?;
-        let mut outs_len = u32::from_le_bytes(outs_len);
+        let outs_len = u32::from_le_bytes(outs_len);
 
         let mut outs = vec![];
-        while outs_len > 0 {
-          // Read in 1024-byte chunks so we don't pre-allocate more than actual present upon a
-          // malicious length being specified
-          let chunk_len = outs_len.min(1024);
-          let mut chunk = vec![0; usize::try_from(chunk_len).unwrap()];
-          reader.read_exact(&mut chunk)?;
-          outs.extend(chunk);
-          outs_len -= chunk_len;
+        for _ in 0 .. outs_len {
+          outs.push(OutInstruction::read(reader)?);
         }
-        let outs = AbiDecode::decode(outs)
-          .map_err(|e| io::Error::other(format!("invalid ABI encoding of outs: {e}")))?;
 
         Ok(RouterCommand::Execute { chain_id, nonce, outs })
       }
@@ -121,9 +262,10 @@ impl RouterCommand {
         nonce.to_little_endian(&mut nonce_bytes);
         writer.write_all(&nonce_bytes)?;
 
-        let outs = outs.clone().encode();
         writer.write_all(&u32::try_from(outs.len()).unwrap().to_le_bytes())?;
-        writer.write_all(&outs)?;
+        for out in outs {
+          out.write(writer)?;
+        }
 
         Ok(())
       }
