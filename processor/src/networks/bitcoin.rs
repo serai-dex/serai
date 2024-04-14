@@ -821,6 +821,7 @@ impl Network for Bitcoin {
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    _key: ProjectivePoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,

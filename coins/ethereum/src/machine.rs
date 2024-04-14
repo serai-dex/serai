@@ -27,12 +27,12 @@ use crate::{
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Call {
-  to: [u8; 20],
-  value: U256,
-  data: Vec<u8>,
+  pub to: [u8; 20],
+  pub value: U256,
+  pub data: Vec<u8>,
 }
 impl Call {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let mut to = [0; 20];
     reader.read_exact(&mut to)?;
 
@@ -134,8 +134,8 @@ impl OutInstructionTarget {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OutInstruction {
-  target: OutInstructionTarget,
-  value: U256,
+  pub target: OutInstructionTarget,
+  pub value: U256,
 }
 impl OutInstruction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {

@@ -401,10 +401,16 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// 1) Call needed_fee
   /// 2) If the Plan is fulfillable, amortize the fee
   /// 3) Call signable_transaction *which MUST NOT return None if the above was done properly*
+  ///
+  /// This takes a destructured Plan as some of these arguments are malleated from the original
+  /// Plan.
+  // TODO: Explicit AmortizedPlan?
+  #[allow(clippy::too_many_arguments)]
   async fn signable_transaction(
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    key: <Self::Curve as Ciphersuite>::G,
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
@@ -541,6 +547,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
       .signable_transaction(
         block_number,
         &plan_id,
+        key,
         &inputs,
         &payments,
         &change,

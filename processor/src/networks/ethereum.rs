@@ -11,7 +11,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
 use ethereum_serai::{
-  ethers_core::types::{BlockNumber, Transaction},
+  ethers_core::types::{U256, BlockNumber, Transaction},
   ethers_providers::{Http, Provider, Middleware},
   crypto::{PublicKey, Signature},
   deployer::Deployer,
@@ -27,9 +27,26 @@ use tokio::{
 };
 
 use serai_client::{
-  primitives::{Balance, NetworkId},
+  primitives::{Coin, Balance, NetworkId},
   validator_sets::primitives::Session,
 };
+
+fn amount_to_serai_amount(coin: Coin, amount: U256) -> u64 {
+  assert_eq!(coin.network(), NetworkId::Ethereum);
+  assert_eq!(coin.decimals(), 8);
+  // Remove 10 decimals so we go from 18 decimals to 8 decimals
+  let divisor = U256::from(10_000_000_000u64);
+  // This is valid up to 184b
+  (amount / divisor).as_u64()
+}
+
+fn balance_to_ethereum_amount(balance: Balance) -> U256 {
+  assert_eq!(balance.coin.network(), NetworkId::Ethereum);
+  assert_eq!(balance.coin.decimals(), 8);
+  // Restore 10 decimals so we go from 8 decimals to 18 decimals
+  let factor = U256::from(10_000_000_000u64);
+  U256::from(balance.amount.0) * factor
+}
 
 use crate::{
   Db, Payment,
@@ -38,7 +55,10 @@ use crate::{
     Eventuality as EventualityTrait, EventualitiesTracker, NetworkError, Network,
   },
   key_gen::NetworkKeyDb,
-  multisigs::scheduler::{Scheduler as SchedulerTrait, smart_contract::Scheduler},
+  multisigs::scheduler::{
+    Scheduler as SchedulerTrait,
+    smart_contract::{Addendum, Scheduler},
+  },
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -461,13 +481,69 @@ impl<D: Debug + Db> Network for Ethereum<D> {
   async fn signable_transaction(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
+    _plan_id: &[u8; 32],
+    key: <Self::Curve as Ciphersuite>::G,
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
     scheduler_addendum: &<Self::Scheduler as SchedulerTrait<Self>>::Addendum,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    todo!("TODO")
+    assert_eq!(inputs.len(), 0);
+    assert!(change.is_none());
+    let chain_id = self.provider.get_chainid().await.map_err(|_| NetworkError::ConnectionError)?;
+
+    // TODO: Perform fee amortization (in scheduler?
+    // TODO: Make this function internal and have needed_fee properly return None as expected?
+    // TODO: signable_transaction is written as cannot return None if needed_fee returns Some
+    // TODO: Why can this return None at all if it isn't allowed to return None?
+
+    let command = match scheduler_addendum {
+      Addendum::Nonce(nonce) => RouterCommand::Execute {
+        chain_id,
+        nonce: (*nonce).into(),
+        outs: payments
+          .iter()
+          .filter_map(|payment| {
+            Some(OutInstruction {
+              target: if let Some(data) = payment.data.as_ref() {
+                // This introspects the Call serialization format, expecting the first 20 bytes to
+                // be the address
+                // This avoids wasting the 20-bytes allocated within address
+                let full_data = [payment.address.0.as_slice(), data].concat();
+                let mut reader = full_data.as_slice();
+
+                let mut calls = vec![];
+                while !reader.is_empty() {
+                  calls.push(Call::read(&mut reader).ok()?)
+                }
+                // The above must have executed at least once since reader contains the address
+                assert_eq!(calls[0].to, payment.address.0);
+
+                OutInstructionTarget::Calls(calls)
+              } else {
+                OutInstructionTarget::Direct(payment.address.0)
+              },
+              value: {
+                assert_eq!(payment.balance.coin, Coin::Ether); // TODO
+                balance_to_ethereum_amount(payment.balance)
+              },
+            })
+          })
+          .collect(),
+      },
+      Addendum::RotateTo { session, new_key } => {
+        assert!(payments.is_empty());
+        RouterCommand::UpdateSeraiKey {
+          chain_id,
+          session: (*session).into(),
+          key: PublicKey::new(*new_key).expect("new key wasn't a valid ETH public key"),
+        }
+      }
+    };
+    Ok(Some((
+      command.clone(),
+      Eventuality(PublicKey::new(key).expect("key wasn't a valid ETH public key"), command),
+    )))
   }
 
   async fn attempt_sign(

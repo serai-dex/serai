@@ -649,6 +649,7 @@ impl Network for Monero {
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    _key: EdwardsPoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
