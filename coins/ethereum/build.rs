@@ -1,6 +1,14 @@
-use std::process::Command;
+use std::{fs, process::Command};
 
-use ethers_contract::Abigen;
+use alloy_sol_macro_input::SolInputExpander;
+use alloy_sol_macro::SolMacroExpander;
+
+fn abi_to_file(name: &'static str, abi: &'static str, file: &str) {
+  let input = syn::parse_str(&(name.to_string() + ", r#\"" + abi + "\"#")).unwrap();
+  let tokens = SolMacroExpander.expand(&input).unwrap();
+  let code = prettyplease::unparse(&syn::parse2::<syn::File>(tokens).unwrap());
+  fs::write(file, code).unwrap();
+}
 
 fn main() {
   println!("cargo:rerun-if-changed=contracts/*");
@@ -41,31 +49,12 @@ fn main() {
     assert!(!line.starts_with("Error:"));
   }
 
-  Abigen::new("Deployer", "./artifacts/Deployer.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/abi/deployer.rs")
-    .unwrap();
-
-  Abigen::new("Router", "./artifacts/Router.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/abi/router.rs")
-    .unwrap();
-
-  Abigen::new("ERC20", "./artifacts/IERC20.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/abi/erc20.rs")
-    .unwrap();
-
-  Abigen::new("TestSchnorr", "./artifacts/TestSchnorr.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/tests/abi/schnorr.rs")
-    .unwrap();
+  abi_to_file("Deployer", include_str!("./artifacts/Deployer.abi"), "./src/abi/deployer.rs");
+  abi_to_file("Router", include_str!("./artifacts/Router.abi"), "./src/abi/router.rs");
+  abi_to_file("ERC20", include_str!("./artifacts/IERC20.abi"), "./src/abi/erc20.rs");
+  abi_to_file(
+    "TestSchnorr",
+    include_str!("./artifacts/TestSchnorr.abi"),
+    "./src/tests/abi/schnorr.rs",
+  );
 }

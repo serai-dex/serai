@@ -15,7 +15,7 @@ use frost::{
   sign::*,
 };
 
-use ethers_core::types::U256;
+use alloy_core::primitives::U256;
 
 use crate::{
   crypto::{PublicKey, EthereumHram, Signature},
@@ -39,7 +39,7 @@ impl Call {
     let value = {
       let mut value_bytes = [0; 32];
       reader.read_exact(&mut value_bytes)?;
-      U256::from_little_endian(&value_bytes)
+      U256::from_le_slice(&value_bytes)
     };
 
     let mut data_len = {
@@ -64,10 +64,7 @@ impl Call {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&self.to)?;
-
-    let mut value_bytes = [0; 32];
-    self.value.to_little_endian(&mut value_bytes);
-    writer.write_all(&value_bytes)?;
+    writer.write_all(&self.value.as_le_bytes())?;
 
     let data_len = u32::try_from(self.data.len())
       .map_err(|_| io::Error::other("call data length exceeded 2**32"))?;
@@ -144,17 +141,14 @@ impl OutInstruction {
     let value = {
       let mut value_bytes = [0; 32];
       reader.read_exact(&mut value_bytes)?;
-      U256::from_little_endian(&value_bytes)
+      U256::from_le_slice(&value_bytes)
     };
 
     Ok(OutInstruction { target, value })
   }
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.target.write(writer)?;
-
-    let mut value_bytes = [0; 32];
-    self.value.to_little_endian(&mut value_bytes);
-    writer.write_all(&value_bytes)
+    writer.write_all(&self.value.as_le_bytes())
   }
 }
 impl From<OutInstruction> for AbiOutInstruction {
@@ -207,19 +201,19 @@ impl RouterCommand {
         let key = PublicKey::new(Secp256k1::read_G(reader)?)
           .ok_or(io::Error::other("key for RouterCommand doesn't have an eth representation"))?;
         Ok(RouterCommand::UpdateSeraiKey {
-          chain_id: U256::from_little_endian(&chain_id),
-          session: U256::from_little_endian(&session),
+          chain_id: U256::from_le_slice(&chain_id),
+          session: U256::from_le_slice(&session),
           key,
         })
       }
       1 => {
         let mut chain_id = [0; 32];
         reader.read_exact(&mut chain_id)?;
-        let chain_id = U256::from_little_endian(&chain_id);
+        let chain_id = U256::from_le_slice(&chain_id);
 
         let mut nonce = [0; 32];
         reader.read_exact(&mut nonce)?;
-        let nonce = U256::from_little_endian(&nonce);
+        let nonce = U256::from_le_slice(&nonce);
 
         let mut outs_len = [0; 4];
         reader.read_exact(&mut outs_len)?;
@@ -240,33 +234,18 @@ impl RouterCommand {
     match self {
       RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
         writer.write_all(&[0])?;
-
-        let mut chain_id_bytes = [0; 32];
-        chain_id.to_little_endian(&mut chain_id_bytes);
-        writer.write_all(&chain_id_bytes)?;
-
-        let mut session_bytes = [0; 32];
-        session.to_little_endian(&mut session_bytes);
-        writer.write_all(&session_bytes)?;
-
+        writer.write_all(&chain_id.as_le_bytes())?;
+        writer.write_all(&session.as_le_bytes())?;
         writer.write_all(&key.A.to_bytes())
       }
       RouterCommand::Execute { chain_id, nonce, outs } => {
         writer.write_all(&[1])?;
-
-        let mut chain_id_bytes = [0; 32];
-        chain_id.to_little_endian(&mut chain_id_bytes);
-        writer.write_all(&chain_id_bytes)?;
-
-        let mut nonce_bytes = [0; 32];
-        nonce.to_little_endian(&mut nonce_bytes);
-        writer.write_all(&nonce_bytes)?;
-
+        writer.write_all(&chain_id.as_le_bytes())?;
+        writer.write_all(&nonce.as_le_bytes())?;
         writer.write_all(&u32::try_from(outs.len()).unwrap().to_le_bytes())?;
         for out in outs {
           out.write(writer)?;
         }
-
         Ok(())
       }
     }

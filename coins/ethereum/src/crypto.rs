@@ -13,15 +13,10 @@ use frost::{
   curve::{Ciphersuite, Secp256k1},
 };
 
-use ethers_core::{
-  types::{Signature as EthersSignature, Transaction},
-  utils::rlp::{Rlp, Decodable},
-};
+use alloy_core::primitives::{Parity, Signature as AlloySignature};
+use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
 
-use crate::{
-  Error, TransactionRequest,
-  abi::router::{Signature as AbiSignature},
-};
+use crate::abi::router::{Router::Signature as AbiSignature};
 
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
@@ -38,32 +33,29 @@ pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
   keccak256(&encoded_point.as_ref()[1 .. 65])[12 ..].try_into().unwrap()
 }
 
-pub(crate) fn deterministically_sign(
-  chain_id: u64,
-  tx: &TransactionRequest,
-) -> Result<Transaction, Error> {
-  let sig_hash = tx.sighash().0;
+pub(crate) fn deterministically_sign(tx: &TxLegacy) -> Signed<TxLegacy> {
+  assert!(
+    tx.chain_id.is_none(),
+    "chain ID was Some when deterministically signing a TX (causing a non-deterministic signer)"
+  );
+
+  let sig_hash = tx.signature_hash().0;
   let mut r = hash_to_scalar(&[sig_hash.as_slice(), b"r"].concat());
   let mut s = hash_to_scalar(&[sig_hash.as_slice(), b"s"].concat());
   loop {
-    // EIP-155 v
-    let v = chain_id
-      .checked_mul(2)
-      .and_then(|id| id.checked_add(35))
-      .ok_or(Error::ChainIdExceedsBounds)?;
-    let tx = tx.rlp_signed(&EthersSignature {
-      v,
-      r: r.to_repr().as_slice().into(),
-      s: s.to_repr().as_slice().into(),
-    });
-    let mut tx = Transaction::decode(&Rlp::new(&tx)).unwrap();
-    if tx.recover_from_mut().is_ok() {
-      return Ok(tx);
+    let r_bytes: [u8; 32] = r.to_repr().into();
+    let s_bytes: [u8; 32] = s.to_repr().into();
+    let v = Parity::NonEip155(false);
+    let signature =
+      AlloySignature::from_scalars_and_parity(r_bytes.into(), s_bytes.into(), v).unwrap();
+    let tx = tx.clone().into_signed(signature);
+    if tx.recover_signer().is_ok() {
+      return tx;
     }
 
     // Re-hash until valid
-    r = hash_to_scalar(r.to_repr().as_ref());
-    s = hash_to_scalar(s.to_repr().as_ref());
+    r = hash_to_scalar(r_bytes.as_ref());
+    s = hash_to_scalar(s_bytes.as_ref());
   }
 }
 
@@ -188,6 +180,8 @@ impl Signature {
 }
 impl From<&Signature> for AbiSignature {
   fn from(sig: &Signature) -> AbiSignature {
-    AbiSignature { c: sig.c.to_repr().into(), s: sig.s.to_repr().into() }
+    let c: [u8; 32] = sig.c.to_repr().into();
+    let s: [u8; 32] = sig.s.to_repr().into();
+    AbiSignature { c: c.into(), s: s.into() }
   }
 }

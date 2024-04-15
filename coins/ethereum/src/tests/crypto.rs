@@ -19,8 +19,9 @@ use frost::{
 use crate::{crypto::*, tests::key_gen};
 
 // The ecrecover opcode, yet with parity replacing v
-// This doesn't use recover from ethers-core due to that enforcing a low-s bound which is invalid
-// for our use case
+// This didn't use the ecrecover from ethers-core due to that enforcing a low-s bound which is
+// invalid for our use case
+// alloy doesn't appear to expose a function offering the ecrecover behavior
 pub(crate) fn ecrecover(message: Scalar, parity: u8, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
   if r.is_zero().into() || s.is_zero().into() || !((parity == 0) || (parity == 1)) {
     return None;
