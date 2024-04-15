@@ -11,15 +11,18 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
 use ethereum_serai::{
-  ethers_core::types::{U256, BlockNumber, Transaction},
-  ethers_providers::{Http, Provider, Middleware},
+  alloy_core::primitives::U256,
+  alloy_rpc_types::{BlockNumberOrTag, Transaction},
+  alloy_simple_request_transport::SimpleRequest,
+  alloy_rpc_client::ClientBuilder,
+  alloy_provider::{Provider, RootProvider},
   crypto::{PublicKey, Signature},
   deployer::Deployer,
   router::{Router, InInstruction as EthereumInInstruction},
   machine::*,
 };
 #[cfg(test)]
-use ethereum_serai::ethers_core::types::H256;
+use ethereum_serai::alloy_core::primitives::B256;
 
 use tokio::{
   time::sleep,
@@ -36,8 +39,8 @@ fn amount_to_serai_amount(coin: Coin, amount: U256) -> u64 {
   assert_eq!(coin.decimals(), 8);
   // Remove 10 decimals so we go from 18 decimals to 8 decimals
   let divisor = U256::from(10_000_000_000u64);
-  // This is valid up to 184b
-  (amount / divisor).as_u64()
+  // This is valid up to 184b, which is assumed for the coins allowed
+  u64::try_from(amount / divisor).unwrap()
 }
 
 fn balance_to_ethereum_amount(balance: Balance) -> U256 {
@@ -82,7 +85,7 @@ impl TryInto<Vec<u8>> for Address {
 }
 impl ToString for Address {
   fn to_string(&self) -> String {
-    ethereum_serai::ethers_core::types::H160(self.0).to_string()
+    ethereum_serai::alloy_core::primitives::Address::from(self.0).to_string()
   }
 }
 
@@ -144,7 +147,7 @@ impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
     let mut id = [0; 40];
     id[.. 32].copy_from_slice(&self.id.0);
     id[32 ..].copy_from_slice(&self.id.1.to_le_bytes());
-    ethereum_serai::ethers_core::utils::keccak256(id)
+    *ethereum_serai::alloy_core::primitives::keccak256(id)
   }
   fn tx_id(&self) -> [u8; 32] {
     self.id.0
@@ -207,12 +210,12 @@ impl EventualityTrait for Eventuality {
     match self.1 {
       RouterCommand::UpdateSeraiKey { session, .. } => {
         let mut res = vec![0];
-        res.extend(session.as_u64().to_le_bytes());
+        res.extend(&*session.as_le_bytes());
         res
       }
       RouterCommand::Execute { nonce, .. } => {
         let mut res = vec![1];
-        res.extend(nonce.as_u64().to_le_bytes());
+        res.extend(&*nonce.as_le_bytes());
         res
       }
     }
@@ -252,7 +255,7 @@ pub struct Ethereum<D: Debug + Db> {
   // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
   // first key (regardless of local state), and this is safe.
   db: D,
-  provider: Arc<Provider<Http>>,
+  provider: Arc<RootProvider<SimpleRequest>>,
   deployer: Deployer,
   router: Arc<RwLock<Option<Router>>>,
 }
@@ -263,13 +266,9 @@ impl<D: Debug + Db> PartialEq for Ethereum<D> {
 }
 impl<D: Debug + Db> Ethereum<D> {
   pub async fn new(db: D, url: String) -> Self {
-    let mut provider = Provider::<Http>::try_from(&url);
-    while let Err(e) = provider {
-      log::error!("couldn't connect to Ethereum node: {e:?}");
-      sleep(Duration::from_secs(5)).await;
-      provider = Provider::<Http>::try_from(&url);
-    }
-    let provider = Arc::new(provider.unwrap());
+    let provider = Arc::new(RootProvider::new(
+      ClientBuilder::default().transport(SimpleRequest::new(url), true),
+    ));
 
     let mut deployer = Deployer::new(provider.clone()).await;
     while !matches!(deployer, Ok(Some(_))) {
@@ -378,13 +377,13 @@ impl<D: Debug + Db> Network for Ethereum<D> {
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     let actual_number = self
       .provider
-      .get_block(BlockNumber::Finalized)
+      .get_block(BlockNumberOrTag::Finalized.into(), false)
       .await
       .map_err(|_| NetworkError::ConnectionError)?
       .expect("no blocks were finalized")
+      .header
       .number
-      .unwrap()
-      .as_u64();
+      .unwrap();
     // Error if there hasn't been a full epoch yet
     if actual_number < 32 {
       Err(NetworkError::ConnectionError)?
@@ -406,11 +405,12 @@ impl<D: Debug + Db> Network for Ethereum<D> {
     } else {
       self
         .provider
-        .get_block(u64::try_from(start - 1).unwrap())
+        .get_block(u64::try_from(start - 1).unwrap().into(), false)
         .await
         .ok()
         .flatten()
         .ok_or(NetworkError::ConnectionError)?
+        .header
         .hash
         .unwrap()
         .into()
@@ -418,11 +418,12 @@ impl<D: Debug + Db> Network for Ethereum<D> {
 
     let end_header = self
       .provider
-      .get_block(u64::try_from(start + 31).unwrap())
+      .get_block(u64::try_from(start + 31).unwrap().into(), false)
       .await
       .ok()
       .flatten()
-      .ok_or(NetworkError::ConnectionError)?;
+      .ok_or(NetworkError::ConnectionError)?
+      .header;
 
     let end_hash = end_header.hash.unwrap().into();
     let time = end_header.timestamp.try_into().unwrap();
@@ -490,7 +491,7 @@ impl<D: Debug + Db> Network for Ethereum<D> {
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     assert_eq!(inputs.len(), 0);
     assert!(change.is_none());
-    let chain_id = self.provider.get_chainid().await.map_err(|_| NetworkError::ConnectionError)?;
+    let chain_id = self.provider.get_chain_id().await.map_err(|_| NetworkError::ConnectionError)?;
 
     // TODO: Perform fee amortization (in scheduler?
     // TODO: Make this function internal and have needed_fee properly return None as expected?
@@ -499,8 +500,8 @@ impl<D: Debug + Db> Network for Ethereum<D> {
 
     let command = match scheduler_addendum {
       Addendum::Nonce(nonce) => RouterCommand::Execute {
-        chain_id,
-        nonce: (*nonce).into(),
+        chain_id: U256::try_from(chain_id).unwrap(),
+        nonce: U256::try_from(*nonce).unwrap(),
         outs: payments
           .iter()
           .filter_map(|payment| {
@@ -534,8 +535,8 @@ impl<D: Debug + Db> Network for Ethereum<D> {
       Addendum::RotateTo { session, new_key } => {
         assert!(payments.is_empty());
         RouterCommand::UpdateSeraiKey {
-          chain_id,
-          session: (*session).into(),
+          chain_id: U256::try_from(chain_id).unwrap(),
+          session: U256::try_from(*session).unwrap(),
           key: PublicKey::new(*new_key).expect("new key wasn't a valid ETH public key"),
         }
       }
@@ -576,13 +577,13 @@ impl<D: Debug + Db> Network for Ethereum<D> {
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
     self
       .provider
-      .get_block(H256(*id))
+      .get_block(B256::from(*id).into(), false)
       .await
       .unwrap()
       .unwrap()
+      .header
       .number
       .unwrap()
-      .as_u64()
       .try_into()
       .unwrap()
   }

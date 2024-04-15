@@ -1,6 +1,9 @@
 use thiserror::Error;
 
 pub use alloy_core;
+pub use alloy_rpc_types;
+pub use alloy_simple_request_transport;
+pub use alloy_rpc_client;
 pub use alloy_provider;
 
 pub mod crypto;
