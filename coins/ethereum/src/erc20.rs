@@ -9,8 +9,8 @@ use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use crate::Error;
-pub use crate::abi::erc20::ERC20 as abi;
-use abi::{ERC20Calls, Transfer, transferCall, transferFromCall};
+pub use crate::abi::erc20 as abi;
+use abi::{IERC20Calls, Transfer, transferCall, transferFromCall};
 
 #[derive(Clone, Debug)]
 pub struct TopLevelErc20Transfer {
@@ -72,11 +72,11 @@ impl ERC20 {
         // And we recognize the call...
         // Don't validate the encoding as this can't be re-encoded to an identical bytestring due
         // to the InInstruction appended
-        if let Ok(call) = ERC20Calls::abi_decode(&tx.input, false) {
+        if let Ok(call) = IERC20Calls::abi_decode(&tx.input, false) {
           // Extract the top-level call's from/to/value
           let (from, call_to, value) = match call {
-            ERC20Calls::transfer(transferCall { to: call_to, value }) => (tx.from, call_to, value),
-            ERC20Calls::transferFrom(transferFromCall { from, to: call_to, value }) => {
+            IERC20Calls::transfer(transferCall { to: call_to, value }) => (tx.from, call_to, value),
+            IERC20Calls::transferFrom(transferFromCall { from, to: call_to, value }) => {
               (from, call_to, value)
             }
             // Treat any other function selectors as unrecognized

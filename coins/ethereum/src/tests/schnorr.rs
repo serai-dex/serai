@@ -25,7 +25,7 @@ use alloy_node_bindings::{Anvil, AnvilInstance};
 use crate::{
   Error,
   crypto::*,
-  tests::{key_gen, deploy_contract, abi::schnorr::TestSchnorr as abi},
+  tests::{key_gen, deploy_contract, abi::schnorr as abi},
 };
 
 async fn setup_test() -> (AnvilInstance, Arc<RootProvider<SimpleRequest>>, Address) {

@@ -16,7 +16,7 @@ use frost::{
 use alloy_core::primitives::{Parity, Signature as AlloySignature};
 use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
 
-use crate::abi::router::{Router::Signature as AbiSignature};
+use crate::abi::router::{Signature as AbiSignature};
 
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()

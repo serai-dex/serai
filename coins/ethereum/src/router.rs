@@ -21,7 +21,7 @@ use alloy_provider::{Provider, RootProvider};
 pub use crate::{
   Error,
   crypto::{PublicKey, Signature},
-  abi::{erc20::ERC20::Transfer, router::Router as abi},
+  abi::{erc20::Transfer, router as abi},
 };
 use abi::{SeraiKeyUpdated, InInstruction as InInstructionEvent};
 

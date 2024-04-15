@@ -14,7 +14,7 @@ use crate::{
   crypto::{self, keccak256, PublicKey},
   router::Router,
 };
-pub use crate::abi::deployer::Deployer as abi;
+pub use crate::abi::deployer as abi;
 
 /// The Deployer contract for the Router contract.
 ///

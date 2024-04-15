@@ -5,7 +5,10 @@ use rand_core::OsRng;
 use k256::{Scalar, ProjectivePoint};
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, tests::key_gen as frost_key_gen};
 
-use alloy_core::{primitives::{Address, U256, Bytes, TxKind}, hex::FromHex};
+use alloy_core::{
+  primitives::{Address, U256, Bytes, TxKind},
+  hex::FromHex,
+};
 use alloy_consensus::{SignableTransaction, TxLegacy};
 
 use alloy_rpc_types::TransactionReceipt;
