@@ -10,10 +10,7 @@ pub mod pallet {
   use sp_std::{vec, collections::btree_map::BTreeMap};
 
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
-  use coins_pallet::{
-    primitives::{OutInstructionWithBalance, OutInstruction},
-    Config as CoinsConfig, Pallet as Coins, AllowMint,
-  };
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
 
   use serai_primitives::*;
   pub use genesis_liquidity_primitives as primitives;
@@ -165,12 +162,37 @@ pub mod pallet {
       Ok(())
     }
 
-    /// Remove the provided genesis liquidity for an account. If called pre-economic security era,
-    pub fn remove_coin_liquidity(
-      account: PublicKey,
-      balance: Balance,
-      out_address: ExternalAddress,
-    ) -> DispatchResult {
+    /// Returns the number of blocks since the coin's network reached economic security first time.
+    /// If the network is yet to be reached that threshold, 0 is returned. And maximum of
+    /// `GENESIS_SRI_TRICKLE_FEED` returned.
+    fn blocks_since_ec_security(coin: &Coin) -> u64 {
+      let ec_security_block =
+        EconomicSecurityReached::<T>::get(coin.network()).saturated_into::<u64>();
+      let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
+      if ec_security_block > 0 {
+        let diff = current - ec_security_block;
+        if diff > GENESIS_SRI_TRICKLE_FEED {
+          return GENESIS_SRI_TRICKLE_FEED;
+        }
+
+        return diff;
+      }
+
+      0
+    }
+
+    fn genesis_ended() -> bool {
+      <frame_system::Pallet<T>>::block_number() >= BLOCKS_PER_MONTH.into()
+    }
+  }
+
+  #[pallet::call]
+  impl<T: Config> Pallet<T> {
+    /// Remove the provided genesis liquidity for an account.
+    #[pallet::call_index(0)]
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn remove_coin_liquidity(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
+      let account = ensure_signed(origin)?;
       let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
 
       // check we are still in genesis period
@@ -232,13 +254,9 @@ pub mod pallet {
           Err(Error::<T>::CanOnlyRemoveFullAmount)?;
         }
 
-        // TODO: do internal transfer instead?
-        let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
-        let instruction = OutInstructionWithBalance {
-          instruction: OutInstruction { address: out_address, data: None },
-          balance,
-        };
-        Coins::<T>::burn_with_instruction(origin.into(), instruction)?;
+        // TODO: do external transfer instead for making it easier for the user?
+        // or do we even want to make it easier?
+        Coins::<T>::transfer(origin.into(), account, balance)?;
 
         // save
         Liquidity::<T>::set(balance.coin, account, None);
@@ -246,29 +264,6 @@ pub mod pallet {
 
       Self::deposit_event(Event::GenesisLiquidityRemoved { by: account.into(), balance });
       Ok(())
-    }
-
-    /// Returns the number of blocks since the coin's network reached economic security first time.
-    /// If the network is yet to be reached that threshold, 0 is returned. And maximum of
-    /// `GENESIS_SRI_TRICKLE_FEED` returned.
-    fn blocks_since_ec_security(coin: &Coin) -> u64 {
-      let ec_security_block =
-        EconomicSecurityReached::<T>::get(coin.network()).saturated_into::<u64>();
-      let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
-      if ec_security_block > 0 {
-        let diff = current - ec_security_block;
-        if diff > GENESIS_SRI_TRICKLE_FEED {
-          return GENESIS_SRI_TRICKLE_FEED;
-        }
-
-        return diff;
-      }
-
-      0
-    }
-
-    fn genesis_ended() -> bool {
-      <frame_system::Pallet<T>>::block_number() >= BLOCKS_PER_MONTH.into()
     }
   }
 }

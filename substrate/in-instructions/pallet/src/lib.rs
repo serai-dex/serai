@@ -204,14 +204,9 @@ pub mod pallet {
             }
           }
         }
-        InInstruction::GenesisLiquidity(ops) => match ops {
-          GenesisLiquidityOperation::Add(address, balance) => {
-            GenesisLiq::<T>::add_coin_liquidity(address.into(), balance)?;
-          }
-          GenesisLiquidityOperation::Remove(address, balance, out_address) => {
-            GenesisLiq::<T>::remove_coin_liquidity(address.into(), balance, out_address)?;
-          }
-        },
+        InInstruction::GenesisLiquidity(address) => {
+          GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
+        }
       }
       Ok(())
     }

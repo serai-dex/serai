@@ -177,6 +177,9 @@ impl Contains<RuntimeCall> for CallFilter {
       },
       RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
       RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
+      RuntimeCall::GenesisLiquidity(call) => {
+        !matches!(call, genesis_liquidity::Call::__Ignore(_, _))
+      }
       RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
       RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
 
