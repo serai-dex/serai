@@ -41,9 +41,8 @@ use tendermint::{
 use tokio::sync::RwLock;
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite,
-  transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
-  Blockchain, P2p,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite, transaction::Transaction as TransactionTrait,
+  Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };
 
 pub mod tx;
