@@ -9,6 +9,8 @@ use std::{
 use async_trait::async_trait;
 use rand_core::{RngCore, OsRng};
 
+use ciphersuite::{Ciphersuite, Ristretto};
+
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet, Serai};
@@ -612,6 +614,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
   p2p: P,
   cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
+  our_key: <Ristretto as Ciphersuite>::G,
 ) {
   let channels = Arc::new(RwLock::new(HashMap::<_, mpsc::UnboundedSender<Message<P>>>::new()));
   tokio::spawn({
@@ -631,6 +634,8 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
             // Subscribe to the topic for this tributary
             p2p.subscribe(tributary.spec.set(), genesis).await;
 
+            let spec_set = tributary.spec.set();
+
             // Per-Tributary P2P message handler
             tokio::spawn({
               let p2p = p2p.clone();
@@ -645,7 +650,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
 
                     P2pMessageKind::Tributary(msg_genesis) => {
                       assert_eq!(msg_genesis, genesis);
-                      log::trace!("handling message for tributary {:?}", tributary.spec.set());
+                      log::trace!("handling message for tributary {:?}", spec_set);
                       if tributary.tributary.handle_message(&msg.msg).await {
                         P2p::broadcast(&p2p, msg.kind, msg.msg).await;
                       }
@@ -668,18 +673,13 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                       // Spawn a dedicated task as this may require loading large amounts of data
                       // from disk and take a notable amount of time
                       tokio::spawn(async move {
-                        /*
                         // Have sqrt(n) nodes reply with the blocks
-                        let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let mut responders = f32::from(spec.n(&[])).sqrt().floor() as u64;
                         // Try to have at least 3 responders
                         if responders < 3 {
-                          responders = tributary.spec.n().min(3).into();
+                          responders = spec.n(&[]).min(3).into();
                         }
-                        */
-
-                        /*
-                        // Have up to three nodes respond
-                        let responders = u64::from(spec.n().min(3));
 
                         // Decide which nodes will respond by using the latest block's hash as a
                         // mutually agreed upon entropy source
@@ -689,7 +689,7 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                         // (so the highest is 7, 8, 9)
                         // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
                         let start =
-                          usize::try_from(entropy % (u64::from(spec.n() + 1) - responders))
+                          usize::try_from(entropy % (u64::from(spec.n(&[]) + 1) - responders))
                             .unwrap();
                         let mut selected = false;
                         for validator in &spec.validators()
@@ -706,21 +706,23 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                         }
 
                         log::debug!("received heartbeat and selected to respond");
-                        */
 
-                        // Have every node respond
-                        // While we could only have a subset respond, LibP2P will sync all messages
-                        // it isn't aware of
-                        // It's cheaper to be aware from our disk than from over the network
+                        // Have the selected nodes respond
                         // TODO: Spawn a dedicated topic for this heartbeat response?
                         let mut latest = msg.msg[.. 32].try_into().unwrap();
+                        let mut to_send = vec![];
                         while let Some(next) = reader.block_after(&latest) {
-                          let mut res = reader.block(&next).unwrap().serialize();
-                          res.extend(reader.commit(&next).unwrap());
-                          // Also include the timestamp used within the Heartbeat
-                          res.extend(&msg.msg[32 .. 40]);
-                          p2p.send(msg.sender, P2pMessageKind::Block(spec.genesis()), res).await;
+                          to_send.push(next);
                           latest = next;
+                        }
+                        if to_send.len() > 1 {
+                          for next in to_send {
+                            let mut res = reader.block(&next).unwrap().serialize();
+                            res.extend(reader.commit(&next).unwrap());
+                            // Also include the timestamp used within the Heartbeat
+                            res.extend(&msg.msg[32 .. 40]);
+                            p2p.send(msg.sender, P2pMessageKind::Block(spec.genesis()), res).await;
+                          }
                         }
                       });
                     }
