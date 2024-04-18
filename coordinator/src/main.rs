@@ -1292,6 +1292,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
     p2p.clone(),
     cosign_channel.clone(),
     tributary_event_listener_4,
+    <Ristretto as Ciphersuite>::generator() * key.deref(),
   ));
 
   // Handle all messages from processors
