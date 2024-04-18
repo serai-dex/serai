@@ -715,12 +715,12 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                       {
                         if our_key == validator.0 {
                           selected = true;
-                          break;
+                          continue;
                         }
                       }
                       if !selected {
                         log::debug!("received heartbeat and not selected to respond");
-                        return;
+                        continue;
                       }
 
                       log::debug!("received heartbeat and selected to respond");
