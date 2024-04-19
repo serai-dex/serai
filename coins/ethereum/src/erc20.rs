@@ -85,8 +85,8 @@ impl ERC20 {
 
           let log = log.log_decode::<Transfer>().map_err(|_| Error::ConnectionError)?.inner.data;
 
-          // Ensure the top-level transfer is equivalent, and this isn't a log for an internal
-          // transfer
+          // Ensure the top-level transfer is equivalent, and this presumably isn't a log for an
+          // internal transfer
           if (log.from != from) || (call_to != to) || (value != log.value) {
             continue;
           }

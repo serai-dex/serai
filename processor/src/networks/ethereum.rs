@@ -475,6 +475,8 @@ impl<D: Debug + Db> Network for Ethereum<D> {
     let router = self.router().await;
     let router = router.as_ref().unwrap();
 
+    // TODO: Top-level transfers
+
     let mut all_events = vec![];
     for block in block.start .. (block.start + 32) {
       let mut events = router.in_instructions(block, &HashSet::from([DAI])).await;
@@ -650,12 +652,14 @@ impl<D: Debug + Db> Network for Ethereum<D> {
     &self,
     completion: &<Self::Eventuality as EventualityTrait>::Completion,
   ) -> Result<(), NetworkError> {
+    // Publish this to the dedicated TX server for a solver to actually publish
     #[cfg(not(test))]
     {
       let _ = completion;
       todo!("TODO");
     }
 
+    // Publish this using a dummy account we fund with magic RPC commands
     #[cfg(test)]
     {
       use rand_core::OsRng;

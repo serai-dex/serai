@@ -647,14 +647,22 @@ impl<D: Db, N: Network> MultisigManager<D, N> {
     });
 
     for plan in &plans {
-      if let Some(change) = N::change_address(plan.key) {
-        if plan.change == Some(change) {
-          // Assert these are only created during the expected step
-          match *step {
-            RotationStep::UseExisting => {}
-            RotationStep::NewAsChange |
-            RotationStep::ForwardFromExisting |
-            RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+      // This first equality should 'never meaningfully' be false
+      // All created plans so far are by the existing multisig EXCEPT:
+      // A) If we created a refund plan from the new multisig (yet that wouldn't have change)
+      // B) The existing Scheduler returned a Plan for the new key (yet that happens with the SC
+      //    scheduler, yet that doesn't have change)
+      // Despite being 'unnecessary' now, it's better to explicitly ensure and be robust
+      if plan.key == self.existing.as_ref().unwrap().key {
+        if let Some(change) = N::change_address(plan.key) {
+          if plan.change == Some(change) {
+            // Assert these (self-change) are only created during the expected step
+            match *step {
+              RotationStep::UseExisting => {}
+              RotationStep::NewAsChange |
+              RotationStep::ForwardFromExisting |
+              RotationStep::ClosingExisting => panic!("change was set to self despite rotating"),
+            }
           }
         }
       }

@@ -420,7 +420,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
 
   /// Prepare a SignableTransaction for a transaction.
   ///
-  /// This must not persistent anything as we will prepare Plans we never intend to execute.
+  /// This must not persist anything as we will prepare Plans we never intend to execute.
   async fn prepare_send(
     &self,
     block_number: usize,
