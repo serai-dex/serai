@@ -43,6 +43,7 @@ jobs:
             -p tendermint-machine \
             -p tributary-chain \
             -p serai-coordinator \
+            -p serai-orchestrator \
             -p serai-docker-tests
 
   test-substrate:
@@ -64,7 +65,9 @@ jobs:
             -p serai-validator-sets-pallet \
             -p serai-in-instructions-primitives \
             -p serai-in-instructions-pallet \
+            -p serai-signals-primitives \
             -p serai-signals-pallet \
+            -p serai-abi \
             -p serai-runtime \
             -p serai-node
 

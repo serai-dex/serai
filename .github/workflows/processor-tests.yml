@@ -37,4 +37,4 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run processor Docker tests
-        run: cd tests/processor && GITHUB_CI=true RUST_BACKTRACE=1 cargo test
+        run: cd tests/processor && GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features
