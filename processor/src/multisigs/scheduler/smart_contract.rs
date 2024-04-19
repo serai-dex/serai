@@ -62,7 +62,7 @@ impl<N: Network> SchedulerAddendum for Addendum<N> {
 create_db! {
   SchedulerDb {
     LastNonce: () -> u64,
-    Rotated: (key: &[u8]) -> (),
+    RotatedTo: (key: &[u8]) -> Vec<u8>,
   }
 }
 
@@ -96,7 +96,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     Ok(Scheduler {
       key,
       coins: network.coins().iter().copied().collect(),
-      rotated: Rotated::get(db, key.to_bytes().as_ref()).is_some(),
+      rotated: RotatedTo::get(db, key.to_bytes().as_ref()).is_some(),
     })
   }
 
@@ -119,6 +119,8 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     let mut nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);
     let mut plans = vec![];
     for chunk in payments.as_slice().chunks(N::MAX_OUTPUTS) {
+      // Once we rotate, all further payments should be scheduled via the new multisig
+      assert!(!self.rotated);
       plans.push(Plan {
         key: self.key,
         inputs: vec![],
@@ -141,7 +143,11 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
       });
       nonce += 1;
       self.rotated = true;
-      Rotated::set(txn, self.key.to_bytes().as_ref(), &());
+      RotatedTo::set(
+        txn,
+        self.key.to_bytes().as_ref(),
+        &key_for_any_change.to_bytes().as_ref().to_vec(),
+      );
     }
 
     LastNonce::set(txn, &nonce);
@@ -169,10 +175,14 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     output: N::Output,
     refund_to: N::Address,
   ) -> Plan<N> {
+    let current_key = RotatedTo::get(txn, self.key.to_bytes().as_ref())
+      .and_then(|key_bytes| <N::Curve as Ciphersuite>::read_G(&mut key_bytes.as_slice()).ok())
+      .unwrap_or(self.key);
+
     let nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);
     LastNonce::set(txn, &(nonce + 1));
     Plan {
-      key: self.key,
+      key: current_key,
       inputs: vec![],
       payments: vec![Payment { address: refund_to, data: None, balance: output.balance() }],
       change: None,
