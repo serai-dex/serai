@@ -26,7 +26,11 @@ contract Router {
     bytes32 s;
   }
 
-  event SeraiKeyUpdated(bytes32 key);
+  event SeraiKeyUpdated(
+    uint256 indexed nonce,
+    bytes32 indexed key,
+    Signature signature
+  );
   event InInstruction(
     address indexed from,
     address indexed coin,
@@ -34,7 +38,12 @@ contract Router {
     bytes instruction
   );
   // success is a uint256 representing a bitfield of transaction successes
-  event Executed(uint256 nonce, bytes32 batch, uint256 success);
+  event Executed(
+    uint256 indexed nonce,
+    bytes32 indexed batch,
+    uint256 success,
+    Signature signature
+  );
 
   // error types
   error InvalidKey();
@@ -43,7 +52,11 @@ contract Router {
   error FailedTransfer();
   error TooManyTransactions();
 
-  modifier _updateSeraiKeyAtEndOfFn(bytes32 key) {
+  modifier _updateSeraiKeyAtEndOfFn(
+    uint256 _nonce,
+    bytes32 key,
+    Signature memory sig
+  ) {
     if (
       (key == bytes32(0)) ||
       ((bytes32(uint256(key) % Schnorr.Q)) != key)
@@ -54,10 +67,16 @@ contract Router {
     _;
 
     seraiKey = key;
-    emit SeraiKeyUpdated(key);
+    emit SeraiKeyUpdated(_nonce, key, sig);
   }
 
-  constructor(bytes32 _seraiKey) _updateSeraiKeyAtEndOfFn(_seraiKey) {}
+  constructor(bytes32 _seraiKey) _updateSeraiKeyAtEndOfFn(
+    0,
+    _seraiKey,
+    Signature({ c: bytes32(0), s: bytes32(0) })
+  ) {
+    nonce = 1;
+  }
 
   // updateSeraiKey validates the given Schnorr signature against the current
   // public key, and if successful, updates the contract's public key to the
@@ -65,7 +84,7 @@ contract Router {
   function updateSeraiKey(
     bytes32 _seraiKey,
     Signature calldata sig
-  ) external _updateSeraiKeyAtEndOfFn(_seraiKey) {
+  ) external _updateSeraiKeyAtEndOfFn(nonce, _seraiKey, sig) {
     bytes memory message =
       abi.encodePacked("updateSeraiKey", block.chainid, nonce, _seraiKey);
     nonce++;
@@ -144,6 +163,7 @@ contract Router {
 
     bytes memory message =
       abi.encode("execute", block.chainid, nonce, transactions);
+    uint256 executed_with_nonce = nonce;
     // This prevents re-entrancy from causing double spends yet does allow
     // out-of-order execution via re-entrancy
     nonce++;
@@ -178,6 +198,7 @@ contract Router {
         Sandbox sandbox = new Sandbox();
         (success, ) = address(sandbox).call{
           value: transactions[i].value,
+          // TODO: Have the Call specify the gas up front
           gas: 350_000
         }(
           abi.encodeWithSelector(
@@ -191,6 +212,11 @@ contract Router {
         successes := or(successes, shl(i, success))
       }
     }
-    emit Executed(nonce, keccak256(message), successes);
+    emit Executed(
+      executed_with_nonce,
+      keccak256(message),
+      successes,
+      sig
+    );
   }
 }

@@ -28,6 +28,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std", "get
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 # Encoders
+const-hex = { version = "1", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }

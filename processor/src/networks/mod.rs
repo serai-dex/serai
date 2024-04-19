@@ -366,6 +366,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// registered eventualities may have been completed in.
   ///
   /// This may panic if not fed a block greater than the tracker's block number.
+  ///
+  /// Plan ID -> (block number, TX ID, completion)
   // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
   // code
   // TODO: Consider having this return the Transaction + the Completion?

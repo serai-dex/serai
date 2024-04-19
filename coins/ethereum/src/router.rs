@@ -23,7 +23,7 @@ pub use crate::{
   crypto::{PublicKey, Signature},
   abi::{erc20::Transfer, router as abi},
 };
-use abi::{SeraiKeyUpdated, InInstruction as InInstructionEvent};
+use abi::{SeraiKeyUpdated, InInstruction as InInstructionEvent, Executed as ExecutedEvent};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Coin {
@@ -121,6 +121,13 @@ impl InInstruction {
 
     writer.write_all(&self.key_at_end_of_block.to_bytes())
   }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Executed {
+  pub tx_id: [u8; 32],
+  pub nonce: u64,
+  pub signature: [u8; 64],
 }
 
 /// The contract Serai uses to manage its state.
@@ -347,5 +354,64 @@ impl Router {
     }
 
     Ok(in_instructions)
+  }
+
+  pub async fn executed_commands(&self, block: u64) -> Result<Vec<Executed>, Error> {
+    let mut res = vec![];
+
+    {
+      let filter = Filter::new().from_block(block).to_block(block).address(self.1);
+      let filter = filter.event_signature(SeraiKeyUpdated::SIGNATURE_HASH);
+      let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
+
+      for log in logs {
+        // Double check the address which emitted this log
+        if log.address() != self.1 {
+          Err(Error::ConnectionError)?;
+        }
+
+        let tx_id = log.transaction_hash.ok_or(Error::ConnectionError)?.into();
+
+        let log =
+          log.log_decode::<SeraiKeyUpdated>().map_err(|_| Error::ConnectionError)?.inner.data;
+
+        let mut signature = [0; 64];
+        signature[.. 32].copy_from_slice(log.signature.c.as_ref());
+        signature[32 ..].copy_from_slice(log.signature.s.as_ref());
+        res.push(Executed {
+          tx_id,
+          nonce: log.nonce.try_into().map_err(|_| Error::ConnectionError)?,
+          signature,
+        });
+      }
+    }
+
+    {
+      let filter = Filter::new().from_block(block).to_block(block).address(self.1);
+      let filter = filter.event_signature(ExecutedEvent::SIGNATURE_HASH);
+      let logs = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
+
+      for log in logs {
+        // Double check the address which emitted this log
+        if log.address() != self.1 {
+          Err(Error::ConnectionError)?;
+        }
+
+        let tx_id = log.transaction_hash.ok_or(Error::ConnectionError)?.into();
+
+        let log = log.log_decode::<ExecutedEvent>().map_err(|_| Error::ConnectionError)?.inner.data;
+
+        let mut signature = [0; 64];
+        signature[.. 32].copy_from_slice(log.signature.c.as_ref());
+        signature[32 ..].copy_from_slice(log.signature.s.as_ref());
+        res.push(Executed {
+          tx_id,
+          nonce: log.nonce.try_into().map_err(|_| Error::ConnectionError)?,
+          signature,
+        });
+      }
+    }
+
+    Ok(res)
   }
 }

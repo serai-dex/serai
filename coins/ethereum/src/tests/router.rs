@@ -100,7 +100,7 @@ async fn test_deploy_contract() {
 
   let block_hash = latest_block_hash(&client).await;
   assert_eq!(router.serai_key(block_hash).await.unwrap(), public_key);
-  assert_eq!(router.nonce(block_hash).await.unwrap(), U256::ZERO);
+  assert_eq!(router.nonce(block_hash).await.unwrap(), U256::try_from(1u64).unwrap());
   // TODO: Check it emitted SeraiKeyUpdated(public_key) at its genesis
 }
 
@@ -126,8 +126,11 @@ async fn test_router_update_serai_key() {
     break next_key;
   };
 
-  let message =
-    Router::update_serai_key_message(U256::try_from(chain_id).unwrap(), U256::ZERO, &next_key);
+  let message = Router::update_serai_key_message(
+    U256::try_from(chain_id).unwrap(),
+    U256::try_from(1u64).unwrap(),
+    &next_key,
+  );
   let sig = hash_and_sign(&keys, &public_key, &message);
 
   let first_block_hash = latest_block_hash(&client).await;
@@ -160,7 +163,7 @@ async fn test_router_execute() {
 
   let first_block_hash = latest_block_hash(&client).await;
   let nonce = contract.nonce(first_block_hash).await.unwrap();
-  assert_eq!(nonce, U256::ZERO);
+  assert_eq!(nonce, U256::try_from(1u64).unwrap());
 
   let message = Router::execute_message(U256::try_from(chain_id).unwrap(), nonce, txs.clone());
   let sig = hash_and_sign(&keys, &public_key, &message);
@@ -170,9 +173,9 @@ async fn test_router_execute() {
   assert!(receipt.status());
 
   let second_block_hash = latest_block_hash(&client).await;
-  assert_eq!(contract.nonce(second_block_hash).await.unwrap(), U256::try_from(1u64).unwrap());
+  assert_eq!(contract.nonce(second_block_hash).await.unwrap(), U256::try_from(2u64).unwrap());
   // Check this does still offer the historical state
-  assert_eq!(contract.nonce(first_block_hash).await.unwrap(), U256::ZERO);
+  assert_eq!(contract.nonce(first_block_hash).await.unwrap(), U256::try_from(1u64).unwrap());
   // TODO: Check logs
 
   println!("gas used: {:?}", receipt.gas_used);

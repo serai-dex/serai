@@ -18,7 +18,7 @@ use ethereum_serai::{
   alloy_provider::{Provider, RootProvider},
   crypto::{PublicKey, Signature},
   deployer::Deployer,
-  router::{Router, InInstruction as EthereumInInstruction},
+  router::{Router, Coin as EthereumCoin, InInstruction as EthereumInInstruction},
   machine::*,
 };
 #[cfg(test)]
@@ -30,26 +30,9 @@ use tokio::{
 };
 
 use serai_client::{
-  primitives::{Coin, Balance, NetworkId},
+  primitives::{Coin, Amount, Balance, NetworkId},
   validator_sets::primitives::Session,
 };
-
-fn amount_to_serai_amount(coin: Coin, amount: U256) -> u64 {
-  assert_eq!(coin.network(), NetworkId::Ethereum);
-  assert_eq!(coin.decimals(), 8);
-  // Remove 10 decimals so we go from 18 decimals to 8 decimals
-  let divisor = U256::from(10_000_000_000u64);
-  // This is valid up to 184b, which is assumed for the coins allowed
-  u64::try_from(amount / divisor).unwrap()
-}
-
-fn balance_to_ethereum_amount(balance: Balance) -> U256 {
-  assert_eq!(balance.coin.network(), NetworkId::Ethereum);
-  assert_eq!(balance.coin.decimals(), 8);
-  // Restore 10 decimals so we go from 8 decimals to 18 decimals
-  let factor = U256::from(10_000_000_000u64);
-  U256::from(balance.amount.0) * factor
-}
 
 use crate::{
   Db, Payment,
@@ -63,6 +46,48 @@ use crate::{
     smart_contract::{Addendum, Scheduler},
   },
 };
+
+#[cfg(not(test))]
+const DAI: [u8; 20] =
+  match const_hex::const_decode_to_array(b"0x6B175474E89094C44Da98b954EedeAC495271d0F") {
+    Ok(res) => res,
+    Err(_) => panic!("invalid non-test DAI hex address"),
+  };
+#[cfg(test)] // TODO
+const DAI: [u8; 20] =
+  match const_hex::const_decode_to_array(b"0000000000000000000000000000000000000000") {
+    Ok(res) => res,
+    Err(_) => panic!("invalid test DAI hex address"),
+  };
+
+fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
+  match coin {
+    EthereumCoin::Ether => Some(Coin::Ether),
+    EthereumCoin::Erc20(token) => {
+      if *token == DAI {
+        return Some(Coin::Dai);
+      }
+      None
+    }
+  }
+}
+
+fn amount_to_serai_amount(coin: Coin, amount: U256) -> Amount {
+  assert_eq!(coin.network(), NetworkId::Ethereum);
+  assert_eq!(coin.decimals(), 8);
+  // Remove 10 decimals so we go from 18 decimals to 8 decimals
+  let divisor = U256::from(10_000_000_000u64);
+  // This is valid up to 184b, which is assumed for the coins allowed
+  Amount(u64::try_from(amount / divisor).unwrap())
+}
+
+fn balance_to_ethereum_amount(balance: Balance) -> U256 {
+  assert_eq!(balance.coin.network(), NetworkId::Ethereum);
+  assert_eq!(balance.coin.decimals(), 8);
+  // Restore 10 decimals so we go from 8 decimals to 18 decimals
+  let factor = U256::from(10_000_000_000u64);
+  U256::from(balance.amount.0) * factor
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Address(pub [u8; 20]);
@@ -122,6 +147,13 @@ pub struct Epoch {
   // The monotonic time for this Epoch.
   time: u64,
 }
+
+impl Epoch {
+  fn end(&self) -> u64 {
+    self.start + 31
+  }
+}
+
 #[async_trait]
 impl<D: Debug + Db> Block<Ethereum<D>> for Epoch {
   type Id = [u8; 32];
@@ -161,7 +193,13 @@ impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
   }
 
   fn balance(&self) -> Balance {
-    todo!("TODO")
+    let coin = coin_to_serai_coin(&self.coin).unwrap_or_else(|| {
+      panic!(
+        "requesting coin for an EthereumInInstruction with a coin {}",
+        "we don't handle. this never should have been yielded"
+      )
+    });
+    Balance { coin, amount: amount_to_serai_amount(coin, self.amount) }
   }
   fn data(&self) -> &[u8] {
     &self.data
@@ -208,15 +246,8 @@ impl EventualityTrait for Eventuality {
 
   fn lookup(&self) -> Vec<u8> {
     match self.1 {
-      RouterCommand::UpdateSeraiKey { nonce, .. } => {
-        let mut res = vec![0];
-        res.extend(&*nonce.as_le_bytes());
-        res
-      }
-      RouterCommand::Execute { nonce, .. } => {
-        let mut res = vec![1];
-        res.extend(&*nonce.as_le_bytes());
-        res
+      RouterCommand::UpdateSeraiKey { nonce, .. } | RouterCommand::Execute { nonce, .. } => {
+        nonce.as_le_bytes().to_vec()
       }
     }
   }
@@ -281,6 +312,8 @@ impl<D: Debug + Db> Ethereum<D> {
     Ethereum { db, provider, deployer, router: Arc::new(RwLock::new(None)) }
   }
 
+  // Obtain a reference to the Router, sleeping until it's deployed if it hasn't already been.
+  // This is guaranteed to return Some.
   pub async fn router(&self) -> RwLockReadGuard<'_, Option<Router>> {
     // If we've already instantiated the Router, return a read reference
     {
@@ -358,19 +391,19 @@ impl<D: Debug + Db> Network for Ethereum<D> {
   }
 
   #[cfg(test)]
-  async fn external_address(&self, key: <Secp256k1 as Ciphersuite>::G) -> Address {
+  async fn external_address(&self, _key: <Secp256k1 as Ciphersuite>::G) -> Address {
     Address(self.router().await.as_ref().unwrap().address())
   }
 
-  fn branch_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+  fn branch_address(_key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
     None
   }
 
-  fn change_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+  fn change_address(_key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
     None
   }
 
-  fn forward_address(key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
+  fn forward_address(_key: <Secp256k1 as Ciphersuite>::G) -> Option<Address> {
     None
   }
 
@@ -426,7 +459,7 @@ impl<D: Debug + Db> Network for Ethereum<D> {
       .header;
 
     let end_hash = end_header.hash.unwrap().into();
-    let time = end_header.timestamp.try_into().unwrap();
+    let time = end_header.timestamp;
 
     Ok(Epoch { prior_end_hash, start: start.try_into().unwrap(), end_hash, time })
   }
@@ -441,13 +474,20 @@ impl<D: Debug + Db> Network for Ethereum<D> {
 
     let mut all_events = vec![];
     for block in block.start .. (block.start + 32) {
-      let mut events = router.in_instructions(block, &HashSet::new()).await; // TODO re: tokens
+      let mut events = router.in_instructions(block, &HashSet::from([DAI])).await;
       while let Err(e) = events {
         log::error!("couldn't connect to Ethereum node for the Router's events: {e:?}");
         sleep(Duration::from_secs(5)).await;
-        events = router.in_instructions(block, &HashSet::new()).await; // TODO re: tokens
+        events = router.in_instructions(block, &HashSet::from([DAI])).await;
       }
       all_events.extend(events.unwrap());
+    }
+
+    for event in &all_events {
+      assert!(
+        coin_to_serai_coin(&event.coin).is_some(),
+        "router yielded events for unrecognized coins"
+      );
     }
     all_events
   }
@@ -464,7 +504,52 @@ impl<D: Debug + Db> Network for Ethereum<D> {
       <Self::Eventuality as EventualityTrait>::Completion,
     ),
   > {
-    todo!("TODO")
+    let mut res = HashMap::new();
+    if eventualities.map.is_empty() {
+      return res;
+    }
+
+    let router = self.router().await;
+    let router = router.as_ref().unwrap();
+
+    let past_scanned_epoch = loop {
+      match self.get_block(eventualities.block_number).await {
+        Ok(block) => break block,
+        Err(e) => log::error!("couldn't get the last scanned block in the tracker: {}", e),
+      }
+      sleep(Duration::from_secs(10)).await;
+    };
+    assert_eq!(
+      past_scanned_epoch.start / 32,
+      u64::try_from(eventualities.block_number).unwrap(),
+      "assumption of tracker block number's relation to epoch start is incorrect"
+    );
+
+    // Iterate from after the epoch number in the tracker to the end of this epoch
+    for block_num in (past_scanned_epoch.end() + 1) ..= block.end() {
+      let executed = loop {
+        match router.executed_commands(block_num).await {
+          Ok(executed) => break executed,
+          Err(e) => log::error!("couldn't get the executed commands in block {block_num}: {e}"),
+        }
+        sleep(Duration::from_secs(10)).await;
+      };
+
+      for executed in executed {
+        let lookup = executed.nonce.to_le_bytes().to_vec();
+        if let Some((plan_id, eventuality)) = eventualities.map.get(&lookup) {
+          if let Some(command) =
+            SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &executed.signature)
+          {
+            res.insert(*plan_id, (block_num.try_into().unwrap(), executed.tx_id, command));
+            eventualities.map.remove(&lookup);
+          }
+        }
+      }
+    }
+    eventualities.block_number = (block.start / 32).try_into().unwrap();
+
+    res
   }
 
   async fn needed_fee(
