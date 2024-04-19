@@ -89,6 +89,6 @@ ethereum = ["secp256k1", "ethereum-serai"]
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
 
-binaries = ["env_logger", "serai-env", "messages", "message-queue"]
+binaries = ["env_logger", "serai-env", "message-queue"]
 parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]
