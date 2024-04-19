@@ -61,12 +61,12 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
 zalloc = { path = "../common/zalloc" }
-serai-db = { path = "../common/db", optional = true }
+serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env", optional = true }
 # TODO: Replace with direct usage of primitives
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
-messages = { package = "serai-processor-messages", path = "./messages", optional = true }
+messages = { package = "serai-processor-messages", path = "./messages" }
 
 message-queue = { package = "serai-message-queue", path = "../message-queue", optional = true }
 
