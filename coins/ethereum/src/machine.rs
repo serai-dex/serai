@@ -168,15 +168,15 @@ impl From<OutInstruction> for AbiOutInstruction {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RouterCommand {
-  UpdateSeraiKey { chain_id: U256, session: U256, key: PublicKey },
+  UpdateSeraiKey { chain_id: U256, nonce: U256, key: PublicKey },
   Execute { chain_id: U256, nonce: U256, outs: Vec<OutInstruction> },
 }
 
 impl RouterCommand {
   pub fn msg(&self) -> Vec<u8> {
     match self {
-      RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
-        Router::update_serai_key_message(*chain_id, *session, key)
+      RouterCommand::UpdateSeraiKey { chain_id, nonce, key } => {
+        Router::update_serai_key_message(*chain_id, *nonce, key)
       }
       RouterCommand::Execute { chain_id, nonce, outs } => Router::execute_message(
         *chain_id,
@@ -195,14 +195,14 @@ impl RouterCommand {
         let mut chain_id = [0; 32];
         reader.read_exact(&mut chain_id)?;
 
-        let mut session = [0; 32];
-        reader.read_exact(&mut session)?;
+        let mut nonce = [0; 32];
+        reader.read_exact(&mut nonce)?;
 
         let key = PublicKey::new(Secp256k1::read_G(reader)?)
           .ok_or(io::Error::other("key for RouterCommand doesn't have an eth representation"))?;
         Ok(RouterCommand::UpdateSeraiKey {
           chain_id: U256::from_le_slice(&chain_id),
-          session: U256::from_le_slice(&session),
+          nonce: U256::from_le_slice(&nonce),
           key,
         })
       }
@@ -232,10 +232,10 @@ impl RouterCommand {
 
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      RouterCommand::UpdateSeraiKey { chain_id, session, key } => {
+      RouterCommand::UpdateSeraiKey { chain_id, nonce, key } => {
         writer.write_all(&[0])?;
         writer.write_all(&chain_id.as_le_bytes())?;
-        writer.write_all(&session.as_le_bytes())?;
+        writer.write_all(&nonce.as_le_bytes())?;
         writer.write_all(&key.A.to_bytes())
       }
       RouterCommand::Execute { chain_id, nonce, outs } => {

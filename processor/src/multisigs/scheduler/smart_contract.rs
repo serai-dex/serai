@@ -20,7 +20,7 @@ pub struct Scheduler<N: Network> {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Addendum<N: Network> {
   Nonce(u64),
-  RotateTo { session: u64, new_key: <N::Curve as Ciphersuite>::G },
+  RotateTo { nonce: u64, new_key: <N::Curve as Ciphersuite>::G },
 }
 
 impl<N: Network> SchedulerAddendum for Addendum<N> {
@@ -34,12 +34,12 @@ impl<N: Network> SchedulerAddendum for Addendum<N> {
         Ok(Addendum::Nonce(u64::from_le_bytes(nonce)))
       }
       1 => {
-        let mut session = [0; 8];
-        reader.read_exact(&mut session)?;
-        let session = u64::from_le_bytes(session);
+        let mut nonce = [0; 8];
+        reader.read_exact(&mut nonce)?;
+        let nonce = u64::from_le_bytes(nonce);
 
         let new_key = N::Curve::read_G(reader)?;
-        Ok(Addendum::RotateTo { session, new_key })
+        Ok(Addendum::RotateTo { nonce, new_key })
       }
       _ => Err(io::Error::other("reading unknown Addendum type"))?,
     }
@@ -50,9 +50,9 @@ impl<N: Network> SchedulerAddendum for Addendum<N> {
         writer.write_all(&[0])?;
         writer.write_all(&nonce.to_le_bytes())
       }
-      Addendum::RotateTo { session, new_key } => {
+      Addendum::RotateTo { nonce, new_key } => {
         writer.write_all(&[1])?;
-        writer.write_all(&session.to_le_bytes())?;
+        writer.write_all(&nonce.to_le_bytes())?;
         writer.write_all(new_key.to_bytes().as_ref())
       }
     }
@@ -62,8 +62,7 @@ impl<N: Network> SchedulerAddendum for Addendum<N> {
 create_db! {
   SchedulerDb {
     LastNonce: () -> u64,
-    Session: () -> u64,
-    UpdatedKey: (key: &[u8]) -> (),
+    Rotated: (key: &[u8]) -> (),
   }
 }
 
@@ -97,7 +96,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     Ok(Scheduler {
       key,
       coins: network.coins().iter().copied().collect(),
-      rotated: UpdatedKey::get(db, key.to_bytes().as_ref()).is_some(),
+      rotated: Rotated::get(db, key.to_bytes().as_ref()).is_some(),
     })
   }
 
@@ -129,23 +128,23 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
       });
       nonce += 1;
     }
-    LastNonce::set(txn, &nonce);
 
     // If we're supposed to rotate to the new key, create an empty Plan which will signify the key
     // update
     if force_spend && (!self.rotated) {
-      let session = Session::get(txn).unwrap_or(0);
       plans.push(Plan {
         key: self.key,
         inputs: vec![],
         payments: vec![],
         change: None,
-        scheduler_addendum: Addendum::RotateTo { session, new_key: key_for_any_change },
+        scheduler_addendum: Addendum::RotateTo { nonce, new_key: key_for_any_change },
       });
+      nonce += 1;
       self.rotated = true;
-      Session::set(txn, &(session + 1));
-      UpdatedKey::set(txn, self.key.to_bytes().as_ref(), &());
+      Rotated::set(txn, self.key.to_bytes().as_ref(), &());
     }
+
+    LastNonce::set(txn, &nonce);
 
     plans
   }

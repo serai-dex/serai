@@ -7,11 +7,9 @@ import "./Schnorr.sol";
 import "./Sandbox.sol";
 
 contract Router {
-  // Nonce is incremented for each batch of transactions executed
+  // Nonce is incremented for each batch of transactions executed/key update
   uint256 public nonce;
 
-  // The current session
-  uint256 public session;
   // Current public key's x-coordinate
   // This key must always have the parity defined within the Schnorr contract
   bytes32 public seraiKey;
@@ -69,12 +67,12 @@ contract Router {
     Signature calldata sig
   ) external _updateSeraiKeyAtEndOfFn(_seraiKey) {
     bytes memory message =
-      abi.encodePacked("updateSeraiKey", block.chainid, session, _seraiKey);
+      abi.encodePacked("updateSeraiKey", block.chainid, nonce, _seraiKey);
+    nonce++;
+
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }
-
-    session += 1;
   }
 
   function inInstruction(
@@ -149,6 +147,7 @@ contract Router {
     // This prevents re-entrancy from causing double spends yet does allow
     // out-of-order execution via re-entrancy
     nonce++;
+
     if (!Schnorr.verify(seraiKey, message, sig.c, sig.s)) {
       revert InvalidSignature();
     }

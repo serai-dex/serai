@@ -208,9 +208,9 @@ impl EventualityTrait for Eventuality {
 
   fn lookup(&self) -> Vec<u8> {
     match self.1 {
-      RouterCommand::UpdateSeraiKey { session, .. } => {
+      RouterCommand::UpdateSeraiKey { nonce, .. } => {
         let mut res = vec![0];
-        res.extend(&*session.as_le_bytes());
+        res.extend(&*nonce.as_le_bytes());
         res
       }
       RouterCommand::Execute { nonce, .. } => {
@@ -532,11 +532,11 @@ impl<D: Debug + Db> Network for Ethereum<D> {
           })
           .collect(),
       },
-      Addendum::RotateTo { session, new_key } => {
+      Addendum::RotateTo { nonce, new_key } => {
         assert!(payments.is_empty());
         RouterCommand::UpdateSeraiKey {
           chain_id: U256::try_from(chain_id).unwrap(),
-          session: U256::try_from(*session).unwrap(),
+          nonce: U256::try_from(*nonce).unwrap(),
           key: PublicKey::new(*new_key).expect("new key wasn't a valid ETH public key"),
         }
       }
