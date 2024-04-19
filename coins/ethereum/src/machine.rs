@@ -276,6 +276,10 @@ impl SignedRouterCommand {
     Some(SignedRouterCommand { command, signature })
   }
 
+  pub fn command(&self) -> &RouterCommand {
+    &self.command
+  }
+
   pub fn signature(&self) -> &Signature {
     &self.signature
   }

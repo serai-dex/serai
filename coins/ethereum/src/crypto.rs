@@ -24,7 +24,7 @@ pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
   <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(data).into())
 }
 
-pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
+pub fn address(point: &ProjectivePoint) -> [u8; 20] {
   let encoded_point = point.to_encoded_point(false);
   // Last 20 bytes of the hash of the concatenated x and y coordinates
   // We obtain the concatenated x and y coordinates via the uncompressed encoding of the point

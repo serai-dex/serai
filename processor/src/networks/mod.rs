@@ -391,7 +391,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
@@ -437,8 +436,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
       inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
         payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
 
-    let Some(tx_fee) = self.needed_fee(block_number, &plan_id, &inputs, &payments, &change).await?
-    else {
+    let Some(tx_fee) = self.needed_fee(block_number, &inputs, &payments, &change).await? else {
       // This Plan is not fulfillable
       // TODO: Have Plan explicitly distinguish payments and branches in two separate Vecs?
       return Ok(PreparedSend {

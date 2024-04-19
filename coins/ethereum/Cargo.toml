@@ -41,3 +41,6 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 tokio = { version = "1", features = ["macros"] }
 
 alloy-node-bindings = { git = "https://github.com/alloy-rs/alloy", rev = "037dd4b20ec8533d6b6d5cf5e9489bbb182c18c6", default-features = false }
+
+[features]
+tests = []

@@ -632,14 +632,13 @@ impl Network for Monero {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(block_number, plan_id, inputs, payments, change, true)
+        .make_signable_transaction(block_number, &[0; 32], inputs, payments, change, true)
         .await?
         .map(|(_, signable)| signable.fee()),
     )

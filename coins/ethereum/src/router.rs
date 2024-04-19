@@ -414,4 +414,13 @@ impl Router {
 
     Ok(res)
   }
+
+  #[cfg(feature = "tests")]
+  pub fn key_updated_filter(&self) -> Filter {
+    Filter::new().address(self.1).event_signature(SeraiKeyUpdated::SIGNATURE_HASH)
+  }
+  #[cfg(feature = "tests")]
+  pub fn executed_filter(&self) -> Filter {
+    Filter::new().address(self.1).event_signature(ExecutedEvent::SIGNATURE_HASH)
+  }
 }

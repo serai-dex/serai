@@ -804,7 +804,6 @@ impl Network for Bitcoin {
   async fn needed_fee(
     &self,
     block_number: usize,
-    _: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
