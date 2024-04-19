@@ -1,5 +1,3 @@
-use sha3::{Digest, Keccak256};
-
 use group::ff::PrimeField;
 use k256::{
   elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
@@ -19,7 +17,7 @@ use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
 use crate::abi::router::{Signature as AbiSignature};
 
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
-  Keccak256::digest(data).into()
+  alloy_core::primitives::keccak256(data).into()
 }
 
 pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {

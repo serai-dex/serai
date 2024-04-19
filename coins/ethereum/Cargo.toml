@@ -21,28 +21,21 @@ thiserror = { version = "1", default-features = false }
 
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-sha3 = { version = "0.10", default-features = false, features = ["std"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["recommended"] }
 
 group = { version = "0.13", default-features = false }
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa", "arithmetic"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["secp256k1"] }
 
 alloy-core = { version = "0.7", default-features = false }
-alloy-sol-types = { version = "0.7", default-features = false }
-alloy-sol-macro = { version = "0.7", default-features = false, features = ["json"] }
+alloy-sol-types = { version = "0.7", default-features = false, features = ["json"] }
 alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "037dd4b20ec8533d6b6d5cf5e9489bbb182c18c6", default-features = false, features = ["k256"] }
 alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", rev = "037dd4b20ec8533d6b6d5cf5e9489bbb182c18c6", default-features = false }
 alloy-rpc-client = { git = "https://github.com/alloy-rs/alloy", rev = "037dd4b20ec8533d6b6d5cf5e9489bbb182c18c6", default-features = false }
 alloy-simple-request-transport = { path = "./alloy-simple-request-transport", default-features = false }
 alloy-provider = { git = "https://github.com/alloy-rs/alloy", rev = "037dd4b20ec8533d6b6d5cf5e9489bbb182c18c6", default-features = false }
 
-[build-dependencies]
-syn = { version = "2", default-features = false, features = ["parsing"] }
-prettyplease = { version = "0.2", default-features = false }
-
 [dev-dependencies]
-sha2 = { version = "0.10", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["tests"] }
 
 tokio = { version = "1", features = ["macros"] }
