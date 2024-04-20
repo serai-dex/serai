@@ -842,12 +842,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
       let (participation, weight) =
         self.block.log.message_instances(self.block.round().number, &Data::Prevote(None));
       let threshold_weight = self.weights.threshold();
-      if (participation < threshold_weight) &&
-        ((threshold_weight - participation) > (threshold_weight / 10))
-      {
+      if participation < threshold_weight {
         log::trace!(
           target: "tendermint",
-          "close to setting prevote timeout, participation: {}, needed: {}",
+          "progess towards setting prevote timeout, participation: {}, needed: {}",
           participation,
           threshold_weight,
         );
