@@ -5,14 +5,20 @@
 pub mod pallet {
   use super::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
-  use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
+  use frame_support::{
+    pallet_prelude::*,
+    sp_runtime::{self, SaturatedConversion},
+  };
 
-  use sp_std::{vec, collections::btree_map::BTreeMap};
+  use sp_std::{vec, vec::Vec, collections::btree_map::BTreeMap};
+  use sp_core::sr25519::Signature;
+  use sp_application_crypto::RuntimePublic;
 
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
 
   use serai_primitives::*;
+  use validator_sets_primitives::{ValidatorSet, Session, musig_key};
   pub use genesis_liquidity_primitives as primitives;
   use primitives::*;
 
@@ -24,6 +30,19 @@ pub mod pallet {
     frame_system::Config + DexConfig + CoinsConfig + coins_pallet::Config<coins_pallet::Instance1>
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+  }
+
+  #[pallet::genesis_config]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  pub struct GenesisConfig<T: Config> {
+    /// List of participants to place in the initial validator sets.
+    pub participants: Vec<T::AccountId>,
+  }
+
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      GenesisConfig { participants: Default::default() }
+    }
   }
 
   #[pallet::error]
@@ -58,6 +77,20 @@ pub mod pallet {
   pub(crate) type EconomicSecurityReached<T: Config> =
     StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, ValueQuery>;
 
+  #[pallet::storage]
+  pub(crate) type Participants<T: Config> =
+    StorageMap<_, Identity, NetworkId, BoundedVec<PublicKey, ConstU32<150>>, ValueQuery>;
+
+  #[pallet::storage]
+  pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, ValueQuery>;
+
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      Participants::<T>::set(NetworkId::Serai, self.participants.clone().try_into().unwrap());
+    }
+  }
+
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
@@ -75,9 +108,14 @@ pub mod pallet {
         let mut pool_values = BTreeMap::new();
         let mut total_value: u64 = 0;
         for coin in COINS {
-          // TODO: following line is just a place holder till we get the actual coin value
-          // in terms of btc.
-          let value = Dex::<T>::security_oracle_value(coin).unwrap_or(Amount(0)).0;
+          if coin == Coin::Serai {
+            continue;
+          }
+
+          // initial coin value in terms of btc
+          let value = Oracle::<T>::get(coin);
+
+          // get the pool & individual address values
           account_values.insert(coin, vec![]);
           let mut pool_amount: u64 = 0;
           for (account, amount) in Liquidity::<T>::iter_prefix(coin) {
@@ -264,6 +302,50 @@ pub mod pallet {
 
       Self::deposit_event(Event::GenesisLiquidityRemoved { by: account.into(), balance });
       Ok(())
+    }
+
+    /// A call to submit the initial coi values.
+    #[pallet::call_index(1)]
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    pub fn set_initial_price(
+      origin: OriginFor<T>,
+      prices: Prices,
+      _signature: Signature,
+    ) -> DispatchResult {
+      ensure_none(origin)?;
+
+      // set the prices
+      Oracle::<T>::set(Coin::Bitcoin, prices.bitcoin);
+      Oracle::<T>::set(Coin::Monero, prices.monero);
+      Oracle::<T>::set(Coin::Ether, prices.ethereum);
+      Oracle::<T>::set(Coin::Dai, prices.dai);
+      Ok(())
+    }
+  }
+
+  #[pallet::validate_unsigned]
+  impl<T: Config> ValidateUnsigned for Pallet<T> {
+    type Call = Call<T>;
+
+    fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
+      match call {
+        Call::set_initial_price { ref prices, ref signature } => {
+          let set = ValidatorSet { network: NetworkId::Serai, session: Session(0) };
+          let signers = Participants::<T>::get(NetworkId::Serai);
+
+          if !musig_key(set, &signers).verify(&set_initial_price_message(&set, prices), signature) {
+            Err(InvalidTransaction::BadProof)?;
+          }
+
+          ValidTransaction::with_tag_prefix("GenesisLiquidity")
+            .and_provides((0, set))
+            .longevity(u64::MAX)
+            .propagate(true)
+            .build()
+        }
+        Call::remove_coin_liquidity { .. } => Err(InvalidTransaction::Call)?,
+        Call::__Ignore(_, _) => unreachable!(),
+      }
     }
   }
 }

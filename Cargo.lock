@@ -7329,6 +7329,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
+ "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-signals-primitives",
@@ -7527,6 +7528,9 @@ dependencies = [
  "serai-dex-pallet",
  "serai-genesis-liquidity-primitives",
  "serai-primitives",
+ "serai-validator-sets-primitives",
+ "sp-application-crypto",
+ "sp-core",
  "sp-std",
 ]
 
@@ -7534,7 +7538,14 @@ dependencies = [
 name = "serai-genesis-liquidity-primitives"
 version = "0.1.0"
 dependencies = [
+ "borsh",
+ "parity-scale-codec",
+ "scale-info",
  "serai-primitives",
+ "serai-validator-sets-primitives",
+ "serde",
+ "sp-std",
+ "zeroize",
 ]
 
 [[package]]

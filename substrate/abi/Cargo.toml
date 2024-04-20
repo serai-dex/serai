@@ -31,6 +31,7 @@ sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
 serai-primitives = { path = "../primitives", version = "0.1" }
 serai-coins-primitives = { path = "../coins/primitives", version = "0.1" }
 serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1" }
+serai-genesis-liquidity-primitives = { path = "../genesis-liquidity/primitives", version = "0.1" }
 serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1" }
 serai-signals-primitives = { path = "../signals/primitives", version = "0.1" }
 
@@ -42,6 +43,7 @@ borsh = [
   "serai-primitives/borsh",
   "serai-coins-primitives/borsh",
   "serai-validator-sets-primitives/borsh",
+  "serai-genesis-liquidity-primitives/borsh",
   "serai-in-instructions-primitives/borsh",
   "serai-signals-primitives/borsh",
 ]
@@ -50,6 +52,7 @@ serde = [
   "serai-primitives/serde",
   "serai-coins-primitives/serde",
   "serai-validator-sets-primitives/serde",
+  "serai-genesis-liquidity-primitives/serde",
   "serai-in-instructions-primitives/serde",
   "serai-signals-primitives/serde",
 ]
