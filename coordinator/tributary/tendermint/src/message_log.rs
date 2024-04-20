@@ -1,6 +1,5 @@
 use std::{sync::Arc, collections::HashMap};
 
-use log::debug;
 use parity_scale_codec::Encode;
 
 use crate::{ext::*, RoundNumber, Step, DataFor, TendermintError, SignedMessageFor, Evidence};
@@ -27,7 +26,7 @@ impl<N: Network> MessageLog<N> {
     let step = msg.data.step();
     if let Some(existing) = msgs.get(&step) {
       if existing.msg.data != msg.data {
-        debug!(
+        log::debug!(
           target: "tendermint",
           "Validator sent multiple messages for the same block + round + step"
         );
