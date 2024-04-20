@@ -710,7 +710,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if !self.block.log.log(signed.clone())? {
       return Err(TendermintError::AlreadyHandled);
     }
-    log::debug!(target: "tendermint", "received new tendermint message");
+    log::debug!(
+      target: "tendermint",
+      "received new tendermint message (block: {}, round: {}, step: {:?})",
+      msg.block.0,
+      msg.round.0,
+      msg.data.step(),
+    );
 
     // All functions, except for the finalizer and the jump, are locked to the current round
 
@@ -757,6 +763,8 @@ impl<N: Network + 'static> TendermintMachine<N> {
       // 55-56
       // Jump, enabling processing by the below code
       if self.block.log.round_participation(msg.round) > self.weights.fault_threshold() {
+        log::debug!("jumping from round {} to round {}", self.block.round().number.0, msg.round.0);
+
         // Jump to the new round.
         let proposer = self.round(msg.round, None);
 
@@ -814,13 +822,24 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if (self.block.round().step == Step::Prevote) && matches!(msg.data, Data::Prevote(_)) {
       let (participation, weight) =
         self.block.log.message_instances(self.block.round().number, &Data::Prevote(None));
+      let threshold_weight = self.weights.threshold();
+      if (participation < threshold_weight) &&
+        ((threshold_weight - participation) > (threshold_weight / 10))
+      {
+        log::trace!(
+          "close to setting prevote timeout, participation: {}, needed: {}",
+          participation,
+          threshold_weight
+        );
+      }
       // 34-35
-      if participation >= self.weights.threshold() {
+      if participation >= threshold_weight {
+        log::trace!("setting timeout for prevote due to sufficient participation");
         self.block.round_mut().set_timeout(Step::Prevote);
       }
 
       // 44-46
-      if weight >= self.weights.threshold() {
+      if weight >= threshold_weight {
         self.broadcast(Data::Precommit(None));
         return Ok(None);
       }
@@ -830,6 +849,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if matches!(msg.data, Data::Precommit(_)) &&
       self.block.log.has_participation(self.block.round().number, Step::Precommit)
     {
+      log::trace!("setting timeout for precommit due to sufficient participation");
       self.block.round_mut().set_timeout(Step::Precommit);
     }
 
