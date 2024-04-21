@@ -57,8 +57,8 @@ impl<N: Network> RoundData<N> {
 
   // Poll all set timeouts, returning the Step whose timeout has just expired
   pub(crate) async fn timeout_future(&self) -> Step {
-    let now = Instant::now();
     /*
+    let now = Instant::now();
     log::trace!(
       target: "tendermint",
       "getting timeout_future, from step {:?}, off timeouts: {:?}",
