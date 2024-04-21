@@ -1048,10 +1048,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
           panic!("honest node (ourselves) had invalid behavior");
         }
 
-        // Save this message to a linear tape of all our messages for this block
+        // Save this message to a linear tape of all our messages for this block, if ours
         // TODO: Since we do this after we mark this message as sent to prevent equivocations, a
         // precisely time reboot could cause this message marked as sent yet not added to the tape
-        {
+        if our_message {
           let message_tape_key = message_tape_key(self.genesis);
           let mut txn = self.db.txn();
           let mut message_tape = txn.get(&message_tape_key).unwrap_or(vec![]);
