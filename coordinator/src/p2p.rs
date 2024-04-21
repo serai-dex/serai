@@ -333,8 +333,8 @@ impl LibP2p {
 
               let (is_fresh_dial, nets) = {
                 let mut dialing_peers = dialing_peers.write().await;
-                let is_fresh_dial = dialing_peers.contains_key(&addr);
-                if !is_fresh_dial {
+                let is_fresh_dial = !dialing_peers.contains_key(&addr);
+                if is_fresh_dial {
                   dialing_peers.insert(addr.clone(), HashSet::new());
                 }
                 // Associate this network with this peer
