@@ -145,7 +145,7 @@ impl Network for TestNetwork {
     println!("Slash for {id} due to {event:?}");
   }
 
-  async fn validate(&self, block: &TestBlock) -> Result<(), BlockError> {
+  async fn validate(&mut self, block: &TestBlock) -> Result<(), BlockError> {
     block.valid
   }
 

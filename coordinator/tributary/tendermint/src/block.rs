@@ -3,6 +3,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
+use parity_scale_codec::Encode;
 use serai_db::{Get, DbTxn, Db};
 
 use crate::{
@@ -19,7 +20,7 @@ pub(crate) struct BlockData<N: Network> {
 
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
-  pub(crate) our_proposal: Option<N::Block>,
+  pub(crate) proposal: Option<N::Block>,
 
   pub(crate) log: MessageLog<N>,
   pub(crate) slashes: HashSet<N::ValidatorId>,
@@ -42,7 +43,7 @@ impl<N: Network> BlockData<N> {
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
-    our_proposal: Option<N::Block>,
+    proposal: Option<N::Block>,
   ) -> BlockData<N> {
     BlockData {
       db,
@@ -50,7 +51,7 @@ impl<N: Network> BlockData<N> {
 
       number,
       validator_id,
-      our_proposal,
+      proposal,
 
       log: MessageLog::new(weights),
       slashes: HashSet::new(),
@@ -107,17 +108,17 @@ impl<N: Network> BlockData<N> {
       self.populate_end_time(round);
     }
 
-    // L11-13
+    // 11-13
     self.round = Some(RoundData::<N>::new(
       round,
       time.unwrap_or_else(|| self.end_time[&RoundNumber(round.0 - 1)]),
     ));
     self.end_time.insert(round, self.round().end_time());
 
-    // L14-21
+    // 14-21
     if Some(proposer) == self.validator_id {
       let (round, block) = self.valid.clone().unzip();
-      block.or_else(|| self.our_proposal.clone()).map(|block| Data::Proposal(round, block))
+      block.or_else(|| self.proposal.clone()).map(|block| Data::Proposal(round, block))
     } else {
       self.round_mut().set_timeout(Step::Propose);
       None
@@ -197,8 +198,8 @@ impl<N: Network> BlockData<N> {
         assert!(!new_round);
         None?;
       }
-      // Put that we're sending this message to the DB
-      txn.put(&msg_key, []);
+      // Put this message to the DB
+      txn.put(&msg_key, res.encode());
 
       txn.commit();
     }

@@ -288,7 +288,7 @@ pub trait Network: Sized + Send + Sync {
   async fn slash(&mut self, validator: Self::ValidatorId, slash_event: SlashEvent);
 
   /// Validate a block.
-  async fn validate(&self, block: &Self::Block) -> Result<(), BlockError>;
+  async fn validate(&mut self, block: &Self::Block) -> Result<(), BlockError>;
 
   /// Add a block, returning the proposal for the next one.
   ///

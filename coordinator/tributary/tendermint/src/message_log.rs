@@ -2,7 +2,7 @@ use std::{sync::Arc, collections::HashMap};
 
 use parity_scale_codec::Encode;
 
-use crate::{ext::*, RoundNumber, Step, DataFor, SignedMessageFor, Evidence};
+use crate::{ext::*, RoundNumber, Step, DataFor, TendermintError, SignedMessageFor, Evidence};
 
 type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, SignedMessageFor<N>>>;
 pub(crate) struct MessageLog<N: Network> {
@@ -16,7 +16,7 @@ impl<N: Network> MessageLog<N> {
   }
 
   // Returns true if it's a new message
-  pub(crate) fn log(&mut self, signed: SignedMessageFor<N>) -> Result<bool, Evidence> {
+  pub(crate) fn log(&mut self, signed: SignedMessageFor<N>) -> Result<bool, TendermintError<N>> {
     let msg = &signed.msg;
     // Clarity, and safety around default != new edge cases
     let round = self.log.entry(msg.round).or_insert_with(HashMap::new);
@@ -30,7 +30,10 @@ impl<N: Network> MessageLog<N> {
           target: "tendermint",
           "Validator sent multiple messages for the same block + round + step"
         );
-        Err(Evidence::ConflictingMessages(existing.encode(), signed.encode()))?;
+        Err(TendermintError::Malicious(
+          msg.sender,
+          Some(Evidence::ConflictingMessages(existing.encode(), signed.encode())),
+        ))?;
       }
       return Ok(false);
     }
@@ -44,8 +47,7 @@ impl<N: Network> MessageLog<N> {
   pub(crate) fn message_instances(&self, round: RoundNumber, data: &DataFor<N>) -> (u64, u64) {
     let mut participating = 0;
     let mut weight = 0;
-    let Some(log) = self.log.get(&round) else { return (0, 0) };
-    for (participant, msgs) in log {
+    for (participant, msgs) in &self.log[&round] {
       if let Some(msg) = msgs.get(&data.step()) {
         let validator_weight = self.weights.weight(*participant);
         participating += validator_weight;
@@ -71,8 +73,7 @@ impl<N: Network> MessageLog<N> {
   // Check if a supermajority of nodes have participated on a specific step
   pub(crate) fn has_participation(&self, round: RoundNumber, step: Step) -> bool {
     let mut participating = 0;
-    let Some(log) = self.log.get(&round) else { return false };
-    for (participant, msgs) in log {
+    for (participant, msgs) in &self.log[&round] {
       if msgs.get(&step).is_some() {
         participating += self.weights.weight(*participant);
       }
