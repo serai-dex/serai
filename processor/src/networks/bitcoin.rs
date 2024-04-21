@@ -52,9 +52,10 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network,
+    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
   },
   Payment,
+  multisigs::scheduler::utxo::Scheduler,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -178,14 +179,6 @@ impl TransactionTrait<Bitcoin> for Transaction {
     hash.reverse();
     hash
   }
-  fn serialize(&self) -> Vec<u8> {
-    let mut buf = vec![];
-    self.consensus_encode(&mut buf).unwrap();
-    buf
-  }
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
-  }
 
   #[cfg(test)]
   async fn fee(&self, network: &Bitcoin) -> u64 {
@@ -209,7 +202,23 @@ impl TransactionTrait<Bitcoin> for Transaction {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Eventuality([u8; 32]);
 
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+pub struct EmptyClaim;
+impl AsRef<[u8]> for EmptyClaim {
+  fn as_ref(&self) -> &[u8] {
+    &[]
+  }
+}
+impl AsMut<[u8]> for EmptyClaim {
+  fn as_mut(&mut self) -> &mut [u8] {
+    &mut []
+  }
+}
+
 impl EventualityTrait for Eventuality {
+  type Claim = EmptyClaim;
+  type Completion = Transaction;
+
   fn lookup(&self) -> Vec<u8> {
     self.0.to_vec()
   }
@@ -223,6 +232,18 @@ impl EventualityTrait for Eventuality {
   }
   fn serialize(&self) -> Vec<u8> {
     self.0.to_vec()
+  }
+
+  fn claim(_: &Transaction) -> EmptyClaim {
+    EmptyClaim
+  }
+  fn serialize_completion(completion: &Transaction) -> Vec<u8> {
+    let mut buf = vec![];
+    completion.consensus_encode(&mut buf).unwrap();
+    buf
+  }
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
+    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
   }
 }
 
@@ -374,8 +395,12 @@ impl Bitcoin {
         for input in &tx.input {
           let mut input_tx = input.previous_output.txid.to_raw_hash().to_byte_array();
           input_tx.reverse();
-          in_value += self.get_transaction(&input_tx).await?.output
-            [usize::try_from(input.previous_output.vout).unwrap()]
+          in_value += self
+            .rpc
+            .get_transaction(&input_tx)
+            .await
+            .map_err(|_| NetworkError::ConnectionError)?
+            .output[usize::try_from(input.previous_output.vout).unwrap()]
           .value
           .to_sat();
         }
@@ -537,6 +562,25 @@ impl Bitcoin {
   }
 }
 
+// Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
+// A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
+// While our inputs are entirely SegWit, such fine tuning is not necessary and could create
+// issues in the future (if the size decreases or we misevaluate it)
+// It also offers a minimal amount of benefit when we are able to logarithmically accumulate
+// inputs
+// For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
+// 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
+// bytes
+// 100,000 / 192 = 520
+// 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
+const MAX_INPUTS: usize = 520;
+const MAX_OUTPUTS: usize = 520;
+
+fn address_from_key(key: ProjectivePoint) -> Address {
+  Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
+    .unwrap()
+}
+
 #[async_trait]
 impl Network for Bitcoin {
   type Curve = Secp256k1;
@@ -548,6 +592,8 @@ impl Network for Bitcoin {
   type SignableTransaction = SignableTransaction;
   type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
+
+  type Scheduler = Scheduler<Bitcoin>;
 
   type Address = Address;
 
@@ -598,19 +644,7 @@ impl Network for Bitcoin {
   // aggregation TX
   const COST_TO_AGGREGATE: u64 = 800;
 
-  // Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
-  // A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
-  // While our inputs are entirely SegWit, such fine tuning is not necessary and could create
-  // issues in the future (if the size decreases or we misevaluate it)
-  // It also offers a minimal amount of benefit when we are able to logarithmically accumulate
-  // inputs
-  // For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
-  // 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
-  // bytes
-  // 100,000 / 192 = 520
-  // 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
-  const MAX_INPUTS: usize = 520;
-  const MAX_OUTPUTS: usize = 520;
+  const MAX_OUTPUTS: usize = MAX_OUTPUTS;
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
     *keys = tweak_keys(keys);
@@ -618,24 +652,24 @@ impl Network for Bitcoin {
     scanner(keys.group_key());
   }
 
-  fn external_address(key: ProjectivePoint) -> Address {
-    Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
-      .unwrap()
+  #[cfg(test)]
+  async fn external_address(&self, key: ProjectivePoint) -> Address {
+    address_from_key(key)
   }
 
-  fn branch_address(key: ProjectivePoint) -> Address {
+  fn branch_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch])))
   }
 
-  fn change_address(key: ProjectivePoint) -> Address {
+  fn change_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])))
   }
 
-  fn forward_address(key: ProjectivePoint) -> Address {
+  fn forward_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
-    Self::external_address(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded]))
+    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded])))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -682,7 +716,7 @@ impl Network for Bitcoin {
           spent_tx.reverse();
           let mut tx;
           while {
-            tx = self.get_transaction(&spent_tx).await;
+            tx = self.rpc.get_transaction(&spent_tx).await;
             tx.is_err()
           } {
             log::error!("couldn't get transaction from bitcoin node: {tx:?}");
@@ -710,7 +744,7 @@ impl Network for Bitcoin {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], (usize, Transaction)> {
+  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -719,11 +753,11 @@ impl Network for Bitcoin {
     fn check_block(
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
+      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
     ) {
       for tx in &block.txdata[1 ..] {
         if let Some((plan, _)) = eventualities.map.remove(tx.id().as_slice()) {
-          res.insert(plan, (eventualities.block_number, tx.clone()));
+          res.insert(plan, (eventualities.block_number, tx.id(), tx.clone()));
         }
       }
 
@@ -770,7 +804,6 @@ impl Network for Bitcoin {
   async fn needed_fee(
     &self,
     block_number: usize,
-    _: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
@@ -787,9 +820,11 @@ impl Network for Bitcoin {
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    _key: ProjectivePoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
+    (): &(),
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
       |signable| {
@@ -803,7 +838,7 @@ impl Network for Bitcoin {
     ))
   }
 
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
@@ -817,7 +852,7 @@ impl Network for Bitcoin {
     )
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
+  async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {
     match self.rpc.send_raw_transaction(tx).await {
       Ok(_) => (),
       Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
@@ -828,17 +863,33 @@ impl Network for Bitcoin {
     Ok(())
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(id).await.map_err(|_| NetworkError::ConnectionError)
-  }
-
-  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Transaction) -> bool {
-    eventuality.0 == tx.id()
+  async fn confirm_completion(
+    &self,
+    eventuality: &Self::Eventuality,
+    _: &EmptyClaim,
+  ) -> Result<Option<Transaction>, NetworkError> {
+    Ok(Some(
+      self.rpc.get_transaction(&eventuality.0).await.map_err(|_| NetworkError::ConnectionError)?,
+    ))
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block_number(id).await.unwrap()
+  }
+
+  #[cfg(test)]
+  async fn check_eventuality_by_claim(
+    &self,
+    eventuality: &Self::Eventuality,
+    _: &EmptyClaim,
+  ) -> bool {
+    self.rpc.get_transaction(&eventuality.0).await.is_ok()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(&self, _: usize, id: &Eventuality) -> Transaction {
+    self.rpc.get_transaction(&id.0).await.unwrap()
   }
 
   #[cfg(test)]
@@ -891,4 +942,8 @@ impl Network for Bitcoin {
     }
     self.get_block(block).await.unwrap()
   }
+}
+
+impl UtxoNetwork for Bitcoin {
+  const MAX_INPUTS: usize = MAX_INPUTS;
 }

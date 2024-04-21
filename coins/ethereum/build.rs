@@ -1,7 +1,5 @@
 use std::process::Command;
 
-use ethers_contract::Abigen;
-
 fn main() {
   println!("cargo:rerun-if-changed=contracts/*");
   println!("cargo:rerun-if-changed=artifacts/*");
@@ -21,22 +19,23 @@ fn main() {
     "--base-path", ".",
     "-o", "./artifacts", "--overwrite",
     "--bin", "--abi",
-    "--optimize",
-    "./contracts/Schnorr.sol", "./contracts/Router.sol",
+    "--via-ir", "--optimize",
+
+    "./contracts/IERC20.sol",
+
+    "./contracts/Schnorr.sol",
+    "./contracts/Deployer.sol",
+    "./contracts/Sandbox.sol",
+    "./contracts/Router.sol",
+
+    "./src/tests/contracts/Schnorr.sol",
+    "./src/tests/contracts/ERC20.sol",
+
+    "--no-color",
   ];
-  assert!(Command::new("solc").args(args).status().unwrap().success());
-
-  Abigen::new("Schnorr", "./artifacts/Schnorr.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/abi/schnorr.rs")
-    .unwrap();
-
-  Abigen::new("Router", "./artifacts/Router.abi")
-    .unwrap()
-    .generate()
-    .unwrap()
-    .write_to_file("./src/abi/router.rs")
-    .unwrap();
+  let solc = Command::new("solc").args(args).output().unwrap();
+  assert!(solc.status.success());
+  for line in String::from_utf8(solc.stderr).unwrap().lines() {
+    assert!(!line.starts_with("Error:"));
+  }
 }

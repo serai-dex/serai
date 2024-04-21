@@ -65,7 +65,7 @@ mod bitcoin {
         .unwrap();
       <Bitcoin as Network>::tweak_keys(&mut keys);
       let group_key = keys.group_key();
-      let serai_btc_address = <Bitcoin as Network>::external_address(group_key);
+      let serai_btc_address = <Bitcoin as Network>::external_address(&btc, group_key).await;
 
       // btc key pair to send from
       let private_key = PrivateKey::new(SecretKey::new(&mut rand_core::OsRng), BNetwork::Regtest);

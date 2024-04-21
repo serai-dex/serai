@@ -21,12 +21,17 @@ pub mod bitcoin;
 #[cfg(feature = "bitcoin")]
 pub use self::bitcoin::Bitcoin;
 
+#[cfg(feature = "ethereum")]
+pub mod ethereum;
+#[cfg(feature = "ethereum")]
+pub use ethereum::Ethereum;
+
 #[cfg(feature = "monero")]
 pub mod monero;
 #[cfg(feature = "monero")]
 pub use monero::Monero;
 
-use crate::{Payment, Plan};
+use crate::{Payment, Plan, multisigs::scheduler::Scheduler};
 
 #[derive(Clone, Copy, Error, Debug)]
 pub enum NetworkError {
@@ -105,7 +110,7 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
   fn kind(&self) -> OutputType;
 
   fn id(&self) -> Self::Id;
-  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id;
+  fn tx_id(&self) -> <N::Transaction as Transaction<N>>::Id; // TODO: Review use of
   fn key(&self) -> <N::Curve as Ciphersuite>::G;
 
   fn presumed_origin(&self) -> Option<N::Address>;
@@ -118,25 +123,33 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 }
 
 #[async_trait]
-pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + Debug {
+pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + PartialEq + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
-  fn serialize(&self) -> Vec<u8>;
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
-
+  // TODO: Move to Balance
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;
 }
 
 pub trait SignableTransaction: Send + Sync + Clone + Debug {
+  // TODO: Move to Balance
   fn fee(&self) -> u64;
 }
 
-pub trait Eventuality: Send + Sync + Clone + Debug {
+pub trait Eventuality: Send + Sync + Clone + PartialEq + Debug {
+  type Claim: Send + Sync + Clone + PartialEq + Default + AsRef<[u8]> + AsMut<[u8]> + Debug;
+  type Completion: Send + Sync + Clone + PartialEq + Debug;
+
   fn lookup(&self) -> Vec<u8>;
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
   fn serialize(&self) -> Vec<u8>;
+
+  fn claim(completion: &Self::Completion) -> Self::Claim;
+
+  // TODO: Make a dedicated Completion trait
+  fn serialize_completion(completion: &Self::Completion) -> Vec<u8>;
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Self::Completion>;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -211,7 +224,7 @@ fn drop_branches<N: Network>(
 ) -> Vec<PostFeeBranch> {
   let mut branch_outputs = vec![];
   for payment in payments {
-    if payment.address == N::branch_address(key) {
+    if Some(&payment.address) == N::branch_address(key).as_ref() {
       branch_outputs.push(PostFeeBranch { expected: payment.balance.amount.0, actual: None });
     }
   }
@@ -227,12 +240,12 @@ pub struct PreparedSend<N: Network> {
 }
 
 #[async_trait]
-pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
+pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// The elliptic curve used for this network.
   type Curve: Curve;
 
   /// The type representing the transaction for this network.
-  type Transaction: Transaction<Self>;
+  type Transaction: Transaction<Self>; // TODO: Review use of
   /// The type representing the block for this network.
   type Block: Block<Self>;
 
@@ -246,7 +259,12 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// This must be binding to both the outputs expected and the plan ID.
   type Eventuality: Eventuality;
   /// The FROST machine to sign a transaction.
-  type TransactionMachine: PreprocessMachine<Signature = Self::Transaction>;
+  type TransactionMachine: PreprocessMachine<
+    Signature = <Self::Eventuality as Eventuality>::Completion,
+  >;
+
+  /// The scheduler for this network.
+  type Scheduler: Scheduler<Self>;
 
   /// The type representing an address.
   // This should NOT be a String, yet a tailored type representing an efficient binary encoding,
@@ -269,10 +287,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize;
   /// The amount of confirmations required to consider a block 'final'.
   const CONFIRMATIONS: usize;
-  /// The maximum amount of inputs which will fit in a TX.
-  /// This should be equal to MAX_OUTPUTS unless one is specifically limited.
-  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
-  const MAX_INPUTS: usize;
   /// The maximum amount of outputs which will fit in a TX.
   /// This should be equal to MAX_INPUTS unless one is specifically limited.
   /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
@@ -293,13 +307,16 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   fn tweak_keys(key: &mut ThresholdKeys<Self::Curve>);
 
   /// Address for the given group key to receive external coins to.
-  fn external_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  #[cfg(test)]
+  async fn external_address(&self, key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
   /// Address for the given group key to use for scheduled branches.
-  fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn branch_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for the given group key to use for change.
-  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  fn change_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
   /// Address for forwarded outputs from prior multisigs.
-  fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Self::Address;
+  ///
+  /// forward_address must only return None if explicit forwarding isn't necessary.
+  fn forward_address(key: <Self::Curve as Ciphersuite>::G) -> Option<Self::Address>;
 
   /// Get the latest block's number.
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError>;
@@ -349,13 +366,24 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// registered eventualities may have been completed in.
   ///
   /// This may panic if not fed a block greater than the tracker's block number.
+  ///
+  /// Plan ID -> (block number, TX ID, completion)
   // TODO: get_eventuality_completions_internal + provided get_eventuality_completions for common
   // code
+  // TODO: Consider having this return the Transaction + the Completion?
+  // Or Transaction with extract_completion?
   async fn get_eventuality_completions(
     &self,
     eventualities: &mut EventualitiesTracker<Self::Eventuality>,
     block: &Self::Block,
-  ) -> HashMap<[u8; 32], (usize, Self::Transaction)>;
+  ) -> HashMap<
+    [u8; 32],
+    (
+      usize,
+      <Self::Transaction as Transaction<Self>>::Id,
+      <Self::Eventuality as Eventuality>::Completion,
+    ),
+  >;
 
   /// Returns the needed fee to fulfill this Plan at this fee rate.
   ///
@@ -363,7 +391,6 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
@@ -375,16 +402,25 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// 1) Call needed_fee
   /// 2) If the Plan is fulfillable, amortize the fee
   /// 3) Call signable_transaction *which MUST NOT return None if the above was done properly*
+  ///
+  /// This takes a destructured Plan as some of these arguments are malleated from the original
+  /// Plan.
+  // TODO: Explicit AmortizedPlan?
+  #[allow(clippy::too_many_arguments)]
   async fn signable_transaction(
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    key: <Self::Curve as Ciphersuite>::G,
     inputs: &[Self::Output],
     payments: &[Payment<Self>],
     change: &Option<Self::Address>,
+    scheduler_addendum: &<Self::Scheduler as Scheduler<Self>>::Addendum,
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError>;
 
   /// Prepare a SignableTransaction for a transaction.
+  ///
+  /// This must not persist anything as we will prepare Plans we never intend to execute.
   async fn prepare_send(
     &self,
     block_number: usize,
@@ -395,13 +431,12 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     assert!((!plan.payments.is_empty()) || plan.change.is_some());
 
     let plan_id = plan.id();
-    let Plan { key, inputs, mut payments, change } = plan;
+    let Plan { key, inputs, mut payments, change, scheduler_addendum } = plan;
     let theoretical_change_amount =
       inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
         payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
 
-    let Some(tx_fee) = self.needed_fee(block_number, &plan_id, &inputs, &payments, &change).await?
-    else {
+    let Some(tx_fee) = self.needed_fee(block_number, &inputs, &payments, &change).await? else {
       // This Plan is not fulfillable
       // TODO: Have Plan explicitly distinguish payments and branches in two separate Vecs?
       return Ok(PreparedSend {
@@ -466,7 +501,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       // Note the branch outputs' new values
       let mut branch_outputs = vec![];
       for (initial_amount, payment) in initial_payment_amounts.into_iter().zip(&payments) {
-        if payment.address == Self::branch_address(key) {
+        if Some(&payment.address) == Self::branch_address(key).as_ref() {
           branch_outputs.push(PostFeeBranch {
             expected: initial_amount,
             actual: if payment.balance.amount.0 == 0 {
@@ -508,11 +543,20 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
       )
     })();
 
-    let Some(tx) =
-      self.signable_transaction(block_number, &plan_id, &inputs, &payments, &change).await?
+    let Some(tx) = self
+      .signable_transaction(
+        block_number,
+        &plan_id,
+        key,
+        &inputs,
+        &payments,
+        &change,
+        &scheduler_addendum,
+      )
+      .await?
     else {
       panic!(
-        "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}",
+        "{}. {}: {}, {}: {:?}, {}: {:?}, {}: {:?}, {}: {}, {}: {:?}",
         "signable_transaction returned None for a TX we prior successfully calculated the fee for",
         "id",
         hex::encode(plan_id),
@@ -524,6 +568,8 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
         change,
         "successfully amoritized fee",
         tx_fee,
+        "scheduler's addendum",
+        scheduler_addendum,
       )
     };
 
@@ -546,30 +592,48 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   }
 
   /// Attempt to sign a SignableTransaction.
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError>;
 
-  /// Publish a transaction.
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError>;
-
-  /// Get a transaction by its ID.
-  async fn get_transaction(
+  /// Publish a completion.
+  async fn publish_completion(
     &self,
-    id: &<Self::Transaction as Transaction<Self>>::Id,
-  ) -> Result<Self::Transaction, NetworkError>;
+    completion: &<Self::Eventuality as Eventuality>::Completion,
+  ) -> Result<(), NetworkError>;
 
-  /// Confirm a plan was completed by the specified transaction.
-  // This is allowed to take shortcuts.
-  // This may assume an honest multisig, solely checking the inputs specified were spent.
-  // This may solely check the outputs are equivalent *so long as it's locked to the plan ID*.
-  fn confirm_completion(&self, eventuality: &Self::Eventuality, tx: &Self::Transaction) -> bool;
+  /// Confirm a plan was completed by the specified transaction, per our bounds.
+  ///
+  /// Returns Err if there was an error with the confirmation methodology.
+  /// Returns Ok(None) if this is not a valid completion.
+  /// Returns Ok(Some(_)) with the completion if it's valid.
+  async fn confirm_completion(
+    &self,
+    eventuality: &Self::Eventuality,
+    claim: &<Self::Eventuality as Eventuality>::Claim,
+  ) -> Result<Option<<Self::Eventuality as Eventuality>::Completion>, NetworkError>;
 
   /// Get a block's number by its ID.
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize;
+
+  /// Check an Eventuality is fulfilled by a claim.
+  #[cfg(test)]
+  async fn check_eventuality_by_claim(
+    &self,
+    eventuality: &Self::Eventuality,
+    claim: &<Self::Eventuality as Eventuality>::Claim,
+  ) -> bool;
+
+  /// Get a transaction by the Eventuality it completes.
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(
+    &self,
+    block: usize,
+    eventuality: &Self::Eventuality,
+  ) -> Self::Transaction;
 
   #[cfg(test)]
   async fn mine_block(&self);
@@ -578,4 +642,11 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
   /// Additionally mines enough blocks so that the TX is past the confirmation depth.
   #[cfg(test)]
   async fn test_send(&self, key: Self::Address) -> Self::Block;
+}
+
+pub trait UtxoNetwork: Network {
+  /// The maximum amount of inputs which will fit in a TX.
+  /// This should be equal to MAX_OUTPUTS unless one is specifically limited.
+  /// A TX with MAX_INPUTS and MAX_OUTPUTS must not exceed the max size.
+  const MAX_INPUTS: usize;
 }
