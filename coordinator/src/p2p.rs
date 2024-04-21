@@ -541,10 +541,10 @@ impl LibP2p {
                 }
                 Some(SwarmEvent::ConnectionClosed { peer_id, endpoint, .. }) => {
                   let mut connected_peers = connected_peers.write().await;
-                  let nets =
-                    connected_peers
-                      .remove(endpoint.get_remote_address())
-                      .expect("closed connection to peer which never connected");
+                  let Some(nets) = connected_peers.remove(endpoint.get_remote_address()) else {
+                    log::debug!("closed connection to peer which wasn't in connected_peers");
+                    continue;
+                  };
                   // Downgrade to a read lock
                   let connected_peers = connected_peers.downgrade();
 
