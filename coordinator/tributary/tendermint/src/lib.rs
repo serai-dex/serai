@@ -679,18 +679,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
       Err(TendermintError::Temporal)?;
     }
 
-    if (msg.block == self.block.number) &&
-      (msg.round == self.block.round().number) &&
-      (msg.data.step() == Step::Propose)
-    {
-      log::trace!(
-        target: "tendermint",
-        "received Propose for block {}, round {}",
-        msg.block.0,
-        msg.round.0,
-      );
-    }
-
     // If this is a precommit, verify its signature
     self.verify_precommit_signature(signed).await?;
 
@@ -698,7 +686,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if matches!(msg.data, Data::Proposal(..)) &&
       (msg.sender != self.weights.proposer(msg.block, msg.round))
     {
-      log::warn!(target: "tendermint", "Validator who wasn't the proposer proposed");
+      log::warn!(target: "tendermint", "validator who wasn't the proposer proposed");
       // TODO: This should have evidence
       self
         .slash(msg.sender, SlashEvent::Id(SlashReason::InvalidProposer, msg.block.0, msg.round.0))
@@ -971,7 +959,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
               // Only run if it's still the step in question
               if self.block.round().step == step {
                 // Slash the validator for not proposing when they should've
-                log::debug!(target: "tendermint", "Validator didn't propose when they should have");
+                log::debug!(target: "tendermint", "validator didn't propose when they should have");
                 // this slash will be voted on.
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number),
