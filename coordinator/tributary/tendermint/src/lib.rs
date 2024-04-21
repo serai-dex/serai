@@ -745,33 +745,26 @@ impl<N: Network + 'static> TendermintMachine<N> {
       msg.data.step(),
     );
 
-    // Run all `upons` run for any round
-    // If it returned true, we added a new block, so return
-    if self.all_any_round_upons(msg.round).await {
-      return Ok(());
-    }
+    // L55-56
+    // Jump ahead if we should
+    if (msg.round.0 > self.block.round().number.0) &&
+      (self.block.log.round_participation(msg.round) >= self.weights.fault_threshold())
+    {
+      log::debug!(
+        target: "tendermint",
+        "jumping from round {} to round {}",
+        self.block.round().number.0,
+        msg.round.0,
+      );
 
-    // Check if we need to jump ahead
-    #[allow(clippy::comparison_chain)]
-    if msg.round.0 < self.block.round().number.0 {
-      // Prior round, disregard if not finalizing
-      return Ok(());
-    } else if msg.round.0 > self.block.round().number.0 {
-      // 55-56
-      // Jump, enabling processing by the below code
-      if self.block.log.round_participation(msg.round) > self.weights.fault_threshold() {
-        log::debug!(
-          target: "tendermint",
-          "jumping from round {} to round {}",
-          self.block.round().number.0,
-          msg.round.0,
-        );
+      // Jump to the new round.
+      let old_round = self.block.round().number;
+      self.round(msg.round, None);
 
-        // Jump to the new round.
-        self.round(msg.round, None);
-
-        // If this round already has precommit messages, verify their signatures
-        let round_msgs = self.block.log.log[&msg.round].clone();
+      // If any jumped over/to round already has precommit messages, verify their signatures
+      for jumped in (old_round.0 + 1) ..= msg.round.0 {
+        let jumped = RoundNumber(jumped);
+        let round_msgs = self.block.log.log.get(&jumped).cloned().unwrap_or_default();
         for (validator, msgs) in &round_msgs {
           if let Some(existing) = msgs.get(&Step::Precommit) {
             if let Ok(res) = self.verify_precommit_signature(existing).await {
@@ -786,7 +779,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
                 .block
                 .log
                 .log
-                .get_mut(&msg.round)
+                .get_mut(&jumped)
                 .unwrap()
                 .get_mut(validator)
                 .unwrap()
@@ -795,12 +788,26 @@ impl<N: Network + 'static> TendermintMachine<N> {
             }
           }
         }
-      } else {
-        // Future round which we aren't ready to jump to, so return for now
-        return Ok(());
       }
     }
 
+    // Now that we've jumped, and:
+    // 1) If this is a message for an old round, verified the precommit signatures
+    // 2) If this is a message for what was the current round, verified the precommit signatures
+    // 3) If this is a message for what was a future round, verified the precommit signatures if it
+    //    has 34+% participation
+    // Run all `upons` run for any round, which may produce a Commit if it has 67+% participation
+    // (returning true if it does, letting us return now)
+    // It's necessary to verify the precommit signatures before Commit production is allowed, hence
+    // this specific flow
+    if self.all_any_round_upons(msg.round).await {
+      return Ok(());
+    }
+
+    // If this is a historic round, or a future round without sufficient participation, return
+    if msg.round.0 != self.block.round().number.0 {
+      return Ok(());
+    }
     // msg.round is now guaranteed to be equal to self.block.round().number
     debug_assert_eq!(msg.round, self.block.round().number);
 
