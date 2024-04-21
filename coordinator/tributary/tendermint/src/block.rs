@@ -3,7 +3,6 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use parity_scale_codec::Encode;
 use serai_db::{Get, DbTxn, Db};
 
 use crate::{
@@ -198,8 +197,8 @@ impl<N: Network> BlockData<N> {
         assert!(!new_round);
         None?;
       }
-      // Put this message to the DB
-      txn.put(&msg_key, res.encode());
+      // Put that we're sending this message to the DB
+      txn.put(&msg_key, []);
 
       txn.commit();
     }

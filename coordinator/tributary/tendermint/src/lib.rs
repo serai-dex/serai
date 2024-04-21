@@ -6,7 +6,7 @@ use std::{
   collections::VecDeque,
 };
 
-use parity_scale_codec::{Encode, Decode};
+use parity_scale_codec::{Encode, Decode, IoReader};
 
 use futures_channel::mpsc;
 use futures_util::{
@@ -14,6 +14,8 @@ use futures_util::{
   future::{self, Fuse},
 };
 use tokio::time::sleep;
+
+use serai_db::{Get, DbTxn, Db};
 
 pub mod time;
 use time::{sys_time, CanonicalInstant};
@@ -29,6 +31,11 @@ pub(crate) mod message_log;
 /// Traits and types of the external network being integrated with to provide consensus over.
 pub mod ext;
 use ext::*;
+
+const MESSAGE_TAPE_KEY: &[u8] = b"tendermint-machine-message_tape";
+fn message_tape_key(genesis: [u8; 32]) -> Vec<u8> {
+  [MESSAGE_TAPE_KEY, &genesis].concat()
+}
 
 pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
   [&end_time.to_le_bytes(), id].concat()
@@ -336,6 +343,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
       time_until_round_end.as_millis(),
     );
     sleep(time_until_round_end).await;
+
+    // Clear the message tape
+    {
+      let mut txn = self.db.txn();
+      txn.del(&message_tape_key(self.genesis));
+      txn.commit();
+    }
 
     // Clear our outbound message queue
     self.queue = VecDeque::new();
@@ -900,6 +914,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub async fn run(mut self) {
     log::debug!(target: "tendermint", "running TendermintMachine");
 
+    let mut rebroadcast_future = Box::pin(sleep(Duration::from_secs(60))).fuse();
     loop {
       // Also create a future for if the queue has a message
       // Does not pop_front as if another message has higher priority, its future will be handled
@@ -987,6 +1002,25 @@ impl<N: Network + 'static> TendermintMachine<N> {
           None
         },
 
+        // If it's been more than 60s, rebroadcast our own messages
+        () = rebroadcast_future => {
+          let key = message_tape_key(self.genesis);
+          let messages = self.db.get(key).unwrap_or(vec![]);
+          let mut messages = messages.as_slice();
+
+          while !messages.is_empty() {
+            self.network.broadcast(
+              SignedMessageFor::<N>::decode(&mut IoReader(&mut messages))
+                .expect("saved invalid message to DB")
+            ).await;
+          }
+
+          // Reset the rebroadcast future
+          rebroadcast_future = Box::pin(sleep(core::time::Duration::from_secs(60))).fuse();
+
+          None
+        },
+
         // Handle any received messages
         msg = self.msg_recv.next() => {
           if let Some(msg) = msg {
@@ -1012,6 +1046,17 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // ensure we don't get slashed on invariants.
         if res.is_err() && our_message {
           panic!("honest node (ourselves) had invalid behavior");
+        }
+
+        // Save this message to a linear tape of all our messages for this block
+        // TODO: Since we do this after we mark this message as sent to prevent equivocations, a
+        // precisely time reboot could cause this message marked as sent yet not added to the tape
+        {
+          let message_tape_key = message_tape_key(self.genesis);
+          let mut txn = self.db.txn();
+          let mut message_tape = txn.get(&message_tape_key).unwrap_or(vec![]);
+          message_tape.extend(signed_msg.encode());
+          txn.put(&message_tape_key, message_tape);
         }
 
         // Re-broadcast this since it's an original consensus message
