@@ -593,6 +593,7 @@ impl LibP2p {
                 for net in nets {
                   existing_nets.insert(net);
                 }
+                continue;
               }
 
               if let Err(e) = swarm.dial(addr) {
