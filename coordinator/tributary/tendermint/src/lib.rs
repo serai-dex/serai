@@ -1059,8 +1059,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
           txn.put(&message_tape_key, message_tape);
         }
 
-        // Re-broadcast this since it's an original consensus message
-        self.network.broadcast(signed_msg).await;
+        // Re-broadcast this since it's an original consensus message worth handling
+        if res.is_ok() {
+          self.network.broadcast(signed_msg).await;
+        }
       }
     }
   }
