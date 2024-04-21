@@ -514,7 +514,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             match step {
               Step::Propose => {
                 // Slash the validator for not proposing when they should've
-                log::debug!(target: "tendermint", "Validator didn't propose when they should have");
+                log::debug!(target: "tendermint", "validator didn't propose when they should have");
                 // this slash will be voted on.
                 self.slash(
                   self.weights.proposer(self.block.number, self.block.round().number),
@@ -724,7 +724,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if !self.block.log.log(signed.clone())? {
       return Err(TendermintError::AlreadyHandled);
     }
-    log::debug!(
+    log::trace!(
       target: "tendermint",
       "received new tendermint message (block: {}, round: {}, step: {:?})",
       msg.block.0,
