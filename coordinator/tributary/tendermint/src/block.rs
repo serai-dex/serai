@@ -20,7 +20,7 @@ pub(crate) struct BlockData<N: Network> {
 
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
-  pub(crate) proposal: Option<N::Block>,
+  pub(crate) our_proposal: Option<N::Block>,
 
   pub(crate) log: MessageLog<N>,
   pub(crate) slashes: HashSet<N::ValidatorId>,
@@ -43,7 +43,7 @@ impl<N: Network> BlockData<N> {
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
-    proposal: Option<N::Block>,
+    our_proposal: Option<N::Block>,
   ) -> BlockData<N> {
     BlockData {
       db,
@@ -51,7 +51,7 @@ impl<N: Network> BlockData<N> {
 
       number,
       validator_id,
-      proposal,
+      our_proposal,
 
       log: MessageLog::new(weights),
       slashes: HashSet::new(),
@@ -108,17 +108,17 @@ impl<N: Network> BlockData<N> {
       self.populate_end_time(round);
     }
 
-    // 11-13
+    // L11-13
     self.round = Some(RoundData::<N>::new(
       round,
       time.unwrap_or_else(|| self.end_time[&RoundNumber(round.0 - 1)]),
     ));
     self.end_time.insert(round, self.round().end_time());
 
-    // 14-21
+    // L14-21
     if Some(proposer) == self.validator_id {
       let (round, block) = self.valid.clone().unzip();
-      block.or_else(|| self.proposal.clone()).map(|block| Data::Proposal(round, block))
+      block.or_else(|| self.our_proposal.clone()).map(|block| Data::Proposal(round, block))
     } else {
       self.round_mut().set_timeout(Step::Propose);
       None

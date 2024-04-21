@@ -366,7 +366,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     }
   }
 
-  async fn validate(&mut self, block: &Self::Block) -> Result<(), TendermintBlockError> {
+  async fn validate(&self, block: &Self::Block) -> Result<(), TendermintBlockError> {
     let block =
       Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
     self
