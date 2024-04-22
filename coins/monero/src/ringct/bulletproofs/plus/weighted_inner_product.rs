@@ -15,7 +15,7 @@ use crate::ringct::bulletproofs::plus::{
   ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, transcript::*,
 };
 
-// Figure 1
+// Figure 1 of the Bulletproofs+ paper
 #[derive(Clone, Debug)]
 pub(crate) struct WipStatement {
   generators: Generators,

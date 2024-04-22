@@ -24,7 +24,7 @@ use crate::{
   },
 };
 
-// Figure 3
+// Figure 3 of the Bulletproofs+ Paper
 #[derive(Clone, Debug)]
 pub(crate) struct AggregateRangeStatement {
   generators: Generators,
@@ -38,24 +38,15 @@ impl Zeroize for AggregateRangeStatement {
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub(crate) struct AggregateRangeWitness {
-  values: Vec<u64>,
-  gammas: Vec<Scalar>,
-}
+pub(crate) struct AggregateRangeWitness(Vec<Commitment>);
 
 impl AggregateRangeWitness {
-  pub(crate) fn new(commitments: &[Commitment]) -> Option<Self> {
+  pub(crate) fn new(commitments: Vec<Commitment>) -> Option<Self> {
     if commitments.is_empty() || (commitments.len() > MAX_M) {
       return None;
     }
 
-    let mut values = Vec::with_capacity(commitments.len());
-    let mut gammas = Vec::with_capacity(commitments.len());
-    for commitment in commitments {
-      values.push(commitment.amount);
-      gammas.push(Scalar(commitment.mask));
-    }
-    Some(AggregateRangeWitness { values, gammas })
+    Some(AggregateRangeWitness(commitments))
   }
 }
 
@@ -162,13 +153,11 @@ impl AggregateRangeStatement {
     witness: &AggregateRangeWitness,
   ) -> Option<AggregateRangeProof> {
     // Check for consistency with the witness
-    if self.V.len() != witness.values.len() {
+    if self.V.len() != witness.0.len() {
       return None;
     }
-    for (commitment, (value, gamma)) in
-      self.V.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
-    {
-      if Commitment::new(**gamma, *value).calculate() != **commitment {
+    for (commitment, witness) in self.V.iter().zip(witness.0.iter()) {
+      if witness.calculate() != **commitment {
         return None;
       }
     }
@@ -196,7 +185,13 @@ impl AggregateRangeStatement {
     let mut a_l = ScalarVector(Vec::with_capacity(V.len() * N));
     for j in 1 ..= V.len() {
       d_js.push(Self::d_j(j, V.len()));
-      a_l.0.append(&mut u64_decompose(*witness.values.get(j - 1).unwrap_or(&0)).0);
+      #[allow(clippy::map_unwrap_or)]
+      a_l.0.append(
+        &mut u64_decompose(
+          *witness.0.get(j - 1).map(|commitment| &commitment.amount).unwrap_or(&0),
+        )
+        .0,
+      );
     }
 
     let a_r = a_l.clone() - Scalar::ONE;
@@ -223,8 +218,8 @@ impl AggregateRangeStatement {
     let a_l = a_l - z;
     let a_r = a_r + &d_descending_y_plus_z;
     let mut alpha = alpha;
-    for j in 1 ..= witness.gammas.len() {
-      alpha += z_pow[j - 1] * witness.gammas[j - 1] * y_mn_plus_one;
+    for j in 1 ..= witness.0.len() {
+      alpha += z_pow[j - 1] * Scalar(witness.0[j - 1].mask) * y_mn_plus_one;
     }
 
     Some(AggregateRangeProof {
