@@ -36,4 +36,4 @@ dkg = { path = "../../crypto/dkg", default-features = false }
 bitcoin-serai = { path = "../../coins/bitcoin", default-features = false, features = ["hazmat"] }
 
 monero-generators = { path = "../../coins/monero/generators", default-features = false }
-monero-serai = { path = "../../coins/monero", default-features = false, features = ["cache-distribution"] }
+monero-serai = { path = "../../coins/monero", default-features = false }

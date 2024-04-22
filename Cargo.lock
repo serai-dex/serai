@@ -4672,7 +4672,6 @@ dependencies = [
 name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [
- "async-lock",
  "async-trait",
  "base58-monero",
  "curve25519-dalek",
