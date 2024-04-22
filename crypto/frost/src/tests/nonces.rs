@@ -9,14 +9,12 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::group::{ff::Field, Group, GroupEncoding};
 
-use dleq::MultiDLEqProof;
 pub use dkg::tests::{key_gen, recover_key};
 
 use crate::{
   Curve, Participant, ThresholdView, ThresholdKeys, FrostError,
   algorithm::Algorithm,
-  sign::{Writable, SignMachine},
-  tests::{algorithm_machines, preprocess, sign},
+  tests::{algorithm_machines, sign},
 };
 
 #[derive(Clone)]
@@ -156,76 +154,4 @@ pub fn test_multi_nonce<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
   let keys = key_gen::<R, C>(&mut *rng);
   let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
   sign(&mut *rng, &MultiNonce::<C>::new(), keys.clone(), machines, &[]);
-}
-
-/// Test malleating a commitment for a nonce across generators causes the preprocess to error.
-pub fn test_invalid_commitment<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  let keys = key_gen::<R, C>(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
-  let (machines, mut preprocesses) = preprocess(&mut *rng, machines, |_, _| {});
-
-  // Select a random participant to give an invalid commitment
-  let participants = preprocesses.keys().collect::<Vec<_>>();
-  let faulty = *participants
-    [usize::try_from(rng.next_u64() % u64::try_from(participants.len()).unwrap()).unwrap()];
-
-  // Grab their preprocess
-  let mut preprocess = preprocesses.remove(&faulty).unwrap();
-
-  // Mutate one of the commitments
-  let nonce =
-    preprocess.commitments.nonces.get_mut(usize::try_from(rng.next_u64()).unwrap() % 2).unwrap();
-  let generators_len = nonce.generators.len();
-  nonce.generators[usize::try_from(rng.next_u64()).unwrap() % generators_len].0
-    [usize::try_from(rng.next_u64()).unwrap() % 2] = C::G::random(&mut *rng);
-
-  // The commitments are validated at time of deserialization (read_preprocess)
-  // Accordingly, serialize it and read it again to make sure that errors
-  assert!(machines
-    .iter()
-    .next()
-    .unwrap()
-    .1
-    .read_preprocess::<&[u8]>(&mut preprocess.serialize().as_ref())
-    .is_err());
-}
-
-/// Test malleating the DLEq proof for a preprocess causes it to error.
-pub fn test_invalid_dleq_proof<R: RngCore + CryptoRng, C: Curve>(rng: &mut R) {
-  let keys = key_gen::<R, C>(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, &MultiNonce::<C>::new(), &keys);
-  let (machines, mut preprocesses) = preprocess(&mut *rng, machines, |_, _| {});
-
-  // Select a random participant to give an invalid DLEq proof
-  let participants = preprocesses.keys().collect::<Vec<_>>();
-  let faulty = *participants
-    [usize::try_from(rng.next_u64() % u64::try_from(participants.len()).unwrap()).unwrap()];
-
-  // Invalidate it by replacing it with a completely different proof
-  let dlogs = [Zeroizing::new(C::F::random(&mut *rng)), Zeroizing::new(C::F::random(&mut *rng))];
-  let mut preprocess = preprocesses.remove(&faulty).unwrap();
-  preprocess.commitments.dleq = Some(MultiDLEqProof::prove(
-    &mut *rng,
-    &mut RecommendedTranscript::new(b"Invalid DLEq Proof"),
-    &nonces::<C>(),
-    &dlogs,
-  ));
-
-  assert!(machines
-    .iter()
-    .next()
-    .unwrap()
-    .1
-    .read_preprocess::<&[u8]>(&mut preprocess.serialize().as_ref())
-    .is_err());
-
-  // Also test None for a proof will cause an error
-  preprocess.commitments.dleq = None;
-  assert!(machines
-    .iter()
-    .next()
-    .unwrap()
-    .1
-    .read_preprocess::<&[u8]>(&mut preprocess.serialize().as_ref())
-    .is_err());
 }

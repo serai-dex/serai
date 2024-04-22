@@ -27,8 +27,6 @@ use crate::{
 mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
-#[cfg(feature = "multisig")]
-pub(crate) use multisig::add_key_image_share;
 
 /// Errors returned when CLSAG signing fails.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -279,8 +277,10 @@ impl Clsag {
         nonce.deref() *
           hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
       );
-      clsag.s[usize::from(inputs[i].2.decoys.i)] =
-        (-((p * inputs[i].0.deref()) + c)) + nonce.deref();
+      // Effectively r - cx, except cx is (c_p x) + (c_c z), where z is the delta between a ring
+      // member's commitment and our input commitment (which will only have a known discrete log
+      // over G if the amounts cancel out)
+      clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce.deref() - ((p * inputs[i].0.deref()) + c);
       inputs[i].0.zeroize();
       nonce.zeroize();
 

@@ -14,7 +14,7 @@ use ciphersuite::group::{ff::PrimeField, GroupEncoding};
 use crate::{
   curve::Curve,
   Participant, ThresholdCore, ThresholdKeys,
-  algorithm::{IetfTranscript, Hram, IetfSchnorr},
+  algorithm::{Hram, IetfSchnorr},
   sign::{
     Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
     PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
@@ -191,7 +191,6 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
             nonces: vec![NonceCommitments {
               generators: vec![GeneratorCommitments(these_commitments)],
             }],
-            dleq: None,
           },
           addendum: (),
         };
@@ -301,12 +300,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     }
 
     // Also test it at the Commitments level
-    let (generated_nonces, commitments) = Commitments::<C>::new::<_, IetfTranscript>(
-      &mut TransparentRng(randomness),
-      &share,
-      &[vec![C::generator()]],
-      &[],
-    );
+    let (generated_nonces, commitments) =
+      Commitments::<C>::new::<_>(&mut TransparentRng(randomness), &share, &[vec![C::generator()]]);
 
     assert_eq!(generated_nonces.len(), 1);
     assert_eq!(generated_nonces[0].0, [nonces[0].clone(), nonces[1].clone()]);

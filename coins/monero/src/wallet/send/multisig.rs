@@ -18,6 +18,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
   Participant, FrostError, ThresholdKeys,
+  dkg::lagrange,
   sign::{
     Writable, Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine,
     SignatureMachine, AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
@@ -27,7 +28,7 @@ use frost::{
 use crate::{
   random_scalar,
   ringct::{
-    clsag::{ClsagInput, ClsagDetails, ClsagAddendum, ClsagMultisig, add_key_image_share},
+    clsag::{ClsagInput, ClsagDetails, ClsagAddendum, ClsagMultisig},
     RctPrunable,
   },
   transaction::{Input, Transaction},
@@ -261,8 +262,13 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     included.push(self.i);
     included.sort_unstable();
 
-    // Convert the unified commitments to a Vec of the individual commitments
+    // Start calculating the key images, as needed on the TX level
     let mut images = vec![EdwardsPoint::identity(); self.clsags.len()];
+    for (image, (generator, offset)) in images.iter_mut().zip(&self.key_images) {
+      *image = generator * offset;
+    }
+
+    // Convert the serialized nonces commitments to a parallelized Vec
     let mut commitments = (0 .. self.clsags.len())
       .map(|c| {
         included
@@ -291,14 +297,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // provides the easiest API overall, as this is where the TX is (which needs the key
             // images in its message), along with where the outputs are determined (where our
             // outputs may need these in order to guarantee uniqueness)
-            add_key_image_share(
-              &mut images[c],
-              self.key_images[c].0,
-              self.key_images[c].1,
-              &included,
-              *l,
-              preprocess.addendum.key_image.0,
-            );
+            images[c] += preprocess.addendum.key_image.0 * lagrange::<dfg::Scalar>(*l, &included).0;
 
             Ok((*l, preprocess))
           })
