@@ -104,27 +104,17 @@ pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
 fn amount_decryption(amount: &EncryptedAmount, key: Scalar) -> (Scalar, u64) {
   match amount {
     EncryptedAmount::Original { mask, amount } => {
-      #[cfg(feature = "experimental")]
-      {
-        let mask_shared_sec = hash(key.as_bytes());
-        let mask =
-          Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
+      let mask_shared_sec = hash(key.as_bytes());
+      let mask =
+        Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
 
-        let amount_shared_sec = hash(&mask_shared_sec);
-        let amount_scalar =
-          Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
-        // d2b from rctTypes.cpp
-        let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
+      let amount_shared_sec = hash(&mask_shared_sec);
+      let amount_scalar =
+        Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
+      // d2b from rctTypes.cpp
+      let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
 
-        (mask, amount)
-      }
-
-      #[cfg(not(feature = "experimental"))]
-      {
-        let _ = mask;
-        let _ = amount;
-        todo!("decrypting a legacy monero transaction's amount")
-      }
+      (mask, amount)
     }
     EncryptedAmount::Compact { amount } => (
       commitment_mask(key),
