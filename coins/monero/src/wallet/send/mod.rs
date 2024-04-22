@@ -39,7 +39,7 @@ use crate::{
   wallet::{
     address::{Network, AddressSpec, MoneroAddress},
     ViewPair, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness,
-    shared_key, commitment_mask, amount_encryption,
+    shared_key, commitment_mask, compact_amount_encryption,
     extra::{ARBITRARY_DATA_MARKER, MAX_ARBITRARY_DATA_SIZE},
   },
 };
@@ -92,7 +92,7 @@ impl SendOutput {
         view_tag,
         dest: ((&shared_key * ED25519_BASEPOINT_TABLE) + output.0.spend),
         commitment: Commitment::new(commitment_mask(shared_key), output.1),
-        amount: amount_encryption(output.1, shared_key),
+        amount: compact_amount_encryption(output.1, shared_key),
       },
       payment_id,
     )
@@ -936,7 +936,7 @@ impl Eventuality {
       return false;
     }
 
-    // TODO: Remove this when the following for loop is updated
+    // TODO: Remove this if/when the following for loop is updated to support older TXs
     assert!(
       rct_type.compact_encrypted_amounts(),
       "created an Eventuality for a very old RctType we don't support proving for"

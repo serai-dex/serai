@@ -10,7 +10,7 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  hash, hash_to_scalar, serialize::write_varint, ringct::EncryptedAmount, transaction::Input,
+  hash, hash_to_scalar, serialize::write_varint, Commitment, ringct::EncryptedAmount, transaction::Input,
 };
 
 pub mod extra;
@@ -94,32 +94,38 @@ pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
   hash_to_scalar(&mask)
 }
 
-pub(crate) fn amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
+pub(crate) fn compact_amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   let mut amount_mask = b"amount".to_vec();
   amount_mask.extend(key.to_bytes());
   (amount ^ u64::from_le_bytes(hash(&amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
 }
 
-// TODO: Move this under EncryptedAmount?
-fn amount_decryption(amount: &EncryptedAmount, key: Scalar) -> (Scalar, u64) {
-  match amount {
-    EncryptedAmount::Original { mask, amount } => {
-      let mask_shared_sec = hash(key.as_bytes());
-      let mask =
-        Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
+impl EncryptedAmount {
+  /// Decrypt an EncryptedAmount into the Commitment it encrypts.
+  ///
+  /// The caller must verify the decrypted Commitment matches with the actual Commitment used
+  /// within in the Monero protocol.
+  pub fn decrypt(&self, key: Scalar) -> Commitment {
+    match self {
+      // TODO: Add a test vector for this
+      EncryptedAmount::Original { mask, amount } => {
+        let mask_shared_sec = hash(key.as_bytes());
+        let mask =
+          Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
 
-      let amount_shared_sec = hash(&mask_shared_sec);
-      let amount_scalar =
-        Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
-      // d2b from rctTypes.cpp
-      let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
+        let amount_shared_sec = hash(&mask_shared_sec);
+        let amount_scalar =
+          Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
+        // d2b from rctTypes.cpp
+        let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
 
-      (mask, amount)
+        Commitment::new(mask, amount)
+      }
+      EncryptedAmount::Compact { amount } => Commitment::new(
+        commitment_mask(key),
+        u64::from_le_bytes(compact_amount_encryption(u64::from_le_bytes(*amount), key)),
+      ),
     }
-    EncryptedAmount::Compact { amount } => (
-      commitment_mask(key),
-      u64::from_le_bytes(amount_encryption(u64::from_le_bytes(*amount), key)),
-    ),
   }
 }
 

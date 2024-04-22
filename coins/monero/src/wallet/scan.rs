@@ -17,9 +17,7 @@ use crate::{
   transaction::{Input, Timelock, Transaction},
   block::Block,
   rpc::{RpcError, RpcConnection, Rpc},
-  wallet::{
-    PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key, amount_decryption,
-  },
+  wallet::{PaymentId, Extra, address::SubaddressIndex, Scanner, uniqueness, shared_key},
 };
 
 /// An absolute output ID, defined as its transaction hash and output index.
@@ -427,15 +425,13 @@ impl Scanner {
           commitment.amount = amount;
         // Regular transaction
         } else {
-          let (mask, amount) = match tx.rct_signatures.base.encrypted_amounts.get(o) {
-            Some(amount) => amount_decryption(amount, shared_key),
+          commitment = match tx.rct_signatures.base.encrypted_amounts.get(o) {
+            Some(amount) => amount.decrypt(shared_key),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
             None => break,
           };
 
-          // Rebuild the commitment to verify it
-          commitment = Commitment::new(mask, amount);
           // If this is a malicious commitment, move to the next output
           // Any other R value will calculate to a different spend key and are therefore ignorable
           if Some(&commitment.calculate()) != tx.rct_signatures.base.commitments.get(o) {
