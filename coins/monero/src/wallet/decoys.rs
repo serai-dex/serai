@@ -1,13 +1,5 @@
 use std_shims::{vec::Vec, collections::HashSet};
 
-#[cfg(feature = "cache-distribution")]
-use std_shims::sync::OnceLock;
-
-#[cfg(all(feature = "cache-distribution", not(feature = "std")))]
-use std_shims::sync::Mutex;
-#[cfg(all(feature = "cache-distribution", feature = "std"))]
-use async_lock::Mutex;
-
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
@@ -28,16 +20,6 @@ const RECENT_WINDOW: usize = 15;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 #[allow(clippy::cast_precision_loss)]
 const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
-
-// TODO: Resolve safety of this in case a reorg occurs/the network changes
-// TODO: Update this when scanning a block, as possible
-#[cfg(feature = "cache-distribution")]
-static DISTRIBUTION_CELL: OnceLock<Mutex<Vec<u64>>> = OnceLock::new();
-#[cfg(feature = "cache-distribution")]
-#[allow(non_snake_case)]
-fn DISTRIBUTION() -> &'static Mutex<Vec<u64>> {
-  DISTRIBUTION_CELL.get_or_init(|| Mutex::new(Vec::with_capacity(3000000)))
-}
 
 #[allow(clippy::too_many_arguments)]
 async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
@@ -158,14 +140,6 @@ async fn select_decoys<R: RngCore + CryptoRng, RPC: RpcConnection>(
   inputs: &[SpendableOutput],
   fingerprintable_canonical: bool,
 ) -> Result<Vec<Decoys>, RpcError> {
-  #[cfg(feature = "cache-distribution")]
-  #[cfg(not(feature = "std"))]
-  let mut distribution = DISTRIBUTION().lock();
-  #[cfg(feature = "cache-distribution")]
-  #[cfg(feature = "std")]
-  let mut distribution = DISTRIBUTION().lock().await;
-
-  #[cfg(not(feature = "cache-distribution"))]
   let mut distribution = vec![];
 
   let decoy_count = ring_len - 1;

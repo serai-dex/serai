@@ -47,8 +47,6 @@ frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8
 
 monero-generators = { path = "generators", version = "0.4", default-features = false }
 
-async-lock = { version = "3", default-features = false, optional = true }
-
 hex-literal = "0.4"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
@@ -93,8 +91,6 @@ std = [
 
   "monero-generators/std",
 
-  "async-lock?/std",
-
   "hex/std",
   "serde/std",
   "serde_json/std",
@@ -102,7 +98,6 @@ std = [
   "base58-monero/std",
 ]
 
-cache-distribution = ["async-lock"]
 http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
