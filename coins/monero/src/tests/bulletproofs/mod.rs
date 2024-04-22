@@ -7,7 +7,8 @@ use multiexp::BatchVerifier;
 
 use crate::{
   Commitment, random_scalar,
-  ringct::bulletproofs::{Bulletproofs, original::OriginalStruct},
+  ringct::bulletproofs::{Bulletproof, original::OriginalStruct},
+  wallet::TransactionError,
 };
 
 mod plus;
@@ -18,7 +19,7 @@ fn bulletproofs_vector() {
   let point = |point| decompress_point(point).unwrap();
 
   // Generated from Monero
-  assert!(Bulletproofs::Original(OriginalStruct {
+  assert!(Bulletproof::Original(OriginalStruct {
     A: point(hex!("ef32c0b9551b804decdcb107eb22aa715b7ce259bf3c5cac20e24dfa6b28ac71")),
     S: point(hex!("e1285960861783574ee2b689ae53622834eb0b035d6943103f960cd23e063fa0")),
     T1: point(hex!("4ea07735f184ba159d0e0eb662bac8cde3eb7d39f31e567b0fbda3aa23fe5620")),
@@ -70,7 +71,11 @@ macro_rules! bulletproofs_tests {
           .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
           .collect::<Vec<_>>();
 
-        let bp = Bulletproofs::prove(&mut OsRng, &commitments, $plus).unwrap();
+        let bp = if $plus {
+          Bulletproof::prove_plus(&mut OsRng, commitments.clone()).unwrap()
+        } else {
+          Bulletproof::prove(&mut OsRng, &commitments).unwrap()
+        };
 
         let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
         assert!(bp.verify(&mut OsRng, &commitments));
@@ -86,7 +91,15 @@ macro_rules! bulletproofs_tests {
       for _ in 0 .. 17 {
         commitments.push(Commitment::new(Scalar::ZERO, 0));
       }
-      assert!(Bulletproofs::prove(&mut OsRng, &commitments, $plus).is_err());
+      assert_eq!(
+        (if $plus {
+          Bulletproof::prove_plus(&mut OsRng, commitments)
+        } else {
+          Bulletproof::prove(&mut OsRng, &commitments)
+        })
+        .unwrap_err(),
+        TransactionError::TooManyOutputs,
+      );
     }
   };
 }
