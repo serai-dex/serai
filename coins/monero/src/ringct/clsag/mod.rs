@@ -26,31 +26,36 @@ use crate::{
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
+pub(crate) use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 
-/// Errors returned when CLSAG signing fails.
+/// Errors when working with CLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum ClsagError {
-  #[cfg_attr(feature = "std", error("internal error ({0})"))]
-  InternalError(&'static str),
+  /// The ring was invalid (such as being too small or too large).
   #[cfg_attr(feature = "std", error("invalid ring"))]
   InvalidRing,
+  /// The specified ring member was invalid (index, ring size).
   #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
   InvalidRingMember(u8, u8),
+  /// The commitment opening provided did not match the ring member's.
   #[cfg_attr(feature = "std", error("invalid commitment"))]
   InvalidCommitment,
+  /// The key image was invalid (such as being identity or torsioned)
   #[cfg_attr(feature = "std", error("invalid key image"))]
   InvalidImage,
+  /// The `D` component was invalid.
   #[cfg_attr(feature = "std", error("invalid D"))]
   InvalidD,
+  /// The `s` vector was invalid.
   #[cfg_attr(feature = "std", error("invalid s"))]
   InvalidS,
+  /// The `c1` variable was invalid.
   #[cfg_attr(feature = "std", error("invalid c1"))]
   InvalidC1,
 }
 
-/// Input being signed for.
+/// Context on the ring member being signed for.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
@@ -63,7 +68,7 @@ impl ClsagInput {
   pub fn new(commitment: Commitment, decoys: Decoys) -> Result<ClsagInput, ClsagError> {
     let n = decoys.len();
     if n > u8::MAX.into() {
-      Err(ClsagError::InternalError("max ring size in this library is u8 max"))?;
+      Err(ClsagError::InvalidRing)?;
     }
     let n = u8::try_from(n).unwrap();
     if decoys.i >= n {
@@ -213,9 +218,16 @@ fn core(
 /// CLSAG signature, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Clsag {
-  pub D: EdwardsPoint,
-  pub s: Vec<Scalar>,
-  pub c1: Scalar,
+  D: EdwardsPoint,
+  pub(crate) s: Vec<Scalar>,
+  pub(crate) c1: Scalar,
+}
+
+pub(crate) struct ClsagSignCore {
+  incomplete_clsag: Clsag,
+  pseudo_out: EdwardsPoint,
+  key_challenge: Scalar,
+  challenged_mask: Scalar,
 }
 
 impl Clsag {
@@ -229,28 +241,34 @@ impl Clsag {
     msg: &[u8; 32],
     A: EdwardsPoint,
     AH: EdwardsPoint,
-  ) -> (Clsag, EdwardsPoint, Scalar, Scalar) {
+  ) -> ClsagSignCore {
     let r: usize = input.decoys.i.into();
 
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
-    let z = input.commitment.mask - mask;
+    let mask_delta = input.commitment.mask - mask;
 
     let H = hash_to_point(&input.decoys.ring[r][0]);
-    let D = H * z;
+    let D = H * mask_delta;
     let mut s = Vec::with_capacity(input.decoys.ring.len());
     for _ in 0 .. input.decoys.ring.len() {
       s.push(random_scalar(rng));
     }
-    let ((D, p, c), c1) =
+    let ((D, c_p, c_c), c1) =
       core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
 
-    (Clsag { D, s, c1 }, pseudo_out, p, c * z)
+    ClsagSignCore {
+      incomplete_clsag: Clsag { D, s, c1 },
+      pseudo_out,
+      key_challenge: c_p,
+      challenged_mask: c_c * mask_delta,
+    }
   }
 
   /// Generate CLSAG signatures for the given inputs.
+  ///
   /// inputs is of the form (private key, key image, input).
   /// sum_outputs is for the sum of the outputs' commitment masks.
-  pub fn sign<R: RngCore + CryptoRng>(
+  pub(crate) fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
@@ -267,20 +285,25 @@ impl Clsag {
       }
 
       let mut nonce = Zeroizing::new(random_scalar(rng));
-      let (mut clsag, pseudo_out, p, c) = Clsag::sign_core(
-        rng,
-        &inputs[i].1,
-        &inputs[i].2,
-        mask,
-        &msg,
-        nonce.deref() * ED25519_BASEPOINT_TABLE,
-        nonce.deref() *
-          hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
-      );
+      let ClsagSignCore { mut incomplete_clsag, pseudo_out, key_challenge, challenged_mask } =
+        Clsag::sign_core(
+          rng,
+          &inputs[i].1,
+          &inputs[i].2,
+          mask,
+          &msg,
+          nonce.deref() * ED25519_BASEPOINT_TABLE,
+          nonce.deref() *
+            hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
+        );
       // Effectively r - cx, except cx is (c_p x) + (c_c z), where z is the delta between a ring
       // member's commitment and our input commitment (which will only have a known discrete log
       // over G if the amounts cancel out)
-      clsag.s[usize::from(inputs[i].2.decoys.i)] = nonce.deref() - ((p * inputs[i].0.deref()) + c);
+      incomplete_clsag.s[usize::from(inputs[i].2.decoys.i)] =
+        nonce.deref() - ((key_challenge * inputs[i].0.deref()) + challenged_mask);
+      let clsag = incomplete_clsag;
+
+      // Zeroize private keys and nonces.
       inputs[i].0.zeroize();
       nonce.zeroize();
 
@@ -310,7 +333,7 @@ impl Clsag {
     if ring.len() != self.s.len() {
       Err(ClsagError::InvalidS)?;
     }
-    if I.is_identity() {
+    if I.is_identity() || (!I.is_torsion_free()) {
       Err(ClsagError::InvalidImage)?;
     }
 
@@ -330,12 +353,14 @@ impl Clsag {
     (ring_len * 32) + 32 + 32
   }
 
+  /// Write the CLSAG to a writer.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_raw_vec(write_scalar, &self.s, w)?;
     w.write_all(&self.c1.to_bytes())?;
     write_point(&self.D, w)
   }
 
+  /// Read a CLSAG from a reader.
   pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Clsag> {
     Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
   }

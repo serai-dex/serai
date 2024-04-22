@@ -33,6 +33,7 @@ pub(crate) fn hadamard_fold(
   res
 }
 
+/// Internal structure representing a Bulletproof.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OriginalStruct {
   pub(crate) A: DalekPoint,

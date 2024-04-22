@@ -51,6 +51,7 @@ impl AggregateRangeWitness {
   }
 }
 
+/// Internal structure representing a Bulletproof+, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct AggregateRangeProof {
   pub(crate) A: EdwardsPoint,
