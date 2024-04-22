@@ -101,6 +101,5 @@ std = [
 http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
-experimental = []
 
 default = ["std", "http-rpc"]
