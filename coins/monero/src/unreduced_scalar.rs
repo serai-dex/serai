@@ -34,10 +34,6 @@ impl UnreducedScalar {
     Ok(UnreducedScalar(read_bytes(r)?))
   }
 
-  pub fn as_bytes(&self) -> &[u8; 32] {
-    &self.0
-  }
-
   fn as_bits(&self) -> [u8; 256] {
     let mut bits = [0; 256];
     for (i, bit) in bits.iter_mut().enumerate() {

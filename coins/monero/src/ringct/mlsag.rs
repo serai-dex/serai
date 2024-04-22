@@ -11,28 +11,36 @@ use monero_generators::H;
 
 use crate::{hash_to_scalar, ringct::hash_to_point, serialize::*};
 
+/// Errors when working with MLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum MlsagError {
+  /// Invalid ring (such as too small or too large).
   #[cfg_attr(feature = "std", error("invalid ring"))]
   InvalidRing,
+  /// Invalid amount of key images.
   #[cfg_attr(feature = "std", error("invalid amount of key images"))]
   InvalidAmountOfKeyImages,
+  /// Invalid ss matrix.
   #[cfg_attr(feature = "std", error("invalid ss"))]
   InvalidSs,
-  #[cfg_attr(feature = "std", error("key image was identity"))]
-  IdentityKeyImage,
+  /// Invalid key image.
+  #[cfg_attr(feature = "std", error("invalid key image"))]
+  InvalidKeyImage,
+  /// Invalid ci vector.
   #[cfg_attr(feature = "std", error("invalid ci"))]
   InvalidCi,
 }
 
+/// A vector of rings, forming a matrix, to verify the MLSAG with.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct RingMatrix {
   matrix: Vec<Vec<EdwardsPoint>>,
 }
 
 impl RingMatrix {
-  pub fn new(matrix: Vec<Vec<EdwardsPoint>>) -> Result<Self, MlsagError> {
+  /// Construct a ring matrix from an already formatted series of points.
+  fn new(matrix: Vec<Vec<EdwardsPoint>>) -> Result<Self, MlsagError> {
     // Monero requires that there is more than one ring member for MLSAG signatures:
     // https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
     // src/ringct/rctSigs.cpp#L462
@@ -60,11 +68,12 @@ impl RingMatrix {
     RingMatrix::new(matrix)
   }
 
-  pub fn iter(&self) -> impl Iterator<Item = &[EdwardsPoint]> {
+  /// Iterate the members of the matrix.
+  fn iter(&self) -> impl Iterator<Item = &[EdwardsPoint]> {
     self.matrix.iter().map(AsRef::as_ref)
   }
 
-  /// Return the amount of members in the ring.
+  /// Returns the amount of members in the ring.
   pub fn members(&self) -> usize {
     self.matrix.len()
   }
@@ -79,13 +88,15 @@ impl RingMatrix {
   }
 }
 
+/// The MLSAG linkable ring signature, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Mlsag {
-  pub ss: Vec<Vec<Scalar>>,
-  pub cc: Scalar,
+  ss: Vec<Vec<Scalar>>,
+  cc: Scalar,
 }
 
 impl Mlsag {
+  /// Write the MLSAG to a writer.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for ss in &self.ss {
       write_raw_vec(write_scalar, ss, w)?;
@@ -93,6 +104,7 @@ impl Mlsag {
     write_scalar(&self.cc, w)
   }
 
+  /// Read the MLSAG from a reader.
   pub fn read<R: Read>(mixins: usize, ss_2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
     Ok(Mlsag {
       ss: (0 .. mixins)
@@ -102,6 +114,7 @@ impl Mlsag {
     })
   }
 
+  /// Verify the MLSAG.
   pub fn verify(
     &self,
     msg: &[u8; 32],
@@ -142,8 +155,8 @@ impl Mlsag {
         // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need
         // to have key images.
         if let Some(ki) = ki {
-          if ki.is_identity() {
-            Err(MlsagError::IdentityKeyImage)?;
+          if ki.is_identity() || (!ki.is_torsion_free()) {
+            Err(MlsagError::InvalidKeyImage)?;
           }
 
           #[allow(non_snake_case)]
@@ -164,8 +177,9 @@ impl Mlsag {
   }
 }
 
-/// An aggregate ring matrix builder, usable to set up the ring matrix to prove/verify an aggregate
-/// MLSAG signature.
+/// Builder for a RingMatrix when using an aggregate signature.
+///
+/// This handles the formatting as necessary.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct AggregateRingMatrixBuilder {
   key_ring: Vec<Vec<EdwardsPoint>>,
@@ -206,7 +220,7 @@ impl AggregateRingMatrixBuilder {
     Ok(())
   }
 
-  /// Build and return the [`RingMatrix`]
+  /// Build and return the [`RingMatrix`].
   pub fn build(mut self) -> Result<RingMatrix, MlsagError> {
     for (i, amount_commitment) in self.amounts_ring.drain(..).enumerate() {
       self.key_ring[i].push(amount_commitment);
