@@ -57,13 +57,13 @@ impl ClsagInput {
 
 /// CLSAG input and the mask to use for it.
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct ClsagDetails {
+pub(crate) struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar,
 }
 
 impl ClsagDetails {
-  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
+  pub(crate) fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
     ClsagDetails { input, mask }
   }
 }
@@ -93,7 +93,7 @@ struct Interim {
 /// FROST algorithm for producing a CLSAG signature.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub struct ClsagMultisig {
+pub(crate) struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
   pub(crate) H: EdwardsPoint,
@@ -107,7 +107,7 @@ pub struct ClsagMultisig {
 }
 
 impl ClsagMultisig {
-  pub fn new(
+  pub(crate) fn new(
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,
     details: Arc<RwLock<Option<ClsagDetails>>>,
@@ -219,8 +219,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 
-    #[allow(non_snake_case)]
-    let (clsag, pseudo_out, p, c) = Clsag::sign_core(
+    let sign_core = Clsag::sign_core(
       &mut rng,
       &self.image.expect("verifying a share despite never processing any addendums").0,
       &self.input(),
@@ -229,10 +228,15 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       nonce_sums[0][0].0,
       nonce_sums[0][1].0,
     );
-    self.interim = Some(Interim { p, c, clsag, pseudo_out });
+    self.interim = Some(Interim {
+      p: sign_core.key_challenge,
+      c: sign_core.challenged_mask,
+      clsag: sign_core.incomplete_clsag,
+      pseudo_out: sign_core.pseudo_out,
+    });
 
     // r - p x, where p is the challenge for the keys
-    *nonces[0] - dfg::Scalar(p) * view.secret_share().deref()
+    *nonces[0] - dfg::Scalar(sign_core.key_challenge) * view.secret_share().deref()
   }
 
   #[must_use]
