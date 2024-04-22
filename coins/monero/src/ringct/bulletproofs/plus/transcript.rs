@@ -1,6 +1,7 @@
 use std_shims::{sync::OnceLock, vec::Vec};
 
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use curve25519_dalek::EdwardsPoint;
+use dalek_ff_group::Scalar;
 
 use monero_generators::{hash_to_point as raw_hash_to_point};
 use crate::{hash, hash_to_scalar as dalek_hash};
