@@ -12,7 +12,7 @@ use crate::{
   Protocol, hash,
   serialize::*,
   ring_signatures::RingSignature,
-  ringct::{bulletproofs::Bulletproofs, RctType, RctBase, RctPrunable, RctSignatures},
+  ringct::{bulletproofs::Bulletproof, RctType, RctBase, RctPrunable, RctSignatures},
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -426,7 +426,7 @@ impl Transaction {
     if !(bp || bp_plus) {
       blob_size
     } else {
-      blob_size + Bulletproofs::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
+      blob_size + Bulletproof::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
     }
   }
 }

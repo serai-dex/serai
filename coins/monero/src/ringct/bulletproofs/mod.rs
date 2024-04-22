@@ -26,15 +26,15 @@ use self::plus::*;
 
 pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
 
-/// Bulletproofs enum, supporting the original and plus formulations.
+/// Bulletproof enum, encapsulating both Bulletproofs and Bulletproofs+.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Bulletproofs {
+pub enum Bulletproof {
   Original(OriginalStruct),
   Plus(AggregateRangeProof),
 }
 
-impl Bulletproofs {
+impl Bulletproof {
   fn bp_fields(plus: bool) -> usize {
     if plus {
       6
@@ -57,7 +57,7 @@ impl Bulletproofs {
 
     let mut bp_clawback = 0;
     if n_padded_outputs > 2 {
-      let fields = Bulletproofs::bp_fields(plus);
+      let fields = Bulletproof::bp_fields(plus);
       let base = ((fields + (2 * (LOG_N + 1))) * 32) / 2;
       let size = (fields + (2 * LR_len)) * 32;
       bp_clawback = ((base * n_padded_outputs) - size) * 4 / 5;
@@ -68,40 +68,49 @@ impl Bulletproofs {
 
   pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
     #[allow(non_snake_case)]
-    let (bp_clawback, LR_len) = Bulletproofs::calculate_bp_clawback(plus, outputs);
-    32 * (Bulletproofs::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
+    let (bp_clawback, LR_len) = Bulletproof::calculate_bp_clawback(plus, outputs);
+    32 * (Bulletproof::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
   }
 
-  /// Prove the list of commitments are within [0 .. 2^64).
+  /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof.
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
-    plus: bool,
-  ) -> Result<Bulletproofs, TransactionError> {
+  ) -> Result<Bulletproof, TransactionError> {
     if outputs.is_empty() {
       Err(TransactionError::NoOutputs)?;
     }
     if outputs.len() > MAX_OUTPUTS {
       Err(TransactionError::TooManyOutputs)?;
     }
-    Ok(if !plus {
-      Bulletproofs::Original(OriginalStruct::prove(rng, outputs))
-    } else {
-      Bulletproofs::Plus(
-        AggregateRangeStatement::new(outputs.iter().map(Commitment::calculate).collect())
-          .unwrap()
-          .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs.to_vec()).unwrap()))
-          .unwrap(),
-      )
-    })
+    Ok(Bulletproof::Original(OriginalStruct::prove(rng, outputs)))
   }
 
-  /// Verify the given Bulletproofs.
+  /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof+.
+  pub fn prove_plus<R: RngCore + CryptoRng>(
+    rng: &mut R,
+    outputs: Vec<Commitment>,
+  ) -> Result<Bulletproof, TransactionError> {
+    if outputs.is_empty() {
+      Err(TransactionError::NoOutputs)?;
+    }
+    if outputs.len() > MAX_OUTPUTS {
+      Err(TransactionError::TooManyOutputs)?;
+    }
+    Ok(Bulletproof::Plus(
+      AggregateRangeStatement::new(outputs.iter().map(Commitment::calculate).collect())
+        .unwrap()
+        .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs).unwrap()))
+        .unwrap(),
+    ))
+  }
+
+  /// Verify the given Bulletproof(+).
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.verify(rng, commitments),
-      Bulletproofs::Plus(bp) => {
+      Bulletproof::Original(bp) => bp.verify(rng, commitments),
+      Bulletproof::Plus(bp) => {
         let mut verifier = BatchVerifier::new(1);
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
@@ -114,9 +123,11 @@ impl Bulletproofs {
     }
   }
 
-  /// Accumulate the verification for the given Bulletproofs into the specified BatchVerifier.
-  /// Returns false if the Bulletproofs aren't sane, without mutating the BatchVerifier.
-  /// Returns true if the Bulletproofs are sane, regardless of their validity.
+  /// Accumulate the verification for the given Bulletproof into the specified BatchVerifier.
+  ///
+  /// Returns false if the Bulletproof isn't sane, leaving the BatchVerifier in an undefined
+  /// state.
+  /// Returns true if the Bulletproof is sane, regardless of their validity.
   #[must_use]
   pub fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
     &self,
@@ -126,8 +137,8 @@ impl Bulletproofs {
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproofs::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
-      Bulletproofs::Plus(bp) => {
+      Bulletproof::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Bulletproof::Plus(bp) => {
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
         };
@@ -142,7 +153,7 @@ impl Bulletproofs {
     specific_write_vec: F,
   ) -> io::Result<()> {
     match self {
-      Bulletproofs::Original(bp) => {
+      Bulletproof::Original(bp) => {
         write_point(&bp.A, w)?;
         write_point(&bp.S, w)?;
         write_point(&bp.T1, w)?;
@@ -156,7 +167,7 @@ impl Bulletproofs {
         write_scalar(&bp.t, w)
       }
 
-      Bulletproofs::Plus(bp) => {
+      Bulletproof::Plus(bp) => {
         write_point(&bp.A.0, w)?;
         write_point(&bp.wip.A.0, w)?;
         write_point(&bp.wip.B.0, w)?;
@@ -173,19 +184,21 @@ impl Bulletproofs {
     self.write_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 
+  /// Write the Bulletproof(+) to a writer.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.write_core(w, |points, w| write_vec(write_point, points, w))
   }
 
+  /// Serialize the Bulletproof(+) to a Vec<u8>.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
-  /// Read Bulletproofs.
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
-    Ok(Bulletproofs::Original(OriginalStruct {
+  /// Read a Bulletproof.
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Bulletproof> {
+    Ok(Bulletproof::Original(OriginalStruct {
       A: read_point(r)?,
       S: read_point(r)?,
       T1: read_point(r)?,
@@ -200,11 +213,11 @@ impl Bulletproofs {
     }))
   }
 
-  /// Read Bulletproofs+.
-  pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproofs> {
+  /// Read a Bulletproof+.
+  pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproof> {
     use dalek_ff_group::{Scalar as DfgScalar, EdwardsPoint as DfgPoint};
 
-    Ok(Bulletproofs::Plus(AggregateRangeProof {
+    Ok(Bulletproof::Plus(AggregateRangeProof {
       A: DfgPoint(read_point(r)?),
       wip: WipProof {
         A: DfgPoint(read_point(r)?),

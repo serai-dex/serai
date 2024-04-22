@@ -23,7 +23,7 @@ pub mod bulletproofs;
 use crate::{
   Protocol,
   serialize::*,
-  ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproofs},
+  ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproof},
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -199,12 +199,12 @@ pub enum RctPrunable {
     mlsags: Vec<Mlsag>,
   },
   MlsagBulletproofs {
-    bulletproofs: Bulletproofs,
+    bulletproofs: Bulletproof,
     mlsags: Vec<Mlsag>,
     pseudo_outs: Vec<EdwardsPoint>,
   },
   Clsag {
-    bulletproofs: Bulletproofs,
+    bulletproofs: Bulletproof,
     clsags: Vec<Clsag>,
     pseudo_outs: Vec<EdwardsPoint>,
   },
@@ -213,7 +213,7 @@ pub enum RctPrunable {
 impl RctPrunable {
   pub(crate) fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
     // 1 byte for number of BPs (technically a VarInt, yet there's always just zero or one)
-    1 + Bulletproofs::fee_weight(protocol.bp_plus(), outputs) +
+    1 + Bulletproof::fee_weight(protocol.bp_plus(), outputs) +
       (inputs * (Clsag::fee_weight(protocol.ring_len()) + 32))
   }
 
@@ -294,7 +294,7 @@ impl RctPrunable {
             {
               Err(io::Error::other("n bulletproofs instead of one"))?;
             }
-            Bulletproofs::read(r)?
+            Bulletproof::read(r)?
           },
           mlsags: (0 .. inputs)
             .map(|_| Mlsag::read(ring_length, 2, r))
@@ -307,9 +307,7 @@ impl RctPrunable {
           if read_varint::<_, u64>(r)? != 1 {
             Err(io::Error::other("n bulletproofs instead of one"))?;
           }
-          (if rct_type == RctType::Clsag { Bulletproofs::read } else { Bulletproofs::read_plus })(
-            r,
-          )?
+          (if rct_type == RctType::Clsag { Bulletproof::read } else { Bulletproof::read_plus })(r)?
         },
         clsags: (0 .. inputs).map(|_| Clsag::read(ring_length, r)).collect::<Result<_, _>>()?,
         pseudo_outs: read_raw_vec(read_point, inputs, r)?,
@@ -360,7 +358,7 @@ impl RctSignatures {
         }
       }
       RctPrunable::Clsag { bulletproofs, .. } => {
-        if matches!(bulletproofs, Bulletproofs::Original { .. }) {
+        if matches!(bulletproofs, Bulletproof::Original { .. }) {
           RctType::Clsag
         } else {
           RctType::BulletproofsPlus

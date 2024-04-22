@@ -31,7 +31,7 @@ use crate::{
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagInput, Clsag},
-    bulletproofs::{MAX_OUTPUTS, Bulletproofs},
+    bulletproofs::{MAX_OUTPUTS, Bulletproof},
     RctBase, RctPrunable, RctSignatures,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
@@ -783,7 +783,11 @@ impl SignableTransaction {
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
 
     // Safe due to the constructor checking MAX_OUTPUTS
-    let bp = Bulletproofs::prove(rng, &commitments, self.protocol.bp_plus()).unwrap();
+    let bp = if self.protocol.bp_plus() {
+      Bulletproof::prove_plus(rng, commitments.clone()).unwrap()
+    } else {
+      Bulletproof::prove(rng, &commitments).unwrap()
+    };
 
     // Create the TX extra
     let extra = Self::extra(
