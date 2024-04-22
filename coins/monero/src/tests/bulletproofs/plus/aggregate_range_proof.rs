@@ -2,7 +2,7 @@ use rand_core::{RngCore, OsRng};
 
 use multiexp::BatchVerifier;
 use group::ff::Field;
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use dalek_ff_group::Scalar;
 
 use crate::{
   Commitment,
@@ -19,7 +19,7 @@ fn test_aggregate_range_proof() {
     for _ in 0 .. m {
       commitments.push(Commitment::new(*Scalar::random(&mut OsRng), OsRng.next_u64()));
     }
-    let commitment_points = commitments.iter().map(|com| EdwardsPoint(com.calculate())).collect();
+    let commitment_points = commitments.iter().map(Commitment::calculate).collect();
     let statement = AggregateRangeStatement::new(commitment_points).unwrap();
     let witness = AggregateRangeWitness::new(commitments).unwrap();
 

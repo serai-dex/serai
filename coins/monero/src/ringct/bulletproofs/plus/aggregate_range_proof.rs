@@ -9,6 +9,7 @@ use group::{
   ff::{Field, PrimeField},
   Group, GroupEncoding,
 };
+use curve25519_dalek::EdwardsPoint as DalekPoint;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 use crate::{
@@ -28,7 +29,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub(crate) struct AggregateRangeStatement {
   generators: Generators,
-  V: Vec<EdwardsPoint>,
+  V: Vec<DalekPoint>,
 }
 
 impl Zeroize for AggregateRangeStatement {
@@ -57,7 +58,7 @@ pub struct AggregateRangeProof {
 }
 
 impl AggregateRangeStatement {
-  pub(crate) fn new(V: Vec<EdwardsPoint>) -> Option<Self> {
+  pub(crate) fn new(V: Vec<DalekPoint>) -> Option<Self> {
     if V.is_empty() || (V.len() > MAX_M) {
       return None;
     }
@@ -98,11 +99,14 @@ impl AggregateRangeStatement {
     }
     let mn = V.len() * N;
 
+    // 2, 4, 6, 8... powers of z, of length equivalent to the amount of commitments
     let mut z_pow = Vec::with_capacity(V.len());
+    // z**2
+    z_pow.push(z * z);
 
     let mut d = ScalarVector::new(mn);
     for j in 1 ..= V.len() {
-      z_pow.push(z.pow(Scalar::from(2 * u64::try_from(j).unwrap()))); // TODO: Optimize this
+      z_pow.push(*z_pow.last().unwrap() * z_pow[0]);
       d = d + &(Self::d_j(j, V.len()) * (z_pow[j - 1]));
     }
 
@@ -157,7 +161,7 @@ impl AggregateRangeStatement {
       return None;
     }
     for (commitment, witness) in self.V.iter().zip(witness.0.iter()) {
-      if witness.calculate() != **commitment {
+      if witness.calculate() != *commitment {
         return None;
       }
     }
@@ -170,9 +174,9 @@ impl AggregateRangeStatement {
     // Commitments aren't transmitted INV_EIGHT though, so this multiplies by INV_EIGHT to enable
     // clearing its cofactor without mutating the value
     // For some reason, these values are transcripted * INV_EIGHT, not as transmitted
-    let mut V = V.into_iter().map(|V| EdwardsPoint(V.0 * crate::INV_EIGHT())).collect::<Vec<_>>();
+    let V = V.into_iter().map(|V| V * crate::INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
-    V.iter_mut().for_each(|V| *V = V.mul_by_cofactor());
+    let mut V = V.into_iter().map(|V| EdwardsPoint(V.mul_by_cofactor())).collect::<Vec<_>>();
 
     // Pad V
     while V.len() < padded_pow_of_2(V.len()) {
@@ -239,9 +243,11 @@ impl AggregateRangeStatement {
   ) -> bool {
     let Self { generators, V } = self;
 
-    let mut V = V.into_iter().map(|V| EdwardsPoint(V.0 * crate::INV_EIGHT())).collect::<Vec<_>>();
+    let V = V.into_iter().map(|V| V * crate::INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
-    V.iter_mut().for_each(|V| *V = V.mul_by_cofactor());
+    // With the torsion clear, wrap it into a EdwardsPoint from dalek-ff-group
+    // (which is prime-order)
+    let V = V.into_iter().map(|V| EdwardsPoint(V.mul_by_cofactor())).collect::<Vec<_>>();
 
     let generators = generators.reduce(V.len() * N);
 
