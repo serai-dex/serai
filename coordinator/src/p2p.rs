@@ -493,8 +493,8 @@ impl LibP2p {
                 continue;
               }
 
-              // Randomly select up to 5
-              for _ in 0 .. 5 {
+              // Randomly select up to 2 * TARGET_PEERS
+              for _ in 0 .. (2 * TARGET_PEERS) {
                 if !nodes.is_empty() {
                   let to_connect = nodes.swap_remove(
                     usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
