@@ -371,7 +371,7 @@ impl LibP2p {
     }
 
     // TODO: If a network has less than TARGET_PEERS, this will cause retries ad infinitum
-    const TARGET_PEERS: usize = 8;
+    const TARGET_PEERS: usize = 5;
 
     // The addrs we're currently dialing, and the networks associated with them
     let dialing_peers = Arc::new(RwLock::new(HashMap::new()));
@@ -493,8 +493,8 @@ impl LibP2p {
                 continue;
               }
 
-              // Randomly select up to 2 * TARGET_PEERS
-              for _ in 0 .. (2 * TARGET_PEERS) {
+              // Randomly select up to 150% of the TARGET_PEERS
+              for _ in 0 .. ((3 * TARGET_PEERS) / 2) {
                 if !nodes.is_empty() {
                   let to_connect = nodes.swap_remove(
                     usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
