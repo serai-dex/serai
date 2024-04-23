@@ -467,10 +467,12 @@ impl LibP2p {
           // TODO: We should also connect to random peers from random nets as needed for
           // cosigning
 
-          // Define a buffer, `to_retry`, so we can exhaust this channel before sending more down
-          // it
-          let mut to_retry = vec![];
+          // Drain the chainnel, de-duplicating any networks in it
+          let mut connect_to_network_networks = HashSet::new();
           while let Some(network) = connect_to_network_recv.recv().await {
+            connect_to_network_networks.insert(network);
+          }
+          for network in connect_to_network_networks {
             if let Ok(mut nodes) = serai.p2p_validators(network).await {
               // If there's an insufficient amount of nodes known, connect to all yet add it
               // back and break
@@ -480,7 +482,8 @@ impl LibP2p {
                   network,
                   nodes.len()
                 );
-                to_retry.push(network);
+                // Retry this later
+                connect_to_network_send.send(network).unwrap();
                 for node in nodes {
                   connect(network, node).await;
                 }
@@ -498,9 +501,6 @@ impl LibP2p {
                 }
               }
             }
-          }
-          for to_retry in to_retry {
-            connect_to_network_send.send(to_retry).unwrap();
           }
           // Sleep 60 seconds before moving to the next iteration
           tokio::time::sleep(core::time::Duration::from_secs(60)).await;
