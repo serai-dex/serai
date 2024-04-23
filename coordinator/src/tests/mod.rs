@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 
 use crate::{
   processors::{Message, Processors},
-  TributaryP2p, P2pMessageKind, P2p,
+  TributaryP2p, ReqResMessageKind, GossipMessageKind, P2pMessageKind, Message as P2pMessage, P2p,
 };
 
 pub mod tributary;
@@ -45,7 +45,10 @@ impl Processors for MemProcessors {
 
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Debug)]
-pub struct LocalP2p(usize, pub Arc<RwLock<(HashSet<Vec<u8>>, Vec<VecDeque<(usize, Vec<u8>)>>)>>);
+pub struct LocalP2p(
+  usize,
+  pub Arc<RwLock<(HashSet<Vec<u8>>, Vec<VecDeque<(usize, P2pMessageKind, Vec<u8>)>>)>>,
+);
 
 impl LocalP2p {
   pub fn new(validators: usize) -> Vec<LocalP2p> {
@@ -66,10 +69,12 @@ impl P2p for LocalP2p {
   async fn unsubscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
-    self.1.write().await.1[to].push_back((self.0, msg));
+    let mut msg_ref = msg.as_slice();
+    let kind = ReqResMessageKind::read(&mut msg_ref).unwrap();
+    self.1.write().await.1[to].push_back((self.0, P2pMessageKind::ReqRes(kind), msg_ref.to_vec()));
   }
 
-  async fn broadcast_raw(&self, _kind: P2pMessageKind, msg: Vec<u8>) {
+  async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     // Content-based deduplication
     let mut lock = self.1.write().await;
     {
@@ -81,19 +86,26 @@ impl P2p for LocalP2p {
     }
     let queues = &mut lock.1;
 
+    let kind_len = (match kind {
+      P2pMessageKind::ReqRes(kind) => kind.serialize(),
+      P2pMessageKind::Gossip(kind) => kind.serialize(),
+    })
+    .len();
+    let msg = msg[kind_len ..].to_vec();
+
     for (i, msg_queue) in queues.iter_mut().enumerate() {
       if i == self.0 {
         continue;
       }
-      msg_queue.push_back((self.0, msg.clone()));
+      msg_queue.push_back((self.0, kind, msg.clone()));
     }
   }
 
-  async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
+  async fn receive(&self) -> P2pMessage<Self> {
     // This is a cursed way to implement an async read from a Vec
     loop {
-      if let Some(res) = self.1.write().await.1[self.0].pop_front() {
-        return res;
+      if let Some((sender, kind, msg)) = self.1.write().await.1[self.0].pop_front() {
+        return P2pMessage { sender, kind, msg };
       }
       tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
@@ -103,6 +115,11 @@ impl P2p for LocalP2p {
 #[async_trait]
 impl TributaryP2p for LocalP2p {
   async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
-    <Self as P2p>::broadcast(self, P2pMessageKind::Tributary(genesis), msg).await
+    <Self as P2p>::broadcast(
+      self,
+      P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)),
+      msg,
+    )
+    .await
   }
 }
