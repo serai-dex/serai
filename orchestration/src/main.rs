@@ -511,7 +511,7 @@ fn start(network: Network, services: HashSet<String>) {
             command
           } else {
             // Publish the port
-            command.arg("-p").arg("30563:30563")
+            command.arg("-p").arg("30564:30564")
           }
         }
         "serai" => {
