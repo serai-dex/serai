@@ -1,4 +1,5 @@
 use core::{marker::PhantomData, fmt};
+use std_shims::string::ToString;
 
 use zeroize::Zeroize;
 
