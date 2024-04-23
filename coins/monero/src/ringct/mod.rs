@@ -31,6 +31,7 @@ pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
   hash_to_point(&(ED25519_BASEPOINT_TABLE * secret.deref())) * secret.deref()
 }
 
+/// An encrypted amount.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EncryptedAmount {
   Original { mask: [u8; 32], amount: [u8; 32] },
@@ -38,6 +39,7 @@ pub enum EncryptedAmount {
 }
 
 impl EncryptedAmount {
+  /// Read an EncryptedAmount from a reader.
   pub fn read<R: Read>(compact: bool, r: &mut R) -> io::Result<EncryptedAmount> {
     Ok(if !compact {
       EncryptedAmount::Original { mask: read_bytes(r)?, amount: read_bytes(r)? }
@@ -46,6 +48,7 @@ impl EncryptedAmount {
     })
   }
 
+  /// Write the EncryptedAmount to a writer.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       EncryptedAmount::Original { mask, amount } => {
@@ -57,6 +60,7 @@ impl EncryptedAmount {
   }
 }
 
+/// The type of the RingCT data.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum RctType {
   /// No RCT proofs.
@@ -77,6 +81,7 @@ pub enum RctType {
 }
 
 impl RctType {
+  /// Convert the RctType to its byte representation.
   pub fn to_byte(self) -> u8 {
     match self {
       RctType::Null => 0,
@@ -89,6 +94,7 @@ impl RctType {
     }
   }
 
+  /// Convert the RctType from its byte representation.
   pub fn from_byte(byte: u8) -> Option<Self> {
     Some(match byte {
       0 => RctType::Null,
@@ -102,6 +108,7 @@ impl RctType {
     })
   }
 
+  /// Returns true if this RctType uses compact encrypted amounts, false otherwise.
   pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
       RctType::Null |
@@ -113,11 +120,22 @@ impl RctType {
   }
 }
 
+/// The base of the RingCT data.
+///
+/// This excludes all proofs (which once initially verified do not need to be kept around) and
+/// solely keeps data which either impacts the effects of the transactions or is needed to scan it.
+///
+/// The one exception for this is `pseudo_outs`, which was originally present here yet moved to
+/// RctPrunable in a later hard fork (causing it to be present in both).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RctBase {
+  /// The fee used by this transaction.
   pub fee: u64,
+  /// The re-randomized amount commitments used within inputs.
   pub pseudo_outs: Vec<EdwardsPoint>,
+  /// The encrypted amounts for the recipient to decrypt.
   pub encrypted_amounts: Vec<EncryptedAmount>,
+  /// The output commitments.
   pub commitments: Vec<EdwardsPoint>,
 }
 
@@ -127,6 +145,7 @@ impl RctBase {
     1 + (outputs * (8 + 32)) + varint_len(fee)
   }
 
+  /// Write the RctBase to a writer.
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     w.write_all(&[rct_type.to_byte()])?;
     match rct_type {
@@ -144,6 +163,7 @@ impl RctBase {
     }
   }
 
+  /// Read a RctBase from a writer.
   pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(RctBase, RctType)> {
     let rct_type =
       RctType::from_byte(read_byte(r)?).ok_or_else(|| io::Error::other("invalid RCT type"))?;
@@ -171,6 +191,8 @@ impl RctBase {
       } else {
         RctBase {
           fee: read_varint(r)?,
+          // Only read pseudo_outs if they have yet to be moved to RctPrunable
+          // TODO: Shouldn't this be any Mlsag*?
           pseudo_outs: if rct_type == RctType::MlsagIndividual {
             read_raw_vec(read_point, inputs, r)?
           } else {
