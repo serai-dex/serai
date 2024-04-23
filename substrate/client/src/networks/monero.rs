@@ -1,4 +1,4 @@
-use core::str::FromStr;
+use core::{str::FromStr, fmt};
 
 use scale::{Encode, Decode};
 
@@ -24,9 +24,9 @@ impl FromStr for Address {
   }
 }
 
-impl ToString for Address {
-  fn to_string(&self) -> String {
-    self.0.to_string()
+impl fmt::Display for Address {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    self.0.fmt(f)
   }
 }
 

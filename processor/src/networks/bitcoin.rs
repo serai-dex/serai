@@ -517,7 +517,7 @@ impl Bitcoin {
         if witness.len() >= 2 {
           let redeem_script = ScriptBuf::from_bytes(witness.last().unwrap().clone());
           if Self::segwit_data_pattern(&redeem_script) == Some(true) {
-            data = witness[witness.len() - 2].clone(); // len() - 1 is the redeem_script
+            data.clone_from(&witness[witness.len() - 2]); // len() - 1 is the redeem_script
             break;
           }
         }
@@ -731,9 +731,9 @@ impl Network for Bitcoin {
       let data = Self::extract_serai_data(tx);
       for output in &mut outputs {
         if output.kind == OutputType::External {
-          output.data = data.clone();
+          output.data.clone_from(&data);
         }
-        output.presumed_origin = presumed_origin.clone();
+        output.presumed_origin.clone_from(&presumed_origin);
       }
     }
 

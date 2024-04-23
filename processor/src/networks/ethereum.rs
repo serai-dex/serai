@@ -1,4 +1,4 @@
-use core::{fmt::Debug, time::Duration};
+use core::{fmt, time::Duration};
 use std::{
   sync::Arc,
   collections::{HashSet, HashMap},
@@ -108,9 +108,10 @@ impl TryInto<Vec<u8>> for Address {
     Ok(self.0.to_vec())
   }
 }
-impl ToString for Address {
-  fn to_string(&self) -> String {
-    ethereum_serai::alloy_core::primitives::Address::from(self.0).to_string()
+
+impl fmt::Display for Address {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    ethereum_serai::alloy_core::primitives::Address::from(self.0).fmt(f)
   }
 }
 
@@ -122,7 +123,7 @@ impl SignableTransaction for RouterCommand {
 }
 
 #[async_trait]
-impl<D: Debug + Db> TransactionTrait<Ethereum<D>> for Transaction {
+impl<D: fmt::Debug + Db> TransactionTrait<Ethereum<D>> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.hash.0
@@ -155,7 +156,7 @@ impl Epoch {
 }
 
 #[async_trait]
-impl<D: Debug + Db> Block<Ethereum<D>> for Epoch {
+impl<D: fmt::Debug + Db> Block<Ethereum<D>> for Epoch {
   type Id = [u8; 32];
   fn id(&self) -> [u8; 32] {
     self.end_hash
@@ -168,7 +169,7 @@ impl<D: Debug + Db> Block<Ethereum<D>> for Epoch {
   }
 }
 
-impl<D: Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
+impl<D: fmt::Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
   type Id = [u8; 32];
 
   fn kind(&self) -> OutputType {
@@ -281,7 +282,7 @@ impl EventualityTrait for Eventuality {
 }
 
 #[derive(Clone, Debug)]
-pub struct Ethereum<D: Debug + Db> {
+pub struct Ethereum<D: fmt::Debug + Db> {
   // This DB is solely used to access the first key generated, as needed to determine the Router's
   // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
   // first key (regardless of local state), and this is safe.
@@ -290,12 +291,12 @@ pub struct Ethereum<D: Debug + Db> {
   deployer: Deployer,
   router: Arc<RwLock<Option<Router>>>,
 }
-impl<D: Debug + Db> PartialEq for Ethereum<D> {
+impl<D: fmt::Debug + Db> PartialEq for Ethereum<D> {
   fn eq(&self, _other: &Ethereum<D>) -> bool {
     true
   }
 }
-impl<D: Debug + Db> Ethereum<D> {
+impl<D: fmt::Debug + Db> Ethereum<D> {
   pub async fn new(db: D, url: String) -> Self {
     let provider = Arc::new(RootProvider::new(
       ClientBuilder::default().transport(SimpleRequest::new(url), true),
@@ -360,7 +361,7 @@ impl<D: Debug + Db> Ethereum<D> {
 }
 
 #[async_trait]
-impl<D: Debug + Db> Network for Ethereum<D> {
+impl<D: fmt::Debug + Db> Network for Ethereum<D> {
   type Curve = Secp256k1;
 
   type Transaction = Transaction;

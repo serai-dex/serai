@@ -1,5 +1,4 @@
-use core::{marker::PhantomData, fmt::Debug};
-use std_shims::string::{String, ToString};
+use core::{marker::PhantomData, fmt};
 
 use zeroize::Zeroize;
 
@@ -81,7 +80,7 @@ impl AddressType {
 }
 
 /// A type which returns the byte for a given address.
-pub trait AddressBytes: Clone + Copy + PartialEq + Eq + Debug {
+pub trait AddressBytes: Clone + Copy + PartialEq + Eq + fmt::Debug {
   fn network_bytes(network: Network) -> (u8, u8, u8, u8);
 }
 
@@ -191,8 +190,8 @@ pub struct Address<B: AddressBytes> {
   pub view: EdwardsPoint,
 }
 
-impl<B: AddressBytes> core::fmt::Debug for Address<B> {
-  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+impl<B: AddressBytes> fmt::Debug for Address<B> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
     fmt
       .debug_struct("Address")
       .field("meta", &self.meta)
@@ -212,8 +211,8 @@ impl<B: AddressBytes> Zeroize for Address<B> {
   }
 }
 
-impl<B: AddressBytes> ToString for Address<B> {
-  fn to_string(&self) -> String {
+impl<B: AddressBytes> fmt::Display for Address<B> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut data = vec![self.meta.to_byte()];
     data.extend(self.spend.compress().to_bytes());
     data.extend(self.view.compress().to_bytes());
@@ -226,7 +225,7 @@ impl<B: AddressBytes> ToString for Address<B> {
     if let Some(id) = self.meta.kind.payment_id() {
       data.extend(id);
     }
-    encode_check(&data).unwrap()
+    write!(f, "{}", encode_check(&data).unwrap())
   }
 }
 
