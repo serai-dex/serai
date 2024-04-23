@@ -9,8 +9,6 @@ use std::{
 use async_trait::async_trait;
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{Ciphersuite, Ristretto};
-
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet, Serai};
@@ -23,12 +21,16 @@ use tokio::{
   time::sleep,
 };
 
+// TODO: Remove cbor
 use libp2p::{
   core::multiaddr::{Protocol, Multiaddr},
   identity::Keypair,
   PeerId,
   tcp::Config as TcpConfig,
   noise, yamux,
+  request_response::{
+    Config as RrConfig, Message as RrMessage, Event as RrEvent, cbor::Behaviour as RrBehavior,
+  },
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
     IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
@@ -135,14 +137,14 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
   async fn subscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
   async fn unsubscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
 
-  async fn send_raw(&self, to: Self::Id, genesis: Option<[u8; 32]>, msg: Vec<u8>);
-  async fn broadcast_raw(&self, genesis: Option<[u8; 32]>, msg: Vec<u8>);
+  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
+  async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>);
   async fn receive_raw(&self) -> (Self::Id, Vec<u8>);
 
   async fn send(&self, to: Self::Id, kind: P2pMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
     actual_msg.extend(msg);
-    self.send_raw(to, kind.genesis(), actual_msg).await;
+    self.send_raw(to, actual_msg).await;
   }
   async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
@@ -159,7 +161,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
       }
     );
     */
-    self.broadcast_raw(kind.genesis(), actual_msg).await;
+    self.broadcast_raw(kind, actual_msg).await;
   }
   async fn receive(&self) -> Message<Self> {
     let (sender, kind, msg) = loop {
@@ -194,6 +196,7 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
 
 #[derive(NetworkBehaviour)]
 struct Behavior {
+  reqres: RrBehavior<Vec<u8>, Vec<u8>>,
   gossipsub: GsBehavior,
 }
 
@@ -201,7 +204,8 @@ struct Behavior {
 #[derive(Clone)]
 pub struct LibP2p {
   subscribe: Arc<Mutex<mpsc::UnboundedSender<(bool, ValidatorSet, [u8; 32])>>>,
-  broadcast: Arc<Mutex<mpsc::UnboundedSender<(Option<[u8; 32]>, Vec<u8>)>>>,
+  send: Arc<Mutex<mpsc::UnboundedSender<(PeerId, Vec<u8>)>>>,
+  broadcast: Arc<Mutex<mpsc::UnboundedSender<(P2pMessageKind, Vec<u8>)>>>,
   receive: Arc<Mutex<mpsc::UnboundedReceiver<(PeerId, Vec<u8>)>>>,
 }
 impl fmt::Debug for LibP2p {
@@ -221,6 +225,7 @@ impl LibP2p {
     let throwaway_key_pair = Keypair::generate_ed25519();
 
     let behavior = Behavior {
+      reqres: { RrBehavior::new([], RrConfig::default()) },
       gossipsub: {
         let heartbeat_interval = tributary::tendermint::LATENCY_TIME / 2;
         let heartbeats_per_block =
@@ -284,6 +289,7 @@ impl LibP2p {
     const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
     swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
 
+    let (send_send, mut send_recv) = mpsc::unbounded_channel();
     let (broadcast_send, mut broadcast_recv) = mpsc::unbounded_channel();
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
     let (subscribe_send, mut subscribe_recv) = mpsc::unbounded_channel();
@@ -486,17 +492,32 @@ impl LibP2p {
               }
             }
 
+            msg = send_recv.recv() => {
+              let (peer, msg): (PeerId, Vec<u8>) =
+                msg.expect("send_recv closed. are we shutting down?");
+              swarm.behaviour_mut().reqres.send_request(&peer, msg);
+            },
+
             // Handle any queued outbound messages
             msg = broadcast_recv.recv() => {
-              let (genesis, msg): (Option<[u8; 32]>, Vec<u8>) =
+              let (kind, msg): (P2pMessageKind, Vec<u8>) =
                 msg.expect("broadcast_recv closed. are we shutting down?");
-              let set = genesis.and_then(|genesis| set_for_genesis.get(&genesis).copied());
-              broadcast_raw(
-                &mut swarm,
-                &mut time_of_last_p2p_message,
-                set,
-                msg,
-              );
+              if matches!(kind, P2pMessageKind::KeepAlive) ||
+                  matches!(kind, P2pMessageKind::Heartbeat(_)) {
+                // Use request/response
+                for peer_id in swarm.connected_peers().copied().collect::<Vec<_>>() {
+                  swarm.behaviour_mut().reqres.send_request(&peer_id, msg.clone());
+                }
+              } else {
+                // Use gossipsub
+                let set = kind.genesis().and_then(|genesis| set_for_genesis.get(&genesis).copied());
+                broadcast_raw(
+                  &mut swarm,
+                  &mut time_of_last_p2p_message,
+                  set,
+                  msg,
+                );
+              }
             }
 
             // Handle new incoming messages
@@ -572,9 +593,21 @@ impl LibP2p {
                     connected_peers.len(),
                   );
                 }
+                Some(SwarmEvent::Behaviour(BehaviorEvent::Reqres(
+                  RrEvent::Message { peer, message },
+                ))) => {
+                  let message = match message {
+                    RrMessage::Request { request, .. } => request,
+                    RrMessage::Response { response, .. } => response,
+                  };
+                  receive_send
+                    .send((peer, message))
+                    .expect("receive_send closed. are we shutting down?");
+                }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
                 ))) => {
+                  // TODO: Ban Heartbeat/Blocks received over gossipsub
                   receive_send
                     .send((propagation_source, message.data))
                     .expect("receive_send closed. are we shutting down?");
@@ -623,6 +656,7 @@ impl LibP2p {
 
     LibP2p {
       subscribe: Arc::new(Mutex::new(subscribe_send)),
+      send: Arc::new(Mutex::new(send_send)),
       broadcast: Arc::new(Mutex::new(broadcast_send)),
       receive: Arc::new(Mutex::new(receive_recv)),
     }
@@ -651,16 +685,16 @@ impl P2p for LibP2p {
       .expect("subscribe_send closed. are we shutting down?");
   }
 
-  async fn send_raw(&self, _: Self::Id, genesis: Option<[u8; 32]>, msg: Vec<u8>) {
-    self.broadcast_raw(genesis, msg).await;
+  async fn send_raw(&self, peer: Self::Id, msg: Vec<u8>) {
+    self.send.lock().await.send((peer, msg)).expect("send_send closed. are we shutting down?");
   }
 
-  async fn broadcast_raw(&self, genesis: Option<[u8; 32]>, msg: Vec<u8>) {
+  async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     self
       .broadcast
       .lock()
       .await
-      .send((genesis, msg))
+      .send((kind, msg))
       .expect("broadcast_send closed. are we shutting down?");
   }
 
@@ -676,17 +710,6 @@ impl TributaryP2p for LibP2p {
   async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
     <Self as P2p>::broadcast(self, P2pMessageKind::Tributary(genesis), msg).await
   }
-}
-
-fn heartbeat_time_unit<D: Db, P: P2p>() -> u64 {
-  // Also include the timestamp so LibP2p doesn't flag this as an old message re-circulating
-  let timestamp = SystemTime::now()
-    .duration_since(SystemTime::UNIX_EPOCH)
-    .expect("system clock is wrong")
-    .as_secs();
-  // Divide by the block time so if multiple parties send a Heartbeat, they're more likely to
-  // overlap
-  timestamp / u64::from(Tributary::<D, Transaction, P>::block_time())
 }
 
 pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
@@ -723,8 +746,11 @@ pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
       if SystemTime::now() > (block_time + Duration::from_secs(60)) {
         log::warn!("last known tributary block was over a minute ago");
         let mut msg = tip.to_vec();
-        let time_unit = heartbeat_time_unit::<D, P>();
-        msg.extend(time_unit.to_le_bytes());
+        let time: u64 = SystemTime::now()
+          .duration_since(SystemTime::UNIX_EPOCH)
+          .expect("system clock is wrong")
+          .as_secs();
+        msg.extend(time.to_le_bytes());
         P2p::broadcast(&p2p, P2pMessageKind::Heartbeat(tributary.genesis()), msg).await;
       }
     }
@@ -738,7 +764,6 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
   p2p: P,
   cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
-  our_key: <Ristretto as Ciphersuite>::G,
 ) {
   let channels = Arc::new(RwLock::new(HashMap::<_, mpsc::UnboundedSender<Message<P>>>::new()));
   tokio::spawn({
@@ -764,7 +789,6 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
             tokio::spawn({
               let p2p = p2p.clone();
               async move {
-                let mut last_replied_to_heartbeat = 0;
                 loop {
                   let Some(mut msg) = recv.recv().await else {
                     // Channel closure happens when the tributary retires
@@ -781,76 +805,37 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                       }
                     }
 
-                    // TODO2: Rate limit this per timestamp
-                    // And/or slash on Heartbeat which justifies a response, since the node
+                    // TODO: Slash on Heartbeat which justifies a response, since the node
                     // obviously was offline and we must now use our bandwidth to compensate for
                     // them?
                     P2pMessageKind::Heartbeat(msg_genesis) => {
                       assert_eq!(msg_genesis, genesis);
-
-                      let current_time_unit = heartbeat_time_unit::<D, P>();
-                      if current_time_unit.saturating_sub(last_replied_to_heartbeat) < 10 {
-                        continue;
-                      }
-
                       if msg.msg.len() != 40 {
                         log::error!("validator sent invalid heartbeat");
                         continue;
                       }
                       // Only respond to recent heartbeats
-                      let msg_time_unit = u64::from_le_bytes(msg.msg[32 .. 40].try_into().expect(
+                      let msg_time = u64::from_le_bytes(msg.msg[32 .. 40].try_into().expect(
                         "length-checked heartbeat message didn't have 8 bytes for the u64",
                       ));
-                      if current_time_unit.saturating_sub(msg_time_unit) > 1 {
+                      if SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .expect("system clock is wrong")
+                        .as_secs()
+                        .saturating_sub(msg_time) >
+                        10
+                      {
                         continue;
                       }
 
-                      // This is the network's last replied to, not ours specifically
-                      last_replied_to_heartbeat = current_time_unit;
+                      log::debug!("received heartbeat with a recent timestamp");
 
                       let reader = tributary.tributary.reader();
-
-                      // Have sqrt(n) nodes reply with the blocks
-                      #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                      let mut responders = f32::from(tributary.spec.n(&[])).sqrt().floor() as u64;
-                      // Try to have at least 3 responders
-                      if responders < 3 {
-                        responders = tributary.spec.n(&[]).min(3).into();
-                      }
-
-                      // Decide which nodes will respond by using the latest block's hash as a
-                      // mutually agreed upon entropy source
-                      // This isn't a secure source of entropy, yet it's fine for this
-                      let entropy = u64::from_le_bytes(reader.tip()[.. 8].try_into().unwrap());
-                      // If n = 10, responders = 3, we want `start` to be 0 ..= 7
-                      // (so the highest is 7, 8, 9)
-                      // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
-                      let start = usize::try_from(
-                        entropy % (u64::from(tributary.spec.n(&[]) + 1) - responders),
-                      )
-                      .unwrap();
-                      let mut selected = false;
-                      for validator in &tributary.spec.validators()
-                        [start .. (start + usize::try_from(responders).unwrap())]
-                      {
-                        if our_key == validator.0 {
-                          selected = true;
-                          continue;
-                        }
-                      }
-                      if !selected {
-                        log::debug!("received heartbeat and not selected to respond");
-                        continue;
-                      }
-
-                      log::debug!("received heartbeat and selected to respond");
 
                       let p2p = p2p.clone();
                       // Spawn a dedicated task as this may require loading large amounts of data
                       // from disk and take a notable amount of time
                       tokio::spawn(async move {
-                        // Have the selected nodes respond
-                        // TODO: Spawn a dedicated topic for this heartbeat response?
                         let mut latest = msg.msg[.. 32].try_into().unwrap();
                         let mut to_send = vec![];
                         while let Some(next) = reader.block_after(&latest) {

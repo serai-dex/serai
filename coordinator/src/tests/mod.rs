@@ -65,11 +65,11 @@ impl P2p for LocalP2p {
   async fn subscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
   async fn unsubscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
 
-  async fn send_raw(&self, to: Self::Id, _genesis: Option<[u8; 32]>, msg: Vec<u8>) {
+  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
     self.1.write().await.1[to].push_back((self.0, msg));
   }
 
-  async fn broadcast_raw(&self, _genesis: Option<[u8; 32]>, msg: Vec<u8>) {
+  async fn broadcast_raw(&self, _kind: P2pMessageKind, msg: Vec<u8>) {
     // Content-based deduplication
     let mut lock = self.1.write().await;
     {
