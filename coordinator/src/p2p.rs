@@ -370,6 +370,9 @@ impl LibP2p {
       IdentTopic::new(format!("{LIBP2P_TOPIC}-{}", hex::encode(set.encode())))
     }
 
+    // TODO: If a network has less than TARGET_PEERS, this will cause retried ad infinitum
+    const TARGET_PEERS: usize = 8;
+
     // The addrs we're currently dialing, and the networks associated with them
     let dialing_peers = Arc::new(RwLock::new(HashMap::new()));
     // The peers we're currently connected to, and the networks associated with them
@@ -448,7 +451,7 @@ impl LibP2p {
                         }
                       }
                       // If we do not, start connecting to this network again
-                      if remaining_peers < 3 {
+                      if remaining_peers < TARGET_PEERS {
                         connect_to_network_send.send(net).expect(
                           "couldn't send net to connect to due to disconnects (receiver dropped?)",
                         );
@@ -476,7 +479,7 @@ impl LibP2p {
             if let Ok(mut nodes) = serai.p2p_validators(network).await {
               // If there's an insufficient amount of nodes known, connect to all yet add it
               // back and break
-              if nodes.len() < 3 {
+              if nodes.len() < TARGET_PEERS {
                 log::warn!(
                   "insufficient amount of P2P nodes known for {:?}: {}",
                   network,
@@ -643,7 +646,7 @@ impl LibP2p {
                       }
                     }
                     // If we do not, start connecting to this network again
-                    if remaining_peers < 3 {
+                    if remaining_peers < TARGET_PEERS {
                       connect_to_network_send
                         .send(net)
                         .expect(
