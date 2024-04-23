@@ -358,7 +358,7 @@ impl LibP2p {
       .with_behaviour(|_| behavior)
       .unwrap()
       .build();
-    const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
+    const PORT: u16 = 30564; // 5132 ^ (('c' << 8) | 'o')
     swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
 
     let (send_send, mut send_recv) = mpsc::unbounded_channel();
