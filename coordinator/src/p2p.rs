@@ -370,7 +370,7 @@ impl LibP2p {
       IdentTopic::new(format!("{LIBP2P_TOPIC}-{}", hex::encode(set.encode())))
     }
 
-    // TODO: If a network has less than TARGET_PEERS, this will cause retried ad infinitum
+    // TODO: If a network has less than TARGET_PEERS, this will cause retries ad infinitum
     const TARGET_PEERS: usize = 8;
 
     // The addrs we're currently dialing, and the networks associated with them
@@ -472,7 +472,7 @@ impl LibP2p {
 
           // Drain the chainnel, de-duplicating any networks in it
           let mut connect_to_network_networks = HashSet::new();
-          while let Some(network) = connect_to_network_recv.recv().await {
+          while let Ok(network) = connect_to_network_recv.try_recv() {
             connect_to_network_networks.insert(network);
           }
           for network in connect_to_network_networks {
