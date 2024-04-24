@@ -2,14 +2,16 @@
 
 ### Addresses
 
-Ethereum addresses are 20-byte hashes.
+Ethereum addresses are 20-byte hashes, identical to Ethereum proper.
 
 ### In Instructions
 
-Ethereum In Instructions are present via being appended to the calldata
-transferring funds to Serai. `origin` is automatically set to the party from
-which funds are being transferred. For an ERC20, this is `from`. For ETH, this
-is the caller.
+In Instructions may be created in one of two ways.
+
+1) Have an EOA call `transfer` or `transferFrom` on an ERC20, appending the
+   encoded InInstruction directly after the calldata. `origin` defaults to the
+   party transferred from.
+2) Call `inInstruction` on the Router. `origin` defaults to `msg.sender`.
 
 ### Out Instructions
 

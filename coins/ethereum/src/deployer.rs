@@ -100,6 +100,7 @@ impl Deployer {
     let to_block = BlockNumberOrTag::Latest;
 
     // Find the first log using this init code (where the init code is binding to the key)
+    // TODO: Make an abstraction for event filtering (de-duplicating common code)
     let filter =
       Filter::new().from_block(0).to_block(to_block).address(Address::from(Self::address()));
     let filter = filter.event_signature(abi::Deployment::SIGNATURE_HASH);

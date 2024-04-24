@@ -29,6 +29,7 @@ pub enum ScannerEvent<N: Network> {
     outputs: Vec<N::Output>,
   },
   // Eventuality completion found on-chain
+  // TODO: Move this from a tuple
   Completed(
     Vec<u8>,
     usize,

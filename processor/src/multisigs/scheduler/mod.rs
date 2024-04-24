@@ -53,6 +53,7 @@ pub trait Scheduler<N: Network>: Sized + Clone + PartialEq + Debug {
     txn: &mut D::Transaction<'_>,
     utxos: Vec<N::Output>,
     payments: Vec<Payment<N>>,
+    // TODO: Tighten this to multisig_for_any_change
     key_for_any_change: <N::Curve as Ciphersuite>::G,
     force_spend: bool,
   ) -> Vec<Plan<N>>;
