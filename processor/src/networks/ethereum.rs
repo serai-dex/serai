@@ -17,6 +17,7 @@ use ethereum_serai::{
   alloy_rpc_client::ClientBuilder,
   alloy_provider::{Provider, RootProvider},
   crypto::{PublicKey, Signature},
+  erc20::Erc20,
   deployer::Deployer,
   router::{Router, Coin as EthereumCoin, InInstruction as EthereumInInstruction},
   machine::*,
@@ -475,10 +476,59 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
   ) -> Vec<Self::Output> {
     let router = self.router().await;
     let router = router.as_ref().unwrap();
-
-    // TODO: Top-level transfers
+    // Grab the key at the end of the epoch
+    let key_at_end_of_block = loop {
+      match router.key_at_end_of_block(block.start + 31).await {
+        Ok(key) => break key,
+        Err(e) => {
+          log::error!("couldn't connect to router for the key at the end of the block: {e:?}");
+          sleep(Duration::from_secs(5)).await;
+          continue;
+        }
+      }
+    };
 
     let mut all_events = vec![];
+    let mut top_level_txids = HashSet::new();
+    for erc20_addr in [DAI] {
+      let erc20 = loop {
+        let Ok(Some(erc20)) = Erc20::new(self.provider.clone(), erc20_addr).await else {
+          log::error!(
+            "couldn't connect to Ethereum node for an ERC20: {}",
+            hex::encode(erc20_addr)
+          );
+          sleep(Duration::from_secs(5)).await;
+          continue;
+        };
+        break erc20;
+      };
+
+      for block in block.start .. (block.start + 32) {
+        let transfers = loop {
+          match erc20.top_level_transfers(block, router.address()).await {
+            Ok(transfers) => break transfers,
+            Err(e) => {
+              log::error!("couldn't connect to Ethereum node for the top-level transfers: {e:?}");
+              sleep(Duration::from_secs(5)).await;
+              continue;
+            }
+          }
+        };
+
+        for transfer in transfers {
+          top_level_txids.insert(transfer.id);
+          all_events.push(EthereumInInstruction {
+            id: (transfer.id, 0),
+            from: transfer.from,
+            coin: EthereumCoin::Erc20(erc20_addr),
+            amount: transfer.amount,
+            data: transfer.data,
+            key_at_end_of_block,
+          });
+        }
+      }
+    }
+
     for block in block.start .. (block.start + 32) {
       let mut events = router.in_instructions(block, &HashSet::from([DAI])).await;
       while let Err(e) = events {
@@ -486,7 +536,16 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
         sleep(Duration::from_secs(5)).await;
         events = router.in_instructions(block, &HashSet::from([DAI])).await;
       }
-      all_events.extend(events.unwrap());
+      let mut events = events.unwrap();
+      for event in &mut events {
+        // A transaction should either be a top-level transfer or a Router InInstruction
+        if top_level_txids.contains(&event.id.0) {
+          panic!("top-level transfer had {} and router had {:?}", hex::encode(event.id.0), event);
+        }
+        // Overwrite the key at end of block to key at end of epoch
+        event.key_at_end_of_block = key_at_end_of_block;
+      }
+      all_events.extend(events);
     }
 
     for event in &all_events {

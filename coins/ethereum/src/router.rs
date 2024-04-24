@@ -229,30 +229,32 @@ impl Router {
     }
   }
 
+  pub async fn key_at_end_of_block(&self, block: u64) -> Result<ProjectivePoint, Error> {
+    let filter = Filter::new().from_block(0).to_block(block).address(self.1);
+    let filter = filter.event_signature(SeraiKeyUpdated::SIGNATURE_HASH);
+    let all_keys = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
+
+    let last_key_x_coordinate_log = all_keys.last().ok_or(Error::ConnectionError)?;
+    let last_key_x_coordinate = last_key_x_coordinate_log
+      .log_decode::<SeraiKeyUpdated>()
+      .map_err(|_| Error::ConnectionError)?
+      .inner
+      .data
+      .key;
+
+    let mut compressed_point = <ProjectivePoint as GroupEncoding>::Repr::default();
+    compressed_point[0] = u8::from(sec1::Tag::CompressedEvenY);
+    compressed_point[1 ..].copy_from_slice(last_key_x_coordinate.as_slice());
+
+    Option::from(ProjectivePoint::from_bytes(&compressed_point)).ok_or(Error::ConnectionError)
+  }
+
   pub async fn in_instructions(
     &self,
     block: u64,
     allowed_tokens: &HashSet<[u8; 20]>,
   ) -> Result<Vec<InInstruction>, Error> {
-    let key_at_end_of_block = {
-      let filter = Filter::new().from_block(0).to_block(block).address(self.1);
-      let filter = filter.event_signature(SeraiKeyUpdated::SIGNATURE_HASH);
-      let all_keys = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
-
-      let last_key_x_coordinate_log = all_keys.last().ok_or(Error::ConnectionError)?;
-      let last_key_x_coordinate = last_key_x_coordinate_log
-        .log_decode::<SeraiKeyUpdated>()
-        .map_err(|_| Error::ConnectionError)?
-        .inner
-        .data
-        .key;
-
-      let mut compressed_point = <ProjectivePoint as GroupEncoding>::Repr::default();
-      compressed_point[0] = u8::from(sec1::Tag::CompressedEvenY);
-      compressed_point[1 ..].copy_from_slice(last_key_x_coordinate.as_slice());
-
-      ProjectivePoint::from_bytes(&compressed_point).expect("router's last key wasn't a valid key")
-    };
+    let key_at_end_of_block = self.key_at_end_of_block(block).await?;
 
     let filter = Filter::new().from_block(block).to_block(block).address(self.1);
     let filter = filter.event_signature(InInstructionEvent::SIGNATURE_HASH);

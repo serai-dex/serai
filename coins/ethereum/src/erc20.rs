@@ -22,8 +22,8 @@ pub struct TopLevelErc20Transfer {
 
 /// A view for an ERC20 contract.
 #[derive(Clone, Debug)]
-pub struct ERC20(Arc<RootProvider<SimpleRequest>>, Address);
-impl ERC20 {
+pub struct Erc20(Arc<RootProvider<SimpleRequest>>, Address);
+impl Erc20 {
   /// Construct a new view of the specified ERC20 contract.
   ///
   /// This checks a contract is deployed at that address yet does not check the contract is
