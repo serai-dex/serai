@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use zeroize::Zeroizing;
 use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
