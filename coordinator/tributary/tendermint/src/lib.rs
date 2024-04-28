@@ -1003,6 +1003,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
         // If it's been more than 60s, rebroadcast our own messages
         () = rebroadcast_future => {
+          log::trace!("rebroadcast future hit within tendermint machine");
           let key = message_tape_key(self.genesis);
           let messages = self.db.get(key).unwrap_or(vec![]);
           let mut messages = messages.as_slice();
