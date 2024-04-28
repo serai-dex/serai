@@ -86,13 +86,4 @@ impl<N: Network> MessageLog<N> {
     let (_, weight) = self.message_instances(round, data);
     weight >= self.weights.threshold()
   }
-
-  pub(crate) fn get(
-    &self,
-    round: RoundNumber,
-    sender: N::ValidatorId,
-    step: Step,
-  ) -> Option<&SignedMessageFor<N>> {
-    self.log.get(&round).and_then(|round| round.get(&sender).and_then(|msgs| msgs.get(&step)))
-  }
 }
