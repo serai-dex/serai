@@ -287,6 +287,14 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
   // Start a new round. Returns true if we were the proposer
   fn round(&mut self, round: RoundNumber, time: Option<CanonicalInstant>) -> bool {
+    // Clear upons
+    self.upons = Upons {
+      upon_prevotes: false,
+      upon_successful_current_round_prevotes: false,
+      upon_negative_current_round_prevotes: false,
+      upon_precommits: false,
+    };
+
     let proposer = self.weights.proposer(self.block.number, round);
     let res = if let Some(data) = self.block.new_round(round, proposer, time) {
       self.broadcast(data);
