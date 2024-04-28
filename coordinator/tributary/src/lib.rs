@@ -59,7 +59,7 @@ pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 pub const BLOCK_SIZE_LIMIT: usize = 3_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
-pub(crate) const TRANSACTION_MESSAGE: u8 = 2; // TODO: Normalize to 1
+pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
