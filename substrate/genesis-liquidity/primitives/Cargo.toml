@@ -30,5 +30,16 @@ serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
 
 [features]
-std = ["serai-primitives/std", "validator-sets-primitives/std", "sp-std/std"]
+std = [
+  "zeroize",
+  "scale/std",
+  "borsh?/std",
+  "serde?/std",
+  "scale-info/std",
+  
+  "serai-primitives/std",
+  "validator-sets-primitives/std",
+
+  "sp-std/std"
+]
 default = ["std"]

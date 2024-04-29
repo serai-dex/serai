@@ -1,21 +1,18 @@
-pub use serai_genesis_liquidity_primitives as primitives;
-
-use serai_primitives::*;
-use primitives::*;
+use serai_primitives::{Balance, SeraiAddress};
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Call {
-  remove_coin_liquidity { balance: Balance },
-  set_initial_price { prices: Prices, signature: Signature },
+  burn { balance: Balance },
+  transfer { to: SeraiAddress, balance: Balance },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Event {
-  GenesisLiquidityAdded { by: SeraiAddress, balance: Balance },
-  GenesisLiquidityRemoved { by: SeraiAddress, balance: Balance },
-  GenesisLiquidityAddedToPool { coin1: Balance, coin2: Balance },
-  EconomicSecurityReached { network: NetworkId },
+  Mint { to: SeraiAddress, balance: Balance },
+  Burn { from: SeraiAddress, balance: Balance },
+  Transfer { from: SeraiAddress, to: SeraiAddress, balance: Balance },
 }

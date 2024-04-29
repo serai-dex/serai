@@ -94,8 +94,14 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
+      #[cfg(feature = "fast-epoch")]
+      let final_block = 25u32;
+
+      #[cfg(not(feature = "fast-epoch"))]
+      let final_block = BLOCKS_PER_MONTH;
+
       // Distribute the genesis sri to pools after a month
-      if n == BLOCKS_PER_MONTH.into() {
+      if n == final_block.into() {
         // mint the SRI
         Coins::<T>::mint(
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -105,8 +111,8 @@ pub mod pallet {
 
         // get coin values & total
         let mut account_values = BTreeMap::new();
-        let mut pool_values = BTreeMap::new();
-        let mut total_value: u64 = 0;
+        let mut pool_values = vec![];
+        let mut total_value: u128 = 0;
         for coin in COINS {
           if coin == Coin::Serai {
             continue;
@@ -117,50 +123,85 @@ pub mod pallet {
 
           // get the pool & individual address values
           account_values.insert(coin, vec![]);
-          let mut pool_amount: u64 = 0;
+          let mut pool_amount: u128 = 0;
           for (account, amount) in Liquidity::<T>::iter_prefix(coin) {
-            pool_amount = pool_amount.saturating_add(amount);
-            let value_this_addr = amount.saturating_mul(value);
+            pool_amount = pool_amount.saturating_add(amount.into());
+            let value_this_addr =
+              u128::from(amount).saturating_mul(value.into()) / 10u128.pow(coin.decimals());
             account_values.get_mut(&coin).unwrap().push((account, value_this_addr))
           }
+          // sort, so that everyone has a consistent accounts vector per coin
+          account_values.get_mut(&coin).unwrap().sort();
 
-          let pool_value = pool_amount.saturating_mul(value);
+          let pool_value = pool_amount.saturating_mul(value.into()) / 10u128.pow(coin.decimals());
           total_value = total_value.saturating_add(pool_value);
-          pool_values.insert(coin, (pool_amount, pool_value));
+          pool_values.push((coin, pool_amount, pool_value));
         }
 
         // add the liquidity per pool
-        for (coin, (amount, value)) in &pool_values {
-          let sri_amount = GENESIS_SRI.saturating_mul(*value) / total_value;
+        let mut total_sri_distributed = 0;
+        let pool_values_len = pool_values.len();
+        for (i, (coin, pool_amount, pool_value)) in pool_values.into_iter().enumerate() {
+          // whatever sri left for the last coin should be ~= it's ratio
+          let sri_amount = if i == (pool_values_len - 1) {
+            GENESIS_SRI - total_sri_distributed
+          } else {
+            u64::try_from(u128::from(GENESIS_SRI).saturating_mul(pool_value) / total_value).unwrap()
+          };
+          total_sri_distributed += sri_amount;
+
+          // we can't add 0 liquidity
+          if !(pool_amount > 0 && sri_amount > 0) {
+            continue;
+          }
+
+          // actually add the liquidity to dex
           let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
           Dex::<T>::add_liquidity(
             origin.into(),
-            *coin,
-            *amount,
+            coin,
+            u64::try_from(pool_amount).unwrap(),
             sri_amount,
-            *amount,
+            u64::try_from(pool_amount).unwrap(),
             sri_amount,
             GENESIS_LIQUIDITY_ACCOUNT.into(),
           )
           .unwrap();
+
+          // let everyone know about the event
           Self::deposit_event(Event::GenesisLiquidityAddedToPool {
-            coin1: Balance { coin: *coin, amount: Amount(*amount) },
+            coin1: Balance { coin, amount: Amount(u64::try_from(pool_amount).unwrap()) },
             coin2: Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
           });
 
           // set liquidity tokens per account
-          let tokens = LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), *coin).0;
-          let mut total_tokens_this_coin: u64 = 0;
-          for (acc, value) in account_values.get(coin).unwrap() {
-            let liq_tokens_this_acc =
-              tokens.saturating_mul(*value) / pool_values.get(coin).unwrap().1;
+          let tokens =
+            u128::from(LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin).0);
+          let mut total_tokens_this_coin: u128 = 0;
+
+          let accounts = account_values.get(&coin).unwrap();
+          for (i, (acc, acc_value)) in accounts.iter().enumerate() {
+            // give whatever left to the last account not to have rounding errors.
+            let liq_tokens_this_acc = if i == accounts.len() - 1 {
+              tokens - total_tokens_this_coin
+            } else {
+              tokens.saturating_mul(*acc_value) / pool_value
+            };
+
             total_tokens_this_coin = total_tokens_this_coin.saturating_add(liq_tokens_this_acc);
-            LiquidityTokensPerAddress::<T>::set(coin, acc, Some(liq_tokens_this_acc));
+
+            LiquidityTokensPerAddress::<T>::set(
+              coin,
+              acc,
+              Some(u64::try_from(liq_tokens_this_acc).unwrap()),
+            );
           }
           assert_eq!(tokens, total_tokens_this_coin);
         }
+        assert_eq!(total_sri_distributed, GENESIS_SRI);
 
-        // we shouldn't have any coin left in our account at this moment, including SRI.
+        // we shouldn't have left any coin in genesis account at this moment, including SRI.
+        // All transferred to the pools.
         for coin in COINS {
           assert_eq!(Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin), Amount(0));
         }

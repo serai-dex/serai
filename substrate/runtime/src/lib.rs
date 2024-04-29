@@ -11,7 +11,6 @@ use core::marker::PhantomData;
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
-use primitives::{NetworkId, NETWORKS};
 
 pub use frame_system as system;
 pub use frame_support as support;
@@ -49,7 +48,7 @@ use sp_runtime::{
   BoundedVec, Perbill, ApplyExtrinsicResult,
 };
 
-use primitives::{PublicKey, AccountLookup, SubstrateAmount};
+use primitives::{NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS};
 
 use support::{
   traits::{ConstU8, ConstU16, ConstU32, ConstU64, Contains},
@@ -323,7 +322,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ MINUTES / 2 }>; // 30 seconds
+  type EpochDuration = ConstU64<{ HOURS / 2 }>; // 30 minutes
 
   #[cfg(not(feature = "fast-epoch"))]
   type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;
@@ -636,6 +635,30 @@ sp_api::impl_runtime_apis! {
             |vec| vec.into_inner().into_iter().map(|(validator, _)| validator).collect()
           )
       }
+    }
+  }
+
+  impl dex::DexApi<Block> for Runtime {
+    fn quote_price_exact_tokens_for_tokens(
+      asset1: Coin,
+      asset2: Coin,
+      amount: SubstrateAmount,
+      include_fee: bool
+    ) -> Option<SubstrateAmount> {
+      Dex::quote_price_exact_tokens_for_tokens(asset1, asset2, amount, include_fee)
+    }
+
+    fn quote_price_tokens_for_exact_tokens(
+      asset1: Coin,
+      asset2: Coin,
+      amount: SubstrateAmount,
+      include_fee: bool
+    ) -> Option<SubstrateAmount> {
+      Dex::quote_price_tokens_for_exact_tokens(asset1, asset2, amount, include_fee)
+    }
+
+    fn get_reserves(asset1: Coin, asset2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
+      Dex::get_reserves(&asset1, &asset2).ok()
     }
   }
 }

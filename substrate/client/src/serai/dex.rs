@@ -1,7 +1,9 @@
 use sp_core::bounded_vec::BoundedVec;
 use serai_abi::primitives::{SeraiAddress, Amount, Coin};
 
-use crate::{SeraiError, TemporalSerai};
+use scale::{decode_from_bytes, Encode};
+
+use crate::{SeraiError, hex_decode, TemporalSerai};
 
 pub type DexEvent = serai_abi::dex::Event;
 
@@ -56,5 +58,22 @@ impl<'a> SeraiDex<'a> {
       amount_out_min: amount_out_min.0,
       send_to: address,
     })
+  }
+
+  pub async fn get_reserves(
+    &self,
+    coin1: Coin,
+    coin2: Coin,
+  ) -> Result<Option<(Amount, Amount)>, SeraiError> {
+    let hash = self
+      .0
+      .serai
+      .call("state_call", ["DexApi_get_reserves".to_string(), hex::encode((coin1, coin2).encode())])
+      .await?;
+    let bytes = hex_decode(hash)
+      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
+    let resut = decode_from_bytes::<Option<(u64, u64)>>(bytes.into())
+      .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
+    Ok(resut.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
   }
 }

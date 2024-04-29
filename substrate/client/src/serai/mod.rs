@@ -1,3 +1,4 @@
+use hex::FromHexError;
 use thiserror::Error;
 
 use async_lock::RwLock;
@@ -26,6 +27,10 @@ pub mod in_instructions;
 pub use in_instructions::SeraiInInstructions;
 pub mod validator_sets;
 pub use validator_sets::SeraiValidatorSets;
+pub mod genesis_liquidity;
+pub use genesis_liquidity::SeraiGenesisLiquidity;
+pub mod liquidity_tokens;
+pub use liquidity_tokens::SeraiLiquidityTokens;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
 pub struct Block {
@@ -82,6 +87,14 @@ impl<'a> Clone for TemporalSerai<'a> {
   }
 }
 
+pub fn hex_decode(str: String) -> Result<Vec<u8>, FromHexError> {
+  if let Some(stripped) = str.strip_prefix("0x") {
+    hex::decode(stripped)
+  } else {
+    hex::decode(str)
+  }
+}
+
 impl Serai {
   pub async fn call<Req: Serialize, Res: DeserializeOwned>(
     &self,
@@ -134,19 +147,11 @@ impl Serai {
     }
   }
 
-  fn hex_decode(str: String) -> Result<Vec<u8>, SeraiError> {
-    (if let Some(stripped) = str.strip_prefix("0x") {
-      hex::decode(stripped)
-    } else {
-      hex::decode(str)
-    })
-    .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))
-  }
-
   pub async fn block_hash(&self, number: u64) -> Result<Option<[u8; 32]>, SeraiError> {
     let hash: Option<String> = self.call("chain_getBlockHash", [number]).await?;
     let Some(hash) = hash else { return Ok(None) };
-    Self::hex_decode(hash)?
+    hex_decode(hash)
+      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?
       .try_into()
       .map_err(|_| SeraiError::InvalidNode("didn't respond to getBlockHash with hash".to_string()))
       .map(Some)
@@ -195,11 +200,13 @@ impl Serai {
     Ok(())
   }
 
+  // TODO: move this into substrate/client/src/validator_sets.rs
   async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
     let hash: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
-    let bytes = Self::hex_decode(hash)?;
+    let bytes = hex_decode(hash)
+      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
     let r = Vec::<Public>::decode(&mut bytes.as_slice())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(r)
@@ -207,9 +214,12 @@ impl Serai {
 
   pub async fn latest_finalized_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     let hash: String = self.call("chain_getFinalizedHead", ()).await?;
-    Self::hex_decode(hash)?.try_into().map_err(|_| {
-      SeraiError::InvalidNode("didn't respond to getFinalizedHead with hash".to_string())
-    })
+    hex_decode(hash)
+      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?
+      .try_into()
+      .map_err(|_| {
+        SeraiError::InvalidNode("didn't respond to getFinalizedHead with hash".to_string())
+      })
   }
 
   pub async fn header(&self, hash: [u8; 32]) -> Result<Option<Header>, SeraiError> {
@@ -219,7 +229,7 @@ impl Serai {
   pub async fn block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
     let block: Option<String> = self.call("chain_getBlockBin", [hex::encode(hash)]).await?;
     let Some(block) = block else { return Ok(None) };
-    let Ok(bytes) = Self::hex_decode(block) else {
+    let Ok(bytes) = hex_decode(block) else {
       Err(SeraiError::InvalidNode("didn't return a hex-encoded block".to_string()))?
     };
     let Ok(block) = Block::decode(&mut bytes.as_slice()) else {
@@ -365,7 +375,8 @@ impl<'a> TemporalSerai<'a> {
     let res: Option<String> =
       self.serai.call("state_getStorage", [hex::encode(full_key), hex::encode(self.block)]).await?;
     let Some(res) = res else { return Ok(None) };
-    let res = Serai::hex_decode(res)?;
+    let res = hex_decode(res)
+      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
     Ok(Some(R::decode(&mut res.as_slice()).map_err(|_| {
       SeraiError::InvalidRuntime("different type present at storage location".to_string())
     })?))
@@ -385,5 +396,13 @@ impl<'a> TemporalSerai<'a> {
 
   pub fn validator_sets(&'a self) -> SeraiValidatorSets<'a> {
     SeraiValidatorSets(self)
+  }
+
+  pub fn genesis_liquidity(&'a self) -> SeraiGenesisLiquidity {
+    SeraiGenesisLiquidity(self)
+  }
+
+  pub fn liquidity_tokens(&'a self) -> SeraiLiquidityTokens {
+    SeraiLiquidityTokens(self)
   }
 }

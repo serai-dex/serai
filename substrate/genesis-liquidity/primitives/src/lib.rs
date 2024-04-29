@@ -30,7 +30,7 @@ pub const GENESIS_SRI: u64 = 100_000_000 * 10_u64.pow(8);
 // This is the account to hold and manage the genesis liquidity.
 pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

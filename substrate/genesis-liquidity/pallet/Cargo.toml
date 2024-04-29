@@ -56,5 +56,6 @@ std = [
   "genesis-liquidity-primitives/std",
   "validator-sets-primitives/std",
 ]
+fast-epoch = []
 
 default = ["std"]
