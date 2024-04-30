@@ -1,13 +1,9 @@
 // FROST defines its nonce as sum(Di, Ei * bi)
-// Monero needs not just the nonce over G however, yet also over H
-// Then there is a signature (a modified Chaum Pedersen proof) using multiple nonces at once
 //
-// Accordingly, in order for this library to be robust, it supports generating an arbitrary amount
-// of nonces, each against an arbitrary list of generators
+// In order for this library to be robust, it supports generating an arbitrary amount of nonces,
+// each against an arbitrary list of generators
 //
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
-// When representations across multiple generators are provided, a DLEq proof is also provided to
-// confirm their integrity
 
 use core::ops::Deref;
 use std::{
@@ -24,31 +20,7 @@ use transcript::Transcript;
 use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
 use multiexp::multiexp_vartime;
 
-use dleq::MultiDLEqProof;
-
 use crate::{curve::Curve, Participant};
-
-// Transcript used to aggregate binomial nonces for usage within a single DLEq proof.
-fn aggregation_transcript<T: Transcript>(context: &[u8]) -> T {
-  let mut transcript = T::new(b"FROST DLEq Aggregation v0.5");
-  transcript.append_message(b"context", context);
-  transcript
-}
-
-// Every participant proves for their commitments at the start of the protocol
-// These proofs are verified sequentially, requiring independent transcripts
-// In order to make these transcripts more robust, the FROST transcript (at time of preprocess) is
-// challenged in order to create a commitment to it, carried in each independent transcript
-// (effectively forking the original transcript)
-//
-// For FROST, as defined by the IETF, this will do nothing (and this transcript will never even be
-// constructed). For higher level protocols, the transcript may have contextual info these proofs
-// will then be bound to
-fn dleq_transcript<T: Transcript>(context: &[u8]) -> T {
-  let mut transcript = T::new(b"FROST Commitments DLEq v0.5");
-  transcript.append_message(b"context", context);
-  transcript
-}
 
 // Each nonce is actually a pair of random scalars, notated as d, e under the FROST paper
 // This is considered a single nonce as r = d + be
@@ -69,7 +41,7 @@ impl<C: Curve> GeneratorCommitments<C> {
   }
 }
 
-// A single nonce's commitments and relevant proofs
+// A single nonce's commitments
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct NonceCommitments<C: Curve> {
   // Called generators as these commitments are indexed by generator later on
@@ -121,12 +93,6 @@ impl<C: Curve> NonceCommitments<C> {
       t.append_message(b"commitment_E", commitments.0[1].to_bytes());
     }
   }
-
-  fn aggregation_factor<T: Transcript>(&self, context: &[u8]) -> C::F {
-    let mut transcript = aggregation_transcript::<T>(context);
-    self.transcript(&mut transcript);
-    <C as Curve>::hash_to_F(b"dleq_aggregation", transcript.challenge(b"binding").as_ref())
-  }
 }
 
 /// Commitments for all the nonces across all their generators.
@@ -135,51 +101,26 @@ pub(crate) struct Commitments<C: Curve> {
   // Called nonces as these commitments are indexed by nonce
   // So to get the commitments for the first nonce, it'd be commitments.nonces[0]
   pub(crate) nonces: Vec<NonceCommitments<C>>,
-  // DLEq Proof proving that each set of commitments were generated using a single pair of discrete
-  // logarithms
-  pub(crate) dleq: Option<MultiDLEqProof<C::G>>,
 }
 
 impl<C: Curve> Commitments<C> {
-  pub(crate) fn new<R: RngCore + CryptoRng, T: Transcript>(
+  pub(crate) fn new<R: RngCore + CryptoRng>(
     rng: &mut R,
     secret_share: &Zeroizing<C::F>,
     planned_nonces: &[Vec<C::G>],
-    context: &[u8],
   ) -> (Vec<Nonce<C>>, Commitments<C>) {
     let mut nonces = vec![];
     let mut commitments = vec![];
 
-    let mut dleq_generators = vec![];
-    let mut dleq_nonces = vec![];
     for generators in planned_nonces {
       let (nonce, these_commitments): (Nonce<C>, _) =
         NonceCommitments::new(&mut *rng, secret_share, generators);
-
-      if generators.len() > 1 {
-        dleq_generators.push(generators.clone());
-        dleq_nonces.push(Zeroizing::new(
-          (these_commitments.aggregation_factor::<T>(context) * nonce.0[1].deref()) +
-            nonce.0[0].deref(),
-        ));
-      }
 
       nonces.push(nonce);
       commitments.push(these_commitments);
     }
 
-    let dleq = if !dleq_generators.is_empty() {
-      Some(MultiDLEqProof::prove(
-        rng,
-        &mut dleq_transcript::<T>(context),
-        &dleq_generators,
-        &dleq_nonces,
-      ))
-    } else {
-      None
-    };
-
-    (nonces, Commitments { nonces: commitments, dleq })
+    (nonces, Commitments { nonces: commitments })
   }
 
   pub(crate) fn transcript<T: Transcript>(&self, t: &mut T) {
@@ -187,57 +128,19 @@ impl<C: Curve> Commitments<C> {
     for nonce in &self.nonces {
       nonce.transcript(t);
     }
-
-    // Transcripting the DLEqs implicitly transcripts the exact generators used for the nonces in
-    // an exact order
-    // This means it shouldn't be possible for variadic generators to cause conflicts
-    if let Some(dleq) = &self.dleq {
-      t.append_message(b"dleq", dleq.serialize());
-    }
   }
 
-  pub(crate) fn read<R: Read, T: Transcript>(
-    reader: &mut R,
-    generators: &[Vec<C::G>],
-    context: &[u8],
-  ) -> io::Result<Self> {
+  pub(crate) fn read<R: Read>(reader: &mut R, generators: &[Vec<C::G>]) -> io::Result<Self> {
     let nonces = (0 .. generators.len())
       .map(|i| NonceCommitments::read(reader, &generators[i]))
       .collect::<Result<Vec<NonceCommitments<C>>, _>>()?;
 
-    let mut dleq_generators = vec![];
-    let mut dleq_nonces = vec![];
-    for (generators, nonce) in generators.iter().cloned().zip(&nonces) {
-      if generators.len() > 1 {
-        let binding = nonce.aggregation_factor::<T>(context);
-        let mut aggregated = vec![];
-        for commitments in &nonce.generators {
-          aggregated.push(commitments.0[0] + (commitments.0[1] * binding));
-        }
-        dleq_generators.push(generators);
-        dleq_nonces.push(aggregated);
-      }
-    }
-
-    let dleq = if !dleq_generators.is_empty() {
-      let dleq = MultiDLEqProof::read(reader, dleq_generators.len())?;
-      dleq
-        .verify(&mut dleq_transcript::<T>(context), &dleq_generators, &dleq_nonces)
-        .map_err(|_| io::Error::other("invalid DLEq proof"))?;
-      Some(dleq)
-    } else {
-      None
-    };
-
-    Ok(Commitments { nonces, dleq })
+    Ok(Commitments { nonces })
   }
 
   pub(crate) fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     for nonce in &self.nonces {
       nonce.write(writer)?;
-    }
-    if let Some(dleq) = &self.dleq {
-      dleq.write(writer)?;
     }
     Ok(())
   }

@@ -39,8 +39,9 @@ use crate::{
   networks::{
     NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
     Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network,
+    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
   },
+  multisigs::scheduler::utxo::Scheduler,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -117,12 +118,6 @@ impl TransactionTrait<Monero> for Transaction {
   fn id(&self) -> Self::Id {
     self.hash()
   }
-  fn serialize(&self) -> Vec<u8> {
-    self.serialize()
-  }
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Transaction::read(reader)
-  }
 
   #[cfg(test)]
   async fn fee(&self, _: &Monero) -> u64 {
@@ -131,6 +126,9 @@ impl TransactionTrait<Monero> for Transaction {
 }
 
 impl EventualityTrait for Eventuality {
+  type Claim = [u8; 32];
+  type Completion = Transaction;
+
   // Use the TX extra to look up potential matches
   // While anyone can forge this, a transaction with distinct outputs won't actually match
   // Extra includess the one time keys which are derived from the plan ID, so a collision here is a
@@ -144,6 +142,16 @@ impl EventualityTrait for Eventuality {
   }
   fn serialize(&self) -> Vec<u8> {
     self.serialize()
+  }
+
+  fn claim(tx: &Transaction) -> [u8; 32] {
+    tx.id()
+  }
+  fn serialize_completion(completion: &Transaction) -> Vec<u8> {
+    completion.serialize()
+  }
+  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
+    Transaction::read(reader)
   }
 }
 
@@ -274,7 +282,8 @@ impl Monero {
   async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
     let mut fees = vec![];
     for tx_hash in &block.txs {
-      let tx = self.get_transaction(tx_hash).await?;
+      let tx =
+        self.rpc.get_transaction(*tx_hash).await.map_err(|_| NetworkError::ConnectionError)?;
       // Only consider fees from RCT transactions, else the fee property read wouldn't be accurate
       if tx.rct_signatures.rct_type() != RctType::Null {
         continue;
@@ -454,6 +463,8 @@ impl Network for Monero {
   type Eventuality = Eventuality;
   type TransactionMachine = TransactionMachine;
 
+  type Scheduler = Scheduler<Monero>;
+
   type Address = Address;
 
   const NETWORK: NetworkId = NetworkId::Monero;
@@ -461,11 +472,6 @@ impl Network for Monero {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
 
-  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
-  // larger than 150kb. This fits within the 100kb mark
-  // Technically, it can be ~124, yet a small bit of buffer is appreciated
-  // TODO: Test creating a TX this big
-  const MAX_INPUTS: usize = 120;
   const MAX_OUTPUTS: usize = 16;
 
   // 0.01 XMR
@@ -478,20 +484,21 @@ impl Network for Monero {
   // Monero doesn't require/benefit from tweaking
   fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
-  fn external_address(key: EdwardsPoint) -> Address {
+  #[cfg(test)]
+  async fn external_address(&self, key: EdwardsPoint) -> Address {
     Self::address_internal(key, EXTERNAL_SUBADDRESS)
   }
 
-  fn branch_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, BRANCH_SUBADDRESS)
+  fn branch_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, BRANCH_SUBADDRESS))
   }
 
-  fn change_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, CHANGE_SUBADDRESS)
+  fn change_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, CHANGE_SUBADDRESS))
   }
 
-  fn forward_address(key: EdwardsPoint) -> Address {
-    Self::address_internal(key, FORWARD_SUBADDRESS)
+  fn forward_address(key: EdwardsPoint) -> Option<Address> {
+    Some(Self::address_internal(key, FORWARD_SUBADDRESS))
   }
 
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
@@ -558,7 +565,7 @@ impl Network for Monero {
     &self,
     eventualities: &mut EventualitiesTracker<Eventuality>,
     block: &Block,
-  ) -> HashMap<[u8; 32], (usize, Transaction)> {
+  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
     let mut res = HashMap::new();
     if eventualities.map.is_empty() {
       return res;
@@ -568,13 +575,13 @@ impl Network for Monero {
       network: &Monero,
       eventualities: &mut EventualitiesTracker<Eventuality>,
       block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, Transaction)>,
+      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
     ) {
       for hash in &block.txs {
         let tx = {
           let mut tx;
           while {
-            tx = network.get_transaction(hash).await;
+            tx = network.rpc.get_transaction(*hash).await;
             tx.is_err()
           } {
             log::error!("couldn't get transaction {}: {}", hex::encode(hash), tx.err().unwrap());
@@ -587,7 +594,7 @@ impl Network for Monero {
           if eventuality.matches(&tx) {
             res.insert(
               eventualities.map.remove(&tx.prefix.extra).unwrap().0,
-              (usize::try_from(block.number().unwrap()).unwrap(), tx),
+              (usize::try_from(block.number().unwrap()).unwrap(), tx.id(), tx),
             );
           }
         }
@@ -625,14 +632,13 @@ impl Network for Monero {
   async fn needed_fee(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
   ) -> Result<Option<u64>, NetworkError> {
     Ok(
       self
-        .make_signable_transaction(block_number, plan_id, inputs, payments, change, true)
+        .make_signable_transaction(block_number, &[0; 32], inputs, payments, change, true)
         .await?
         .map(|(_, signable)| signable.fee()),
     )
@@ -642,9 +648,11 @@ impl Network for Monero {
     &self,
     block_number: usize,
     plan_id: &[u8; 32],
+    _key: EdwardsPoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
     change: &Option<Address>,
+    (): &(),
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(
       self
@@ -658,7 +666,7 @@ impl Network for Monero {
     )
   }
 
-  async fn attempt_send(
+  async fn attempt_sign(
     &self,
     keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
@@ -669,7 +677,7 @@ impl Network for Monero {
     }
   }
 
-  async fn publish_transaction(&self, tx: &Self::Transaction) -> Result<(), NetworkError> {
+  async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {
     match self.rpc.publish_transaction(tx).await {
       Ok(()) => Ok(()),
       Err(RpcError::ConnectionError(e)) => {
@@ -682,17 +690,47 @@ impl Network for Monero {
     }
   }
 
-  async fn get_transaction(&self, id: &[u8; 32]) -> Result<Transaction, NetworkError> {
-    self.rpc.get_transaction(*id).await.map_err(map_rpc_err)
-  }
-
-  fn confirm_completion(&self, eventuality: &Eventuality, tx: &Transaction) -> bool {
-    eventuality.matches(tx)
+  async fn confirm_completion(
+    &self,
+    eventuality: &Eventuality,
+    id: &[u8; 32],
+  ) -> Result<Option<Transaction>, NetworkError> {
+    let tx = self.rpc.get_transaction(*id).await.map_err(map_rpc_err)?;
+    if eventuality.matches(&tx) {
+      Ok(Some(tx))
+    } else {
+      Ok(None)
+    }
   }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
     self.rpc.get_block(*id).await.unwrap().number().unwrap().try_into().unwrap()
+  }
+
+  #[cfg(test)]
+  async fn check_eventuality_by_claim(
+    &self,
+    eventuality: &Self::Eventuality,
+    claim: &[u8; 32],
+  ) -> bool {
+    return eventuality.matches(&self.rpc.get_transaction(*claim).await.unwrap());
+  }
+
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(
+    &self,
+    block: usize,
+    eventuality: &Eventuality,
+  ) -> Transaction {
+    let block = self.rpc.get_block_by_number(block).await.unwrap();
+    for tx in &block.txs {
+      let tx = self.rpc.get_transaction(*tx).await.unwrap();
+      if eventuality.matches(&tx) {
+        return tx;
+      }
+    }
+    panic!("block didn't have a transaction for this eventuality")
   }
 
   #[cfg(test)]
@@ -774,4 +812,12 @@ impl Network for Monero {
     }
     self.get_block(block).await.unwrap()
   }
+}
+
+impl UtxoNetwork for Monero {
+  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
+  // larger than 150kb. This fits within the 100kb mark
+  // Technically, it can be ~124, yet a small bit of buffer is appreciated
+  // TODO: Test creating a TX this big
+  const MAX_INPUTS: usize = 120;
 }

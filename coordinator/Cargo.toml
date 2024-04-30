@@ -51,7 +51,7 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
-libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "macros"] }
+libp2p = { version = "0.52", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "request-response", "gossipsub", "macros"] }
 
 [dev-dependencies]
 tributary = { package = "tributary-chain", path = "./tributary", features = ["tests"] }

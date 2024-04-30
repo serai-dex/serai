@@ -260,7 +260,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         cosign_channel.send(cosigned_block).unwrap();
         let mut buf = vec![];
         cosigned_block.serialize(&mut buf).unwrap();
-        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
+        P2p::broadcast(p2p, GossipMessageKind::CosignedBlock, buf).await;
         None
       }
       // This causes an action on Substrate yet not on any Tributary

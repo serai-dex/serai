@@ -74,7 +74,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
         panic!("provided transaction saved to disk wasn't provided");
       };
 
-      if res.transactions.get(order).is_none() {
+      if !res.transactions.contains_key(order) {
         res.transactions.insert(order, VecDeque::new());
       }
       res.transactions.get_mut(order).unwrap().push_back(tx);
@@ -135,7 +135,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
       txn.put(current_provided_key, currently_provided);
       txn.commit();
 
-      if self.transactions.get(order).is_none() {
+      if !self.transactions.contains_key(order) {
         self.transactions.insert(order, VecDeque::new());
       }
       self.transactions.get_mut(order).unwrap().push_back(tx);

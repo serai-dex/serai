@@ -22,7 +22,7 @@ use serai_db::{Get, DbTxn, Db, create_db};
 use processor_messages::coordinator::cosign_block_msg;
 
 use crate::{
-  p2p::{CosignedBlock, P2pMessageKind, P2p},
+  p2p::{CosignedBlock, GossipMessageKind, P2p},
   substrate::LatestCosignedBlock,
 };
 
@@ -323,7 +323,7 @@ impl<D: Db> CosignEvaluator<D> {
           for cosign in cosigns {
             let mut buf = vec![];
             cosign.serialize(&mut buf).unwrap();
-            P2p::broadcast(&p2p, P2pMessageKind::CosignedBlock, buf).await;
+            P2p::broadcast(&p2p, GossipMessageKind::CosignedBlock, buf).await;
           }
           sleep(Duration::from_secs(60)).await;
         }

@@ -41,9 +41,8 @@ use tendermint::{
 use tokio::sync::RwLock;
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, BLOCK_MESSAGE, ReadWrite,
-  transaction::Transaction as TransactionTrait, Transaction, BlockHeader, Block, BlockError,
-  Blockchain, P2p,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite, transaction::Transaction as TransactionTrait,
+  Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };
 
 pub mod tx;
@@ -414,12 +413,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       );
       match block_res {
         Ok(()) => {
-          // If we successfully added this block, broadcast it
-          // TODO: Move this under the coordinator once we set up on new block notifications?
-          let mut msg = serialized_block.0;
-          msg.insert(0, BLOCK_MESSAGE);
-          msg.extend(encoded_commit);
-          self.p2p.broadcast(self.genesis, msg).await;
+          // If we successfully added this block, break
           break;
         }
         Err(BlockError::NonLocalProvided(hash)) => {
@@ -428,6 +422,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
             hex::encode(hash),
             hex::encode(self.genesis)
           );
+          tokio::time::sleep(core::time::Duration::from_secs(5)).await;
         }
         _ => return invalid_block(),
       }

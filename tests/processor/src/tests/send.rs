@@ -261,12 +261,12 @@ fn send_test() {
       let participating =
         participating.iter().map(|p| usize::from(u16::from(*p) - 1)).collect::<HashSet<_>>();
       for participant in &participating {
-        assert!(coordinators[*participant].get_transaction(&ops, &tx_id).await.is_some());
+        assert!(coordinators[*participant].get_published_transaction(&ops, &tx_id).await.is_some());
       }
 
       // Publish this transaction to the left out nodes
       let tx = coordinators[*participating.iter().next().unwrap()]
-        .get_transaction(&ops, &tx_id)
+        .get_published_transaction(&ops, &tx_id)
         .await
         .unwrap();
       for (i, coordinator) in coordinators.iter_mut().enumerate() {

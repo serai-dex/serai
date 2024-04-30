@@ -43,7 +43,7 @@ fn create_coin<T: Config>(coin: &Coin) -> (T::AccountId, AccountIdLookupOf<T>) {
   let caller_lookup = T::Lookup::unlookup(caller);
   assert_ok!(Coins::<T>::mint(
     caller,
-    Balance { coin: Coin::native(), amount: Amount(SubstrateAmount::max_value().div(1000u64)) }
+    Balance { coin: Coin::native(), amount: Amount(SubstrateAmount::MAX.div(1000u64)) }
   ));
   assert_ok!(Coins::<T>::mint(
     caller,

@@ -43,7 +43,6 @@ multiexp = { path = "../../crypto/multiexp", version = "0.4", default-features =
 
 # Needed for multisig
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
-dleq = { path = "../../crypto/dleq", version = "0.4", default-features = false, features = ["serialize"], optional = true }
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", default-features = false, features = ["ed25519"], optional = true }
 
 monero-generators = { path = "generators", version = "0.4", default-features = false }
@@ -91,7 +90,6 @@ std = [
   "multiexp/std",
 
   "transcript/std",
-  "dleq/std",
 
   "monero-generators/std",
 
@@ -106,7 +104,7 @@ std = [
 
 cache-distribution = ["async-lock"]
 http-rpc = ["digest_auth", "simple-request", "tokio"]
-multisig = ["transcript", "frost", "dleq", "std"]
+multisig = ["transcript", "frost", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
 experimental = []
 

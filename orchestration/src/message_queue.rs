@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 

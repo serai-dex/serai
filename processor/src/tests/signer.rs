@@ -17,19 +17,20 @@ use serai_client::{
 use messages::sign::*;
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Network},
+  networks::{Output, Transaction, Eventuality, UtxoNetwork},
+  multisigs::scheduler::Scheduler,
   signer::Signer,
 };
 
 #[allow(clippy::type_complexity)]
-pub async fn sign<N: Network>(
+pub async fn sign<N: UtxoNetwork>(
   network: N,
   session: Session,
   mut keys_txs: HashMap<
     Participant,
     (ThresholdKeys<N::Curve>, (N::SignableTransaction, N::Eventuality)),
   >,
-) -> <N::Transaction as Transaction<N>>::Id {
+) -> <N::Eventuality as Eventuality>::Claim {
   let actual_id = SignId { session, id: [0xaa; 32], attempt: 0 };
 
   let mut keys = HashMap::new();
@@ -65,14 +66,15 @@ pub async fn sign<N: Network>(
 
   let mut preprocesses = HashMap::new();
 
+  let mut eventuality = None;
   for i in 1 ..= signers.len() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    let (tx, eventuality) = txs.remove(&i).unwrap();
+    let (tx, this_eventuality) = txs.remove(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     match signers
       .get_mut(&i)
       .unwrap()
-      .sign_transaction(&mut txn, actual_id.id, tx, &eventuality)
+      .sign_transaction(&mut txn, actual_id.id, tx, &this_eventuality)
       .await
     {
       // All participants should emit a preprocess
@@ -86,6 +88,11 @@ pub async fn sign<N: Network>(
       _ => panic!("didn't get preprocess back"),
     }
     txn.commit();
+
+    if eventuality.is_none() {
+      eventuality = Some(this_eventuality.clone());
+    }
+    assert_eq!(eventuality, Some(this_eventuality));
   }
 
   let mut shares = HashMap::new();
@@ -140,19 +147,25 @@ pub async fn sign<N: Network>(
     txn.commit();
   }
 
-  let mut typed_tx_id = <N::Transaction as Transaction<N>>::Id::default();
-  typed_tx_id.as_mut().copy_from_slice(tx_id.unwrap().as_ref());
-  typed_tx_id
+  let mut typed_claim = <N::Eventuality as Eventuality>::Claim::default();
+  typed_claim.as_mut().copy_from_slice(tx_id.unwrap().as_ref());
+  assert!(network.check_eventuality_by_claim(&eventuality.unwrap(), &typed_claim).await);
+  typed_claim
 }
 
-pub async fn test_signer<N: Network>(network: N) {
+pub async fn test_signer<N: UtxoNetwork>(network: N)
+where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let mut keys = key_gen(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
-  let outputs = network.get_outputs(&network.test_send(N::external_address(key)).await, key).await;
+  let outputs = network
+    .get_outputs(&network.test_send(N::external_address(&network, key).await).await, key)
+    .await;
   let sync_block = network.get_latest_block_number().await.unwrap() - N::CONFIRMATIONS;
 
   let amount = 2 * N::DUST;
@@ -166,7 +179,7 @@ pub async fn test_signer<N: Network>(network: N) {
           key,
           inputs: outputs.clone(),
           payments: vec![Payment {
-            address: N::external_address(key),
+            address: N::external_address(&network, key).await,
             data: None,
             balance: Balance {
               coin: match N::NETWORK {
@@ -178,7 +191,8 @@ pub async fn test_signer<N: Network>(network: N) {
               amount: Amount(amount),
             },
           }],
-          change: Some(N::change_address(key)),
+          change: Some(N::change_address(key).unwrap()),
+          scheduler_addendum: ().into(),
         },
         0,
       )
@@ -191,13 +205,12 @@ pub async fn test_signer<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  // The signer may not publish the TX if it has a connection error
-  // It doesn't fail in this case
-  let txid = sign(network.clone(), Session(0), keys_txs).await;
-  let tx = network.get_transaction(&txid).await.unwrap();
-  assert_eq!(tx.id(), txid);
+  let claim = sign(network.clone(), Session(0), keys_txs).await;
+
   // Mine a block, and scan it, to ensure that the TX actually made it on chain
   network.mine_block().await;
+  let block_number = network.get_latest_block_number().await.unwrap();
+  let tx = network.get_transaction_by_eventuality(block_number, &eventualities[0]).await;
   let outputs = network
     .get_outputs(
       &network.get_block(network.get_latest_block_number().await.unwrap()).await.unwrap(),
@@ -212,6 +225,7 @@ pub async fn test_signer<N: Network>(network: N) {
 
   // Check the eventualities pass
   for eventuality in eventualities {
-    assert!(network.confirm_completion(&eventuality, &tx));
+    let completion = network.confirm_completion(&eventuality, &claim).await.unwrap().unwrap();
+    assert_eq!(N::Eventuality::claim(&completion), claim);
   }
 }

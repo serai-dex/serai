@@ -375,7 +375,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     if !msg.is_empty() {
-      panic!("message was passed to the TransactionMachine when it generates its own");
+      panic!("message was passed to the TransactionSignMachine when it generates its own");
     }
 
     let commitments = (0 .. self.sigs.len())

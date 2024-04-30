@@ -116,8 +116,8 @@ async fn sync_test() {
     .map_err(|_| "failed to send ActiveTributary to heartbeat")
     .unwrap();
 
-  // The heartbeat is once every 10 blocks
-  sleep(Duration::from_secs(10 * block_time)).await;
+  // The heartbeat is once every 10 blocks, with some limitations
+  sleep(Duration::from_secs(20 * block_time)).await;
   assert!(syncer_tributary.tip().await != spec.genesis());
 
   // Verify it synced to the tip

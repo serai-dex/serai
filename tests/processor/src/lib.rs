@@ -416,7 +416,11 @@ impl Coordinator {
     }
   }
 
-  pub async fn get_transaction(&self, ops: &DockerOperations, tx: &[u8]) -> Option<Vec<u8>> {
+  pub async fn get_published_transaction(
+    &self,
+    ops: &DockerOperations,
+    tx: &[u8],
+  ) -> Option<Vec<u8>> {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
       NetworkId::Bitcoin => {
@@ -424,8 +428,15 @@ impl Coordinator {
 
         let rpc =
           Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
+
+        // Bitcoin publishes a 0-byte TX ID to reduce variables
+        // Accordingly, read the mempool to find the (presumed relevant) TX
+        let entries: Vec<String> =
+          rpc.rpc_call("getrawmempool", serde_json::json!([false])).await.unwrap();
+        assert_eq!(entries.len(), 1, "more than one entry in the mempool, so unclear which to get");
+
         let mut hash = [0; 32];
-        hash.copy_from_slice(tx);
+        hash.copy_from_slice(&hex::decode(&entries[0]).unwrap());
         if let Ok(tx) = rpc.get_transaction(&hash).await {
           let mut buf = vec![];
           tx.consensus_encode(&mut buf).unwrap();
