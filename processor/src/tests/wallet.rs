@@ -15,7 +15,7 @@ use serai_client::{
 
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Block, Network},
+  networks::{Output, Transaction, Eventuality, Block, UtxoNetwork},
   multisigs::{
     scanner::{ScannerEvent, Scanner},
     scheduler::Scheduler,
@@ -24,7 +24,7 @@ use crate::{
 };
 
 // Tests the Scanner, Scheduler, and Signer together
-pub async fn test_wallet<N: Network>(network: N) {
+pub async fn test_wallet<N: UtxoNetwork>(network: N) {
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
@@ -47,7 +47,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       network.mine_block().await;
     }
 
-    let block = network.test_send(N::external_address(key)).await;
+    let block = network.test_send(N::external_address(&network, key).await).await;
     let block_id = block.id();
 
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
@@ -58,7 +58,7 @@ pub async fn test_wallet<N: Network>(network: N) {
         assert_eq!(outputs.len(), 1);
         (block_id, outputs)
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     }
@@ -69,22 +69,13 @@ pub async fn test_wallet<N: Network>(network: N) {
   txn.commit();
 
   let mut txn = db.txn();
-  let mut scheduler = Scheduler::new::<MemDb>(
-    &mut txn,
-    key,
-    match N::NETWORK {
-      NetworkId::Serai => panic!("test_wallet called with Serai"),
-      NetworkId::Bitcoin => Coin::Bitcoin,
-      NetworkId::Ethereum => Coin::Ether,
-      NetworkId::Monero => Coin::Monero,
-    },
-  );
+  let mut scheduler = N::Scheduler::new::<MemDb>(&mut txn, key, N::NETWORK);
   let amount = 2 * N::DUST;
   let plans = scheduler.schedule::<MemDb>(
     &mut txn,
     outputs.clone(),
     vec![Payment {
-      address: N::external_address(key),
+      address: N::external_address(&network, key).await,
       data: None,
       balance: Balance {
         coin: match N::NETWORK {
@@ -100,27 +91,26 @@ pub async fn test_wallet<N: Network>(network: N) {
     false,
   );
   txn.commit();
+  assert_eq!(plans.len(), 1);
+  assert_eq!(plans[0].key, key);
+  assert_eq!(plans[0].inputs, outputs);
   assert_eq!(
-    plans,
-    vec![Plan {
-      key,
-      inputs: outputs.clone(),
-      payments: vec![Payment {
-        address: N::external_address(key),
-        data: None,
-        balance: Balance {
-          coin: match N::NETWORK {
-            NetworkId::Serai => panic!("test_wallet called with Serai"),
-            NetworkId::Bitcoin => Coin::Bitcoin,
-            NetworkId::Ethereum => Coin::Ether,
-            NetworkId::Monero => Coin::Monero,
-          },
-          amount: Amount(amount),
-        }
-      }],
-      change: Some(N::change_address(key)),
+    plans[0].payments,
+    vec![Payment {
+      address: N::external_address(&network, key).await,
+      data: None,
+      balance: Balance {
+        coin: match N::NETWORK {
+          NetworkId::Serai => panic!("test_wallet called with Serai"),
+          NetworkId::Bitcoin => Coin::Bitcoin,
+          NetworkId::Ethereum => Coin::Ether,
+          NetworkId::Monero => Coin::Monero,
+        },
+        amount: Amount(amount),
+      }
     }]
   );
+  assert_eq!(plans[0].change, Some(N::change_address(key).unwrap()));
 
   {
     let mut buf = vec![];
@@ -143,10 +133,10 @@ pub async fn test_wallet<N: Network>(network: N) {
     keys_txs.insert(i, (keys, (signable, eventuality)));
   }
 
-  let txid = sign(network.clone(), Session(0), keys_txs).await;
-  let tx = network.get_transaction(&txid).await.unwrap();
+  let claim = sign(network.clone(), Session(0), keys_txs).await;
   network.mine_block().await;
   let block_number = network.get_latest_block_number().await.unwrap();
+  let tx = network.get_transaction_by_eventuality(block_number, &eventualities[0]).await;
   let block = network.get_block(block_number).await.unwrap();
   let outputs = network.get_outputs(&block, key).await;
   assert_eq!(outputs.len(), 2);
@@ -154,7 +144,8 @@ pub async fn test_wallet<N: Network>(network: N) {
   assert!((outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount));
 
   for eventuality in eventualities {
-    assert!(network.confirm_completion(&eventuality, &tx));
+    let completion = network.confirm_completion(&eventuality, &claim).await.unwrap().unwrap();
+    assert_eq!(N::Eventuality::claim(&completion), claim);
   }
 
   for _ in 1 .. N::CONFIRMATIONS {
@@ -168,7 +159,7 @@ pub async fn test_wallet<N: Network>(network: N) {
       assert_eq!(block_id, block.id());
       assert_eq!(these_outputs, outputs);
     }
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }

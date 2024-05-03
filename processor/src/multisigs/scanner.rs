@@ -17,15 +17,26 @@ use tokio::{
 
 use crate::{
   Get, DbTxn, Db,
-  networks::{Output, Transaction, EventualitiesTracker, Block, Network},
+  networks::{Output, Transaction, Eventuality, EventualitiesTracker, Block, Network},
 };
 
 #[derive(Clone, Debug)]
 pub enum ScannerEvent<N: Network> {
   // Block scanned
-  Block { is_retirement_block: bool, block: <N::Block as Block<N>>::Id, outputs: Vec<N::Output> },
+  Block {
+    is_retirement_block: bool,
+    block: <N::Block as Block<N>>::Id,
+    outputs: Vec<N::Output>,
+  },
   // Eventuality completion found on-chain
-  Completed(Vec<u8>, usize, [u8; 32], N::Transaction),
+  // TODO: Move this from a tuple
+  Completed(
+    Vec<u8>,
+    usize,
+    [u8; 32],
+    <N::Transaction as Transaction<N>>::Id,
+    <N::Eventuality as Eventuality>::Completion,
+  ),
 }
 
 pub type ScannerEventChannel<N> = mpsc::UnboundedReceiver<ScannerEvent<N>>;
@@ -555,19 +566,25 @@ impl<N: Network, D: Db> Scanner<N, D> {
             }
           }
 
-          for (id, (block_number, tx)) in network
+          for (id, (block_number, tx, completion)) in network
             .get_eventuality_completions(scanner.eventualities.get_mut(&key_vec).unwrap(), &block)
             .await
           {
             info!(
               "eventuality {} resolved by {}, as found on chain",
               hex::encode(id),
-              hex::encode(&tx.id())
+              hex::encode(tx.as_ref())
             );
 
             completion_block_numbers.push(block_number);
             // This must be before the mission of ScannerEvent::Block, per commentary in mod.rs
-            if !scanner.emit(ScannerEvent::Completed(key_vec.clone(), block_number, id, tx)) {
+            if !scanner.emit(ScannerEvent::Completed(
+              key_vec.clone(),
+              block_number,
+              id,
+              tx,
+              completion,
+            )) {
               return;
             }
           }

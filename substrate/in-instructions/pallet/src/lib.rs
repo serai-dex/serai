@@ -10,7 +10,7 @@ pub use in_instructions_primitives as primitives;
 use primitives::*;
 
 // TODO: Investigate why Substrate generates these
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
+#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
 #[frame_support::pallet]
 pub mod pallet {
   use sp_std::vec;
@@ -204,14 +204,9 @@ pub mod pallet {
             }
           }
         }
-        InInstruction::GenesisLiquidity(ops) => match ops {
-          GenesisLiquidityOperation::Add(address, balance) => {
-            GenesisLiq::<T>::add_coin_liquidity(address.into(), balance)?;
-          }
-          GenesisLiquidityOperation::Remove(address, balance, out_address) => {
-            GenesisLiq::<T>::remove_coin_liquidity(address.into(), balance, out_address)?;
-          }
-        },
+        InInstruction::GenesisLiquidity(address) => {
+          GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
+        }
       }
       Ok(())
     }

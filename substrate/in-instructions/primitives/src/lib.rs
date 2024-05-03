@@ -75,19 +75,10 @@ pub enum DexCall {
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum GenesisLiquidityOperation {
-  Add(SeraiAddress, Balance),
-  Remove(SeraiAddress, Balance, ExternalAddress),
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize))]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum InInstruction {
   Transfer(SeraiAddress),
   Dex(DexCall),
-  GenesisLiquidity(GenesisLiquidityOperation),
+  GenesisLiquidity(SeraiAddress),
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebug)]

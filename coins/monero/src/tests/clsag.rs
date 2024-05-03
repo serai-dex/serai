@@ -57,7 +57,7 @@ fn clsag() {
     }
 
     let image = generate_key_image(&secrets.0);
-    let (clsag, pseudo_out) = Clsag::sign(
+    let (mut clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       vec![(
         secrets.0,
@@ -76,7 +76,12 @@ fn clsag() {
       msg,
     )
     .swap_remove(0);
+
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
+
+    // make sure verification fails if we throw a random `c1` at it.
+    clsag.c1 = random_scalar(&mut OsRng);
+    assert!(clsag.verify(&ring, &image, &pseudo_out, &msg).is_err());
   }
 }
 

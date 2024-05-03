@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
 

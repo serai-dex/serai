@@ -5,16 +5,17 @@ use std::{
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
-use serai_client::primitives::{Coin, Amount, Balance};
+use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
 
 use crate::{
-  networks::{OutputType, Output, Network},
   DbTxn, Db, Payment, Plan,
+  networks::{OutputType, Output, Network, UtxoNetwork},
+  multisigs::scheduler::Scheduler as SchedulerTrait,
 };
 
-/// Stateless, deterministic output/payment manager.
-#[derive(PartialEq, Eq, Debug)]
-pub struct Scheduler<N: Network> {
+/// Deterministic output/payment manager.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Scheduler<N: UtxoNetwork> {
   key: <N::Curve as Ciphersuite>::G,
   coin: Coin,
 
@@ -46,7 +47,7 @@ fn scheduler_key<D: Db, G: GroupEncoding>(key: &G) -> Vec<u8> {
   D::key(b"SCHEDULER", b"scheduler", key.to_bytes())
 }
 
-impl<N: Network> Scheduler<N> {
+impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
   pub fn empty(&self) -> bool {
     self.queued_plans.is_empty() &&
       self.plans.is_empty() &&
@@ -144,8 +145,18 @@ impl<N: Network> Scheduler<N> {
   pub fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    coin: Coin,
+    network: NetworkId,
   ) -> Self {
+    assert!(N::branch_address(key).is_some());
+    assert!(N::change_address(key).is_some());
+    assert!(N::forward_address(key).is_some());
+
+    let coin = {
+      let coins = network.coins();
+      assert_eq!(coins.len(), 1);
+      coins[0]
+    };
+
     let res = Scheduler {
       key,
       coin,
@@ -159,7 +170,17 @@ impl<N: Network> Scheduler<N> {
     res
   }
 
-  pub fn from_db<D: Db>(db: &D, key: <N::Curve as Ciphersuite>::G, coin: Coin) -> io::Result<Self> {
+  pub fn from_db<D: Db>(
+    db: &D,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> io::Result<Self> {
+    let coin = {
+      let coins = network.coins();
+      assert_eq!(coins.len(), 1);
+      coins[0]
+    };
+
     let scheduler = db.get(scheduler_key::<D, _>(&key)).unwrap_or_else(|| {
       panic!("loading scheduler from DB without scheduler for {}", hex::encode(key.to_bytes()))
     });
@@ -201,7 +222,7 @@ impl<N: Network> Scheduler<N> {
       amount
     };
 
-    let branch_address = N::branch_address(self.key);
+    let branch_address = N::branch_address(self.key).unwrap();
 
     // If we have more payments than we can handle in a single TX, create plans for them
     // TODO2: This isn't perfect. For 258 outputs, and a MAX_OUTPUTS of 16, this will create:
@@ -237,7 +258,8 @@ impl<N: Network> Scheduler<N> {
       key: self.key,
       inputs,
       payments,
-      change: Some(N::change_address(key_for_any_change)).filter(|_| change),
+      change: Some(N::change_address(key_for_any_change).unwrap()).filter(|_| change),
+      scheduler_addendum: (),
     }
   }
 
@@ -305,7 +327,7 @@ impl<N: Network> Scheduler<N> {
       its *own* branch address, since created_output is called on the signer's Scheduler.
     */
     {
-      let branch_address = N::branch_address(self.key);
+      let branch_address = N::branch_address(self.key).unwrap();
       payments =
         payments.drain(..).filter(|payment| payment.address != branch_address).collect::<Vec<_>>();
     }
@@ -357,7 +379,8 @@ impl<N: Network> Scheduler<N> {
         key: self.key,
         inputs: chunk,
         payments: vec![],
-        change: Some(N::change_address(key_for_any_change)),
+        change: Some(N::change_address(key_for_any_change).unwrap()),
+        scheduler_addendum: (),
       })
     }
 
@@ -403,7 +426,8 @@ impl<N: Network> Scheduler<N> {
         key: self.key,
         inputs: self.utxos.drain(..).collect::<Vec<_>>(),
         payments: vec![],
-        change: Some(N::change_address(key_for_any_change)),
+        change: Some(N::change_address(key_for_any_change).unwrap()),
+        scheduler_addendum: (),
       });
     }
 
@@ -435,9 +459,6 @@ impl<N: Network> Scheduler<N> {
 
   // Note a branch output as having been created, with the amount it was actually created with,
   // or not having been created due to being too small
-  // This can be called whenever, so long as it's properly ordered
-  // (it's independent to Serai/the chain we're scheduling over, yet still expects outputs to be
-  // created in the same order Plans are returned in)
   pub fn created_output<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,
@@ -499,5 +520,108 @@ impl<N: Network> Scheduler<N> {
 
     // TODO2: This shows how ridiculous the serialize function is
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
+  }
+}
+
+impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
+  type Addendum = ();
+
+  /// Check if this Scheduler is empty.
+  fn empty(&self) -> bool {
+    Scheduler::empty(self)
+  }
+
+  /// Create a new Scheduler.
+  fn new<D: Db>(
+    txn: &mut D::Transaction<'_>,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> Self {
+    Scheduler::new::<D>(txn, key, network)
+  }
+
+  /// Load a Scheduler from the DB.
+  fn from_db<D: Db>(
+    db: &D,
+    key: <N::Curve as Ciphersuite>::G,
+    network: NetworkId,
+  ) -> io::Result<Self> {
+    Scheduler::from_db::<D>(db, key, network)
+  }
+
+  /// Check if a branch is usable.
+  fn can_use_branch(&self, balance: Balance) -> bool {
+    Scheduler::can_use_branch(self, balance)
+  }
+
+  /// Schedule a series of outputs/payments.
+  fn schedule<D: Db>(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    utxos: Vec<N::Output>,
+    payments: Vec<Payment<N>>,
+    key_for_any_change: <N::Curve as Ciphersuite>::G,
+    force_spend: bool,
+  ) -> Vec<Plan<N>> {
+    Scheduler::schedule::<D>(self, txn, utxos, payments, key_for_any_change, force_spend)
+  }
+
+  /// Consume all payments still pending within this Scheduler, without scheduling them.
+  fn consume_payments<D: Db>(&mut self, txn: &mut D::Transaction<'_>) -> Vec<Payment<N>> {
+    Scheduler::consume_payments::<D>(self, txn)
+  }
+
+  /// Note a branch output as having been created, with the amount it was actually created with,
+  /// or not having been created due to being too small.
+  // TODO: Move this to Balance.
+  fn created_output<D: Db>(
+    &mut self,
+    txn: &mut D::Transaction<'_>,
+    expected: u64,
+    actual: Option<u64>,
+  ) {
+    Scheduler::created_output::<D>(self, txn, expected, actual)
+  }
+
+  fn refund_plan<D: Db>(
+    &mut self,
+    _: &mut D::Transaction<'_>,
+    output: N::Output,
+    refund_to: N::Address,
+  ) -> Plan<N> {
+    Plan {
+      key: output.key(),
+      // Uses a payment as this will still be successfully sent due to fee amortization,
+      // and because change is currently always a Serai key
+      payments: vec![Payment { address: refund_to, data: None, balance: output.balance() }],
+      inputs: vec![output],
+      change: None,
+      scheduler_addendum: (),
+    }
+  }
+
+  fn shim_forward_plan(output: N::Output, to: <N::Curve as Ciphersuite>::G) -> Option<Plan<N>> {
+    Some(Plan {
+      key: output.key(),
+      payments: vec![Payment {
+        address: N::forward_address(to).unwrap(),
+        data: None,
+        balance: output.balance(),
+      }],
+      inputs: vec![output],
+      change: None,
+      scheduler_addendum: (),
+    })
+  }
+
+  fn forward_plan<D: Db>(
+    &mut self,
+    _: &mut D::Transaction<'_>,
+    output: N::Output,
+    to: <N::Curve as Ciphersuite>::G,
+  ) -> Option<Plan<N>> {
+    assert_eq!(self.key, output.key());
+    // Call shim as shim returns the actual
+    Self::shim_forward_plan(output, to)
   }
 }

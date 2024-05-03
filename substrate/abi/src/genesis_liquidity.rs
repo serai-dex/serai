@@ -1,11 +1,13 @@
+pub use serai_genesis_liquidity_primitives as primitives;
+
 use serai_primitives::*;
+use primitives::*;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Call {
-  // This call is just a place holder so that abi works as expected.
-  empty_call,
+  remove_coin_liquidity { balance: Balance },
+  set_initial_price { prices: Prices, signature: Signature },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]

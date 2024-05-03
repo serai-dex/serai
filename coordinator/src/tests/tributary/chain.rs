@@ -26,7 +26,7 @@ use serai_db::MemDb;
 use tributary::Tributary;
 
 use crate::{
-  P2pMessageKind, P2p,
+  GossipMessageKind, P2pMessageKind, P2p,
   tributary::{Transaction, TributarySpec},
   tests::LocalP2p,
 };
@@ -98,7 +98,7 @@ pub async fn run_tributaries(
     for (p2p, tributary) in &mut tributaries {
       while let Poll::Ready(msg) = poll!(p2p.receive()) {
         match msg.kind {
-          P2pMessageKind::Tributary(genesis) => {
+          P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)) => {
             assert_eq!(genesis, tributary.genesis());
             if tributary.handle_message(&msg.msg).await {
               p2p.broadcast(msg.kind, msg.msg).await;
@@ -173,7 +173,7 @@ async fn tributary_test() {
     for (p2p, tributary) in &mut tributaries {
       while let Poll::Ready(msg) = poll!(p2p.receive()) {
         match msg.kind {
-          P2pMessageKind::Tributary(genesis) => {
+          P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)) => {
             assert_eq!(genesis, tributary.genesis());
             tributary.handle_message(&msg.msg).await;
           }
@@ -199,7 +199,7 @@ async fn tributary_test() {
   for (p2p, tributary) in &mut tributaries {
     while let Poll::Ready(msg) = poll!(p2p.receive()) {
       match msg.kind {
-        P2pMessageKind::Tributary(genesis) => {
+        P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)) => {
           assert_eq!(genesis, tributary.genesis());
           tributary.handle_message(&msg.msg).await;
         }

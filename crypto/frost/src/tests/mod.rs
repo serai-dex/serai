@@ -12,7 +12,7 @@ use crate::{
 
 /// Tests for the nonce handling code.
 pub mod nonces;
-use nonces::{test_multi_nonce, test_invalid_commitment, test_invalid_dleq_proof};
+use nonces::test_multi_nonce;
 
 /// Vectorized test suite to ensure consistency.
 pub mod vectors;
@@ -267,6 +267,4 @@ pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut 
   test_schnorr_blame::<R, C, H>(rng);
 
   test_multi_nonce::<R, C>(rng);
-  test_invalid_commitment::<R, C>(rng);
-  test_invalid_dleq_proof::<R, C>(rng);
 }

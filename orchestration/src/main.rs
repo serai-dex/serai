@@ -266,7 +266,7 @@ fn dockerfiles(network: Network) {
   let orchestration_path = orchestration_path(network);
 
   bitcoin(&orchestration_path, network);
-  ethereum(&orchestration_path);
+  ethereum(&orchestration_path, network);
   monero(&orchestration_path, network);
   if network == Network::Dev {
     monero_wallet_rpc(&orchestration_path);

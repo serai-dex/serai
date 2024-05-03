@@ -91,7 +91,7 @@ impl Bulletproofs {
       Bulletproofs::Plus(
         AggregateRangeStatement::new(outputs.iter().map(|com| DfgPoint(com.calculate())).collect())
           .unwrap()
-          .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs).unwrap()))
+          .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs.to_vec()).unwrap()))
           .unwrap(),
       )
     })

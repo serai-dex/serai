@@ -33,4 +33,4 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run message-queue Docker tests
-        run: cd tests/message-queue && GITHUB_CI=true RUST_BACKTRACE=1 cargo test
+        run: cd tests/message-queue && GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features

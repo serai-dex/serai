@@ -28,6 +28,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std", "get
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 # Encoders
+const-hex = { version = "1", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
@@ -40,10 +41,15 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", d
 frost = { package = "modular-frost", path = "../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../crypto/schnorrkel", default-features = false }
 
+# Bitcoin/Ethereum
+k256 = { version = "^0.13.1", default-features = false, features = ["std"], optional = true }
+
 # Bitcoin
 secp256k1 = { version = "0.28", default-features = false, features = ["std", "global-context", "rand-std"], optional = true }
-k256 = { version = "^0.13.1", default-features = false, features = ["std"], optional = true }
 bitcoin-serai = { path = "../coins/bitcoin", default-features = false, features = ["std"], optional = true }
+
+# Ethereum
+ethereum-serai = { path = "../coins/ethereum", default-features = false, optional = true }
 
 # Monero
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
@@ -55,12 +61,12 @@ env_logger = { version = "0.10", default-features = false, features = ["humantim
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
 zalloc = { path = "../common/zalloc" }
-serai-db = { path = "../common/db", optional = true }
+serai-db = { path = "../common/db" }
 serai-env = { path = "../common/env", optional = true }
 # TODO: Replace with direct usage of primitives
 serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
 
-messages = { package = "serai-processor-messages", path = "./messages", optional = true }
+messages = { package = "serai-processor-messages", path = "./messages" }
 
 message-queue = { package = "serai-message-queue", path = "../message-queue", optional = true }
 
@@ -69,6 +75,8 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["test
 
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 
+ethereum-serai = { path = "../coins/ethereum", default-features = false, features = ["tests"] }
+
 dockertest = "0.4"
 serai-docker-tests = { path = "../tests/docker" }
 
@@ -76,9 +84,11 @@ serai-docker-tests = { path = "../tests/docker" }
 secp256k1 = ["k256", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
 
+ethereum = ["secp256k1", "ethereum-serai"]
+
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]
 
-binaries = ["env_logger", "serai-env", "messages", "message-queue"]
+binaries = ["env_logger", "serai-env", "message-queue"]
 parity-db = ["serai-db/parity-db"]
 rocksdb = ["serai-db/rocksdb"]

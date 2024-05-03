@@ -161,7 +161,7 @@ pub fn new_partial(
   ))
 }
 
-pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
+pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
   let (
     sc_service::PartialComponents {
       client,
@@ -175,6 +175,11 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
     },
     keystore_container,
   ) = new_partial(&config)?;
+
+  config.network.node_name = "serai".to_string();
+  config.network.client_version = "0.1.0".to_string();
+  config.network.listen_addresses =
+    vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
 
   let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
   let grandpa_protocol_name =
@@ -202,6 +207,59 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
       block_announce_validator_builder: None,
       warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
     })?;
+
+  task_manager.spawn_handle().spawn("bootnodes", "bootnodes", {
+    let network = network.clone();
+    let id = config.chain_spec.id().to_string();
+
+    async move {
+      // Transforms the above Multiaddrs into MultiaddrWithPeerIds
+      // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
+      // time and this fine for a testnet
+      let bootnodes = || async {
+        use libp2p::{Transport as TransportTrait, tcp::tokio::Transport, noise::Config};
+
+        let bootnode_multiaddrs = crate::chain_spec::bootnode_multiaddrs(&id);
+
+        let mut tasks = vec![];
+        for multiaddr in bootnode_multiaddrs {
+          tasks.push(tokio::time::timeout(
+            core::time::Duration::from_secs(10),
+            tokio::task::spawn(async move {
+              let Ok(noise) = Config::new(&sc_network::Keypair::generate_ed25519()) else { None? };
+              let mut transport = Transport::default()
+                .upgrade(libp2p::core::upgrade::Version::V1)
+                .authenticate(noise)
+                .multiplex(libp2p::yamux::Config::default());
+              let Ok(transport) = transport.dial(multiaddr.clone()) else { None? };
+              let Ok((peer_id, _)) = transport.await else { None? };
+              Some(sc_network::config::MultiaddrWithPeerId { multiaddr, peer_id })
+            }),
+          ));
+        }
+
+        let mut res = vec![];
+        for task in tasks {
+          if let Ok(Ok(Some(bootnode))) = task.await {
+            res.push(bootnode);
+          }
+        }
+        res
+      };
+
+      use sc_network::{NetworkStatusProvider, NetworkPeers};
+      loop {
+        if let Ok(status) = network.status().await {
+          if status.num_connected_peers < 3 {
+            for bootnode in bootnodes().await {
+              let _ = network.add_reserved_peer(bootnode);
+            }
+          }
+        }
+        tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+      }
+    }
+  });
 
   if config.offchain_worker.enabled {
     task_manager.spawn_handle().spawn(
@@ -258,11 +316,13 @@ pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
   };
 
   let rpc_builder = {
+    let id = config.chain_spec.id().to_string();
     let client = client.clone();
     let pool = transaction_pool.clone();
 
     Box::new(move |deny_unsafe, _| {
       crate::rpc::create_full(crate::rpc::FullDeps {
+        id: id.clone(),
         client: client.clone(),
         pool: pool.clone(),
         deny_unsafe,

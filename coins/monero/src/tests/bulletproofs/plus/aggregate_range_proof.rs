@@ -21,7 +21,7 @@ fn test_aggregate_range_proof() {
     }
     let commitment_points = commitments.iter().map(|com| EdwardsPoint(com.calculate())).collect();
     let statement = AggregateRangeStatement::new(commitment_points).unwrap();
-    let witness = AggregateRangeWitness::new(&commitments).unwrap();
+    let witness = AggregateRangeWitness::new(commitments).unwrap();
 
     let proof = statement.clone().prove(&mut OsRng, &witness).unwrap();
     statement.verify(&mut OsRng, &mut verifier, (), proof);

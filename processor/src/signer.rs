@@ -2,7 +2,6 @@ use core::{marker::PhantomData, fmt};
 use std::collections::HashMap;
 
 use rand_core::OsRng;
-use ciphersuite::group::GroupEncoding;
 use frost::{
   ThresholdKeys, FrostError,
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
@@ -17,7 +16,7 @@ pub use serai_db::*;
 
 use crate::{
   Get, DbTxn, Db,
-  networks::{Transaction, Eventuality, Network},
+  networks::{Eventuality, Network},
 };
 
 create_db!(
@@ -25,7 +24,7 @@ create_db!(
     CompletionsDb: (id: [u8; 32]) -> Vec<u8>,
     EventualityDb: (id: [u8; 32]) -> Vec<u8>,
     AttemptDb: (id: &SignId) -> (),
-    TransactionDb: (id: &[u8]) -> Vec<u8>,
+    CompletionDb: (claim: &[u8]) -> Vec<u8>,
     ActiveSignsDb: () -> Vec<[u8; 32]>,
     CompletedOnChainDb: (id: &[u8; 32]) -> (),
   }
@@ -59,12 +58,20 @@ impl CompletionsDb {
   fn completions<N: Network>(
     getter: &impl Get,
     id: [u8; 32],
-  ) -> Vec<<N::Transaction as Transaction<N>>::Id> {
-    let completions = Self::get(getter, id).unwrap_or_default();
+  ) -> Vec<<N::Eventuality as Eventuality>::Claim> {
+    let Some(completions) = Self::get(getter, id) else { return vec![] };
+
+    // If this was set yet is empty, it's because it's the encoding of a claim with a length of 0
+    if completions.is_empty() {
+      let default = <N::Eventuality as Eventuality>::Claim::default();
+      assert_eq!(default.as_ref().len(), 0);
+      return vec![default];
+    }
+
     let mut completions_ref = completions.as_slice();
     let mut res = vec![];
     while !completions_ref.is_empty() {
-      let mut id = <N::Transaction as Transaction<N>>::Id::default();
+      let mut id = <N::Eventuality as Eventuality>::Claim::default();
       let id_len = id.as_ref().len();
       id.as_mut().copy_from_slice(&completions_ref[.. id_len]);
       completions_ref = &completions_ref[id_len ..];
@@ -73,25 +80,37 @@ impl CompletionsDb {
     res
   }
 
-  fn complete<N: Network>(txn: &mut impl DbTxn, id: [u8; 32], tx: &N::Transaction) {
-    let tx_id = tx.id();
-    // Transactions can be completed by multiple signatures
+  fn complete<N: Network>(
+    txn: &mut impl DbTxn,
+    id: [u8; 32],
+    completion: &<N::Eventuality as Eventuality>::Completion,
+  ) {
+    // Completions can be completed by multiple signatures
     // Save every solution in order to be robust
-    TransactionDb::save_transaction::<N>(txn, tx);
-    let mut existing = Self::get(txn, id).unwrap_or_default();
-    // Don't add this TX if it's already present
-    let tx_len = tx_id.as_ref().len();
-    assert_eq!(existing.len() % tx_len, 0);
+    CompletionDb::save_completion::<N>(txn, completion);
 
-    let mut i = 0;
-    while i < existing.len() {
-      if &existing[i .. (i + tx_len)] == tx_id.as_ref() {
-        return;
-      }
-      i += tx_len;
+    let claim = N::Eventuality::claim(completion);
+    let claim: &[u8] = claim.as_ref();
+
+    // If claim has a 0-byte encoding, the set key, even if empty, is the claim
+    if claim.is_empty() {
+      Self::set(txn, id, &vec![]);
+      return;
     }
 
-    existing.extend(tx_id.as_ref());
+    let mut existing = Self::get(txn, id).unwrap_or_default();
+    assert_eq!(existing.len() % claim.len(), 0);
+
+    // Don't add this completion if it's already present
+    let mut i = 0;
+    while i < existing.len() {
+      if &existing[i .. (i + claim.len())] == claim {
+        return;
+      }
+      i += claim.len();
+    }
+
+    existing.extend(claim);
     Self::set(txn, id, &existing);
   }
 }
@@ -110,25 +129,33 @@ impl EventualityDb {
   }
 }
 
-impl TransactionDb {
-  fn save_transaction<N: Network>(txn: &mut impl DbTxn, tx: &N::Transaction) {
-    Self::set(txn, tx.id().as_ref(), &tx.serialize());
+impl CompletionDb {
+  fn save_completion<N: Network>(
+    txn: &mut impl DbTxn,
+    completion: &<N::Eventuality as Eventuality>::Completion,
+  ) {
+    let claim = N::Eventuality::claim(completion);
+    let claim: &[u8] = claim.as_ref();
+    Self::set(txn, claim, &N::Eventuality::serialize_completion(completion));
   }
 
-  fn transaction<N: Network>(
+  fn completion<N: Network>(
     getter: &impl Get,
-    id: &<N::Transaction as Transaction<N>>::Id,
-  ) -> Option<N::Transaction> {
-    Self::get(getter, id.as_ref()).map(|tx| N::Transaction::read(&mut tx.as_slice()).unwrap())
+    claim: &<N::Eventuality as Eventuality>::Claim,
+  ) -> Option<<N::Eventuality as Eventuality>::Completion> {
+    Self::get(getter, claim.as_ref())
+      .map(|completion| N::Eventuality::read_completion::<&[u8]>(&mut completion.as_ref()).unwrap())
   }
 }
 
 type PreprocessFor<N> = <<N as Network>::TransactionMachine as PreprocessMachine>::Preprocess;
 type SignMachineFor<N> = <<N as Network>::TransactionMachine as PreprocessMachine>::SignMachine;
-type SignatureShareFor<N> =
-  <SignMachineFor<N> as SignMachine<<N as Network>::Transaction>>::SignatureShare;
-type SignatureMachineFor<N> =
-  <SignMachineFor<N> as SignMachine<<N as Network>::Transaction>>::SignatureMachine;
+type SignatureShareFor<N> = <SignMachineFor<N> as SignMachine<
+  <<N as Network>::Eventuality as Eventuality>::Completion,
+>>::SignatureShare;
+type SignatureMachineFor<N> = <SignMachineFor<N> as SignMachine<
+  <<N as Network>::Eventuality as Eventuality>::Completion,
+>>::SignatureMachine;
 
 pub struct Signer<N: Network, D: Db> {
   db: PhantomData<D>,
@@ -164,12 +191,11 @@ impl<N: Network, D: Db> Signer<N, D> {
     log::info!("rebroadcasting transactions for plans whose completions yet to be confirmed...");
     loop {
       for active in ActiveSignsDb::get(&db).unwrap_or_default() {
-        for completion in CompletionsDb::completions::<N>(&db, active) {
-          log::info!("rebroadcasting {}", hex::encode(&completion));
+        for claim in CompletionsDb::completions::<N>(&db, active) {
+          log::info!("rebroadcasting completion with claim {}", hex::encode(claim.as_ref()));
           // TODO: Don't drop the error entirely. Check for invariants
-          let _ = network
-            .publish_transaction(&TransactionDb::transaction::<N>(&db, &completion).unwrap())
-            .await;
+          let _ =
+            network.publish_completion(&CompletionDb::completion::<N>(&db, &claim).unwrap()).await;
         }
       }
       // Only run every five minutes so we aren't frequently loading tens to hundreds of KB from
@@ -242,7 +268,7 @@ impl<N: Network, D: Db> Signer<N, D> {
   fn complete(
     &mut self,
     id: [u8; 32],
-    tx_id: &<N::Transaction as Transaction<N>>::Id,
+    claim: &<N::Eventuality as Eventuality>::Claim,
   ) -> ProcessorMessage {
     // Assert we're actively signing for this TX
     assert!(self.signable.remove(&id).is_some(), "completed a TX we weren't signing for");
@@ -256,7 +282,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     self.signing.remove(&id);
 
     // Emit the event for it
-    ProcessorMessage::Completed { session: self.session, id, tx: tx_id.as_ref().to_vec() }
+    ProcessorMessage::Completed { session: self.session, id, tx: claim.as_ref().to_vec() }
   }
 
   #[must_use]
@@ -264,16 +290,16 @@ impl<N: Network, D: Db> Signer<N, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx: &N::Transaction,
+    completion: &<N::Eventuality as Eventuality>::Completion,
   ) -> Option<ProcessorMessage> {
     let first_completion = !Self::already_completed(txn, id);
 
     // Save this completion to the DB
     CompletedOnChainDb::complete_on_chain(txn, &id);
-    CompletionsDb::complete::<N>(txn, id, tx);
+    CompletionsDb::complete::<N>(txn, id, completion);
 
     if first_completion {
-      Some(self.complete(id, &tx.id()))
+      Some(self.complete(id, &N::Eventuality::claim(completion)))
     } else {
       None
     }
@@ -286,49 +312,50 @@ impl<N: Network, D: Db> Signer<N, D> {
     &mut self,
     txn: &mut D::Transaction<'_>,
     id: [u8; 32],
-    tx_id: &<N::Transaction as Transaction<N>>::Id,
+    claim: &<N::Eventuality as Eventuality>::Claim,
   ) -> Option<ProcessorMessage> {
     if let Some(eventuality) = EventualityDb::eventuality::<N>(txn, id) {
-      // Transaction hasn't hit our mempool/was dropped for a different signature
-      // The latter can happen given certain latency conditions/a single malicious signer
-      // In the case of a single malicious signer, they can drag multiple honest validators down
-      // with them, so we unfortunately can't slash on this case
-      let Ok(tx) = self.network.get_transaction(tx_id).await else {
-        warn!(
-          "a validator claimed {} completed {} yet we didn't have that TX in our mempool {}",
-          hex::encode(tx_id),
-          hex::encode(id),
-          "(or had another connectivity issue)",
-        );
-        return None;
-      };
+      match self.network.confirm_completion(&eventuality, claim).await {
+        Ok(Some(completion)) => {
+          info!(
+            "signer eventuality for {} resolved in {}",
+            hex::encode(id),
+            hex::encode(claim.as_ref())
+          );
 
-      if self.network.confirm_completion(&eventuality, &tx) {
-        info!("signer eventuality for {} resolved in TX {}", hex::encode(id), hex::encode(tx_id));
+          let first_completion = !Self::already_completed(txn, id);
 
-        let first_completion = !Self::already_completed(txn, id);
+          // Save this completion to the DB
+          CompletionsDb::complete::<N>(txn, id, &completion);
 
-        // Save this completion to the DB
-        CompletionsDb::complete::<N>(txn, id, &tx);
-
-        if first_completion {
-          return Some(self.complete(id, &tx.id()));
+          if first_completion {
+            return Some(self.complete(id, claim));
+          }
         }
-      } else {
-        warn!(
-          "a validator claimed {} completed {} when it did not",
-          hex::encode(tx_id),
-          hex::encode(id)
-        );
+        Ok(None) => {
+          warn!(
+            "a validator claimed {} completed {} when it did not",
+            hex::encode(claim.as_ref()),
+            hex::encode(id),
+          );
+        }
+        Err(_) => {
+          // Transaction hasn't hit our mempool/was dropped for a different signature
+          // The latter can happen given certain latency conditions/a single malicious signer
+          // In the case of a single malicious signer, they can drag multiple honest validators down
+          // with them, so we unfortunately can't slash on this case
+          warn!(
+            "a validator claimed {} completed {} yet we couldn't check that claim",
+            hex::encode(claim.as_ref()),
+            hex::encode(id),
+          );
+        }
       }
     } else {
-      // If we don't have this in RAM, it should be because we already finished signing it
-      assert!(!CompletionsDb::completions::<N>(txn, id).is_empty());
-      info!(
-        "signer {} informed of the eventuality completion for plan {}, {}",
-        hex::encode(self.keys[0].group_key().to_bytes()),
+      warn!(
+        "informed of completion {} for eventuality {}, when we didn't have that eventuality",
+        hex::encode(claim.as_ref()),
         hex::encode(id),
-        "which we already marked as completed",
       );
     }
     None
@@ -405,7 +432,7 @@ impl<N: Network, D: Db> Signer<N, D> {
     let mut preprocesses = vec![];
     let mut serialized_preprocesses = vec![];
     for keys in &self.keys {
-      let machine = match self.network.attempt_send(keys.clone(), tx.clone()).await {
+      let machine = match self.network.attempt_sign(keys.clone(), tx.clone()).await {
         Err(e) => {
           error!("failed to attempt {}, #{}: {:?}", hex::encode(id.id), id.attempt, e);
           return None;
@@ -572,7 +599,7 @@ impl<N: Network, D: Db> Signer<N, D> {
           assert!(shares.insert(self.keys[i].params().i(), our_share).is_none());
         }
 
-        let tx = match machine.complete(shares) {
+        let completion = match machine.complete(shares) {
           Ok(res) => res,
           Err(e) => match e {
             FrostError::InternalError(_) |
@@ -588,40 +615,39 @@ impl<N: Network, D: Db> Signer<N, D> {
           },
         };
 
-        // Save the transaction in case it's needed for recovery
-        CompletionsDb::complete::<N>(txn, id.id, &tx);
+        // Save the completion in case it's needed for recovery
+        CompletionsDb::complete::<N>(txn, id.id, &completion);
 
         // Publish it
-        let tx_id = tx.id();
-        if let Err(e) = self.network.publish_transaction(&tx).await {
-          error!("couldn't publish {:?}: {:?}", tx, e);
+        if let Err(e) = self.network.publish_completion(&completion).await {
+          error!("couldn't publish completion for plan {}: {:?}", hex::encode(id.id), e);
         } else {
-          info!("published {} for plan {}", hex::encode(&tx_id), hex::encode(id.id));
+          info!("published completion for plan {}", hex::encode(id.id));
         }
 
         // Stop trying to sign for this TX
-        Some(self.complete(id.id, &tx_id))
+        Some(self.complete(id.id, &N::Eventuality::claim(&completion)))
       }
 
       CoordinatorMessage::Reattempt { id } => self.attempt(txn, id.id, id.attempt).await,
 
-      CoordinatorMessage::Completed { session: _, id, tx: mut tx_vec } => {
-        let mut tx = <N::Transaction as Transaction<N>>::Id::default();
-        if tx.as_ref().len() != tx_vec.len() {
-          let true_len = tx_vec.len();
-          tx_vec.truncate(2 * tx.as_ref().len());
+      CoordinatorMessage::Completed { session: _, id, tx: mut claim_vec } => {
+        let mut claim = <N::Eventuality as Eventuality>::Claim::default();
+        if claim.as_ref().len() != claim_vec.len() {
+          let true_len = claim_vec.len();
+          claim_vec.truncate(2 * claim.as_ref().len());
           warn!(
             "a validator claimed {}... (actual length {}) completed {} yet {}",
-            hex::encode(&tx_vec),
+            hex::encode(&claim_vec),
             true_len,
             hex::encode(id),
-            "that's not a valid TX ID",
+            "that's not a valid Claim",
           );
           return None;
         }
-        tx.as_mut().copy_from_slice(&tx_vec);
+        claim.as_mut().copy_from_slice(&claim_vec);
 
-        self.claimed_eventuality_completion(txn, id, &tx).await
+        self.claimed_eventuality_completion(txn, id, &claim).await
       }
     }
   }
