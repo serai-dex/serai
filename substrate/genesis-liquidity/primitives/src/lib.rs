@@ -19,7 +19,11 @@ use serai_primitives::*;
 use validator_sets_primitives::ValidatorSet;
 
 // amount of blocks in 30 days for 6s per block.
-pub const BLOCKS_PER_MONTH: u32 = 10 * 60 * 24 * 30;
+#[cfg(not(feature = "fast-epoch"))]
+pub const GENESIS_PERIOD_BLOCKS: u32 = 10 * 60 * 24 * 30;
+
+#[cfg(feature = "fast-epoch")]
+pub const GENESIS_PERIOD_BLOCKS: u32 = 25;
 
 /// 180 days of blocks
 pub const GENESIS_SRI_TRICKLE_FEED: u64 = 10 * 60 * 24 * 180;

@@ -3,7 +3,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 /// Amount of blocks in 30 days for 6s per block.
-pub const BLOCKS_PER_MONTH: u32 = 10 * 60 * 24 * 30;
+const BLOCKS_PER_MONTH: u32 = 10 * 60 * 24 * 30;
 
 /// INITIAL_REWARD = 100,000 SRI / BLOCKS_PER_DAY for 60 days
 pub const INITIAL_REWARD_PER_BLOCK: u64 = 100_000 * 10u64.pow(8) / ((BLOCKS_PER_MONTH as u64) / 30);

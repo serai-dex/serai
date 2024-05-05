@@ -37,7 +37,8 @@ validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../..
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-serai-validator-sets-primitives = { path = "../../validator-sets/primitives", default-features = false }
+validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
+genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../../genesis-liquidity/primitives", default-features = false }
 emissions-primitives = { package = "serai-emissions-primitives", path = "../primitives", default-features = false }
 
 [features]
@@ -60,6 +61,8 @@ std = [
 
   "serai-primitives/std",
   "emissions-primitives/std",
+  "genesis-liquidity-primitives/std",
 ]
+fast-epoch = ["genesis-liquidity-primitives/fast-epoch"]
 
 default = ["std"]

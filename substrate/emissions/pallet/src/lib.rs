@@ -18,7 +18,8 @@ pub mod pallet {
   use pallet_babe::{Pallet as Babe, Config as BabeConfig};
 
   use serai_primitives::{NetworkId, NETWORKS, *};
-  use serai_validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
+  use validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
+  use genesis_liquidity_primitives::GENESIS_PERIOD_BLOCKS;
   use emissions_primitives::*;
 
   #[pallet::config]
@@ -116,7 +117,7 @@ pub mod pallet {
 
       // emissions start only after genesis period and happens once per epoch
       // so we don't do anything before that time.
-      if !(n >= BLOCKS_PER_MONTH.into() && T::ShouldEndSession::should_end_session(n)) {
+      if !(n >= GENESIS_PERIOD_BLOCKS.into() && T::ShouldEndSession::should_end_session(n)) {
         return;
       }
 
@@ -262,7 +263,7 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
-      n >= BLOCKS_PER_MONTH.into() && n < (3 * BLOCKS_PER_MONTH).into()
+      n >= GENESIS_PERIOD_BLOCKS.into() && n < (3 * GENESIS_PERIOD_BLOCKS).into()
     }
 
     /// Returns true if any of the external networks haven't reached economic security yet.

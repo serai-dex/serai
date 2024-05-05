@@ -128,7 +128,7 @@ std = [
   "pallet-transaction-payment-rpc-runtime-api/std",
 ]
 
-fast-epoch = ["genesis-liquidity-pallet/fast-epoch"]
+fast-epoch = ["genesis-liquidity-pallet/fast-epoch", "emissions-pallet/fast-epoch"]
 
 runtime-benchmarks = [
   "sp-runtime/runtime-benchmarks",

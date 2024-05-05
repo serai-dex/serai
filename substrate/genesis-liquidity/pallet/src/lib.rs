@@ -94,14 +94,8 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
-      #[cfg(feature = "fast-epoch")]
-      let final_block = 25u32;
-
-      #[cfg(not(feature = "fast-epoch"))]
-      let final_block = BLOCKS_PER_MONTH;
-
       // Distribute the genesis sri to pools after a month
-      if n == final_block.into() {
+      if n == GENESIS_PERIOD_BLOCKS.into() {
         // mint the SRI
         Coins::<T>::mint(
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -261,7 +255,7 @@ pub mod pallet {
     }
 
     fn genesis_ended() -> bool {
-      <frame_system::Pallet<T>>::block_number() >= BLOCKS_PER_MONTH.into()
+      <frame_system::Pallet<T>>::block_number() >= GENESIS_PERIOD_BLOCKS.into()
     }
   }
 
