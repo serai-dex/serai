@@ -124,7 +124,7 @@ impl SignableTransaction for RouterCommand {
 }
 
 #[async_trait]
-impl<D: fmt::Debug + Db> TransactionTrait<Ethereum<D>> for Transaction {
+impl<D: Db> TransactionTrait<Ethereum<D>> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
     self.hash.0
@@ -157,7 +157,7 @@ impl Epoch {
 }
 
 #[async_trait]
-impl<D: fmt::Debug + Db> Block<Ethereum<D>> for Epoch {
+impl<D: Db> Block<Ethereum<D>> for Epoch {
   type Id = [u8; 32];
   fn id(&self) -> [u8; 32] {
     self.end_hash
@@ -170,7 +170,7 @@ impl<D: fmt::Debug + Db> Block<Ethereum<D>> for Epoch {
   }
 }
 
-impl<D: fmt::Debug + Db> Output<Ethereum<D>> for EthereumInInstruction {
+impl<D: Db> Output<Ethereum<D>> for EthereumInInstruction {
   type Id = [u8; 32];
 
   fn kind(&self) -> OutputType {
@@ -282,8 +282,8 @@ impl EventualityTrait for Eventuality {
   }
 }
 
-#[derive(Clone, Debug)]
-pub struct Ethereum<D: fmt::Debug + Db> {
+#[derive(Clone)]
+pub struct Ethereum<D: Db> {
   // This DB is solely used to access the first key generated, as needed to determine the Router's
   // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
   // first key (regardless of local state), and this is safe.
@@ -292,19 +292,25 @@ pub struct Ethereum<D: fmt::Debug + Db> {
   deployer: Deployer,
   router: Arc<RwLock<Option<Router>>>,
 }
-impl<D: fmt::Debug + Db> PartialEq for Ethereum<D> {
+impl<D: Db> PartialEq for Ethereum<D> {
   fn eq(&self, _other: &Ethereum<D>) -> bool {
     true
   }
 }
-impl<D: fmt::Debug + Db> Ethereum<D> {
+impl<D: Db> fmt::Debug for Ethereum<D> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt
+      .debug_struct("Ethereum")
+      .field("deployer", &self.deployer)
+      .field("router", &self.router)
+      .finish_non_exhaustive()
+  }
+}
+impl<D: Db> Ethereum<D> {
   pub async fn new(db: D, url: String) -> Self {
     let provider = Arc::new(RootProvider::new(
       ClientBuilder::default().transport(SimpleRequest::new(url), true),
     ));
-
-    #[cfg(test)] // TODO: Move to test code
-    provider.raw_request::<_, ()>("evm_setAutomine".into(), false).await.unwrap();
 
     let mut deployer = Deployer::new(provider.clone()).await;
     while !matches!(deployer, Ok(Some(_))) {
@@ -362,7 +368,7 @@ impl<D: fmt::Debug + Db> Ethereum<D> {
 }
 
 #[async_trait]
-impl<D: fmt::Debug + Db> Network for Ethereum<D> {
+impl<D: Db> Network for Ethereum<D> {
   type Curve = Secp256k1;
 
   type Transaction = Transaction;
@@ -479,7 +485,8 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
     // Grab the key at the end of the epoch
     let key_at_end_of_block = loop {
       match router.key_at_end_of_block(block.start + 31).await {
-        Ok(key) => break key,
+        Ok(Some(key)) => break key,
+        Ok(None) => return vec![],
         Err(e) => {
           log::error!("couldn't connect to router for the key at the end of the block: {e:?}");
           sleep(Duration::from_secs(5)).await;
@@ -491,17 +498,7 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
     let mut all_events = vec![];
     let mut top_level_txids = HashSet::new();
     for erc20_addr in [DAI] {
-      let erc20 = loop {
-        let Ok(Some(erc20)) = Erc20::new(self.provider.clone(), erc20_addr).await else {
-          log::error!(
-            "couldn't connect to Ethereum node for an ERC20: {}",
-            hex::encode(erc20_addr)
-          );
-          sleep(Duration::from_secs(5)).await;
-          continue;
-        };
-        break erc20;
-      };
+      let erc20 = Erc20::new(self.provider.clone(), erc20_addr);
 
       for block in block.start .. (block.start + 32) {
         let transfers = loop {
@@ -821,6 +818,7 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
             .provider
             .get_transaction_by_hash(log.clone().transaction_hash.unwrap())
             .await
+            .unwrap()
             .unwrap();
         };
 
@@ -830,20 +828,26 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
           .to_block(((block + 1) * 32) - 1)
           .topic1(nonce);
         let logs = self.provider.get_logs(&filter).await.unwrap();
-        self.provider.get_transaction_by_hash(logs[0].transaction_hash.unwrap()).await.unwrap()
+        self
+          .provider
+          .get_transaction_by_hash(logs[0].transaction_hash.unwrap())
+          .await
+          .unwrap()
+          .unwrap()
       }
     }
   }
 
   #[cfg(test)]
   async fn mine_block(&self) {
-    self.provider.raw_request::<_, ()>("anvil_mine".into(), [32]).await.unwrap();
+    self.provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
   }
 
   #[cfg(test)]
   async fn test_send(&self, send_to: Self::Address) -> Self::Block {
     use rand_core::OsRng;
     use ciphersuite::group::ff::Field;
+    use ethereum_serai::alloy_sol_types::SolCall;
 
     let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
     let address = ethereum_serai::crypto::address(&(Secp256k1::generator() * key));
@@ -858,15 +862,22 @@ impl<D: fmt::Debug + Db> Network for Ethereum<D> {
       .await
       .unwrap();
 
+    let value = U256::from_str_radix("1000000000000000000", 10).unwrap();
     let tx = ethereum_serai::alloy_consensus::TxLegacy {
       chain_id: None,
       nonce: 0,
-      gas_price: 100_000_000_000u128,
-      gas_limit: 21_0000u128,
+      gas_price: 1_000_000_000u128,
+      gas_limit: 200_000u128,
       to: ethereum_serai::alloy_core::primitives::TxKind::Call(send_to.0.into()),
       // 1 ETH
-      value: U256::from_str_radix("1000000000000000000", 10).unwrap(),
-      input: vec![].into(),
+      value,
+      input: ethereum_serai::router::abi::inInstructionCall::new((
+        [0; 20].into(),
+        value,
+        vec![].into(),
+      ))
+      .abi_encode()
+      .into(),
     };
 
     use ethereum_serai::alloy_consensus::SignableTransaction;

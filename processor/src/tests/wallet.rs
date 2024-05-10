@@ -1,4 +1,5 @@
-use std::{time::Duration, collections::HashMap};
+use core::{time::Duration, pin::Pin, future::Future};
+use std::collections::HashMap;
 
 use rand_core::OsRng;
 
@@ -24,12 +25,9 @@ use crate::{
 };
 
 // Tests the Scanner, Scheduler, and Signer together
-pub async fn test_wallet<N: UtxoNetwork>(network: N) {
-  // Mine blocks so there's a confirmed block
-  for _ in 0 .. N::CONFIRMATIONS {
-    network.mine_block().await;
-  }
-
+pub async fn test_wallet<N: UtxoNetwork>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) {
   let mut keys = key_gen(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
@@ -37,6 +35,13 @@ pub async fn test_wallet<N: UtxoNetwork>(network: N) {
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut db = MemDb::new();
+  let network = new_network(db.clone()).await;
+
+  // Mine blocks so there's a confirmed block
+  for _ in 0 .. N::CONFIRMATIONS {
+    network.mine_block().await;
+  }
+
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
   let (block_id, outputs) = {

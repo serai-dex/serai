@@ -1,3 +1,4 @@
+use core::{pin::Pin, future::Future};
 use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
@@ -153,8 +154,9 @@ pub async fn sign<N: UtxoNetwork>(
   typed_claim
 }
 
-pub async fn test_signer<N: UtxoNetwork>(network: N)
-where
+pub async fn test_signer<N: UtxoNetwork>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) where
   <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
 {
   let mut keys = key_gen(&mut OsRng);
@@ -162,6 +164,9 @@ where
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
+
+  let db = MemDb::new();
+  let network = new_network(db).await;
 
   let outputs = network
     .get_outputs(&network.test_send(N::external_address(&network, key).await).await, key)

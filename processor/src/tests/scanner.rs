@@ -1,21 +1,23 @@
-use core::time::Duration;
+use core::{pin::Pin, time::Duration, future::Future};
 use std::sync::Arc;
 
-use ciphersuite::Ciphersuite;
 use rand_core::OsRng;
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::{Participant, tests::key_gen};
 
 use tokio::{sync::Mutex, time::timeout};
 
 use serai_db::{DbTxn, Db, MemDb};
+use serai_client::validator_sets::primitives::Session;
 
 use crate::{
-  networks::{OutputType, Output, Block, UtxoNetwork},
+  networks::{OutputType, Output, Block, Network},
+  key_gen::NetworkKeyDb,
   multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
-pub async fn new_scanner<N: UtxoNetwork, D: Db>(
+pub async fn new_scanner<N: Network, D: Db>(
   network: &N,
   db: &D,
   group_key: <N::Curve as Ciphersuite>::G,
@@ -40,18 +42,27 @@ pub async fn new_scanner<N: UtxoNetwork, D: Db>(
   scanner
 }
 
-pub async fn test_scanner<N: UtxoNetwork>(network: N) {
+pub async fn test_scanner<N: Network>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) {
   let mut keys =
     frost::tests::key_gen::<_, N::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
   N::tweak_keys(&mut keys);
   let group_key = keys.group_key();
+
+  let mut db = MemDb::new();
+  {
+    let mut txn = db.txn();
+    NetworkKeyDb::set(&mut txn, Session(0), &group_key.to_bytes().as_ref().to_vec());
+    txn.commit();
+  }
+  let network = new_network(db.clone()).await;
 
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let db = MemDb::new();
   let first = Arc::new(Mutex::new(true));
   let scanner = new_scanner(&network, &db, group_key, &first).await;
 
@@ -101,13 +112,17 @@ pub async fn test_scanner<N: UtxoNetwork>(network: N) {
   .is_err());
 }
 
-pub async fn test_no_deadlock_in_multisig_completed<N: UtxoNetwork>(network: N) {
+pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) {
+  let mut db = MemDb::new();
+  let network = new_network(db.clone()).await;
+
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let mut db = MemDb::new();
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
 
