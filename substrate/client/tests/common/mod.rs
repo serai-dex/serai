@@ -2,6 +2,7 @@ pub mod tx;
 pub mod validator_sets;
 pub mod in_instructions;
 pub mod dex;
+pub mod genesis_liquidity;
 
 #[macro_export]
 macro_rules! serai_test {

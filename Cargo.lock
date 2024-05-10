@@ -7652,6 +7652,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
+ "serai-emissions-primitives",
  "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
@@ -7817,7 +7818,6 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
- "pallet-babe",
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
@@ -7828,7 +7828,6 @@ dependencies = [
  "serai-validator-sets-pallet",
  "serai-validator-sets-primitives",
  "sp-runtime",
- "sp-session",
  "sp-std",
 ]
 

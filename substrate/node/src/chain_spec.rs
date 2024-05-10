@@ -58,7 +58,15 @@ fn devnet_genesis(
     },
     genesis_liquidity: GenesisLiquidityConfig { participants: validators.clone() },
     emissions: EmissionsConfig {
-      networks: serai_runtime::primitives::NETWORKS.to_vec(),
+      networks: serai_runtime::primitives::NETWORKS
+        .iter()
+        .map(|network| match network {
+          NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
+          NetworkId::Bitcoin => (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
+          NetworkId::Ethereum => (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+          NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
+        })
+        .collect(),
       participants: validators.clone(),
     },
     signals: SignalsConfig::default(),
@@ -109,7 +117,15 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
     },
     genesis_liquidity: GenesisLiquidityConfig { participants: validators.clone() },
     emissions: EmissionsConfig {
-      networks: serai_runtime::primitives::NETWORKS.to_vec(),
+      networks: serai_runtime::primitives::NETWORKS
+        .iter()
+        .map(|network| match network {
+          NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
+          NetworkId::Bitcoin => (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
+          NetworkId::Ethereum => (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+          NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
+        })
+        .collect(),
       participants: validators.clone(),
     },
     signals: SignalsConfig::default(),

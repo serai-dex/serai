@@ -7,6 +7,8 @@ use crate::{SeraiError, hex_decode, TemporalSerai};
 
 pub type DexEvent = serai_abi::dex::Event;
 
+const PALLET: &str = "Dex";
+
 #[derive(Clone, Copy)]
 pub struct SeraiDex<'a>(pub(crate) &'a TemporalSerai<'a>);
 impl<'a> SeraiDex<'a> {
@@ -75,5 +77,9 @@ impl<'a> SeraiDex<'a> {
     let resut = decode_from_bytes::<Option<(u64, u64)>>(bytes.into())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(resut.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
+  }
+
+  pub async fn oracle_value(&self, coin: Coin) -> Result<Option<Amount>, SeraiError> {
+    self.0.storage(PALLET, "SecurityOracleValue", coin).await
   }
 }
