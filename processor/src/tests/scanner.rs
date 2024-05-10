@@ -126,25 +126,33 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
 
-  let mut txn = db.txn();
   // Register keys to cause Block events at CONFIRMATIONS (dropped since first keys),
   // CONFIRMATIONS + 1, and CONFIRMATIONS + 2
   for i in 0 .. 3 {
+    let key = {
+      let mut keys = key_gen(&mut OsRng);
+      for keys in keys.values_mut() {
+        N::tweak_keys(keys);
+      }
+      let key = keys[&Participant::new(1).unwrap()].group_key();
+      if i == 0 {
+        let mut txn = db.txn();
+        NetworkKeyDb::set(&mut txn, Session(0), &key.to_bytes().as_ref().to_vec());
+        txn.commit();
+      }
+      key
+    };
+
+    let mut txn = db.txn();
     scanner
       .register_key(
         &mut txn,
         network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS + i,
-        {
-          let mut keys = key_gen(&mut OsRng);
-          for keys in keys.values_mut() {
-            N::tweak_keys(keys);
-          }
-          keys[&Participant::new(1).unwrap()].group_key()
-        },
+        key,
       )
       .await;
+    txn.commit();
   }
-  txn.commit();
 
   for _ in 0 .. (3 * N::CONFIRMATIONS) {
     network.mine_block().await;
