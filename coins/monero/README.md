@@ -47,3 +47,15 @@ It also won't act as a wallet, just as a transaction library. wallet2 has
 several *non-transaction-level* policies, such as always attempting to use two
 inputs to create transactions. These are considered out of scope to
 monero-serai.
+
+### Feature flags
+monero-serai has certain functionality behind feature flags:
+
+- `std:` Enables usage of Rust's `std` and several other functionality. See `Cargo.toml` for the full list.
+- `http-rpc`: Enables an HTTP(S) transport type within the `rpc` module
+- `multisig`: Enables multi-signature features within the `wallet` module
+- `binaries`: TODO
+
+The features enabled by default are:
+- `std`
+- `http-rpc`
