@@ -11,16 +11,20 @@ use alloy_core::{
 };
 use alloy_consensus::{SignableTransaction, TxLegacy};
 
-use alloy_rpc_types::TransactionReceipt;
+use alloy_rpc_types::{BlockNumberOrTag, TransactionReceipt};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use crate::crypto::{address, deterministically_sign, PublicKey};
 
+#[cfg(test)]
 mod crypto;
 
+#[cfg(test)]
 mod abi;
+#[cfg(test)]
 mod schnorr;
+#[cfg(test)]
 mod router;
 
 pub fn key_gen() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {
@@ -53,14 +57,15 @@ pub async fn send(
   // let chain_id = provider.get_chain_id().await.unwrap();
   // tx.chain_id = Some(chain_id);
   tx.chain_id = None;
-  tx.nonce = provider.get_transaction_count(address, None).await.unwrap();
+  tx.nonce =
+    provider.get_transaction_count(address, BlockNumberOrTag::Latest.into()).await.unwrap();
   // 100 gwei
   tx.gas_price = 100_000_000_000u128;
 
   let sig = wallet.sign_prehash_recoverable(tx.signature_hash().as_ref()).unwrap();
   assert_eq!(address, tx.clone().into_signed(sig.into()).recover_signer().unwrap());
   assert!(
-    provider.get_balance(address, None).await.unwrap() >
+    provider.get_balance(address, BlockNumberOrTag::Latest.into()).await.unwrap() >
       ((U256::from(tx.gas_price) * U256::from(tx.gas_limit)) + tx.value)
   );
 

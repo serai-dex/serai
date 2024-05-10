@@ -1,8 +1,10 @@
 use thiserror::Error;
 
 pub use alloy_core;
-pub use alloy_consensus;
+pub use alloy_sol_types;
 
+pub use alloy_consensus;
+pub use alloy_network;
 pub use alloy_rpc_types;
 pub use alloy_simple_request_transport;
 pub use alloy_rpc_client;
@@ -18,8 +20,8 @@ pub mod router;
 
 pub mod machine;
 
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum Error {
