@@ -273,7 +273,21 @@ pub mod pallet {
         // TODO: `participants_for_latest_decided_set` returns keys with key shares but we
         // store keys with actual stake amounts. Pr https://github.com/serai-dex/serai/pull/518
         // supposed to change that and so this pr relies and that pr.
-        Participants::<T>::set(n, ValidatorSets::<T>::participants_for_latest_decided_set(n));
+        let participants = ValidatorSets::<T>::participants_for_latest_decided_set(n)
+          .unwrap()
+          .into_iter()
+          .map(|(key, shares)| {
+            let amount = match n {
+              NetworkId::Serai => shares * 50_000 * 10_u64.pow(8),
+              NetworkId::Bitcoin => shares * 1_000_000 * 10_u64.pow(8),
+              NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
+              NetworkId::Monero => shares * 100_000 * 10_u64.pow(8),
+            };
+            (key, amount)
+          })
+          .collect::<Vec<_>>();
+
+        Participants::<T>::set(n, Some(participants.try_into().unwrap()));
       }
     }
   }
