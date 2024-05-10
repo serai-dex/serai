@@ -378,31 +378,6 @@ pub mod pallet {
     },
   }
 
-  #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-  pub struct GenesisConfig<T: Config> {
-    /// Pools to create at launch.
-    pub pools: Vec<Coin>,
-    /// field just to have T.
-    pub _ignore: PhantomData<T>,
-  }
-
-  impl<T: Config> Default for GenesisConfig<T> {
-    fn default() -> Self {
-      GenesisConfig { pools: Default::default(), _ignore: Default::default() }
-    }
-  }
-
-  #[pallet::genesis_build]
-  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-    fn build(&self) {
-      // create the pools
-      for coin in &self.pools {
-        Pallet::<T>::create_pool(*coin).unwrap();
-      }
-    }
-  }
-
   #[pallet::error]
   pub enum Error<T> {
     /// Provided coins are equal.
@@ -515,19 +490,15 @@ pub mod pallet {
     ///
     /// Once a pool is created, someone may [`Pallet::add_liquidity`] to it.
     pub(crate) fn create_pool(coin: Coin) -> DispatchResult {
-      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
-
-      // prepare pool_id
-      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
+      // get pool_id
+      let pool_id = Self::get_pool_id(coin, Coin::Serai)?;
       ensure!(!Pools::<T>::contains_key(pool_id), Error::<T>::PoolExists);
 
       let pool_account = Self::get_pool_account(pool_id);
       frame_system::Pallet::<T>::inc_providers(&pool_account);
 
       Pools::<T>::insert(pool_id, ());
-
       Self::deposit_event(Event::PoolCreated { pool_id, pool_account });
-
       Ok(())
     }
 
@@ -566,11 +537,14 @@ pub mod pallet {
     ) -> DispatchResult {
       let sender = ensure_signed(origin)?;
       ensure!((sri_desired > 0) && (coin_desired > 0), Error::<T>::WrongDesiredAmount);
-      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
-      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
+      let pool_id = Self::get_pool_id(coin, Coin::Serai)?;
 
-      Pools::<T>::get(pool_id).as_ref().ok_or(Error::<T>::PoolNotFound)?;
+      // create the pool if it doesn't exist. We can just attempt to do that because our checks
+      // far enough to allow that.
+      if Pools::<T>::get(pool_id).is_none() {
+        Self::create_pool(coin)?;
+      }
       let pool_account = Self::get_pool_account(pool_id);
 
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);

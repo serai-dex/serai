@@ -7,8 +7,8 @@ use sc_service::ChainType;
 
 use serai_runtime::{
   primitives::*, WASM_BINARY, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig,
-  CoinsConfig, DexConfig, ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig,
-  EmissionsConfig, GenesisLiquidityConfig,
+  CoinsConfig, ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
+  GenesisLiquidityConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -41,11 +41,6 @@ fn devnet_genesis(
         .into_iter()
         .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
-      _ignore: Default::default(),
-    },
-
-    dex: DexConfig {
-      pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero],
       _ignore: Default::default(),
     },
 
@@ -97,11 +92,6 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
         .iter()
         .map(|a| (*a, Balance { coin: Coin::Serai, amount: Amount(5_000_000 * 10_u64.pow(8)) }))
         .collect(),
-      _ignore: Default::default(),
-    },
-
-    dex: DexConfig {
-      pools: vec![Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero],
       _ignore: Default::default(),
     },
 
