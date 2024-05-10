@@ -146,7 +146,7 @@ async fn get_distances(
     }
 
     let amount = serai.coins().coin_supply(coin).await.unwrap();
-    let required = required_stake(&serai, Balance { coin, amount }).await;
+    let required = required_stake(serai, Balance { coin, amount }).await;
     let mut current = *current_stake.get(&coin.network()).unwrap();
     if current > required {
       current = required;

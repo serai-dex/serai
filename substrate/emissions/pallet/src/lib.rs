@@ -279,8 +279,7 @@ pub mod pallet {
           .map(|(key, shares)| {
             let amount = match n {
               NetworkId::Serai => shares * 50_000 * 10_u64.pow(8),
-              NetworkId::Bitcoin => shares * 1_000_000 * 10_u64.pow(8),
-              NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
+              NetworkId::Bitcoin | NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
               NetworkId::Monero => shares * 100_000 * 10_u64.pow(8),
             };
             (key, amount)
