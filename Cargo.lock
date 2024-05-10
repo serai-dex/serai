@@ -2125,7 +2125,7 @@ dependencies = [
 [[package]]
 name = "dockertest"
 version = "0.4.0"
-source = "git+https://github.com/kayabaNerve/dockertest-rs?branch=arc#c0ea77997048f9edc9987984bbe20e43fac74e06"
+source = "git+https://github.com/orcalabs/dockertest-rs?rev=4dd6ae24738aa6dc5c89444cc822ea4745517493#4dd6ae24738aa6dc5c89444cc822ea4745517493"
 dependencies = [
  "anyhow",
  "async-trait",
