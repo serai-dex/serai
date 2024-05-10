@@ -69,6 +69,17 @@ impl<B: Block, S: Signature> PartialEq for Data<B, S> {
   }
 }
 
+impl<B: Block, S: Signature> core::hash::Hash for Data<B, S> {
+  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+    match self {
+      Data::Proposal(valid_round, block) => (0, valid_round, block.id().as_ref()).hash(state),
+      Data::Prevote(id) => (1, id.as_ref().map(AsRef::<[u8]>::as_ref)).hash(state),
+      Data::Precommit(None) => (2, 0).hash(state),
+      Data::Precommit(Some((id, _))) => (2, 1, id.as_ref()).hash(state),
+    }
+  }
+}
+
 impl<B: Block, S: Signature> Data<B, S> {
   pub fn step(&self) -> Step {
     match self {

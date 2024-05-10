@@ -9,6 +9,7 @@ pub(crate) struct MessageLog<N: Network> {
   weights: Arc<N::Weights>,
   round_participation: HashMap<RoundNumber, u64>,
   participation: HashMap<(RoundNumber, Step), u64>,
+  message_instances: HashMap<(RoundNumber, DataFor<N>), u64>,
   pub(crate) log: HashMap<RoundNumber, RoundLog<N>>,
 }
 
@@ -18,6 +19,7 @@ impl<N: Network> MessageLog<N> {
       weights,
       round_participation: HashMap::new(),
       participation: HashMap::new(),
+      message_instances: HashMap::new(),
       log: HashMap::new(),
     }
   }
@@ -48,24 +50,11 @@ impl<N: Network> MessageLog<N> {
       *self.round_participation.entry(msg.round).or_insert_with(|| 0) += sender_weight;
     }
     *self.participation.entry((msg.round, step)).or_insert_with(|| 0) += sender_weight;
+    *self.message_instances.entry((msg.round, msg.data.clone())).or_insert_with(|| 0) +=
+      sender_weight;
 
     msgs.insert(step, signed);
     Ok(true)
-  }
-
-  // For a given round, return the weight agreeing with the data
-  fn message_instances(&self, round: RoundNumber, data: &DataFor<N>) -> u64 {
-    let mut weight = 0;
-    let Some(log) = self.log.get(&round) else { return 0 };
-    for (participant, msgs) in log {
-      if let Some(msg) = msgs.get(&data.step()) {
-        let validator_weight = self.weights.weight(*participant);
-        if data == &msg.msg.data {
-          weight += validator_weight;
-        }
-      }
-    }
-    weight
   }
 
   // Get the participation in a given round
@@ -80,6 +69,6 @@ impl<N: Network> MessageLog<N> {
 
   // Check if consensus has been reached on a specific piece of data
   pub(crate) fn has_consensus(&self, round: RoundNumber, data: &DataFor<N>) -> bool {
-    self.message_instances(round, data) >= self.weights.threshold()
+    *self.message_instances.get(&(round, data.clone())).unwrap_or(&0) >= self.weights.threshold()
   }
 }
