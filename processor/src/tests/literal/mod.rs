@@ -431,5 +431,7 @@ mod ethereum {
     ethereum_key_gen,
     ethereum_scanner,
     ethereum_no_deadlock_in_multisig_completed,
+    ethereum_signer,
+    ethereum_wallet,
   );
 }

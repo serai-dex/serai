@@ -29,12 +29,16 @@ macro_rules! test_network {
     $key_gen: ident,
     $scanner: ident,
     $no_deadlock_in_multisig_completed: ident,
+    $signer: ident,
+    $wallet: ident,
   ) => {
     use core::{pin::Pin, future::Future};
     use $crate::tests::{
       init_logger,
       key_gen::test_key_gen,
       scanner::{test_scanner, test_no_deadlock_in_multisig_completed},
+      signer::test_signer,
+      wallet::test_wallet,
     };
 
     // This doesn't interact with a node and accordingly doesn't need to be spawn one
@@ -63,25 +67,6 @@ macro_rules! test_network {
         test_no_deadlock_in_multisig_completed(new_network).await;
       });
     }
-  };
-}
-
-#[macro_export]
-macro_rules! test_utxo_network {
-  (
-    $N: ty,
-    $docker: ident,
-    $network: ident,
-    $key_gen: ident,
-    $scanner: ident,
-    $no_deadlock_in_multisig_completed: ident,
-    $signer: ident,
-    $wallet: ident,
-    $addresses: ident,
-  ) => {
-    use $crate::tests::{signer::test_signer, wallet::test_wallet, addresses::test_addresses};
-
-    test_network!($N, $docker, $network, $key_gen, $scanner, $no_deadlock_in_multisig_completed,);
 
     #[test]
     fn $signer() {
@@ -102,6 +87,34 @@ macro_rules! test_utxo_network {
         test_wallet(new_network).await;
       });
     }
+  };
+}
+
+#[macro_export]
+macro_rules! test_utxo_network {
+  (
+    $N: ty,
+    $docker: ident,
+    $network: ident,
+    $key_gen: ident,
+    $scanner: ident,
+    $no_deadlock_in_multisig_completed: ident,
+    $signer: ident,
+    $wallet: ident,
+    $addresses: ident,
+  ) => {
+    use $crate::tests::addresses::test_addresses;
+
+    test_network!(
+      $N,
+      $docker,
+      $network,
+      $key_gen,
+      $scanner,
+      $no_deadlock_in_multisig_completed,
+      $signer,
+      $wallet,
+    );
 
     #[test]
     fn $addresses() {

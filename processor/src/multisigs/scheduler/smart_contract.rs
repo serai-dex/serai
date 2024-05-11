@@ -116,7 +116,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
       assert!(self.coins.contains(&utxo.balance().coin));
     }
 
-    let mut nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);
+    let mut nonce = LastNonce::get(txn).map_or(1, |nonce| nonce + 1);
     let mut plans = vec![];
     for chunk in payments.as_slice().chunks(N::MAX_OUTPUTS) {
       // Once we rotate, all further payments should be scheduled via the new multisig
@@ -179,7 +179,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
       .and_then(|key_bytes| <N::Curve as Ciphersuite>::read_G(&mut key_bytes.as_slice()).ok())
       .unwrap_or(self.key);
 
-    let nonce = LastNonce::get(txn).map_or(0, |nonce| nonce + 1);
+    let nonce = LastNonce::get(txn).map_or(1, |nonce| nonce + 1);
     LastNonce::set(txn, &(nonce + 1));
     Plan {
       key: current_key,

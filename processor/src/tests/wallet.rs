@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
+use ciphersuite::group::GroupEncoding;
 use frost::{Participant, dkg::tests::key_gen};
 
 use tokio::time::timeout;
@@ -16,16 +17,17 @@ use serai_client::{
 
 use crate::{
   Payment, Plan,
-  networks::{Output, Transaction, Eventuality, Block, UtxoNetwork},
+  networks::{Output, Transaction, Eventuality, Block, Network},
+  key_gen::NetworkKeyDb,
   multisigs::{
     scanner::{ScannerEvent, Scanner},
-    scheduler::Scheduler,
+    scheduler::{self, Scheduler},
   },
   tests::sign,
 };
 
 // Tests the Scanner, Scheduler, and Signer together
-pub async fn test_wallet<N: UtxoNetwork>(
+pub async fn test_wallet<N: Network>(
   new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
 ) {
   let mut keys = key_gen(&mut OsRng);
@@ -35,6 +37,11 @@ pub async fn test_wallet<N: UtxoNetwork>(
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut db = MemDb::new();
+  {
+    let mut txn = db.txn();
+    NetworkKeyDb::set(&mut txn, Session(0), &key.to_bytes().as_ref().to_vec());
+    txn.commit();
+  }
   let network = new_network(db.clone()).await;
 
   // Mine blocks so there's a confirmed block
@@ -98,7 +105,13 @@ pub async fn test_wallet<N: UtxoNetwork>(
   txn.commit();
   assert_eq!(plans.len(), 1);
   assert_eq!(plans[0].key, key);
-  assert_eq!(plans[0].inputs, outputs);
+  if std::any::TypeId::of::<N::Scheduler>() ==
+    std::any::TypeId::of::<scheduler::smart_contract::Scheduler<N>>()
+  {
+    assert_eq!(plans[0].inputs, vec![]);
+  } else {
+    assert_eq!(plans[0].inputs, outputs);
+  }
   assert_eq!(
     plans[0].payments,
     vec![Payment {
@@ -115,7 +128,7 @@ pub async fn test_wallet<N: UtxoNetwork>(
       }
     }]
   );
-  assert_eq!(plans[0].change, Some(N::change_address(key).unwrap()));
+  assert_eq!(plans[0].change, N::change_address(key));
 
   {
     let mut buf = vec![];
@@ -144,9 +157,22 @@ pub async fn test_wallet<N: UtxoNetwork>(
   let tx = network.get_transaction_by_eventuality(block_number, &eventualities[0]).await;
   let block = network.get_block(block_number).await.unwrap();
   let outputs = network.get_outputs(&block, key).await;
-  assert_eq!(outputs.len(), 2);
-  let amount = amount - tx.fee(&network).await;
-  assert!((outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount));
+
+  // Don't run if Ethereum as the received output will revert by the contract
+  // (and therefore not actually exist)
+  if N::NETWORK != NetworkId::Ethereum {
+    assert_eq!(outputs.len(), 1 + usize::from(u8::from(plans[0].change.is_some())));
+    // Adjust the amount for the fees
+    let amount = amount - tx.fee(&network).await;
+    if plans[0].change.is_some() {
+      // Check either output since Monero will randomize its output order
+      assert!(
+        (outputs[0].balance().amount.0 == amount) || (outputs[1].balance().amount.0 == amount)
+      );
+    } else {
+      assert!(outputs[0].balance().amount.0 == amount);
+    }
+  }
 
   for eventuality in eventualities {
     let completion = network.confirm_completion(&eventuality, &claim).await.unwrap().unwrap();
@@ -157,21 +183,23 @@ pub async fn test_wallet<N: UtxoNetwork>(
     network.mine_block().await;
   }
 
-  match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
-    ScannerEvent::Block { is_retirement_block, block: block_id, outputs: these_outputs } => {
-      scanner.multisig_completed.send(false).unwrap();
-      assert!(!is_retirement_block);
-      assert_eq!(block_id, block.id());
-      assert_eq!(these_outputs, outputs);
+  if N::NETWORK != NetworkId::Ethereum {
+    match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
+      ScannerEvent::Block { is_retirement_block, block: block_id, outputs: these_outputs } => {
+        scanner.multisig_completed.send(false).unwrap();
+        assert!(!is_retirement_block);
+        assert_eq!(block_id, block.id());
+        assert_eq!(these_outputs, outputs);
+      }
+      ScannerEvent::Completed(_, _, _, _, _) => {
+        panic!("unexpectedly got eventuality completion");
+      }
     }
-    ScannerEvent::Completed(_, _, _, _, _) => {
-      panic!("unexpectedly got eventuality completion");
-    }
-  }
 
-  // Check the Scanner DB can reload the outputs
-  let mut txn = db.txn();
-  assert_eq!(scanner.ack_block(&mut txn, block.id()).await.1, outputs);
-  scanner.release_lock().await;
-  txn.commit();
+    // Check the Scanner DB can reload the outputs
+    let mut txn = db.txn();
+    assert_eq!(scanner.ack_block(&mut txn, block.id()).await.1, outputs);
+    scanner.release_lock().await;
+    txn.commit();
+  }
 }

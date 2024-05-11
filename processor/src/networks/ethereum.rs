@@ -719,22 +719,6 @@ impl<D: Db> Network for Ethereum<D> {
     // Publish this using a dummy account we fund with magic RPC commands
     #[cfg(test)]
     {
-      use rand_core::OsRng;
-      use ciphersuite::group::ff::Field;
-
-      let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
-      let address = ethereum_serai::crypto::address(&(Secp256k1::generator() * key));
-
-      // Set a 1.1 ETH balance
-      self
-        .provider
-        .raw_request::<_, ()>(
-          "anvil_setBalance".into(),
-          [Address(address).to_string(), "1100000000000000000".into()],
-        )
-        .await
-        .unwrap();
-
       let router = self.router().await;
       let router = router.as_ref().unwrap();
 
@@ -747,17 +731,30 @@ impl<D: Db> Network for Ethereum<D> {
           completion.signature(),
         ),
       };
-      tx.gas_price = 100_000_000_000u128;
+      tx.gas_limit = 1_000_000u64.into();
+      tx.gas_price = 1_000_000_000u64.into();
+      let tx = ethereum_serai::crypto::deterministically_sign(&tx);
 
-      use ethereum_serai::alloy_consensus::SignableTransaction;
-      let sig =
-        k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(key).unwrap())
-          .sign_prehash_recoverable(tx.signature_hash().as_ref())
+      if self.provider.get_transaction_by_hash(*tx.hash()).await.unwrap().is_none() {
+        self
+          .provider
+          .raw_request::<_, ()>(
+            "anvil_setBalance".into(),
+            [
+              tx.recover_signer().unwrap().to_string(),
+              (U256::from(tx.tx().gas_limit) * U256::from(tx.tx().gas_price)).to_string(),
+            ],
+          )
+          .await
           .unwrap();
 
-      let mut bytes = vec![];
-      tx.encode_with_signature_fields(&sig.into(), &mut bytes);
-      let _ = self.provider.send_raw_transaction(&bytes).await.ok().unwrap();
+        let (tx, sig, _) = tx.into_parts();
+        let mut bytes = vec![];
+        tx.encode_with_signature_fields(&sig, &mut bytes);
+        let pending_tx = self.provider.send_raw_transaction(&bytes).await.unwrap();
+        self.mine_block().await;
+        assert!(pending_tx.get_receipt().await.unwrap().status());
+      }
 
       Ok(())
     }
@@ -801,41 +798,50 @@ impl<D: Db> Network for Ethereum<D> {
     block: usize,
     eventuality: &Self::Eventuality,
   ) -> Self::Transaction {
-    match eventuality.1 {
-      RouterCommand::UpdateSeraiKey { nonce, .. } | RouterCommand::Execute { nonce, .. } => {
-        let router = self.router().await;
-        let router = router.as_ref().unwrap();
+    // We mine 96 blocks to ensure the 32 blocks relevant are finalized
+    // Back-check the prior two epochs in response to this
+    // TODO: Review why this is sub(3) and not sub(2)
+    for block in block.saturating_sub(3) ..= block {
+      match eventuality.1 {
+        RouterCommand::UpdateSeraiKey { nonce, .. } | RouterCommand::Execute { nonce, .. } => {
+          let router = self.router().await;
+          let router = router.as_ref().unwrap();
 
-        let block = u64::try_from(block).unwrap();
-        let filter = router
-          .key_updated_filter()
-          .from_block(block * 32)
-          .to_block(((block + 1) * 32) - 1)
-          .topic1(nonce);
-        let logs = self.provider.get_logs(&filter).await.unwrap();
-        if let Some(log) = logs.first() {
+          let block = u64::try_from(block).unwrap();
+          let filter = router
+            .key_updated_filter()
+            .from_block(block * 32)
+            .to_block(((block + 1) * 32) - 1)
+            .topic1(nonce);
+          let logs = self.provider.get_logs(&filter).await.unwrap();
+          if let Some(log) = logs.first() {
+            return self
+              .provider
+              .get_transaction_by_hash(log.clone().transaction_hash.unwrap())
+              .await
+              .unwrap()
+              .unwrap();
+          };
+
+          let filter = router
+            .executed_filter()
+            .from_block(block * 32)
+            .to_block(((block + 1) * 32) - 1)
+            .topic1(nonce);
+          let logs = self.provider.get_logs(&filter).await.unwrap();
+          if logs.is_empty() {
+            continue;
+          }
           return self
             .provider
-            .get_transaction_by_hash(log.clone().transaction_hash.unwrap())
+            .get_transaction_by_hash(logs[0].transaction_hash.unwrap())
             .await
             .unwrap()
             .unwrap();
-        };
-
-        let filter = router
-          .executed_filter()
-          .from_block(block * 32)
-          .to_block(((block + 1) * 32) - 1)
-          .topic1(nonce);
-        let logs = self.provider.get_logs(&filter).await.unwrap();
-        self
-          .provider
-          .get_transaction_by_hash(logs[0].transaction_hash.unwrap())
-          .await
-          .unwrap()
-          .unwrap()
+        }
       }
     }
+    panic!("couldn't find completion in any three of checked blocks");
   }
 
   #[cfg(test)]
