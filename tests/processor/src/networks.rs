@@ -19,6 +19,7 @@ pub const RPC_USER: &str = "serai";
 pub const RPC_PASS: &str = "seraidex";
 
 pub const BTC_PORT: u32 = 8332;
+pub const ETH_PORT: u32 = 8545;
 pub const XMR_PORT: u32 = 18081;
 
 pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
@@ -29,6 +30,17 @@ pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
   )
   .set_publish_all_ports(true);
   (composition, BTC_PORT)
+}
+
+pub fn ethereum_instance() -> (TestBodySpecification, u32) {
+  serai_docker_tests::build("ethereum".to_string());
+
+  let composition = TestBodySpecification::with_image(
+    Image::with_repository("serai-dev-ethereum").pull_policy(PullPolicy::Never),
+  )
+  .set_start_policy(StartPolicy::Strict)
+  .set_publish_all_ports(true);
+  (composition, ETH_PORT)
 }
 
 pub fn monero_instance() -> (TestBodySpecification, u32) {
@@ -45,7 +57,7 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
 pub fn network_instance(network: NetworkId) -> (TestBodySpecification, u32) {
   match network {
     NetworkId::Bitcoin => bitcoin_instance(),
-    NetworkId::Ethereum => todo!(),
+    NetworkId::Ethereum => ethereum_instance(),
     NetworkId::Monero => monero_instance(),
     NetworkId::Serai => {
       panic!("Serai is not a valid network to spawn an instance of for a processor")
@@ -58,7 +70,7 @@ pub fn network_rpc(network: NetworkId, ops: &DockerOperations, handle: &str) -> 
     .handle(handle)
     .host_port(match network {
       NetworkId::Bitcoin => BTC_PORT,
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => ETH_PORT,
       NetworkId::Monero => XMR_PORT,
       NetworkId::Serai => panic!("getting port for external network yet it was Serai"),
     })
@@ -70,7 +82,7 @@ pub fn confirmations(network: NetworkId) -> usize {
   use processor::networks::*;
   match network {
     NetworkId::Bitcoin => Bitcoin::CONFIRMATIONS,
-    NetworkId::Ethereum => todo!(),
+    NetworkId::Ethereum => Ethereum::<serai_db::MemDb>::CONFIRMATIONS,
     NetworkId::Monero => Monero::CONFIRMATIONS,
     NetworkId::Serai => panic!("getting confirmations required for Serai"),
   }
@@ -82,6 +94,10 @@ pub enum Wallet {
     private_key: bitcoin_serai::bitcoin::PrivateKey,
     public_key: bitcoin_serai::bitcoin::PublicKey,
     input_tx: bitcoin_serai::bitcoin::Transaction,
+  },
+  Ethereum {
+    key: <ciphersuite::Secp256k1 as Ciphersuite>::F,
+    nonce: u64,
   },
   Monero {
     handle: String,
@@ -138,7 +154,37 @@ impl Wallet {
         Wallet::Bitcoin { private_key, public_key, input_tx: funds }
       }
 
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => {
+        use ciphersuite::{group::ff::Field, Ciphersuite, Secp256k1};
+        use ethereum_serai::{
+          alloy_core::primitives::{U256, Address},
+          alloy_simple_request_transport::SimpleRequest,
+          alloy_rpc_client::ClientBuilder,
+          alloy_provider::{Provider, RootProvider},
+          alloy_network::Ethereum,
+        };
+
+        let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
+        let address =
+          ethereum_serai::crypto::address(&(<Secp256k1 as Ciphersuite>::generator() * key));
+
+        let provider = RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        );
+
+        provider
+          .raw_request::<_, ()>(
+            "anvil_setBalance".into(),
+            [Address(address.into()).to_string(), {
+              let nine_decimals = U256::from(1_000_000_000u64);
+              (U256::from(100u64) * nine_decimals * nine_decimals).to_string()
+            }],
+          )
+          .await
+          .unwrap();
+
+        Wallet::Ethereum { key, nonce: 0 }
+      }
 
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
@@ -282,6 +328,24 @@ impl Wallet {
         (buf, Balance { coin: Coin::Bitcoin, amount: Amount(AMOUNT) })
       }
 
+      Wallet::Ethereum { key, ref mut nonce } => {
+        /*
+        use ethereum_serai::alloy_core::primitives::U256;
+
+        let eight_decimals = U256::from(100_000_000u64);
+        let nine_decimals = eight_decimals * U256::from(10u64);
+        let eighteen_decimals = nine_decimals * nine_decimals;
+
+        let tx = todo!("send to router");
+
+        *nonce += 1;
+        (tx, Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) })
+        */
+        let _ = key;
+        let _ = nonce;
+        todo!()
+      }
+
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
         use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
         use monero_serai::{
@@ -371,6 +435,13 @@ impl Wallet {
           networks::bitcoin::Address::new(Address::p2pkh(public_key, Network::Regtest))
             .unwrap()
             .into(),
+        )
+        .unwrap()
+      }
+      Wallet::Ethereum { key, .. } => {
+        use ciphersuite::{Ciphersuite, Secp256k1};
+        ExternalAddress::new(
+          ethereum_serai::crypto::address(&(Secp256k1::generator() * key)).into(),
         )
         .unwrap()
       }
