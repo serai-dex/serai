@@ -182,11 +182,11 @@ impl Coordinator {
               }
             }
             NetworkId::Ethereum => {
-              use ethereum_serai::{
-                alloy_simple_request_transport::SimpleRequest,
-                alloy_rpc_client::ClientBuilder,
-                alloy_provider::{Provider, RootProvider},
-                alloy_network::Ethereum,
+              use ethereum_serai::alloy::{
+                simple_request_transport::SimpleRequest,
+                rpc_client::ClientBuilder,
+                provider::{Provider, RootProvider},
+                network::Ethereum,
               };
 
               let provider = RootProvider::<_, Ethereum>::new(
@@ -293,12 +293,12 @@ impl Coordinator {
         (hash, block_buf)
       }
       NetworkId::Ethereum => {
-        use ethereum_serai::{
-          alloy_simple_request_transport::SimpleRequest,
-          alloy_rpc_types::BlockNumberOrTag,
-          alloy_rpc_client::ClientBuilder,
-          alloy_provider::{Provider, RootProvider},
-          alloy_network::Ethereum,
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_types::BlockNumberOrTag,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
         };
 
         let provider = RootProvider::<_, Ethereum>::new(
@@ -395,11 +395,11 @@ impl Coordinator {
         }
       }
       NetworkId::Ethereum => {
-        use ethereum_serai::{
-          alloy_simple_request_transport::SimpleRequest,
-          alloy_rpc_client::ClientBuilder,
-          alloy_provider::{Provider, RootProvider},
-          alloy_network::Ethereum,
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
         };
 
         let provider = RootProvider::<_, Ethereum>::new(
@@ -464,11 +464,11 @@ impl Coordinator {
         rpc.send_raw_transaction(&Transaction::consensus_decode(&mut &*tx).unwrap()).await.unwrap();
       }
       NetworkId::Ethereum => {
-        use ethereum_serai::{
-          alloy_simple_request_transport::SimpleRequest,
-          alloy_rpc_client::ClientBuilder,
-          alloy_provider::{Provider, RootProvider},
-          alloy_network::Ethereum,
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
         };
 
         let provider = RootProvider::<_, Ethereum>::new(
@@ -517,12 +517,12 @@ impl Coordinator {
         }
       }
       NetworkId::Ethereum => {
-        use ethereum_serai::{
-          alloy_simple_request_transport::SimpleRequest,
-          alloy_consensus::{TxLegacy, Signed},
-          alloy_rpc_client::ClientBuilder,
-          alloy_provider::{Provider, RootProvider},
-          alloy_network::Ethereum,
+        use ethereum_serai::alloy::{
+          consensus::{TxLegacy, Signed},
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
         };
 
         let provider = RootProvider::<_, Ethereum>::new(

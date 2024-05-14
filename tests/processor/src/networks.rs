@@ -156,12 +156,12 @@ impl Wallet {
 
       NetworkId::Ethereum => {
         use ciphersuite::{group::ff::Field, Ciphersuite, Secp256k1};
-        use ethereum_serai::{
-          alloy_core::primitives::{U256, Address},
-          alloy_simple_request_transport::SimpleRequest,
-          alloy_rpc_client::ClientBuilder,
-          alloy_provider::{Provider, RootProvider},
-          alloy_network::Ethereum,
+        use ethereum_serai::alloy::{
+          primitives::{U256, Address},
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
         };
 
         let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
@@ -330,7 +330,7 @@ impl Wallet {
 
       Wallet::Ethereum { key, ref mut nonce } => {
         /*
-        use ethereum_serai::alloy_core::primitives::U256;
+        use ethereum_serai::alloy::primitives::U256;
 
         let eight_decimals = U256::from(100_000_000u64);
         let nine_decimals = eight_decimals * U256::from(10u64);

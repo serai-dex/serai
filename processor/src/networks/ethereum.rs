@@ -11,11 +11,13 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
 use ethereum_serai::{
-  alloy_core::primitives::U256,
-  alloy_rpc_types::{BlockNumberOrTag, Transaction},
-  alloy_simple_request_transport::SimpleRequest,
-  alloy_rpc_client::ClientBuilder,
-  alloy_provider::{Provider, RootProvider},
+  alloy::{
+    primitives::U256,
+    rpc_types::{BlockNumberOrTag, Transaction},
+    simple_request_transport::SimpleRequest,
+    rpc_client::ClientBuilder,
+    provider::{Provider, RootProvider},
+  },
   crypto::{PublicKey, Signature},
   erc20::Erc20,
   deployer::Deployer,
@@ -23,7 +25,7 @@ use ethereum_serai::{
   machine::*,
 };
 #[cfg(test)]
-use ethereum_serai::alloy_core::primitives::B256;
+use ethereum_serai::alloy::primitives::B256;
 
 use tokio::{
   time::sleep,
@@ -112,7 +114,7 @@ impl TryInto<Vec<u8>> for Address {
 
 impl fmt::Display for Address {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    ethereum_serai::alloy_core::primitives::Address::from(self.0).fmt(f)
+    ethereum_serai::alloy::primitives::Address::from(self.0).fmt(f)
   }
 }
 
@@ -181,7 +183,7 @@ impl<D: Db> Output<Ethereum<D>> for EthereumInInstruction {
     let mut id = [0; 40];
     id[.. 32].copy_from_slice(&self.id.0);
     id[32 ..].copy_from_slice(&self.id.1.to_le_bytes());
-    *ethereum_serai::alloy_core::primitives::keccak256(id)
+    *ethereum_serai::alloy::primitives::keccak256(id)
   }
   fn tx_id(&self) -> [u8; 32] {
     self.id.0
@@ -853,7 +855,7 @@ impl<D: Db> Network for Ethereum<D> {
   async fn test_send(&self, send_to: Self::Address) -> Self::Block {
     use rand_core::OsRng;
     use ciphersuite::group::ff::Field;
-    use ethereum_serai::alloy_sol_types::SolCall;
+    use ethereum_serai::alloy::sol_types::SolCall;
 
     let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
     let address = ethereum_serai::crypto::address(&(Secp256k1::generator() * key));
@@ -869,12 +871,12 @@ impl<D: Db> Network for Ethereum<D> {
       .unwrap();
 
     let value = U256::from_str_radix("1000000000000000000", 10).unwrap();
-    let tx = ethereum_serai::alloy_consensus::TxLegacy {
+    let tx = ethereum_serai::alloy::consensus::TxLegacy {
       chain_id: None,
       nonce: 0,
       gas_price: 1_000_000_000u128,
       gas_limit: 200_000u128,
-      to: ethereum_serai::alloy_core::primitives::TxKind::Call(send_to.0.into()),
+      to: ethereum_serai::alloy::primitives::TxKind::Call(send_to.0.into()),
       // 1 ETH
       value,
       input: ethereum_serai::router::abi::inInstructionCall::new((
@@ -886,7 +888,7 @@ impl<D: Db> Network for Ethereum<D> {
       .into(),
     };
 
-    use ethereum_serai::alloy_consensus::SignableTransaction;
+    use ethereum_serai::alloy::consensus::SignableTransaction;
     let sig = k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(key).unwrap())
       .sign_prehash_recoverable(tx.signature_hash().as_ref())
       .unwrap();

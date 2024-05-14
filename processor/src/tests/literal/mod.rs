@@ -314,10 +314,12 @@ mod ethereum {
   ) -> impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = Ethereum<MemDb>>>> {
     use std::sync::Arc;
     use ethereum_serai::{
-      alloy_core::primitives::U256,
-      alloy_simple_request_transport::SimpleRequest,
-      alloy_rpc_client::ClientBuilder,
-      alloy_provider::{Provider, RootProvider},
+      alloy::{
+        primitives::U256,
+        simple_request_transport::SimpleRequest,
+        rpc_client::ClientBuilder,
+        provider::{Provider, RootProvider},
+      },
       deployer::Deployer,
     };
 
