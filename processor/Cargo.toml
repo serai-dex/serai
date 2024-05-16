@@ -84,7 +84,7 @@ serai-docker-tests = { path = "../tests/docker" }
 secp256k1 = ["k256", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
 
-ethereum = ["secp256k1", "ethereum-serai"]
+ethereum = ["secp256k1", "ethereum-serai/tests"]
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
 monero = ["ed25519", "monero-serai", "serai-client/monero"]

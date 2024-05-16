@@ -4,7 +4,7 @@ use alloy_core::primitives::{Address, B256, U256};
 
 use alloy_sol_types::{SolInterface, SolEvent};
 
-use alloy_rpc_types::{BlockNumberOrTag, Filter};
+use alloy_rpc_types::Filter;
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
@@ -25,22 +25,8 @@ pub struct TopLevelErc20Transfer {
 pub struct Erc20(Arc<RootProvider<SimpleRequest>>, Address);
 impl Erc20 {
   /// Construct a new view of the specified ERC20 contract.
-  ///
-  /// This checks a contract is deployed at that address yet does not check the contract is
-  /// actually an ERC20.
-  pub async fn new(
-    provider: Arc<RootProvider<SimpleRequest>>,
-    address: [u8; 20],
-  ) -> Result<Option<Self>, Error> {
-    let code = provider
-      .get_code_at(address.into(), BlockNumberOrTag::Finalized.into())
-      .await
-      .map_err(|_| Error::ConnectionError)?;
-    // Contract has yet to be deployed
-    if code.is_empty() {
-      return Ok(None);
-    }
-    Ok(Some(Self(provider.clone(), Address::from(&address))))
+  pub fn new(provider: Arc<RootProvider<SimpleRequest>>, address: [u8; 20]) -> Self {
+    Self(provider, Address::from(&address))
   }
 
   pub async fn top_level_transfers(
@@ -65,7 +51,8 @@ impl Erc20 {
       }
 
       let tx_id = log.transaction_hash.ok_or(Error::ConnectionError)?;
-      let tx = self.0.get_transaction_by_hash(tx_id).await.map_err(|_| Error::ConnectionError)?;
+      let tx =
+        self.0.get_transaction_by_hash(tx_id).await.ok().flatten().ok_or(Error::ConnectionError)?;
 
       // If this is a top-level call...
       if tx.to == Some(self.1) {

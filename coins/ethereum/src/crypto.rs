@@ -31,7 +31,10 @@ pub fn address(point: &ProjectivePoint) -> [u8; 20] {
   keccak256(&encoded_point.as_ref()[1 .. 65])[12 ..].try_into().unwrap()
 }
 
-pub(crate) fn deterministically_sign(tx: &TxLegacy) -> Signed<TxLegacy> {
+/// Deterministically sign a transaction.
+///
+/// This function panics if passed a transaction with a non-None chain ID.
+pub fn deterministically_sign(tx: &TxLegacy) -> Signed<TxLegacy> {
   assert!(
     tx.chain_id.is_none(),
     "chain ID was Some when deterministically signing a TX (causing a non-deterministic signer)"

@@ -159,11 +159,12 @@ impl Router {
   #[cfg(test)]
   pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, Error> {
     let call = TransactionRequest::default()
-      .to(Some(self.1))
+      .to(self.1)
       .input(TransactionInput::new(abi::seraiKeyCall::new(()).abi_encode().into()));
     let bytes = self
       .0
-      .call(&call, Some(BlockId::Hash(B256::from(at).into())))
+      .call(&call)
+      .block(BlockId::Hash(B256::from(at).into()))
       .await
       .map_err(|_| Error::ConnectionError)?;
     let res =
@@ -197,11 +198,12 @@ impl Router {
   #[cfg(test)]
   pub async fn nonce(&self, at: [u8; 32]) -> Result<U256, Error> {
     let call = TransactionRequest::default()
-      .to(Some(self.1))
+      .to(self.1)
       .input(TransactionInput::new(abi::nonceCall::new(()).abi_encode().into()));
     let bytes = self
       .0
-      .call(&call, Some(BlockId::Hash(B256::from(at).into())))
+      .call(&call)
+      .block(BlockId::Hash(B256::from(at).into()))
       .await
       .map_err(|_| Error::ConnectionError)?;
     let res =
@@ -229,10 +231,13 @@ impl Router {
     }
   }
 
-  pub async fn key_at_end_of_block(&self, block: u64) -> Result<ProjectivePoint, Error> {
+  pub async fn key_at_end_of_block(&self, block: u64) -> Result<Option<ProjectivePoint>, Error> {
     let filter = Filter::new().from_block(0).to_block(block).address(self.1);
     let filter = filter.event_signature(SeraiKeyUpdated::SIGNATURE_HASH);
     let all_keys = self.0.get_logs(&filter).await.map_err(|_| Error::ConnectionError)?;
+    if all_keys.is_empty() {
+      return Ok(None);
+    };
 
     let last_key_x_coordinate_log = all_keys.last().ok_or(Error::ConnectionError)?;
     let last_key_x_coordinate = last_key_x_coordinate_log
@@ -246,7 +251,9 @@ impl Router {
     compressed_point[0] = u8::from(sec1::Tag::CompressedEvenY);
     compressed_point[1 ..].copy_from_slice(last_key_x_coordinate.as_slice());
 
-    Option::from(ProjectivePoint::from_bytes(&compressed_point)).ok_or(Error::ConnectionError)
+    let key =
+      Option::from(ProjectivePoint::from_bytes(&compressed_point)).ok_or(Error::ConnectionError)?;
+    Ok(Some(key))
   }
 
   pub async fn in_instructions(
@@ -254,7 +261,9 @@ impl Router {
     block: u64,
     allowed_tokens: &HashSet<[u8; 20]>,
   ) -> Result<Vec<InInstruction>, Error> {
-    let key_at_end_of_block = self.key_at_end_of_block(block).await?;
+    let Some(key_at_end_of_block) = self.key_at_end_of_block(block).await? else {
+      return Ok(vec![]);
+    };
 
     let filter = Filter::new().from_block(block).to_block(block).address(self.1);
     let filter = filter.event_signature(InInstructionEvent::SIGNATURE_HASH);
@@ -274,7 +283,13 @@ impl Router {
       );
 
       let tx_hash = log.transaction_hash.ok_or(Error::ConnectionError)?;
-      let tx = self.0.get_transaction_by_hash(tx_hash).await.map_err(|_| Error::ConnectionError)?;
+      let tx = self
+        .0
+        .get_transaction_by_hash(tx_hash)
+        .await
+        .ok()
+        .flatten()
+        .ok_or(Error::ConnectionError)?;
 
       let log =
         log.log_decode::<InInstructionEvent>().map_err(|_| Error::ConnectionError)?.inner.data;

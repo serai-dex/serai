@@ -181,7 +181,28 @@ impl Coordinator {
                 break;
               }
             }
-            NetworkId::Ethereum => todo!(),
+            NetworkId::Ethereum => {
+              use ethereum_serai::alloy::{
+                simple_request_transport::SimpleRequest,
+                rpc_client::ClientBuilder,
+                provider::{Provider, RootProvider},
+                network::Ethereum,
+              };
+
+              let provider = RootProvider::<_, Ethereum>::new(
+                ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+              );
+
+              loop {
+                if handle
+                  .block_on(provider.raw_request::<_, ()>("evm_setAutomine".into(), [false]))
+                  .is_ok()
+                {
+                  break;
+                }
+                handle.block_on(tokio::time::sleep(core::time::Duration::from_secs(1)));
+              }
+            }
             NetworkId::Monero => {
               use monero_serai::rpc::HttpRpc;
 
@@ -271,7 +292,45 @@ impl Coordinator {
         block.consensus_encode(&mut block_buf).unwrap();
         (hash, block_buf)
       }
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => {
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_types::BlockNumberOrTag,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
+        };
+
+        let provider = RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        );
+        let start = provider
+          .get_block(BlockNumberOrTag::Latest.into(), false)
+          .await
+          .unwrap()
+          .unwrap()
+          .header
+          .number
+          .unwrap();
+        // We mine 96 blocks to mine one epoch, then cause its finalization
+        provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+        let end_of_epoch = start + 31;
+        let hash = provider
+          .get_block(BlockNumberOrTag::Number(end_of_epoch).into(), false)
+          .await
+          .unwrap()
+          .unwrap()
+          .header
+          .hash
+          .unwrap();
+
+        let state = provider
+          .raw_request::<_, String>("anvil_dumpState".into(), ())
+          .await
+          .unwrap()
+          .into_bytes();
+        (hash.into(), state)
+      }
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_serai::{
@@ -303,39 +362,6 @@ impl Coordinator {
     }
   }
 
-  pub async fn broadcast_block(&self, ops: &DockerOperations, block: &[u8]) {
-    let rpc_url = network_rpc(self.network, ops, &self.network_handle);
-    match self.network {
-      NetworkId::Bitcoin => {
-        use bitcoin_serai::rpc::Rpc;
-
-        let rpc =
-          Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
-        let res: Option<String> =
-          rpc.rpc_call("submitblock", serde_json::json!([hex::encode(block)])).await.unwrap();
-        if let Some(err) = res {
-          panic!("submitblock failed: {err}");
-        }
-      }
-      NetworkId::Ethereum => todo!(),
-      NetworkId::Monero => {
-        use monero_serai::rpc::HttpRpc;
-
-        let rpc =
-          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
-        let res: serde_json::Value = rpc
-          .json_rpc_call("submit_block", Some(serde_json::json!([hex::encode(block)])))
-          .await
-          .unwrap();
-        let err = res.get("error");
-        if err.is_some() && (err.unwrap() != &serde_json::Value::Null) {
-          panic!("failed to submit Monero block: {res}");
-        }
-      }
-      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
-    }
-  }
-
   pub async fn sync(&self, ops: &DockerOperations, others: &[Coordinator]) {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
@@ -345,13 +371,8 @@ impl Coordinator {
         let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
         let to = rpc.get_latest_block_number().await.unwrap();
         for coordinator in others {
-          let from = Rpc::new(network_rpc(self.network, ops, &coordinator.network_handle))
-            .await
-            .expect("couldn't connect to the Bitcoin RPC")
-            .get_latest_block_number()
-            .await
-            .unwrap() +
-            1;
+          let from = rpc.get_latest_block_number().await.unwrap() + 1;
+
           for b in from ..= to {
             let mut buf = vec![];
             rpc
@@ -360,11 +381,40 @@ impl Coordinator {
               .unwrap()
               .consensus_encode(&mut buf)
               .unwrap();
-            coordinator.broadcast_block(ops, &buf).await;
+
+            let rpc_url = network_rpc(coordinator.network, ops, &coordinator.network_handle);
+            let rpc =
+              Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
+
+            let res: Option<String> =
+              rpc.rpc_call("submitblock", serde_json::json!([hex::encode(buf)])).await.unwrap();
+            if let Some(err) = res {
+              panic!("submitblock failed: {err}");
+            }
           }
         }
       }
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => {
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
+        };
+
+        let provider = RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        );
+        let state = provider.raw_request::<_, String>("anvil_dumpState".into(), ()).await.unwrap();
+
+        for coordinator in others {
+          let rpc_url = network_rpc(coordinator.network, ops, &coordinator.network_handle);
+          let provider = RootProvider::<_, Ethereum>::new(
+            ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          );
+          provider.raw_request::<_, ()>("anvil_loadState".into(), &state).await.unwrap();
+        }
+      }
       NetworkId::Monero => {
         use monero_serai::rpc::HttpRpc;
 
@@ -378,12 +428,21 @@ impl Coordinator {
             .await
             .unwrap();
           for b in from .. to {
-            coordinator
-              .broadcast_block(
-                ops,
-                &rpc.get_block(rpc.get_block_hash(b).await.unwrap()).await.unwrap().serialize(),
-              )
-              .await;
+            let block =
+              rpc.get_block(rpc.get_block_hash(b).await.unwrap()).await.unwrap().serialize();
+
+            let rpc_url = network_rpc(coordinator.network, ops, &coordinator.network_handle);
+            let rpc = HttpRpc::new(rpc_url)
+              .await
+              .expect("couldn't connect to the coordinator's Monero RPC");
+            let res: serde_json::Value = rpc
+              .json_rpc_call("submit_block", Some(serde_json::json!([hex::encode(block)])))
+              .await
+              .unwrap();
+            let err = res.get("error");
+            if err.is_some() && (err.unwrap() != &serde_json::Value::Null) {
+              panic!("failed to submit Monero block: {res}");
+            }
           }
         }
       }
@@ -404,7 +463,19 @@ impl Coordinator {
           Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
         rpc.send_raw_transaction(&Transaction::consensus_decode(&mut &*tx).unwrap()).await.unwrap();
       }
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => {
+        use ethereum_serai::alloy::{
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
+        };
+
+        let provider = RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        );
+        let _ = provider.send_raw_transaction(tx).await.unwrap();
+      }
       NetworkId::Monero => {
         use monero_serai::{transaction::Transaction, rpc::HttpRpc};
 
@@ -445,7 +516,26 @@ impl Coordinator {
           None
         }
       }
-      NetworkId::Ethereum => todo!(),
+      NetworkId::Ethereum => {
+        use ethereum_serai::alloy::{
+          consensus::{TxLegacy, Signed},
+          simple_request_transport::SimpleRequest,
+          rpc_client::ClientBuilder,
+          provider::{Provider, RootProvider},
+          network::Ethereum,
+        };
+
+        let provider = RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        );
+        let mut hash = [0; 32];
+        hash.copy_from_slice(tx);
+        let tx = provider.get_transaction_by_hash(hash.into()).await.unwrap()?;
+        let (tx, sig, _) = Signed::<TxLegacy>::try_from(tx).unwrap().into_parts();
+        let mut bytes = vec![];
+        tx.encode_with_signature_fields(&sig, &mut bytes);
+        Some(bytes)
+      }
       NetworkId::Monero => {
         use monero_serai::rpc::HttpRpc;
 
