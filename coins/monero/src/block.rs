@@ -17,14 +17,40 @@ const EXISTING_BLOCK_HASH_202612: [u8; 32] =
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
+  /// This represents the hardfork number of the block.
   pub major_version: u8,
+  /// This field is used to vote for a particular [hardfork](https://github.com/monero-project/monero/blob/c8214782fb2a769c57382a999eaf099691c836e7/src/cryptonote_basic/cryptonote_basic.h#L460).
   pub minor_version: u8,
+  /// The UNIX time at which the block was mined.
   pub timestamp: u64,
+  /// The previous [`Block::hash`].
   pub previous: [u8; 32],
+  /// The block's nonce.
   pub nonce: u32,
 }
 
 impl BlockHeader {
+  /// Serialize [`Self`] into the writer `w`.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::block::*;
+  /// # fn main() -> std::io::Result<()> {
+  /// let block_header = BlockHeader {
+  ///   major_version: 1,
+  ///   minor_version: 2,
+  ///   timestamp: 3,
+  ///   previous: [4; 32],
+  ///   nonce: 5,
+  /// };
+  ///
+  /// let mut writer = vec![];
+  /// block_header.write(&mut writer)?;
+  /// # }
+  /// ```
+  ///
+  /// # Errors
+  /// This function returns any errors from the writer itself.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(&self.major_version, w)?;
     write_varint(&self.minor_version, w)?;
@@ -33,12 +59,60 @@ impl BlockHeader {
     w.write_all(&self.nonce.to_le_bytes())
   }
 
+  /// Serialize [`Self`].
+  ///
+  /// This allocates and returns a new buffer containing the serialized bytes.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::block::*;
+  /// # fn main() -> std::io::Result<()> {
+  /// let block_header = BlockHeader {
+  ///   major_version: 1,
+  ///   minor_version: 2,
+  ///   timestamp: 3,
+  ///   previous: [4; 32],
+  ///   nonce: 5,
+  /// };
+  ///
+  /// let mut writer = vec![];
+  /// block_header.write(&mut writer)?;
+  ///
+  /// let serialized = block_header.serialize();
+  /// assert_eq!(serialized, writer);
+  /// # }
+  /// ```
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
+  /// Create [`Self`] from the reader `r`.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::block::*;
+  /// # fn main() -> std::io::Result<()> {
+  /// let block_header = BlockHeader {
+  ///   major_version: 1,
+  ///   minor_version: 2,
+  ///   timestamp: 3,
+  ///   previous: [4; 32],
+  ///   nonce: 5,
+  /// };
+  ///
+  /// let mut vec = vec![];
+  /// block_header.write(&mut vec)?;
+  ///
+  /// let read = BlockHeader::read(& vec)?;
+  /// assert_eq!(read, block_header);
+  /// # }
+  /// ```
+  ///
+  /// # Errors
+  /// This function returns an error if either the reader failed,
+  /// or if the data could not be deserialized into a [`Self`].
   pub fn read<R: Read>(r: &mut R) -> io::Result<BlockHeader> {
     Ok(BlockHeader {
       major_version: read_varint(r)?,
@@ -124,7 +198,7 @@ impl Block {
     Ok(Block {
       header,
       miner_tx,
-      txs: (0_usize .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
+      txs: (0_usize..read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }
 }
