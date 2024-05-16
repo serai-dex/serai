@@ -51,8 +51,26 @@ pub mod wallet;
 #[cfg(test)]
 mod tests;
 
+/// Default block lock time for transactions.
+///
+/// This is the amount of new blocks that must
+/// pass before a new transaction can be spent.
+///
+/// Equivalent to Monero's [`CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE`](https://github.com/monero-project/monero/blob/c8214782fb2a769c57382a999eaf099691c836e7/src/cryptonote_config.h#L49).
 pub const DEFAULT_LOCK_WINDOW: usize = 10;
+/// Block lock time for coinbase transactions.
+///
+/// This is the amount of new blocks that must
+/// pass before a coinbase/miner transaction can be spent.
+///
+/// Equivalent to Monero's [`CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW`](https://github.com/monero-project/monero/blob/c8214782fb2a769c57382a999eaf099691c836e7/src/cryptonote_config.h#L44).
 pub const COINBASE_LOCK_WINDOW: usize = 60;
+/// Average amount of seconds it takes for a block to be mined.
+///
+/// This is target amount of seconds mining difficulty will adjust to,
+/// i.e. a block will be mined every `BLOCK_TIME` seconds on average.
+///
+/// Equivalent to Monero's [`DIFFICULTY_TARGET_V2`](https://github.com/monero-project/monero/blob/c8214782fb2a769c57382a999eaf099691c836e7/src/cryptonote_config.h#L44).
 pub const BLOCK_TIME: usize = 120;
 
 static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
