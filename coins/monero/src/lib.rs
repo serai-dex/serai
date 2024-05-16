@@ -93,19 +93,34 @@ pub(crate) fn BASEPOINT_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[allow(non_camel_case_types)]
 pub enum Protocol {
+  /// Version 14.
   v14,
+  /// Version 16.
   v16,
+  /// A custom version with customized properties.
   Custom {
+    /// See [`Self::ring_len`].
     ring_len: usize,
+    /// See [`Self::bp_plus`].
     bp_plus: bool,
+    /// See [`Self::optimal_rct_type`].
     optimal_rct_type: RctType,
+    /// See [`Self::view_tags`].
     view_tags: bool,
+    /// See [`Self::v16_fee`].
     v16_fee: bool,
   },
 }
 
 impl Protocol {
   /// Amount of ring members under this protocol version.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::*;
+  /// assert_eq!(Protocol::v14.ring_len(), 11);
+  /// assert_eq!(Protocol::v16.ring_len(), 16);
+  /// ```
   pub fn ring_len(&self) -> usize {
     match self {
       Protocol::v14 => 11,
@@ -117,6 +132,13 @@ impl Protocol {
   /// Whether or not the specified version uses Bulletproofs or Bulletproofs+.
   ///
   /// This method will likely be reworked when versions not using Bulletproofs at all are added.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::*;
+  /// assert_eq!(Protocol::v14.bp_plus(), false);
+  /// assert_eq!(Protocol::v16.bp_plus(), true);
+  /// ```
   pub fn bp_plus(&self) -> bool {
     match self {
       Protocol::v14 => false,
@@ -125,6 +147,14 @@ impl Protocol {
     }
   }
 
+  /// The optimal RingCT type for this version.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::{*, ringct::*};
+  /// assert_eq!(Protocol::v14.optimal_rct_type(), RctType::Clsag);
+  /// assert_eq!(Protocol::v16.optimal_rct_type(), RctType::BulletproofsPlus);
+  /// ```
   // TODO: Make this an Option when we support pre-RCT protocols
   pub fn optimal_rct_type(&self) -> RctType {
     match self {
@@ -135,6 +165,13 @@ impl Protocol {
   }
 
   /// Whether or not the specified version uses view tags.
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::{*, ringct::*};
+  /// assert_eq!(Protocol::v14.view_tags(), false);
+  /// assert_eq!(Protocol::v16.view_tags(), true);
+  /// ```
   pub fn view_tags(&self) -> bool {
     match self {
       Protocol::v14 => false,
@@ -145,6 +182,13 @@ impl Protocol {
 
   /// Whether or not the specified version uses the fee algorithm from Monero
   /// hard fork version 16 (released in v18 binaries).
+  ///
+  /// # Example
+  /// ```rust
+  /// # use monero_serai::{*, ringct::*};
+  /// assert_eq!(Protocol::v14.v16_fee(), false);
+  /// assert_eq!(Protocol::v16.v16_fee(), true);
+  /// ```
   pub fn v16_fee(&self) -> bool {
     match self {
       Protocol::v14 => false,
@@ -206,11 +250,15 @@ impl Protocol {
   }
 }
 
-/// Transparent structure representing a Pedersen commitment's contents.
+/// Transparent structure representing a [https://web.getmonero.org/resources/moneropedia/pedersen-commitment.html]()'s contents.
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Commitment {
+  /// The value used to mask the `amount`.
   pub mask: Scalar,
+  /// The value being masked.
+  ///
+  /// In Monero's case, this is the amount of XMR in atomic units.
   pub amount: u64,
 }
 
@@ -226,6 +274,7 @@ impl Commitment {
     Commitment { mask: Scalar::ONE, amount: 0 }
   }
 
+  /// Create a new [`Self`].
   pub fn new(mask: Scalar, amount: u64) -> Commitment {
     Commitment { mask, amount }
   }

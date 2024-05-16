@@ -11,6 +11,7 @@ use monero_generators::hash_to_point;
 
 use crate::{serialize::*, hash_to_scalar};
 
+/// A signature within a [`RingSignature`].
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Signature {
   c: Scalar,
@@ -18,23 +19,37 @@ pub struct Signature {
 }
 
 impl Signature {
+  /// Serialize [`Self`] into the writer `w`.
+  ///
+  /// # Errors
+  /// This function returns any errors from the writer itself.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_scalar(&self.c, w)?;
     write_scalar(&self.r, w)?;
     Ok(())
   }
 
+  /// Create [`Self`] from the reader `r`.
+  ///
+  /// # Errors
+  /// This function returns an error if either the reader failed,
+  /// or if the data could not be deserialized into a [`Self`].
   pub fn read<R: Read>(r: &mut R) -> io::Result<Signature> {
     Ok(Signature { c: read_scalar(r)?, r: read_scalar(r)? })
   }
 }
 
+/// A [ring signature](https://en.wikipedia.org/wiki/Ring_signature).
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct RingSignature {
   sigs: Vec<Signature>,
 }
 
 impl RingSignature {
+  /// Serialize [`Self`] into the writer `w`.
+  ///
+  /// # Errors
+  /// This function returns any errors from the writer itself.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for sig in &self.sigs {
       sig.write(w)?;
@@ -42,6 +57,11 @@ impl RingSignature {
     Ok(())
   }
 
+  /// Create [`Self`] from the reader `r`.
+  ///
+  /// # Errors
+  /// This function returns an error if either the reader failed,
+  /// or if the data could not be deserialized into a [`Self`].
   pub fn read<R: Read>(members: usize, r: &mut R) -> io::Result<RingSignature> {
     Ok(RingSignature { sigs: read_raw_vec(Signature::read, members, r)? })
   }

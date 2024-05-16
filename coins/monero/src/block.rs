@@ -15,8 +15,8 @@ const CORRECT_BLOCK_HASH_202612: [u8; 32] =
 const EXISTING_BLOCK_HASH_202612: [u8; 32] =
   hex_literal::hex!("bbd604d2ba11ba27935e006ed39c9bfdd99b76bf4a50654bc1e1e61217962698");
 
-#[derive(Clone, PartialEq, Eq, Debug)]
 /// The header of a [`Block`].
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
   /// This represents the hardfork number of the block.
   pub major_version: u8,
@@ -60,9 +60,7 @@ impl BlockHeader {
     w.write_all(&self.nonce.to_le_bytes())
   }
 
-  /// Serialize [`Self`].
-  ///
-  /// This allocates and returns a new buffer containing the serialized bytes.
+  /// Serialize [`Self`] into a new byte buffer.
   ///
   /// # Example
   /// ```rust
@@ -125,8 +123,8 @@ impl BlockHeader {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
 /// Block on the Monero blockchain.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Block {
   /// The header of this block.
   pub header: BlockHeader,
@@ -197,9 +195,7 @@ impl Block {
     hash
   }
 
-  /// Serialize [`Self`].
-  ///
-  /// This allocates and returns a new buffer containing the serialized bytes.
+  /// Serialize [`Self`] into a new byte buffer.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
