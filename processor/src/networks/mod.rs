@@ -432,9 +432,12 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
 
     let plan_id = plan.id();
     let Plan { key, inputs, mut payments, change, scheduler_addendum } = plan;
-    let theoretical_change_amount =
+    let theoretical_change_amount = if change.is_some() {
       inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
-        payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>();
+        payments.iter().map(|payment| payment.balance.amount.0).sum::<u64>()
+    } else {
+      0
+    };
 
     let Some(tx_fee) = self.needed_fee(block_number, &inputs, &payments, &change).await? else {
       // This Plan is not fulfillable

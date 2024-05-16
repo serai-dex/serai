@@ -56,12 +56,12 @@ pub async fn call_verify(
   let px: [u8; 32] = public_key.px.to_repr().into();
   let c_bytes: [u8; 32] = signature.c.to_repr().into();
   let s_bytes: [u8; 32] = signature.s.to_repr().into();
-  let call = TransactionRequest::default().to(Some(contract)).input(TransactionInput::new(
+  let call = TransactionRequest::default().to(contract).input(TransactionInput::new(
     abi::verifyCall::new((px.into(), message.to_vec().into(), c_bytes.into(), s_bytes.into()))
       .abi_encode()
       .into(),
   ));
-  let bytes = provider.call(&call, None).await.map_err(|_| Error::ConnectionError)?;
+  let bytes = provider.call(&call).await.map_err(|_| Error::ConnectionError)?;
   let res =
     abi::verifyCall::abi_decode_returns(&bytes, true).map_err(|_| Error::ConnectionError)?;
 

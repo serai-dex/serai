@@ -1,12 +1,17 @@
 use thiserror::Error;
 
-pub use alloy_core;
-pub use alloy_consensus;
+pub mod alloy {
+  pub use alloy_core::primitives;
+  pub use alloy_core as core;
+  pub use alloy_sol_types as sol_types;
 
-pub use alloy_rpc_types;
-pub use alloy_simple_request_transport;
-pub use alloy_rpc_client;
-pub use alloy_provider;
+  pub use alloy_consensus as consensus;
+  pub use alloy_network as network;
+  pub use alloy_rpc_types as rpc_types;
+  pub use alloy_simple_request_transport as simple_request_transport;
+  pub use alloy_rpc_client as rpc_client;
+  pub use alloy_provider as provider;
+}
 
 pub mod crypto;
 
@@ -18,8 +23,8 @@ pub mod router;
 
 pub mod machine;
 
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "tests"))]
+pub mod tests;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum Error {

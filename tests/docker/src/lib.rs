@@ -124,7 +124,7 @@ pub fn build(name: String) {
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
       let mut metadatas = match name.as_str() {
-        "bitcoin" | "monero" => vec![],
+        "bitcoin" | "ethereum" | "monero" => vec![],
         "message-queue" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),

@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{time::Duration, pin::Pin, future::Future};
 use std::collections::HashMap;
 
 use rand_core::OsRng;
@@ -82,8 +82,9 @@ async fn spend<N: UtxoNetwork, D: Db>(
   }
 }
 
-pub async fn test_addresses<N: UtxoNetwork>(network: N)
-where
+pub async fn test_addresses<N: UtxoNetwork>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) where
   <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
 {
   let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
@@ -92,12 +93,14 @@ where
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
+  let mut db = MemDb::new();
+  let network = new_network(db.clone()).await;
+
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let mut db = MemDb::new();
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
   let mut txn = db.txn();
