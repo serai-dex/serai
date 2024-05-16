@@ -16,6 +16,7 @@ const EXISTING_BLOCK_HASH_202612: [u8; 32] =
   hex_literal::hex!("bbd604d2ba11ba27935e006ed39c9bfdd99b76bf4a50654bc1e1e61217962698");
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+/// The header of a [`Block`].
 pub struct BlockHeader {
   /// This represents the hardfork number of the block.
   pub major_version: u8,
@@ -125,13 +126,18 @@ impl BlockHeader {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+/// Block on the Monero blockchain.
 pub struct Block {
+  /// The header of this block.
   pub header: BlockHeader,
+  /// The miner/coinbase transaction.
   pub miner_tx: Transaction,
+  /// Hashes of all the transactions within this block.
   pub txs: Vec<[u8; 32]>,
 }
 
 impl Block {
+  /// Return the amount of Monero generated in this block in atomic units.
   pub fn number(&self) -> Option<u64> {
     match self.miner_tx.prefix.inputs.first() {
       Some(Input::Gen(number)) => Some(*number),
@@ -139,6 +145,10 @@ impl Block {
     }
   }
 
+  /// Serialize [`Self`] into the writer `w`.
+  ///
+  /// # Errors
+  /// This function returns any errors from the writer itself.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.header.write(w)?;
     self.miner_tx.write(w)?;
@@ -149,6 +159,11 @@ impl Block {
     Ok(())
   }
 
+  /// Return the merkle root of this block.
+  ///
+  /// In the case that this block has no transactions other than
+  /// the miner transaction, the miner transaction hash is returned,
+  /// i.e. the [`Transaction::hash`] of [`Self::miner_tx`] is returned.
   fn tx_merkle_root(&self) -> [u8; 32] {
     merkle_root(self.miner_tx.hash(), &self.txs)
   }
@@ -165,6 +180,7 @@ impl Block {
     blob
   }
 
+  /// Calculate the hash of this block.
   pub fn hash(&self) -> [u8; 32] {
     let mut hashable = self.serialize_hashable();
     // Monero pre-appends a VarInt of the block hashing blobs length before getting the block hash
@@ -181,12 +197,20 @@ impl Block {
     hash
   }
 
+  /// Serialize [`Self`].
+  ///
+  /// This allocates and returns a new buffer containing the serialized bytes.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
     serialized
   }
 
+  /// Create [`Self`] from the reader `r`.
+  ///
+  /// # Errors
+  /// This function returns an error if either the reader failed,
+  /// or if the data could not be deserialized into a [`Self`].
   pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
     let header = BlockHeader::read(r)?;
 
