@@ -7908,6 +7908,7 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
+ "serai-emissions-pallet",
  "serai-genesis-liquidity-pallet",
  "serai-in-instructions-primitives",
  "serai-primitives",

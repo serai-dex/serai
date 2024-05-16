@@ -797,12 +797,19 @@ pub mod pallet {
       total_required
     }
 
+    // TODO: make the increase_allocation public instead?
     pub fn deposit_stake(
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
     ) -> DispatchResult {
-      // TODO: make the increase_allocation public instead?
+      // TODO: Should this call be part of the `increase_allocation` since we have to have it
+      // before each call to it?
+      Coins::<T>::transfer_internal(
+        account,
+        Self::account(),
+        Balance { coin: Coin::Serai, amount },
+      )?;
       Self::increase_allocation(network, account, amount, true)
     }
 

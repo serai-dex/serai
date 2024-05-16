@@ -7,7 +7,7 @@ pub mod pallet {
   use frame_system::pallet_prelude::*;
   use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
-  use sp_std::{vec, vec::Vec, collections::btree_map::BTreeMap};
+  use sp_std::{vec, vec::Vec, ops::Mul, collections::btree_map::BTreeMap};
   use sp_runtime;
 
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
@@ -44,7 +44,8 @@ pub mod pallet {
 
   #[pallet::error]
   pub enum Error<T> {
-    MintFailed,
+    NetworkHasEconomicSecurity,
+    NoValueForCoin,
   }
 
   #[pallet::event]
@@ -336,11 +337,34 @@ pub mod pallet {
         )
         .unwrap();
 
-        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) })
-          .map_err(|_| Error::<T>::MintFailed)?;
+        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) })?;
         ValidatorSets::<T>::deposit_stake(n, p, Amount(p_reward))?;
       }
 
+      Ok(())
+    }
+
+    pub fn swap_to_staked_sri(
+      to: PublicKey,
+      network: NetworkId,
+      balance: Balance,
+    ) -> DispatchResult {
+      // check the network didn't reach the economic security yet
+      if Self::economic_security_reached(network) {
+        Err(Error::<T>::NetworkHasEconomicSecurity)?;
+      }
+
+      // calculate how much SRI the balance makes
+      let value =
+        Dex::<T>::security_oracle_value(balance.coin).ok_or(Error::<T>::NoValueForCoin)?;
+      // TODO: may panic? It might be best for this math ops to return the result as is instead of
+      // doing an unwrap so that it can be properly dealt with.
+      let sri_amount = balance.amount.mul(value);
+
+      // Mint & stake the SRI for the network.
+      Coins::<T>::mint(to, Balance { coin: Coin::Serai, amount: sri_amount })?;
+      // TODO: deposit_stake lets staking less than per key share. Should we allow that here?
+      ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
       Ok(())
     }
   }

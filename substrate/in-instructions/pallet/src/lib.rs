@@ -34,12 +34,18 @@ pub mod pallet {
   };
 
   use genesis_liquidity_pallet::{Pallet as GenesisLiq, Config as GenesisLiqConfig};
+  use emissions_pallet::{Pallet as Emissions, Config as EmissionsConfig};
 
   use super::*;
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig + GenesisLiqConfig
+    frame_system::Config
+    + CoinsConfig
+    + DexConfig
+    + ValidatorSetsConfig
+    + GenesisLiqConfig
+    + EmissionsConfig
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -206,6 +212,9 @@ pub mod pallet {
         }
         InInstruction::GenesisLiquidity(address) => {
           GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
+        }
+        InInstruction::SwapToStakedSRI(address, network) => {
+          Emissions::<T>::swap_to_staked_sri(address.into(), network, instruction.balance)?;
         }
       }
       Ok(())

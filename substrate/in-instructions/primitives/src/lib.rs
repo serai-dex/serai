@@ -79,6 +79,7 @@ pub enum InInstruction {
   Transfer(SeraiAddress),
   Dex(DexCall),
   GenesisLiquidity(SeraiAddress),
+  SwapToStakedSRI(SeraiAddress, NetworkId),
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebug)]
