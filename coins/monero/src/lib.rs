@@ -250,7 +250,7 @@ impl Protocol {
   }
 }
 
-/// Transparent structure representing a [https://web.getmonero.org/resources/moneropedia/pedersen-commitment.html]()'s contents.
+/// Transparent structure representing a [Pedersen commitment](https://web.getmonero.org/resources/moneropedia/pedersen-commitment.html)'s contents.
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Commitment {

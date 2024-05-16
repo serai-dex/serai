@@ -249,7 +249,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
     // We produced shares as `r - p x`, yet the signature is `r - p x - c x`
-    // Substract `c x` (saved as `c`) now
+    // Subtract `c x` (saved as `c`) now
     clsag.s[usize::from(self.input().decoys.i)] = sum.0 - interim.c;
     if clsag
       .verify(

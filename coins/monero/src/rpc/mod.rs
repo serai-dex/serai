@@ -34,8 +34,10 @@ pub use http::*;
 //   src/wallet/wallet2.cpp#L121
 const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
 
+/// A empty marker struct representing an empty response.
 #[derive(Deserialize, Debug)]
 pub struct EmptyResponse {}
+/// A generic JSON-RPC response.
 #[derive(Deserialize, Debug)]
 pub struct JsonRpcResponse<T> {
   result: T,
@@ -54,6 +56,7 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
+/// The response data from an [`Rpc::get_outs`] call.
 #[derive(Deserialize, Debug)]
 pub struct OutputResponse {
   pub height: usize,
@@ -63,27 +66,41 @@ pub struct OutputResponse {
   txid: String,
 }
 
+/// Possible errors that can occur from an RPC call.
+///
+/// This represents errors on the client side, as well
+/// as valid error responses from the server.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum RpcError {
+  /// There was an internal error.
   #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
+  /// There was a connection error.
   #[cfg_attr(feature = "std", error("connection error ({0})"))]
   ConnectionError(String),
+  /// The data response received from the node was invalid.
   #[cfg_attr(feature = "std", error("invalid node ({0})"))]
   InvalidNode(String),
+  /// The Monero [`Protocol`] version was invalid.
   #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
   UnsupportedProtocol(usize),
+  /// Requested transaction hashes were not found.
   #[cfg_attr(feature = "std", error("transactions not found"))]
   TransactionsNotFound(Vec<[u8; 32]>),
+  /// A curve point received from the node was invalid.
   #[cfg_attr(feature = "std", error("invalid point ({0})"))]
   InvalidPoint(String),
+  /// The transaction(s) requested were pruned from the node.
   #[cfg_attr(feature = "std", error("pruned transaction"))]
   PrunedTransaction,
+  /// An invalid transaction was either sent/received to/from the node.
   #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
   InvalidTransaction([u8; 32]),
+  /// The node failed to return a fee.
   #[cfg_attr(feature = "std", error("unexpected fee response"))]
   InvalidFee,
+  /// The transaction priority level given was invalid.
   #[cfg_attr(feature = "std", error("invalid priority"))]
   InvalidPriority,
 }
@@ -114,12 +131,15 @@ fn read_epee_vi<R: io::Read>(reader: &mut R) -> io::Result<u64> {
     _ => unreachable!(),
   };
   let mut vi = u64::from(vi_start >> 2);
-  for i in 1 .. len {
+  for i in 1..len {
     vi |= u64::from(read_byte(reader)?) << (((i - 1) * 8) + 6);
   }
   Ok(vi)
 }
 
+/// A trait representing an RPC connection.
+///
+/// Note that [`HttpRpc`] already implements this trait.
 #[async_trait]
 pub trait RpcConnection: Clone + Debug {
   /// Perform a POST request to the specified route with the specified body.
@@ -128,6 +148,7 @@ pub trait RpcConnection: Clone + Debug {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError>;
 }
 
+/// A generic RPC client.
 // TODO: Make this provided methods for RpcConnection?
 #[derive(Clone, Debug)]
 pub struct Rpc<R: RpcConnection>(R);
@@ -202,6 +223,7 @@ impl<R: RpcConnection> Rpc<R> {
     )
   }
 
+  /// Get the node's current block height.
   pub async fn get_height(&self) -> Result<usize, RpcError> {
     #[derive(Deserialize, Debug)]
     struct HeightResponse {
@@ -210,6 +232,7 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
+  /// Get [`Transaction`]s by their `hashes`.
   pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
     if hashes.is_empty() {
       return Ok(vec![]);
@@ -274,6 +297,7 @@ impl<R: RpcConnection> Rpc<R> {
       .collect()
   }
 
+  /// Get a single [`Transaction`] by its hash.
   pub async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
   }
@@ -314,6 +338,7 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(block)
   }
 
+  /// Get a [`Block`] by its height number.
   pub async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
@@ -341,6 +366,7 @@ impl<R: RpcConnection> Rpc<R> {
     }
   }
 
+  /// Get all the [`Transaction`]s belonging to the corresponding block `hash`.
   pub async fn get_block_transactions(&self, hash: [u8; 32]) -> Result<Vec<Transaction>, RpcError> {
     let block = self.get_block(hash).await?;
     let mut res = vec![block.miner_tx];
@@ -405,7 +431,7 @@ impl<R: RpcConnection> Rpc<R> {
       let read_object = |reader: &mut &[u8]| -> io::Result<Vec<u64>> {
         let fields = read_byte(reader)? >> 2;
 
-        for _ in 0 .. fields {
+        for _ in 0..fields {
           let name_len = read_byte(reader)?;
           let name = read_raw_vec(read_byte, name_len.into(), reader)?;
 
@@ -458,7 +484,7 @@ impl<R: RpcConnection> Rpc<R> {
           };
 
           let mut bytes_res = vec![];
-          for _ in 0 .. iters {
+          for _ in 0..iters {
             bytes_res.push(f(reader)?);
           }
 
@@ -478,8 +504,8 @@ impl<R: RpcConnection> Rpc<R> {
               if bytes_res
                 .first()
                 .ok_or_else(|| io::Error::other("status wasn't a string"))?
-                .as_slice() !=
-                b"OK"
+                .as_slice()
+                != b"OK"
               {
                 // TODO: Better handle non-OK responses
                 Err(io::Error::other("response wasn't OK"))?;
@@ -623,6 +649,7 @@ impl<R: RpcConnection> Rpc<R> {
       .collect()
   }
 
+  /// Get a [`Fee`] based on [`Protocol::v14`] rules.
   async fn get_fee_v14(&self, priority: FeePriority) -> Result<Fee, RpcError> {
     #[derive(Deserialize, Debug)]
     struct FeeResponseV14 {
@@ -702,6 +729,7 @@ impl<R: RpcConnection> Rpc<R> {
     }
   }
 
+  /// Broadcast a [`Transaction`] to the network.
   pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
@@ -730,6 +758,13 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(())
   }
 
+  /// Generate blocks.
+  ///
+  /// - `address` is the address that will receive the coinbase reward
+  /// - `block_count` is the number of blocks that will be generated
+  ///
+  /// Note this is only for testing with nodes started with `--regtest`, see:
+  /// <https://www.getmonero.org/resources/developer-guides/daemon-rpc.html#generateblocks>.
   // TODO: Take &Address, not &str?
   pub async fn generate_blocks(
     &self,
