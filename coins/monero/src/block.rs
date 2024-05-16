@@ -47,7 +47,7 @@ impl BlockHeader {
   ///
   /// let mut writer = vec![];
   /// block_header.write(&mut writer)?;
-  /// # }
+  /// # Ok(()) }
   /// ```
   ///
   /// # Errors
@@ -79,7 +79,7 @@ impl BlockHeader {
   ///
   /// let serialized = block_header.serialize();
   /// assert_eq!(serialized, writer);
-  /// # }
+  /// # Ok(()) }
   /// ```
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
@@ -104,9 +104,9 @@ impl BlockHeader {
   /// let mut vec = vec![];
   /// block_header.write(&mut vec)?;
   ///
-  /// let read = BlockHeader::read(& vec)?;
+  /// let read = BlockHeader::read(&mut vec.as_slice())?;
   /// assert_eq!(read, block_header);
-  /// # }
+  /// # Ok(()) }
   /// ```
   ///
   /// # Errors

@@ -85,13 +85,13 @@ impl RctType {
   ///
   /// ```rust
   /// # use monero_serai::ringct::*;
-  /// assert_eq!(RctType::Null.to_bytes(), 0);
-  /// assert_eq!(RctType::MlsagAggregate.to_bytes(), 1);
-  /// assert_eq!(RctType::MlsagIndividual.to_bytes(), 2);
-  /// assert_eq!(RctType::Bulletproofs.to_bytes(), 3);
-  /// assert_eq!(RctType::BulletproofsCompactAmount.to_bytes(), 4);
-  /// assert_eq!(RctType::Clsag.to_bytes(), 5);
-  /// assert_eq!(RctType::BulletproofsPlus.to_bytes(), 6);
+  /// assert_eq!(RctType::Null.to_byte(), 0);
+  /// assert_eq!(RctType::MlsagAggregate.to_byte(), 1);
+  /// assert_eq!(RctType::MlsagIndividual.to_byte(), 2);
+  /// assert_eq!(RctType::Bulletproofs.to_byte(), 3);
+  /// assert_eq!(RctType::BulletproofsCompactAmount.to_byte(), 4);
+  /// assert_eq!(RctType::Clsag.to_byte(), 5);
+  /// assert_eq!(RctType::BulletproofsPlus.to_byte(), 6);
   /// ```
   pub fn to_byte(self) -> u8 {
     match self {
@@ -109,20 +109,20 @@ impl RctType {
   ///
   /// ```rust
   /// # use monero_serai::ringct::*;
-  /// assert_eq!(RctType::from_bytes(0).unwrap(), RctType::Null);
-  /// assert_eq!(RctType::from_bytes(1).unwrap(), RctType::MlsagAggregate);
-  /// assert_eq!(RctType::from_bytes(2).unwrap(), RctType::MlsagIndividual);
-  /// assert_eq!(RctType::from_bytes(3).unwrap(), RctType::Bulletproofs);
-  /// assert_eq!(RctType::from_bytes(4).unwrap(), RctType::BulletproofsCompactAmount);
-  /// assert_eq!(RctType::from_bytes(5).unwrap(), RctType::Clsag);
-  /// assert_eq!(RctType::from_bytes(6).unwrap(), RctType::BulletproofsPlus);
+  /// assert_eq!(RctType::from_byte(0).unwrap(), RctType::Null);
+  /// assert_eq!(RctType::from_byte(1).unwrap(), RctType::MlsagAggregate);
+  /// assert_eq!(RctType::from_byte(2).unwrap(), RctType::MlsagIndividual);
+  /// assert_eq!(RctType::from_byte(3).unwrap(), RctType::Bulletproofs);
+  /// assert_eq!(RctType::from_byte(4).unwrap(), RctType::BulletproofsCompactAmount);
+  /// assert_eq!(RctType::from_byte(5).unwrap(), RctType::Clsag);
+  /// assert_eq!(RctType::from_byte(6).unwrap(), RctType::BulletproofsPlus);
   /// ```
   ///
   /// # Errors
   /// This function returns [`None`] if the byte representation is invalid.
   /// ```rust
   /// # use monero_serai::ringct::*;
-  /// assert_eq!(RctType::from_bytes(7), None);
+  /// assert_eq!(RctType::from_byte(7), None);
   /// ```
   pub fn from_byte(byte: u8) -> Option<Self> {
     Some(match byte {
