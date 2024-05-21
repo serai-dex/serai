@@ -58,14 +58,7 @@ impl Deployer {
   /// Construct a new view of the `Deployer`.
   pub async fn new(provider: Arc<RootProvider<SimpleRequest>>) -> Result<Option<Self>, Error> {
     let address = Self::address();
-    #[cfg(not(test))]
-    let required_block = BlockNumberOrTag::Finalized;
-    #[cfg(test)]
-    let required_block = BlockNumberOrTag::Latest;
-    let code = provider
-      .get_code_at(address.into(), required_block.into())
-      .await
-      .map_err(|_| Error::ConnectionError)?;
+    let code = provider.get_code_at(address.into()).await.map_err(|_| Error::ConnectionError)?;
     // Contract has yet to be deployed
     if code.is_empty() {
       return Ok(None);
