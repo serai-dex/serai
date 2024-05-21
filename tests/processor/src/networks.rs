@@ -261,7 +261,6 @@ impl Wallet {
           OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
           absolute::LockTime,
           transaction::{Version, Transaction},
-          Network, Address,
         };
 
         const AMOUNT: u64 = 100000000;
@@ -281,13 +280,11 @@ impl Wallet {
             },
             TxOut {
               value: Amount::from_sat(AMOUNT),
-              script_pubkey: Address::p2tr_tweaked(
+              script_pubkey: ScriptBuf::new_p2tr_tweaked(
                 TweakedPublicKey::dangerous_assume_tweaked(
                   XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
                 ),
-                Network::Bitcoin,
-              )
-              .script_pubkey(),
+              ),
             },
           ],
         };
@@ -521,13 +518,8 @@ impl Wallet {
 
     match self {
       Wallet::Bitcoin { public_key, .. } => {
-        use bitcoin_serai::bitcoin::{Network, Address};
-        ExternalAddress::new(
-          networks::bitcoin::Address::new(Address::p2pkh(public_key, Network::Regtest))
-            .unwrap()
-            .into(),
-        )
-        .unwrap()
+        use bitcoin_serai::bitcoin::ScriptBuf;
+        ExternalAddress::new(ScriptBuf::new_p2pkh(&public_key.pubkey_hash()).into()).unwrap()
       }
       Wallet::Ethereum { key, .. } => ExternalAddress::new(
         ethereum_serai::crypto::address(&(ciphersuite::Secp256k1::generator() * key)).into(),

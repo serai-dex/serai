@@ -20,8 +20,7 @@ use bitcoin_serai::{
     key::{Parity, XOnlyPublicKey},
     consensus::{Encodable, Decodable},
     script::Instruction,
-    address::Address as BAddress,
-    Transaction, Block, Network as BNetwork, ScriptBuf,
+    Transaction, Block, ScriptBuf,
     opcodes::all::{OP_SHA256, OP_EQUALVERIFY},
   },
   wallet::{
@@ -454,7 +453,7 @@ impl Bitcoin {
     match BSignableTransaction::new(
       inputs.iter().map(|input| input.output.clone()).collect(),
       &payments,
-      change.as_ref().map(AsRef::as_ref),
+      change.clone().map(Into::into),
       None,
       fee.0,
     ) {
@@ -535,6 +534,8 @@ impl Bitcoin {
     input_index: usize,
     private_key: &PrivateKey,
   ) -> ScriptBuf {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     let public_key = PublicKey::from_private_key(SECP256K1, private_key);
     let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
 
@@ -581,13 +582,9 @@ const MAX_OUTPUTS: usize = 520;
 
 fn address_from_key(key: ProjectivePoint) -> Address {
   Address::new(
-    BAddress::from_script(
-      &p2tr_script_buf(key).expect("creating address from key which isn't properly tweaked"),
-      BNetwork::Bitcoin,
-    )
-    .expect("couldn't go from p2tr script buf to address"),
+    p2tr_script_buf(key).expect("creating address from key which isn't properly tweaked"),
   )
-  .expect("couldn't create Serai-representable address for bitcoin address")
+  .expect("couldn't create Serai-representable address for P2TR script")
 }
 
 #[async_trait]
@@ -733,9 +730,7 @@ impl Network for Bitcoin {
           }
           tx.unwrap().output.swap_remove(usize::try_from(input.previous_output.vout).unwrap())
         };
-        BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin)
-          .ok()
-          .and_then(Address::new)
+        Address::new(spent_output.script_pubkey)
       };
       let data = Self::extract_serai_data(tx);
       for output in &mut outputs {
@@ -903,6 +898,8 @@ impl Network for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     self
       .rpc
       .rpc_call::<Vec<String>>(
@@ -915,6 +912,8 @@ impl Network for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Address) -> Block {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, BNetwork::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
@@ -939,7 +938,7 @@ impl Network for Bitcoin {
       }],
       output: vec![TxOut {
         value: tx.output[0].value - BAmount::from_sat(10000),
-        script_pubkey: address.as_ref().script_pubkey(),
+        script_pubkey: address.clone().into(),
       }],
     };
     tx.input[0].script_sig = Self::sign_btc_input_for_p2pkh(&tx, 0, &private_key);

@@ -192,7 +192,7 @@ async_sequential! {
     assert_eq!(output.offset(), Scalar::ZERO);
 
     let inputs = vec![output];
-    let addr = || Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap();
+    let addr = || p2tr_script_buf(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
     assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
@@ -205,7 +205,7 @@ async_sequential! {
     // No change
     assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
     // Consolidation TX
-    assert!(SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, FEE).is_ok());
+    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
     // Data
     assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
     // No outputs
@@ -228,7 +228,7 @@ async_sequential! {
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, 0),
+      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
       Err(TransactionError::TooLowFee),
     );
 
@@ -260,20 +260,19 @@ async_sequential! {
 
     // Declare payments, change, fee
     let payments = [
-      (Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap(), 1005),
-      (Address::from_script(&p2tr_script_buf(offset_key).unwrap(), Network::Regtest).unwrap(), 1007)
+      (p2tr_script_buf(key).unwrap(), 1005),
+      (p2tr_script_buf(offset_key).unwrap(), 1007)
     ];
 
     let change_offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
-    let change_addr =
-      Address::from_script(&p2tr_script_buf(change_key).unwrap(), Network::Regtest).unwrap();
+    let change_addr = p2tr_script_buf(change_key).unwrap();
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
       vec![output.clone(), offset_output.clone()],
       &payments,
-      Some(&change_addr),
+      Some(change_addr.clone()),
       None,
       FEE
     ).unwrap();
@@ -298,7 +297,7 @@ async_sequential! {
     for ((output, scanned), payment) in tx.output.iter().zip(outputs.iter()).zip(payments.iter()) {
       assert_eq!(
         output,
-        &TxOut { script_pubkey: payment.0.script_pubkey(), value: Amount::from_sat(payment.1) },
+        &TxOut { script_pubkey: payment.0.clone(), value: Amount::from_sat(payment.1) },
       );
       assert_eq!(scanned.value(), payment.1 );
     }
@@ -313,7 +312,7 @@ async_sequential! {
       input_value - payments.iter().map(|payment| payment.1).sum::<u64>() - needed_fee;
     assert_eq!(
       tx.output[2],
-      TxOut { script_pubkey: change_addr.script_pubkey(), value: Amount::from_sat(change_amount) },
+      TxOut { script_pubkey: change_addr, value: Amount::from_sat(change_amount) },
     );
 
     // This also tests send_raw_transaction and get_transaction, which the RPC test can't
@@ -343,7 +342,7 @@ async_sequential! {
       &SignableTransaction::new(
         vec![output],
         &[],
-        Some(&Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap()),
+        Some(p2tr_script_buf(key).unwrap()),
         Some(data.clone()),
         FEE
       ).unwrap()

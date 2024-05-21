@@ -135,7 +135,7 @@ mod bitcoin {
         }],
         output: vec![TxOut {
           value: tx.output[0].value - BAmount::from_sat(10000),
-          script_pubkey: serai_btc_address.as_ref().script_pubkey(),
+          script_pubkey: serai_btc_address.into(),
         }],
       };
 

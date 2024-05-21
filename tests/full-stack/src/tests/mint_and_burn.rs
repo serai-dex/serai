@@ -454,19 +454,17 @@ async fn mint_and_burn_test() {
 
     // Create a random Bitcoin/Monero address
     let bitcoin_addr = {
-      use bitcoin_serai::bitcoin::{network::Network, key::PublicKey, address::Address};
-      // Uses Network::Bitcoin since it doesn't actually matter, Serai strips it out
-      // TODO: Move Serai to ScriptBuf from Address
-      Address::p2pkh(
-        loop {
+      use bitcoin_serai::bitcoin::{key::PublicKey, ScriptBuf};
+      ScriptBuf::new_p2pkh(
+        &(loop {
           let mut bytes = [0; 33];
           OsRng.fill_bytes(&mut bytes);
           bytes[0] %= 4;
           if let Ok(key) = PublicKey::from_slice(&bytes) {
             break key;
           }
-        },
-        Network::Bitcoin,
+        })
+        .pubkey_hash(),
       )
     };
 
@@ -559,7 +557,7 @@ async fn mint_and_burn_test() {
             let received_output = block.txdata[1]
               .output
               .iter()
-              .find(|output| output.script_pubkey == bitcoin_addr.script_pubkey())
+              .find(|output| output.script_pubkey == bitcoin_addr)
               .unwrap();
 
             let tx_fee = 1_100_000_00 -
