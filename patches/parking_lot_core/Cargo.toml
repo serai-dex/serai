@@ -1,0 +1,17 @@
+[package]
+name = "parking_lot_core"
+version = "0.8.6"
+description = "parking_lot_core which patches to the latest update"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/parking_lot_core"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+rust-version = "1.70"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+parking_lot_core = "0.9"
