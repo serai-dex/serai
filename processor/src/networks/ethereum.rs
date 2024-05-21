@@ -426,7 +426,7 @@ impl<D: Db> Network for Ethereum<D> {
       .get_block(BlockNumberOrTag::Finalized.into(), false)
       .await
       .map_err(|_| NetworkError::ConnectionError)?
-      .expect("no blocks were finalized")
+      .ok_or(NetworkError::ConnectionError)?
       .header
       .number
       .unwrap();

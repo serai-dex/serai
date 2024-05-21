@@ -17,6 +17,15 @@ pub fn processor(
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
+      if coin == "ethereum" {
+        r#"
+RUN cargo install svm-rs
+RUN svm install 0.8.25
+RUN svm use 0.8.25
+"#
+      } else {
+        ""
+      },
       network.release(),
       &format!("binaries {} {coin}", network.db()),
       "serai-processor",
@@ -34,7 +43,7 @@ RUN apt install -y ca-certificates
   let hostname = format!("serai-{}-{coin}", network.label());
   let port = match coin {
     "bitcoin" => 8332,
-    "ethereum" => return, // TODO
+    "ethereum" => 8545,
     "monero" => 18081,
     _ => panic!("unrecognized external network"),
   };

@@ -96,6 +96,7 @@ pub enum Wallet {
     input_tx: bitcoin_serai::bitcoin::Transaction,
   },
   Ethereum {
+    rpc_url: String,
     key: <ciphersuite::Secp256k1 as Ciphersuite>::F,
     nonce: u64,
   },
@@ -155,7 +156,7 @@ impl Wallet {
       }
 
       NetworkId::Ethereum => {
-        use ciphersuite::{group::ff::Field, Ciphersuite, Secp256k1};
+        use ciphersuite::{group::ff::Field, Secp256k1};
         use ethereum_serai::alloy::{
           primitives::{U256, Address},
           simple_request_transport::SimpleRequest,
@@ -183,7 +184,7 @@ impl Wallet {
           .await
           .unwrap();
 
-        Wallet::Ethereum { key, nonce: 0 }
+        Wallet::Ethereum { rpc_url: rpc_url.clone(), key, nonce: 0 }
       }
 
       NetworkId::Monero => {
@@ -328,22 +329,107 @@ impl Wallet {
         (buf, Balance { coin: Coin::Bitcoin, amount: Amount(AMOUNT) })
       }
 
-      Wallet::Ethereum { key, ref mut nonce } => {
-        /*
-        use ethereum_serai::alloy::primitives::U256;
+      Wallet::Ethereum { rpc_url, key, ref mut nonce } => {
+        use std::sync::Arc;
+        use ethereum_serai::{
+          alloy::{
+            primitives::{U256, TxKind},
+            sol_types::SolCall,
+            simple_request_transport::SimpleRequest,
+            consensus::{TxLegacy, SignableTransaction},
+            rpc_client::ClientBuilder,
+            provider::{Provider, RootProvider},
+            network::Ethereum,
+          },
+          crypto::PublicKey,
+          deployer::Deployer,
+        };
 
         let eight_decimals = U256::from(100_000_000u64);
         let nine_decimals = eight_decimals * U256::from(10u64);
         let eighteen_decimals = nine_decimals * nine_decimals;
+        let one_eth = eighteen_decimals;
 
-        let tx = todo!("send to router");
+        let provider = Arc::new(RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        ));
+
+        let to_as_key = PublicKey::new(
+          <ciphersuite::Secp256k1 as Ciphersuite>::read_G(&mut to.as_slice()).unwrap(),
+        )
+        .unwrap();
+        let router_addr = {
+          // Find the deployer
+          let deployer = Deployer::new(provider.clone()).await.unwrap().unwrap();
+
+          // Find the router, deploying if non-existent
+          let router = if let Some(router) =
+            deployer.find_router(provider.clone(), &to_as_key).await.unwrap()
+          {
+            router
+          } else {
+            let mut tx = deployer.deploy_router(&to_as_key);
+            tx.gas_price = 1_000_000_000u64.into();
+            let tx = ethereum_serai::crypto::deterministically_sign(&tx);
+            let signer = tx.recover_signer().unwrap();
+            let (tx, sig, _) = tx.into_parts();
+
+            provider
+              .raw_request::<_, ()>(
+                "anvil_setBalance".into(),
+                [signer.to_string(), (tx.gas_limit * tx.gas_price).to_string()],
+              )
+              .await
+              .unwrap();
+
+            let mut bytes = vec![];
+            tx.encode_with_signature_fields(&sig, &mut bytes);
+            let _ = provider.send_raw_transaction(&bytes).await.unwrap();
+
+            provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+
+            deployer.find_router(provider.clone(), &to_as_key).await.unwrap().unwrap()
+          };
+
+          router.address()
+        };
+
+        let tx = TxLegacy {
+          chain_id: None,
+          nonce: *nonce,
+          gas_price: 1_000_000_000u128,
+          gas_limit: 200_000u128,
+          to: TxKind::Call(router_addr.into()),
+          // 1 ETH
+          value: one_eth,
+          input: ethereum_serai::router::abi::inInstructionCall::new((
+            [0; 20].into(),
+            one_eth,
+            if let Some(instruction) = instruction {
+              Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode().into()
+            } else {
+              vec![].into()
+            },
+          ))
+          .abi_encode()
+          .into(),
+        };
 
         *nonce += 1;
-        (tx, Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) })
-        */
-        let _ = key;
-        let _ = nonce;
-        todo!()
+
+        let sig =
+          k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(*key).unwrap())
+            .sign_prehash_recoverable(tx.signature_hash().as_ref())
+            .unwrap();
+
+        let mut bytes = vec![];
+        tx.encode_with_signature_fields(&sig.into(), &mut bytes);
+
+        // We drop the bottom 10 decimals
+        (
+          bytes,
+          Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) },
+        )
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
@@ -438,13 +524,10 @@ impl Wallet {
         )
         .unwrap()
       }
-      Wallet::Ethereum { key, .. } => {
-        use ciphersuite::{Ciphersuite, Secp256k1};
-        ExternalAddress::new(
-          ethereum_serai::crypto::address(&(Secp256k1::generator() * key)).into(),
-        )
-        .unwrap()
-      }
+      Wallet::Ethereum { key, .. } => ExternalAddress::new(
+        ethereum_serai::crypto::address(&(ciphersuite::Secp256k1::generator() * key)).into(),
+      )
+      .unwrap(),
       Wallet::Monero { view_pair, .. } => {
         use monero_serai::wallet::address::{Network, AddressSpec};
         ExternalAddress::new(

@@ -137,7 +137,7 @@ WORKDIR /home/{user}
   }
 }
 
-fn build_serai_service(release: bool, features: &str, package: &str) -> String {
+fn build_serai_service(prelude: &str, release: bool, features: &str, package: &str) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
@@ -158,6 +158,8 @@ RUN apt install -y make protobuf-compiler
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
+
+{prelude}
 
 # Add files for build
 ADD patches /serai/patches

@@ -46,4 +46,4 @@ tokio = { version = "1", features = ["macros"] }
 alloy-node-bindings = { git = "https://github.com/alloy-rs/alloy", rev = "b79db21734cffddc11753fe62ba571565c896f42", default-features = false }
 
 [features]
-tests = ["alloy-node-bindings"]
+tests = ["alloy-node-bindings", "frost/tests"]
