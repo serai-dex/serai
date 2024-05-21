@@ -45,7 +45,7 @@ frost-schnorrkel = { path = "../crypto/schnorrkel", default-features = false }
 k256 = { version = "^0.13.1", default-features = false, features = ["std"], optional = true }
 
 # Bitcoin
-secp256k1 = { version = "0.28", default-features = false, features = ["std", "global-context", "rand-std"], optional = true }
+secp256k1 = { version = "0.29", default-features = false, features = ["std", "global-context", "rand-std"], optional = true }
 bitcoin-serai = { path = "../coins/bitcoin", default-features = false, features = ["std"], optional = true }
 
 # Ethereum

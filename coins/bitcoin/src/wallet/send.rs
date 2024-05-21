@@ -23,7 +23,7 @@ use bitcoin::{
 
 use crate::{
   crypto::Schnorr,
-  wallet::{ReceivedOutput, address_payload},
+  wallet::{ReceivedOutput, p2tr_script_buf},
 };
 
 #[rustfmt::skip]
@@ -248,7 +248,7 @@ impl SignableTransaction {
 
   /// Returns the TX ID of the transaction this will create.
   pub fn txid(&self) -> [u8; 32] {
-    let mut res = self.tx.txid().to_byte_array();
+    let mut res = self.tx.compute_txid().to_byte_array();
     res.reverse();
     res
   }
@@ -288,7 +288,7 @@ impl SignableTransaction {
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
 
       let offset = keys.clone().offset(self.offsets[i]);
-      if address_payload(offset.group_key())?.script_pubkey() != self.prevouts[i].script_pubkey {
+      if p2tr_script_buf(offset.group_key())? != self.prevouts[i].script_pubkey {
         None?;
       }
 

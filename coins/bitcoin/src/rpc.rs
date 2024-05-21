@@ -195,13 +195,13 @@ impl Rpc {
         // If this was already successfully published, consider this having succeeded
         if let RpcError::RequestError(Error { code, .. }) = e {
           if code == RPC_VERIFY_ALREADY_IN_CHAIN {
-            return Ok(tx.txid());
+            return Ok(tx.compute_txid());
           }
         }
         Err(e)?
       }
     };
-    if txid != tx.txid() {
+    if txid != tx.compute_txid() {
       Err(RpcError::InvalidResponse("returned TX ID inequals calculated TX ID"))?;
     }
     Ok(txid)
@@ -215,7 +215,7 @@ impl Rpc {
     let tx: Transaction = encode::deserialize(&bytes)
       .map_err(|_| RpcError::InvalidResponse("node sent an improperly serialized transaction"))?;
 
-    let mut tx_hash = *tx.txid().as_raw_hash().as_byte_array();
+    let mut tx_hash = *tx.compute_txid().as_raw_hash().as_byte_array();
     tx_hash.reverse();
     if hash != &tx_hash {
       Err(RpcError::InvalidResponse("node replied with a different transaction"))?;

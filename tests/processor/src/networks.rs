@@ -126,7 +126,7 @@ impl Wallet {
         let secret_key = SecretKey::new(&mut rand_core::OsRng);
         let private_key = PrivateKey::new(secret_key, Network::Regtest);
         let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-        let main_addr = Address::p2pkh(&public_key, Network::Regtest);
+        let main_addr = Address::p2pkh(public_key, Network::Regtest);
 
         let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
 
@@ -258,10 +258,10 @@ impl Wallet {
           consensus::Encodable,
           sighash::{EcdsaSighashType, SighashCache},
           script::{PushBytesBuf, Script, ScriptBuf, Builder},
-          address::Payload,
           OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
           absolute::LockTime,
           transaction::{Version, Transaction},
+          Network, Address,
         };
 
         const AMOUNT: u64 = 100000000;
@@ -269,7 +269,7 @@ impl Wallet {
           version: Version(2),
           lock_time: LockTime::ZERO,
           input: vec![TxIn {
-            previous_output: OutPoint { txid: input_tx.txid(), vout: 0 },
+            previous_output: OutPoint { txid: input_tx.compute_txid(), vout: 0 },
             script_sig: Script::new().into(),
             sequence: Sequence(u32::MAX),
             witness: Witness::default(),
@@ -281,9 +281,12 @@ impl Wallet {
             },
             TxOut {
               value: Amount::from_sat(AMOUNT),
-              script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
-                XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
-              ))
+              script_pubkey: Address::p2tr_tweaked(
+                TweakedPublicKey::dangerous_assume_tweaked(
+                  XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
+                ),
+                Network::Bitcoin,
+              )
               .script_pubkey(),
             },
           ],
@@ -303,7 +306,7 @@ impl Wallet {
 
         let mut der = SECP256K1
           .sign_ecdsa_low_r(
-            &Message::from(
+            &Message::from_digest_slice(
               SighashCache::new(&tx)
                 .legacy_signature_hash(
                   0,
@@ -311,8 +314,10 @@ impl Wallet {
                   EcdsaSighashType::All.to_u32(),
                 )
                 .unwrap()
-                .to_raw_hash(),
-            ),
+                .to_raw_hash()
+                .as_ref(),
+            )
+            .unwrap(),
             &private_key.inner,
           )
           .serialize_der()
