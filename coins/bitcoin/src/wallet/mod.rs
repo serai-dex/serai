@@ -93,7 +93,7 @@ impl ReceivedOutput {
     let output;
     let outpoint;
     {
-      let mut buf_r = BufReader::new(r);
+      let mut buf_r = BufReader::with_capacity(0, r);
       output =
         TxOut::consensus_decode(&mut buf_r).map_err(|_| io::Error::other("invalid TxOut"))?;
       outpoint =

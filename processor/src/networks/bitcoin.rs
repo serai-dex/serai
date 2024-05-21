@@ -242,7 +242,7 @@ impl EventualityTrait for Eventuality {
     buf
   }
   fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
-    Transaction::consensus_decode(&mut io::BufReader::new(reader))
+    Transaction::consensus_decode(&mut io::BufReader::with_capacity(0, reader))
       .map_err(|e| io::Error::other(format!("{e}")))
   }
 }
