@@ -519,7 +519,12 @@ impl Wallet {
     match self {
       Wallet::Bitcoin { public_key, .. } => {
         use bitcoin_serai::bitcoin::ScriptBuf;
-        ExternalAddress::new(ScriptBuf::new_p2pkh(&public_key.pubkey_hash()).into()).unwrap()
+        ExternalAddress::new(
+          networks::bitcoin::Address::new(ScriptBuf::new_p2pkh(&public_key.pubkey_hash()))
+            .unwrap()
+            .into(),
+        )
+        .unwrap()
       }
       Wallet::Ethereum { key, .. } => ExternalAddress::new(
         ethereum_serai::crypto::address(&(ciphersuite::Secp256k1::generator() * key)).into(),
