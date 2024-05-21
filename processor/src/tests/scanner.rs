@@ -115,6 +115,12 @@ pub async fn test_scanner<N: Network>(
 pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
   new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
 ) {
+  // This test scans two blocks then acknowledges one, yet a network with one confirm won't scan
+  // two blocks before the first is acknowledged (due to the look-ahead limit)
+  if N::CONFIRMATIONS <= 1 {
+    return;
+  }
+
   let mut db = MemDb::new();
   let network = new_network(db.clone()).await;
 
@@ -139,6 +145,10 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
         let mut txn = db.txn();
         NetworkKeyDb::set(&mut txn, Session(0), &key.to_bytes().as_ref().to_vec());
         txn.commit();
+
+        // Sleep for 5 seconds as setting the Network key value will trigger an async task for
+        // Ethereum
+        tokio::time::sleep(Duration::from_secs(5)).await;
       }
       key
     };
@@ -158,6 +168,7 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
     network.mine_block().await;
   }
 
+  // Block for the second set of keys registered
   let block_id =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Block { is_retirement_block, block, outputs: _ } => {
@@ -170,6 +181,7 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
       }
     };
 
+  // Block for the third set of keys registered
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block { .. } => {}
     ScannerEvent::Completed(_, _, _, _, _) => {
