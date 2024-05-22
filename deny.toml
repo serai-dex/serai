@@ -44,6 +44,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-env" },
 
   { allow = ["AGPL-3.0"], name = "ethereum-serai" },
+  { allow = ["AGPL-3.0"], name = "serai-ethereum-relayer" },
 
   { allow = ["AGPL-3.0"], name = "serai-message-queue" },
 

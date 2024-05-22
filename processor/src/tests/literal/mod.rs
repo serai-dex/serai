@@ -423,7 +423,7 @@ mod ethereum {
           });
         }
 
-        Ethereum::new(db, url.clone()).await
+        Ethereum::new(db, url.clone(), String::new()).await
       })
     }
   }

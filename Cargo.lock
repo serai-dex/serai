@@ -7885,6 +7885,17 @@ name = "serai-env"
 version = "0.1.0"
 
 [[package]]
+name = "serai-ethereum-relayer"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "serai-db",
+ "serai-env",
+ "tokio",
+]
+
+[[package]]
 name = "serai-full-stack-tests"
 version = "0.1.0"
 dependencies = [

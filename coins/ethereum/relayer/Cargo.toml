@@ -1,0 +1,30 @@
+[package]
+name = "serai-ethereum-relayer"
+version = "0.1.0"
+description = "A relayer for Serai's Ethereum transactions"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/ethereum/relayer"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { version = "0.4", default-features = false, features = ["std"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+
+tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
+
+serai-env = { path = "../../../common/env" }
+serai-db = { path = "../../../common/db" }
+
+[features]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

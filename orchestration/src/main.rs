@@ -32,6 +32,9 @@ use mimalloc::mimalloc;
 mod coins;
 use coins::*;
 
+mod ethereum_relayer;
+use ethereum_relayer::ethereum_relayer;
+
 mod message_queue;
 use message_queue::message_queue;
 
@@ -280,6 +283,8 @@ fn dockerfiles(network: Network) {
   let ethereum_key = infrastructure_keys.remove("ethereum").unwrap();
   let monero_key = infrastructure_keys.remove("monero").unwrap();
 
+  ethereum_relayer(&orchestration_path, network);
+
   message_queue(
     &orchestration_path,
     network,
@@ -363,6 +368,7 @@ fn start(network: Network, services: HashSet<String>) {
     let name = match service.as_ref() {
       "serai" => "serai",
       "coordinator" => "coordinator",
+      "ethereum-relayer" => "ethereum-relayer",
       "message-queue" => "message-queue",
       "bitcoin-daemon" => "bitcoin",
       "bitcoin-processor" => "bitcoin-processor",
@@ -495,6 +501,10 @@ fn start(network: Network, services: HashSet<String>) {
             command
           }
         }
+        "ethereum-relayer" => {
+          // Expose the router command fetch server
+          command.arg("-p").arg("20831:20831")
+        }
         "monero" => {
           // Expose the RPC for tests
           if network == Network::Dev {
@@ -561,6 +571,9 @@ Commands:
     - `message-queue`
     - `bitcoin-daemon`
     - `bitcoin-processor`
+    - `ethereum-daemon`
+    - `ethereum-processor`
+    - `ethereum-relayer`
     - `monero-daemon`
     - `monero-processor`
     - `monero-wallet-rpc` (if "dev")
@@ -593,6 +606,9 @@ Commands:
     Some("start") => {
       let mut services = HashSet::new();
       for arg in args {
+        if arg == "ethereum-processor" {
+          services.insert("ethereum-relayer".to_string());
+        }
         if let Some(ext_network) = arg.strip_suffix("-processor") {
           services.insert(ext_network.to_string() + "-daemon");
         }

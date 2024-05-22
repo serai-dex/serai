@@ -38,8 +38,11 @@ members = [
   "crypto/schnorrkel",
 
   "coins/bitcoin",
+
   "coins/ethereum/alloy-simple-request-transport",
   "coins/ethereum",
+  "coins/ethereum/relayer",
+
   "coins/monero/generators",
   "coins/monero",
 

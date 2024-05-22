@@ -41,24 +41,32 @@ RUN apt install -y ca-certificates
   const RPC_PASS: &str = "seraidex";
   // TODO: Isolate networks
   let hostname = format!("serai-{}-{coin}", network.label());
-  let port = match coin {
-    "bitcoin" => 8332,
-    "ethereum" => 8545,
-    "monero" => 18081,
-    _ => panic!("unrecognized external network"),
-  };
+  let port = format!(
+    "{}",
+    match coin {
+      "bitcoin" => 8332,
+      "ethereum" => 8545,
+      "monero" => 18081,
+      _ => panic!("unrecognized external network"),
+    }
+  );
 
-  let env_vars = [
+  let mut env_vars = vec![
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coin_key.to_repr())),
     ("ENTROPY", hex::encode(entropy.as_ref())),
     ("NETWORK", coin.to_string()),
     ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
     ("NETWORK_RPC_HOSTNAME", hostname),
-    ("NETWORK_RPC_PORT", format!("{port}")),
+    ("NETWORK_RPC_PORT", port),
     ("DB_PATH", "/volume/processor-db".to_string()),
     ("RUST_LOG", "info,serai_processor=debug".to_string()),
   ];
+  if coin == "ethereum" {
+    env_vars
+      .push(("ETHEREUM_RELAYER_HOSTNAME", format!("serai-{}-ethereum-relayer", network.label())));
+    env_vars.push(("ETHEREUM_RELAYER_PORT", "20830".to_string()));
+  }
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
     env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);

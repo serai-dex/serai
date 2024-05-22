@@ -147,7 +147,7 @@ pub(crate) async fn sign_tx(
 
 #[test]
 fn send_test() {
-  for network in [NetworkId::Bitcoin, /* TODO NetworkId::Ethereum, */ NetworkId::Monero] {
+  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
@@ -182,7 +182,7 @@ fn send_test() {
       let (tx, balance_sent) =
         wallet.send_to_address(&ops, &key_pair.1, Some(instruction.clone())).await;
       for coordinator in &mut coordinators {
-        coordinator.publish_transacton(&ops, &tx).await;
+        coordinator.publish_transaction(&ops, &tx).await;
       }
 
       // Put the TX past the confirmation depth
@@ -295,7 +295,7 @@ fn send_test() {
         .unwrap();
       for (i, coordinator) in coordinators.iter_mut().enumerate() {
         if !participating.contains(&i) {
-          coordinator.publish_transacton(&ops, &tx).await;
+          coordinator.publish_eventuality_completion(&ops, &tx).await;
           // Tell them of it as a completion of the relevant signing nodes
           coordinator
             .send_message(messages::sign::CoordinatorMessage::Completed {

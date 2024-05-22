@@ -229,7 +229,7 @@ fn batch_test() {
         let (tx, balance_sent) =
           wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
         for coordinator in &mut coordinators {
-          coordinator.publish_transacton(&ops, &tx).await;
+          coordinator.publish_transaction(&ops, &tx).await;
         }
 
         // Put the TX past the confirmation depth
