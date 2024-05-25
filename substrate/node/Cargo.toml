@@ -20,10 +20,11 @@ workspace = true
 name = "serai-node"
 
 [dependencies]
+rand_core = "0.6"
 zeroize = "1"
 hex = "0.4"
+log = "0.4"
 
-rand_core = "0.6"
 schnorrkel = "0.11"
 
 libp2p = "0.52"

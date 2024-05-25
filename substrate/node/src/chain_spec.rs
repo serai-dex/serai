@@ -18,9 +18,12 @@ fn account_from_name(name: &'static str) -> PublicKey {
 
 fn wasm_binary() -> Vec<u8> {
   // TODO: Accept a config of runtime path
-  if let Ok(binary) = std::fs::read("/runtime/serai.wasm") {
+  const WASM_PATH: &str = "/runtime/serai.wasm";
+  if let Ok(binary) = std::fs::read(WASM_PATH) {
+    log::info!("using {WASM_PATH}");
     return binary;
   }
+  log::info!("using built-in {WASM_PATH}");
   WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
 
