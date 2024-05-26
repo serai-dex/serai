@@ -382,23 +382,17 @@ fn start(network: Network, services: HashSet<String>) {
     let serai_runtime_volume = format!("serai-{}-runtime-volume", network.label());
     if name == "serai" {
       // Check if it's built by checking if the volume has the expected runtime file
+      let wasm_build_container_name = format!("serai-{}-runtime", network.label());
       let built = || {
-        if let Ok(path) = Command::new("docker")
-          .arg("volume")
+        if let Ok(state_and_status) = Command::new("docker")
           .arg("inspect")
           .arg("-f")
-          .arg("{{ .Mountpoint }}")
-          .arg(&serai_runtime_volume)
+          .arg("{{.State.Status}}:{{.State.ExitCode}}")
+          .arg(&wasm_build_container_name)
           .output()
         {
-          if let Ok(path) = String::from_utf8(path.stdout) {
-            if let Ok(iter) = std::fs::read_dir(PathBuf::from(path.trim())) {
-              for item in iter.flatten() {
-                if item.file_name() == "serai.wasm" {
-                  return true;
-                }
-              }
-            }
+          if let Ok(state_and_status) = String::from_utf8(state_and_status.stdout) {
+            return state_and_status.trim() == "exited:0";
           }
         }
         false
