@@ -23,7 +23,7 @@ fn wasm_binary() -> Vec<u8> {
     log::info!("using {WASM_PATH}");
     return binary;
   }
-  log::info!("using built-in {WASM_PATH}");
+  log::info!("using built-in wasm");
   WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
 
