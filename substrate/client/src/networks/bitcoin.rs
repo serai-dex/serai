@@ -83,12 +83,6 @@ impl TryFrom<Vec<u8>> for Address {
 }
 
 fn try_to_vec(addr: &Address) -> Result<Vec<u8>, ()> {
-  let witness_program = |addr: &Address| {
-    let program_push = addr.0.as_script().instructions().last().ok_or(())?.map_err(|_| ())?;
-    let program = program_push.push_bytes().ok_or(())?.as_bytes();
-    Ok::<_, ()>(program.to_vec())
-  };
-
   let parsed_addr =
     BAddress::<NetworkChecked>::from_script(&addr.0, Network::Bitcoin).map_err(|_| ())?;
   Ok(
@@ -100,21 +94,19 @@ fn try_to_vec(addr: &Address) -> Result<Vec<u8>, ()> {
         EncodedAddress::P2SH(*parsed_addr.script_hash().unwrap().as_raw_hash().as_byte_array())
       }
       Some(AddressType::P2wpkh) => {
-        let program = witness_program(addr)?;
-        let mut buf = [0; 20];
-        buf.copy_from_slice(program.as_ref());
-        EncodedAddress::P2WPKH(buf)
+        let program = parsed_addr.witness_program().ok_or(())?;
+        let program = program.program().as_bytes();
+        EncodedAddress::P2WPKH(program.try_into().map_err(|_| ())?)
       }
       Some(AddressType::P2wsh) => {
-        let program = witness_program(addr)?;
-        let mut buf = [0; 32];
-        buf.copy_from_slice(program.as_ref());
-        EncodedAddress::P2WSH(buf)
+        let program = parsed_addr.witness_program().ok_or(())?;
+        let program = program.program().as_bytes();
+        EncodedAddress::P2WSH(program.try_into().map_err(|_| ())?)
       }
       Some(AddressType::P2tr) => {
-        let program = witness_program(addr)?;
-        let program_ref: &[u8] = program.as_ref();
-        EncodedAddress::P2TR(program_ref.try_into().map_err(|_| ())?)
+        let program = parsed_addr.witness_program().ok_or(())?;
+        let program = program.program().as_bytes();
+        EncodedAddress::P2TR(program.try_into().map_err(|_| ())?)
       }
       _ => Err(())?,
     })
