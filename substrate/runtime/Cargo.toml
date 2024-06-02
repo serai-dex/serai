@@ -49,6 +49,7 @@ frame-executive = { git = "https://github.com/serai-dex/substrate", default-feat
 frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", default-features = false }
+serai-abi = { path = "../abi", default-features = false, features = ["serde"] }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-authorship = { git = "https://github.com/serai-dex/substrate", default-features = false }
@@ -102,6 +103,8 @@ std = [
   "frame-executive/std",
 
   "serai-primitives/std",
+  "serai-abi/std",
+  "serai-abi/serde",
 
   "pallet-timestamp/std",
   "pallet-authorship/std",

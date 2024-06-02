@@ -1,10 +1,11 @@
+use sp_core::{ConstU32, bounded::BoundedVec};
 use sp_consensus_grandpa::EquivocationProof;
 
 use serai_primitives::{BlockNumber, SeraiAddress};
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 pub struct ReportEquivocation {
-  pub equivocation_proof: Box<EquivocationProof<[u8; 32], BlockNumber>>,
+  pub equivocation_proof: alloc::boxed::Box<EquivocationProof<[u8; 32], BlockNumber>>,
   pub key_owner_proof: SeraiAddress,
 }
 
@@ -15,10 +16,10 @@ pub enum Call {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
-  NewAuthorities { authority_set: Vec<(SeraiAddress, u64)> },
+  NewAuthorities { authority_set: BoundedVec<(SeraiAddress, u64), ConstU32<0>> },
   // TODO: Remove these
   Paused,
   Resumed,
