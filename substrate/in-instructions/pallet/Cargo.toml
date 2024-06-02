@@ -60,3 +60,6 @@ std = [
   "validator-sets-pallet/std",
 ]
 default = ["std"]
+
+# TODO
+try-runtime = []

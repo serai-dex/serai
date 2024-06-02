@@ -3,9 +3,9 @@
 Flexible Transcript is a crate offering:
 - `Transcript`, a trait offering functions transcripts should implement.
 - `DigestTranscript`, a competent transcript format instantiated against a
-provided hash function.
+  provided hash function.
 - `MerlinTranscript`, a wrapper of `merlin` into the trait (available via the
-`merlin` feature).
+  `merlin` feature).
 - `RecommendedTranscript`, a transcript recommended for usage in applications.
   Currently, this is `DigestTranscript<Blake2b512>` (available via the
   `recommended` feature).

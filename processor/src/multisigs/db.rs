@@ -231,7 +231,7 @@ impl ForwardedOutputDb {
     let res = InInstructionWithBalance::decode(&mut outputs_ref).unwrap();
     assert!(outputs_ref.len() < outputs.len());
     if outputs_ref.is_empty() {
-      txn.del(&Self::key(balance));
+      txn.del(Self::key(balance));
     } else {
       Self::set(txn, balance, &outputs);
     }

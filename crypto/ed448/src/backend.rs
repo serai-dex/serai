@@ -34,7 +34,7 @@ macro_rules! math_op {
     impl $Op<$Other> for $Value {
       type Output = $Value;
       fn $op_fn(self, other: $Other) -> Self::Output {
-        Self($function(self.0, other.0))
+        $Value($function(self.0, other.0))
       }
     }
     impl $Assign<$Other> for $Value {
@@ -45,7 +45,7 @@ macro_rules! math_op {
     impl<'a> $Op<&'a $Other> for $Value {
       type Output = $Value;
       fn $op_fn(self, other: &'a $Other) -> Self::Output {
-        Self($function(self.0, other.0))
+        $Value($function(self.0, other.0))
       }
     }
     impl<'a> $Assign<&'a $Other> for $Value {
@@ -60,7 +60,7 @@ macro_rules! from_wrapper {
   ($wrapper: ident, $inner: ident, $uint: ident) => {
     impl From<$uint> for $wrapper {
       fn from(a: $uint) -> $wrapper {
-        Self(Residue::new(&$inner::from(a)))
+        $wrapper(Residue::new(&$inner::from(a)))
       }
     }
   };
@@ -127,7 +127,7 @@ macro_rules! field {
     impl Neg for $FieldName {
       type Output = $FieldName;
       fn neg(self) -> $FieldName {
-        Self(self.0.neg())
+        $FieldName(self.0.neg())
       }
     }
 
@@ -141,13 +141,13 @@ macro_rules! field {
     impl $FieldName {
       /// Perform an exponentiation.
       pub fn pow(&self, other: $FieldName) -> $FieldName {
-        let mut table = [Self(Residue::ONE); 16];
+        let mut table = [$FieldName(Residue::ONE); 16];
         table[1] = *self;
         for i in 2 .. 16 {
           table[i] = table[i - 1] * self;
         }
 
-        let mut res = Self(Residue::ONE);
+        let mut res = $FieldName(Residue::ONE);
         let mut bits = 0;
         for (i, mut bit) in other.to_le_bits().iter_mut().rev().enumerate() {
           bits <<= 1;
@@ -170,8 +170,8 @@ macro_rules! field {
     }
 
     impl Field for $FieldName {
-      const ZERO: Self = Self(Residue::ZERO);
-      const ONE: Self = Self(Residue::ONE);
+      const ZERO: Self = $FieldName(Residue::ZERO);
+      const ONE: Self = $FieldName(Residue::ONE);
 
       fn random(mut rng: impl RngCore) -> Self {
         let mut bytes = [0; 112];
@@ -188,12 +188,12 @@ macro_rules! field {
 
       fn invert(&self) -> CtOption<Self> {
         const NEG_2: $FieldName =
-          Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::from_u8(2))));
+          $FieldName($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::from_u8(2))));
         CtOption::new(self.pow(NEG_2), !self.is_zero())
       }
 
       fn sqrt(&self) -> CtOption<Self> {
-        const MOD_1_4: $FieldName = Self($ResidueType::new(
+        const MOD_1_4: $FieldName = $FieldName($ResidueType::new(
           &$MODULUS.saturating_add(&U448::ONE).wrapping_div(&U448::from_u8(4)),
         ));
 
@@ -217,14 +217,14 @@ macro_rules! field {
       const TWO_INV: Self = $FieldName($ResidueType::new(&U448::from_u8(2)).invert().0);
 
       const MULTIPLICATIVE_GENERATOR: Self =
-        Self(Residue::new(&U448::from_u8($MULTIPLICATIVE_GENERATOR)));
+        $FieldName(Residue::new(&U448::from_u8($MULTIPLICATIVE_GENERATOR)));
       // True for both the Ed448 Scalar field and FieldElement field
       const S: u32 = 1;
 
       // Both fields have their root of unity as -1
       const ROOT_OF_UNITY: Self =
-        Self($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::ONE)));
-      const ROOT_OF_UNITY_INV: Self = Self(Self::ROOT_OF_UNITY.0.invert().0);
+        $FieldName($ResidueType::sub(&$ResidueType::ZERO, &$ResidueType::new(&U448::ONE)));
+      const ROOT_OF_UNITY_INV: Self = $FieldName(Self::ROOT_OF_UNITY.0.invert().0);
 
       const DELTA: Self = $FieldName(Residue::new(&U448::from_le_hex($DELTA)));
 

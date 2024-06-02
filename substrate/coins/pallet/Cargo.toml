@@ -49,6 +49,9 @@ std = [
   "coins-primitives/std",
 ]
 
+# TODO
+try-runtime = []
+
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
