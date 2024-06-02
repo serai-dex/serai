@@ -180,7 +180,10 @@ impl<'a> SeraiValidatorSets<'a> {
 
   pub fn set_keys(
     network: NetworkId,
-    removed_participants: Vec<SeraiAddress>,
+    removed_participants: sp_runtime::BoundedVec<
+      SeraiAddress,
+      sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
+    >,
     key_pair: KeyPair,
     signature: Signature,
   ) -> Transaction {

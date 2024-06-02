@@ -7,7 +7,8 @@ use primitives::SignalId;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Call {
   register_retirement_signal { in_favor_of: [u8; 32] },
   revoke_retirement_signal { retirement_signal_id: [u8; 32] },
@@ -18,7 +19,8 @@ pub enum Call {
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
   RetirementSignalRegistered {
     signal_id: [u8; 32],

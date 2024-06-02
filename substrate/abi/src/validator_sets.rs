@@ -1,4 +1,4 @@
-use sp_core::{ConstU32, bounded_vec::BoundedVec};
+use sp_core::{ConstU32, bounded::BoundedVec};
 
 pub use serai_validator_sets_primitives as primitives;
 
@@ -6,11 +6,12 @@ use serai_primitives::*;
 use serai_validator_sets_primitives::*;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Call {
   set_keys {
     network: NetworkId,
-    removed_participants: Vec<SeraiAddress>,
+    removed_participants: BoundedVec<SeraiAddress, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
     key_pair: KeyPair,
     signature: Signature,
   },
@@ -35,7 +36,8 @@ pub enum Call {
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
   NewSet {
     set: ValidatorSet,

@@ -8195,6 +8195,7 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "scale-info",
+ "serai-abi",
  "serai-coins-pallet",
  "serai-dex-pallet",
  "serai-in-instructions-pallet",

@@ -133,7 +133,13 @@ mod impl_pst_for_serai {
       key_pair: KeyPair,
       signature: Signature,
     ) {
-      let tx = SeraiValidatorSets::set_keys(set.network, removed, key_pair, signature);
+      // TODO: BoundedVec as an arg to avoid this expect
+      let tx = SeraiValidatorSets::set_keys(
+        set.network,
+        removed.try_into().expect("removing more than allowed"),
+        key_pair,
+        signature,
+      );
       async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, (): ()) -> bool {
         if matches!(serai.keys(set).await, Ok(Some(_))) {
           log::info!("another coordinator set key pair for {:?}", set);

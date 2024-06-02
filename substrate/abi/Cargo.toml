@@ -16,27 +16,48 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-scale = { package = "parity-scale-codec", version = "3", features = ["derive"] }
-scale-info = { version = "2", features = ["derive"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-borsh = { version = "1", features = ["derive", "de_strict_order"], optional = true }
-serde = { version = "1", features = ["derive", "alloc"], optional = true }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-runtime = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-serai-primitives = { path = "../primitives", version = "0.1" }
-serai-coins-primitives = { path = "../coins/primitives", version = "0.1" }
-serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1" }
-serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1" }
-serai-signals-primitives = { path = "../signals/primitives", version = "0.1" }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-frame-support = { git = "https://github.com/serai-dex/substrate" }
+serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
+serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
+serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1", default-features = false }
+serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1", default-features = false }
+serai-signals-primitives = { path = "../signals/primitives", version = "0.1", default-features = false }
 
 [features]
+std = [
+  "scale/std",
+  "scale-info/std",
+
+  "borsh?/std",
+  "serde?/std",
+
+  "sp-core/std",
+  "sp-runtime/std",
+
+  "sp-consensus-babe/std",
+  "sp-consensus-grandpa/std",
+
+  "frame-support/std",
+
+  "serai-primitives/std",
+  "serai-coins-primitives/std",
+  "serai-validator-sets-primitives/std",
+  "serai-in-instructions-primitives/std",
+  "serai-signals-primitives/std",
+]
 borsh = [
   "dep:borsh",
   "serai-primitives/borsh",
@@ -53,3 +74,4 @@ serde = [
   "serai-in-instructions-primitives/serde",
   "serai-signals-primitives/serde",
 ]
+default = ["std"]

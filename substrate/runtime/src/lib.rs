@@ -64,6 +64,8 @@ use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 
+mod abi;
+
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
 
@@ -81,7 +83,7 @@ pub type SignedExtra = (
   transaction_payment::ChargeTransactionPayment<Runtime>,
 );
 
-pub type Transaction = serai_primitives::Transaction<RuntimeCall, SignedExtra>;
+pub type Transaction = serai_abi::tx::Transaction<RuntimeCall, SignedExtra>;
 pub type Block = generic::Block<Header, Transaction>;
 pub type BlockId = generic::BlockId<Block>;
 
@@ -161,35 +163,9 @@ parameter_types! {
 pub struct CallFilter;
 impl Contains<RuntimeCall> for CallFilter {
   fn contains(call: &RuntimeCall) -> bool {
-    match call {
-      RuntimeCall::Timestamp(call) => match call {
-        timestamp::Call::set { .. } => true,
-        timestamp::Call::__Ignore(_, _) => false,
-      },
-
-      // All of these pallets are our own, and all of their written calls are intended to be called
-      RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
-      RuntimeCall::LiquidityTokens(call) => match call {
-        coins::Call::transfer { .. } | coins::Call::burn { .. } => true,
-        coins::Call::burn_with_instruction { .. } | coins::Call::__Ignore(_, _) => false,
-      },
-      RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
-      RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
-      RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
-      RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
-
-      RuntimeCall::Babe(call) => match call {
-        babe::Call::report_equivocation { .. } |
-        babe::Call::report_equivocation_unsigned { .. } => true,
-        babe::Call::plan_config_change { .. } | babe::Call::__Ignore(_, _) => false,
-      },
-
-      RuntimeCall::Grandpa(call) => match call {
-        grandpa::Call::report_equivocation { .. } |
-        grandpa::Call::report_equivocation_unsigned { .. } => true,
-        grandpa::Call::note_stalled { .. } | grandpa::Call::__Ignore(_, _) => false,
-      },
-    }
+    // If the call is defined in our ABI, it's allowed
+    let call: Result<serai_abi::Call, ()> = call.clone().try_into();
+    call.is_ok()
   }
 }
 
