@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::{sync::Arc, io};
+use std::{sync::Arc, io, collections::VecDeque};
 
 use async_trait::async_trait;
 
@@ -59,8 +59,7 @@ pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 pub const BLOCK_SIZE_LIMIT: usize = 3_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
-pub(crate) const BLOCK_MESSAGE: u8 = 1;
-pub(crate) const TRANSACTION_MESSAGE: u8 = 2;
+pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -194,7 +193,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
-    let to_rebroadcast = Arc::new(RwLock::new(vec![]));
+    let to_rebroadcast = Arc::new(RwLock::new(VecDeque::new()));
     // Actively rebroadcast consensus messages to ensure they aren't prematurely dropped from the
     // P2P layer
     let p2p_meta_task_handle = Arc::new(
@@ -207,7 +206,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
             for msg in to_rebroadcast {
               p2p.broadcast(genesis, msg).await;
             }
-            tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(core::time::Duration::from_secs(60)).await;
           }
         }
       })
@@ -218,7 +217,15 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       TendermintNetwork { genesis, signer, validators, blockchain, to_rebroadcast, p2p };
 
     let TendermintHandle { synced_block, synced_block_result, messages, machine } =
-      TendermintMachine::new(network.clone(), block_number, start_time, proposal).await;
+      TendermintMachine::new(
+        db.clone(),
+        network.clone(),
+        genesis,
+        block_number,
+        start_time,
+        proposal,
+      )
+      .await;
     tokio::spawn(machine.run());
 
     Some(Self {
@@ -328,9 +335,6 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 
   // Return true if the message should be rebroadcasted.
   pub async fn handle_message(&self, msg: &[u8]) -> bool {
-    // Acquire the lock now to prevent sync_block from being run at the same time
-    let mut sync_block = self.synced_block_result.write().await;
-
     match msg.first() {
       Some(&TRANSACTION_MESSAGE) => {
         let Ok(tx) = Transaction::read::<&[u8]>(&mut &msg[1 ..]) else {
@@ -359,19 +363,6 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
         };
 
         self.messages.write().await.send(msg).await.unwrap();
-        false
-      }
-
-      Some(&BLOCK_MESSAGE) => {
-        let mut msg_ref = &msg[1 ..];
-        let Ok(block) = Block::<T>::read(&mut msg_ref) else {
-          log::error!("received invalid block message");
-          return false;
-        };
-        let commit = msg[(msg.len() - msg_ref.len()) ..].to_vec();
-        if self.sync_block_internal(block, commit, &mut sync_block).await {
-          log::debug!("synced block over p2p net instead of building the commit ourselves");
-        }
         false
       }
 

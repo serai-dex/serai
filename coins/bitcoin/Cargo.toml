@@ -23,7 +23,7 @@ thiserror = { version = "1", default-features = false, optional = true }
 zeroize = { version = "^1.5", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-bitcoin = { version = "0.31", default-features = false, features = ["no-std"] }
+bitcoin = { version = "0.32", default-features = false }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
 
@@ -36,7 +36,7 @@ serde_json = { version = "1", default-features = false, optional = true }
 simple-request = { path = "../../common/request", version = "0.1", default-features = false, features = ["tls", "basic-auth"], optional = true }
 
 [dev-dependencies]
-secp256k1 = { version = "0.28", default-features = false, features = ["std"] }
+secp256k1 = { version = "0.29", default-features = false, features = ["std"] }
 
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 

@@ -14,7 +14,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::{
+  constants::{ED25519_BASEPOINT_TABLE, ED25519_BASEPOINT_POINT},
+  scalar::Scalar,
+  edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
+  traits::VartimePrecomputedMultiscalarMul,
+};
 
 pub use monero_generators::{H, decompress_point};
 
@@ -54,6 +59,13 @@ static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
 #[allow(non_snake_case)]
 pub(crate) fn INV_EIGHT() -> Scalar {
   *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
+}
+
+static BASEPOINT_PRECOMP_CELL: OnceLock<VartimeEdwardsPrecomputation> = OnceLock::new();
+#[allow(non_snake_case)]
+pub(crate) fn BASEPOINT_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
+  BASEPOINT_PRECOMP_CELL
+    .get_or_init(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]))
 }
 
 /// Monero protocol version.

@@ -1,17 +1,19 @@
-use core::time::Duration;
+use core::{pin::Pin, time::Duration, future::Future};
 use std::sync::Arc;
 
-use ciphersuite::Ciphersuite;
 use rand_core::OsRng;
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::{Participant, tests::key_gen};
 
 use tokio::{sync::Mutex, time::timeout};
 
 use serai_db::{DbTxn, Db, MemDb};
+use serai_client::validator_sets::primitives::Session;
 
 use crate::{
   networks::{OutputType, Output, Block, Network},
+  key_gen::NetworkKeyDb,
   multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
 };
 
@@ -40,23 +42,32 @@ pub async fn new_scanner<N: Network, D: Db>(
   scanner
 }
 
-pub async fn test_scanner<N: Network>(network: N) {
+pub async fn test_scanner<N: Network>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) {
   let mut keys =
     frost::tests::key_gen::<_, N::Curve>(&mut OsRng).remove(&Participant::new(1).unwrap()).unwrap();
   N::tweak_keys(&mut keys);
   let group_key = keys.group_key();
+
+  let mut db = MemDb::new();
+  {
+    let mut txn = db.txn();
+    NetworkKeyDb::set(&mut txn, Session(0), &group_key.to_bytes().as_ref().to_vec());
+    txn.commit();
+  }
+  let network = new_network(db.clone()).await;
 
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let db = MemDb::new();
   let first = Arc::new(Mutex::new(true));
   let scanner = new_scanner(&network, &db, group_key, &first).await;
 
   // Receive funds
-  let block = network.test_send(N::external_address(keys.group_key())).await;
+  let block = network.test_send(N::external_address(&network, keys.group_key()).await).await;
   let block_id = block.id();
 
   // Verify the Scanner picked them up
@@ -71,7 +82,7 @@ pub async fn test_scanner<N: Network>(network: N) {
           assert_eq!(outputs[0].kind(), OutputType::External);
           outputs
         }
-        ScannerEvent::Completed(_, _, _, _) => {
+        ScannerEvent::Completed(_, _, _, _, _) => {
           panic!("unexpectedly got eventuality completion");
         }
       };
@@ -101,40 +112,63 @@ pub async fn test_scanner<N: Network>(network: N) {
   .is_err());
 }
 
-pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
+pub async fn test_no_deadlock_in_multisig_completed<N: Network>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) {
+  // This test scans two blocks then acknowledges one, yet a network with one confirm won't scan
+  // two blocks before the first is acknowledged (due to the look-ahead limit)
+  if N::CONFIRMATIONS <= 1 {
+    return;
+  }
+
+  let mut db = MemDb::new();
+  let network = new_network(db.clone()).await;
+
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let mut db = MemDb::new();
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
 
-  let mut txn = db.txn();
   // Register keys to cause Block events at CONFIRMATIONS (dropped since first keys),
   // CONFIRMATIONS + 1, and CONFIRMATIONS + 2
   for i in 0 .. 3 {
+    let key = {
+      let mut keys = key_gen(&mut OsRng);
+      for keys in keys.values_mut() {
+        N::tweak_keys(keys);
+      }
+      let key = keys[&Participant::new(1).unwrap()].group_key();
+      if i == 0 {
+        let mut txn = db.txn();
+        NetworkKeyDb::set(&mut txn, Session(0), &key.to_bytes().as_ref().to_vec());
+        txn.commit();
+
+        // Sleep for 5 seconds as setting the Network key value will trigger an async task for
+        // Ethereum
+        tokio::time::sleep(Duration::from_secs(5)).await;
+      }
+      key
+    };
+
+    let mut txn = db.txn();
     scanner
       .register_key(
         &mut txn,
         network.get_latest_block_number().await.unwrap() + N::CONFIRMATIONS + i,
-        {
-          let mut keys = key_gen(&mut OsRng);
-          for keys in keys.values_mut() {
-            N::tweak_keys(keys);
-          }
-          keys[&Participant::new(1).unwrap()].group_key()
-        },
+        key,
       )
       .await;
+    txn.commit();
   }
-  txn.commit();
 
   for _ in 0 .. (3 * N::CONFIRMATIONS) {
     network.mine_block().await;
   }
 
+  // Block for the second set of keys registered
   let block_id =
     match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
       ScannerEvent::Block { is_retirement_block, block, outputs: _ } => {
@@ -142,14 +176,15 @@ pub async fn test_no_deadlock_in_multisig_completed<N: Network>(network: N) {
         assert!(!is_retirement_block);
         block
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };
 
+  // Block for the third set of keys registered
   match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
     ScannerEvent::Block { .. } => {}
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   };

@@ -1,8 +1,8 @@
 use core::{time::Duration, fmt};
 use std::{
   sync::Arc,
-  io::Read,
-  collections::HashMap,
+  io::{self, Read},
+  collections::{HashSet, HashMap},
   time::{SystemTime, Instant},
 };
 
@@ -15,7 +15,7 @@ use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorS
 
 use serai_db::Db;
 
-use futures_util::StreamExt;
+use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt};
 use tokio::{
   sync::{Mutex, RwLock, mpsc, broadcast},
   time::sleep,
@@ -27,12 +27,16 @@ use libp2p::{
   PeerId,
   tcp::Config as TcpConfig,
   noise, yamux,
+  request_response::{
+    Codec as RrCodecTrait, Message as RrMessage, Event as RrEvent, Config as RrConfig,
+    Behaviour as RrBehavior,
+  },
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
     IdentityTransform, AllowAllSubscriptionFilter, Event as GsEvent, PublishError,
     Behaviour as GsBehavior,
   },
-  swarm::{NetworkBehaviour, SwarmEvent, Swarm},
+  swarm::{NetworkBehaviour, SwarmEvent},
   SwarmBuilder,
 };
 
@@ -40,6 +44,8 @@ pub(crate) use tributary::{ReadWrite, P2p as TributaryP2p};
 
 use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 
+// Block size limit + 1 KB of space for signatures/metadata
+const MAX_LIBP2P_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
@@ -51,71 +57,112 @@ pub struct CosignedBlock {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum P2pMessageKind {
+pub enum ReqResMessageKind {
   KeepAlive,
-  Tributary([u8; 32]),
   Heartbeat([u8; 32]),
   Block([u8; 32]),
+}
+
+impl ReqResMessageKind {
+  pub fn read<R: Read>(reader: &mut R) -> Option<ReqResMessageKind> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind).ok()?;
+    match kind[0] {
+      0 => Some(ReqResMessageKind::KeepAlive),
+      1 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        ReqResMessageKind::Heartbeat(genesis)
+      }),
+      2 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        ReqResMessageKind::Block(genesis)
+      }),
+      _ => None,
+    }
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    match self {
+      ReqResMessageKind::KeepAlive => vec![0],
+      ReqResMessageKind::Heartbeat(genesis) => {
+        let mut res = vec![1];
+        res.extend(genesis);
+        res
+      }
+      ReqResMessageKind::Block(genesis) => {
+        let mut res = vec![2];
+        res.extend(genesis);
+        res
+      }
+    }
+  }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum GossipMessageKind {
+  Tributary([u8; 32]),
   CosignedBlock,
+}
+
+impl GossipMessageKind {
+  pub fn read<R: Read>(reader: &mut R) -> Option<GossipMessageKind> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind).ok()?;
+    match kind[0] {
+      0 => Some({
+        let mut genesis = [0; 32];
+        reader.read_exact(&mut genesis).ok()?;
+        GossipMessageKind::Tributary(genesis)
+      }),
+      1 => Some(GossipMessageKind::CosignedBlock),
+      _ => None,
+    }
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    match self {
+      GossipMessageKind::Tributary(genesis) => {
+        let mut res = vec![0];
+        res.extend(genesis);
+        res
+      }
+      GossipMessageKind::CosignedBlock => {
+        vec![1]
+      }
+    }
+  }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum P2pMessageKind {
+  ReqRes(ReqResMessageKind),
+  Gossip(GossipMessageKind),
 }
 
 impl P2pMessageKind {
   fn genesis(&self) -> Option<[u8; 32]> {
     match self {
-      P2pMessageKind::KeepAlive | P2pMessageKind::CosignedBlock => None,
-      P2pMessageKind::Tributary(genesis) |
-      P2pMessageKind::Heartbeat(genesis) |
-      P2pMessageKind::Block(genesis) => Some(*genesis),
+      P2pMessageKind::ReqRes(ReqResMessageKind::KeepAlive) |
+      P2pMessageKind::Gossip(GossipMessageKind::CosignedBlock) => None,
+      P2pMessageKind::ReqRes(
+        ReqResMessageKind::Heartbeat(genesis) | ReqResMessageKind::Block(genesis),
+      ) |
+      P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)) => Some(*genesis),
     }
   }
+}
 
-  fn serialize(&self) -> Vec<u8> {
-    match self {
-      P2pMessageKind::KeepAlive => vec![0],
-      P2pMessageKind::Tributary(genesis) => {
-        let mut res = vec![1];
-        res.extend(genesis);
-        res
-      }
-      P2pMessageKind::Heartbeat(genesis) => {
-        let mut res = vec![2];
-        res.extend(genesis);
-        res
-      }
-      P2pMessageKind::Block(genesis) => {
-        let mut res = vec![3];
-        res.extend(genesis);
-        res
-      }
-      P2pMessageKind::CosignedBlock => {
-        vec![4]
-      }
-    }
+impl From<ReqResMessageKind> for P2pMessageKind {
+  fn from(kind: ReqResMessageKind) -> P2pMessageKind {
+    P2pMessageKind::ReqRes(kind)
   }
+}
 
-  fn read<R: Read>(reader: &mut R) -> Option<P2pMessageKind> {
-    let mut kind = [0; 1];
-    reader.read_exact(&mut kind).ok()?;
-    match kind[0] {
-      0 => Some(P2pMessageKind::KeepAlive),
-      1 => Some({
-        let mut genesis = [0; 32];
-        reader.read_exact(&mut genesis).ok()?;
-        P2pMessageKind::Tributary(genesis)
-      }),
-      2 => Some({
-        let mut genesis = [0; 32];
-        reader.read_exact(&mut genesis).ok()?;
-        P2pMessageKind::Heartbeat(genesis)
-      }),
-      3 => Some({
-        let mut genesis = [0; 32];
-        reader.read_exact(&mut genesis).ok()?;
-        P2pMessageKind::Block(genesis)
-      }),
-      4 => Some(P2pMessageKind::CosignedBlock),
-      _ => None,
-    }
+impl From<GossipMessageKind> for P2pMessageKind {
+  fn from(kind: GossipMessageKind) -> P2pMessageKind {
+    P2pMessageKind::Gossip(kind)
   }
 }
 
@@ -133,17 +180,21 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
   async fn subscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
   async fn unsubscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
 
-  async fn send_raw(&self, to: Self::Id, genesis: Option<[u8; 32]>, msg: Vec<u8>);
-  async fn broadcast_raw(&self, genesis: Option<[u8; 32]>, msg: Vec<u8>);
-  async fn receive_raw(&self) -> (Self::Id, Vec<u8>);
+  async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
+  async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>);
+  async fn receive(&self) -> Message<Self>;
 
-  async fn send(&self, to: Self::Id, kind: P2pMessageKind, msg: Vec<u8>) {
+  async fn send(&self, to: Self::Id, kind: ReqResMessageKind, msg: Vec<u8>) {
     let mut actual_msg = kind.serialize();
     actual_msg.extend(msg);
-    self.send_raw(to, kind.genesis(), actual_msg).await;
+    self.send_raw(to, actual_msg).await;
   }
-  async fn broadcast(&self, kind: P2pMessageKind, msg: Vec<u8>) {
-    let mut actual_msg = kind.serialize();
+  async fn broadcast(&self, kind: impl Send + Into<P2pMessageKind>, msg: Vec<u8>) {
+    let kind = kind.into();
+    let mut actual_msg = match kind {
+      P2pMessageKind::ReqRes(kind) => kind.serialize(),
+      P2pMessageKind::Gossip(kind) => kind.serialize(),
+    };
     actual_msg.extend(msg);
     /*
     log::trace!(
@@ -157,41 +208,70 @@ pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
       }
     );
     */
-    self.broadcast_raw(kind.genesis(), actual_msg).await;
+    self.broadcast_raw(kind, actual_msg).await;
   }
-  async fn receive(&self) -> Message<Self> {
-    let (sender, kind, msg) = loop {
-      let (sender, msg) = self.receive_raw().await;
-      if msg.is_empty() {
-        log::error!("empty p2p message from {sender:?}");
-        continue;
-      }
+}
 
-      let mut msg_ref = msg.as_ref();
-      let Some(kind) = P2pMessageKind::read::<&[u8]>(&mut msg_ref) else {
-        log::error!("invalid p2p message kind from {sender:?}");
-        continue;
-      };
-      break (sender, kind, msg_ref.to_vec());
-    };
-    /*
-    log::trace!(
-      "received p2p message (kind {})",
-      match kind {
-        P2pMessageKind::KeepAlive => "KeepAlive".to_string(),
-        P2pMessageKind::Tributary(genesis) => format!("Tributary({})", hex::encode(genesis)),
-        P2pMessageKind::Heartbeat(genesis) => format!("Heartbeat({})", hex::encode(genesis)),
-        P2pMessageKind::Block(genesis) => format!("Block({})", hex::encode(genesis)),
-        P2pMessageKind::CosignedBlock => "CosignedBlock".to_string(),
-      }
-    );
-    */
-    Message { sender, kind, msg }
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+struct RrCodec;
+#[async_trait]
+impl RrCodecTrait for RrCodec {
+  type Protocol = &'static str;
+  type Request = Vec<u8>;
+  type Response = Vec<u8>;
+
+  async fn read_request<R: Send + Unpin + AsyncRead>(
+    &mut self,
+    _: &Self::Protocol,
+    io: &mut R,
+  ) -> io::Result<Vec<u8>> {
+    let mut len = [0; 4];
+    io.read_exact(&mut len).await?;
+    let len = usize::try_from(u32::from_le_bytes(len)).expect("not a 32-bit platform?");
+    if len > MAX_LIBP2P_MESSAGE_SIZE {
+      Err(io::Error::other("request length exceeded MAX_LIBP2P_MESSAGE_SIZE"))?;
+    }
+    // This may be a non-trivial allocation easily causable
+    // While we could chunk the read, meaning we only perform the allocation as bandwidth is used,
+    // the max message size should be sufficiently sane
+    let mut buf = vec![0; len];
+    io.read_exact(&mut buf).await?;
+    Ok(buf)
+  }
+  async fn read_response<R: Send + Unpin + AsyncRead>(
+    &mut self,
+    proto: &Self::Protocol,
+    io: &mut R,
+  ) -> io::Result<Vec<u8>> {
+    self.read_request(proto, io).await
+  }
+  async fn write_request<W: Send + Unpin + AsyncWrite>(
+    &mut self,
+    _: &Self::Protocol,
+    io: &mut W,
+    req: Vec<u8>,
+  ) -> io::Result<()> {
+    io.write_all(
+      &u32::try_from(req.len())
+        .map_err(|_| io::Error::other("request length exceeded 2**32"))?
+        .to_le_bytes(),
+    )
+    .await?;
+    io.write_all(&req).await
+  }
+  async fn write_response<W: Send + Unpin + AsyncWrite>(
+    &mut self,
+    proto: &Self::Protocol,
+    io: &mut W,
+    res: Vec<u8>,
+  ) -> io::Result<()> {
+    self.write_request(proto, io, res).await
   }
 }
 
 #[derive(NetworkBehaviour)]
 struct Behavior {
+  reqres: RrBehavior<RrCodec>,
   gossipsub: GsBehavior,
 }
 
@@ -199,8 +279,9 @@ struct Behavior {
 #[derive(Clone)]
 pub struct LibP2p {
   subscribe: Arc<Mutex<mpsc::UnboundedSender<(bool, ValidatorSet, [u8; 32])>>>,
-  broadcast: Arc<Mutex<mpsc::UnboundedSender<(Option<[u8; 32]>, Vec<u8>)>>>,
-  receive: Arc<Mutex<mpsc::UnboundedReceiver<(PeerId, Vec<u8>)>>>,
+  send: Arc<Mutex<mpsc::UnboundedSender<(PeerId, Vec<u8>)>>>,
+  broadcast: Arc<Mutex<mpsc::UnboundedSender<(P2pMessageKind, Vec<u8>)>>>,
+  receive: Arc<Mutex<mpsc::UnboundedReceiver<Message<Self>>>>,
 }
 impl fmt::Debug for LibP2p {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -211,14 +292,12 @@ impl fmt::Debug for LibP2p {
 impl LibP2p {
   #[allow(clippy::new_without_default)]
   pub fn new(serai: Arc<Serai>) -> Self {
-    // Block size limit + 1 KB of space for signatures/metadata
-    const MAX_LIBP2P_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
-
     log::info!("creating a libp2p instance");
 
     let throwaway_key_pair = Keypair::generate_ed25519();
 
     let behavior = Behavior {
+      reqres: { RrBehavior::new([], RrConfig::default()) },
       gossipsub: {
         let heartbeat_interval = tributary::tendermint::LATENCY_TIME / 2;
         let heartbeats_per_block =
@@ -282,6 +361,7 @@ impl LibP2p {
     const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
     swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{PORT}").parse().unwrap()).unwrap();
 
+    let (send_send, mut send_recv) = mpsc::unbounded_channel();
     let (broadcast_send, mut broadcast_recv) = mpsc::unbounded_channel();
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
     let (subscribe_send, mut subscribe_recv) = mpsc::unbounded_channel();
@@ -290,44 +370,31 @@ impl LibP2p {
       IdentTopic::new(format!("{LIBP2P_TOPIC}-{}", hex::encode(set.encode())))
     }
 
+    // TODO: If a network has less than TARGET_PEERS, this will cause retries ad infinitum
+    const TARGET_PEERS: usize = 5;
+
+    // The addrs we're currently dialing, and the networks associated with them
+    let dialing_peers = Arc::new(RwLock::new(HashMap::new()));
+    // The peers we're currently connected to, and the networks associated with them
+    let connected_peers = Arc::new(RwLock::new(HashMap::<Multiaddr, HashSet<NetworkId>>::new()));
+
+    // Find and connect to peers
+    let (connect_to_network_send, mut connect_to_network_recv) =
+      tokio::sync::mpsc::unbounded_channel();
+    let (to_dial_send, mut to_dial_recv) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn({
-      let mut time_of_last_p2p_message = Instant::now();
+      let dialing_peers = dialing_peers.clone();
+      let connected_peers = connected_peers.clone();
 
-      #[allow(clippy::needless_pass_by_ref_mut)] // False positive
-      fn broadcast_raw(
-        p2p: &mut Swarm<Behavior>,
-        time_of_last_p2p_message: &mut Instant,
-        set: Option<ValidatorSet>,
-        msg: Vec<u8>,
-      ) {
-        // Update the time of last message
-        *time_of_last_p2p_message = Instant::now();
-
-        let topic =
-          if let Some(set) = set { topic_for_set(set) } else { IdentTopic::new(LIBP2P_TOPIC) };
-
-        match p2p.behaviour_mut().gossipsub.publish(topic, msg.clone()) {
-          Err(PublishError::SigningError(e)) => panic!("signing error when broadcasting: {e}"),
-          Err(PublishError::InsufficientPeers) => {
-            log::warn!("failed to send p2p message due to insufficient peers")
-          }
-          Err(PublishError::MessageTooLarge) => {
-            panic!("tried to send a too large message: {}", hex::encode(msg))
-          }
-          Err(PublishError::TransformFailed(e)) => panic!("IdentityTransform failed: {e}"),
-          Err(PublishError::Duplicate) | Ok(_) => {}
-        }
-      }
-
+      let connect_to_network_send = connect_to_network_send.clone();
       async move {
-        let mut set_for_genesis = HashMap::new();
-        let mut pending_p2p_connections = vec![];
-        // Run this task ad-infinitum
         loop {
-          // Handle pending P2P connections
-          // TODO: Break this out onto its own task with better peer management logic?
-          {
-            let mut connect = |addr: Multiaddr| {
+          let connect = |network: NetworkId, addr: Multiaddr| {
+            let dialing_peers = dialing_peers.clone();
+            let connected_peers = connected_peers.clone();
+            let to_dial_send = to_dial_send.clone();
+            let connect_to_network_send = connect_to_network_send.clone();
+            async move {
               log::info!("found peer from substrate: {addr}");
 
               let protocols = addr.iter().filter_map(|piece| match piece {
@@ -345,42 +412,114 @@ impl LibP2p {
               let addr = new_addr;
               log::debug!("transformed found peer: {addr}");
 
-              if let Err(e) = swarm.dial(addr) {
-                log::warn!("dialing peer failed: {e:?}");
-              }
-            };
-
-            while let Some(network) = pending_p2p_connections.pop() {
-              if let Ok(mut nodes) = serai.p2p_validators(network).await {
-                // If there's an insufficient amount of nodes known, connect to all yet add it back
-                // and break
-                if nodes.len() < 3 {
-                  log::warn!(
-                    "insufficient amount of P2P nodes known for {:?}: {}",
-                    network,
-                    nodes.len()
-                  );
-                  pending_p2p_connections.push(network);
-                  for node in nodes {
-                    connect(node);
-                  }
-                  break;
+              let (is_fresh_dial, nets) = {
+                let mut dialing_peers = dialing_peers.write().await;
+                let is_fresh_dial = !dialing_peers.contains_key(&addr);
+                if is_fresh_dial {
+                  dialing_peers.insert(addr.clone(), HashSet::new());
                 }
+                // Associate this network with this peer
+                dialing_peers.get_mut(&addr).unwrap().insert(network);
 
-                // Randomly select up to 5
-                for _ in 0 .. 5 {
-                  if !nodes.is_empty() {
-                    let to_connect = nodes.swap_remove(
-                      usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
-                        .unwrap(),
-                    );
-                    connect(to_connect);
+                let nets = dialing_peers.get(&addr).unwrap().clone();
+                (is_fresh_dial, nets)
+              };
+
+              // Spawn a task to remove this peer from 'dialing' in sixty seconds, in case dialing
+              // fails
+              // This performs cleanup and bounds the size of the map to whatever growth occurs
+              // within a temporal window
+              tokio::spawn({
+                let dialing_peers = dialing_peers.clone();
+                let connected_peers = connected_peers.clone();
+                let connect_to_network_send = connect_to_network_send.clone();
+                let addr = addr.clone();
+                async move {
+                  tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+                  let mut dialing_peers = dialing_peers.write().await;
+                  if let Some(expected_nets) = dialing_peers.remove(&addr) {
+                    log::debug!("removed addr from dialing upon timeout: {addr}");
+
+                    // TODO: De-duplicate this below instance
+                    // If we failed to dial and haven't gotten enough actual connections, retry
+                    let connected_peers = connected_peers.read().await;
+                    for net in expected_nets {
+                      let mut remaining_peers = 0;
+                      for nets in connected_peers.values() {
+                        if nets.contains(&net) {
+                          remaining_peers += 1;
+                        }
+                      }
+                      // If we do not, start connecting to this network again
+                      if remaining_peers < TARGET_PEERS {
+                        connect_to_network_send.send(net).expect(
+                          "couldn't send net to connect to due to disconnects (receiver dropped?)",
+                        );
+                      }
+                    }
                   }
+                }
+              });
+
+              if is_fresh_dial {
+                to_dial_send.send((addr, nets)).unwrap();
+              }
+            }
+          };
+
+          // TODO: We should also connect to random peers from random nets as needed for
+          // cosigning
+
+          // Drain the chainnel, de-duplicating any networks in it
+          let mut connect_to_network_networks = HashSet::new();
+          while let Ok(network) = connect_to_network_recv.try_recv() {
+            connect_to_network_networks.insert(network);
+          }
+          for network in connect_to_network_networks {
+            if let Ok(mut nodes) = serai.p2p_validators(network).await {
+              // If there's an insufficient amount of nodes known, connect to all yet add it
+              // back and break
+              if nodes.len() < TARGET_PEERS {
+                log::warn!(
+                  "insufficient amount of P2P nodes known for {:?}: {}",
+                  network,
+                  nodes.len()
+                );
+                // Retry this later
+                connect_to_network_send.send(network).unwrap();
+                for node in nodes {
+                  connect(network, node).await;
+                }
+                continue;
+              }
+
+              // Randomly select up to 150% of the TARGET_PEERS
+              for _ in 0 .. ((3 * TARGET_PEERS) / 2) {
+                if !nodes.is_empty() {
+                  let to_connect = nodes.swap_remove(
+                    usize::try_from(OsRng.next_u64() % u64::try_from(nodes.len()).unwrap())
+                      .unwrap(),
+                  );
+                  connect(network, to_connect).await;
                 }
               }
             }
           }
+          // Sleep 60 seconds before moving to the next iteration
+          tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+        }
+      }
+    });
 
+    // Manage the actual swarm
+    tokio::spawn({
+      let mut time_of_last_p2p_message = Instant::now();
+
+      async move {
+        let connected_peers = connected_peers.clone();
+
+        let mut set_for_genesis = HashMap::new();
+        loop {
           let time_since_last = Instant::now().duration_since(time_of_last_p2p_message);
           tokio::select! {
             biased;
@@ -392,7 +531,7 @@ impl LibP2p {
               let topic = topic_for_set(set);
               if subscribe {
                 log::info!("subscribing to p2p messages for {set:?}");
-                pending_p2p_connections.push(set.network);
+                connect_to_network_send.send(set.network).unwrap();
                 set_for_genesis.insert(genesis, set);
                 swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
               } else {
@@ -402,17 +541,50 @@ impl LibP2p {
               }
             }
 
+            msg = send_recv.recv() => {
+              let (peer, msg): (PeerId, Vec<u8>) =
+                msg.expect("send_recv closed. are we shutting down?");
+              swarm.behaviour_mut().reqres.send_request(&peer, msg);
+            },
+
             // Handle any queued outbound messages
             msg = broadcast_recv.recv() => {
-              let (genesis, msg): (Option<[u8; 32]>, Vec<u8>) =
+              // Update the time of last message
+              time_of_last_p2p_message = Instant::now();
+
+              let (kind, msg): (P2pMessageKind, Vec<u8>) =
                 msg.expect("broadcast_recv closed. are we shutting down?");
-              let set = genesis.and_then(|genesis| set_for_genesis.get(&genesis).copied());
-              broadcast_raw(
-                &mut swarm,
-                &mut time_of_last_p2p_message,
-                set,
-                msg,
-              );
+
+              if matches!(kind, P2pMessageKind::ReqRes(_)) {
+                // Use request/response, yet send to all connected peers
+                for peer_id in swarm.connected_peers().copied().collect::<Vec<_>>() {
+                  swarm.behaviour_mut().reqres.send_request(&peer_id, msg.clone());
+                }
+              } else {
+                // Use gossipsub
+
+                let set =
+                  kind.genesis().and_then(|genesis| set_for_genesis.get(&genesis).copied());
+                let topic = if let Some(set) = set {
+                  topic_for_set(set)
+                } else {
+                  IdentTopic::new(LIBP2P_TOPIC)
+                };
+
+                match swarm.behaviour_mut().gossipsub.publish(topic, msg.clone()) {
+                  Err(PublishError::SigningError(e)) => {
+                    panic!("signing error when broadcasting: {e}")
+                  },
+                  Err(PublishError::InsufficientPeers) => {
+                    log::warn!("failed to send p2p message due to insufficient peers")
+                  }
+                  Err(PublishError::MessageTooLarge) => {
+                    panic!("tried to send a too large message: {}", hex::encode(msg))
+                  }
+                  Err(PublishError::TransformFailed(e)) => panic!("IdentityTransform failed: {e}"),
+                  Err(PublishError::Duplicate) | Ok(_) => {}
+                }
+              }
             }
 
             // Handle new incoming messages
@@ -421,22 +593,121 @@ impl LibP2p {
                 Some(SwarmEvent::Dialing { connection_id, .. }) => {
                   log::debug!("dialing to peer in connection ID {}", &connection_id);
                 }
-                  Some(SwarmEvent::ConnectionEstablished { peer_id, connection_id, .. }) => {
+                Some(SwarmEvent::ConnectionEstablished {
+                  peer_id,
+                  connection_id,
+                  endpoint,
+                  ..
+                }) => {
+                  if &peer_id == swarm.local_peer_id() {
+                    log::warn!("established a libp2p connection to ourselves");
+                    swarm.close_connection(connection_id);
+                    continue;
+                  }
+
+                  let addr = endpoint.get_remote_address();
+                  let nets = {
+                    let mut dialing_peers = dialing_peers.write().await;
+                    if let Some(nets) = dialing_peers.remove(addr) {
+                      nets
+                    } else {
+                      log::debug!("connected to a peer who we didn't have within dialing");
+                      HashSet::new()
+                    }
+                  };
+                  {
+                    let mut connected_peers = connected_peers.write().await;
+                    connected_peers.insert(addr.clone(), nets);
+
                     log::debug!(
-                      "connection established to peer {} in connection ID {}",
+                      "connection established to peer {} in connection ID {}, connected peers: {}",
                       &peer_id,
                       &connection_id,
+                      connected_peers.len(),
                     );
-                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id)
                   }
+                }
+                Some(SwarmEvent::ConnectionClosed { peer_id, endpoint, .. }) => {
+                  let mut connected_peers = connected_peers.write().await;
+                  let Some(nets) = connected_peers.remove(endpoint.get_remote_address()) else {
+                    log::debug!("closed connection to peer which wasn't in connected_peers");
+                    continue;
+                  };
+                  // Downgrade to a read lock
+                  let connected_peers = connected_peers.downgrade();
+
+                  // For each net we lost a peer for, check if we still have sufficient peers
+                  // overall
+                  for net in nets {
+                    let mut remaining_peers = 0;
+                    for nets in connected_peers.values() {
+                      if nets.contains(&net) {
+                        remaining_peers += 1;
+                      }
+                    }
+                    // If we do not, start connecting to this network again
+                    if remaining_peers < TARGET_PEERS {
+                      connect_to_network_send
+                        .send(net)
+                        .expect(
+                          "couldn't send net to connect to due to disconnects (receiver dropped?)"
+                        );
+                    }
+                  }
+
+                  log::debug!(
+                    "connection with peer {peer_id} closed, connected peers: {}",
+                    connected_peers.len(),
+                  );
+                }
+                Some(SwarmEvent::Behaviour(BehaviorEvent::Reqres(
+                  RrEvent::Message { peer, message },
+                ))) => {
+                  let message = match message {
+                    RrMessage::Request { request, .. } => request,
+                    RrMessage::Response { response, .. } => response,
+                  };
+
+                  let mut msg_ref = message.as_slice();
+                  let Some(kind) = ReqResMessageKind::read(&mut msg_ref) else { continue };
+                  let message = Message {
+                    sender: peer,
+                    kind: P2pMessageKind::ReqRes(kind),
+                    msg: msg_ref.to_vec(),
+                  };
+                  receive_send.send(message).expect("receive_send closed. are we shutting down?");
+                }
                 Some(SwarmEvent::Behaviour(BehaviorEvent::Gossipsub(
                   GsEvent::Message { propagation_source, message, .. },
                 ))) => {
-                  receive_send
-                    .send((propagation_source, message.data))
-                    .expect("receive_send closed. are we shutting down?");
+                  let mut msg_ref = message.data.as_slice();
+                  let Some(kind) = GossipMessageKind::read(&mut msg_ref) else { continue };
+                  let message = Message {
+                    sender: propagation_source,
+                    kind: P2pMessageKind::Gossip(kind),
+                    msg: msg_ref.to_vec(),
+                  };
+                  receive_send.send(message).expect("receive_send closed. are we shutting down?");
                 }
                 _ => {}
+              }
+            }
+
+            // Handle peers to dial
+            addr_and_nets = to_dial_recv.recv() => {
+              let (addr, nets) =
+                addr_and_nets.expect("received address was None (sender dropped?)");
+              // If we've already dialed and connected to this address, don't further dial them
+              // Just associate these networks with them
+              if let Some(existing_nets) = connected_peers.write().await.get_mut(&addr) {
+                for net in nets {
+                  existing_nets.insert(net);
+                }
+                continue;
+              }
+
+              if let Err(e) = swarm.dial(addr) {
+                log::warn!("dialing peer failed: {e:?}");
               }
             }
 
@@ -448,12 +719,13 @@ impl LibP2p {
             // (where a finalized block only occurs due to network activity), meaning this won't be
             // run
             () = tokio::time::sleep(Duration::from_secs(80).saturating_sub(time_since_last)) => {
-              broadcast_raw(
-                &mut swarm,
-                &mut time_of_last_p2p_message,
-                None,
-                P2pMessageKind::KeepAlive.serialize()
-              );
+              time_of_last_p2p_message = Instant::now();
+              for peer_id in swarm.connected_peers().copied().collect::<Vec<_>>() {
+                swarm
+                  .behaviour_mut()
+                  .reqres
+                  .send_request(&peer_id, ReqResMessageKind::KeepAlive.serialize());
+              }
             }
           }
         }
@@ -462,6 +734,7 @@ impl LibP2p {
 
     LibP2p {
       subscribe: Arc::new(Mutex::new(subscribe_send)),
+      send: Arc::new(Mutex::new(send_send)),
       broadcast: Arc::new(Mutex::new(broadcast_send)),
       receive: Arc::new(Mutex::new(receive_recv)),
     }
@@ -490,22 +763,22 @@ impl P2p for LibP2p {
       .expect("subscribe_send closed. are we shutting down?");
   }
 
-  async fn send_raw(&self, _: Self::Id, genesis: Option<[u8; 32]>, msg: Vec<u8>) {
-    self.broadcast_raw(genesis, msg).await;
+  async fn send_raw(&self, peer: Self::Id, msg: Vec<u8>) {
+    self.send.lock().await.send((peer, msg)).expect("send_send closed. are we shutting down?");
   }
 
-  async fn broadcast_raw(&self, genesis: Option<[u8; 32]>, msg: Vec<u8>) {
+  async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>) {
     self
       .broadcast
       .lock()
       .await
-      .send((genesis, msg))
+      .send((kind, msg))
       .expect("broadcast_send closed. are we shutting down?");
   }
 
   // TODO: We only have a single handle call this. Differentiate Send/Recv to remove this constant
   // lock acquisition?
-  async fn receive_raw(&self) -> (Self::Id, Vec<u8>) {
+  async fn receive(&self) -> Message<Self> {
     self.receive.lock().await.recv().await.expect("receive_recv closed. are we shutting down?")
   }
 }
@@ -513,7 +786,7 @@ impl P2p for LibP2p {
 #[async_trait]
 impl TributaryP2p for LibP2p {
   async fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) {
-    <Self as P2p>::broadcast(self, P2pMessageKind::Tributary(genesis), msg).await
+    <Self as P2p>::broadcast(self, GossipMessageKind::Tributary(genesis), msg).await
   }
 }
 
@@ -551,16 +824,12 @@ pub async fn heartbeat_tributaries_task<D: Db, P: P2p>(
       if SystemTime::now() > (block_time + Duration::from_secs(60)) {
         log::warn!("last known tributary block was over a minute ago");
         let mut msg = tip.to_vec();
-        // Also include the timestamp so LibP2p doesn't flag this as an old message re-circulating
-        let timestamp = SystemTime::now()
+        let time: u64 = SystemTime::now()
           .duration_since(SystemTime::UNIX_EPOCH)
           .expect("system clock is wrong")
           .as_secs();
-        // Divide by the block time so if multiple parties send a Heartbeat, they're more likely to
-        // overlap
-        let time_unit = timestamp / u64::from(Tributary::<D, Transaction, P>::block_time());
-        msg.extend(time_unit.to_le_bytes());
-        P2p::broadcast(&p2p, P2pMessageKind::Heartbeat(tributary.genesis()), msg).await;
+        msg.extend(time.to_le_bytes());
+        P2p::broadcast(&p2p, ReqResMessageKind::Heartbeat(tributary.genesis()), msg).await;
       }
     }
 
@@ -592,6 +861,8 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
             // Subscribe to the topic for this tributary
             p2p.subscribe(tributary.spec.set(), genesis).await;
 
+            let spec_set = tributary.spec.set();
+
             // Per-Tributary P2P message handler
             tokio::spawn({
               let p2p = p2p.clone();
@@ -602,91 +873,58 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                     break;
                   };
                   match msg.kind {
-                    P2pMessageKind::KeepAlive => {}
+                    P2pMessageKind::ReqRes(ReqResMessageKind::KeepAlive) => {}
 
-                    P2pMessageKind::Tributary(msg_genesis) => {
-                      assert_eq!(msg_genesis, genesis);
-                      log::trace!("handling message for tributary {:?}", tributary.spec.set());
-                      if tributary.tributary.handle_message(&msg.msg).await {
-                        P2p::broadcast(&p2p, msg.kind, msg.msg).await;
-                      }
-                    }
-
-                    // TODO2: Rate limit this per timestamp
-                    // And/or slash on Heartbeat which justifies a response, since the node
+                    // TODO: Slash on Heartbeat which justifies a response, since the node
                     // obviously was offline and we must now use our bandwidth to compensate for
                     // them?
-                    P2pMessageKind::Heartbeat(msg_genesis) => {
+                    P2pMessageKind::ReqRes(ReqResMessageKind::Heartbeat(msg_genesis)) => {
                       assert_eq!(msg_genesis, genesis);
                       if msg.msg.len() != 40 {
                         log::error!("validator sent invalid heartbeat");
                         continue;
                       }
+                      // Only respond to recent heartbeats
+                      let msg_time = u64::from_le_bytes(msg.msg[32 .. 40].try_into().expect(
+                        "length-checked heartbeat message didn't have 8 bytes for the u64",
+                      ));
+                      if SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .expect("system clock is wrong")
+                        .as_secs()
+                        .saturating_sub(msg_time) >
+                        10
+                      {
+                        continue;
+                      }
+
+                      log::debug!("received heartbeat with a recent timestamp");
+
+                      let reader = tributary.tributary.reader();
 
                       let p2p = p2p.clone();
-                      let spec = tributary.spec.clone();
-                      let reader = tributary.tributary.reader();
                       // Spawn a dedicated task as this may require loading large amounts of data
                       // from disk and take a notable amount of time
                       tokio::spawn(async move {
-                        /*
-                        // Have sqrt(n) nodes reply with the blocks
-                        let mut responders = (tributary.spec.n() as f32).sqrt().floor() as u64;
-                        // Try to have at least 3 responders
-                        if responders < 3 {
-                          responders = tributary.spec.n().min(3).into();
-                        }
-                        */
-
-                        /*
-                        // Have up to three nodes respond
-                        let responders = u64::from(spec.n().min(3));
-
-                        // Decide which nodes will respond by using the latest block's hash as a
-                        // mutually agreed upon entropy source
-                        // This isn't a secure source of entropy, yet it's fine for this
-                        let entropy = u64::from_le_bytes(reader.tip()[.. 8].try_into().unwrap());
-                        // If n = 10, responders = 3, we want `start` to be 0 ..= 7
-                        // (so the highest is 7, 8, 9)
-                        // entropy % (10 + 1) - 3 = entropy % 8 = 0 ..= 7
-                        let start =
-                          usize::try_from(entropy % (u64::from(spec.n() + 1) - responders))
-                            .unwrap();
-                        let mut selected = false;
-                        for validator in &spec.validators()
-                          [start .. (start + usize::try_from(responders).unwrap())]
-                        {
-                          if our_key == validator.0 {
-                            selected = true;
-                            break;
-                          }
-                        }
-                        if !selected {
-                          log::debug!("received heartbeat and not selected to respond");
-                          return;
-                        }
-
-                        log::debug!("received heartbeat and selected to respond");
-                        */
-
-                        // Have every node respond
-                        // While we could only have a subset respond, LibP2P will sync all messages
-                        // it isn't aware of
-                        // It's cheaper to be aware from our disk than from over the network
-                        // TODO: Spawn a dedicated topic for this heartbeat response?
                         let mut latest = msg.msg[.. 32].try_into().unwrap();
+                        let mut to_send = vec![];
                         while let Some(next) = reader.block_after(&latest) {
-                          let mut res = reader.block(&next).unwrap().serialize();
-                          res.extend(reader.commit(&next).unwrap());
-                          // Also include the timestamp used within the Heartbeat
-                          res.extend(&msg.msg[32 .. 40]);
-                          p2p.send(msg.sender, P2pMessageKind::Block(spec.genesis()), res).await;
+                          to_send.push(next);
                           latest = next;
+                        }
+                        if to_send.len() > 3 {
+                          for next in to_send {
+                            let mut res = reader.block(&next).unwrap().serialize();
+                            res.extend(reader.commit(&next).unwrap());
+                            // Also include the timestamp used within the Heartbeat
+                            res.extend(&msg.msg[32 .. 40]);
+                            p2p.send(msg.sender, ReqResMessageKind::Block(genesis), res).await;
+                          }
                         }
                       });
                     }
 
-                    P2pMessageKind::Block(msg_genesis) => {
+                    P2pMessageKind::ReqRes(ReqResMessageKind::Block(msg_genesis)) => {
                       assert_eq!(msg_genesis, genesis);
                       let mut msg_ref: &[u8] = msg.msg.as_ref();
                       let Ok(block) = Block::<Transaction>::read(&mut msg_ref) else {
@@ -705,7 +943,15 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                       );
                     }
 
-                    P2pMessageKind::CosignedBlock => unreachable!(),
+                    P2pMessageKind::Gossip(GossipMessageKind::Tributary(msg_genesis)) => {
+                      assert_eq!(msg_genesis, genesis);
+                      log::trace!("handling message for tributary {:?}", spec_set);
+                      if tributary.tributary.handle_message(&msg.msg).await {
+                        P2p::broadcast(&p2p, msg.kind, msg.msg).await;
+                      }
+                    }
+
+                    P2pMessageKind::Gossip(GossipMessageKind::CosignedBlock) => unreachable!(),
                   }
                 }
               }
@@ -725,15 +971,16 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
   loop {
     let msg = p2p.receive().await;
     match msg.kind {
-      P2pMessageKind::KeepAlive => {}
-      P2pMessageKind::Tributary(genesis) |
-      P2pMessageKind::Heartbeat(genesis) |
-      P2pMessageKind::Block(genesis) => {
+      P2pMessageKind::ReqRes(ReqResMessageKind::KeepAlive) => {}
+      P2pMessageKind::Gossip(GossipMessageKind::Tributary(genesis)) |
+      P2pMessageKind::ReqRes(
+        ReqResMessageKind::Heartbeat(genesis) | ReqResMessageKind::Block(genesis),
+      ) => {
         if let Some(channel) = channels.read().await.get(&genesis) {
           channel.send(msg).unwrap();
         }
       }
-      P2pMessageKind::CosignedBlock => {
+      P2pMessageKind::Gossip(GossipMessageKind::CosignedBlock) => {
         let Ok(msg) = CosignedBlock::deserialize_reader(&mut msg.msg.as_slice()) else {
           log::error!("received CosignedBlock message with invalidly serialized contents");
           continue;

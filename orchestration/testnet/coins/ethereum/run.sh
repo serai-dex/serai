@@ -1,3 +1,1 @@
-#!/bin/sh
-
-exit 1
+/execution_layer.sh & /consensus_layer.sh

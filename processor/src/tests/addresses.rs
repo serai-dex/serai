@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{time::Duration, pin::Pin, future::Future};
 use std::collections::HashMap;
 
 use rand_core::OsRng;
@@ -13,18 +13,23 @@ use serai_db::{DbTxn, MemDb};
 
 use crate::{
   Plan, Db,
-  networks::{OutputType, Output, Block, Network},
-  multisigs::scanner::{ScannerEvent, Scanner, ScannerHandle},
+  networks::{OutputType, Output, Block, UtxoNetwork},
+  multisigs::{
+    scheduler::Scheduler,
+    scanner::{ScannerEvent, Scanner, ScannerHandle},
+  },
   tests::sign,
 };
 
-async fn spend<N: Network, D: Db>(
+async fn spend<N: UtxoNetwork, D: Db>(
   db: &mut D,
   network: &N,
   keys: &HashMap<Participant, ThresholdKeys<N::Curve>>,
   scanner: &mut ScannerHandle<N, D>,
   outputs: Vec<N::Output>,
-) {
+) where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
   let mut keys_txs = HashMap::new();
@@ -41,7 +46,8 @@ async fn spend<N: Network, D: Db>(
               key,
               inputs: outputs.clone(),
               payments: vec![],
-              change: Some(N::change_address(key)),
+              change: Some(N::change_address(key).unwrap()),
+              scheduler_addendum: ().into(),
             },
             0,
           )
@@ -70,25 +76,31 @@ async fn spend<N: Network, D: Db>(
       scanner.release_lock().await;
       txn.commit();
     }
-    ScannerEvent::Completed(_, _, _, _) => {
+    ScannerEvent::Completed(_, _, _, _, _) => {
       panic!("unexpectedly got eventuality completion");
     }
   }
 }
 
-pub async fn test_addresses<N: Network>(network: N) {
+pub async fn test_addresses<N: UtxoNetwork>(
+  new_network: impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = N>>>,
+) where
+  <N::Scheduler as Scheduler<N>>::Addendum: From<()>,
+{
   let mut keys = frost::tests::key_gen::<_, N::Curve>(&mut OsRng);
   for keys in keys.values_mut() {
     N::tweak_keys(keys);
   }
   let key = keys[&Participant::new(1).unwrap()].group_key();
 
+  let mut db = MemDb::new();
+  let network = new_network(db.clone()).await;
+
   // Mine blocks so there's a confirmed block
   for _ in 0 .. N::CONFIRMATIONS {
     network.mine_block().await;
   }
 
-  let mut db = MemDb::new();
   let (mut scanner, current_keys) = Scanner::new(network.clone(), db.clone());
   assert!(current_keys.is_empty());
   let mut txn = db.txn();
@@ -101,10 +113,10 @@ pub async fn test_addresses<N: Network>(network: N) {
   // Receive funds to the various addresses and make sure they're properly identified
   let mut received_outputs = vec![];
   for (kind, address) in [
-    (OutputType::External, N::external_address(key)),
-    (OutputType::Branch, N::branch_address(key)),
-    (OutputType::Change, N::change_address(key)),
-    (OutputType::Forwarded, N::forward_address(key)),
+    (OutputType::External, N::external_address(&network, key).await),
+    (OutputType::Branch, N::branch_address(key).unwrap()),
+    (OutputType::Change, N::change_address(key).unwrap()),
+    (OutputType::Forwarded, N::forward_address(key).unwrap()),
   ] {
     let block_id = network.test_send(address).await.id();
 
@@ -123,7 +135,7 @@ pub async fn test_addresses<N: Network>(network: N) {
         txn.commit();
         received_outputs.extend(outputs);
       }
-      ScannerEvent::Completed(_, _, _, _) => {
+      ScannerEvent::Completed(_, _, _, _, _) => {
         panic!("unexpectedly got eventuality completion");
       }
     };

@@ -55,6 +55,8 @@ impl Client {
   fn connector() -> Connector {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
+    res.set_nodelay(true);
+    res.set_reuse_address(true);
     #[cfg(feature = "tls")]
     let res = HttpsConnectorBuilder::new()
       .with_native_roots()
@@ -68,7 +70,9 @@ impl Client {
   pub fn with_connection_pool() -> Client {
     Client {
       connection: Connection::ConnectionPool(
-        HyperClient::builder(TokioExecutor::new()).build(Self::connector()),
+        HyperClient::builder(TokioExecutor::new())
+          .pool_idle_timeout(core::time::Duration::from_secs(60))
+          .build(Self::connector()),
       ),
     }
   }

@@ -11,7 +11,7 @@ impl Get for Transaction<'_> {
     let mut res = self.0.get(&key);
     for change in &self.1 {
       if change.1 == key.as_ref() {
-        res = change.2.clone();
+        res.clone_from(&change.2);
       }
     }
     res

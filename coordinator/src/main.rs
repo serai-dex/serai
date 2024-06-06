@@ -260,7 +260,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
         cosign_channel.send(cosigned_block).unwrap();
         let mut buf = vec![];
         cosigned_block.serialize(&mut buf).unwrap();
-        P2p::broadcast(p2p, P2pMessageKind::CosignedBlock, buf).await;
+        P2p::broadcast(p2p, GossipMessageKind::CosignedBlock, buf).await;
         None
       }
       // This causes an action on Substrate yet not on any Tributary
@@ -836,8 +836,8 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
 ) {
   let mut tributaries = HashMap::new();
   'outer: loop {
-    // TODO: Create a better async flow for this, as this does still hammer this task
-    tokio::task::yield_now().await;
+    // TODO: Create a better async flow for this
+    tokio::time::sleep(core::time::Duration::from_millis(100)).await;
 
     match tributary_event.try_recv() {
       Ok(event) => match event {

@@ -363,21 +363,26 @@ pub mod pallet {
 
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
-      let mut iter = SortedAllocationsIter::<T>::new(network);
       let mut participants = vec![];
-      let mut key_shares = 0;
       let mut total_stake = 0;
-      while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
-        let Some((key, amount)) = iter.next() else { break };
+      {
+        let mut iter = SortedAllocationsIter::<T>::new(network);
+        let mut key_shares = 0;
+        while key_shares < u64::from(MAX_KEY_SHARES_PER_SET) {
+          let Some((key, amount)) = iter.next() else { break };
 
-        let these_key_shares = amount.0 / allocation_per_key_share;
-        InSet::<T>::set(network, key, Some(these_key_shares));
-        participants.push((key, these_key_shares));
+          let these_key_shares =
+            (amount.0 / allocation_per_key_share).min(u64::from(MAX_KEY_SHARES_PER_SET));
+          participants.push((key, these_key_shares));
 
-        // This can technically set key_shares to a value exceeding MAX_KEY_SHARES_PER_SET
-        // Off-chain, the key shares per validator will be accordingly adjusted
-        key_shares += these_key_shares;
-        total_stake += amount.0;
+          key_shares += these_key_shares;
+          total_stake += amount.0;
+        }
+        amortize_excess_key_shares(&mut participants);
+      }
+
+      for (key, shares) in &participants {
+        InSet::<T>::set(network, key, Some(*shares));
       }
       TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
 
@@ -472,7 +477,7 @@ pub mod pallet {
 
       let Some(top) = top else { return false };
 
-      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause an off-chain reduction of
+      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause a round robin reduction of
       // each validator's key shares until their sum is MAX_KEY_SHARES_PER_SET
       // post_amortization_key_shares_for_top_validator yields what the top validator's key shares
       // would be after such a reduction, letting us evaluate this correctly

@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
 
@@ -55,12 +55,9 @@ CMD ["/run.sh"]
     network.label(),
   );
 
-  let run = crate::os(
-    os,
-    &("RUN mkdir /volume && chown monero /volume\r\n".to_string() +
-      if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }),
-    "monero",
-  ) + &run_monero;
+  let run =
+    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
+      &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();

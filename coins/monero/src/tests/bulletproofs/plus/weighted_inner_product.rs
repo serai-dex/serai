@@ -9,7 +9,6 @@ use dalek_ff_group::{Scalar, EdwardsPoint};
 use crate::ringct::bulletproofs::plus::{
   ScalarVector, PointVector, GeneratorsList, Generators,
   weighted_inner_product::{WipStatement, WipWitness},
-  weighted_inner_product,
 };
 
 #[test]
@@ -68,7 +67,7 @@ fn test_weighted_inner_product() {
     #[allow(non_snake_case)]
     let P = g_bold.multiexp(&a) +
       h_bold.multiexp(&b) +
-      (g * weighted_inner_product(&a, &b, &y_vec)) +
+      (g * a.clone().weighted_inner_product(&b, &y_vec)) +
       (h * alpha);
 
     let statement = WipStatement::new(generators, P, y);

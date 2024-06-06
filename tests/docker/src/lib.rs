@@ -85,7 +85,7 @@ pub fn build(name: String) {
   }
 
   let mut dockerfile_path = orchestration_path.clone();
-  if HashSet::from(["bitcoin", "ethereum", "monero"]).contains(name.as_str()) {
+  if HashSet::from(["bitcoin", "ethereum", "ethereum-relayer", "monero"]).contains(name.as_str()) {
     dockerfile_path = dockerfile_path.join("coins");
   }
   if name.contains("-processor") {
@@ -124,7 +124,8 @@ pub fn build(name: String) {
       // Check any additionally specified paths
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
       let mut metadatas = match name.as_str() {
-        "bitcoin" | "monero" => vec![],
+        "bitcoin" | "ethereum" | "monero" => vec![],
+        "ethereum-relayer" => vec![meta(repo_path.join("common")), meta(repo_path.join("coins"))],
         "message-queue" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),

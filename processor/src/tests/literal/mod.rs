@@ -3,6 +3,8 @@ use dockertest::{
   TestBodySpecification, DockerOperations, DockerTest,
 };
 
+use serai_db::MemDb;
+
 #[cfg(feature = "bitcoin")]
 mod bitcoin {
   use std::sync::Arc;
@@ -33,8 +35,6 @@ mod bitcoin {
     sync::Mutex,
   };
 
-  use serai_db::MemDb;
-
   use super::*;
   use crate::{
     networks::{Network, Bitcoin, Output, OutputType, Block},
@@ -57,7 +57,7 @@ mod bitcoin {
   fn test_receive_data_from_input() {
     let docker = spawn_bitcoin();
     docker.run(|ops| async move {
-      let btc = bitcoin(&ops).await;
+      let btc = bitcoin(&ops).await(MemDb::new()).await;
 
       // generate a multisig address to receive the coins
       let mut keys = frost::tests::key_gen::<_, <Bitcoin as Network>::Curve>(&mut OsRng)
@@ -65,12 +65,12 @@ mod bitcoin {
         .unwrap();
       <Bitcoin as Network>::tweak_keys(&mut keys);
       let group_key = keys.group_key();
-      let serai_btc_address = <Bitcoin as Network>::external_address(group_key);
+      let serai_btc_address = <Bitcoin as Network>::external_address(&btc, group_key).await;
 
       // btc key pair to send from
       let private_key = PrivateKey::new(SecretKey::new(&mut rand_core::OsRng), BNetwork::Regtest);
       let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-      let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+      let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
 
       // get unlocked coins
       let new_block = btc.get_latest_block_number().await.unwrap() + 1;
@@ -107,7 +107,7 @@ mod bitcoin {
         version: Version(2),
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-          previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+          previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
           script_sig: Script::new().into(),
           sequence: Sequence(u32::MAX),
           witness: Witness::default(),
@@ -128,14 +128,14 @@ mod bitcoin {
         version: Version(2),
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-          previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+          previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
           script_sig: Script::new().into(),
           sequence: Sequence(u32::MAX),
           witness: Witness::new(),
         }],
         output: vec![TxOut {
           value: tx.output[0].value - BAmount::from_sat(10000),
-          script_pubkey: serai_btc_address.as_ref().script_pubkey(),
+          script_pubkey: serai_btc_address.into(),
         }],
       };
 
@@ -143,12 +143,14 @@ mod bitcoin {
       // This is the standard script with an extra argument of the InInstruction
       let mut sig = SECP256K1
         .sign_ecdsa_low_r(
-          &Message::from(
+          &Message::from_digest_slice(
             SighashCache::new(&tx)
               .p2wsh_signature_hash(0, &script, initial_output_value, EcdsaSighashType::All)
               .unwrap()
-              .to_raw_hash(),
-          ),
+              .to_raw_hash()
+              .as_ref(),
+          )
+          .unwrap(),
           &private_key.inner,
         )
         .serialize_der()
@@ -208,23 +210,26 @@ mod bitcoin {
     test
   }
 
-  async fn bitcoin(ops: &DockerOperations) -> Bitcoin {
+  async fn bitcoin(
+    ops: &DockerOperations,
+  ) -> impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = Bitcoin>>> {
     let handle = ops.handle("serai-dev-bitcoin").host_port(8332).unwrap();
-    let bitcoin = Bitcoin::new(format!("http://serai:seraidex@{}:{}", handle.0, handle.1)).await;
+    let url = format!("http://serai:seraidex@{}:{}", handle.0, handle.1);
+    let bitcoin = Bitcoin::new(url.clone()).await;
     bitcoin.fresh_chain().await;
-    bitcoin
+    move |_db| Box::pin(Bitcoin::new(url.clone()))
   }
 
-  test_network!(
+  test_utxo_network!(
     Bitcoin,
     spawn_bitcoin,
     bitcoin,
     bitcoin_key_gen,
     bitcoin_scanner,
+    bitcoin_no_deadlock_in_multisig_completed,
     bitcoin_signer,
     bitcoin_wallet,
     bitcoin_addresses,
-    bitcoin_no_deadlock_in_multisig_completed,
   );
 }
 
@@ -252,24 +257,185 @@ mod monero {
     test
   }
 
-  async fn monero(ops: &DockerOperations) -> Monero {
+  async fn monero(
+    ops: &DockerOperations,
+  ) -> impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = Monero>>> {
     let handle = ops.handle("serai-dev-monero").host_port(18081).unwrap();
-    let monero = Monero::new(format!("http://serai:seraidex@{}:{}", handle.0, handle.1)).await;
+    let url = format!("http://serai:seraidex@{}:{}", handle.0, handle.1);
+    let monero = Monero::new(url.clone()).await;
     while monero.get_latest_block_number().await.unwrap() < 150 {
       monero.mine_block().await;
     }
-    monero
+    move |_db| Box::pin(Monero::new(url.clone()))
   }
 
-  test_network!(
+  test_utxo_network!(
     Monero,
     spawn_monero,
     monero,
     monero_key_gen,
     monero_scanner,
+    monero_no_deadlock_in_multisig_completed,
     monero_signer,
     monero_wallet,
     monero_addresses,
-    monero_no_deadlock_in_multisig_completed,
+  );
+}
+
+#[cfg(feature = "ethereum")]
+mod ethereum {
+  use super::*;
+
+  use ciphersuite::{Ciphersuite, Secp256k1};
+
+  use serai_client::validator_sets::primitives::Session;
+
+  use crate::networks::Ethereum;
+
+  fn spawn_ethereum() -> DockerTest {
+    serai_docker_tests::build("ethereum".to_string());
+
+    let composition = TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-ethereum").pull_policy(PullPolicy::Never),
+    )
+    .set_start_policy(StartPolicy::Strict)
+    .set_log_options(Some(LogOptions {
+      action: LogAction::Forward,
+      policy: LogPolicy::OnError,
+      source: LogSource::Both,
+    }))
+    .set_publish_all_ports(true);
+
+    let mut test = DockerTest::new();
+    test.provide_container(composition);
+    test
+  }
+
+  async fn ethereum(
+    ops: &DockerOperations,
+  ) -> impl Fn(MemDb) -> Pin<Box<dyn Send + Future<Output = Ethereum<MemDb>>>> {
+    use std::sync::Arc;
+    use ethereum_serai::{
+      alloy::{
+        primitives::U256,
+        simple_request_transport::SimpleRequest,
+        rpc_client::ClientBuilder,
+        provider::{Provider, RootProvider},
+      },
+      deployer::Deployer,
+    };
+
+    let handle = ops.handle("serai-dev-ethereum").host_port(8545).unwrap();
+    let url = format!("http://{}:{}", handle.0, handle.1);
+    tokio::time::sleep(core::time::Duration::from_secs(15)).await;
+
+    {
+      let provider = Arc::new(RootProvider::new(
+        ClientBuilder::default().transport(SimpleRequest::new(url.clone()), true),
+      ));
+      provider.raw_request::<_, ()>("evm_setAutomine".into(), [false]).await.unwrap();
+      provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+
+      // Perform deployment
+      {
+        // Make sure the Deployer constructor returns None, as it doesn't exist yet
+        assert!(Deployer::new(provider.clone()).await.unwrap().is_none());
+
+        // Deploy the Deployer
+        let tx = Deployer::deployment_tx();
+
+        provider
+          .raw_request::<_, ()>(
+            "anvil_setBalance".into(),
+            [
+              tx.recover_signer().unwrap().to_string(),
+              (U256::from(tx.tx().gas_limit) * U256::from(tx.tx().gas_price)).to_string(),
+            ],
+          )
+          .await
+          .unwrap();
+
+        let (tx, sig, _) = tx.into_parts();
+        let mut bytes = vec![];
+        tx.encode_with_signature_fields(&sig, &mut bytes);
+
+        let pending_tx = provider.send_raw_transaction(&bytes).await.unwrap();
+        provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+        //tokio::time::sleep(core::time::Duration::from_secs(15)).await;
+        let receipt = pending_tx.get_receipt().await.unwrap();
+        assert!(receipt.status());
+
+        let _ = Deployer::new(provider.clone())
+          .await
+          .expect("network error")
+          .expect("deployer wasn't deployed");
+      }
+    }
+
+    move |db| {
+      let url = url.clone();
+      Box::pin(async move {
+        {
+          let db = db.clone();
+          let url = url.clone();
+          // Spawn a task to deploy the proper Router when the time comes
+          tokio::spawn(async move {
+            let key = loop {
+              let Some(key) = crate::key_gen::NetworkKeyDb::get(&db, Session(0)) else {
+                tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+                continue;
+              };
+              break ethereum_serai::crypto::PublicKey::new(
+                Secp256k1::read_G(&mut key.as_slice()).unwrap(),
+              )
+              .unwrap();
+            };
+            let provider = Arc::new(RootProvider::new(
+              ClientBuilder::default().transport(SimpleRequest::new(url.clone()), true),
+            ));
+            let deployer = Deployer::new(provider.clone()).await.unwrap().unwrap();
+
+            let mut tx = deployer.deploy_router(&key);
+            tx.gas_limit = 1_000_000u64.into();
+            tx.gas_price = 1_000_000_000u64.into();
+            let tx = ethereum_serai::crypto::deterministically_sign(&tx);
+
+            provider
+              .raw_request::<_, ()>(
+                "anvil_setBalance".into(),
+                [
+                  tx.recover_signer().unwrap().to_string(),
+                  (U256::from(tx.tx().gas_limit) * U256::from(tx.tx().gas_price)).to_string(),
+                ],
+              )
+              .await
+              .unwrap();
+
+            let (tx, sig, _) = tx.into_parts();
+            let mut bytes = vec![];
+            tx.encode_with_signature_fields(&sig, &mut bytes);
+            let pending_tx = provider.send_raw_transaction(&bytes).await.unwrap();
+            provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+            let receipt = pending_tx.get_receipt().await.unwrap();
+            assert!(receipt.status());
+
+            let _router = deployer.find_router(provider.clone(), &key).await.unwrap().unwrap();
+          });
+        }
+
+        Ethereum::new(db, url.clone(), String::new()).await
+      })
+    }
+  }
+
+  test_network!(
+    Ethereum<MemDb>,
+    spawn_ethereum,
+    ethereum,
+    ethereum_key_gen,
+    ethereum_scanner,
+    ethereum_no_deadlock_in_multisig_completed,
+    ethereum_signer,
+    ethereum_wallet,
   );
 }

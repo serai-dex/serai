@@ -41,8 +41,9 @@ enum HasEvents {
 
 create_db!(
   SubstrateCosignDb {
+    ScanCosignFrom: () -> u64,
     IntendedCosign: () -> (u64, Option<u64>),
-    BlockHasEvents: (block: u64) -> HasEvents,
+    BlockHasEventsCache: (block: u64) -> HasEvents,
     LatestCosignedBlock: () -> u64,
   }
 );
@@ -85,7 +86,7 @@ async fn block_has_events(
   serai: &Serai,
   block: u64,
 ) -> Result<HasEvents, SeraiError> {
-  let cached = BlockHasEvents::get(txn, block);
+  let cached = BlockHasEventsCache::get(txn, block);
   match cached {
     None => {
       let serai = serai.as_of(
@@ -107,8 +108,8 @@ async fn block_has_events(
 
       let has_events = if has_no_events { HasEvents::No } else { HasEvents::Yes };
 
-      BlockHasEvents::set(txn, block, &has_events);
-      Ok(HasEvents::Yes)
+      BlockHasEventsCache::set(txn, block, &has_events);
+      Ok(has_events)
     }
     Some(code) => Ok(code),
   }
@@ -135,6 +136,7 @@ async fn potentially_cosign_block(
   if (block_has_events == HasEvents::No) &&
     (LatestCosignedBlock::latest_cosigned_block(txn) == (block - 1))
   {
+    log::debug!("automatically co-signing next block ({block}) since it has no events");
     LatestCosignedBlock::set(txn, &block);
   }
 
@@ -178,7 +180,7 @@ async fn potentially_cosign_block(
   which should be cosigned). Accordingly, it is necessary to call multiple times even if
   `latest_number` doesn't change.
 */
-pub async fn advance_cosign_protocol(
+async fn advance_cosign_protocol_inner(
   db: &mut impl Db,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   serai: &Serai,
@@ -203,8 +205,14 @@ pub async fn advance_cosign_protocol(
   let mut window_end_exclusive = last_intended_to_cosign_block + COSIGN_DISTANCE;
   // If we've never triggered a cosign, don't skip any cosigns based on proximity
   if last_intended_to_cosign_block == INITIAL_INTENDED_COSIGN {
-    window_end_exclusive = 0;
+    window_end_exclusive = 1;
   }
+
+  // The consensus rules for this are `last_intended_to_cosign_block + 1`
+  let scan_start_block = last_intended_to_cosign_block + 1;
+  // As a practical optimization, we don't re-scan old blocks since old blocks are independent to
+  // new state
+  let scan_start_block = scan_start_block.max(ScanCosignFrom::get(&txn).unwrap_or(1));
 
   // Check all blocks within the window to see if they should be cosigned
   // If so, we're skipping them and need to flag them as skipped so that once the window closes, we
@@ -212,7 +220,8 @@ pub async fn advance_cosign_protocol(
   // We only perform this check if we haven't already marked a block as skipped since the cosign
   // the skipped block will cause will cosign all other blocks within this window
   if skipped_block.is_none() {
-    for b in (last_intended_to_cosign_block + 1) .. window_end_exclusive.min(latest_number) {
+    let window_end_inclusive = window_end_exclusive - 1;
+    for b in scan_start_block ..= window_end_inclusive.min(latest_number) {
       if block_has_events(&mut txn, serai, b).await? == HasEvents::Yes {
         skipped_block = Some(b);
         log::debug!("skipping cosigning {b} due to proximity to prior cosign");
@@ -227,7 +236,7 @@ pub async fn advance_cosign_protocol(
   // A list of sets which are cosigning, along with a boolean of if we're in the set
   let mut cosigning = vec![];
 
-  for block in (last_intended_to_cosign_block + 1) ..= latest_number {
+  for block in scan_start_block ..= latest_number {
     let actual_block = serai
       .finalized_block_by_number(block)
       .await?
@@ -276,6 +285,11 @@ pub async fn advance_cosign_protocol(
 
       break;
     }
+
+    // If this TX is committed, always start future scanning from the next block
+    ScanCosignFrom::set(&mut txn, &(block + 1));
+    // Since we're scanning *from* the next block, tidy the cache
+    BlockHasEventsCache::del(&mut txn, block);
   }
 
   if let Some((number, hash)) = to_cosign {
@@ -295,5 +309,24 @@ pub async fn advance_cosign_protocol(
   }
   txn.commit();
 
+  Ok(())
+}
+
+pub async fn advance_cosign_protocol(
+  db: &mut impl Db,
+  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai: &Serai,
+  latest_number: u64,
+) -> Result<(), SeraiError> {
+  loop {
+    let scan_from = ScanCosignFrom::get(db).unwrap_or(1);
+    // Only scan 1000 blocks at a time to limit a massive txn from forming
+    let scan_to = latest_number.min(scan_from + 1000);
+    advance_cosign_protocol_inner(db, key, serai, scan_to).await?;
+    // If we didn't limit the scan_to, break
+    if scan_to == latest_number {
+      break;
+    }
+  }
   Ok(())
 }

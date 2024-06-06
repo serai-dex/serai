@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
@@ -13,15 +13,15 @@ pub fn message_queue(
   monero_key: <Ristretto as Ciphersuite>::G,
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service(network.release(), network.db(), "serai-message-queue");
+    &build_serai_service("", network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [
     ("COORDINATOR_KEY", hex::encode(coordinator_key.to_bytes())),
     ("BITCOIN_KEY", hex::encode(bitcoin_key.to_bytes())),
     ("ETHEREUM_KEY", hex::encode(ethereum_key.to_bytes())),
     ("MONERO_KEY", hex::encode(monero_key.to_bytes())),
-    ("DB_PATH", "./message-queue-db".to_string()),
-    ("RUST_LOG", "serai_message_queue=trace".to_string()),
+    ("DB_PATH", "/volume/message-queue-db".to_string()),
+    ("RUST_LOG", "info,serai_message_queue=trace".to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {

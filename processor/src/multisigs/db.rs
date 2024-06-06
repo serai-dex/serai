@@ -1,3 +1,5 @@
+use std::io;
+
 use ciphersuite::Ciphersuite;
 pub use serai_db::*;
 
@@ -6,8 +8,58 @@ use serai_client::{primitives::Balance, in_instructions::primitives::InInstructi
 
 use crate::{
   Get, Plan,
-  networks::{Transaction, Network},
+  networks::{Output, Transaction, Network},
 };
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum PlanFromScanning<N: Network> {
+  Refund(N::Output, N::Address),
+  Forward(N::Output),
+}
+
+impl<N: Network> PlanFromScanning<N> {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+    match kind[0] {
+      0 => {
+        let output = N::Output::read(reader)?;
+
+        let mut address_vec_len = [0; 4];
+        reader.read_exact(&mut address_vec_len)?;
+        let mut address_vec =
+          vec![0; usize::try_from(u32::from_le_bytes(address_vec_len)).unwrap()];
+        reader.read_exact(&mut address_vec)?;
+        let address =
+          N::Address::try_from(address_vec).map_err(|_| "invalid address saved to disk").unwrap();
+
+        Ok(PlanFromScanning::Refund(output, address))
+      }
+      1 => {
+        let output = N::Output::read(reader)?;
+        Ok(PlanFromScanning::Forward(output))
+      }
+      _ => panic!("reading unrecognized PlanFromScanning"),
+    }
+  }
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    match self {
+      PlanFromScanning::Refund(output, address) => {
+        writer.write_all(&[0])?;
+        output.write(writer)?;
+
+        let address_vec: Vec<u8> =
+          address.clone().try_into().map_err(|_| "invalid address being refunded to").unwrap();
+        writer.write_all(&u32::try_from(address_vec.len()).unwrap().to_le_bytes())?;
+        writer.write_all(&address_vec)
+      }
+      PlanFromScanning::Forward(output) => {
+        writer.write_all(&[1])?;
+        output.write(writer)
+      }
+    }
+  }
+}
 
 create_db!(
   MultisigsDb {
@@ -80,7 +132,11 @@ impl PlanDb {
   ) -> bool {
     let plan = Plan::<N>::read::<&[u8]>(&mut &Self::get(getter, &id).unwrap()[8 ..]).unwrap();
     assert_eq!(plan.id(), id);
-    (key == plan.key) && (Some(N::change_address(plan.key)) == plan.change)
+    if let Some(change) = N::change_address(plan.key) {
+      (key == plan.key) && (Some(change) == plan.change)
+    } else {
+      false
+    }
   }
 }
 
@@ -130,7 +186,7 @@ impl PlansFromScanningDb {
   pub fn set_plans_from_scanning<N: Network>(
     txn: &mut impl DbTxn,
     block_number: usize,
-    plans: Vec<Plan<N>>,
+    plans: Vec<PlanFromScanning<N>>,
   ) {
     let mut buf = vec![];
     for plan in plans {
@@ -142,13 +198,13 @@ impl PlansFromScanningDb {
   pub fn take_plans_from_scanning<N: Network>(
     txn: &mut impl DbTxn,
     block_number: usize,
-  ) -> Option<Vec<Plan<N>>> {
+  ) -> Option<Vec<PlanFromScanning<N>>> {
     let block_number = u64::try_from(block_number).unwrap();
     let res = Self::get(txn, block_number).map(|plans| {
       let mut plans_ref = plans.as_slice();
       let mut res = vec![];
       while !plans_ref.is_empty() {
-        res.push(Plan::<N>::read(&mut plans_ref).unwrap());
+        res.push(PlanFromScanning::<N>::read(&mut plans_ref).unwrap());
       }
       res
     });
@@ -175,7 +231,7 @@ impl ForwardedOutputDb {
     let res = InInstructionWithBalance::decode(&mut outputs_ref).unwrap();
     assert!(outputs_ref.len() < outputs.len());
     if outputs_ref.is_empty() {
-      txn.del(&Self::key(balance));
+      txn.del(Self::key(balance));
     } else {
       Self::set(txn, balance, &outputs);
     }

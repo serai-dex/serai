@@ -31,6 +31,8 @@ mod networks;
 use networks::{Block, Network};
 #[cfg(feature = "bitcoin")]
 use networks::Bitcoin;
+#[cfg(feature = "ethereum")]
+use networks::Ethereum;
 #[cfg(feature = "monero")]
 use networks::Monero;
 
@@ -735,6 +737,7 @@ async fn main() {
   };
   let network_id = match env::var("NETWORK").expect("network wasn't specified").as_str() {
     "bitcoin" => NetworkId::Bitcoin,
+    "ethereum" => NetworkId::Ethereum,
     "monero" => NetworkId::Monero,
     _ => panic!("unrecognized network"),
   };
@@ -744,6 +747,16 @@ async fn main() {
   match network_id {
     #[cfg(feature = "bitcoin")]
     NetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
+    #[cfg(feature = "ethereum")]
+    NetworkId::Ethereum => {
+      let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
+        .expect("ethereum relayer hostname wasn't specified")
+        .to_string();
+      let relayer_port =
+        env::var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
+      let relayer_url = relayer_hostname + ":" + &relayer_port;
+      run(db.clone(), Ethereum::new(db, url, relayer_url).await, coordinator).await
+    }
     #[cfg(feature = "monero")]
     NetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
     _ => panic!("spawning a processor for an unsupported network"),

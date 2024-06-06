@@ -105,13 +105,13 @@ pub struct Metadata {
   /// but the payment ID will be returned here anyway:
   ///
   /// 1) If the payment ID is tied to an output received by a subaddress account
-  /// that spent Monero in the transaction (the received output is considered
-  /// "change" and is not considered a "payment" in this case). If there are multiple
-  /// spending subaddress accounts in a transaction, the highest index spent key image
-  /// is used to determine the spending subaddress account.
+  ///    that spent Monero in the transaction (the received output is considered
+  ///    "change" and is not considered a "payment" in this case). If there are multiple
+  ///    spending subaddress accounts in a transaction, the highest index spent key image
+  ///    is used to determine the spending subaddress account.
   ///
   /// 2) If the payment ID is the unencrypted variant and the block's hf version is
-  /// v12 or higher (https://github.com/serai-dex/serai/issues/512)
+  ///    v12 or higher (https://github.com/serai-dex/serai/issues/512)
   pub payment_id: Option<PaymentId>,
   /// Arbitrary data encoded in TX extra.
   pub arbitrary_data: Vec<Vec<u8>>,

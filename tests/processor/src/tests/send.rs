@@ -8,11 +8,14 @@ use dkg::{Participant, tests::clone_without};
 use messages::{sign::SignId, SubstrateContext};
 
 use serai_client::{
-  primitives::{BlockHash, NetworkId},
+  primitives::{BlockHash, NetworkId, Amount, Balance, SeraiAddress},
   coins::primitives::{OutInstruction, OutInstructionWithBalance},
-  in_instructions::primitives::Batch,
+  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
   validator_sets::primitives::Session,
 };
+
+use serai_db::MemDb;
+use processor::networks::{Network, Bitcoin, Ethereum, Monero};
 
 use crate::{*, tests::*};
 
@@ -144,7 +147,7 @@ pub(crate) async fn sign_tx(
 
 #[test]
 fn send_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Monero] {
+  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
@@ -173,9 +176,13 @@ fn send_test() {
       coordinators[0].sync(&ops, &coordinators[1 ..]).await;
 
       // Send into the processor's wallet
-      let (tx, balance_sent) = wallet.send_to_address(&ops, &key_pair.1, None).await;
+      let mut serai_address = [0; 32];
+      OsRng.fill_bytes(&mut serai_address);
+      let instruction = InInstruction::Transfer(SeraiAddress(serai_address));
+      let (tx, balance_sent) =
+        wallet.send_to_address(&ops, &key_pair.1, Some(instruction.clone())).await;
       for coordinator in &mut coordinators {
-        coordinator.publish_transacton(&ops, &tx).await;
+        coordinator.publish_transaction(&ops, &tx).await;
       }
 
       // Put the TX past the confirmation depth
@@ -192,8 +199,25 @@ fn send_test() {
       // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
       tokio::time::sleep(Duration::from_secs(10)).await;
 
-      let expected_batch =
-        Batch { network, id: 0, block: BlockHash(block_with_tx.unwrap()), instructions: vec![] };
+      let amount_minted = Amount(
+        balance_sent.amount.0 -
+          (2 * match network {
+            NetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
+            NetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
+            NetworkId::Monero => Monero::COST_TO_AGGREGATE,
+            NetworkId::Serai => panic!("minted for Serai?"),
+          }),
+      );
+
+      let expected_batch = Batch {
+        network,
+        id: 0,
+        block: BlockHash(block_with_tx.unwrap()),
+        instructions: vec![InInstructionWithBalance {
+          instruction,
+          balance: Balance { coin: balance_sent.coin, amount: amount_minted },
+        }],
+      };
 
       // Make sure the proceessors picked it up by checking they're trying to sign a batch for it
       let (id, preprocesses) =
@@ -221,7 +245,7 @@ fn send_test() {
             block: substrate_block_num,
             burns: vec![OutInstructionWithBalance {
               instruction: OutInstruction { address: wallet.address(), data: None },
-              balance: balance_sent,
+              balance: Balance { coin: balance_sent.coin, amount: amount_minted },
             }],
             batches: vec![batch.batch.id],
           },
@@ -261,17 +285,17 @@ fn send_test() {
       let participating =
         participating.iter().map(|p| usize::from(u16::from(*p) - 1)).collect::<HashSet<_>>();
       for participant in &participating {
-        assert!(coordinators[*participant].get_transaction(&ops, &tx_id).await.is_some());
+        assert!(coordinators[*participant].get_published_transaction(&ops, &tx_id).await.is_some());
       }
 
       // Publish this transaction to the left out nodes
       let tx = coordinators[*participating.iter().next().unwrap()]
-        .get_transaction(&ops, &tx_id)
+        .get_published_transaction(&ops, &tx_id)
         .await
         .unwrap();
       for (i, coordinator) in coordinators.iter_mut().enumerate() {
         if !participating.contains(&i) {
-          coordinator.publish_transacton(&ops, &tx).await;
+          coordinator.publish_eventuality_completion(&ops, &tx).await;
           // Tell them of it as a completion of the relevant signing nodes
           coordinator
             .send_message(messages::sign::CoordinatorMessage::Completed {

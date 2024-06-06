@@ -3,8 +3,7 @@
 use group::Group;
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
-mod scalar_vector;
-pub(crate) use scalar_vector::{ScalarVector, weighted_inner_product};
+pub(crate) use crate::ringct::bulletproofs::scalar_vector::ScalarVector;
 mod point_vector;
 pub(crate) use point_vector::PointVector;
 

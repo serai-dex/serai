@@ -8,7 +8,10 @@ use frost::curve::Ciphersuite;
 
 use serai_client::primitives::Balance;
 
-use crate::networks::{Output, Network};
+use crate::{
+  networks::{Output, Network},
+  multisigs::scheduler::{SchedulerAddendum, Scheduler},
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Payment<N: Network> {
@@ -73,7 +76,7 @@ impl<N: Network> Payment<N> {
   }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Plan<N: Network> {
   pub key: <N::Curve as Ciphersuite>::G,
   pub inputs: Vec<N::Output>,
@@ -90,7 +93,11 @@ pub struct Plan<N: Network> {
   /// This MUST contain a Serai address. Operating costs may be deducted from the payments in this
   /// Plan on the premise that the change address is Serai's, and accordingly, Serai will recoup
   /// the operating costs.
+  //
+  // TODO: Consider moving to ::G?
   pub change: Option<N::Address>,
+  /// The scheduler's additional data.
+  pub scheduler_addendum: <N::Scheduler as Scheduler<N>>::Addendum,
 }
 impl<N: Network> core::fmt::Debug for Plan<N> {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
@@ -100,6 +107,7 @@ impl<N: Network> core::fmt::Debug for Plan<N> {
       .field("inputs", &self.inputs)
       .field("payments", &self.payments)
       .field("change", &self.change.as_ref().map(ToString::to_string))
+      .field("scheduler_addendum", &self.scheduler_addendum)
       .finish()
   }
 }
@@ -124,6 +132,10 @@ impl<N: Network> Plan<N> {
     if let Some(change) = &self.change {
       transcript.append_message(b"change", change.to_string());
     }
+
+    let mut addendum_bytes = vec![];
+    self.scheduler_addendum.write(&mut addendum_bytes).unwrap();
+    transcript.append_message(b"scheduler_addendum", addendum_bytes);
 
     transcript
   }
@@ -161,7 +173,8 @@ impl<N: Network> Plan<N> {
     };
     assert!(serai_client::primitives::MAX_ADDRESS_LEN <= u8::MAX.into());
     writer.write_all(&[u8::try_from(change.len()).unwrap()])?;
-    writer.write_all(&change)
+    writer.write_all(&change)?;
+    self.scheduler_addendum.write(writer)
   }
 
   pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
@@ -193,6 +206,7 @@ impl<N: Network> Plan<N> {
         })?)
       };
 
-    Ok(Plan { key, inputs, payments, change })
+    let scheduler_addendum = <N::Scheduler as Scheduler<N>>::Addendum::read(reader)?;
+    Ok(Plan { key, inputs, payments, change, scheduler_addendum })
   }
 }

@@ -1,36 +1,44 @@
-//SPDX-License-Identifier: AGPLv3
+// SPDX-License-Identifier: AGPLv3
 pragma solidity ^0.8.0;
 
 // see https://github.com/noot/schnorr-verify for implementation details
-contract Schnorr {
+library Schnorr {
   // secp256k1 group order
   uint256 constant public Q =
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
-  // parity := public key y-coord parity (27 or 28)
-  // px := public key x-coord
-  // message := 32-byte message
-  // s := schnorr signature
-  // e := schnorr signature challenge
-  function verify(
-    uint8 parity,
-    bytes32 px,
-    bytes32 message,
-    bytes32 s,
-    bytes32 e
-  ) public view returns (bool) {
-    // ecrecover = (m, v, r, s);
-    bytes32 sp = bytes32(Q - mulmod(uint256(s), uint256(px), Q));
-    bytes32 ep = bytes32(Q - mulmod(uint256(e), uint256(px), Q));
+  // Fixed parity for the public keys used in this contract
+  // This avoids spending a word passing the parity in a similar style to
+  // Bitcoin's Taproot
+  uint8 constant public KEY_PARITY = 27;
 
-    require(sp != 0);
-    // the ecrecover precompile implementation checks that the `r` and `s`
-    // inputs are non-zero (in this case, `px` and `ep`), thus we don't need to
-    // check if they're zero.will make me 
-    address R = ecrecover(sp, parity, px, ep);
-    require(R != address(0), "ecrecover failed");
-    return e == keccak256(
-      abi.encodePacked(R, uint8(parity), px, block.chainid, message)
-    );
+  error InvalidSOrA();
+  error MalformedSignature();
+
+  // px := public key x-coord, where the public key has a parity of KEY_PARITY
+  // message := 32-byte hash of the message
+  // c := schnorr signature challenge
+  // s := schnorr signature
+  function verify(
+    bytes32 px,
+    bytes memory message,
+    bytes32 c,
+    bytes32 s
+  ) internal pure returns (bool) {
+    // ecrecover = (m, v, r, s) -> key
+    // We instead pass the following to obtain the nonce (not the key)
+    // Then we hash it and verify it matches the challenge
+    bytes32 sa = bytes32(Q - mulmod(uint256(s), uint256(px), Q));
+    bytes32 ca = bytes32(Q - mulmod(uint256(c), uint256(px), Q));
+
+    // For safety, we want each input to ecrecover to be 0 (sa, px, ca)
+    // The ecreover precomple checks `r` and `s` (`px` and `ca`) are non-zero
+    // That leaves us to check `sa` are non-zero
+    if (sa == 0) revert InvalidSOrA();
+    address R = ecrecover(sa, KEY_PARITY, px, ca);
+    if (R == address(0)) revert MalformedSignature();
+
+    // Check the signature is correct by rebuilding the challenge
+    return c == keccak256(abi.encodePacked(R, px, message));
   }
 }

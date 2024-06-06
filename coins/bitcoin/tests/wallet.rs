@@ -22,11 +22,10 @@ use bitcoin_serai::{
     hashes::Hash as HashTrait,
     blockdata::opcodes::all::OP_RETURN,
     script::{PushBytesBuf, Instruction, Instructions, Script},
-    address::NetworkChecked,
     OutPoint, Amount, TxOut, Transaction, Network, Address,
   },
   wallet::{
-    tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
+    tweak_keys, p2tr_script_buf, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
   },
   rpc::Rpc,
 };
@@ -48,7 +47,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
       "generatetoaddress",
       serde_json::json!([
         1,
-        Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())
+        Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap()
       ]),
     )
     .await
@@ -69,7 +68,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   assert_eq!(outputs, scanner.scan_transaction(&block.txdata[0]));
 
   assert_eq!(outputs.len(), 1);
-  assert_eq!(outputs[0].outpoint(), &OutPoint::new(block.txdata[0].txid(), 0));
+  assert_eq!(outputs[0].outpoint(), &OutPoint::new(block.txdata[0].compute_txid(), 0));
   assert_eq!(outputs[0].value(), block.txdata[0].output[0].value.to_sat());
 
   assert_eq!(
@@ -193,7 +192,7 @@ async_sequential! {
     assert_eq!(output.offset(), Scalar::ZERO);
 
     let inputs = vec![output];
-    let addr = || Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap());
+    let addr = || p2tr_script_buf(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
     assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
@@ -206,7 +205,7 @@ async_sequential! {
     // No change
     assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
     // Consolidation TX
-    assert!(SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, FEE).is_ok());
+    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
     // Data
     assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
     // No outputs
@@ -229,7 +228,7 @@ async_sequential! {
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], Some(&addr()), None, 0),
+      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
       Err(TransactionError::TooLowFee),
     );
 
@@ -261,20 +260,19 @@ async_sequential! {
 
     // Declare payments, change, fee
     let payments = [
-      (Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap()), 1005),
-      (Address::<NetworkChecked>::new(Network::Regtest, address_payload(offset_key).unwrap()), 1007)
+      (p2tr_script_buf(key).unwrap(), 1005),
+      (p2tr_script_buf(offset_key).unwrap(), 1007)
     ];
 
     let change_offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
-    let change_addr =
-      Address::<NetworkChecked>::new(Network::Regtest, address_payload(change_key).unwrap());
+    let change_addr = p2tr_script_buf(change_key).unwrap();
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
       vec![output.clone(), offset_output.clone()],
       &payments,
-      Some(&change_addr),
+      Some(change_addr.clone()),
       None,
       FEE
     ).unwrap();
@@ -287,7 +285,7 @@ async_sequential! {
     // Ensure we can scan it
     let outputs = scanner.scan_transaction(&tx);
     for (o, output) in outputs.iter().enumerate() {
-      assert_eq!(output.outpoint(), &OutPoint::new(tx.txid(), u32::try_from(o).unwrap()));
+      assert_eq!(output.outpoint(), &OutPoint::new(tx.compute_txid(), u32::try_from(o).unwrap()));
       assert_eq!(&ReceivedOutput::read::<&[u8]>(&mut output.serialize().as_ref()).unwrap(), output);
     }
 
@@ -299,7 +297,7 @@ async_sequential! {
     for ((output, scanned), payment) in tx.output.iter().zip(outputs.iter()).zip(payments.iter()) {
       assert_eq!(
         output,
-        &TxOut { script_pubkey: payment.0.script_pubkey(), value: Amount::from_sat(payment.1) },
+        &TxOut { script_pubkey: payment.0.clone(), value: Amount::from_sat(payment.1) },
       );
       assert_eq!(scanned.value(), payment.1 );
     }
@@ -314,13 +312,13 @@ async_sequential! {
       input_value - payments.iter().map(|payment| payment.1).sum::<u64>() - needed_fee;
     assert_eq!(
       tx.output[2],
-      TxOut { script_pubkey: change_addr.script_pubkey(), value: Amount::from_sat(change_amount) },
+      TxOut { script_pubkey: change_addr, value: Amount::from_sat(change_amount) },
     );
 
     // This also tests send_raw_transaction and get_transaction, which the RPC test can't
     // effectively test
     rpc.send_raw_transaction(&tx).await.unwrap();
-    let mut hash = *tx.txid().as_raw_hash().as_byte_array();
+    let mut hash = *tx.compute_txid().as_raw_hash().as_byte_array();
     hash.reverse();
     assert_eq!(tx, rpc.get_transaction(&hash).await.unwrap());
     assert_eq!(expected_id, hash);
@@ -344,7 +342,7 @@ async_sequential! {
       &SignableTransaction::new(
         vec![output],
         &[],
-        Some(&Address::<NetworkChecked>::new(Network::Regtest, address_payload(key).unwrap())),
+        Some(p2tr_script_buf(key).unwrap()),
         Some(data.clone()),
         FEE
       ).unwrap()

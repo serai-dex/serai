@@ -24,7 +24,7 @@ use crate::{
   },
 };
 
-// Figure 3
+// Figure 3 of the Bulletproofs+ Paper
 #[derive(Clone, Debug)]
 pub(crate) struct AggregateRangeStatement {
   generators: Generators,
@@ -38,24 +38,15 @@ impl Zeroize for AggregateRangeStatement {
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub(crate) struct AggregateRangeWitness {
-  values: Vec<u64>,
-  gammas: Vec<Scalar>,
-}
+pub(crate) struct AggregateRangeWitness(Vec<Commitment>);
 
 impl AggregateRangeWitness {
-  pub(crate) fn new(commitments: &[Commitment]) -> Option<Self> {
+  pub(crate) fn new(commitments: Vec<Commitment>) -> Option<Self> {
     if commitments.is_empty() || (commitments.len() > MAX_M) {
       return None;
     }
 
-    let mut values = Vec::with_capacity(commitments.len());
-    let mut gammas = Vec::with_capacity(commitments.len());
-    for commitment in commitments {
-      values.push(commitment.amount);
-      gammas.push(Scalar(commitment.mask));
-    }
-    Some(AggregateRangeWitness { values, gammas })
+    Some(AggregateRangeWitness(commitments))
   }
 }
 
@@ -112,7 +103,7 @@ impl AggregateRangeStatement {
     let mut d = ScalarVector::new(mn);
     for j in 1 ..= V.len() {
       z_pow.push(z.pow(Scalar::from(2 * u64::try_from(j).unwrap()))); // TODO: Optimize this
-      d = d.add_vec(&Self::d_j(j, V.len()).mul(z_pow[j - 1]));
+      d = d + &(Self::d_j(j, V.len()) * (z_pow[j - 1]));
     }
 
     let mut ascending_y = ScalarVector(vec![y]);
@@ -124,7 +115,8 @@ impl AggregateRangeStatement {
     let mut descending_y = ascending_y.clone();
     descending_y.0.reverse();
 
-    let d_descending_y = d.mul_vec(&descending_y);
+    let d_descending_y = d.clone() * &descending_y;
+    let d_descending_y_plus_z = d_descending_y + z;
 
     let y_mn_plus_one = descending_y[0] * y;
 
@@ -135,9 +127,9 @@ impl AggregateRangeStatement {
 
     let neg_z = -z;
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 2);
-    for (i, d_y_z) in d_descending_y.add(z).0.drain(..).enumerate() {
+    for (i, d_y_z) in d_descending_y_plus_z.0.iter().enumerate() {
       A_terms.push((neg_z, generators.generator(GeneratorsList::GBold1, i)));
-      A_terms.push((d_y_z, generators.generator(GeneratorsList::HBold1, i)));
+      A_terms.push((*d_y_z, generators.generator(GeneratorsList::HBold1, i)));
     }
     A_terms.push((y_mn_plus_one, commitment_accum));
     A_terms.push((
@@ -145,7 +137,14 @@ impl AggregateRangeStatement {
       Generators::g(),
     ));
 
-    (y, d_descending_y, y_mn_plus_one, z, ScalarVector(z_pow), A + multiexp_vartime(&A_terms))
+    (
+      y,
+      d_descending_y_plus_z,
+      y_mn_plus_one,
+      z,
+      ScalarVector(z_pow),
+      A + multiexp_vartime(&A_terms),
+    )
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -154,13 +153,11 @@ impl AggregateRangeStatement {
     witness: &AggregateRangeWitness,
   ) -> Option<AggregateRangeProof> {
     // Check for consistency with the witness
-    if self.V.len() != witness.values.len() {
+    if self.V.len() != witness.0.len() {
       return None;
     }
-    for (commitment, (value, gamma)) in
-      self.V.iter().zip(witness.values.iter().zip(witness.gammas.iter()))
-    {
-      if Commitment::new(**gamma, *value).calculate() != **commitment {
+    for (commitment, witness) in self.V.iter().zip(witness.0.iter()) {
+      if witness.calculate() != **commitment {
         return None;
       }
     }
@@ -188,10 +185,16 @@ impl AggregateRangeStatement {
     let mut a_l = ScalarVector(Vec::with_capacity(V.len() * N));
     for j in 1 ..= V.len() {
       d_js.push(Self::d_j(j, V.len()));
-      a_l.0.append(&mut u64_decompose(*witness.values.get(j - 1).unwrap_or(&0)).0);
+      #[allow(clippy::map_unwrap_or)]
+      a_l.0.append(
+        &mut u64_decompose(
+          *witness.0.get(j - 1).map(|commitment| &commitment.amount).unwrap_or(&0),
+        )
+        .0,
+      );
     }
 
-    let a_r = a_l.sub(Scalar::ONE);
+    let a_r = a_l.clone() - Scalar::ONE;
 
     let alpha = Scalar::random(&mut *rng);
 
@@ -209,14 +212,14 @@ impl AggregateRangeStatement {
     // Multiply by INV_EIGHT per earlier commentary
     A.0 *= crate::INV_EIGHT();
 
-    let (y, d_descending_y, y_mn_plus_one, z, z_pow, A_hat) =
+    let (y, d_descending_y_plus_z, y_mn_plus_one, z, z_pow, A_hat) =
       Self::compute_A_hat(PointVector(V), &generators, &mut transcript, A);
 
-    let a_l = a_l.sub(z);
-    let a_r = a_r.add_vec(&d_descending_y).add(z);
+    let a_l = a_l - z;
+    let a_r = a_r + &d_descending_y_plus_z;
     let mut alpha = alpha;
-    for j in 1 ..= witness.gammas.len() {
-      alpha += z_pow[j - 1] * witness.gammas[j - 1] * y_mn_plus_one;
+    for j in 1 ..= witness.0.len() {
+      alpha += z_pow[j - 1] * Scalar(witness.0[j - 1].mask) * y_mn_plus_one;
     }
 
     Some(AggregateRangeProof {

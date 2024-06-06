@@ -10,6 +10,8 @@ use parity_scale_codec::{Encode, Decode};
 use futures_util::sink::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
 
+use serai_db::MemDb;
+
 use tendermint_machine::{
   ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   SlashEvent, TendermintMachine, TendermintHandle,
@@ -111,6 +113,8 @@ struct TestNetwork(
 
 #[async_trait]
 impl Network for TestNetwork {
+  type Db = MemDb;
+
   type ValidatorId = TestValidatorId;
   type SignatureScheme = TestSignatureScheme;
   type Weights = TestWeights;
@@ -170,7 +174,9 @@ impl TestNetwork {
         let i = u16::try_from(i).unwrap();
         let TendermintHandle { messages, synced_block, synced_block_result, machine } =
           TendermintMachine::new(
+            MemDb::new(),
             TestNetwork(i, arc.clone()),
+            [0; 32],
             BlockNumber(1),
             start_time,
             TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },

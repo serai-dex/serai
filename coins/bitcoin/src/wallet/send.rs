@@ -18,12 +18,12 @@ use bitcoin::{
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
   transaction::{Version, Transaction},
-  OutPoint, Sequence, Witness, TxIn, Amount, TxOut, Address,
+  OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
 };
 
 use crate::{
   crypto::Schnorr,
-  wallet::{ReceivedOutput, address_payload},
+  wallet::{ReceivedOutput, p2tr_script_buf},
 };
 
 #[rustfmt::skip]
@@ -61,7 +61,11 @@ pub struct SignableTransaction {
 }
 
 impl SignableTransaction {
-  fn calculate_weight(inputs: usize, payments: &[(Address, u64)], change: Option<&Address>) -> u64 {
+  fn calculate_weight(
+    inputs: usize,
+    payments: &[(ScriptBuf, u64)],
+    change: Option<&ScriptBuf>,
+  ) -> u64 {
     // Expand this a full transaction in order to use the bitcoin library's weight function
     let mut tx = Transaction {
       version: Version(2),
@@ -86,14 +90,14 @@ impl SignableTransaction {
         // The script pub key is not of a fixed size and does have to be used here
         .map(|payment| TxOut {
           value: Amount::from_sat(payment.1),
-          script_pubkey: payment.0.script_pubkey(),
+          script_pubkey: payment.0.clone(),
         })
         .collect(),
     };
     if let Some(change) = change {
       // Use a 0 value since we're currently unsure what the change amount will be, and since
       // the value is fixed size (so any value could be used here)
-      tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.script_pubkey() });
+      tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
     }
     u64::from(tx.weight())
   }
@@ -121,8 +125,8 @@ impl SignableTransaction {
   /// If data is specified, an OP_RETURN output will be added with it.
   pub fn new(
     mut inputs: Vec<ReceivedOutput>,
-    payments: &[(Address, u64)],
-    change: Option<&Address>,
+    payments: &[(ScriptBuf, u64)],
+    change: Option<ScriptBuf>,
     data: Option<Vec<u8>>,
     fee_per_weight: u64,
   ) -> Result<SignableTransaction, TransactionError> {
@@ -159,10 +163,7 @@ impl SignableTransaction {
     let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
     let mut tx_outs = payments
       .iter()
-      .map(|payment| TxOut {
-        value: Amount::from_sat(payment.1),
-        script_pubkey: payment.0.script_pubkey(),
-      })
+      .map(|payment| TxOut { value: Amount::from_sat(payment.1), script_pubkey: payment.0.clone() })
       .collect::<Vec<_>>();
 
     // Add the OP_RETURN output
@@ -213,12 +214,11 @@ impl SignableTransaction {
 
     // If there's a change address, check if there's change to give it
     if let Some(change) = change {
-      let weight_with_change = Self::calculate_weight(tx_ins.len(), payments, Some(change));
+      let weight_with_change = Self::calculate_weight(tx_ins.len(), payments, Some(&change));
       let fee_with_change = fee_per_weight * weight_with_change;
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         if value >= DUST {
-          tx_outs
-            .push(TxOut { value: Amount::from_sat(value), script_pubkey: change.script_pubkey() });
+          tx_outs.push(TxOut { value: Amount::from_sat(value), script_pubkey: change });
           weight = weight_with_change;
           needed_fee = fee_with_change;
         }
@@ -248,7 +248,7 @@ impl SignableTransaction {
 
   /// Returns the TX ID of the transaction this will create.
   pub fn txid(&self) -> [u8; 32] {
-    let mut res = self.tx.txid().to_byte_array();
+    let mut res = self.tx.compute_txid().to_byte_array();
     res.reverse();
     res
   }
@@ -288,7 +288,7 @@ impl SignableTransaction {
       transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
 
       let offset = keys.clone().offset(self.offsets[i]);
-      if address_payload(offset.group_key())?.script_pubkey() != self.prevouts[i].script_pubkey {
+      if p2tr_script_buf(offset.group_key())? != self.prevouts[i].script_pubkey {
         None?;
       }
 
@@ -375,7 +375,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     if !msg.is_empty() {
-      panic!("message was passed to the TransactionMachine when it generates its own");
+      panic!("message was passed to the TransactionSignMachine when it generates its own");
     }
 
     let commitments = (0 .. self.sigs.len())

@@ -1,5 +1,8 @@
 use core::{ops::Deref, fmt::Debug};
-use std_shims::io::{self, Read, Write};
+use std_shims::{
+  io::{self, Read, Write},
+  collections::HashMap,
+};
 use std::sync::{Arc, RwLock};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
@@ -9,11 +12,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
-use group::{ff::Field, Group, GroupEncoding};
+use group::{
+  ff::{Field, PrimeField},
+  Group, GroupEncoding,
+};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
-use dleq::DLEqProof;
 use frost::{
   dkg::lagrange,
   curve::Ed25519,
@@ -25,10 +30,6 @@ use crate::ringct::{
   hash_to_point,
   clsag::{ClsagInput, Clsag},
 };
-
-fn dleq_transcript() -> RecommendedTranscript {
-  RecommendedTranscript::new(b"monero_key_image_dleq")
-}
 
 impl ClsagInput {
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
@@ -43,6 +44,7 @@ impl ClsagInput {
       // They're just a unreliable reference to this data which will be included in the message
       // if in use
       transcript.append_message(b"member", [u8::try_from(i).expect("ring size exceeded 255")]);
+      // This also transcripts the key image generator since it's derived from this key
       transcript.append_message(b"key", pair[0].compress().to_bytes());
       transcript.append_message(b"commitment", pair[1].compress().to_bytes())
     }
@@ -70,13 +72,11 @@ impl ClsagDetails {
 #[derive(Clone, PartialEq, Eq, Zeroize, Debug)]
 pub struct ClsagAddendum {
   pub(crate) key_image: dfg::EdwardsPoint,
-  dleq: DLEqProof<dfg::EdwardsPoint>,
 }
 
 impl WriteAddendum for ClsagAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(self.key_image.compress().to_bytes().as_ref())?;
-    self.dleq.write(writer)
+    writer.write_all(self.key_image.compress().to_bytes().as_ref())
   }
 }
 
@@ -97,9 +97,8 @@ pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
   pub(crate) H: EdwardsPoint,
-  // Merged here as CLSAG needs it, passing it would be a mess, yet having it beforehand requires
-  // an extra round
-  image: EdwardsPoint,
+  key_image_shares: HashMap<[u8; 32], dfg::EdwardsPoint>,
+  image: Option<dfg::EdwardsPoint>,
 
   details: Arc<RwLock<Option<ClsagDetails>>>,
 
@@ -117,7 +116,8 @@ impl ClsagMultisig {
       transcript,
 
       H: hash_to_point(&output_key),
-      image: EdwardsPoint::identity(),
+      key_image_shares: HashMap::new(),
+      image: None,
 
       details,
 
@@ -135,20 +135,6 @@ impl ClsagMultisig {
   }
 }
 
-pub(crate) fn add_key_image_share(
-  image: &mut EdwardsPoint,
-  generator: EdwardsPoint,
-  offset: Scalar,
-  included: &[Participant],
-  participant: Participant,
-  share: EdwardsPoint,
-) {
-  if image.is_identity().into() {
-    *image = generator * offset;
-  }
-  *image += share * lagrange::<dfg::Scalar>(participant, included).0;
-}
-
 impl Algorithm<Ed25519> for ClsagMultisig {
   type Transcript = RecommendedTranscript;
   type Addendum = ClsagAddendum;
@@ -160,23 +146,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
-    rng: &mut R,
+    _rng: &mut R,
     keys: &ThresholdKeys<Ed25519>,
   ) -> ClsagAddendum {
-    ClsagAddendum {
-      key_image: dfg::EdwardsPoint(self.H) * keys.secret_share().deref(),
-      dleq: DLEqProof::prove(
-        rng,
-        // Doesn't take in a larger transcript object due to the usage of this
-        // Every prover would immediately write their own DLEq proof, when they can only do so in
-        // the proper order if they want to reach consensus
-        // It'd be a poor API to have CLSAG define a new transcript solely to pass here, just to
-        // try to merge later in some form, when it should instead just merge xH (as it does)
-        &mut dleq_transcript(),
-        &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
-        keys.secret_share(),
-      ),
-    }
+    ClsagAddendum { key_image: dfg::EdwardsPoint(self.H) * keys.secret_share().deref() }
   }
 
   fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<ClsagAddendum> {
@@ -190,7 +163,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       Err(io::Error::other("non-canonical key image"))?;
     }
 
-    Ok(ClsagAddendum { key_image: xH, dleq: DLEqProof::<dfg::EdwardsPoint>::read(reader)? })
+    Ok(ClsagAddendum { key_image: xH })
   }
 
   fn process_addendum(
@@ -199,32 +172,29 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     l: Participant,
     addendum: ClsagAddendum,
   ) -> Result<(), FrostError> {
-    if self.image.is_identity().into() {
+    if self.image.is_none() {
       self.transcript.domain_separate(b"CLSAG");
+      // Transcript the ring
       self.input().transcript(&mut self.transcript);
+      // Transcript the mask
       self.transcript.append_message(b"mask", self.mask().to_bytes());
+
+      // Init the image to the offset
+      self.image = Some(dfg::EdwardsPoint(self.H) * view.offset());
     }
 
+    // Transcript this participant's contribution
     self.transcript.append_message(b"participant", l.to_bytes());
-
-    addendum
-      .dleq
-      .verify(
-        &mut dleq_transcript(),
-        &[dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)],
-        &[view.original_verification_share(l), addendum.key_image],
-      )
-      .map_err(|_| FrostError::InvalidPreprocess(l))?;
-
     self.transcript.append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
-    add_key_image_share(
-      &mut self.image,
-      self.H,
-      view.offset().0,
-      view.included(),
-      l,
-      addendum.key_image.0,
-    );
+
+    // Accumulate the interpolated share
+    let interpolated_key_image_share =
+      addendum.key_image * lagrange::<dfg::Scalar>(l, view.included());
+    *self.image.as_mut().unwrap() += interpolated_key_image_share;
+
+    self
+      .key_image_shares
+      .insert(view.verification_share(l).to_bytes(), interpolated_key_image_share);
 
     Ok(())
   }
@@ -252,7 +222,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     #[allow(non_snake_case)]
     let (clsag, pseudo_out, p, c) = Clsag::sign_core(
       &mut rng,
-      &self.image,
+      &self.image.expect("verifying a share despite never processing any addendums").0,
       &self.input(),
       self.mask(),
       self.msg.as_ref().unwrap(),
@@ -261,7 +231,8 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     );
     self.interim = Some(Interim { p, c, clsag, pseudo_out });
 
-    (-(dfg::Scalar(p) * view.secret_share().deref())) + nonces[0].deref()
+    // r - p x, where p is the challenge for the keys
+    *nonces[0] - dfg::Scalar(p) * view.secret_share().deref()
   }
 
   #[must_use]
@@ -273,11 +244,13 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
+    // We produced shares as `r - p x`, yet the signature is `r - p x - c x`
+    // Substract `c x` (saved as `c`) now
     clsag.s[usize::from(self.input().decoys.i)] = sum.0 - interim.c;
     if clsag
       .verify(
         &self.input().decoys.ring,
-        &self.image,
+        &self.image.expect("verifying a signature despite never processing any addendums").0,
         &interim.pseudo_out,
         self.msg.as_ref().unwrap(),
       )
@@ -295,10 +268,61 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     share: dfg::Scalar,
   ) -> Result<Vec<(dfg::Scalar, dfg::EdwardsPoint)>, ()> {
     let interim = self.interim.as_ref().unwrap();
-    Ok(vec![
+
+    // For a share `r - p x`, the following two equalities should hold:
+    // - `(r - p x)G == R.0 - pV`, where `V = xG`
+    // - `(r - p x)H == R.1 - pK`, where `K = xH` (the key image share)
+    //
+    // This is effectively a discrete log equality proof for:
+    // V, K over G, H
+    // with nonces
+    // R.0, R.1
+    // and solution
+    // s
+    //
+    // Which is a batch-verifiable rewrite of the traditional CP93 proof
+    // (and also writable as Generalized Schnorr Protocol)
+    //
+    // That means that given a proper challenge, this alone can be certainly argued to prove the
+    // key image share is well-formed and the provided signature so proves for that.
+
+    // This is a bit funky as it doesn't prove the nonces are well-formed however. They're part of
+    // the prover data/transcript for a CP93/GSP proof, not part of the statement. This practically
+    // is fine, for a variety of reasons (given a consistent `x`, a consistent `r` can be
+    // extracted, and the nonces as used in CLSAG are also part of its prover data/transcript).
+
+    let key_image_share = self.key_image_shares[&verification_share.to_bytes()];
+
+    // Hash every variable relevant here, using the hahs output as the random weight
+    let mut weight_transcript =
+      RecommendedTranscript::new(b"monero-serai v0.1 ClsagMultisig::verify_share");
+    weight_transcript.append_message(b"G", dfg::EdwardsPoint::generator().to_bytes());
+    weight_transcript.append_message(b"H", self.H.to_bytes());
+    weight_transcript.append_message(b"xG", verification_share.to_bytes());
+    weight_transcript.append_message(b"xH", key_image_share.to_bytes());
+    weight_transcript.append_message(b"rG", nonces[0][0].to_bytes());
+    weight_transcript.append_message(b"rH", nonces[0][1].to_bytes());
+    weight_transcript.append_message(b"c", dfg::Scalar(interim.p).to_repr());
+    weight_transcript.append_message(b"s", share.to_repr());
+    let weight = weight_transcript.challenge(b"weight");
+    let weight = dfg::Scalar(Scalar::from_bytes_mod_order_wide(&weight.into()));
+
+    let part_one = vec![
       (share, dfg::EdwardsPoint::generator()),
-      (dfg::Scalar(interim.p), verification_share),
+      // -(R.0 - pV) == -R.0 + pV
       (-dfg::Scalar::ONE, nonces[0][0]),
-    ])
+      (dfg::Scalar(interim.p), verification_share),
+    ];
+
+    let mut part_two = vec![
+      (weight * share, dfg::EdwardsPoint(self.H)),
+      // -(R.1 - pK) == -R.1 + pK
+      (-weight, nonces[0][1]),
+      (weight * dfg::Scalar(interim.p), key_image_share),
+    ];
+
+    let mut all = part_one;
+    all.append(&mut part_two);
+    Ok(all)
   }
 }

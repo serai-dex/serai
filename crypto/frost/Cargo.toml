@@ -38,7 +38,6 @@ ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = 
 multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
-dleq = { path = "../dleq", version = "^0.4.1", default-features = false, features = ["std", "serialize"] }
 
 dkg = { path = "../dkg", version = "^0.5.1", default-features = false, features = ["std"] }
 

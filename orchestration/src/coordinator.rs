@@ -1,4 +1,4 @@
-use std::{path::Path};
+use std::path::Path;
 
 use zeroize::Zeroizing;
 
@@ -11,12 +11,13 @@ pub fn coordinator(
   orchestration_path: &Path,
   network: Network,
   coordinator_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
+      "",
       network.release(),
       &format!("{db} {longer_reattempts}"),
       "serai-coordinator",
@@ -27,13 +28,16 @@ pub fn coordinator(
 RUN apt install -y ca-certificates
 "#;
 
+  #[rustfmt::skip]
+  const DEFAULT_RUST_LOG: &str = "info,serai_coordinator=debug,tributary_chain=debug,tendermint=debug,libp2p_gossipsub::behaviour=error";
+
   let env_vars = [
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coordinator_key.to_repr())),
-    ("DB_PATH", "./coordinator-db".to_string()),
+    ("DB_PATH", "/volume/coordinator-db".to_string()),
     ("SERAI_KEY", hex::encode(serai_key.to_repr())),
     ("SERAI_HOSTNAME", format!("serai-{}-serai", network.label())),
-    ("RUST_LOG", "serai_coordinator=debug,tributary_chain=debug,tendermint=debug".to_string()),
+    ("RUST_LOG", DEFAULT_RUST_LOG.to_string()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {

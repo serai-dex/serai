@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
+use multiexp::{BatchVerifier, multiexp, multiexp_vartime};
 use group::{
   ff::{Field, PrimeField},
   GroupEncoding,
@@ -12,11 +12,10 @@ use group::{
 use dalek_ff_group::{Scalar, EdwardsPoint};
 
 use crate::ringct::bulletproofs::plus::{
-  ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, weighted_inner_product,
-  transcript::*,
+  ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, transcript::*,
 };
 
-// Figure 1
+// Figure 1 of the Bulletproofs+ paper
 #[derive(Clone, Debug)]
 pub(crate) struct WipStatement {
   generators: Generators,
@@ -219,7 +218,7 @@ impl WipStatement {
         .zip(g_bold.0.iter().copied())
         .chain(witness.b.0.iter().copied().zip(h_bold.0.iter().copied()))
         .collect::<Vec<_>>();
-      P_terms.push((weighted_inner_product(&witness.a, &witness.b, &y), g));
+      P_terms.push((witness.a.clone().weighted_inner_product(&witness.b, &y), g));
       P_terms.push((witness.alpha, h));
       debug_assert_eq!(multiexp(&P_terms), P);
       P_terms.zeroize();
@@ -258,14 +257,13 @@ impl WipStatement {
       let d_l = Scalar::random(&mut *rng);
       let d_r = Scalar::random(&mut *rng);
 
-      let c_l = weighted_inner_product(&a1, &b2, &y);
-      let c_r = weighted_inner_product(&(a2.mul(y_n_hat)), &b1, &y);
+      let c_l = a1.clone().weighted_inner_product(&b2, &y);
+      let c_r = (a2.clone() * y_n_hat).weighted_inner_product(&b1, &y);
 
       // TODO: Calculate these with a batch inversion
       let y_inv_n_hat = y_n_hat.invert().unwrap();
 
-      let mut L_terms = a1
-        .mul(y_inv_n_hat)
+      let mut L_terms = (a1.clone() * y_inv_n_hat)
         .0
         .drain(..)
         .zip(g_bold2.0.iter().copied())
@@ -277,8 +275,7 @@ impl WipStatement {
       L_vec.push(L);
       L_terms.zeroize();
 
-      let mut R_terms = a2
-        .mul(y_n_hat)
+      let mut R_terms = (a2.clone() * y_n_hat)
         .0
         .drain(..)
         .zip(g_bold1.0.iter().copied())
@@ -294,8 +291,8 @@ impl WipStatement {
       (e, inv_e, e_square, inv_e_square, g_bold, h_bold) =
         Self::next_G_H(&mut transcript, g_bold1, g_bold2, h_bold1, h_bold2, L, R, y_inv_n_hat);
 
-      a = a1.mul(e).add_vec(&a2.mul(y_n_hat * inv_e));
-      b = b1.mul(inv_e).add_vec(&b2.mul(e));
+      a = (a1 * e) + &(a2 * (y_n_hat * inv_e));
+      b = (b1 * inv_e) + &(b2 * e);
       alpha += (d_l * e_square) + (d_r * inv_e_square);
 
       debug_assert_eq!(g_bold.len(), a.len());

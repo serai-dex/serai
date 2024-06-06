@@ -3,6 +3,9 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
+use parity_scale_codec::Encode;
+use serai_db::{Get, DbTxn, Db};
+
 use crate::{
   time::CanonicalInstant,
   ext::{RoundNumber, BlockNumber, Block, Network},
@@ -12,6 +15,9 @@ use crate::{
 };
 
 pub(crate) struct BlockData<N: Network> {
+  db: N::Db,
+  genesis: [u8; 32],
+
   pub(crate) number: BlockNumber,
   pub(crate) validator_id: Option<N::ValidatorId>,
   pub(crate) proposal: Option<N::Block>,
@@ -32,12 +38,17 @@ pub(crate) struct BlockData<N: Network> {
 
 impl<N: Network> BlockData<N> {
   pub(crate) fn new(
+    db: N::Db,
+    genesis: [u8; 32],
     weights: Arc<N::Weights>,
     number: BlockNumber,
     validator_id: Option<N::ValidatorId>,
     proposal: Option<N::Block>,
   ) -> BlockData<N> {
     BlockData {
+      db,
+      genesis,
+
       number,
       validator_id,
       proposal,
@@ -129,11 +140,70 @@ impl<N: Network> BlockData<N> {
     self.round_mut().step = data.step();
 
     // Only return a message to if we're actually a current validator
-    self.validator_id.map(|validator_id| Message {
+    let round_number = self.round().number;
+    let res = self.validator_id.map(|validator_id| Message {
       sender: validator_id,
       block: self.number,
-      round: self.round().number,
+      round: round_number,
       data,
-    })
+    });
+
+    if let Some(res) = res.as_ref() {
+      const LATEST_BLOCK_KEY: &[u8] = b"tendermint-machine-sent_block";
+      const LATEST_ROUND_KEY: &[u8] = b"tendermint-machine-sent_round";
+      const PROPOSE_KEY: &[u8] = b"tendermint-machine-sent_propose";
+      const PEVOTE_KEY: &[u8] = b"tendermint-machine-sent_prevote";
+      const PRECOMMIT_KEY: &[u8] = b"tendermint-machine-sent_commit";
+
+      let genesis = self.genesis;
+      let key = |prefix: &[u8]| [prefix, &genesis].concat();
+
+      let mut txn = self.db.txn();
+
+      // Ensure we haven't prior sent a message for a future block/round
+      let last_block_or_round = |txn: &mut <N::Db as Db>::Transaction<'_>, prefix, current| {
+        let key = key(prefix);
+        let latest =
+          u64::from_le_bytes(txn.get(key.as_slice()).unwrap_or(vec![0; 8]).try_into().unwrap());
+        if latest > current {
+          None?;
+        }
+        if current > latest {
+          txn.put(&key, current.to_le_bytes());
+          return Some(true);
+        }
+        Some(false)
+      };
+      let new_block = last_block_or_round(&mut txn, LATEST_BLOCK_KEY, self.number.0)?;
+      if new_block {
+        // Delete the latest round key
+        txn.del(key(LATEST_ROUND_KEY));
+      }
+      let new_round = last_block_or_round(&mut txn, LATEST_ROUND_KEY, round_number.0.into())?;
+      if new_block || new_round {
+        // Delete the messages for the old round
+        txn.del(key(PROPOSE_KEY));
+        txn.del(key(PEVOTE_KEY));
+        txn.del(key(PRECOMMIT_KEY));
+      }
+
+      // Check we haven't sent this message within this round
+      let msg_key = key(match res.data.step() {
+        Step::Propose => PROPOSE_KEY,
+        Step::Prevote => PEVOTE_KEY,
+        Step::Precommit => PRECOMMIT_KEY,
+      });
+      if txn.get(&msg_key).is_some() {
+        assert!(!new_block);
+        assert!(!new_round);
+        None?;
+      }
+      // Put this message to the DB
+      txn.put(&msg_key, res.encode());
+
+      txn.commit();
+    }
+
+    res
   }
 }

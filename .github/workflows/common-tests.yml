@@ -28,4 +28,5 @@ jobs:
             -p std-shims \
             -p zalloc \
             -p serai-db \
-            -p serai-env
+            -p serai-env \
+            -p simple-request

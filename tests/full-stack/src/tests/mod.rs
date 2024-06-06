@@ -57,12 +57,16 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
     let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance();
 
     let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin);
-    let bitcoin_processor_composition =
+    let mut bitcoin_processor_composition =
       processor_instance(NetworkId::Bitcoin, bitcoin_port, message_queue_keys[&NetworkId::Bitcoin]);
+    assert_eq!(bitcoin_processor_composition.len(), 1);
+    let bitcoin_processor_composition = bitcoin_processor_composition.swap_remove(0);
 
     let (monero_composition, monero_port) = network_instance(NetworkId::Monero);
-    let monero_processor_composition =
+    let mut monero_processor_composition =
       processor_instance(NetworkId::Monero, monero_port, message_queue_keys[&NetworkId::Monero]);
+    assert_eq!(monero_processor_composition.len(), 1);
+    let monero_processor_composition = monero_processor_composition.swap_remove(0);
 
     let coordinator_composition = coordinator_instance(name, coord_key);
     let serai_composition = serai_composition(name, false);
@@ -161,54 +165,57 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
   *OUTER_OPS.get_or_init(|| Mutex::new(None)).lock().await = None;
 
   // Spawns a coordinator, if one has yet to be spawned, or else runs the test.
-  #[async_recursion::async_recursion]
-  async fn spawn_coordinator_or_run_test(inner_ops: DockerOperations) {
-    // If the outer operations have yet to be set, these *are* the outer operations
-    let outer_ops = OUTER_OPS.get().unwrap();
-    if outer_ops.lock().await.is_none() {
-      *outer_ops.lock().await = Some(inner_ops);
-    }
+  pub(crate) fn spawn_coordinator_or_run_test(
+    inner_ops: DockerOperations,
+  ) -> core::pin::Pin<Box<impl Send + Future<Output = ()>>> {
+    Box::pin(async {
+      // If the outer operations have yet to be set, these *are* the outer operations
+      let outer_ops = OUTER_OPS.get().unwrap();
+      if outer_ops.lock().await.is_none() {
+        *outer_ops.lock().await = Some(inner_ops);
+      }
 
-    let context_lock = CONTEXT.get().unwrap().lock().await;
-    let Context { pending_coordinator_compositions, handles, test_body } =
-      context_lock.as_ref().unwrap();
+      let context_lock = CONTEXT.get().unwrap().lock().await;
+      let Context { pending_coordinator_compositions, handles, test_body } =
+        context_lock.as_ref().unwrap();
 
-    // Check if there is a coordinator left
-    let maybe_coordinator = {
-      let mut remaining = pending_coordinator_compositions.lock().await;
-      let maybe_coordinator = if !remaining.is_empty() {
-        let handles = handles[handles.len() - remaining.len()].clone();
-        let composition = remaining.remove(0);
-        Some((composition, handles))
+      // Check if there is a coordinator left
+      let maybe_coordinator = {
+        let mut remaining = pending_coordinator_compositions.lock().await;
+        let maybe_coordinator = if !remaining.is_empty() {
+          let handles = handles[handles.len() - remaining.len()].clone();
+          let composition = remaining.remove(0);
+          Some((composition, handles))
+        } else {
+          None
+        };
+        drop(remaining);
+        maybe_coordinator
+      };
+
+      if let Some((mut composition, handles)) = maybe_coordinator {
+        let network = {
+          let outer_ops = outer_ops.lock().await;
+          let outer_ops = outer_ops.as_ref().unwrap();
+          // Spawn it by building another DockerTest which recursively calls this function
+          // TODO: Spawn this outside of DockerTest so we can remove the recursion
+          let serai_container = outer_ops.handle(&handles.serai);
+          composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
+          let message_queue_container = outer_ops.handle(&handles.message_queue);
+          composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
+
+          format!("container:{}", serai_container.name())
+        };
+        let mut test = DockerTest::new().with_network(dockertest::Network::External(network));
+        test.provide_container(composition);
+
+        drop(context_lock);
+        test.run_async(spawn_coordinator_or_run_test).await;
       } else {
-        None
-      };
-      drop(remaining);
-      maybe_coordinator
-    };
-
-    if let Some((mut composition, handles)) = maybe_coordinator {
-      let network = {
-        let outer_ops = outer_ops.lock().await;
-        let outer_ops = outer_ops.as_ref().unwrap();
-        // Spawn it by building another DockerTest which recursively calls this function
-        // TODO: Spawn this outside of DockerTest so we can remove the recursion
-        let serai_container = outer_ops.handle(&handles.serai);
-        composition.modify_env("SERAI_HOSTNAME", serai_container.ip());
-        let message_queue_container = outer_ops.handle(&handles.message_queue);
-        composition.modify_env("MESSAGE_QUEUE_RPC", message_queue_container.ip());
-
-        format!("container:{}", serai_container.name())
-      };
-      let mut test = DockerTest::new().with_network(dockertest::Network::External(network));
-      test.provide_container(composition);
-
-      drop(context_lock);
-      test.run_async(spawn_coordinator_or_run_test).await;
-    } else {
-      let outer_ops = outer_ops.lock().await.take().unwrap();
-      test_body.body(outer_ops, handles.clone()).await;
-    }
+        let outer_ops = outer_ops.lock().await.take().unwrap();
+        test_body.body(outer_ops, handles.clone()).await;
+      }
+    })
   }
 
   test.run_async(spawn_coordinator_or_run_test).await;

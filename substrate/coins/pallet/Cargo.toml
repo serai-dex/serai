@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/coins/pallet"
 authors = ["Akil Demir <aeg_asd@hotmail.com>"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -48,6 +48,9 @@ std = [
   "serai-primitives/std",
   "coins-primitives/std",
 ]
+
+# TODO
+try-runtime = []
 
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
