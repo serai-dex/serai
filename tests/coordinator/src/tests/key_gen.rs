@@ -42,13 +42,12 @@ pub async fn key_gen<C: Ciphersuite>(
         }) => {
           assert_eq!(id, *this_id);
           assert_eq!(
-            *params,
-            ThresholdParams::new(
-              u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),
-              u16::try_from(coordinators).unwrap(),
-              participant_is[i],
-            )
-            .unwrap()
+            params.t(),
+            u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),
+          );
+          assert_eq!(
+            params.n(),
+            u16::try_from(coordinators).unwrap(),
           );
           assert_eq!(*shares, 1);
           participant_is.push(params.i());
