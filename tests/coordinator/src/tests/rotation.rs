@@ -11,8 +11,10 @@ use serai_client::{
   },
   Amount, Pair, Transaction,
 };
+
 use crate::{*, tests::*};
 
+// TODO: This is duplicated with serai-client's tests
 async fn publish_tx(serai: &Serai, tx: &Transaction) -> [u8; 32] {
   let mut latest = serai
     .block(serai.latest_finalized_block_hash().await.unwrap())
