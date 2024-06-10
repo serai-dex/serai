@@ -129,7 +129,7 @@ async fn set_rotation_test() {
   new_test(
     |mut processors: Vec<Processor>| async move {
       // exclude the last processor from keygen since we will add him later
-      let excluded = processors.pop().unwrap();
+      let mut excluded = processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);
 
       let pair5 = insecure_pair_from_name("Eve");
@@ -142,6 +142,13 @@ async fn set_rotation_test() {
 
       // genesis keygen
       let _ = key_gen::<Secp256k1>(&mut processors, Session(0)).await;
+      // Even the excluded processor should receive the key pair confirmation
+      match excluded.recv_message().await {
+        CoordinatorMessage::Substrate(
+          messages::substrate::CoordinatorMessage::ConfirmKeyPair { session, .. },
+        ) => assert_eq!(session, Session(0)),
+        _ => panic!("excluded got message other than ConfirmKeyPair"),
+      }
 
       // wait until next session to see the effect on coordinator
       wait_till_next_epoch(&serai).await;

@@ -10,6 +10,7 @@ use ciphersuite::{
   group::{ff::Field, GroupEncoding},
   Ciphersuite, Ristretto, Secp256k1,
 };
+use dkg::ThresholdParams;
 
 use serai_client::{
   primitives::NetworkId,
@@ -31,29 +32,30 @@ pub async fn key_gen<C: Ciphersuite>(
   let id = KeyGenId { session: set.session, attempt: 0 };
 
   for (i, processor) in processors.iter_mut().enumerate() {
-    loop {
-      let msg = processor.recv_message().await;
-      match &msg {
-        CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
-          id: this_id,
-          params,
-          shares,
-        }) => {
-          assert_eq!(id, *this_id);
-          assert_eq!(params.t(), u16::try_from(((coordinators * 2) / 3) + 1).unwrap());
-          assert_eq!(params.n(), u16::try_from(coordinators).unwrap());
-          assert_eq!(*shares, 1);
-          participant_is.push(params.i());
-          break;
-        }
-        CoordinatorMessage::Substrate(
-          messages::substrate::CoordinatorMessage::ConfirmKeyPair { .. },
-        ) => {
-          continue;
-        }
-        _ => panic!("unexpected message: {msg:?}"),
+    let msg = processor.recv_message().await;
+    match &msg {
+      CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
+        params,
+        ..
+      }) => {
+        participant_is.push(params.i());
       }
+      _ => panic!("unexpected message: {msg:?}"),
     }
+
+    assert_eq!(
+      msg,
+      CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
+        id,
+        params: ThresholdParams::new(
+          u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),
+          u16::try_from(coordinators).unwrap(),
+          participant_is[i],
+        )
+        .unwrap(),
+        shares: 1,
+      })
+    );
 
     processor
       .send_message(messages::key_gen::ProcessorMessage::Commitments {
