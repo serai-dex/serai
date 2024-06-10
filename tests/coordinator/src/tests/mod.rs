@@ -47,7 +47,9 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let mut coordinator_compositions = vec![];
-  for i in 0 .. 5 {
+  // Spawn one extra coordinator which isn't in-set
+  #[allow(clippy::range_plus_one)]
+  for i in 0 .. (COORDINATORS + 1) {
     let name = match i {
       0 => "Alice",
       1 => "Bob",

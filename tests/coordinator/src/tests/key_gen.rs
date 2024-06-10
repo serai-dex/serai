@@ -32,16 +32,27 @@ pub async fn key_gen<C: Ciphersuite>(
   let id = KeyGenId { session: set.session, attempt: 0 };
 
   for (i, processor) in processors.iter_mut().enumerate() {
-    let mut found = false;
-    while !found {
+    loop {
       let msg = processor.recv_message().await;
       match &msg {
         CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
+          id: this_id,
           params,
-          ..
+          shares,
         }) => {
+          assert_eq!(id, *this_id);
+          assert_eq!(
+            *params,
+            ThresholdParams::new(
+              u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),
+              u16::try_from(coordinators).unwrap(),
+              participant_is[i],
+            )
+            .unwrap()
+          );
+          assert_eq!(*shares, 1);
           participant_is.push(params.i());
-          found = true;
+          break;
         }
         CoordinatorMessage::Substrate(
           messages::substrate::CoordinatorMessage::ConfirmKeyPair { .. },
@@ -50,20 +61,6 @@ pub async fn key_gen<C: Ciphersuite>(
         }
         _ => panic!("unexpected message: {msg:?}"),
       }
-
-      assert_eq!(
-        msg,
-        CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
-          id,
-          params: ThresholdParams::new(
-            u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),
-            u16::try_from(coordinators).unwrap(),
-            participant_is[i],
-          )
-          .unwrap(),
-          shares: 1,
-        })
-      );
     }
 
     processor
@@ -193,14 +190,14 @@ pub async fn key_gen<C: Ciphersuite>(
               .unwrap()
               .as_secs()
               .abs_diff(context.serai_time) <
-              (60 * 60 * 3) // 3hrs
+              (60 * 60 * 3) // 3 hours, which should exceed the length of any test we run
           );
           assert_eq!(context.network_latest_finalized_block.0, [0; 32]);
           assert_eq!(set.session, session);
           assert_eq!(key_pair.0 .0, substrate_key);
           assert_eq!(&key_pair.1, &network_key);
         }
-        _ => panic!("coordinator didn't respond with ConfirmKeyPair msg: {msg:?}"),
+        _ => panic!("coordinator didn't respond with ConfirmKeyPair. msg: {msg:?}"),
       }
       message = Some(msg);
     } else {
@@ -233,7 +230,7 @@ pub async fn key_gen<C: Ciphersuite>(
 async fn key_gen_test() {
   new_test(
     |mut processors: Vec<Processor>| async move {
-      // pop the last participant since genesis keygen has only 4 participant.
+      // pop the last participant since genesis keygen has only 4 participants
       processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);
 

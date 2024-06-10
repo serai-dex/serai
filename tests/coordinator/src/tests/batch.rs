@@ -262,7 +262,7 @@ pub async fn batch(
 async fn batch_test() {
   new_test(
     |mut processors: Vec<Processor>| async move {
-      // pop the last participant since genesis keygen has only 4 participant.
+      // pop the last participant since genesis keygen has only 4 participants
       processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);
 

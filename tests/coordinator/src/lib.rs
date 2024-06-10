@@ -350,7 +350,7 @@ impl Processor {
 
   /// Receive a message from the coordinator as a processor.
   pub async fn recv_message(&mut self) -> CoordinatorMessage {
-    // Set a timeout of 30 minutes to allow effectively any protocol to occur without a fear of
+    // Set a timeout of 20 minutes to allow effectively any protocol to occur without a fear of
     // an arbitrary timeout cutting it short
     tokio::time::timeout(Duration::from_secs(20 * 60), self.msgs.recv()).await.unwrap().unwrap()
   }
