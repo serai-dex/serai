@@ -14,10 +14,6 @@ use serai_client::{
 mod common;
 use common::validator_sets::{set_keys, allocate_stake, deallocate_stake};
 
-// TODO: get rid of this is constant and retrive the epoch numbers from sthe node directly
-// since epochs doesn't always change at the exact intervals.
-const EPOCH_INTERVAL: u64 = 300;
-
 serai_test!(
   set_keys_test: (|serai: Serai| async move {
     let network = NetworkId::Bitcoin;
@@ -225,20 +221,38 @@ async fn validator_set_rotation() {
     .await;
 }
 
+async fn epoch_for_block(serai: &Serai, block: [u8; 32]) -> u64 {
+  let epoch: String = serai
+    .call("state_call", ["BabeApi_current_epoch".to_string(), String::new(), hex::encode(block)])
+    .await
+    .unwrap();
+  <u64 as scale::Decode>::decode(
+    &mut hex::decode(epoch.strip_prefix("0x").unwrap()).unwrap().as_slice(),
+  )
+  .unwrap()
+}
+
 async fn verify_session_and_active_validators(
   serai: &Serai,
   network: NetworkId,
   session: u64,
   participants: &[Public],
 ) {
-  // wait untill the epoch block finalized
-  let epoch_block = (session * EPOCH_INTERVAL) + 1;
-  while serai.finalized_block_by_number(epoch_block).await.unwrap().is_none() {
-    // sleep 1 block
-    tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
-  }
-  let serai_for_block =
-    serai.as_of(serai.finalized_block_by_number(epoch_block).await.unwrap().unwrap().hash());
+  // wait untill the epoch block finalizes
+  let block = loop {
+    let mut block = serai.latest_finalized_block_hash().await.unwrap();
+    if epoch_for_block(serai, block).await < session {
+      // Sleep a block
+      tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
+      continue;
+    }
+    while epoch_for_block(serai, block).await > session {
+      block = serai.block(block).await.unwrap().unwrap().header.parent_hash.0;
+    }
+    assert_eq!(epoch_for_block(serai, block).await, session);
+    break block;
+  };
+  let serai_for_block = serai.as_of(block);
 
   // verify session
   let s = serai_for_block.validator_sets().session(network).await.unwrap().unwrap();
@@ -251,9 +265,10 @@ async fn verify_session_and_active_validators(
   assert_eq!(validators, participants);
 
   // make sure finalization continues as usual after the changes
+  let current_finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
   tokio::time::timeout(tokio::time::Duration::from_secs(60), async move {
     let mut finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
-    while finalized_block <= epoch_block + 2 {
+    while finalized_block <= current_finalized_block + 2 {
       tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
       finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     }
@@ -265,8 +280,7 @@ async fn verify_session_and_active_validators(
 }
 
 async fn get_active_session(serai: &Serai, network: NetworkId, hash: [u8; 32]) -> u64 {
-  let block_number = serai.block(hash).await.unwrap().unwrap().header.number;
-  let epoch = block_number / EPOCH_INTERVAL;
+  let epoch = epoch_for_block(serai, hash).await;
 
   // changes should be active in the next session
   if network == NetworkId::Serai {
