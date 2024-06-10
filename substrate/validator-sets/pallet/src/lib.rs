@@ -643,8 +643,9 @@ pub mod pallet {
     // Checks if this session has completed the handover from the prior session.
     fn handover_completed(network: NetworkId, session: Session) -> bool {
       let Some(current_session) = Self::session(network) else { return false };
-      // No handover occurs on genesis
-      if current_session.0 == 0 {
+
+      // If the session we've been queried about is old, it must have completed its handover
+      if current_session.0 > session.0 {
         return true;
       }
       // If the session we've been queried about has yet to start, it can't have completed its
@@ -652,19 +653,21 @@ pub mod pallet {
       if current_session.0 < session.0 {
         return false;
       }
-      if current_session.0 == session.0 {
-        // Handover is automatically complete for Serai as it doesn't have a handover protocol
-        // If not Serai, check the prior session had its keys cleared, which happens once its
-        // retired
-        return (network == NetworkId::Serai) ||
-          (!Keys::<T>::contains_key(ValidatorSet {
-            network,
-            session: Session(current_session.0 - 1),
-          }));
+
+      // Handover is automatically complete for Serai as it doesn't have a handover protocol
+      if network == NetworkId::Serai {
+        return true;
       }
-      // We're currently in a future session, meaning this session definitely performed itself
-      // handover
-      true
+
+      // The current session must have set keys for its handover to be completed
+      if !Keys::<T>::contains_key(ValidatorSet { network, session }) {
+        return false;
+      }
+
+      // This must be the first session (which has set keys) OR the prior session must have been
+      // retired (signified by its keys no longer being present)
+      (session.0 == 0) ||
+        (!Keys::<T>::contains_key(ValidatorSet { network, session: Session(session.0 - 1) }))
     }
 
     fn new_session() {
@@ -682,6 +685,8 @@ pub mod pallet {
       }
     }
 
+    // TODO: This is called retire_set, yet just starts retiring the set
+    // Update the nomenclature within this function
     pub fn retire_set(set: ValidatorSet) {
       // If the prior prior set didn't report, emit they're retired now
       if PendingSlashReport::<T>::get(set.network).is_some() {

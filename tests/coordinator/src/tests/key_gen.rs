@@ -10,7 +10,6 @@ use ciphersuite::{
   group::{ff::Field, GroupEncoding},
   Ciphersuite, Ristretto, Secp256k1,
 };
-use dkg::ThresholdParams;
 
 use serai_client::{
   primitives::NetworkId,
@@ -41,8 +40,8 @@ pub async fn key_gen<C: Ciphersuite>(
           shares,
         }) => {
           assert_eq!(id, *this_id);
-          assert_eq!(params.t(), u16::try_from(((coordinators * 2) / 3) + 1).unwrap(),);
-          assert_eq!(params.n(), u16::try_from(coordinators).unwrap(),);
+          assert_eq!(params.t(), u16::try_from(((coordinators * 2) / 3) + 1).unwrap());
+          assert_eq!(params.n(), u16::try_from(coordinators).unwrap());
           assert_eq!(*shares, 1);
           participant_is.push(params.i());
           break;
