@@ -366,7 +366,10 @@ impl<'a> TemporalSerai<'a> {
     let Some(res) = res else { return Ok(None) };
     let res = Serai::hex_decode(res)?;
     Ok(Some(R::decode(&mut res.as_slice()).map_err(|_| {
-      SeraiError::InvalidRuntime("different type present at storage location".to_string())
+      SeraiError::InvalidRuntime(format!(
+        "different type present at storage location, raw value: {}",
+        hex::encode(res)
+      ))
     })?))
   }
 

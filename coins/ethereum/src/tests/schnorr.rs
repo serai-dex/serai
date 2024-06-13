@@ -15,7 +15,7 @@ use alloy_core::primitives::Address;
 
 use alloy_sol_types::SolCall;
 
-use alloy_rpc_types::{TransactionInput, TransactionRequest};
+use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{Provider, RootProvider};

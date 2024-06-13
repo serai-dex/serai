@@ -365,7 +365,7 @@ impl Coordinator {
       NetworkId::Ethereum => {
         use ethereum_serai::alloy::{
           simple_request_transport::SimpleRequest,
-          rpc_types::BlockNumberOrTag,
+          rpc_types::{BlockTransactionsKind, BlockNumberOrTag},
           rpc_client::ClientBuilder,
           provider::{Provider, RootProvider},
           network::Ethereum,
@@ -375,7 +375,7 @@ impl Coordinator {
           ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
         );
         let start = provider
-          .get_block(BlockNumberOrTag::Latest.into(), false)
+          .get_block(BlockNumberOrTag::Latest.into(), BlockTransactionsKind::Hashes)
           .await
           .unwrap()
           .unwrap()
@@ -386,7 +386,7 @@ impl Coordinator {
         provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
         let end_of_epoch = start + 31;
         let hash = provider
-          .get_block(BlockNumberOrTag::Number(end_of_epoch).into(), false)
+          .get_block(BlockNumberOrTag::Number(end_of_epoch).into(), BlockTransactionsKind::Hashes)
           .await
           .unwrap()
           .unwrap()
@@ -468,7 +468,7 @@ impl Coordinator {
       NetworkId::Ethereum => {
         use ethereum_serai::alloy::{
           simple_request_transport::SimpleRequest,
-          rpc_types::BlockNumberOrTag,
+          rpc_types::{BlockTransactionsKind, BlockNumberOrTag},
           rpc_client::ClientBuilder,
           provider::{Provider, RootProvider},
           network::Ethereum,
@@ -480,7 +480,7 @@ impl Coordinator {
           );
 
           let expected_number = provider
-            .get_block(BlockNumberOrTag::Latest.into(), false)
+            .get_block(BlockNumberOrTag::Latest.into(), BlockTransactionsKind::Hashes)
             .await
             .unwrap()
             .unwrap()
@@ -503,7 +503,7 @@ impl Coordinator {
             .unwrap());
 
           let new_number = provider
-            .get_block(BlockNumberOrTag::Latest.into(), false)
+            .get_block(BlockNumberOrTag::Latest.into(), BlockTransactionsKind::Hashes)
             .await
             .unwrap()
             .unwrap()

@@ -13,7 +13,7 @@ use frost::ThresholdKeys;
 use ethereum_serai::{
   alloy::{
     primitives::U256,
-    rpc_types::{BlockNumberOrTag, Transaction},
+    rpc_types::{BlockTransactionsKind, BlockNumberOrTag, Transaction},
     simple_request_transport::SimpleRequest,
     rpc_client::ClientBuilder,
     provider::{Provider, RootProvider},
@@ -432,7 +432,7 @@ impl<D: Db> Network for Ethereum<D> {
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     let actual_number = self
       .provider
-      .get_block(BlockNumberOrTag::Finalized.into(), false)
+      .get_block(BlockNumberOrTag::Finalized.into(), BlockTransactionsKind::Hashes)
       .await
       .map_err(|_| NetworkError::ConnectionError)?
       .ok_or(NetworkError::ConnectionError)?
@@ -460,7 +460,7 @@ impl<D: Db> Network for Ethereum<D> {
     } else {
       self
         .provider
-        .get_block(u64::try_from(start - 1).unwrap().into(), false)
+        .get_block(u64::try_from(start - 1).unwrap().into(), BlockTransactionsKind::Hashes)
         .await
         .ok()
         .flatten()
@@ -473,7 +473,7 @@ impl<D: Db> Network for Ethereum<D> {
 
     let end_header = self
       .provider
-      .get_block(u64::try_from(start + 31).unwrap().into(), false)
+      .get_block(u64::try_from(start + 31).unwrap().into(), BlockTransactionsKind::Hashes)
       .await
       .ok()
       .flatten()
@@ -807,7 +807,7 @@ impl<D: Db> Network for Ethereum<D> {
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
     self
       .provider
-      .get_block(B256::from(*id).into(), false)
+      .get_block(B256::from(*id).into(), BlockTransactionsKind::Hashes)
       .await
       .unwrap()
       .unwrap()

@@ -14,6 +14,7 @@ use frost::{
 use alloy_core::primitives::{Address, U256};
 
 use alloy_simple_request_transport::SimpleRequest;
+use alloy_rpc_types_eth::BlockTransactionsKind;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{Provider, RootProvider};
 
@@ -84,7 +85,7 @@ async fn setup_test() -> (
 
 async fn latest_block_hash(client: &RootProvider<SimpleRequest>) -> [u8; 32] {
   client
-    .get_block(client.get_block_number().await.unwrap().into(), false)
+    .get_block(client.get_block_number().await.unwrap().into(), BlockTransactionsKind::Hashes)
     .await
     .unwrap()
     .unwrap()

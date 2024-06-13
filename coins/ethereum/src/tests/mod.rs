@@ -11,7 +11,7 @@ use alloy_core::{
 };
 use alloy_consensus::{SignableTransaction, TxLegacy};
 
-use alloy_rpc_types::TransactionReceipt;
+use alloy_rpc_types_eth::TransactionReceipt;
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 

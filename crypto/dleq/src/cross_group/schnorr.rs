@@ -28,10 +28,7 @@ pub(crate) struct SchnorrPoK<G: PrimeGroup + Zeroize> {
   s: G::Scalar,
 }
 
-impl<G: PrimeGroup + Zeroize> SchnorrPoK<G>
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+impl<G: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize> SchnorrPoK<G> {
   // Not HRAm due to the lack of m
   #[allow(non_snake_case)]
   fn hra<T: Transcript>(transcript: &mut T, generator: G, R: G, A: G) -> G::Scalar {

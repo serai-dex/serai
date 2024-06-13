@@ -5,7 +5,7 @@ use alloy_consensus::{Signed, TxLegacy};
 
 use alloy_sol_types::{SolCall, SolEvent};
 
-use alloy_rpc_types::{BlockNumberOrTag, Filter};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 

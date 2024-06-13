@@ -7,7 +7,7 @@ pub mod alloy {
 
   pub use alloy_consensus as consensus;
   pub use alloy_network as network;
-  pub use alloy_rpc_types as rpc_types;
+  pub use alloy_rpc_types_eth as rpc_types;
   pub use alloy_simple_request_transport as simple_request_transport;
   pub use alloy_rpc_client as rpc_client;
   pub use alloy_provider as provider;

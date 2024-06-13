@@ -21,8 +21,8 @@ tower = "0.4"
 serde_json = { version = "1", default-features = false }
 simple-request = { path = "../../../common/request", default-features = false }
 
-alloy-json-rpc = { git = "https://github.com/alloy-rs/alloy", rev = "64feb9bc51c8021ea08535694c44de84222f474e", default-features = false }
-alloy-transport = { git = "https://github.com/alloy-rs/alloy", rev = "64feb9bc51c8021ea08535694c44de84222f474e", default-features = false }
+alloy-json-rpc = { git = "https://github.com/alloy-rs/alloy", rev = "9edb7d184592322e97b587c60368e33ef1dfa323", default-features = false }
+alloy-transport = { git = "https://github.com/alloy-rs/alloy", rev = "9edb7d184592322e97b587c60368e33ef1dfa323", default-features = false }
 
 [features]
 default = ["tls"]
