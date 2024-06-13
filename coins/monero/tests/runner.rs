@@ -9,7 +9,6 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 use tokio::sync::Mutex;
 
 use monero_serai::{
-  random_scalar,
   rpc::{HttpRpc, Rpc},
   wallet::{
     ViewPair, Scanner,
@@ -21,9 +20,9 @@ use monero_serai::{
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
-  let spend = random_scalar(&mut OsRng);
+  let spend = Scalar::random(&mut OsRng);
   let spend_pub = &spend * ED25519_BASEPOINT_TABLE;
-  let view = Zeroizing::new(random_scalar(&mut OsRng));
+  let view = Zeroizing::new(Scalar::random(&mut OsRng));
   (
     spend,
     ViewPair::new(spend_pub, view.clone()),
@@ -103,8 +102,8 @@ pub async fn rpc() -> Rpc<HttpRpc> {
 
   let addr = MoneroAddress {
     meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
-    spend: &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-    view: &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+    spend: &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+    view: &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
   }
   .to_string();
 
@@ -161,7 +160,7 @@ macro_rules! test {
         use zeroize::Zeroizing;
         use rand_core::OsRng;
 
-        use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+        use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
         #[cfg(feature = "multisig")]
         use transcript::{Transcript, RecommendedTranscript};
@@ -173,9 +172,9 @@ macro_rules! test {
         };
 
         use monero_serai::{
-          random_scalar,
           wallet::{
-            address::{Network, AddressSpec}, ViewPair, Scanner, Change, Decoys, FeePriority,
+            address::{Network, AddressSpec},
+            ViewPair, Scanner, Change, DecoySelection, Decoys, FeePriority,
             SignableTransaction, SignableTransactionBuilder,
           },
         };
@@ -196,7 +195,7 @@ macro_rules! test {
             continue;
           }
 
-          let spend = Zeroizing::new(random_scalar(&mut OsRng));
+          let spend = Zeroizing::new(Scalar::random(&mut OsRng));
           #[cfg(feature = "multisig")]
           let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
@@ -211,7 +210,7 @@ macro_rules! test {
 
           let rpc = rpc().await;
 
-          let view = ViewPair::new(spend_pub, Zeroizing::new(random_scalar(&mut OsRng)));
+          let view = ViewPair::new(spend_pub, Zeroizing::new(Scalar::random(&mut OsRng)));
           let addr = view.address(Network::Mainnet, AddressSpec::Standard);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
@@ -223,8 +222,8 @@ macro_rules! test {
             rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
             Change::new(
               &ViewPair::new(
-                &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-                Zeroizing::new(random_scalar(&mut OsRng))
+                &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+                Zeroizing::new(Scalar::random(&mut OsRng))
               ),
               false
             ),

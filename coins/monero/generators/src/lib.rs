@@ -1,8 +1,5 @@
-//! Generators used by Monero in both its Pedersen commitments and Bulletproofs(+).
-//!
-//! An implementation of Monero's `ge_fromfe_frombytes_vartime`, simply called
-//! `hash_to_point` here, is included, as needed to generate generators.
-
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use std_shims::{sync::OnceLock, vec::Vec};
@@ -14,16 +11,15 @@ use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint};
 use group::{Group, GroupEncoding};
 use dalek_ff_group::EdwardsPoint;
 
-mod varint;
-use varint::write_varint;
+use monero_io::{write_varint, decompress_point};
 
 mod hash_to_point;
-pub use hash_to_point::{hash_to_point, decompress_point};
+pub use hash_to_point::hash_to_point;
 
 #[cfg(test)]
 mod tests;
 
-fn hash(data: &[u8]) -> [u8; 32] {
+fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
 
@@ -32,7 +28,7 @@ static H_CELL: OnceLock<DalekPoint> = OnceLock::new();
 #[allow(non_snake_case)]
 pub fn H() -> DalekPoint {
   *H_CELL.get_or_init(|| {
-    decompress_point(hash(&EdwardsPoint::generator().to_bytes())).unwrap().mul_by_cofactor()
+    decompress_point(keccak256(&EdwardsPoint::generator().to_bytes())).unwrap().mul_by_cofactor()
   })
 }
 
@@ -70,10 +66,10 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
     even.extend(dst);
     let mut odd = even.clone();
 
-    write_varint(&i.try_into().unwrap(), &mut even).unwrap();
-    write_varint(&(i + 1).try_into().unwrap(), &mut odd).unwrap();
-    res.H.push(EdwardsPoint(hash_to_point(hash(&even))));
-    res.G.push(EdwardsPoint(hash_to_point(hash(&odd))));
+    write_varint::<Vec<u8>, u64>(&i.try_into().unwrap(), &mut even).unwrap();
+    write_varint::<Vec<u8>, u64>(&(i + 1).try_into().unwrap(), &mut odd).unwrap();
+    res.H.push(EdwardsPoint(hash_to_point(keccak256(&even))));
+    res.G.push(EdwardsPoint(hash_to_point(keccak256(&odd))));
   }
   res
 }

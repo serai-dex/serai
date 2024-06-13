@@ -2,14 +2,11 @@ use hex_literal::hex;
 
 use rand_core::{RngCore, OsRng};
 
-use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
-use monero_generators::decompress_point;
+use monero_io::decompress_point;
 
-use crate::{
-  random_scalar,
-  wallet::address::{Network, AddressType, AddressMeta, MoneroAddress},
-};
+use crate::wallet::address::{Network, AddressType, AddressMeta, MoneroAddress};
 
 const SPEND: [u8; 32] = hex!("f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7");
 const VIEW: [u8; 32] = hex!("4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce");
@@ -75,8 +72,8 @@ fn featured() {
     [(Network::Mainnet, 'C'), (Network::Testnet, 'K'), (Network::Stagenet, 'F')]
   {
     for _ in 0 .. 100 {
-      let spend = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
-      let view = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
+      let spend = &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE;
+      let view = &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE;
 
       for features in 0 .. (1 << 3) {
         const SUBADDRESS_FEATURE_BIT: u8 = 1;

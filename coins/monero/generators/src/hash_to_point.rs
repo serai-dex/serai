@@ -1,27 +1,20 @@
 use subtle::ConditionallySelectable;
 
-use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
+use curve25519_dalek::edwards::EdwardsPoint;
 
 use group::ff::{Field, PrimeField};
 use dalek_ff_group::FieldElement;
 
-use crate::hash;
+use monero_io::decompress_point;
 
-/// Decompress canonically encoded ed25519 point
-/// It does not check if the point is in the prime order subgroup
-pub fn decompress_point(bytes: [u8; 32]) -> Option<EdwardsPoint> {
-  CompressedEdwardsY(bytes)
-    .decompress()
-    // Ban points which are either unreduced or -0
-    .filter(|point| point.compress().to_bytes() == bytes)
-}
+use crate::keccak256;
 
 /// Monero's hash to point function, as named `hash_to_ec`.
 pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let A = FieldElement::from(486662u64);
 
-  let v = FieldElement::from_square(hash(&bytes)).double();
+  let v = FieldElement::from_square(keccak256(&bytes)).double();
   let w = v + FieldElement::ONE;
   let x = w.square() + (-A.square() * v);
 

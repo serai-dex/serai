@@ -22,7 +22,7 @@ use monero_serai::{
   wallet::{
     ViewPair, Scanner,
     address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, Change, Decoys, TransactionError,
+    Fee, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
     SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
 };

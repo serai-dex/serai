@@ -13,7 +13,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use frost::curve::Ed25519;
 
 use crate::{
-  Commitment, random_scalar,
+  Commitment,
   wallet::Decoys,
   ringct::{
     generate_key_image,
@@ -43,8 +43,8 @@ fn clsag() {
     let mut secrets = (Zeroizing::new(Scalar::ZERO), Scalar::ZERO);
     let mut ring = vec![];
     for i in 0 .. RING_LEN {
-      let dest = Zeroizing::new(random_scalar(&mut OsRng));
-      let mask = random_scalar(&mut OsRng);
+      let dest = Zeroizing::new(Scalar::random(&mut OsRng));
+      let mask = Scalar::random(&mut OsRng);
       let amount;
       if i == real {
         secrets = (dest.clone(), mask);
@@ -72,7 +72,7 @@ fn clsag() {
         )
         .unwrap(),
       )],
-      random_scalar(&mut OsRng),
+      Scalar::random(&mut OsRng),
       msg,
     )
     .swap_remove(0);
@@ -80,7 +80,7 @@ fn clsag() {
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
 
     // make sure verification fails if we throw a random `c1` at it.
-    clsag.c1 = random_scalar(&mut OsRng);
+    clsag.c1 = Scalar::random(&mut OsRng);
     assert!(clsag.verify(&ring, &image, &pseudo_out, &msg).is_err());
   }
 }
@@ -90,15 +90,15 @@ fn clsag() {
 fn clsag_multisig() {
   let keys = key_gen::<_, Ed25519>(&mut OsRng);
 
-  let randomness = random_scalar(&mut OsRng);
+  let randomness = Scalar::random(&mut OsRng);
   let mut ring = vec![];
   for i in 0 .. RING_LEN {
     let dest;
     let mask;
     let amount;
     if i != u64::from(RING_INDEX) {
-      dest = &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE;
-      mask = random_scalar(&mut OsRng);
+      dest = &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE;
+      mask = Scalar::random(&mut OsRng);
       amount = OsRng.next_u64();
     } else {
       dest = keys[&Participant::new(1).unwrap()].group_key().0;
@@ -108,7 +108,7 @@ fn clsag_multisig() {
     ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
-  let mask_sum = random_scalar(&mut OsRng);
+  let mask_sum = Scalar::random(&mut OsRng);
   let algorithm = ClsagMultisig::new(
     RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
     keys[&Participant::new(1).unwrap()].group_key().0,

@@ -1,12 +1,18 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use core::fmt::Debug;
 use std_shims::{
+  vec,
   vec::Vec,
   io::{self, Read, Write},
 };
 
-use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
-
-use monero_generators::decompress_point;
+use curve25519_dalek::{
+  scalar::Scalar,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
@@ -29,17 +35,17 @@ mod sealed {
 }
 
 // This will panic if the VarInt exceeds u64::MAX
-pub(crate) fn varint_len<U: sealed::VarInt>(varint: U) -> usize {
+pub fn varint_len<U: sealed::VarInt>(varint: U) -> usize {
   let varint_u64: u64 = varint.try_into().map_err(|_| "varint exceeded u64").unwrap();
   ((usize::try_from(u64::BITS - varint_u64.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
 }
 
-pub(crate) fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {
+pub fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {
   w.write_all(&[*byte])
 }
 
 // This will panic if the VarInt exceeds u64::MAX
-pub(crate) fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -> io::Result<()> {
+pub fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -> io::Result<()> {
   let mut varint: u64 = (*varint).try_into().map_err(|_| "varint exceeded u64").unwrap();
   while {
     let mut b = u8::try_from(varint & u64::from(!VARINT_CONTINUATION_MASK)).unwrap();
@@ -53,15 +59,15 @@ pub(crate) fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -
   Ok(())
 }
 
-pub(crate) fn write_scalar<W: Write>(scalar: &Scalar, w: &mut W) -> io::Result<()> {
+pub fn write_scalar<W: Write>(scalar: &Scalar, w: &mut W) -> io::Result<()> {
   w.write_all(&scalar.to_bytes())
 }
 
-pub(crate) fn write_point<W: Write>(point: &EdwardsPoint, w: &mut W) -> io::Result<()> {
+pub fn write_point<W: Write>(point: &EdwardsPoint, w: &mut W) -> io::Result<()> {
   w.write_all(&point.compress().to_bytes())
 }
 
-pub(crate) fn write_raw_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
+pub fn write_raw_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   f: F,
   values: &[T],
   w: &mut W,
@@ -72,7 +78,7 @@ pub(crate) fn write_raw_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   Ok(())
 }
 
-pub(crate) fn write_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
+pub fn write_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   f: F,
   values: &[T],
   w: &mut W,
@@ -81,29 +87,29 @@ pub(crate) fn write_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   write_raw_vec(f, values, w)
 }
 
-pub(crate) fn read_bytes<R: Read, const N: usize>(r: &mut R) -> io::Result<[u8; N]> {
+pub fn read_bytes<R: Read, const N: usize>(r: &mut R) -> io::Result<[u8; N]> {
   let mut res = [0; N];
   r.read_exact(&mut res)?;
   Ok(res)
 }
 
-pub(crate) fn read_byte<R: Read>(r: &mut R) -> io::Result<u8> {
+pub fn read_byte<R: Read>(r: &mut R) -> io::Result<u8> {
   Ok(read_bytes::<_, 1>(r)?[0])
 }
 
-pub(crate) fn read_u16<R: Read>(r: &mut R) -> io::Result<u16> {
+pub fn read_u16<R: Read>(r: &mut R) -> io::Result<u16> {
   read_bytes(r).map(u16::from_le_bytes)
 }
 
-pub(crate) fn read_u32<R: Read>(r: &mut R) -> io::Result<u32> {
+pub fn read_u32<R: Read>(r: &mut R) -> io::Result<u32> {
   read_bytes(r).map(u32::from_le_bytes)
 }
 
-pub(crate) fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
+pub fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
   read_bytes(r).map(u64::from_le_bytes)
 }
 
-pub(crate) fn read_varint<R: Read, U: sealed::VarInt>(r: &mut R) -> io::Result<U> {
+pub fn read_varint<R: Read, U: sealed::VarInt>(r: &mut R) -> io::Result<U> {
   let mut bits = 0;
   let mut res = 0;
   while {
@@ -128,24 +134,34 @@ pub(crate) fn read_varint<R: Read, U: sealed::VarInt>(r: &mut R) -> io::Result<U
 // for now. There's also further edge cases as noted by
 // https://github.com/monero-project/monero/issues/8438, where some scalars had an archaic
 // reduction applied
-pub(crate) fn read_scalar<R: Read>(r: &mut R) -> io::Result<Scalar> {
+pub fn read_scalar<R: Read>(r: &mut R) -> io::Result<Scalar> {
   Option::from(Scalar::from_canonical_bytes(read_bytes(r)?))
     .ok_or_else(|| io::Error::other("unreduced scalar"))
 }
 
-pub(crate) fn read_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
+/// Decompress a canonically encoded ed25519 point.
+///
+/// This function does not check if the point is within the prime order subgroup.
+pub fn decompress_point(bytes: [u8; 32]) -> Option<EdwardsPoint> {
+  CompressedEdwardsY(bytes)
+    .decompress()
+    // Ban points which are either unreduced or -0
+    .filter(|point| point.compress().to_bytes() == bytes)
+}
+
+pub fn read_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   let bytes = read_bytes(r)?;
   decompress_point(bytes).ok_or_else(|| io::Error::other("invalid point"))
 }
 
-pub(crate) fn read_torsion_free_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
+pub fn read_torsion_free_point<R: Read>(r: &mut R) -> io::Result<EdwardsPoint> {
   read_point(r)
     .ok()
     .filter(EdwardsPoint::is_torsion_free)
     .ok_or_else(|| io::Error::other("invalid point"))
 }
 
-pub(crate) fn read_raw_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
+pub fn read_raw_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   f: F,
   len: usize,
   r: &mut R,
@@ -157,16 +173,13 @@ pub(crate) fn read_raw_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
   Ok(res)
 }
 
-pub(crate) fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: usize>(
+pub fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: usize>(
   f: F,
   r: &mut R,
 ) -> io::Result<[T; N]> {
   read_raw_vec(f, N, r).map(|vec| vec.try_into().unwrap())
 }
 
-pub(crate) fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
-  f: F,
-  r: &mut R,
-) -> io::Result<Vec<T>> {
+pub fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(f: F, r: &mut R) -> io::Result<Vec<T>> {
   read_raw_vec(f, read_varint(r)?, r)
 }

@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_snake_case)]
 
 use core::ops::Deref;
@@ -18,15 +21,14 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
 };
 
-use crate::{
-  INV_EIGHT, BASEPOINT_PRECOMP, Commitment, random_scalar, hash_to_scalar, wallet::decoys::Decoys,
-  ringct::hash_to_point, serialize::*,
-};
+use monero_io::*;
+use monero_generators::hash_to_point;
+use monero_primitives::{INV_EIGHT, BASEPOINT_PRECOMP, Commitment, Decoys, keccak256_to_scalar};
 
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub(crate) use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
+pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
 
 /// Errors when working with CLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -59,9 +61,9 @@ pub enum ClsagError {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ClsagInput {
   // The actual commitment for the true spend
-  pub(crate) commitment: Commitment,
+  pub commitment: Commitment,
   // True spend index, offsets, and ring
-  pub(crate) decoys: Decoys,
+  pub decoys: Decoys,
 }
 
 impl ClsagInput {
@@ -139,10 +141,10 @@ fn core(
   to_hash.extend(D_INV_EIGHT.compress().to_bytes());
   to_hash.extend(pseudo_out.compress().to_bytes());
   // mu_P with agg_0
-  let mu_P = hash_to_scalar(&to_hash);
+  let mu_P = keccak256_to_scalar(&to_hash);
   // mu_C with agg_1
   to_hash[PREFIX_AGG_0_LEN - 1] = b'1';
-  let mu_C = hash_to_scalar(&to_hash);
+  let mu_C = keccak256_to_scalar(&to_hash);
 
   // Truncate it for the round transcript, altering the DST as needed
   to_hash.truncate(((2 * n) + 1) * 32);
@@ -164,7 +166,7 @@ fn core(
       end = r + n;
       to_hash.extend(A.compress().to_bytes());
       to_hash.extend(AH.compress().to_bytes());
-      c = hash_to_scalar(&to_hash);
+      c = keccak256_to_scalar(&to_hash);
     }
 
     Mode::Verify(c1) => {
@@ -190,7 +192,7 @@ fn core(
       }
     };
 
-    let PH = hash_to_point(&P[i]);
+    let PH = hash_to_point(P[i].compress().0);
 
     // (c_p * I) + (c_c * D) + (s_i * PH)
     let R = match A_c1 {
@@ -203,7 +205,7 @@ fn core(
     to_hash.truncate(((2 * n) + 3) * 32);
     to_hash.extend(L.compress().to_bytes());
     to_hash.extend(R.compress().to_bytes());
-    c = hash_to_scalar(&to_hash);
+    c = keccak256_to_scalar(&to_hash);
 
     // This will only execute once and shouldn't need to be constant time. Making it constant time
     // removes the risk of branch prediction creating timing differences depending on ring index
@@ -220,7 +222,7 @@ fn core(
 pub struct Clsag {
   D: EdwardsPoint,
   pub(crate) s: Vec<Scalar>,
-  pub(crate) c1: Scalar,
+  pub c1: Scalar,
 }
 
 pub(crate) struct ClsagSignCore {
@@ -247,11 +249,11 @@ impl Clsag {
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
     let mask_delta = input.commitment.mask - mask;
 
-    let H = hash_to_point(&input.decoys.ring[r][0]);
+    let H = hash_to_point(input.decoys.ring[r][0].compress().0);
     let D = H * mask_delta;
     let mut s = Vec::with_capacity(input.decoys.ring.len());
     for _ in 0 .. input.decoys.ring.len() {
-      s.push(random_scalar(rng));
+      s.push(Scalar::random(rng));
     }
     let ((D, c_p, c_c), c1) =
       core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
@@ -268,7 +270,7 @@ impl Clsag {
   ///
   /// inputs is of the form (private key, key image, input).
   /// sum_outputs is for the sum of the outputs' commitment masks.
-  pub(crate) fn sign<R: RngCore + CryptoRng>(
+  pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
     sum_outputs: Scalar,
@@ -277,14 +279,14 @@ impl Clsag {
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::ZERO;
     for i in 0 .. inputs.len() {
-      let mut mask = random_scalar(rng);
+      let mut mask = Scalar::random(rng);
       if i == (inputs.len() - 1) {
         mask = sum_outputs - sum_pseudo_outs;
       } else {
         sum_pseudo_outs += mask;
       }
 
-      let mut nonce = Zeroizing::new(random_scalar(rng));
+      let mut nonce = Zeroizing::new(Scalar::random(rng));
       let ClsagSignCore { mut incomplete_clsag, pseudo_out, key_challenge, challenged_mask } =
         Clsag::sign_core(
           rng,
@@ -294,7 +296,9 @@ impl Clsag {
           &msg,
           nonce.deref() * ED25519_BASEPOINT_TABLE,
           nonce.deref() *
-            hash_to_point(&inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0]),
+            hash_to_point(
+              inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0].compress().0,
+            ),
         );
       // Effectively r - cx, except cx is (c_p x) + (c_c z), where z is the delta between a ring
       // member's commitment and our input commitment (which will only have a known discrete log
@@ -349,7 +353,7 @@ impl Clsag {
     Ok(())
   }
 
-  pub(crate) fn fee_weight(ring_len: usize) -> usize {
+  pub fn fee_weight(ring_len: usize) -> usize {
     (ring_len * 32) + 32 + 32
   }
 

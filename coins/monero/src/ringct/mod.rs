@@ -14,7 +14,7 @@ pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 /// MLSAG struct, along with verifying functionality.
 pub mod mlsag;
 /// CLSAG struct, along with signing and verifying functionality.
-pub mod clsag;
+pub use monero_clsag as clsag;
 /// BorromeanRange struct, along with verifying functionality.
 pub mod borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.

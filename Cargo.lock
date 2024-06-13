@@ -4752,6 +4752,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-clsag"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "dalek-ff-group",
+ "flexible-transcript",
+ "group",
+ "modular-frost",
+ "monero-generators",
+ "monero-io",
+ "monero-primitives",
+ "rand_chacha",
+ "rand_core",
+ "sha3",
+ "std-shims",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-generators"
 version = "0.4.0"
 dependencies = [
@@ -4759,9 +4780,31 @@ dependencies = [
  "dalek-ff-group",
  "group",
  "hex",
+ "monero-io",
  "sha3",
  "std-shims",
  "subtle",
+]
+
+[[package]]
+name = "monero-io"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "std-shims",
+]
+
+[[package]]
+name = "monero-primitives"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "monero-generators",
+ "monero-io",
+ "rand_core",
+ "sha3",
+ "std-shims",
+ "zeroize",
 ]
 
 [[package]]
@@ -4778,7 +4821,10 @@ dependencies = [
  "hex",
  "hex-literal",
  "modular-frost",
+ "monero-clsag",
  "monero-generators",
+ "monero-io",
+ "monero-primitives",
  "multiexp",
  "pbkdf2 0.12.2",
  "rand",
@@ -8035,7 +8081,10 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "minimal-ed448",
+ "monero-clsag",
  "monero-generators",
+ "monero-io",
+ "monero-primitives",
  "monero-serai",
  "multiexp",
  "schnorr-signatures",

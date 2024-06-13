@@ -440,7 +440,8 @@ impl Wallet {
           Protocol,
           wallet::{
             address::{Network, AddressType, AddressMeta, Address},
-            SpendableOutput, Decoys, Change, FeePriority, Scanner, SignableTransaction,
+            SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
+            SignableTransaction,
           },
           rpc::HttpRpc,
           decompress_point,

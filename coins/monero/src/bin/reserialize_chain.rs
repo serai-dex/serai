@@ -17,7 +17,7 @@ mod binaries {
     rpc::{RpcError, Rpc, HttpRpc},
   };
 
-  pub(crate) use monero_generators::decompress_point;
+  pub(crate) use monero_io::decompress_point;
 
   pub(crate) use tokio::task::JoinHandle;
 

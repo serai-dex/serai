@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use monero_generators::decompress_point;
+use monero_io::decompress_point;
 
 use base58_monero::base58::{encode_check, decode_check};
 

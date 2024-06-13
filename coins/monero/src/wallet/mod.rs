@@ -10,7 +10,8 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  hash, hash_to_scalar, serialize::write_varint, Commitment, ringct::EncryptedAmount, transaction::Input,
+  hash, hash_to_scalar, serialize::write_varint, Commitment, ringct::EncryptedAmount,
+  transaction::Input,
 };
 
 pub mod extra;
@@ -26,8 +27,14 @@ use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, M
 mod scan;
 pub use scan::{ReceivedOutput, SpendableOutput, Timelocked};
 
+#[cfg(feature = "std")]
 pub mod decoys;
-pub use decoys::Decoys;
+#[cfg(not(feature = "std"))]
+pub mod decoys {
+  pub use monero_primitives::Decoys;
+  pub trait DecoySelection {}
+}
+pub use decoys::{DecoySelection, Decoys};
 
 mod send;
 pub use send::{FeePriority, Fee, TransactionError, Change, SignableTransaction, Eventuality};

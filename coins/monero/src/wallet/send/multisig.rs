@@ -26,7 +26,6 @@ use frost::{
 };
 
 use crate::{
-  random_scalar,
   ringct::{
     clsag::{ClsagInput, ClsagDetails, ClsagAddendum, ClsagMultisig},
     RctPrunable,
@@ -348,7 +347,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     while !sorted.is_empty() {
       let value = sorted.remove(0);
 
-      let mut mask = random_scalar(&mut rng);
+      let mut mask = Scalar::random(&mut rng);
       if sorted.is_empty() {
         mask = output_masks - sum_pseudo_outs;
       } else {

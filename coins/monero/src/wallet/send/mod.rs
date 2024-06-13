@@ -23,7 +23,7 @@ use dalek_ff_group as dfg;
 use frost::FrostError;
 
 use crate::{
-  Protocol, Commitment, hash, random_scalar,
+  Protocol, Commitment, hash,
   serialize::{
     read_byte, read_bytes, read_u64, read_scalar, read_point, read_vec, write_byte, write_scalar,
     write_point, write_raw_vec, write_vec,
@@ -616,7 +616,7 @@ impl SignableTransaction {
     payments.shuffle(&mut rng);
 
     // Used for all non-subaddress outputs, or if there's only one subaddress output and a change
-    let tx_key = Zeroizing::new(random_scalar(&mut rng));
+    let tx_key = Zeroizing::new(Scalar::random(&mut rng));
     let mut tx_public_key = tx_key.deref() * ED25519_BASEPOINT_TABLE;
 
     // If any of these outputs are to a subaddress, we need keys distinct to them
@@ -660,7 +660,7 @@ impl SignableTransaction {
       let (output, payment_id) = match payment {
         InternalPayment::Payment(payment, need_dummy_payment_id) => {
           // If this is a subaddress, generate a dedicated r. Else, reuse the TX key
-          let dedicated = Zeroizing::new(random_scalar(&mut rng));
+          let dedicated = Zeroizing::new(Scalar::random(&mut rng));
           let use_dedicated = additional && payment.0.is_subaddress();
           let r = if use_dedicated { &dedicated } else { &tx_key };
 

@@ -11,7 +11,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::scalar::Scalar;
 
-use crate::{random_scalar, wallet::seed::SeedError};
+use crate::wallet::seed::SeedError;
 
 pub(crate) const CLASSIC_SEED_LENGTH: usize = 24;
 pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
@@ -276,7 +276,7 @@ pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8
 pub struct ClassicSeed(Language, Zeroizing<String>);
 impl ClassicSeed {
   pub(crate) fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> ClassicSeed {
-    key_to_seed(lang, Zeroizing::new(random_scalar(rng)))
+    key_to_seed(lang, Zeroizing::new(Scalar::random(rng)))
   }
 
   #[allow(clippy::needless_pass_by_value)]

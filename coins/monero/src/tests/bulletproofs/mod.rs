@@ -2,11 +2,11 @@ use hex_literal::hex;
 use rand_core::OsRng;
 
 use curve25519_dalek::scalar::Scalar;
-use monero_generators::decompress_point;
+use monero_io::decompress_point;
 use multiexp::BatchVerifier;
 
 use crate::{
-  Commitment, random_scalar,
+  Commitment,
   ringct::bulletproofs::{Bulletproof, original::OriginalStruct},
   wallet::TransactionError,
 };
@@ -68,7 +68,7 @@ macro_rules! bulletproofs_tests {
       let mut verifier = BatchVerifier::new(16);
       for i in 1 ..= 16 {
         let commitments = (1 ..= i)
-          .map(|i| Commitment::new(random_scalar(&mut OsRng), u64::try_from(i).unwrap()))
+          .map(|i| Commitment::new(Scalar::random(&mut OsRng), u64::try_from(i).unwrap()))
           .collect::<Vec<_>>();
 
         let bp = if $plus {

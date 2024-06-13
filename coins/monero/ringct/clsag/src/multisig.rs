@@ -26,10 +26,9 @@ use frost::{
   algorithm::{WriteAddendum, Algorithm},
 };
 
-use crate::ringct::{
-  hash_to_point,
-  clsag::{ClsagInput, Clsag},
-};
+use monero_generators::hash_to_point;
+
+use crate::{ClsagInput, Clsag};
 
 impl ClsagInput {
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
@@ -57,13 +56,13 @@ impl ClsagInput {
 
 /// CLSAG input and the mask to use for it.
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub(crate) struct ClsagDetails {
+pub struct ClsagDetails {
   input: ClsagInput,
   mask: Scalar,
 }
 
 impl ClsagDetails {
-  pub(crate) fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
+  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
     ClsagDetails { input, mask }
   }
 }
@@ -71,7 +70,7 @@ impl ClsagDetails {
 /// Addendum produced during the FROST signing process with relevant data.
 #[derive(Clone, PartialEq, Eq, Zeroize, Debug)]
 pub struct ClsagAddendum {
-  pub(crate) key_image: dfg::EdwardsPoint,
+  pub key_image: dfg::EdwardsPoint,
 }
 
 impl WriteAddendum for ClsagAddendum {
@@ -93,10 +92,10 @@ struct Interim {
 /// FROST algorithm for producing a CLSAG signature.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
-pub(crate) struct ClsagMultisig {
+pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
-  pub(crate) H: EdwardsPoint,
+  pub H: EdwardsPoint,
   key_image_shares: HashMap<[u8; 32], dfg::EdwardsPoint>,
   image: Option<dfg::EdwardsPoint>,
 
@@ -107,7 +106,7 @@ pub(crate) struct ClsagMultisig {
 }
 
 impl ClsagMultisig {
-  pub(crate) fn new(
+  pub fn new(
     transcript: RecommendedTranscript,
     output_key: EdwardsPoint,
     details: Arc<RwLock<Option<ClsagDetails>>>,
@@ -115,7 +114,7 @@ impl ClsagMultisig {
     ClsagMultisig {
       transcript,
 
-      H: hash_to_point(&output_key),
+      H: hash_to_point(output_key.compress().0),
       key_image_shares: HashMap::new(),
       image: None,
 

@@ -3,8 +3,8 @@ use rand_core::OsRng;
 use monero_serai::{
   transaction::Transaction,
   wallet::{
-    extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput, Decoys,
-    SignableTransactionBuilder,
+    extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput, DecoySelection,
+    Decoys, SignableTransactionBuilder,
   },
   rpc::{Rpc, HttpRpc},
   Protocol,
@@ -104,8 +104,8 @@ test!(
       use monero_serai::wallet::FeePriority;
 
       let change_view = ViewPair::new(
-        &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-        Zeroizing::new(random_scalar(&mut OsRng)),
+        &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+        Zeroizing::new(Scalar::random(&mut OsRng)),
       );
 
       let mut builder = SignableTransactionBuilder::new(
@@ -117,8 +117,8 @@ test!(
 
       // Send to a subaddress
       let sub_view = ViewPair::new(
-        &random_scalar(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-        Zeroizing::new(random_scalar(&mut OsRng)),
+        &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+        Zeroizing::new(Scalar::random(&mut OsRng)),
       );
       builder.add_payment(
         sub_view

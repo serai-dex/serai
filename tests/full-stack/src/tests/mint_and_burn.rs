@@ -349,7 +349,7 @@ async fn mint_and_burn_test() {
         Protocol,
         transaction::Timelock,
         wallet::{
-          ViewPair, Scanner, Decoys, Change, FeePriority, SignableTransaction,
+          ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
           address::{Network, AddressType, AddressMeta, MoneroAddress},
         },
         decompress_point,

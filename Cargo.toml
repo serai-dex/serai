@@ -43,7 +43,10 @@ members = [
   "coins/ethereum",
   "coins/ethereum/relayer",
 
+  "coins/monero/io",
   "coins/monero/generators",
+  "coins/monero/primitives",
+  "coins/monero/ringct/clsag",
   "coins/monero",
 
   "message-queue",

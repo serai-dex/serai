@@ -6,26 +6,21 @@
 #[macro_use]
 extern crate alloc;
 
-use std_shims::{sync::OnceLock, io};
+use std_shims::io;
 
-use rand_core::{RngCore, CryptoRng};
-
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::{
-  constants::{ED25519_BASEPOINT_TABLE, ED25519_BASEPOINT_POINT},
-  scalar::Scalar,
-  edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
-  traits::VartimePrecomputedMultiscalarMul,
-};
+use curve25519_dalek::scalar::Scalar;
 
-pub use monero_generators::{H, decompress_point};
+pub use monero_io::decompress_point;
+pub use monero_generators::H;
+pub use monero_primitives::INV_EIGHT;
 
 mod merkle;
 
-mod serialize;
+use monero_io as serialize;
 use serialize::{read_byte, read_u16};
 
 /// UnreducedScalar struct with functionality for recovering incorrectly reduced scalars.
@@ -54,19 +49,6 @@ mod tests;
 pub const DEFAULT_LOCK_WINDOW: usize = 10;
 pub const COINBASE_LOCK_WINDOW: usize = 60;
 pub const BLOCK_TIME: usize = 120;
-
-static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
-#[allow(non_snake_case)]
-pub(crate) fn INV_EIGHT() -> Scalar {
-  *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
-}
-
-static BASEPOINT_PRECOMP_CELL: OnceLock<VartimeEdwardsPrecomputation> = OnceLock::new();
-#[allow(non_snake_case)]
-pub(crate) fn BASEPOINT_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
-  BASEPOINT_PRECOMP_CELL
-    .get_or_init(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]))
-}
 
 /// Monero protocol version.
 ///
@@ -188,42 +170,7 @@ impl Protocol {
   }
 }
 
-/// Transparent structure representing a Pedersen commitment's contents.
-#[allow(non_snake_case)]
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct Commitment {
-  pub mask: Scalar,
-  pub amount: u64,
-}
-
-impl core::fmt::Debug for Commitment {
-  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
-    fmt.debug_struct("Commitment").field("amount", &self.amount).finish_non_exhaustive()
-  }
-}
-
-impl Commitment {
-  /// A commitment to zero, defined with a mask of 1 (as to not be the identity).
-  pub fn zero() -> Commitment {
-    Commitment { mask: Scalar::ONE, amount: 0 }
-  }
-
-  pub fn new(mask: Scalar, amount: u64) -> Commitment {
-    Commitment { mask, amount }
-  }
-
-  /// Calculate a Pedersen commitment, as a point, from the transparent structure.
-  pub fn calculate(&self) -> EdwardsPoint {
-    (&self.mask * ED25519_BASEPOINT_TABLE) + (Scalar::from(self.amount) * H())
-  }
-}
-
-/// Support generating a random scalar using a modern rand, as dalek's is notoriously dated.
-pub fn random_scalar<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
-  let mut r = [0; 64];
-  rng.fill_bytes(&mut r);
-  Scalar::from_bytes_mod_order_wide(&r)
-}
+pub use monero_primitives::Commitment;
 
 pub(crate) fn hash(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()

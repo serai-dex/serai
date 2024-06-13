@@ -11,7 +11,7 @@ use async_trait::async_trait;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use monero_generators::decompress_point;
+use monero_io::decompress_point;
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};

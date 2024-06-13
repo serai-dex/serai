@@ -1,0 +1,66 @@
+[package]
+name = "monero-clsag"
+version = "0.1.0"
+description = "The CLSAG linkable ring signature, as defined by the Monero protocol"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/ringct/clsag"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { path = "../../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+thiserror = { version = "1", default-features = false, optional = true }
+
+rand_core = { version = "0.6", default-features = false }
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false }
+
+# Cryptographic dependencies
+sha3 = { version = "0.10", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
+
+# Multisig dependencies
+rand_chacha = { version = "0.3", default-features = false, optional = true }
+transcript = { package = "flexible-transcript", path = "../../../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
+group = { version = "0.13", default-features = false, optional = true }
+dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", version = "0.4", default-features = false, optional = true }
+frost = { package = "modular-frost", path = "../../../../crypto/frost", default-features = false, features = ["ed25519"], optional = true }
+
+# Other Monero dependencies
+monero-io = { path = "../../io", version = "0.1", default-features = false }
+monero-generators = { path = "../../generators", version = "0.4", default-features = false }
+monero-primitives = { path = "../../primitives", version = "0.1", default-features = false }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "rand_core/std",
+  "zeroize/std",
+  "subtle/std",
+
+  "sha3/std",
+  "curve25519-dalek/precomputed-tables",
+
+  "rand_chacha?/std",
+  "transcript?/std",
+  "group?/alloc",
+  "dalek-ff-group?/std",
+
+  "monero-io/std",
+  "monero-generators/std",
+  "monero-primitives/std",
+]
+multisig = ["rand_chacha", "transcript", "group", "dalek-ff-group", "frost", "std"]
+default = ["std"]

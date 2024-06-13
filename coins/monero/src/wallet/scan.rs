@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-use monero_generators::decompress_point;
+use monero_io::decompress_point;
 
 use crate::{
   Commitment,
