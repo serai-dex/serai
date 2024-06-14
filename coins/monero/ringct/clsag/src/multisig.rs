@@ -1,9 +1,9 @@
 use core::{ops::Deref, fmt::Debug};
 use std_shims::{
+  sync::{Arc, Mutex},
   io::{self, Read, Write},
   collections::HashMap,
 };
-use std::sync::{Arc, Mutex};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -54,6 +54,35 @@ impl ClsagContext {
   }
 }
 
+/// A channel to send the mask to use for the pseudo-out (rerandomized commitment) with.
+///
+/// A mask must be sent along this channel before any preprocess addendums are handled. Breaking
+/// this rule will cause a panic.
+#[derive(Clone, Debug)]
+pub struct ClsagMultisigMaskSender {
+  buf: Arc<Mutex<Option<Scalar>>>,
+}
+#[derive(Clone, Debug)]
+struct ClsagMultisigMaskReceiver {
+  buf: Arc<Mutex<Option<Scalar>>>,
+}
+impl ClsagMultisigMaskSender {
+  fn new() -> (ClsagMultisigMaskSender, ClsagMultisigMaskReceiver) {
+    let buf = Arc::new(Mutex::new(None));
+    (ClsagMultisigMaskSender { buf: buf.clone() }, ClsagMultisigMaskReceiver { buf })
+  }
+
+  /// Send a mask to a CLSAG multisig instance.
+  pub fn send(self, mask: Scalar) {
+    *self.buf.lock() = Some(mask);
+  }
+}
+impl ClsagMultisigMaskReceiver {
+  fn recv(self) -> Scalar {
+    self.buf.lock().unwrap()
+  }
+}
+
 /// Addendum produced during the signing process.
 #[derive(Clone, PartialEq, Eq, Zeroize, Debug)]
 pub struct ClsagAddendum {
@@ -61,6 +90,7 @@ pub struct ClsagAddendum {
 }
 
 impl ClsagAddendum {
+  /// The key image share within this addendum.
   pub fn key_image_share(&self) -> dfg::EdwardsPoint {
     self.key_image_share
   }
@@ -94,7 +124,7 @@ pub struct ClsagMultisig {
 
   context: ClsagContext,
 
-  mask_mutex: Arc<Mutex<Option<Scalar>>>,
+  mask_recv: Option<ClsagMultisigMaskReceiver>,
   mask: Option<Scalar>,
 
   msg: Option<[u8; 32]>,
@@ -108,23 +138,26 @@ impl ClsagMultisig {
   pub fn new(
     transcript: RecommendedTranscript,
     context: ClsagContext,
-    mask_mutex: Arc<Mutex<Option<Scalar>>>,
-  ) -> ClsagMultisig {
-    ClsagMultisig {
-      transcript,
+  ) -> (ClsagMultisig, ClsagMultisigMaskSender) {
+    let (mask_send, mask_recv) = ClsagMultisigMaskSender::new();
+    (
+      ClsagMultisig {
+        transcript,
 
-      key_image_generator: hash_to_point(context.decoys.signer_ring_members()[0].compress().0),
-      key_image_shares: HashMap::new(),
-      image: None,
+        key_image_generator: hash_to_point(context.decoys.signer_ring_members()[0].compress().0),
+        key_image_shares: HashMap::new(),
+        image: None,
 
-      context,
+        context,
 
-      mask_mutex,
-      mask: None,
+        mask_recv: Some(mask_recv),
+        mask: None,
 
-      msg: None,
-      interim: None,
-    }
+        msg: None,
+        interim: None,
+      },
+      mask_send,
+    )
   }
 
   /// The key image generator used by the signer.
@@ -182,7 +215,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       // Fetch the mask from the Mutex
       // We set it to a variable to ensure our view of it is consistent
       // It was this or a mpsc channel... std doesn't have oneshot :/
-      self.mask = Some(self.mask_mutex.lock().unwrap().unwrap());
+      self.mask = Some(self.mask_recv.take().unwrap().recv());
       // Transcript the mask
       self.transcript.append_message(b"mask", self.mask.expect("mask wasn't set").to_bytes());
 

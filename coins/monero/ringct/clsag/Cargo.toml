@@ -39,6 +39,9 @@ monero-io = { path = "../../io", version = "0.1", default-features = false }
 monero-generators = { path = "../../generators", version = "0.4", default-features = false }
 monero-primitives = { path = "../../primitives", version = "0.1", default-features = false }
 
+[dev-dependencies]
+frost = { package = "modular-frost", path = "../../../../crypto/frost", default-features = false, features = ["ed25519", "tests"] }
+
 [features]
 std = [
   "std-shims/std",

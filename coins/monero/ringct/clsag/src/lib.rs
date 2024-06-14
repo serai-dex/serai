@@ -28,7 +28,10 @@ use monero_primitives::{INV_EIGHT, BASEPOINT_PRECOMP, Commitment, Decoys, keccak
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{ClsagAddendum, ClsagMultisig};
+pub use multisig::{ClsagMultisigMaskSender, ClsagAddendum, ClsagMultisig};
+
+#[cfg(all(feature = "std", test))]
+mod tests;
 
 /// Errors when working with CLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -219,8 +222,7 @@ fn core(
 pub struct Clsag {
   D: EdwardsPoint,
   s: Vec<Scalar>,
-  // TODO: Remove pub
-  pub c1: Scalar,
+  c1: Scalar,
 }
 
 struct ClsagSignCore {

@@ -3,7 +3,6 @@ use std_shims::{
   io::{self, Read},
   collections::HashMap,
 };
-use std::sync::{Arc, Mutex};
 
 use zeroize::Zeroizing;
 
@@ -27,7 +26,7 @@ use frost::{
 
 use crate::{
   ringct::{
-    clsag::{ClsagContext, ClsagAddendum, ClsagMultisig},
+    clsag::{ClsagContext, ClsagMultisigMaskSender, ClsagAddendum, ClsagMultisig},
     RctPrunable,
   },
   transaction::{Input, Transaction},
@@ -43,7 +42,7 @@ pub struct TransactionMachine {
 
   // Hashed key and scalar offset
   key_images: Vec<(EdwardsPoint, Scalar)>,
-  clsag_mask_mutexes: Vec<Arc<Mutex<Option<Scalar>>>>,
+  clsag_mask_sends: Vec<ClsagMultisigMaskSender>,
   clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 }
 
@@ -54,7 +53,7 @@ pub struct TransactionSignMachine {
   transcript: RecommendedTranscript,
 
   key_images: Vec<(EdwardsPoint, Scalar)>,
-  clsag_mask_mutexes: Vec<Arc<Mutex<Option<Scalar>>>>,
+  clsag_mask_sends: Vec<ClsagMultisigMaskSender>,
   clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
 
   our_preprocess: Vec<Preprocess<Ed25519, ClsagAddendum>>,
@@ -73,11 +72,7 @@ impl SignableTransaction {
     keys: &ThresholdKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
   ) -> Result<TransactionMachine, TransactionError> {
-    let mut clsag_mask_mutexes = vec![];
-    for _ in 0 .. self.inputs.len() {
-      // Doesn't resize as that will use a single Rc for the entire Vec
-      clsag_mask_mutexes.push(Arc::new(Mutex::new(None)));
-    }
+    let mut clsag_mask_sends = vec![];
     let mut clsags = vec![];
 
     // Create a RNG out of the input shared keys, which either requires the view key or being every
@@ -148,7 +143,8 @@ impl SignableTransaction {
 
       let context = ClsagContext::new(decoys.clone(), input.commitment())
         .map_err(TransactionError::ClsagError)?;
-      let clsag = ClsagMultisig::new(transcript.clone(), context, clsag_mask_mutexes[i].clone());
+      let (clsag, clsag_mask_send) = ClsagMultisig::new(transcript.clone(), context);
+      clsag_mask_sends.push(clsag_mask_send);
       key_images.push((
         clsag.key_image_generator(),
         keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + self.inputs[i].0.key_offset(),
@@ -161,7 +157,7 @@ impl SignableTransaction {
       i: keys.params().i(),
       transcript,
       key_images,
-      clsag_mask_mutexes,
+      clsag_mask_sends,
       clsags,
     })
   }
@@ -206,7 +202,7 @@ impl PreprocessMachine for TransactionMachine {
         transcript: self.transcript,
 
         key_images: self.key_images,
-        clsag_mask_mutexes: self.clsag_mask_mutexes,
+        clsag_mask_sends: self.clsag_mask_sends,
         clsags,
 
         our_preprocess,
@@ -334,7 +330,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       sorted.push((
         images.swap_remove(0),
         self.signable.inputs.swap_remove(0).1,
-        self.clsag_mask_mutexes.swap_remove(0),
+        self.clsag_mask_sends.swap_remove(0),
         self.clsags.swap_remove(0),
         commitments.swap_remove(0),
       ));
@@ -352,7 +348,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       } else {
         sum_pseudo_outs += mask;
       }
-      *value.2.lock().unwrap() = Some(mask);
+      value.2.send(mask);
 
       tx.prefix.inputs.push(Input::ToKey {
         amount: None,

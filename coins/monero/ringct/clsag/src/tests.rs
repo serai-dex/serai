@@ -1,5 +1,4 @@
 use core::ops::Deref;
-use std::sync::{Arc, Mutex};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
@@ -11,16 +10,11 @@ use transcript::{Transcript, RecommendedTranscript};
 #[cfg(feature = "multisig")]
 use frost::curve::Ed25519;
 
-use crate::{
-  Commitment,
-  wallet::Decoys,
-  ringct::{
-    generate_key_image,
-    clsag::{ClsagContext, Clsag},
-  },
-};
+use monero_generators::hash_to_point;
+use monero_primitives::{Commitment, Decoys};
+use crate::{ClsagContext, Clsag};
 #[cfg(feature = "multisig")]
-use crate::ringct::clsag::ClsagMultisig;
+use crate::ClsagMultisig;
 
 #[cfg(feature = "multisig")]
 use frost::{
@@ -72,7 +66,8 @@ fn clsag() {
     .unwrap()
     .swap_remove(0);
 
-    let image = generate_key_image(&secrets.0);
+    let image =
+      hash_to_point((ED25519_BASEPOINT_TABLE * secrets.0.deref()).compress().0) * secrets.0.deref();
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
 
     // make sure verification fails if we throw a random `c1` at it.
@@ -104,15 +99,15 @@ fn clsag_multisig() {
     ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
-  let algorithm = ClsagMultisig::new(
+  let (algorithm, mask_send) = ClsagMultisig::new(
     RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
     ClsagContext::new(
       Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
       Commitment::new(randomness, AMOUNT),
     )
     .unwrap(),
-    Arc::new(Mutex::new(Some(Scalar::random(&mut OsRng)))),
   );
+  mask_send.send(Scalar::random(&mut OsRng));
 
   sign(
     &mut OsRng,
