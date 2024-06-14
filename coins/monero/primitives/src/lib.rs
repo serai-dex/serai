@@ -151,4 +151,9 @@ impl Decoys {
   pub fn ring(&self) -> &[[EdwardsPoint; 2]] {
     &self.ring
   }
+
+  // The [key, commitment] pair of the signer.
+  pub fn signer_ring_members(&self) -> [EdwardsPoint; 2] {
+    self.ring[usize::from(self.signer_index)]
+  }
 }

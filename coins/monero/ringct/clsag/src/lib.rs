@@ -28,7 +28,7 @@ use monero_primitives::{INV_EIGHT, BASEPOINT_PRECOMP, Commitment, Decoys, keccak
 #[cfg(feature = "multisig")]
 mod multisig;
 #[cfg(feature = "multisig")]
-pub use multisig::{ClsagDetails, ClsagAddendum, ClsagMultisig};
+pub use multisig::{ClsagAddendum, ClsagMultisig};
 
 /// Errors when working with CLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -37,9 +37,9 @@ pub enum ClsagError {
   /// The ring was invalid (such as being too small or too large).
   #[cfg_attr(feature = "std", error("invalid ring"))]
   InvalidRing,
-  /// The specified ring member was invalid (index, ring size).
-  #[cfg_attr(feature = "std", error("invalid ring member (member {0}, ring size {1})"))]
-  InvalidRingMember(u8, u8),
+  /// The discrete logarithm of the key, scaling G, wasn't equivalent to the signing ring member.
+  #[cfg_attr(feature = "std", error("invalid commitment"))]
+  InvalidKey,
   /// The commitment opening provided did not match the ring member's.
   #[cfg_attr(feature = "std", error("invalid commitment"))]
   InvalidCommitment,
@@ -57,32 +57,28 @@ pub enum ClsagError {
   InvalidC1,
 }
 
-/// Context on the ring member being signed for.
+/// Context on the input being signed for.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct ClsagInput {
-  // The actual commitment for the true spend
-  pub commitment: Commitment,
-  // True spend index, offsets, and ring
-  pub decoys: Decoys,
+pub struct ClsagContext {
+  // The opening for the commitment of the signing ring member
+  commitment: Commitment,
+  // Selected ring members' positions, signer index, and ring
+  decoys: Decoys,
 }
 
-impl ClsagInput {
-  pub fn new(commitment: Commitment, decoys: Decoys) -> Result<ClsagInput, ClsagError> {
-    let n = decoys.len();
-    if n > u8::MAX.into() {
+impl ClsagContext {
+  /// Create a new context, as necessary for signing.
+  pub fn new(decoys: Decoys, commitment: Commitment) -> Result<ClsagContext, ClsagError> {
+    if decoys.len() > u8::MAX.into() {
       Err(ClsagError::InvalidRing)?;
-    }
-    let n = u8::try_from(n).unwrap();
-    if decoys.signer_index() >= n {
-      Err(ClsagError::InvalidRingMember(decoys.signer_index(), n))?;
     }
 
     // Validate the commitment matches
-    if decoys.ring()[usize::from(decoys.signer_index())][1] != commitment.calculate() {
+    if decoys.signer_ring_members()[1] != commitment.calculate() {
       Err(ClsagError::InvalidCommitment)?;
     }
 
-    Ok(ClsagInput { commitment, decoys })
+    Ok(ClsagContext { commitment, decoys })
   }
 }
 
@@ -93,6 +89,7 @@ enum Mode {
 }
 
 // Core of the CLSAG algorithm, applicable to both sign and verify with minimal differences
+//
 // Said differences are covered via the above Mode
 fn core(
   ring: &[[EdwardsPoint; 2]],
@@ -217,15 +214,16 @@ fn core(
   ((D_INV_EIGHT, c * mu_P, c * mu_C), c1)
 }
 
-/// CLSAG signature, as used in Monero.
+/// The CLSAG signature, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Clsag {
   D: EdwardsPoint,
-  pub(crate) s: Vec<Scalar>,
+  s: Vec<Scalar>,
+  // TODO: Remove pub
   pub c1: Scalar,
 }
 
-pub(crate) struct ClsagSignCore {
+struct ClsagSignCore {
   incomplete_clsag: Clsag,
   pseudo_out: EdwardsPoint,
   key_challenge: Scalar,
@@ -235,10 +233,10 @@ pub(crate) struct ClsagSignCore {
 impl Clsag {
   // Sign core is the extension of core as needed for signing, yet is shared between single signer
   // and multisig, hence why it's still core
-  pub(crate) fn sign_core<R: RngCore + CryptoRng>(
+  fn sign_core<R: RngCore + CryptoRng>(
     rng: &mut R,
     I: &EdwardsPoint,
-    input: &ClsagInput,
+    input: &ClsagContext,
     mask: Scalar,
     msg: &[u8; 32],
     A: EdwardsPoint,
@@ -266,23 +264,54 @@ impl Clsag {
     }
   }
 
-  /// Generate CLSAG signatures for the given inputs.
+  /// Sign CLSAG signatures for the provided inputs.
   ///
-  /// inputs is of the form (private key, key image, input).
-  /// sum_outputs is for the sum of the outputs' commitment masks.
+  /// Monero ensures the rerandomized input commitments have the same value as the outputs by
+  /// checking `sum(rerandomized_input_commitments) - sum(output_commitments) == 0`. This requires
+  /// not only the amounts balance, yet also
+  /// `sum(input_commitment_masks) - sum(output_commitment_masks)`.
+  ///
+  /// Monero solves this by following the wallet protocol to determine each output commitment's
+  /// randomness, then using random masks for all but the last input. The last input is
+  /// rerandomized to the necessary mask for the equation to balance.
+  ///
+  /// Due to Monero having this behavior, it only makes sense to sign CLSAGs as a list, hence this
+  /// API being the way it is.
+  ///
+  /// `inputs` is of the form (discrete logarithm of the key, context).
+  ///
+  /// `sum_outputs` is for the sum of the output commitments' masks.
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
-    mut inputs: Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>,
+    mut inputs: Vec<(Zeroizing<Scalar>, ClsagContext)>,
     sum_outputs: Scalar,
     msg: [u8; 32],
-  ) -> Vec<(Clsag, EdwardsPoint)> {
+  ) -> Result<Vec<(Clsag, EdwardsPoint)>, ClsagError> {
+    // Create the key images
+    let mut key_image_generators = vec![];
+    let mut key_images = vec![];
+    for input in &inputs {
+      let key = input.1.decoys.signer_ring_members()[0];
+
+      // Check the key is consistent
+      if (ED25519_BASEPOINT_TABLE * input.0.deref()) != key {
+        Err(ClsagError::InvalidKey)?;
+      }
+
+      let key_image_generator = hash_to_point(key.compress().0);
+      key_image_generators.push(key_image_generator);
+      key_images.push(key_image_generator * input.0.deref());
+    }
+
     let mut res = Vec::with_capacity(inputs.len());
     let mut sum_pseudo_outs = Scalar::ZERO;
     for i in 0 .. inputs.len() {
-      let mut mask = Scalar::random(rng);
+      let mask;
+      // If this is the last input, set the mask as described above
       if i == (inputs.len() - 1) {
         mask = sum_outputs - sum_pseudo_outs;
       } else {
+        mask = Scalar::random(rng);
         sum_pseudo_outs += mask;
       }
 
@@ -290,22 +319,17 @@ impl Clsag {
       let ClsagSignCore { mut incomplete_clsag, pseudo_out, key_challenge, challenged_mask } =
         Clsag::sign_core(
           rng,
+          &key_images[i],
           &inputs[i].1,
-          &inputs[i].2,
           mask,
           &msg,
           nonce.deref() * ED25519_BASEPOINT_TABLE,
-          nonce.deref() *
-            hash_to_point(
-              inputs[i].2.decoys.ring()[usize::from(inputs[i].2.decoys.signer_index())][0]
-                .compress()
-                .0,
-            ),
+          nonce.deref() * key_image_generators[i],
         );
-      // Effectively r - cx, except cx is (c_p x) + (c_c z), where z is the delta between a ring
-      // member's commitment and our input commitment (which will only have a known discrete log
-      // over G if the amounts cancel out)
-      incomplete_clsag.s[usize::from(inputs[i].2.decoys.signer_index())] =
+      // Effectively r - c x, except c x is (c_p x) + (c_c z), where z is the delta between the
+      // ring member's commitment and our pseudo-out commitment (which will only have a known
+      // discrete log over G if the amounts cancel out)
+      incomplete_clsag.s[usize::from(inputs[i].1.decoys.signer_index())] =
         nonce.deref() - ((key_challenge * inputs[i].0.deref()) + challenged_mask);
       let clsag = incomplete_clsag;
 
@@ -314,16 +338,16 @@ impl Clsag {
       nonce.zeroize();
 
       debug_assert!(clsag
-        .verify(inputs[i].2.decoys.ring(), &inputs[i].1, &pseudo_out, &msg)
+        .verify(inputs[i].1.decoys.ring(), &key_images[i], &pseudo_out, &msg)
         .is_ok());
 
       res.push((clsag, pseudo_out));
     }
 
-    res
+    Ok(res)
   }
 
-  /// Verify the CLSAG signature against the given Transaction data.
+  /// Verify a CLSAG signature for the provided context.
   pub fn verify(
     &self,
     ring: &[[EdwardsPoint; 2]],
@@ -331,8 +355,8 @@ impl Clsag {
     pseudo_out: &EdwardsPoint,
     msg: &[u8; 32],
   ) -> Result<(), ClsagError> {
-    // Preliminary checks. s, c1, and points must also be encoded canonically, which isn't checked
-    // here
+    // Preliminary checks
+    // s, c1, and points must also be encoded canonically, which is checked at time of decode
     if ring.is_empty() {
       Err(ClsagError::InvalidRing)?;
     }
@@ -355,18 +379,19 @@ impl Clsag {
     Ok(())
   }
 
+  /// The weight a CLSAG will take within a Monero transaction.
   pub fn fee_weight(ring_len: usize) -> usize {
     (ring_len * 32) + 32 + 32
   }
 
-  /// Write the CLSAG to a writer.
+  /// Write a CLSAG.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_raw_vec(write_scalar, &self.s, w)?;
     w.write_all(&self.c1.to_bytes())?;
     write_point(&self.D, w)
   }
 
-  /// Read a CLSAG from a reader.
+  /// Read a CLSAG.
   pub fn read<R: Read>(decoys: usize, r: &mut R) -> io::Result<Clsag> {
     Ok(Clsag { s: read_raw_vec(read_scalar, decoys, r)?, c1: read_scalar(r)?, D: read_point(r)? })
   }

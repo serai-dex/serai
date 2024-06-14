@@ -32,7 +32,7 @@ use crate::{
   },
   ringct::{
     generate_key_image,
-    clsag::{ClsagError, ClsagInput, Clsag},
+    clsag::{ClsagError, ClsagContext, Clsag},
     bulletproofs::{MAX_OUTPUTS, Bulletproof},
     RctBase, RctPrunable, RctSignatures,
   },
@@ -168,34 +168,48 @@ fn prepare_inputs(
   inputs: &[(SpendableOutput, Decoys)],
   spend: &Zeroizing<Scalar>,
   tx: &mut Transaction,
-) -> Result<Vec<(Zeroizing<Scalar>, EdwardsPoint, ClsagInput)>, TransactionError> {
+) -> Result<Vec<(Zeroizing<Scalar>, ClsagContext)>, TransactionError> {
   let mut signable = Vec::with_capacity(inputs.len());
 
-  for (i, (input, decoys)) in inputs.iter().enumerate() {
+  for (input, decoys) in inputs {
     let input_spend = Zeroizing::new(input.key_offset() + spend.deref());
     let image = generate_key_image(&input_spend);
     signable.push((
       input_spend,
-      image,
-      ClsagInput::new(input.commitment().clone(), decoys.clone())
+      ClsagContext::new(decoys.clone(), input.commitment().clone())
         .map_err(TransactionError::ClsagError)?,
     ));
 
     tx.prefix.inputs.push(Input::ToKey {
       amount: None,
       key_offsets: decoys.offsets().to_vec(),
-      key_image: signable[i].1,
+      key_image: image,
     });
   }
 
-  signable.sort_by(|x, y| x.1.compress().to_bytes().cmp(&y.1.compress().to_bytes()).reverse());
-  tx.prefix.inputs.sort_by(|x, y| {
+  // We now need to sort the inputs by their key image
+  // We take the transaction's inputs, temporarily
+  let mut tx_inputs = Vec::with_capacity(inputs.len());
+  std::mem::swap(&mut tx_inputs, &mut tx.prefix.inputs);
+
+  // Then we join them with their signable contexts
+  let mut joint = tx_inputs.into_iter().zip(signable).collect::<Vec<_>>();
+  // Perform the actual sort
+  joint.sort_by(|(x, _), (y, _)| {
     if let (Input::ToKey { key_image: x, .. }, Input::ToKey { key_image: y, .. }) = (x, y) {
       x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
     } else {
       panic!("Input wasn't ToKey")
     }
   });
+
+  // We now re-create the consumed signable (tx.prefix.inputs already having an empty vector) and
+  // split the joint iterator back into two Vecs
+  let mut signable = Vec::with_capacity(inputs.len());
+  for (input, signable_i) in joint {
+    tx.prefix.inputs.push(input);
+    signable.push(signable_i);
+  }
 
   Ok(signable)
 }
@@ -875,7 +889,8 @@ impl SignableTransaction {
 
     let signable = prepare_inputs(&self.inputs, spend, &mut tx)?;
 
-    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash());
+    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash())
+      .map_err(|_| TransactionError::WrongPrivateKey)?;
     match tx.rct_signatures.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {

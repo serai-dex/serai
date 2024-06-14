@@ -3,7 +3,7 @@ use std_shims::{
   io::{self, Read},
   collections::HashMap,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use zeroize::Zeroizing;
 
@@ -27,7 +27,7 @@ use frost::{
 
 use crate::{
   ringct::{
-    clsag::{ClsagInput, ClsagDetails, ClsagAddendum, ClsagMultisig},
+    clsag::{ClsagContext, ClsagAddendum, ClsagMultisig},
     RctPrunable,
   },
   transaction::{Input, Transaction},
@@ -43,7 +43,7 @@ pub struct TransactionMachine {
 
   // Hashed key and scalar offset
   key_images: Vec<(EdwardsPoint, Scalar)>,
-  inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
+  clsag_mask_mutexes: Vec<Arc<Mutex<Option<Scalar>>>>,
   clsags: Vec<AlgorithmMachine<Ed25519, ClsagMultisig>>,
 }
 
@@ -54,7 +54,7 @@ pub struct TransactionSignMachine {
   transcript: RecommendedTranscript,
 
   key_images: Vec<(EdwardsPoint, Scalar)>,
-  inputs: Vec<Arc<RwLock<Option<ClsagDetails>>>>,
+  clsag_mask_mutexes: Vec<Arc<Mutex<Option<Scalar>>>>,
   clsags: Vec<AlgorithmSignMachine<Ed25519, ClsagMultisig>>,
 
   our_preprocess: Vec<Preprocess<Ed25519, ClsagAddendum>>,
@@ -73,10 +73,10 @@ impl SignableTransaction {
     keys: &ThresholdKeys<Ed25519>,
     mut transcript: RecommendedTranscript,
   ) -> Result<TransactionMachine, TransactionError> {
-    let mut inputs = vec![];
+    let mut clsag_mask_mutexes = vec![];
     for _ in 0 .. self.inputs.len() {
       // Doesn't resize as that will use a single Rc for the entire Vec
-      inputs.push(Arc::new(RwLock::new(None)));
+      clsag_mask_mutexes.push(Arc::new(Mutex::new(None)));
     }
     let mut clsags = vec![];
 
@@ -139,16 +139,18 @@ impl SignableTransaction {
     }
 
     let mut key_images = vec![];
-    for (i, (input, _)) in self.inputs.iter().enumerate() {
+    for (i, (input, decoys)) in self.inputs.iter().enumerate() {
       // Check this the right set of keys
       let offset = keys.offset(dfg::Scalar(input.key_offset()));
       if offset.group_key().0 != input.key() {
         Err(TransactionError::WrongPrivateKey)?;
       }
 
-      let clsag = ClsagMultisig::new(transcript.clone(), input.key(), inputs[i].clone());
+      let context = ClsagContext::new(decoys.clone(), input.commitment())
+        .map_err(TransactionError::ClsagError)?;
+      let clsag = ClsagMultisig::new(transcript.clone(), context, clsag_mask_mutexes[i].clone());
       key_images.push((
-        clsag.H,
+        clsag.key_image_generator(),
         keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + self.inputs[i].0.key_offset(),
       ));
       clsags.push(AlgorithmMachine::new(clsag, offset));
@@ -156,12 +158,10 @@ impl SignableTransaction {
 
     Ok(TransactionMachine {
       signable: self,
-
       i: keys.params().i(),
       transcript,
-
       key_images,
-      inputs,
+      clsag_mask_mutexes,
       clsags,
     })
   }
@@ -206,7 +206,7 @@ impl PreprocessMachine for TransactionMachine {
         transcript: self.transcript,
 
         key_images: self.key_images,
-        inputs: self.inputs,
+        clsag_mask_mutexes: self.clsag_mask_mutexes,
         clsags,
 
         our_preprocess,
@@ -296,7 +296,8 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // provides the easiest API overall, as this is where the TX is (which needs the key
             // images in its message), along with where the outputs are determined (where our
             // outputs may need these in order to guarantee uniqueness)
-            images[c] += preprocess.addendum.key_image.0 * lagrange::<dfg::Scalar>(*l, &included).0;
+            images[c] +=
+              preprocess.addendum.key_image_share().0 * lagrange::<dfg::Scalar>(*l, &included).0;
 
             Ok((*l, preprocess))
           })
@@ -330,12 +331,10 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // Sort the inputs, as expected
     let mut sorted = Vec::with_capacity(self.clsags.len());
     while !self.clsags.is_empty() {
-      let (inputs, decoys) = self.signable.inputs.swap_remove(0);
       sorted.push((
         images.swap_remove(0),
-        inputs,
-        decoys,
-        self.inputs.swap_remove(0),
+        self.signable.inputs.swap_remove(0).1,
+        self.clsag_mask_mutexes.swap_remove(0),
         self.clsags.swap_remove(0),
         commitments.swap_remove(0),
       ));
@@ -353,22 +352,16 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       } else {
         sum_pseudo_outs += mask;
       }
+      *value.2.lock().unwrap() = Some(mask);
 
       tx.prefix.inputs.push(Input::ToKey {
         amount: None,
-        key_offsets: value.2.offsets().to_vec(),
+        key_offsets: value.1.offsets().to_vec(),
         key_image: value.0,
       });
 
-      *value.3.write().unwrap() = Some(ClsagDetails::new(
-        ClsagInput::new(value.1.commitment().clone(), value.2).map_err(|_| {
-          panic!("Signing an input which isn't present in the ring we created for it")
-        })?,
-        mask,
-      ));
-
-      self.clsags.push(value.4);
-      commitments.push(value.5);
+      self.clsags.push(value.3);
+      commitments.push(value.4);
     }
 
     let msg = tx.signature_hash();

@@ -3,12 +3,12 @@ use std_shims::{
   io::{self, Read, Write},
   collections::HashMap,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, Zeroizing};
 
 use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
@@ -28,20 +28,20 @@ use frost::{
 
 use monero_generators::hash_to_point;
 
-use crate::{ClsagInput, Clsag};
+use crate::{ClsagContext, Clsag};
 
-impl ClsagInput {
+impl ClsagContext {
   fn transcript<T: Transcript>(&self, transcript: &mut T) {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
-    transcript.append_message(b"real_spend", [self.decoys.signer_index()]);
+    transcript.append_message(b"signer_index", [self.decoys.signer_index()]);
 
     // Ring
     for (i, pair) in self.decoys.ring().iter().enumerate() {
-      // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
+      // Doesn't include global output indexes as CLSAG doesn't care/won't be affected by it
       // They're just a unreliable reference to this data which will be included in the message
-      // if in use
+      // if somehow relevant
       transcript.append_message(b"member", [u8::try_from(i).expect("ring size exceeded 255")]);
       // This also transcripts the key image generator since it's derived from this key
       transcript.append_message(b"key", pair[0].compress().to_bytes());
@@ -49,33 +49,26 @@ impl ClsagInput {
     }
 
     // Doesn't include the commitment's parts as the above ring + index includes the commitment
-    // The only potential malleability would be if the G/H relationship is known breaking the
+    // The only potential malleability would be if the G/H relationship is known, breaking the
     // discrete log problem, which breaks everything already
   }
 }
 
-/// CLSAG input and the mask to use for it.
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
-pub struct ClsagDetails {
-  input: ClsagInput,
-  mask: Scalar,
-}
-
-impl ClsagDetails {
-  pub fn new(input: ClsagInput, mask: Scalar) -> ClsagDetails {
-    ClsagDetails { input, mask }
-  }
-}
-
-/// Addendum produced during the FROST signing process with relevant data.
+/// Addendum produced during the signing process.
 #[derive(Clone, PartialEq, Eq, Zeroize, Debug)]
 pub struct ClsagAddendum {
-  pub key_image: dfg::EdwardsPoint,
+  key_image_share: dfg::EdwardsPoint,
+}
+
+impl ClsagAddendum {
+  pub fn key_image_share(&self) -> dfg::EdwardsPoint {
+    self.key_image_share
+  }
 }
 
 impl WriteAddendum for ClsagAddendum {
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(self.key_image.compress().to_bytes().as_ref())
+    writer.write_all(self.key_image_share.compress().to_bytes().as_ref())
   }
 }
 
@@ -89,66 +82,77 @@ struct Interim {
   pseudo_out: EdwardsPoint,
 }
 
-/// FROST algorithm for producing a CLSAG signature.
+/// FROST-inspired algorithm for producing a CLSAG signature.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
-  pub H: EdwardsPoint,
+  key_image_generator: EdwardsPoint,
   key_image_shares: HashMap<[u8; 32], dfg::EdwardsPoint>,
   image: Option<dfg::EdwardsPoint>,
 
-  details: Arc<RwLock<Option<ClsagDetails>>>,
+  context: ClsagContext,
+
+  mask_mutex: Arc<Mutex<Option<Scalar>>>,
+  mask: Option<Scalar>,
 
   msg: Option<[u8; 32]>,
   interim: Option<Interim>,
 }
 
 impl ClsagMultisig {
+  /// Construct a new instance of multisignature CLSAG signing.
+  ///
+  /// Before this has its `process_addendum` called, a mask must be set. Else this will panic.
   pub fn new(
     transcript: RecommendedTranscript,
-    output_key: EdwardsPoint,
-    details: Arc<RwLock<Option<ClsagDetails>>>,
+    context: ClsagContext,
+    mask_mutex: Arc<Mutex<Option<Scalar>>>,
   ) -> ClsagMultisig {
     ClsagMultisig {
       transcript,
 
-      H: hash_to_point(output_key.compress().0),
+      key_image_generator: hash_to_point(context.decoys.signer_ring_members()[0].compress().0),
       key_image_shares: HashMap::new(),
       image: None,
 
-      details,
+      context,
+
+      mask_mutex,
+      mask: None,
 
       msg: None,
       interim: None,
     }
   }
 
-  fn input(&self) -> ClsagInput {
-    (*self.details.read().unwrap()).as_ref().unwrap().input.clone()
-  }
-
-  fn mask(&self) -> Scalar {
-    (*self.details.read().unwrap()).as_ref().unwrap().mask
+  /// The key image generator used by the signer.
+  pub fn key_image_generator(&self) -> EdwardsPoint {
+    self.key_image_generator
   }
 }
 
 impl Algorithm<Ed25519> for ClsagMultisig {
   type Transcript = RecommendedTranscript;
   type Addendum = ClsagAddendum;
+  // We output the CLSAG and the key image, which requires an interactive protocol to obtain
   type Signature = (Clsag, EdwardsPoint);
 
+  // We need the nonce represented against both G and the key image generator
   fn nonces(&self) -> Vec<Vec<dfg::EdwardsPoint>> {
-    vec![vec![dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.H)]]
+    vec![vec![dfg::EdwardsPoint::generator(), dfg::EdwardsPoint(self.key_image_generator)]]
   }
 
+  // We also publish our share of the key image
   fn preprocess_addendum<R: RngCore + CryptoRng>(
     &mut self,
     _rng: &mut R,
     keys: &ThresholdKeys<Ed25519>,
   ) -> ClsagAddendum {
-    ClsagAddendum { key_image: dfg::EdwardsPoint(self.H) * keys.secret_share().deref() }
+    ClsagAddendum {
+      key_image_share: dfg::EdwardsPoint(self.key_image_generator) * keys.secret_share().deref(),
+    }
   }
 
   fn read_addendum<R: Read>(&self, reader: &mut R) -> io::Result<ClsagAddendum> {
@@ -162,7 +166,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       Err(io::Error::other("non-canonical key image"))?;
     }
 
-    Ok(ClsagAddendum { key_image: xH })
+    Ok(ClsagAddendum { key_image_share: xH })
   }
 
   fn process_addendum(
@@ -174,21 +178,27 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     if self.image.is_none() {
       self.transcript.domain_separate(b"CLSAG");
       // Transcript the ring
-      self.input().transcript(&mut self.transcript);
+      self.context.transcript(&mut self.transcript);
+      // Fetch the mask from the Mutex
+      // We set it to a variable to ensure our view of it is consistent
+      // It was this or a mpsc channel... std doesn't have oneshot :/
+      self.mask = Some(self.mask_mutex.lock().unwrap().unwrap());
       // Transcript the mask
-      self.transcript.append_message(b"mask", self.mask().to_bytes());
+      self.transcript.append_message(b"mask", self.mask.expect("mask wasn't set").to_bytes());
 
       // Init the image to the offset
-      self.image = Some(dfg::EdwardsPoint(self.H) * view.offset());
+      self.image = Some(dfg::EdwardsPoint(self.key_image_generator) * view.offset());
     }
 
     // Transcript this participant's contribution
     self.transcript.append_message(b"participant", l.to_bytes());
-    self.transcript.append_message(b"key_image_share", addendum.key_image.compress().to_bytes());
+    self
+      .transcript
+      .append_message(b"key_image_share", addendum.key_image_share.compress().to_bytes());
 
     // Accumulate the interpolated share
     let interpolated_key_image_share =
-      addendum.key_image * lagrange::<dfg::Scalar>(l, view.included());
+      addendum.key_image_share * lagrange::<dfg::Scalar>(l, view.included());
     *self.image.as_mut().unwrap() += interpolated_key_image_share;
 
     self
@@ -210,19 +220,22 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     msg: &[u8],
   ) -> dfg::Scalar {
     // Use the transcript to get a seeded random number generator
+    //
     // The transcript contains private data, preventing passive adversaries from recreating this
-    // process even if they have access to commitments (specifically, the ring index being signed
-    // for, along with the mask which should not only require knowing the shared keys yet also the
-    // input commitment masks)
+    // process even if they have access to the commitments/key image share broadcast so far
+    //
+    // Specifically, the transcript contains the signer's index within the ring, along with the
+    // opening of the commitment being re-randomized (and what it's re-randomized to)
     let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
+    // TODO: Accept the message preimage and remove this panic
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 
     let sign_core = Clsag::sign_core(
       &mut rng,
       &self.image.expect("verifying a share despite never processing any addendums").0,
-      &self.input(),
-      self.mask(),
+      &self.context,
+      self.mask.expect("mask wasn't set"),
       self.msg.as_ref().unwrap(),
       nonce_sums[0][0].0,
       nonce_sums[0][1].0,
@@ -247,12 +260,12 @@ impl Algorithm<Ed25519> for ClsagMultisig {
   ) -> Option<Self::Signature> {
     let interim = self.interim.as_ref().unwrap();
     let mut clsag = interim.clsag.clone();
-    // We produced shares as `r - p x`, yet the signature is `r - p x - c x`
+    // We produced shares as `r - p x`, yet the signature is actually `r - p x - c x`
     // Substract `c x` (saved as `c`) now
-    clsag.s[usize::from(self.input().decoys.signer_index())] = sum.0 - interim.c;
+    clsag.s[usize::from(self.context.decoys.signer_index())] = sum.0 - interim.c;
     if clsag
       .verify(
-        self.input().decoys.ring(),
+        self.context.decoys.ring(),
         &self.image.expect("verifying a signature despite never processing any addendums").0,
         &interim.pseudo_out,
         self.msg.as_ref().unwrap(),
@@ -296,11 +309,11 @@ impl Algorithm<Ed25519> for ClsagMultisig {
 
     let key_image_share = self.key_image_shares[&verification_share.to_bytes()];
 
-    // Hash every variable relevant here, using the hahs output as the random weight
+    // Hash every variable relevant here, using the hash output as the random weight
     let mut weight_transcript =
       RecommendedTranscript::new(b"monero-serai v0.1 ClsagMultisig::verify_share");
     weight_transcript.append_message(b"G", dfg::EdwardsPoint::generator().to_bytes());
-    weight_transcript.append_message(b"H", self.H.to_bytes());
+    weight_transcript.append_message(b"H", self.key_image_generator.to_bytes());
     weight_transcript.append_message(b"xG", verification_share.to_bytes());
     weight_transcript.append_message(b"xH", key_image_share.to_bytes());
     weight_transcript.append_message(b"rG", nonces[0][0].to_bytes());
@@ -318,7 +331,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     ];
 
     let mut part_two = vec![
-      (weight * share, dfg::EdwardsPoint(self.H)),
+      (weight * share, dfg::EdwardsPoint(self.key_image_generator)),
       // -(R.1 - pK) == -R.1 + pK
       (-weight, nonces[0][1]),
       (weight * dfg::Scalar(interim.p), key_image_share),

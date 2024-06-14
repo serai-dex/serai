@@ -1,6 +1,5 @@
 use core::ops::Deref;
-#[cfg(feature = "multisig")]
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
@@ -17,11 +16,11 @@ use crate::{
   wallet::Decoys,
   ringct::{
     generate_key_image,
-    clsag::{ClsagInput, Clsag},
+    clsag::{ClsagContext, Clsag},
   },
 };
 #[cfg(feature = "multisig")]
-use crate::ringct::clsag::{ClsagDetails, ClsagMultisig};
+use crate::ringct::clsag::ClsagMultisig;
 
 #[cfg(feature = "multisig")]
 use frost::{
@@ -56,24 +55,24 @@ fn clsag() {
         .push([dest.deref() * ED25519_BASEPOINT_TABLE, Commitment::new(mask, amount).calculate()]);
     }
 
-    let image = generate_key_image(&secrets.0);
     let (mut clsag, pseudo_out) = Clsag::sign(
       &mut OsRng,
       vec![(
-        secrets.0,
-        image,
-        ClsagInput::new(
-          Commitment::new(secrets.1, AMOUNT),
+        secrets.0.clone(),
+        ClsagContext::new(
           Decoys::new((1 ..= RING_LEN).collect(), u8::try_from(real).unwrap(), ring.clone())
             .unwrap(),
+          Commitment::new(secrets.1, AMOUNT),
         )
         .unwrap(),
       )],
       Scalar::random(&mut OsRng),
       msg,
     )
+    .unwrap()
     .swap_remove(0);
 
+    let image = generate_key_image(&secrets.0);
     clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
 
     // make sure verification fails if we throw a random `c1` at it.
@@ -105,18 +104,14 @@ fn clsag_multisig() {
     ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
-  let mask_sum = Scalar::random(&mut OsRng);
   let algorithm = ClsagMultisig::new(
     RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
-    keys[&Participant::new(1).unwrap()].group_key().0,
-    Arc::new(RwLock::new(Some(ClsagDetails::new(
-      ClsagInput::new(
-        Commitment::new(randomness, AMOUNT),
-        Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
-      )
-      .unwrap(),
-      mask_sum,
-    )))),
+    ClsagContext::new(
+      Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
+      Commitment::new(randomness, AMOUNT),
+    )
+    .unwrap(),
+    Arc::new(Mutex::new(Some(Scalar::random(&mut OsRng)))),
   );
 
   sign(
