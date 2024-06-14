@@ -35,10 +35,10 @@ impl ClsagInput {
     // Doesn't domain separate as this is considered part of the larger CLSAG proof
 
     // Ring index
-    transcript.append_message(b"real_spend", [self.decoys.i]);
+    transcript.append_message(b"real_spend", [self.decoys.signer_index()]);
 
     // Ring
-    for (i, pair) in self.decoys.ring.iter().enumerate() {
+    for (i, pair) in self.decoys.ring().iter().enumerate() {
       // Doesn't include global output indexes as CLSAG doesn't care and won't be affected by it
       // They're just a unreliable reference to this data which will be included in the message
       // if in use
@@ -249,10 +249,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     let mut clsag = interim.clsag.clone();
     // We produced shares as `r - p x`, yet the signature is `r - p x - c x`
     // Substract `c x` (saved as `c`) now
-    clsag.s[usize::from(self.input().decoys.i)] = sum.0 - interim.c;
+    clsag.s[usize::from(self.input().decoys.signer_index())] = sum.0 - interim.c;
     if clsag
       .verify(
-        &self.input().decoys.ring,
+        self.input().decoys.ring(),
         &self.image.expect("verifying a signature despite never processing any addendums").0,
         &interim.pseudo_out,
         self.msg.as_ref().unwrap(),

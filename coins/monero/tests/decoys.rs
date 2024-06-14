@@ -74,7 +74,7 @@ test!(
         .await
         .unwrap();
 
-        selected_fresh_decoy = decoys[0].indexes().contains(&output_tx1.global_index);
+        selected_fresh_decoy = decoys[0].positions().contains(&output_tx1.global_index);
         attempts -= 1;
       }
 
@@ -151,7 +151,7 @@ test!(
         .await
         .unwrap();
 
-        selected_fresh_decoy = decoys[0].indexes().contains(&output_tx1.global_index);
+        selected_fresh_decoy = decoys[0].positions().contains(&output_tx1.global_index);
         attempts -= 1;
       }
 

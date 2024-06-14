@@ -260,12 +260,15 @@ async fn select_decoys<R: RngCore + CryptoRng, RPC: RpcConnection>(
       // members
     }
 
-    res.push(Decoys {
-      // Binary searches for the real spend since we don't know where it sorted to
-      i: u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
-      offsets: offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
-      ring: ring.iter().map(|output| output.1).collect(),
-    });
+    res.push(
+      Decoys::new(
+        offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
+        // Binary searches for the real spend since we don't know where it sorted to
+        u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
+        ring.iter().map(|output| output.1).collect(),
+      )
+      .unwrap(),
+    );
   }
 
   Ok(res)

@@ -25,7 +25,6 @@ zeroize = { version = "^1.5", default-features = false, features = ["zeroize_der
 subtle = { version = "^2.4", default-features = false }
 
 # Cryptographic dependencies
-sha3 = { version = "0.10", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 # Multisig dependencies
@@ -50,7 +49,6 @@ std = [
   "zeroize/std",
   "subtle/std",
 
-  "sha3/std",
   "curve25519-dalek/precomputed-tables",
 
   "rand_chacha?/std",

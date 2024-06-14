@@ -108,11 +108,11 @@ impl SignableTransaction {
       transcript.append_message(b"input_shared_key", input.key_offset().to_bytes());
 
       // Ensure all signers are signing the same rings
-      transcript.append_message(b"real_spend", [decoys.i]);
-      for (i, ring_member) in decoys.ring.iter().enumerate() {
+      transcript.append_message(b"real_spend", [decoys.signer_index()]);
+      for (i, ring_member) in decoys.ring().iter().enumerate() {
         transcript
           .append_message(b"ring_member", [u8::try_from(i).expect("ring size exceeded 255")]);
-        transcript.append_message(b"ring_member_offset", decoys.offsets[i].to_le_bytes());
+        transcript.append_message(b"ring_member_offset", decoys.offsets()[i].to_le_bytes());
         transcript.append_message(b"ring_member_key", ring_member[0].compress().to_bytes());
         transcript.append_message(b"ring_member_commitment", ring_member[1].compress().to_bytes());
       }
@@ -356,7 +356,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
       tx.prefix.inputs.push(Input::ToKey {
         amount: None,
-        key_offsets: value.2.offsets.clone(),
+        key_offsets: value.2.offsets().to_vec(),
         key_image: value.0,
       });
 

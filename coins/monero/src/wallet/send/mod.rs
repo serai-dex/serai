@@ -22,6 +22,8 @@ use dalek_ff_group as dfg;
 #[cfg(feature = "multisig")]
 use frost::FrostError;
 
+use monero_io::varint_len;
+
 use crate::{
   Protocol, Commitment, hash,
   serialize::{
@@ -181,7 +183,7 @@ fn prepare_inputs(
 
     tx.prefix.inputs.push(Input::ToKey {
       amount: None,
-      key_offsets: decoys.offsets.clone(),
+      key_offsets: decoys.offsets().to_vec(),
       key_image: signable[i].1,
     });
   }
@@ -518,8 +520,13 @@ impl SignableTransaction {
     }
 
     // Caclculate weight of decoys
-    let decoy_weights =
-      inputs.iter().map(|(_, decoy)| Decoys::fee_weight(&decoy.offsets)).collect::<Vec<_>>();
+    let decoy_weights = inputs
+      .iter()
+      .map(|(_, decoys)| {
+        let offsets = decoys.offsets();
+        varint_len(offsets.len()) + offsets.iter().map(|offset| varint_len(*offset)).sum::<usize>()
+      })
+      .collect::<Vec<_>>();
 
     // Deterministically calculate tx weight and fee
     let (weight, fee) =

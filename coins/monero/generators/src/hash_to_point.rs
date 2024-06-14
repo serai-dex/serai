@@ -9,7 +9,7 @@ use monero_io::decompress_point;
 
 use crate::keccak256;
 
-/// Monero's hash to point function, as named `hash_to_ec`.
+/// Monero's `hash_to_ec` function.
 pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let A = FieldElement::from(486662u64);

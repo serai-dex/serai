@@ -73,12 +73,12 @@ impl ClsagInput {
       Err(ClsagError::InvalidRing)?;
     }
     let n = u8::try_from(n).unwrap();
-    if decoys.i >= n {
-      Err(ClsagError::InvalidRingMember(decoys.i, n))?;
+    if decoys.signer_index() >= n {
+      Err(ClsagError::InvalidRingMember(decoys.signer_index(), n))?;
     }
 
     // Validate the commitment matches
-    if decoys.ring[usize::from(decoys.i)][1] != commitment.calculate() {
+    if decoys.ring()[usize::from(decoys.signer_index())][1] != commitment.calculate() {
       Err(ClsagError::InvalidCommitment)?;
     }
 
@@ -244,19 +244,19 @@ impl Clsag {
     A: EdwardsPoint,
     AH: EdwardsPoint,
   ) -> ClsagSignCore {
-    let r: usize = input.decoys.i.into();
+    let r: usize = input.decoys.signer_index().into();
 
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
     let mask_delta = input.commitment.mask - mask;
 
-    let H = hash_to_point(input.decoys.ring[r][0].compress().0);
+    let H = hash_to_point(input.decoys.ring()[r][0].compress().0);
     let D = H * mask_delta;
-    let mut s = Vec::with_capacity(input.decoys.ring.len());
-    for _ in 0 .. input.decoys.ring.len() {
+    let mut s = Vec::with_capacity(input.decoys.ring().len());
+    for _ in 0 .. input.decoys.ring().len() {
       s.push(Scalar::random(rng));
     }
     let ((D, c_p, c_c), c1) =
-      core(&input.decoys.ring, I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
+      core(input.decoys.ring(), I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
 
     ClsagSignCore {
       incomplete_clsag: Clsag { D, s, c1 },
@@ -297,13 +297,15 @@ impl Clsag {
           nonce.deref() * ED25519_BASEPOINT_TABLE,
           nonce.deref() *
             hash_to_point(
-              inputs[i].2.decoys.ring[usize::from(inputs[i].2.decoys.i)][0].compress().0,
+              inputs[i].2.decoys.ring()[usize::from(inputs[i].2.decoys.signer_index())][0]
+                .compress()
+                .0,
             ),
         );
       // Effectively r - cx, except cx is (c_p x) + (c_c z), where z is the delta between a ring
       // member's commitment and our input commitment (which will only have a known discrete log
       // over G if the amounts cancel out)
-      incomplete_clsag.s[usize::from(inputs[i].2.decoys.i)] =
+      incomplete_clsag.s[usize::from(inputs[i].2.decoys.signer_index())] =
         nonce.deref() - ((key_challenge * inputs[i].0.deref()) + challenged_mask);
       let clsag = incomplete_clsag;
 
@@ -312,7 +314,7 @@ impl Clsag {
       nonce.zeroize();
 
       debug_assert!(clsag
-        .verify(&inputs[i].2.decoys.ring, &inputs[i].1, &pseudo_out, &msg)
+        .verify(inputs[i].2.decoys.ring(), &inputs[i].1, &pseudo_out, &msg)
         .is_ok());
 
       res.push((clsag, pseudo_out));

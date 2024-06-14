@@ -64,11 +64,8 @@ fn clsag() {
         image,
         ClsagInput::new(
           Commitment::new(secrets.1, AMOUNT),
-          Decoys {
-            i: u8::try_from(real).unwrap(),
-            offsets: (1 ..= RING_LEN).collect(),
-            ring: ring.clone(),
-          },
+          Decoys::new((1 ..= RING_LEN).collect(), u8::try_from(real).unwrap(), ring.clone())
+            .unwrap(),
         )
         .unwrap(),
       )],
@@ -115,7 +112,7 @@ fn clsag_multisig() {
     Arc::new(RwLock::new(Some(ClsagDetails::new(
       ClsagInput::new(
         Commitment::new(randomness, AMOUNT),
-        Decoys { i: RING_INDEX, offsets: (1 ..= RING_LEN).collect(), ring: ring.clone() },
+        Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
       )
       .unwrap(),
       mask_sum,
