@@ -3,12 +3,10 @@ use std_shims::vec::Vec;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use dalek_ff_group::EdwardsPoint;
+use curve25519_dalek::edwards::EdwardsPoint;
 
 #[cfg(test)]
-use multiexp::multiexp;
-#[cfg(test)]
-use crate::ringct::bulletproofs::plus::ScalarVector;
+use crate::{core::multiexp, plus::ScalarVector};
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct PointVector(pub(crate) Vec<EdwardsPoint>);

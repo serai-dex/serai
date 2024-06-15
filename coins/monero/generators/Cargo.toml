@@ -37,7 +37,6 @@ std = [
   "subtle/std",
 
   "sha3/std",
-  "curve25519-dalek/precomputed-tables",
 
   "group/alloc",
   "dalek-ff-group/std",

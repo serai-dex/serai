@@ -1,24 +1,21 @@
 use std_shims::vec::Vec;
 
 use rand_core::{RngCore, CryptoRng};
-
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use multiexp::{BatchVerifier, multiexp, multiexp_vartime};
-use group::{
-  ff::{Field, PrimeField},
-  GroupEncoding,
-};
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
-use crate::ringct::bulletproofs::plus::{
-  ScalarVector, PointVector, GeneratorsList, Generators, padded_pow_of_2, transcript::*,
+use monero_primitives::{INV_EIGHT, keccak256_to_scalar};
+use crate::{
+  core::{multiexp, multiexp_vartime},
+  batch_verifier::BulletproofsPlusBatchVerifier,
+  plus::{ScalarVector, PointVector, GeneratorsList, BpPlusGenerators, padded_pow_of_2},
 };
 
 // Figure 1 of the Bulletproofs+ paper
 #[derive(Clone, Debug)]
 pub(crate) struct WipStatement {
-  generators: Generators,
+  generators: BpPlusGenerators,
   P: EdwardsPoint,
   y: ScalarVector,
 }
@@ -68,7 +65,7 @@ pub(crate) struct WipProof {
 }
 
 impl WipStatement {
-  pub(crate) fn new(generators: Generators, P: EdwardsPoint, y: Scalar) -> Self {
+  pub(crate) fn new(generators: BpPlusGenerators, P: EdwardsPoint, y: Scalar) -> Self {
     debug_assert_eq!(generators.len(), padded_pow_of_2(generators.len()));
 
     // y ** n
@@ -82,16 +79,26 @@ impl WipStatement {
   }
 
   fn transcript_L_R(transcript: &mut Scalar, L: EdwardsPoint, R: EdwardsPoint) -> Scalar {
-    let e = hash_to_scalar(
-      &[transcript.to_repr().as_ref(), L.to_bytes().as_ref(), R.to_bytes().as_ref()].concat(),
+    let e = keccak256_to_scalar(
+      [
+        transcript.to_bytes().as_ref(),
+        L.compress().to_bytes().as_ref(),
+        R.compress().to_bytes().as_ref(),
+      ]
+      .concat(),
     );
     *transcript = e;
     e
   }
 
   fn transcript_A_B(transcript: &mut Scalar, A: EdwardsPoint, B: EdwardsPoint) -> Scalar {
-    let e = hash_to_scalar(
-      &[transcript.to_repr().as_ref(), A.to_bytes().as_ref(), B.to_bytes().as_ref()].concat(),
+    let e = keccak256_to_scalar(
+      [
+        transcript.to_bytes().as_ref(),
+        A.compress().to_bytes().as_ref(),
+        B.compress().to_bytes().as_ref(),
+      ]
+      .concat(),
     );
     *transcript = e;
     e
@@ -119,7 +126,7 @@ impl WipStatement {
     debug_assert_eq!(g_bold1.len(), h_bold1.len());
 
     let e = Self::transcript_L_R(transcript, L, R);
-    let inv_e = e.invert().unwrap();
+    let inv_e = e.invert();
 
     // This vartime is safe as all of these arguments are public
     let mut new_g_bold = Vec::with_capacity(g_bold1.len());
@@ -133,8 +140,8 @@ impl WipStatement {
       new_h_bold.push(multiexp_vartime(&[(e, h_bold.0), (inv_e, h_bold.1)]));
     }
 
-    let e_square = e.square();
-    let inv_e_square = inv_e.square();
+    let e_square = e * e;
+    let inv_e_square = inv_e * inv_e;
 
     (e, inv_e, e_square, inv_e_square, PointVector(new_g_bold), PointVector(new_h_bold))
   }
@@ -177,7 +184,7 @@ impl WipStatement {
 
       // Sanity check since if the above failed to populate, it'd be critical
       for product in &products {
-        debug_assert!(!bool::from(product.is_zero()));
+        debug_assert!(*product != Scalar::ZERO);
       }
     }
 
@@ -197,12 +204,12 @@ impl WipStatement {
     if generators.len() != witness.a.len() {
       return None;
     }
-    let (g, h) = (Generators::g(), Generators::h());
+    let (g, h) = (BpPlusGenerators::g(), BpPlusGenerators::h());
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. generators.len() {
-      g_bold.push(generators.generator(GeneratorsList::GBold1, i));
-      h_bold.push(generators.generator(GeneratorsList::HBold1, i));
+      g_bold.push(generators.generator(GeneratorsList::GBold, i));
+      h_bold.push(generators.generator(GeneratorsList::HBold, i));
     }
     let mut g_bold = PointVector(g_bold);
     let mut h_bold = PointVector(h_bold);
@@ -261,7 +268,7 @@ impl WipStatement {
       let c_r = (a2.clone() * y_n_hat).weighted_inner_product(&b1, &y);
 
       // TODO: Calculate these with a batch inversion
-      let y_inv_n_hat = y_n_hat.invert().unwrap();
+      let y_inv_n_hat = y_n_hat.invert();
 
       let mut L_terms = (a1.clone() * y_inv_n_hat)
         .0
@@ -271,7 +278,7 @@ impl WipStatement {
         .collect::<Vec<_>>();
       L_terms.push((c_l, g));
       L_terms.push((d_l, h));
-      let L = multiexp(&L_terms) * Scalar(crate::INV_EIGHT());
+      let L = multiexp(&L_terms) * INV_EIGHT();
       L_vec.push(L);
       L_terms.zeroize();
 
@@ -283,7 +290,7 @@ impl WipStatement {
         .collect::<Vec<_>>();
       R_terms.push((c_r, g));
       R_terms.push((d_r, h));
-      let R = multiexp(&R_terms) * Scalar(crate::INV_EIGHT());
+      let R = multiexp(&R_terms) * INV_EIGHT();
       R_vec.push(R);
       R_terms.zeroize();
 
@@ -316,33 +323,32 @@ impl WipStatement {
 
     let mut A_terms =
       vec![(r, g_bold[0]), (s, h_bold[0]), ((ry * b[0]) + (s * y[0] * a[0]), g), (delta, h)];
-    let A = multiexp(&A_terms) * Scalar(crate::INV_EIGHT());
+    let A = multiexp(&A_terms) * INV_EIGHT();
     A_terms.zeroize();
 
     let mut B_terms = vec![(ry * s, g), (eta, h)];
-    let B = multiexp(&B_terms) * Scalar(crate::INV_EIGHT());
+    let B = multiexp(&B_terms) * INV_EIGHT();
     B_terms.zeroize();
 
     let e = Self::transcript_A_B(&mut transcript, A, B);
 
     let r_answer = r + (a[0] * e);
     let s_answer = s + (b[0] * e);
-    let delta_answer = eta + (delta * e) + (alpha * e.square());
+    let delta_answer = eta + (delta * e) + (alpha * (e * e));
 
     Some(WipProof { L: L_vec, R: R_vec, A, B, r_answer, s_answer, delta_answer })
   }
 
-  pub(crate) fn verify<Id: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub(crate) fn verify<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<Id, EdwardsPoint>,
-    id: Id,
+    verifier: &mut BulletproofsPlusBatchVerifier,
     mut transcript: Scalar,
     mut proof: WipProof,
   ) -> bool {
-    let WipStatement { generators, P, y } = self;
+    let verifier_weight = Scalar::random(rng);
 
-    let (g, h) = (Generators::g(), Generators::h());
+    let WipStatement { generators, P, y } = self;
 
     // Verify the L/R lengths
     {
@@ -359,7 +365,7 @@ impl WipStatement {
     }
 
     let inv_y = {
-      let inv_y = y[0].invert().unwrap();
+      let inv_y = y[0].invert();
       let mut res = Vec::with_capacity(y.len());
       res.push(inv_y);
       while res.len() < y.len() {
@@ -368,51 +374,49 @@ impl WipStatement {
       res
     };
 
-    let mut P_terms = vec![(Scalar::ONE, P)];
-    P_terms.reserve(6 + (2 * generators.len()) + proof.L.len());
+    let mut e_is = Vec::with_capacity(proof.L.len());
+    for (L, R) in proof.L.iter_mut().zip(proof.R.iter_mut()) {
+      e_is.push(Self::transcript_L_R(&mut transcript, *L, *R));
+      *L = L.mul_by_cofactor();
+      *R = R.mul_by_cofactor();
+    }
+
+    let e = Self::transcript_A_B(&mut transcript, proof.A, proof.B);
+    proof.A = proof.A.mul_by_cofactor();
+    proof.B = proof.B.mul_by_cofactor();
+    let neg_e_square = verifier_weight * -(e * e);
+
+    verifier.0.other.push((neg_e_square, P));
 
     let mut challenges = Vec::with_capacity(proof.L.len());
     let product_cache = {
-      let mut es = Vec::with_capacity(proof.L.len());
-      for (L, R) in proof.L.iter_mut().zip(proof.R.iter_mut()) {
-        es.push(Self::transcript_L_R(&mut transcript, *L, *R));
-        *L = L.mul_by_cofactor();
-        *R = R.mul_by_cofactor();
-      }
+      let mut inv_e_is = e_is.clone();
+      Scalar::batch_invert(&mut inv_e_is);
 
-      let mut inv_es = es.clone();
-      let mut scratch = vec![Scalar::ZERO; es.len()];
-      group::ff::BatchInverter::invert_with_external_scratch(&mut inv_es, &mut scratch);
-      drop(scratch);
-
-      debug_assert_eq!(es.len(), inv_es.len());
-      debug_assert_eq!(es.len(), proof.L.len());
-      debug_assert_eq!(es.len(), proof.R.len());
-      for ((e, inv_e), (L, R)) in
-        es.drain(..).zip(inv_es.drain(..)).zip(proof.L.iter().zip(proof.R.iter()))
+      debug_assert_eq!(e_is.len(), inv_e_is.len());
+      debug_assert_eq!(e_is.len(), proof.L.len());
+      debug_assert_eq!(e_is.len(), proof.R.len());
+      for ((e_i, inv_e_i), (L, R)) in
+        e_is.drain(..).zip(inv_e_is.drain(..)).zip(proof.L.iter().zip(proof.R.iter()))
       {
-        debug_assert_eq!(e.invert().unwrap(), inv_e);
+        debug_assert_eq!(e_i.invert(), inv_e_i);
 
-        challenges.push((e, inv_e));
+        challenges.push((e_i, inv_e_i));
 
-        let e_square = e.square();
-        let inv_e_square = inv_e.square();
-        P_terms.push((e_square, *L));
-        P_terms.push((inv_e_square, *R));
+        let e_i_square = e_i * e_i;
+        let inv_e_i_square = inv_e_i * inv_e_i;
+        verifier.0.other.push((neg_e_square * e_i_square, *L));
+        verifier.0.other.push((neg_e_square * inv_e_i_square, *R));
       }
 
       Self::challenge_products(&challenges)
     };
 
-    let e = Self::transcript_A_B(&mut transcript, proof.A, proof.B);
-    proof.A = proof.A.mul_by_cofactor();
-    proof.B = proof.B.mul_by_cofactor();
-    let neg_e_square = -e.square();
-
-    let mut multiexp = P_terms;
-    multiexp.reserve(4 + (2 * generators.len()));
-    for (scalar, _) in &mut multiexp {
-      *scalar *= neg_e_square;
+    while verifier.0.g_bold.len() < generators.len() {
+      verifier.0.g_bold.push(Scalar::ZERO);
+    }
+    while verifier.0.h_bold.len() < generators.len() {
+      verifier.0.h_bold.push(Scalar::ZERO);
     }
 
     let re = proof.r_answer * e;
@@ -421,23 +425,18 @@ impl WipStatement {
       if i > 0 {
         scalar *= inv_y[i - 1];
       }
-      multiexp.push((scalar, generators.generator(GeneratorsList::GBold1, i)));
+      verifier.0.g_bold[i] += verifier_weight * scalar;
     }
 
     let se = proof.s_answer * e;
     for i in 0 .. generators.len() {
-      multiexp.push((
-        se * product_cache[product_cache.len() - 1 - i],
-        generators.generator(GeneratorsList::HBold1, i),
-      ));
+      verifier.0.h_bold[i] += verifier_weight * (se * product_cache[product_cache.len() - 1 - i]);
     }
 
-    multiexp.push((-e, proof.A));
-    multiexp.push((proof.r_answer * y[0] * proof.s_answer, g));
-    multiexp.push((proof.delta_answer, h));
-    multiexp.push((-Scalar::ONE, proof.B));
-
-    verifier.queue(rng, id, multiexp);
+    verifier.0.other.push((verifier_weight * -e, proof.A));
+    verifier.0.g += verifier_weight * (proof.r_answer * y[0] * proof.s_answer);
+    verifier.0.h += verifier_weight * proof.delta_answer;
+    verifier.0.other.push((-verifier_weight, proof.B));
 
     true
   }

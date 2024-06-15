@@ -1,35 +1,28 @@
 use std_shims::vec::Vec;
 
 use rand_core::{RngCore, CryptoRng};
-
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use multiexp::{multiexp, multiexp_vartime, BatchVerifier};
-use group::{
-  ff::{Field, PrimeField},
-  Group, GroupEncoding,
-};
-use curve25519_dalek::EdwardsPoint as DalekPoint;
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
+
+use monero_primitives::{INV_EIGHT, Commitment, keccak256_to_scalar};
 
 use crate::{
-  Commitment,
-  ringct::{
-    bulletproofs::core::{MAX_M, N},
-    bulletproofs::plus::{
-      ScalarVector, PointVector, GeneratorsList, Generators,
-      transcript::*,
-      weighted_inner_product::{WipStatement, WipWitness, WipProof},
-      padded_pow_of_2, u64_decompose,
-    },
+  batch_verifier::BulletproofsPlusBatchVerifier,
+  core::{MAX_M, N, multiexp, multiexp_vartime},
+  plus::{
+    ScalarVector, PointVector, GeneratorsList, BpPlusGenerators,
+    transcript::*,
+    weighted_inner_product::{WipStatement, WipWitness, WipProof},
+    padded_pow_of_2, u64_decompose,
   },
 };
 
 // Figure 3 of the Bulletproofs+ Paper
 #[derive(Clone, Debug)]
 pub(crate) struct AggregateRangeStatement {
-  generators: Generators,
-  V: Vec<DalekPoint>,
+  generators: BpPlusGenerators,
+  V: Vec<EdwardsPoint>,
 }
 
 impl Zeroize for AggregateRangeStatement {
@@ -58,18 +51,29 @@ pub struct AggregateRangeProof {
   pub(crate) wip: WipProof,
 }
 
+struct AHatComputation {
+  y: Scalar,
+  d_descending_y_plus_z: ScalarVector,
+  y_mn_plus_one: Scalar,
+  z: Scalar,
+  z_pow: ScalarVector,
+  A_hat: EdwardsPoint,
+}
+
 impl AggregateRangeStatement {
-  pub(crate) fn new(V: Vec<DalekPoint>) -> Option<Self> {
+  pub(crate) fn new(V: Vec<EdwardsPoint>) -> Option<Self> {
     if V.is_empty() || (V.len() > MAX_M) {
       return None;
     }
 
-    Some(Self { generators: Generators::new(), V })
+    Some(Self { generators: BpPlusGenerators::new(), V })
   }
 
   fn transcript_A(transcript: &mut Scalar, A: EdwardsPoint) -> (Scalar, Scalar) {
-    let y = hash_to_scalar(&[transcript.to_repr().as_ref(), A.to_bytes().as_ref()].concat());
-    let z = hash_to_scalar(y.to_bytes().as_ref());
+    let y = keccak256_to_scalar(
+      [transcript.to_bytes().as_ref(), A.compress().to_bytes().as_ref()].concat(),
+    );
+    let z = keccak256_to_scalar(y.to_bytes().as_ref());
     *transcript = z;
     (y, z)
   }
@@ -88,10 +92,10 @@ impl AggregateRangeStatement {
 
   fn compute_A_hat(
     mut V: PointVector,
-    generators: &Generators,
+    generators: &BpPlusGenerators,
     transcript: &mut Scalar,
     mut A: EdwardsPoint,
-  ) -> (Scalar, ScalarVector, Scalar, Scalar, ScalarVector, EdwardsPoint) {
+  ) -> AHatComputation {
     let (y, z) = Self::transcript_A(transcript, A);
     A = A.mul_by_cofactor();
 
@@ -133,23 +137,23 @@ impl AggregateRangeStatement {
     let neg_z = -z;
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 2);
     for (i, d_y_z) in d_descending_y_plus_z.0.iter().enumerate() {
-      A_terms.push((neg_z, generators.generator(GeneratorsList::GBold1, i)));
-      A_terms.push((*d_y_z, generators.generator(GeneratorsList::HBold1, i)));
+      A_terms.push((neg_z, generators.generator(GeneratorsList::GBold, i)));
+      A_terms.push((*d_y_z, generators.generator(GeneratorsList::HBold, i)));
     }
     A_terms.push((y_mn_plus_one, commitment_accum));
     A_terms.push((
-      ((y_pows * z) - (d.sum() * y_mn_plus_one * z) - (y_pows * z.square())),
-      Generators::g(),
+      ((y_pows * z) - (d.sum() * y_mn_plus_one * z) - (y_pows * (z * z))),
+      BpPlusGenerators::g(),
     ));
 
-    (
+    AHatComputation {
       y,
       d_descending_y_plus_z,
       y_mn_plus_one,
       z,
-      ScalarVector(z_pow),
-      A + multiexp_vartime(&A_terms),
-    )
+      z_pow: ScalarVector(z_pow),
+      A_hat: A + multiexp_vartime(&A_terms),
+    }
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -175,9 +179,9 @@ impl AggregateRangeStatement {
     // Commitments aren't transmitted INV_EIGHT though, so this multiplies by INV_EIGHT to enable
     // clearing its cofactor without mutating the value
     // For some reason, these values are transcripted * INV_EIGHT, not as transmitted
-    let V = V.into_iter().map(|V| V * crate::INV_EIGHT()).collect::<Vec<_>>();
+    let V = V.into_iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
-    let mut V = V.into_iter().map(|V| EdwardsPoint(V.mul_by_cofactor())).collect::<Vec<_>>();
+    let mut V = V.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
     // Pad V
     while V.len() < padded_pow_of_2(V.len()) {
@@ -205,26 +209,26 @@ impl AggregateRangeStatement {
 
     let mut A_terms = Vec::with_capacity((generators.len() * 2) + 1);
     for (i, a_l) in a_l.0.iter().enumerate() {
-      A_terms.push((*a_l, generators.generator(GeneratorsList::GBold1, i)));
+      A_terms.push((*a_l, generators.generator(GeneratorsList::GBold, i)));
     }
     for (i, a_r) in a_r.0.iter().enumerate() {
-      A_terms.push((*a_r, generators.generator(GeneratorsList::HBold1, i)));
+      A_terms.push((*a_r, generators.generator(GeneratorsList::HBold, i)));
     }
-    A_terms.push((alpha, Generators::h()));
+    A_terms.push((alpha, BpPlusGenerators::h()));
     let mut A = multiexp(&A_terms);
     A_terms.zeroize();
 
     // Multiply by INV_EIGHT per earlier commentary
-    A.0 *= crate::INV_EIGHT();
+    A *= INV_EIGHT();
 
-    let (y, d_descending_y_plus_z, y_mn_plus_one, z, z_pow, A_hat) =
+    let AHatComputation { y, d_descending_y_plus_z, y_mn_plus_one, z, z_pow, A_hat } =
       Self::compute_A_hat(PointVector(V), &generators, &mut transcript, A);
 
     let a_l = a_l - z;
     let a_r = a_r + &d_descending_y_plus_z;
     let mut alpha = alpha;
     for j in 1 ..= witness.0.len() {
-      alpha += z_pow[j - 1] * Scalar(witness.0[j - 1].mask) * y_mn_plus_one;
+      alpha += z_pow[j - 1] * witness.0[j - 1].mask * y_mn_plus_one;
     }
 
     Some(AggregateRangeProof {
@@ -235,25 +239,22 @@ impl AggregateRangeStatement {
     })
   }
 
-  pub(crate) fn verify<Id: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub(crate) fn verify<R: RngCore + CryptoRng>(
     self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<Id, EdwardsPoint>,
-    id: Id,
+    verifier: &mut BulletproofsPlusBatchVerifier,
     proof: AggregateRangeProof,
   ) -> bool {
     let Self { generators, V } = self;
 
-    let V = V.into_iter().map(|V| V * crate::INV_EIGHT()).collect::<Vec<_>>();
+    let V = V.into_iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
-    // With the torsion clear, wrap it into a EdwardsPoint from dalek-ff-group
-    // (which is prime-order)
-    let V = V.into_iter().map(|V| EdwardsPoint(V.mul_by_cofactor())).collect::<Vec<_>>();
+    let V = V.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
     let generators = generators.reduce(V.len() * N);
 
-    let (y, _, _, _, _, A_hat) =
+    let AHatComputation { y, A_hat, .. } =
       Self::compute_A_hat(PointVector(V), &generators, &mut transcript, proof.A);
-    WipStatement::new(generators, A_hat, y).verify(rng, verifier, id, transcript, proof.wip)
+    WipStatement::new(generators, A_hat, y).verify(rng, verifier, transcript, proof.wip)
   }
 }

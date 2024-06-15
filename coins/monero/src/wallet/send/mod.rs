@@ -33,7 +33,7 @@ use crate::{
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagContext, Clsag},
-    bulletproofs::{MAX_OUTPUTS, Bulletproof},
+    bulletproofs::{MAX_COMMITMENTS, Bulletproof},
     RctBase, RctPrunable, RctSignatures,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
@@ -504,7 +504,7 @@ impl SignableTransaction {
     let out_amount = payments.iter().map(|payment| payment.1).sum::<u64>();
 
     let outputs = payments.len() + usize::from(change.address.is_some());
-    if outputs > MAX_OUTPUTS {
+    if outputs > MAX_COMMITMENTS {
       Err(TransactionError::TooManyOutputs)?;
     }
 
@@ -803,7 +803,7 @@ impl SignableTransaction {
     let commitments = outputs.iter().map(|output| output.commitment.clone()).collect::<Vec<_>>();
     let sum = commitments.iter().map(|commitment| commitment.mask).sum();
 
-    // Safe due to the constructor checking MAX_OUTPUTS
+    // Safe due to the constructor checking MAX_COMMITMENTS
     let bp = if self.protocol.bp_plus() {
       Bulletproof::prove_plus(rng, commitments.clone()).unwrap()
     } else {

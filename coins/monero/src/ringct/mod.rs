@@ -18,7 +18,7 @@ pub use monero_clsag as clsag;
 /// BorromeanRange struct, along with verifying functionality.
 pub mod borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
-pub mod bulletproofs;
+pub use monero_bulletproofs as bulletproofs;
 
 use crate::{
   Protocol,

@@ -47,6 +47,7 @@ members = [
   "coins/monero/generators",
   "coins/monero/primitives",
   "coins/monero/ringct/clsag",
+  "coins/monero/ringct/bulletproofs",
   "coins/monero",
 
   "message-queue",

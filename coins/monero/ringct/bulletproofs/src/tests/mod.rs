@@ -2,14 +2,11 @@ use hex_literal::hex;
 use rand_core::OsRng;
 
 use curve25519_dalek::scalar::Scalar;
-use monero_io::decompress_point;
-use multiexp::BatchVerifier;
 
-use crate::{
-  Commitment,
-  ringct::bulletproofs::{Bulletproof, original::OriginalStruct},
-  wallet::TransactionError,
-};
+use monero_io::decompress_point;
+use monero_primitives::Commitment;
+
+use crate::{batch_verifier::BatchVerifier, original::OriginalStruct, Bulletproof, BulletproofError};
 
 mod plus;
 
@@ -24,7 +21,7 @@ fn bulletproofs_vector() {
     S: point(hex!("e1285960861783574ee2b689ae53622834eb0b035d6943103f960cd23e063fa0")),
     T1: point(hex!("4ea07735f184ba159d0e0eb662bac8cde3eb7d39f31e567b0fbda3aa23fe5620")),
     T2: point(hex!("b8390aa4b60b255630d40e592f55ec6b7ab5e3a96bfcdcd6f1cd1d2fc95f441e")),
-    taux: scalar(hex!("5957dba8ea9afb23d6e81cc048a92f2d502c10c749dc1b2bd148ae8d41ec7107")),
+    tau_x: scalar(hex!("5957dba8ea9afb23d6e81cc048a92f2d502c10c749dc1b2bd148ae8d41ec7107")),
     mu: scalar(hex!("923023b234c2e64774b820b4961f7181f6c1dc152c438643e5a25b0bf271bc02")),
     L: vec![
       point(hex!("c45f656316b9ebf9d357fb6a9f85b5f09e0b991dd50a6e0ae9b02de3946c9d99")),
@@ -65,7 +62,7 @@ macro_rules! bulletproofs_tests {
     #[test]
     fn $name() {
       // Create Bulletproofs for all possible output quantities
-      let mut verifier = BatchVerifier::new(16);
+      let mut verifier = BatchVerifier::new();
       for i in 1 ..= 16 {
         let commitments = (1 ..= i)
           .map(|i| Commitment::new(Scalar::random(&mut OsRng), u64::try_from(i).unwrap()))
@@ -79,9 +76,9 @@ macro_rules! bulletproofs_tests {
 
         let commitments = commitments.iter().map(Commitment::calculate).collect::<Vec<_>>();
         assert!(bp.verify(&mut OsRng, &commitments));
-        assert!(bp.batch_verify(&mut OsRng, &mut verifier, i, &commitments));
+        assert!(bp.batch_verify(&mut OsRng, &mut verifier, &commitments));
       }
-      assert!(verifier.verify_vartime());
+      assert!(verifier.verify());
     }
 
     #[test]
@@ -98,7 +95,7 @@ macro_rules! bulletproofs_tests {
           Bulletproof::prove(&mut OsRng, &commitments)
         })
         .unwrap_err(),
-        TransactionError::TooManyOutputs,
+        BulletproofError::TooManyCommitments,
       );
     }
   };

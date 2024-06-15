@@ -35,7 +35,6 @@ std = [
   "zeroize/std",
 
   "sha3/std",
-  "curve25519-dalek/precomputed-tables",
 
   "monero-generators/std",
 ]

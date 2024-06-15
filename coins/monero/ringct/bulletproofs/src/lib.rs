@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_snake_case)]
 
 use std_shims::{
@@ -6,25 +9,39 @@ use std_shims::{
 };
 
 use rand_core::{RngCore, CryptoRng};
-
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 use curve25519_dalek::edwards::EdwardsPoint;
-use multiexp::BatchVerifier;
 
-use crate::{Commitment, wallet::TransactionError, serialize::*};
+use monero_io::*;
+use monero_primitives::Commitment;
 
 pub(crate) mod scalar_vector;
 pub(crate) mod core;
-use self::core::LOG_N;
+use crate::core::LOG_N;
+
+pub mod batch_verifier;
+use batch_verifier::{InternalBatchVerifier, BulletproofsPlusBatchVerifier, BatchVerifier};
 
 pub(crate) mod original;
-use self::original::OriginalStruct;
+use crate::original::OriginalStruct;
 
 pub(crate) mod plus;
-use self::plus::*;
+use crate::plus::*;
 
-pub(crate) const MAX_OUTPUTS: usize = self::core::MAX_M;
+#[cfg(test)]
+mod tests;
+
+pub const MAX_COMMITMENTS: usize = crate::core::MAX_M;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum BulletproofError {
+  #[cfg_attr(feature = "std", error("no commitments to prove the range for"))]
+  NoCommitments,
+  #[cfg_attr(feature = "std", error("too many commitments to prove the range for"))]
+  TooManyCommitments,
+}
 
 /// Bulletproof enum, encapsulating both Bulletproofs and Bulletproofs+.
 #[allow(clippy::large_enum_variant)]
@@ -45,7 +62,7 @@ impl Bulletproof {
 
   // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
   //   src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
-  pub(crate) fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
+  pub fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
     #[allow(non_snake_case)]
     let mut LR_len = 0;
     let mut n_padded_outputs = 1;
@@ -66,7 +83,7 @@ impl Bulletproof {
     (bp_clawback, LR_len)
   }
 
-  pub(crate) fn fee_weight(plus: bool, outputs: usize) -> usize {
+  pub fn fee_weight(plus: bool, outputs: usize) -> usize {
     #[allow(non_snake_case)]
     let (bp_clawback, LR_len) = Bulletproof::calculate_bp_clawback(plus, outputs);
     32 * (Bulletproof::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
@@ -76,12 +93,12 @@ impl Bulletproof {
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: &[Commitment],
-  ) -> Result<Bulletproof, TransactionError> {
+  ) -> Result<Bulletproof, BulletproofError> {
     if outputs.is_empty() {
-      Err(TransactionError::NoOutputs)?;
+      Err(BulletproofError::NoCommitments)?;
     }
-    if outputs.len() > MAX_OUTPUTS {
-      Err(TransactionError::TooManyOutputs)?;
+    if outputs.len() > MAX_COMMITMENTS {
+      Err(BulletproofError::TooManyCommitments)?;
     }
     Ok(Bulletproof::Original(OriginalStruct::prove(rng, outputs)))
   }
@@ -90,12 +107,12 @@ impl Bulletproof {
   pub fn prove_plus<R: RngCore + CryptoRng>(
     rng: &mut R,
     outputs: Vec<Commitment>,
-  ) -> Result<Bulletproof, TransactionError> {
+  ) -> Result<Bulletproof, BulletproofError> {
     if outputs.is_empty() {
-      Err(TransactionError::NoOutputs)?;
+      Err(BulletproofError::NoCommitments)?;
     }
-    if outputs.len() > MAX_OUTPUTS {
-      Err(TransactionError::TooManyOutputs)?;
+    if outputs.len() > MAX_COMMITMENTS {
+      Err(BulletproofError::TooManyCommitments)?;
     }
     Ok(Bulletproof::Plus(
       AggregateRangeStatement::new(outputs.iter().map(Commitment::calculate).collect())
@@ -111,14 +128,14 @@ impl Bulletproof {
     match self {
       Bulletproof::Original(bp) => bp.verify(rng, commitments),
       Bulletproof::Plus(bp) => {
-        let mut verifier = BatchVerifier::new(1);
+        let mut verifier = BulletproofsPlusBatchVerifier(InternalBatchVerifier::new());
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
         };
-        if !statement.verify(rng, &mut verifier, (), bp.clone()) {
+        if !statement.verify(rng, &mut verifier, bp.clone()) {
           return false;
         }
-        verifier.verify_vartime()
+        verifier.verify()
       }
     }
   }
@@ -129,20 +146,19 @@ impl Bulletproof {
   /// state.
   /// Returns true if the Bulletproof is sane, regardless of their validity.
   #[must_use]
-  pub fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub fn batch_verify<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<ID, dalek_ff_group::EdwardsPoint>,
-    id: ID,
+    verifier: &mut BatchVerifier,
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproof::Original(bp) => bp.batch_verify(rng, verifier, id, commitments),
+      Bulletproof::Original(bp) => bp.batch_verify(rng, &mut verifier.original, commitments),
       Bulletproof::Plus(bp) => {
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
         };
-        statement.verify(rng, verifier, id, bp.clone())
+        statement.verify(rng, &mut verifier.plus, bp.clone())
       }
     }
   }
@@ -158,7 +174,7 @@ impl Bulletproof {
         write_point(&bp.S, w)?;
         write_point(&bp.T1, w)?;
         write_point(&bp.T2, w)?;
-        write_scalar(&bp.taux, w)?;
+        write_scalar(&bp.tau_x, w)?;
         write_scalar(&bp.mu, w)?;
         specific_write_vec(&bp.L, w)?;
         specific_write_vec(&bp.R, w)?;
@@ -168,19 +184,19 @@ impl Bulletproof {
       }
 
       Bulletproof::Plus(bp) => {
-        write_point(&bp.A.0, w)?;
-        write_point(&bp.wip.A.0, w)?;
-        write_point(&bp.wip.B.0, w)?;
-        write_scalar(&bp.wip.r_answer.0, w)?;
-        write_scalar(&bp.wip.s_answer.0, w)?;
-        write_scalar(&bp.wip.delta_answer.0, w)?;
-        specific_write_vec(&bp.wip.L.iter().copied().map(|L| L.0).collect::<Vec<_>>(), w)?;
-        specific_write_vec(&bp.wip.R.iter().copied().map(|R| R.0).collect::<Vec<_>>(), w)
+        write_point(&bp.A, w)?;
+        write_point(&bp.wip.A, w)?;
+        write_point(&bp.wip.B, w)?;
+        write_scalar(&bp.wip.r_answer, w)?;
+        write_scalar(&bp.wip.s_answer, w)?;
+        write_scalar(&bp.wip.delta_answer, w)?;
+        specific_write_vec(&bp.wip.L, w)?;
+        specific_write_vec(&bp.wip.R, w)
       }
     }
   }
 
-  pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.write_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 
@@ -203,7 +219,7 @@ impl Bulletproof {
       S: read_point(r)?,
       T1: read_point(r)?,
       T2: read_point(r)?,
-      taux: read_scalar(r)?,
+      tau_x: read_scalar(r)?,
       mu: read_scalar(r)?,
       L: read_vec(read_point, r)?,
       R: read_vec(read_point, r)?,
@@ -215,18 +231,16 @@ impl Bulletproof {
 
   /// Read a Bulletproof+.
   pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproof> {
-    use dalek_ff_group::{Scalar as DfgScalar, EdwardsPoint as DfgPoint};
-
     Ok(Bulletproof::Plus(AggregateRangeProof {
-      A: DfgPoint(read_point(r)?),
+      A: read_point(r)?,
       wip: WipProof {
-        A: DfgPoint(read_point(r)?),
-        B: DfgPoint(read_point(r)?),
-        r_answer: DfgScalar(read_scalar(r)?),
-        s_answer: DfgScalar(read_scalar(r)?),
-        delta_answer: DfgScalar(read_scalar(r)?),
-        L: read_vec(read_point, r)?.into_iter().map(DfgPoint).collect(),
-        R: read_vec(read_point, r)?.into_iter().map(DfgPoint).collect(),
+        A: read_point(r)?,
+        B: read_point(r)?,
+        r_answer: read_scalar(r)?,
+        s_answer: read_scalar(r)?,
+        delta_answer: read_scalar(r)?,
+        L: read_vec(read_point, r)?.into_iter().collect(),
+        R: read_vec(read_point, r)?.into_iter().collect(),
       },
     }))
   }

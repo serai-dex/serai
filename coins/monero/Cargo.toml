@@ -34,7 +34,7 @@ rand_distr = { version = "0.4", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
 
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "precomputed-tables"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 # Used for the hash to curve, along with the more complicated proofs
 group = { version = "0.13", default-features = false }
@@ -49,6 +49,7 @@ monero-io = { path = "io", version = "0.1", default-features = false }
 monero-generators = { path = "generators", version = "0.4", default-features = false }
 monero-primitives = { path = "primitives", version = "0.1", default-features = false }
 monero-clsag = { path = "ringct/clsag", version = "0.1", default-features = false }
+monero-bulletproofs = { path = "ringct/bulletproofs", version = "0.1", default-features = false }
 
 hex-literal = "0.4"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
@@ -96,6 +97,7 @@ std = [
   "monero-generators/std",
   "monero-primitives/std",
   "monero-clsag/std",
+  "monero-bulletproofs/std",
 
   "hex/std",
   "serde/std",
@@ -104,6 +106,7 @@ std = [
   "base58-monero/std",
 ]
 
+compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-bulletproofs/compile-time-generators"]
 http-rpc = ["digest_auth", "simple-request", "tokio"]
 multisig = ["transcript", "frost", "monero-clsag/multisig", "std"]
 binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]

@@ -1,17 +1,17 @@
 use std_shims::{vec::Vec, sync::OnceLock};
 
 use rand_core::{RngCore, CryptoRng};
-
 use zeroize::Zeroize;
 
-use curve25519_dalek::{scalar::Scalar as DalekScalar, edwards::EdwardsPoint as DalekPoint};
+use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwards::EdwardsPoint};
 
-use group::{ff::Field, Group};
-use dalek_ff_group::{ED25519_BASEPOINT_POINT as G, Scalar, EdwardsPoint};
+use monero_generators::H;
+use monero_primitives::{INV_EIGHT, Commitment, keccak256_to_scalar};
 
-use multiexp::{BatchVerifier, multiexp};
-
-use crate::{Commitment, ringct::bulletproofs::core::*};
+use crate::{
+  core::*,
+  batch_verifier::{InternalBatchVerifier, BulletproofsBatchVerifier},
+};
 
 include!(concat!(env!("OUT_DIR"), "/generators.rs"));
 
@@ -36,17 +36,17 @@ pub(crate) fn hadamard_fold(
 /// Internal structure representing a Bulletproof.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct OriginalStruct {
-  pub(crate) A: DalekPoint,
-  pub(crate) S: DalekPoint,
-  pub(crate) T1: DalekPoint,
-  pub(crate) T2: DalekPoint,
-  pub(crate) taux: DalekScalar,
-  pub(crate) mu: DalekScalar,
-  pub(crate) L: Vec<DalekPoint>,
-  pub(crate) R: Vec<DalekPoint>,
-  pub(crate) a: DalekScalar,
-  pub(crate) b: DalekScalar,
-  pub(crate) t: DalekScalar,
+  pub(crate) A: EdwardsPoint,
+  pub(crate) S: EdwardsPoint,
+  pub(crate) T1: EdwardsPoint,
+  pub(crate) T2: EdwardsPoint,
+  pub(crate) tau_x: Scalar,
+  pub(crate) mu: Scalar,
+  pub(crate) L: Vec<EdwardsPoint>,
+  pub(crate) R: Vec<EdwardsPoint>,
+  pub(crate) a: Scalar,
+  pub(crate) b: Scalar,
+  pub(crate) t: Scalar,
 }
 
 impl OriginalStruct {
@@ -68,7 +68,7 @@ impl OriginalStruct {
     let (mut rho, S) = alpha_rho(&mut *rng, generators, &sL, &sR);
 
     let y = hash_cache(&mut cache, &[A.compress().to_bytes(), S.compress().to_bytes()]);
-    let mut cache = hash_to_scalar(&y.to_bytes());
+    let mut cache = keccak256_to_scalar(y.to_bytes());
     let z = cache;
 
     let l0 = aL - z;
@@ -86,32 +86,32 @@ impl OriginalStruct {
     let r0 = ((aR + z) * &yMN) + &ScalarVector(zero_twos);
     let r1 = yMN * &sR;
 
-    let (T1, T2, x, mut taux) = {
+    let (T1, T2, x, mut tau_x) = {
       let t1 = l0.clone().inner_product(&r1) + r0.clone().inner_product(&l1);
       let t2 = l1.clone().inner_product(&r1);
 
       let mut tau1 = Scalar::random(&mut *rng);
       let mut tau2 = Scalar::random(&mut *rng);
 
-      let T1 = prove_multiexp(&[(t1, H()), (tau1, EdwardsPoint::generator())]);
-      let T2 = prove_multiexp(&[(t2, H()), (tau2, EdwardsPoint::generator())]);
+      let T1 = multiexp(&[(t1, H()), (tau1, ED25519_BASEPOINT_POINT)]) * INV_EIGHT();
+      let T2 = multiexp(&[(t2, H()), (tau2, ED25519_BASEPOINT_POINT)]) * INV_EIGHT();
 
       let x =
         hash_cache(&mut cache, &[z.to_bytes(), T1.compress().to_bytes(), T2.compress().to_bytes()]);
 
-      let taux = (tau2 * (x * x)) + (tau1 * x);
+      let tau_x = (tau2 * (x * x)) + (tau1 * x);
 
       tau1.zeroize();
       tau2.zeroize();
-      (T1, T2, x, taux)
+      (T1, T2, x, tau_x)
     };
 
     let mu = (x * rho) + alpha;
     alpha.zeroize();
     rho.zeroize();
 
-    for (i, gamma) in commitments.iter().map(|c| Scalar(c.mask)).enumerate() {
-      taux += zpow[i + 2] * gamma;
+    for (i, gamma) in commitments.iter().map(|c| c.mask).enumerate() {
+      tau_x += zpow[i + 2] * gamma;
     }
 
     let l = l0 + &(l1 * x);
@@ -120,12 +120,12 @@ impl OriginalStruct {
     let t = l.clone().inner_product(&r);
 
     let x_ip =
-      hash_cache(&mut cache, &[x.to_bytes(), taux.to_bytes(), mu.to_bytes(), t.to_bytes()]);
+      hash_cache(&mut cache, &[x.to_bytes(), tau_x.to_bytes(), mu.to_bytes(), t.to_bytes()]);
 
     let mut a = l;
     let mut b = r;
 
-    let yinv = y.invert().unwrap();
+    let yinv = y.invert();
     let yinvpow = ScalarVector::powers(yinv, MN);
 
     let mut G_proof = generators.G[.. a.len()].to_vec();
@@ -146,13 +146,13 @@ impl OriginalStruct {
       let (G_L, G_R) = G_proof.split_at(aL.len());
       let (H_L, H_R) = H_proof.split_at(aL.len());
 
-      let L_i = prove_multiexp(&LR_statements(&aL, G_R, &bR, H_L, cL, U));
-      let R_i = prove_multiexp(&LR_statements(&aR, G_L, &bL, H_R, cR, U));
+      let L_i = multiexp(&LR_statements(&aL, G_R, &bR, H_L, cL, U)) * INV_EIGHT();
+      let R_i = multiexp(&LR_statements(&aR, G_L, &bL, H_R, cR, U)) * INV_EIGHT();
       L.push(L_i);
       R.push(R_i);
 
       let w = hash_cache(&mut cache, &[L_i.compress().to_bytes(), R_i.compress().to_bytes()]);
-      let winv = w.invert().unwrap();
+      let winv = w.invert();
 
       a = (aL * w) + &(aR * winv);
       b = (bL * winv) + &(bR * w);
@@ -163,30 +163,17 @@ impl OriginalStruct {
       }
     }
 
-    let res = OriginalStruct {
-      A: *A,
-      S: *S,
-      T1: *T1,
-      T2: *T2,
-      taux: *taux,
-      mu: *mu,
-      L: L.drain(..).map(|L| *L).collect(),
-      R: R.drain(..).map(|R| *R).collect(),
-      a: *a[0],
-      b: *b[0],
-      t: *t,
-    };
+    let res = OriginalStruct { A, S, T1, T2, tau_x, mu, L, R, a: a[0], b: b[0], t };
     debug_assert!(res.verify(rng, &commitments_points));
     res
   }
 
   #[must_use]
-  fn verify_core<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  fn verify_core<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
-    id: ID,
-    commitments: &[DalekPoint],
+    verifier: &mut BulletproofsBatchVerifier,
+    commitments: &[EdwardsPoint],
   ) -> bool {
     // Verify commitments are valid
     if commitments.is_empty() || (commitments.len() > MAX_M) {
@@ -207,7 +194,7 @@ impl OriginalStruct {
     let (mut cache, commitments) = hash_commitments(commitments.iter().copied());
     let y = hash_cache(&mut cache, &[self.A.compress().to_bytes(), self.S.compress().to_bytes()]);
 
-    let z = hash_to_scalar(&y.to_bytes());
+    let z = keccak256_to_scalar(y.to_bytes());
     cache = z;
 
     let x = hash_cache(
@@ -217,18 +204,18 @@ impl OriginalStruct {
 
     let x_ip = hash_cache(
       &mut cache,
-      &[x.to_bytes(), self.taux.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()],
+      &[x.to_bytes(), self.tau_x.to_bytes(), self.mu.to_bytes(), self.t.to_bytes()],
     );
 
     let mut w = Vec::with_capacity(logMN);
     let mut winv = Vec::with_capacity(logMN);
     for (L, R) in self.L.iter().zip(&self.R) {
       w.push(hash_cache(&mut cache, &[L.compress().to_bytes(), R.compress().to_bytes()]));
-      winv.push(cache.invert().unwrap());
+      winv.push(cache.invert());
     }
 
     // Convert the proof from * INV_EIGHT to its actual form
-    let normalize = |point: &DalekPoint| EdwardsPoint(point.mul_by_cofactor());
+    let normalize = |point: &EdwardsPoint| point.mul_by_cofactor();
 
     let L = self.L.iter().map(normalize).collect::<Vec<_>>();
     let R = self.R.iter().map(normalize).collect::<Vec<_>>();
@@ -240,58 +227,69 @@ impl OriginalStruct {
     let commitments = commitments.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
     // Verify it
-    let mut proof = Vec::with_capacity(4 + commitments.len());
-
     let zpow = ScalarVector::powers(z, M + 3);
-    let ip1y = ScalarVector::powers(y, M * N).sum();
-    let mut k = -(zpow[2] * ip1y);
-    for j in 1 ..= M {
-      k -= zpow[j + 2] * IP12();
-    }
-    let y1 = Scalar(self.t) - ((z * ip1y) + k);
-    proof.push((-y1, H()));
 
-    proof.push((-Scalar(self.taux), G));
-
-    for (j, commitment) in commitments.iter().enumerate() {
-      proof.push((zpow[j + 2], *commitment));
-    }
-
-    proof.push((x, T1));
-    proof.push((x * x, T2));
-    verifier.queue(&mut *rng, id, proof);
-
-    proof = Vec::with_capacity(4 + (2 * (MN + logMN)));
-    let z3 = (Scalar(self.t) - (Scalar(self.a) * Scalar(self.b))) * x_ip;
-    proof.push((z3, H()));
-    proof.push((-Scalar(self.mu), G));
-
-    proof.push((Scalar::ONE, A));
-    proof.push((x, S));
-
+    // First multiexp
     {
-      let ypow = ScalarVector::powers(y, MN);
-      let yinv = y.invert().unwrap();
-      let yinvpow = ScalarVector::powers(yinv, MN);
+      let verifier_weight = Scalar::random(rng);
 
-      let w_cache = challenge_products(&w, &winv);
+      let ip1y = ScalarVector::powers(y, M * N).sum();
+      let mut k = -(zpow[2] * ip1y);
+      for j in 1 ..= M {
+        k -= zpow[j + 2] * IP12();
+      }
+      let y1 = self.t - ((z * ip1y) + k);
+      verifier.0.h -= verifier_weight * y1;
 
-      let generators = GENERATORS();
-      for i in 0 .. MN {
-        let g = (Scalar(self.a) * w_cache[i]) + z;
-        proof.push((-g, generators.G[i]));
+      verifier.0.g -= verifier_weight * self.tau_x;
 
-        let mut h = Scalar(self.b) * yinvpow[i] * w_cache[(!i) & (MN - 1)];
-        h -= ((zpow[(i / N) + 2] * TWO_N()[i % N]) + (z * ypow[i])) * yinvpow[i];
-        proof.push((-h, generators.H[i]));
+      for (j, commitment) in commitments.iter().enumerate() {
+        verifier.0.other.push((verifier_weight * zpow[j + 2], *commitment));
+      }
+
+      verifier.0.other.push((verifier_weight * x, T1));
+      verifier.0.other.push((verifier_weight * (x * x), T2));
+    }
+
+    // Second multiexp
+    {
+      let verifier_weight = Scalar::random(rng);
+      let z3 = (self.t - (self.a * self.b)) * x_ip;
+      verifier.0.h += verifier_weight * z3;
+      verifier.0.g -= verifier_weight * self.mu;
+
+      verifier.0.other.push((verifier_weight, A));
+      verifier.0.other.push((verifier_weight * x, S));
+
+      {
+        let ypow = ScalarVector::powers(y, MN);
+        let yinv = y.invert();
+        let yinvpow = ScalarVector::powers(yinv, MN);
+
+        let w_cache = challenge_products(&w, &winv);
+
+        while verifier.0.g_bold.len() < MN {
+          verifier.0.g_bold.push(Scalar::ZERO);
+        }
+        while verifier.0.h_bold.len() < MN {
+          verifier.0.h_bold.push(Scalar::ZERO);
+        }
+
+        for i in 0 .. MN {
+          let g = (self.a * w_cache[i]) + z;
+          verifier.0.g_bold[i] -= verifier_weight * g;
+
+          let mut h = self.b * yinvpow[i] * w_cache[(!i) & (MN - 1)];
+          h -= ((zpow[(i / N) + 2] * TWO_N()[i % N]) + (z * ypow[i])) * yinvpow[i];
+          verifier.0.h_bold[i] -= verifier_weight * h;
+        }
+      }
+
+      for i in 0 .. logMN {
+        verifier.0.other.push((verifier_weight * (w[i] * w[i]), L[i]));
+        verifier.0.other.push((verifier_weight * (winv[i] * winv[i]), R[i]));
       }
     }
-
-    for i in 0 .. logMN {
-      proof.push((w[i] * w[i], L[i]));
-      proof.push((winv[i] * winv[i], R[i]));
-    }
-    verifier.queue(rng, id, proof);
 
     true
   }
@@ -300,24 +298,23 @@ impl OriginalStruct {
   pub(crate) fn verify<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    commitments: &[DalekPoint],
+    commitments: &[EdwardsPoint],
   ) -> bool {
-    let mut verifier = BatchVerifier::new(1);
-    if self.verify_core(rng, &mut verifier, (), commitments) {
-      verifier.verify_vartime()
+    let mut verifier = BulletproofsBatchVerifier(InternalBatchVerifier::new());
+    if self.verify_core(rng, &mut verifier, commitments) {
+      verifier.verify()
     } else {
       false
     }
   }
 
   #[must_use]
-  pub(crate) fn batch_verify<ID: Copy + Zeroize, R: RngCore + CryptoRng>(
+  pub(crate) fn batch_verify<R: RngCore + CryptoRng>(
     &self,
     rng: &mut R,
-    verifier: &mut BatchVerifier<ID, EdwardsPoint>,
-    id: ID,
-    commitments: &[DalekPoint],
+    verifier: &mut BulletproofsBatchVerifier,
+    commitments: &[EdwardsPoint],
   ) -> bool {
-    self.verify_core(rng, verifier, id, commitments)
+    self.verify_core(rng, verifier, commitments)
   }
 }

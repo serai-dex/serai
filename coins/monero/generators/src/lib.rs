@@ -6,10 +6,7 @@ use std_shims::{sync::OnceLock, vec::Vec};
 
 use sha3::{Digest, Keccak256};
 
-use curve25519_dalek::edwards::{EdwardsPoint as DalekPoint};
-
-use group::{Group, GroupEncoding};
-use dalek_ff_group::EdwardsPoint;
+use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, edwards::EdwardsPoint};
 
 use monero_io::{write_varint, decompress_point};
 
@@ -23,24 +20,26 @@ fn keccak256(data: &[u8]) -> [u8; 32] {
   Keccak256::digest(data).into()
 }
 
-static H_CELL: OnceLock<DalekPoint> = OnceLock::new();
+static H_CELL: OnceLock<EdwardsPoint> = OnceLock::new();
 /// Monero's `H` generator.
 ///
 /// Contrary to convention (`G` for values, `H` for randomness), `H` is used by Monero for amounts
 /// within Pedersen commitments.
 #[allow(non_snake_case)]
-pub fn H() -> DalekPoint {
+pub fn H() -> EdwardsPoint {
   *H_CELL.get_or_init(|| {
-    decompress_point(keccak256(&EdwardsPoint::generator().to_bytes())).unwrap().mul_by_cofactor()
+    decompress_point(keccak256(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
+      .unwrap()
+      .mul_by_cofactor()
   })
 }
 
-static H_POW_2_CELL: OnceLock<[DalekPoint; 64]> = OnceLock::new();
+static H_POW_2_CELL: OnceLock<[EdwardsPoint; 64]> = OnceLock::new();
 /// Monero's `H` generator, multiplied by 2**i for i in 1 ..= 64.
 ///
 /// This table is useful when working with amounts, which are u64s.
 #[allow(non_snake_case)]
-pub fn H_pow_2() -> &'static [DalekPoint; 64] {
+pub fn H_pow_2() -> &'static [EdwardsPoint; 64] {
   H_POW_2_CELL.get_or_init(|| {
     let mut res = [H(); 64];
     for i in 1 .. 64 {
@@ -79,11 +78,11 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
 
     let mut even = preimage.clone();
     write_varint(&i, &mut even).unwrap();
-    res.H.push(EdwardsPoint(hash_to_point(keccak256(&even))));
+    res.H.push(hash_to_point(keccak256(&even)));
 
     let mut odd = preimage.clone();
     write_varint(&(i + 1), &mut odd).unwrap();
-    res.G.push(EdwardsPoint(hash_to_point(keccak256(&odd))));
+    res.G.push(hash_to_point(keccak256(&odd)));
   }
   res
 }

@@ -4,14 +4,12 @@ mod binaries {
 
   pub(crate) use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
-  pub(crate) use multiexp::BatchVerifier;
-
   pub(crate) use serde::Deserialize;
   pub(crate) use serde_json::json;
 
   pub(crate) use monero_serai::{
     Commitment,
-    ringct::RctPrunable,
+    ringct::{RctPrunable, bulletproofs::batch_verifier::BatchVerifier},
     transaction::{Input, Transaction},
     block::Block,
     rpc::{RpcError, Rpc, HttpRpc},
@@ -95,7 +93,7 @@ mod binaries {
         all_txs.extend(txs.txs);
       }
 
-      let mut batch = BatchVerifier::new(block.txs.len());
+      let mut batch = BatchVerifier::new();
       for (tx_hash, tx_res) in block.txs.into_iter().zip(all_txs) {
         assert_eq!(
           tx_res.tx_hash,
@@ -135,7 +133,6 @@ mod binaries {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
               &mut batch,
-              (),
               &tx.rct_signatures.base.commitments
             ));
           }
@@ -143,7 +140,6 @@ mod binaries {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
               &mut batch,
-              (),
               &tx.rct_signatures.base.commitments
             ));
 
@@ -234,7 +230,7 @@ mod binaries {
           }
         }
       }
-      assert!(batch.verify_vartime());
+      assert!(batch.verify());
     }
 
     println!("Deserialized, hashed, and reserialized {block_i} with {txs_len} TXs");

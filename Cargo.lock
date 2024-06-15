@@ -4752,6 +4752,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-bulletproofs"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "hex-literal",
+ "monero-generators",
+ "monero-io",
+ "monero-primitives",
+ "rand_core",
+ "std-shims",
+ "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-clsag"
 version = "0.1.0"
 dependencies = [
@@ -4819,6 +4835,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "modular-frost",
+ "monero-bulletproofs",
  "monero-clsag",
  "monero-generators",
  "monero-io",
@@ -8079,6 +8096,7 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "minimal-ed448",
+ "monero-bulletproofs",
  "monero-clsag",
  "monero-generators",
  "monero-io",

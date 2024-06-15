@@ -6,9 +6,9 @@ use std_shims::vec::Vec;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use group::ff::Field;
-use dalek_ff_group::{Scalar, EdwardsPoint};
-use multiexp::multiexp;
+use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
+
+use crate::core::multiexp;
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct ScalarVector(pub(crate) Vec<Scalar>);

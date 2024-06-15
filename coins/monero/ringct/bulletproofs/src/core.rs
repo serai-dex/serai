@@ -1,42 +1,44 @@
 use std_shims::{vec::Vec, sync::OnceLock};
 
 use rand_core::{RngCore, CryptoRng};
-
 use subtle::{Choice, ConditionallySelectable};
 
-use curve25519_dalek::edwards::EdwardsPoint as DalekPoint;
-
-use group::{ff::Field, Group};
-use dalek_ff_group::{Scalar, EdwardsPoint};
-
-use multiexp::multiexp as multiexp_const;
+use curve25519_dalek::{
+  constants::ED25519_BASEPOINT_TABLE,
+  traits::{MultiscalarMul, VartimeMultiscalarMul},
+  scalar::Scalar,
+  edwards::EdwardsPoint,
+};
 
 pub(crate) use monero_generators::Generators;
+use monero_primitives::{INV_EIGHT, Commitment, keccak256_to_scalar};
 
-use crate::{INV_EIGHT as DALEK_INV_EIGHT, H as DALEK_H, Commitment, hash_to_scalar as dalek_hash};
-pub(crate) use crate::ringct::bulletproofs::scalar_vector::*;
-
-#[inline]
-pub(crate) fn INV_EIGHT() -> Scalar {
-  Scalar(DALEK_INV_EIGHT())
-}
-
-#[inline]
-pub(crate) fn H() -> EdwardsPoint {
-  EdwardsPoint(DALEK_H())
-}
-
-pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
-  Scalar(dalek_hash(data))
-}
+pub(crate) use crate::scalar_vector::*;
 
 // Components common between variants
+// TODO: Move to generators? primitives?
 pub(crate) const MAX_M: usize = 16;
 pub(crate) const LOG_N: usize = 6; // 2 << 6 == N
 pub(crate) const N: usize = 64;
 
-pub(crate) fn prove_multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
-  multiexp_const(pairs) * INV_EIGHT()
+pub(crate) fn multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
+  let mut buf_scalars = Vec::with_capacity(pairs.len());
+  let mut buf_points = Vec::with_capacity(pairs.len());
+  for (scalar, point) in pairs {
+    buf_scalars.push(scalar);
+    buf_points.push(point);
+  }
+  EdwardsPoint::multiscalar_mul(buf_scalars, buf_points)
+}
+
+pub(crate) fn multiexp_vartime(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
+  let mut buf_scalars = Vec::with_capacity(pairs.len());
+  let mut buf_points = Vec::with_capacity(pairs.len());
+  for (scalar, point) in pairs {
+    buf_scalars.push(scalar);
+    buf_points.push(point);
+  }
+  EdwardsPoint::vartime_multiscalar_mul(buf_scalars, buf_points)
 }
 
 pub(crate) fn vector_exponent(
@@ -52,7 +54,7 @@ pub(crate) fn hash_cache(cache: &mut Scalar, mash: &[[u8; 32]]) -> Scalar {
   let slice =
     &[cache.to_bytes().as_ref(), mash.iter().copied().flatten().collect::<Vec<_>>().as_ref()]
       .concat();
-  *cache = hash_to_scalar(slice);
+  *cache = keccak256_to_scalar(slice);
   *cache
 }
 
@@ -88,11 +90,11 @@ pub(crate) fn bit_decompose(commitments: &[Commitment]) -> (ScalarVector, Scalar
   (aL, aR)
 }
 
-pub(crate) fn hash_commitments<C: IntoIterator<Item = DalekPoint>>(
+pub(crate) fn hash_commitments<C: IntoIterator<Item = EdwardsPoint>>(
   commitments: C,
 ) -> (Scalar, Vec<EdwardsPoint>) {
-  let V = commitments.into_iter().map(|c| EdwardsPoint(c) * INV_EIGHT()).collect::<Vec<_>>();
-  (hash_to_scalar(&V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)
+  let V = commitments.into_iter().map(|c| c * INV_EIGHT()).collect::<Vec<_>>();
+  (keccak256_to_scalar(V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)
 }
 
 pub(crate) fn alpha_rho<R: RngCore + CryptoRng>(
@@ -102,7 +104,7 @@ pub(crate) fn alpha_rho<R: RngCore + CryptoRng>(
   aR: &ScalarVector,
 ) -> (Scalar, EdwardsPoint) {
   let ar = Scalar::random(rng);
-  (ar, (vector_exponent(generators, aL, aR) + (EdwardsPoint::generator() * ar)) * INV_EIGHT())
+  (ar, (vector_exponent(generators, aL, aR) + (ED25519_BASEPOINT_TABLE * &ar)) * INV_EIGHT())
 }
 
 pub(crate) fn LR_statements(
@@ -144,7 +146,7 @@ pub(crate) fn challenge_products(w: &[Scalar], winv: &[Scalar]) -> Vec<Scalar> {
 
   // Sanity check as if the above failed to populate, it'd be critical
   for w in &products {
-    debug_assert!(!bool::from(w.is_zero()));
+    debug_assert!(*w != Scalar::ZERO);
   }
 
   products

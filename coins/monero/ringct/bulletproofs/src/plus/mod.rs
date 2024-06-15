@@ -1,9 +1,13 @@
 #![allow(non_snake_case)]
 
-use group::Group;
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use std_shims::sync::OnceLock;
 
-pub(crate) use crate::ringct::bulletproofs::scalar_vector::ScalarVector;
+use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwards::EdwardsPoint};
+
+use monero_generators::{H, Generators};
+
+pub(crate) use crate::scalar_vector::ScalarVector;
+
 mod point_vector;
 pub(crate) use point_vector::PointVector;
 
@@ -23,55 +27,51 @@ pub(crate) fn padded_pow_of_2(i: usize) -> usize {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum GeneratorsList {
-  GBold1,
-  HBold1,
+  GBold,
+  HBold,
 }
 
 // TODO: Table these
 #[derive(Clone, Debug)]
-pub(crate) struct Generators {
-  g_bold1: &'static [EdwardsPoint],
-  h_bold1: &'static [EdwardsPoint],
+pub(crate) struct BpPlusGenerators {
+  g_bold: &'static [EdwardsPoint],
+  h_bold: &'static [EdwardsPoint],
 }
 
-mod generators {
-  use std_shims::sync::OnceLock;
-  use monero_generators::Generators;
-  include!(concat!(env!("OUT_DIR"), "/generators_plus.rs"));
-}
+include!(concat!(env!("OUT_DIR"), "/generators_plus.rs"));
 
-impl Generators {
+impl BpPlusGenerators {
   #[allow(clippy::new_without_default)]
   pub(crate) fn new() -> Self {
-    let gens = generators::GENERATORS();
-    Generators { g_bold1: &gens.G, h_bold1: &gens.H }
+    let gens = GENERATORS();
+    BpPlusGenerators { g_bold: &gens.G, h_bold: &gens.H }
   }
 
   pub(crate) fn len(&self) -> usize {
-    self.g_bold1.len()
+    self.g_bold.len()
   }
 
   pub(crate) fn g() -> EdwardsPoint {
-    dalek_ff_group::EdwardsPoint(crate::H())
+    H()
   }
 
   pub(crate) fn h() -> EdwardsPoint {
-    EdwardsPoint::generator()
+    ED25519_BASEPOINT_POINT
   }
 
   pub(crate) fn generator(&self, list: GeneratorsList, i: usize) -> EdwardsPoint {
     match list {
-      GeneratorsList::GBold1 => self.g_bold1[i],
-      GeneratorsList::HBold1 => self.h_bold1[i],
+      GeneratorsList::GBold => self.g_bold[i],
+      GeneratorsList::HBold => self.h_bold[i],
     }
   }
 
   pub(crate) fn reduce(&self, generators: usize) -> Self {
     // Round to the nearest power of 2
     let generators = padded_pow_of_2(generators);
-    assert!(generators <= self.g_bold1.len());
+    assert!(generators <= self.g_bold.len());
 
-    Generators { g_bold1: &self.g_bold1[.. generators], h_bold1: &self.h_bold1[.. generators] }
+    BpPlusGenerators { g_bold: &self.g_bold[.. generators], h_bold: &self.h_bold[.. generators] }
   }
 }
 

@@ -2,13 +2,14 @@
 
 use rand_core::OsRng;
 
-use multiexp::BatchVerifier;
-use group::{ff::Field, Group};
-use dalek_ff_group::{Scalar, EdwardsPoint};
+use curve25519_dalek::{traits::Identity, scalar::Scalar, edwards::EdwardsPoint};
 
-use crate::ringct::bulletproofs::plus::{
-  ScalarVector, PointVector, GeneratorsList, Generators,
-  weighted_inner_product::{WipStatement, WipWitness},
+use crate::{
+  batch_verifier::BulletproofsPlusBatchVerifier,
+  plus::{
+    ScalarVector, PointVector, GeneratorsList, BpPlusGenerators,
+    weighted_inner_product::{WipStatement, WipWitness},
+  },
 };
 
 #[test]
@@ -17,33 +18,33 @@ fn test_zero_weighted_inner_product() {
   let P = EdwardsPoint::identity();
   let y = Scalar::random(&mut OsRng);
 
-  let generators = Generators::new().reduce(1);
+  let generators = BpPlusGenerators::new().reduce(1);
   let statement = WipStatement::new(generators, P, y);
   let witness = WipWitness::new(ScalarVector::new(1), ScalarVector::new(1), Scalar::ZERO).unwrap();
 
   let transcript = Scalar::random(&mut OsRng);
   let proof = statement.clone().prove(&mut OsRng, transcript, &witness).unwrap();
 
-  let mut verifier = BatchVerifier::new(1);
-  statement.verify(&mut OsRng, &mut verifier, (), transcript, proof);
-  assert!(verifier.verify_vartime());
+  let mut verifier = BulletproofsPlusBatchVerifier::default();
+  statement.verify(&mut OsRng, &mut verifier, transcript, proof);
+  assert!(verifier.verify());
 }
 
 #[test]
 fn test_weighted_inner_product() {
   // P = sum(g_bold * a, h_bold * b, g * (a * y * b), h * alpha)
-  let mut verifier = BatchVerifier::new(6);
-  let generators = Generators::new();
+  let mut verifier = BulletproofsPlusBatchVerifier::default();
+  let generators = BpPlusGenerators::new();
   for i in [1, 2, 4, 8, 16, 32] {
     let generators = generators.reduce(i);
-    let g = Generators::g();
-    let h = Generators::h();
+    let g = BpPlusGenerators::g();
+    let h = BpPlusGenerators::h();
     assert_eq!(generators.len(), i);
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. i {
-      g_bold.push(generators.generator(GeneratorsList::GBold1, i));
-      h_bold.push(generators.generator(GeneratorsList::HBold1, i));
+      g_bold.push(generators.generator(GeneratorsList::GBold, i));
+      h_bold.push(generators.generator(GeneratorsList::HBold, i));
     }
     let g_bold = PointVector(g_bold);
     let h_bold = PointVector(h_bold);
@@ -75,7 +76,7 @@ fn test_weighted_inner_product() {
 
     let transcript = Scalar::random(&mut OsRng);
     let proof = statement.clone().prove(&mut OsRng, transcript, &witness).unwrap();
-    statement.verify(&mut OsRng, &mut verifier, (), transcript, proof);
+    statement.verify(&mut OsRng, &mut verifier, transcript, proof);
   }
-  assert!(verifier.verify_vartime());
+  assert!(verifier.verify());
 }

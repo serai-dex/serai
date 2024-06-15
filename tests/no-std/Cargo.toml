@@ -39,4 +39,5 @@ monero-io = { path = "../../coins/monero/io", default-features = false }
 monero-generators = { path = "../../coins/monero/generators", default-features = false }
 monero-primitives = { path = "../../coins/monero/primitives", default-features = false }
 monero-clsag = { path = "../../coins/monero/ringct/clsag", default-features = false }
+monero-bulletproofs = { path = "../../coins/monero/ringct/bulletproofs", default-features = false }
 monero-serai = { path = "../../coins/monero", default-features = false }
