@@ -190,7 +190,7 @@ fn prepare_inputs(
   // We now need to sort the inputs by their key image
   // We take the transaction's inputs, temporarily
   let mut tx_inputs = Vec::with_capacity(inputs.len());
-  std::mem::swap(&mut tx_inputs, &mut tx.prefix.inputs);
+  core::mem::swap(&mut tx_inputs, &mut tx.prefix.inputs);
 
   // Then we join them with their signable contexts
   let mut joint = tx_inputs.into_iter().zip(signable).collect::<Vec<_>>();

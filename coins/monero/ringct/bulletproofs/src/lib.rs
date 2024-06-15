@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 
 use std_shims::{
-  vec::Vec,
+  vec, vec::Vec,
   io::{self, Read, Write},
 };
 

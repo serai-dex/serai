@@ -1,3 +1,5 @@
+use std_shims::{vec, vec::Vec};
+
 use curve25519_dalek::{
   constants::ED25519_BASEPOINT_POINT,
   traits::{IsIdentity, VartimeMultiscalarMul},

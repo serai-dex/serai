@@ -2,7 +2,7 @@ use core::{
   borrow::Borrow,
   ops::{Index, IndexMut, Add, Sub, Mul},
 };
-use std_shims::vec::Vec;
+use std_shims::{vec, vec::Vec};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

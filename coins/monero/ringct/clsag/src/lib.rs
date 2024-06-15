@@ -5,7 +5,7 @@
 
 use core::ops::Deref;
 use std_shims::{
-  vec::Vec,
+  vec, vec::Vec,
   io::{self, Read, Write},
 };
 
