@@ -12,7 +12,7 @@ pub(crate) mod hash_to_point;
 pub use hash_to_point::{raw_hash_to_point, hash_to_point};
 
 /// MLSAG struct, along with verifying functionality.
-pub mod mlsag;
+pub use monero_mlsag as mlsag;
 /// CLSAG struct, along with signing and verifying functionality.
 pub use monero_clsag as clsag;
 /// BorromeanRange struct, along with verifying functionality.

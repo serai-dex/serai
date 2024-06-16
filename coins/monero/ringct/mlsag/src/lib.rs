@@ -1,3 +1,9 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+#![allow(non_snake_case)]
+
 use std_shims::{
   vec::Vec,
   io::{self, Read, Write},
@@ -7,9 +13,9 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::{traits::IsIdentity, Scalar, EdwardsPoint};
 
-use monero_generators::H;
-
-use crate::{hash_to_scalar, ringct::hash_to_point, serialize::*};
+use monero_io::*;
+use monero_generators::{H, hash_to_point};
+use monero_primitives::keccak256_to_scalar;
 
 /// Errors when working with MLSAGs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -68,17 +74,17 @@ impl RingMatrix {
     RingMatrix::new(matrix)
   }
 
-  /// Iterate the members of the matrix.
+  /// Iterate over the members of the matrix.
   fn iter(&self) -> impl Iterator<Item = &[EdwardsPoint]> {
     self.matrix.iter().map(AsRef::as_ref)
   }
 
-  /// Returns the amount of members in the ring.
+  /// Get the amount of members in the ring.
   pub fn members(&self) -> usize {
     self.matrix.len()
   }
 
-  /// Returns the length of a ring member.
+  /// Get the length of a ring member.
   ///
   /// A ring member is a vector of points for which the signer knows all of the discrete logarithms
   /// of.
@@ -96,7 +102,7 @@ pub struct Mlsag {
 }
 
 impl Mlsag {
-  /// Write the MLSAG to a writer.
+  /// Write a MLSAG.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for ss in &self.ss {
       write_raw_vec(write_scalar, ss, w)?;
@@ -104,7 +110,7 @@ impl Mlsag {
     write_scalar(&self.cc, w)
   }
 
-  /// Read the MLSAG from a reader.
+  /// Read a MLSAG.
   pub fn read<R: Read>(mixins: usize, ss_2_elements: usize, r: &mut R) -> io::Result<Mlsag> {
     Ok(Mlsag {
       ss: (0 .. mixins)
@@ -114,7 +120,7 @@ impl Mlsag {
     })
   }
 
-  /// Verify the MLSAG.
+  /// Verify a MLSAG.
   pub fn verify(
     &self,
     msg: &[u8; 32],
@@ -149,7 +155,8 @@ impl Mlsag {
         #[allow(non_snake_case)]
         let L = EdwardsPoint::vartime_double_scalar_mul_basepoint(&ci, ring_member_entry, s);
 
-        buf.extend_from_slice(ring_member_entry.compress().as_bytes());
+        let compressed_ring_member_entry = ring_member_entry.compress();
+        buf.extend_from_slice(compressed_ring_member_entry.as_bytes());
         buf.extend_from_slice(L.compress().as_bytes());
 
         // Not all dimensions need to be linkable, e.g. commitments, and only linkable layers need
@@ -160,12 +167,12 @@ impl Mlsag {
           }
 
           #[allow(non_snake_case)]
-          let R = (s * hash_to_point(ring_member_entry)) + (ci * ki);
+          let R = (s * hash_to_point(compressed_ring_member_entry.to_bytes())) + (ci * ki);
           buf.extend_from_slice(R.compress().as_bytes());
         }
       }
 
-      ci = hash_to_scalar(&buf);
+      ci = keccak256_to_scalar(&buf);
       // keep the msg in the buffer.
       buf.drain(msg.len() ..);
     }
@@ -190,7 +197,7 @@ pub struct AggregateRingMatrixBuilder {
 impl AggregateRingMatrixBuilder {
   /// Create a new AggregateRingMatrixBuilder.
   ///
-  /// Takes in the transaction's outputs; commitments and fee.
+  /// This takes in the transaction's outputs' commitments and fee used.
   pub fn new(commitments: &[EdwardsPoint], fee: u64) -> Self {
     AggregateRingMatrixBuilder {
       key_ring: vec![],

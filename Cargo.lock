@@ -4810,12 +4810,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "monero-primitives"
+name = "monero-mlsag"
 version = "0.1.0"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
+ "monero-primitives",
+ "std-shims",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "monero-primitives"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "monero-generators",
  "sha3",
  "std-shims",
  "zeroize",
@@ -4839,8 +4851,8 @@ dependencies = [
  "monero-clsag",
  "monero-generators",
  "monero-io",
+ "monero-mlsag",
  "monero-primitives",
- "multiexp",
  "pbkdf2 0.12.2",
  "rand",
  "rand_chacha",
@@ -8100,6 +8112,7 @@ dependencies = [
  "monero-clsag",
  "monero-generators",
  "monero-io",
+ "monero-mlsag",
  "monero-primitives",
  "monero-serai",
  "multiexp",

@@ -39,7 +39,6 @@ curve25519-dalek = { version = "4", default-features = false, features = ["alloc
 # Used for the hash to curve, along with the more complicated proofs
 group = { version = "0.13", default-features = false }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.4", default-features = false }
-multiexp = { path = "../../crypto/multiexp", version = "0.4", default-features = false, features = ["batch"] }
 
 # Needed for multisig
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
@@ -48,6 +47,7 @@ frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8
 monero-io = { path = "io", version = "0.1", default-features = false }
 monero-generators = { path = "generators", version = "0.4", default-features = false }
 monero-primitives = { path = "primitives", version = "0.1", default-features = false }
+monero-mlsag = { path = "ringct/mlsag", version = "0.1", default-features = false }
 monero-clsag = { path = "ringct/clsag", version = "0.1", default-features = false }
 monero-bulletproofs = { path = "ringct/bulletproofs", version = "0.1", default-features = false }
 
@@ -89,13 +89,12 @@ std = [
   "sha3/std",
   "pbkdf2/std",
 
-  "multiexp/std",
-
   "transcript/std",
 
   "monero-io/std",
   "monero-generators/std",
   "monero-primitives/std",
+  "monero-mlsag/std",
   "monero-clsag/std",
   "monero-bulletproofs/std",
 
