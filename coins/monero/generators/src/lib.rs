@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use std_shims::{sync::OnceLock, vec::Vec};
@@ -59,7 +60,9 @@ pub const LOG_COMMITMENT_BITS: usize = 6; // 2 ** 6 == N
 /// Container struct for Bulletproofs(+) generators.
 #[allow(non_snake_case)]
 pub struct Generators {
+  /// The G (bold) vector of generators.
   pub G: Vec<EdwardsPoint>,
+  /// The H (bold) vector of generators.
   pub H: Vec<EdwardsPoint>,
 }
 

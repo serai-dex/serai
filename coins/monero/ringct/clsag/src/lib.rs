@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_snake_case)]
 
@@ -24,7 +25,7 @@ use curve25519_dalek::{
 
 use monero_io::*;
 use monero_generators::hash_to_point;
-use monero_primitives::{INV_EIGHT, BASEPOINT_PRECOMP, Commitment, Decoys, keccak256_to_scalar};
+use monero_primitives::{INV_EIGHT, G_PRECOMP, Commitment, Decoys, keccak256_to_scalar};
 
 #[cfg(feature = "multisig")]
 mod multisig;
@@ -189,7 +190,7 @@ fn core(
         EdwardsPoint::multiscalar_mul([s[i], c_p, c_c], [ED25519_BASEPOINT_POINT, P[i], C[i]])
       }
       Mode::Verify(..) => {
-        BASEPOINT_PRECOMP().vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
+        G_PRECOMP().vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
       }
     };
 

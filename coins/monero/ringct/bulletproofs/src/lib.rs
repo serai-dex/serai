@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_snake_case)]
 
@@ -53,7 +54,9 @@ pub enum BulletproofError {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproof {
+  /// A Bulletproof.
   Original(OriginalStruct),
+  /// A Bulletproof+.
   Plus(AggregateRangeProof),
 }
 

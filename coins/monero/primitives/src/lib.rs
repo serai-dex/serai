@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use std_shims::vec::Vec;
@@ -21,31 +22,32 @@ use monero_generators::H;
 // On std, we cache some variables in statics.
 #[cfg(feature = "std")]
 static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
+/// The inverse of 8 over l.
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
-/// The inverse of 8 over l.
 pub fn INV_EIGHT() -> Scalar {
   *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
 }
 // In no-std environments, we prefer the reduced memory use and calculate it ad-hoc.
+/// The inverse of 8 over l.
 #[cfg(not(feature = "std"))]
 #[allow(non_snake_case)]
-/// The inverse of 8 over l.
 pub fn INV_EIGHT() -> Scalar {
   Scalar::from(8u8).invert()
 }
 
 #[cfg(feature = "std")]
-static BASEPOINT_PRECOMP_CELL: OnceLock<VartimeEdwardsPrecomputation> = OnceLock::new();
+static G_PRECOMP_CELL: OnceLock<VartimeEdwardsPrecomputation> = OnceLock::new();
+/// A cached (if std) pre-computation of the Ed25519 generator, G.
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
-pub fn BASEPOINT_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
-  BASEPOINT_PRECOMP_CELL
-    .get_or_init(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]))
+pub fn G_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
+  G_PRECOMP_CELL.get_or_init(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]))
 }
+/// A cached (if std) pre-computation of the Ed25519 generator, G.
 #[cfg(not(feature = "std"))]
 #[allow(non_snake_case)]
-pub fn BASEPOINT_PRECOMP() -> VartimeEdwardsPrecomputation {
+pub fn G_PRECOMP() -> VartimeEdwardsPrecomputation {
   VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT])
 }
 
@@ -71,7 +73,9 @@ pub fn keccak256_to_scalar(data: impl AsRef<[u8]>) -> Scalar {
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Commitment {
+  /// The mask for this commitment.
   pub mask: Scalar,
+  /// The amount committed to by this commitment.
   pub amount: u64,
 }
 
@@ -147,12 +151,12 @@ impl Decoys {
     self.signer_index
   }
 
-  // The ring.
+  /// The ring.
   pub fn ring(&self) -> &[[EdwardsPoint; 2]] {
     &self.ring
   }
 
-  // The [key, commitment] pair of the signer.
+  /// The [key, commitment] pair of the signer.
   pub fn signer_ring_members(&self) -> [EdwardsPoint; 2] {
     self.ring[usize::from(self.signer_index)]
   }
