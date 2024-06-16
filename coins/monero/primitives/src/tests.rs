@@ -1,6 +1,6 @@
 use curve25519_dalek::scalar::Scalar;
 
-use crate::unreduced_scalar::*;
+use crate::UnreducedScalar;
 
 #[test]
 fn recover_scalars() {

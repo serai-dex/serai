@@ -25,7 +25,11 @@ sha3 = { version = "0.10", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 # Other Monero dependencies
+monero-io = { path = "../io", version = "0.1", default-features = false }
 monero-generators = { path = "../generators", version = "0.4", default-features = false }
+
+[dev-dependencies]
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [features]
 std = [

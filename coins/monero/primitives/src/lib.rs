@@ -19,6 +19,12 @@ use curve25519_dalek::{
 
 use monero_generators::H;
 
+mod unreduced_scalar;
+pub use unreduced_scalar::UnreducedScalar;
+
+#[cfg(test)]
+mod tests;
+
 // On std, we cache some variables in statics.
 #[cfg(feature = "std")]
 static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();

@@ -16,7 +16,7 @@ pub use monero_mlsag as mlsag;
 /// CLSAG struct, along with signing and verifying functionality.
 pub use monero_clsag as clsag;
 /// BorromeanRange struct, along with verifying functionality.
-pub mod borromean;
+pub use monero_borromean as borromean;
 /// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub use monero_bulletproofs as bulletproofs;
 

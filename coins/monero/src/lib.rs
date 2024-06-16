@@ -23,9 +23,6 @@ mod merkle;
 use monero_io as serialize;
 use serialize::{read_byte, read_u16};
 
-/// UnreducedScalar struct with functionality for recovering incorrectly reduced scalars.
-mod unreduced_scalar;
-
 /// Ring Signature structs and functionality.
 pub mod ring_signatures;
 

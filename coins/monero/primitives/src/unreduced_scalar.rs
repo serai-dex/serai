@@ -1,18 +1,19 @@
 use core::cmp::Ordering;
-
 use std_shims::{
   sync::OnceLock,
   io::{self, *},
 };
 
+use zeroize::Zeroize;
+
 use curve25519_dalek::scalar::Scalar;
 
-use crate::serialize::*;
+use monero_io::*;
 
 static PRECOMPUTED_SCALARS_CELL: OnceLock<[Scalar; 8]> = OnceLock::new();
-/// Precomputed scalars used to recover an incorrectly reduced scalar.
+// Precomputed scalars used to recover an incorrectly reduced scalar.
 #[allow(non_snake_case)]
-pub(crate) fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
+fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
   *PRECOMPUTED_SCALARS_CELL.get_or_init(|| {
     let mut precomputed_scalars = [Scalar::ONE; 8];
     for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
@@ -22,14 +23,23 @@ pub(crate) fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
   })
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// An unreduced scalar.
+///
+/// While most of modern Monero enforces scalars be reduced, certain legacy parts of the code did
+/// not. These section can generally simply be read as a scalar/reduced into a scalar when the time
+/// comes, yet a couple have non-standard reductions performed.
+///
+/// This struct delays scalar conversions and offers the non-standard reduction.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct UnreducedScalar(pub [u8; 32]);
 
 impl UnreducedScalar {
+  /// Write an UnreducedScalar.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(&self.0)
   }
 
+  /// Read an UnreducedScalar.
   pub fn read<R: Read>(r: &mut R) -> io::Result<UnreducedScalar> {
     Ok(UnreducedScalar(read_bytes(r)?))
   }
@@ -43,12 +53,12 @@ impl UnreducedScalar {
     bits
   }
 
-  /// Computes the non-adjacent form of this scalar with width 5.
-  ///
-  /// This matches Monero's `slide` function and intentionally gives incorrect outputs under
-  /// certain conditions in order to match Monero.
-  ///
-  /// This function does not execute in constant time.
+  // Computes the non-adjacent form of this scalar with width 5.
+  //
+  // This matches Monero's `slide` function and intentionally gives incorrect outputs under
+  // certain conditions in order to match Monero.
+  //
+  // This function does not execute in constant time.
   fn non_adjacent_form(&self) -> [i8; 256] {
     let bits = self.as_bits();
     let mut naf = [0i8; 256];
@@ -104,11 +114,11 @@ impl UnreducedScalar {
   /// Recover the scalar that an array of bytes was incorrectly interpreted as by Monero's `slide`
   /// function.
   ///
-  /// In Borromean range proofs Monero was not checking that the scalars used were
-  /// reduced. This lead to the scalar stored being interpreted as a different scalar,
-  /// this function recovers that scalar.
+  /// In Borromean range proofs, Monero was not checking that the scalars used were
+  /// reduced. This lead to the scalar stored being interpreted as a different scalar.
+  /// This function recovers that scalar.
   ///
-  /// See: https://github.com/monero-project/monero/issues/8438
+  /// See https://github.com/monero-project/monero/issues/8438 for more info.
   pub fn recover_monero_slide_scalar(&self) -> Scalar {
     if self.0[31] & 128 == 0 {
       // Computing the w-NAF of a number can only give an output with 1 more bit than

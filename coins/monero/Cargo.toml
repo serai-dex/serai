@@ -49,6 +49,7 @@ monero-generators = { path = "generators", version = "0.4", default-features = f
 monero-primitives = { path = "primitives", version = "0.1", default-features = false }
 monero-mlsag = { path = "ringct/mlsag", version = "0.1", default-features = false }
 monero-clsag = { path = "ringct/clsag", version = "0.1", default-features = false }
+monero-borromean = { path = "ringct/borromean", version = "0.1", default-features = false }
 monero-bulletproofs = { path = "ringct/bulletproofs", version = "0.1", default-features = false }
 
 hex-literal = "0.4"

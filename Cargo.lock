@@ -4752,6 +4752,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-borromean"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "monero-generators",
+ "monero-io",
+ "monero-primitives",
+ "std-shims",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
 dependencies = [
@@ -4827,7 +4839,9 @@ name = "monero-primitives"
 version = "0.1.0"
 dependencies = [
  "curve25519-dalek",
+ "hex",
  "monero-generators",
+ "monero-io",
  "sha3",
  "std-shims",
  "zeroize",
@@ -4847,6 +4861,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "modular-frost",
+ "monero-borromean",
  "monero-bulletproofs",
  "monero-clsag",
  "monero-generators",
