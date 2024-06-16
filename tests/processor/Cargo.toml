@@ -31,7 +31,8 @@ bitcoin-serai = { path = "../../coins/bitcoin" }
 k256 = "0.13"
 ethereum-serai = { path = "../../coins/ethereum" }
 
-monero-serai = { path = "../../coins/monero" }
+monero-simple-request-rpc = { path = "../../coins/monero/rpc/simple-request" }
+monero-wallet = { path = "../../coins/monero/wallet" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 

@@ -1,0 +1,88 @@
+[package]
+name = "monero-wallet"
+version = "0.1.0"
+description = "Wallet functionality for the Monero protocol, built around monero-serai"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/wallet"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+async-trait = { version = "0.1", default-features = false }
+thiserror = { version = "1", default-features = false, optional = true }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false }
+
+rand_core = { version = "0.6", default-features = false }
+# Used to send transactions
+rand = { version = "0.8", default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
+# Used to select decoys
+rand_distr = { version = "0.4", default-features = false }
+
+sha3 = { version = "0.10", default-features = false }
+pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
+
+group = { version = "0.13", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "group"] }
+
+# Multisig dependencies
+transcript = { package = "flexible-transcript", path = "../../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4", default-features = false, optional = true }
+frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["ed25519"], optional = true }
+
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+base58-monero = { version = "2", default-features = false, features = ["check"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+
+monero-serai = { path = "..", default-features = false }
+monero-rpc = { path = "../rpc", default-features = false }
+
+[dev-dependencies]
+hex-literal = "0.4"
+
+frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["ed25519", "tests"] }
+
+tokio = { version = "1", features = ["sync", "macros"] }
+
+monero-simple-request-rpc = { path = "../rpc/simple-request", default-features = false }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "zeroize/std",
+  "subtle/std",
+
+  "rand_core/std",
+  "rand/std",
+  "rand_chacha/std",
+  "rand_distr/std",
+
+  "sha3/std",
+  "pbkdf2/std",
+
+  "hex/std",
+  "base58-monero/std",
+  "serde/std",
+  "serde_json/std",
+
+  "monero-serai/std",
+  "monero-rpc/std",
+]
+multisig = ["transcript", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]
+default = ["std"]

@@ -1,3 +1,4 @@
+/* TODO
 #[cfg(feature = "binaries")]
 mod binaries {
   pub(crate) use std::sync::Arc;
@@ -12,14 +13,14 @@ mod binaries {
     ringct::{RctPrunable, bulletproofs::BatchVerifier},
     transaction::{Input, Transaction},
     block::Block,
-    rpc::{RpcError, Rpc, HttpRpc},
+    rpc::{RpcError, Rpc, SimpleRequestRpc},
   };
 
   pub(crate) use monero_io::decompress_point;
 
   pub(crate) use tokio::task::JoinHandle;
 
-  pub(crate) async fn check_block(rpc: Arc<Rpc<HttpRpc>>, block_i: usize) {
+  pub(crate) async fn check_block(rpc: Arc<Rpc<SimpleRequestRpc>>, block_i: usize) {
     let hash = loop {
       match rpc.get_block_hash(block_i).await {
         Ok(hash) => break hash,
@@ -157,7 +158,7 @@ mod binaries {
               }
 
               async fn get_outs(
-                rpc: &Rpc<HttpRpc>,
+                rpc: &Rpc<SimpleRequestRpc>,
                 amount: u64,
                 indexes: &[u64],
               ) -> Vec<[EdwardsPoint; 2]> {
@@ -268,9 +269,9 @@ async fn main() {
   let nodes = if specified_nodes.is_empty() { default_nodes } else { specified_nodes };
 
   let rpc = |url: String| async move {
-    HttpRpc::new(url.clone())
+    SimpleRequestRpc::new(url.clone())
       .await
-      .unwrap_or_else(|_| panic!("couldn't create HttpRpc connected to {url}"))
+      .unwrap_or_else(|_| panic!("couldn't create SimpleRequestRpc connected to {url}"))
   };
   let main_rpc = rpc(nodes[0].clone()).await;
   let mut rpcs = vec![];
@@ -315,3 +316,6 @@ async fn main() {
 fn main() {
   panic!("To run binaries, please build with `--feature binaries`.");
 }
+*/
+
+fn main() {}

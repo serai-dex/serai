@@ -27,14 +27,6 @@ pub mod transaction;
 /// Block structs.
 pub mod block;
 
-/// Monero daemon RPC interface.
-pub mod rpc;
-/// Wallet functionality, enabling scanning and sending transactions.
-pub mod wallet;
-
-#[cfg(test)]
-mod tests;
-
 pub const DEFAULT_LOCK_WINDOW: usize = 10;
 pub const COINBASE_LOCK_WINDOW: usize = 60;
 pub const BLOCK_TIME: usize = 120;
@@ -106,7 +98,7 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn write<W: stdio::Write>(&self, w: &mut W) -> stdio::Result<()> {
+  pub fn write<W: stdio::Write>(&self, w: &mut W) -> stdio::Result<()> {
     match self {
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
@@ -122,7 +114,7 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn read<R: stdio::Read>(r: &mut R) -> stdio::Result<Protocol> {
+  pub fn read<R: stdio::Read>(r: &mut R) -> stdio::Result<Protocol> {
     Ok(match read_byte(r)? {
       // Monero protocol
       0 => match read_byte(r)? {

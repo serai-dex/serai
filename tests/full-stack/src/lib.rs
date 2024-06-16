@@ -53,8 +53,8 @@ impl Handles {
   pub async fn monero(
     &self,
     ops: &DockerOperations,
-  ) -> monero_serai::rpc::Rpc<monero_serai::rpc::HttpRpc> {
-    use monero_serai::rpc::HttpRpc;
+  ) -> monero_wallet::rpc::Rpc<monero_simple_request_rpc::SimpleRequestRpc> {
+    use monero_simple_request_rpc::SimpleRequestRpc;
 
     let rpc = ops.handle(&self.monero.0).host_port(self.monero.1).unwrap();
     let rpc = format!("http://{RPC_USER}:{RPC_PASS}@{}:{}", rpc.0, rpc.1);
@@ -62,7 +62,7 @@ impl Handles {
     // If the RPC server has yet to start, sleep for up to 60s until it does
     for _ in 0 .. 60 {
       tokio::time::sleep(Duration::from_secs(1)).await;
-      let Ok(client) = HttpRpc::new(rpc.clone()).await else { continue };
+      let Ok(client) = SimpleRequestRpc::new(rpc.clone()).await else { continue };
       if client.get_height().await.is_err() {
         continue;
       }

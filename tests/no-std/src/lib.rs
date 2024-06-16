@@ -27,3 +27,4 @@ pub use monero_mlsag;
 pub use monero_clsag;
 pub use monero_bulletproofs;
 pub use monero_serai;
+pub use monero_rpc;

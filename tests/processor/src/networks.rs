@@ -103,8 +103,8 @@ pub enum Wallet {
   Monero {
     handle: String,
     spend_key: Zeroizing<curve25519_dalek::scalar::Scalar>,
-    view_pair: monero_serai::wallet::ViewPair,
-    inputs: Vec<monero_serai::wallet::ReceivedOutput>,
+    view_pair: monero_wallet::ViewPair,
+    inputs: Vec<monero_wallet::ReceivedOutput>,
   },
 }
 
@@ -189,12 +189,10 @@ impl Wallet {
 
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-        use monero_serai::{
-          wallet::{
-            ViewPair, Scanner,
-            address::{Network, AddressSpec},
-          },
-          rpc::HttpRpc,
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{
+          ViewPair, Scanner,
+          address::{Network, AddressSpec},
         };
 
         let mut bytes = [0; 64];
@@ -206,7 +204,7 @@ impl Wallet {
         let view_pair =
           ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key));
 
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         let height = rpc.get_height().await.unwrap();
         // Mines 200 blocks so sufficient decoys exist, as only 60 is needed for maturity
@@ -436,20 +434,17 @@ impl Wallet {
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
         use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
-        use monero_serai::{
-          Protocol,
-          wallet::{
-            address::{Network, AddressType, AddressMeta, Address},
-            SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
-            SignableTransaction,
-          },
-          rpc::HttpRpc,
-          io::decompress_point,
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{
+          monero::{Protocol, io::decompress_point},
+          address::{Network, AddressType, AddressMeta, Address},
+          SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
+          SignableTransaction,
         };
         use processor::{additional_key, networks::Monero};
 
         let rpc_url = network_rpc(NetworkId::Monero, ops, handle);
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         // Prepare inputs
         let outputs = std::mem::take(inputs);
@@ -532,7 +527,7 @@ impl Wallet {
       )
       .unwrap(),
       Wallet::Monero { view_pair, .. } => {
-        use monero_serai::wallet::address::{Network, AddressSpec};
+        use monero_wallet::address::{Network, AddressSpec};
         ExternalAddress::new(
           networks::monero::Address::new(
             view_pair.address(Network::Mainnet, AddressSpec::Standard),

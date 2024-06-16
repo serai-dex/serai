@@ -42,3 +42,5 @@ monero-mlsag = { path = "../../coins/monero/ringct/mlsag", default-features = fa
 monero-clsag = { path = "../../coins/monero/ringct/clsag", default-features = false }
 monero-bulletproofs = { path = "../../coins/monero/ringct/bulletproofs", default-features = false }
 monero-serai = { path = "../../coins/monero", default-features = false }
+monero-rpc = { path = "../../coins/monero/rpc", default-features = false }
+monero-wallet = { path = "../../coins/monero/wallet", default-features = false }

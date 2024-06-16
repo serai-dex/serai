@@ -23,7 +23,7 @@ pub enum Input {
 }
 
 impl Input {
-  pub(crate) fn fee_weight(offsets_weight: usize) -> usize {
+  pub fn fee_weight(offsets_weight: usize) -> usize {
     // Uses 1 byte for the input type
     // Uses 1 byte for the VarInt amount due to amount being 0
     1 + 1 + offsets_weight + 32
@@ -82,7 +82,7 @@ pub struct Output {
 }
 
 impl Output {
-  pub(crate) fn fee_weight(view_tags: bool) -> usize {
+  pub fn fee_weight(view_tags: bool) -> usize {
     // Uses 1 byte for the output type
     // Uses 1 byte for the VarInt amount due to amount being 0
     1 + 1 + 32 + if view_tags { 1 } else { 0 }
@@ -182,7 +182,7 @@ pub struct TransactionPrefix {
 }
 
 impl TransactionPrefix {
-  pub(crate) fn fee_weight(
+  pub fn fee_weight(
     decoy_weights: &[usize],
     outputs: usize,
     view_tags: bool,
@@ -254,7 +254,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-  pub(crate) fn fee_weight(
+  pub fn fee_weight(
     protocol: Protocol,
     decoy_weights: &[usize],
     outputs: usize,

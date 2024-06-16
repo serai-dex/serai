@@ -51,6 +51,9 @@ members = [
   "coins/monero/ringct/borromean",
   "coins/monero/ringct/bulletproofs",
   "coins/monero",
+  "coins/monero/rpc",
+  "coins/monero/rpc/simple-request",
+  "coins/monero/wallet",
 
   "message-queue",
 

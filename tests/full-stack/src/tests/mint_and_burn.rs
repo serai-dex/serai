@@ -88,7 +88,7 @@ async fn mint_and_burn_test() {
       // Mine a Monero block
       let monero_blocks = {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-        use monero_serai::wallet::{
+        use monero_wallet::{
           ViewPair,
           address::{Network, AddressSpec},
         };
@@ -345,14 +345,10 @@ async fn mint_and_burn_test() {
     // Send in XMR
     {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-      use monero_serai::{
-        Protocol,
-        transaction::Timelock,
-        wallet::{
-          ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
-          address::{Network, AddressType, AddressMeta, MoneroAddress},
-        },
-        io::decompress_point,
+      use monero_wallet::{
+        monero::{io::decompress_point, Protocol, transaction::Timelock},
+        ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
+        address::{Network, AddressType, AddressMeta, MoneroAddress},
       };
 
       // Grab the first output on the chain
@@ -473,7 +469,7 @@ async fn mint_and_burn_test() {
       let spend = ED25519_BASEPOINT_TABLE * &Scalar::random(&mut OsRng);
       let view = Scalar::random(&mut OsRng);
 
-      use monero_serai::wallet::address::{Network, AddressType, AddressMeta, MoneroAddress};
+      use monero_wallet::address::{Network, AddressType, AddressMeta, MoneroAddress};
       let addr = MoneroAddress::new(
         AddressMeta::new(Network::Mainnet, AddressType::Standard),
         spend,
@@ -578,7 +574,7 @@ async fn mint_and_burn_test() {
 
     // Verify the received Monero TX
     {
-      use monero_serai::wallet::{ViewPair, Scanner};
+      use monero_wallet::{ViewPair, Scanner};
       let rpc = handles[0].monero(&ops).await;
       let mut scanner = Scanner::from_view(
         ViewPair::new(monero_spend, Zeroizing::new(monero_view)),

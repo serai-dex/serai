@@ -13,18 +13,14 @@ use ciphersuite::group::{ff::Field, Group};
 use dalek_ff_group::{Scalar, EdwardsPoint};
 use frost::{curve::Ed25519, ThresholdKeys};
 
-use monero_serai::{
-  Protocol,
-  ringct::RctType,
-  transaction::Transaction,
-  block::Block,
-  rpc::{RpcError, HttpRpc, Rpc},
-  wallet::{
-    ViewPair, Scanner,
-    address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
-    Fee, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
-    SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
-  },
+use monero_simple_request_rpc::SimpleRequestRpc;
+use monero_wallet::{
+  monero::{Protocol, ringct::RctType, transaction::Transaction, block::Block},
+  rpc::{RpcError, Rpc},
+  ViewPair, Scanner,
+  address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
+  Fee, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
+  SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
 };
 
 use tokio::time::sleep;
@@ -226,7 +222,7 @@ impl BlockTrait<Monero> for Block {
 
 #[derive(Clone, Debug)]
 pub struct Monero {
-  rpc: Rpc<HttpRpc>,
+  rpc: Rpc<SimpleRequestRpc>,
 }
 // Shim required for testing/debugging purposes due to generic arguments also necessitating trait
 // bounds
@@ -249,11 +245,11 @@ fn map_rpc_err(err: RpcError) -> NetworkError {
 
 impl Monero {
   pub async fn new(url: String) -> Monero {
-    let mut res = HttpRpc::new(url.clone()).await;
+    let mut res = SimpleRequestRpc::new(url.clone()).await;
     while let Err(e) = res {
       log::error!("couldn't connect to Monero node: {e:?}");
       tokio::time::sleep(Duration::from_secs(5)).await;
-      res = HttpRpc::new(url.clone()).await;
+      res = SimpleRequestRpc::new(url.clone()).await;
     }
     Monero { rpc: res.unwrap() }
   }
@@ -760,7 +756,7 @@ impl Network for Monero {
   async fn test_send(&self, address: Address) -> Block {
     use zeroize::Zeroizing;
     use rand_core::OsRng;
-    use monero_serai::wallet::FeePriority;
+    use monero_wallet::FeePriority;
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     for _ in 0 .. 80 {

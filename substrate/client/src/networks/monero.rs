@@ -4,7 +4,7 @@ use scale::{Encode, Decode};
 
 use ciphersuite::{Ciphersuite, Ed25519};
 
-use monero_serai::wallet::address::{AddressError, Network, AddressType, AddressMeta, MoneroAddress};
+use monero_wallet::address::{AddressError, Network, AddressType, AddressMeta, MoneroAddress};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Address(MoneroAddress);

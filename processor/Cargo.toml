@@ -53,7 +53,8 @@ ethereum-serai = { path = "../coins/ethereum", default-features = false, optiona
 
 # Monero
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
-monero-serai = { path = "../coins/monero", default-features = false, features = ["std", "http-rpc", "multisig"], optional = true }
+monero-simple-request-rpc = { path = "../coins/monero/rpc/simple-request", default-features = false, optional = true }
+monero-wallet = { path = "../coins/monero/wallet", default-features = false, features = ["std", "multisig"], optional = true }
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -87,7 +88,7 @@ bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"
 ethereum = ["secp256k1", "ethereum-serai/tests"]
 
 ed25519 = ["dalek-ff-group", "frost/ed25519"]
-monero = ["ed25519", "monero-serai", "serai-client/monero"]
+monero = ["ed25519", "monero-simple-request-rpc", "monero-wallet", "serai-client/monero"]
 
 binaries = ["env_logger", "serai-env", "message-queue"]
 parity-db = ["serai-db/parity-db"]
