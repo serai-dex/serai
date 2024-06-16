@@ -7,7 +7,7 @@ use curve25519_dalek::{scalar::Scalar, edwards::EdwardsPoint};
 
 use monero_primitives::{INV_EIGHT, keccak256_to_scalar};
 use crate::{
-  core::{multiexp, multiexp_vartime},
+  core::{multiexp, multiexp_vartime, challenge_products},
   batch_verifier::BulletproofsPlusBatchVerifier,
   plus::{ScalarVector, PointVector, GeneratorsList, BpPlusGenerators, padded_pow_of_2},
 };
@@ -144,51 +144,6 @@ impl WipStatement {
     let inv_e_square = inv_e * inv_e;
 
     (e, inv_e, e_square, inv_e_square, PointVector(new_g_bold), PointVector(new_h_bold))
-  }
-
-  /*
-  This has room for optimization worth investigating further. It currently takes
-  an iterative approach. It can be optimized further via divide and conquer.
-
-  Assume there are 4 challenges.
-
-  Iterative approach (current):
-    1. Do the optimal multiplications across challenge column 0 and 1.
-    2. Do the optimal multiplications across that result and column 2.
-    3. Do the optimal multiplications across that result and column 3.
-
-  Divide and conquer (worth investigating further):
-    1. Do the optimal multiplications across challenge column 0 and 1.
-    2. Do the optimal multiplications across challenge column 2 and 3.
-    3. Multiply both results together.
-
-  When there are 4 challenges (n=16), the iterative approach does 28 multiplications
-  versus divide and conquer's 24.
-  */
-  fn challenge_products(challenges: &[(Scalar, Scalar)]) -> Vec<Scalar> {
-    let mut products = vec![Scalar::ONE; 1 << challenges.len()];
-
-    if !challenges.is_empty() {
-      products[0] = challenges[0].1;
-      products[1] = challenges[0].0;
-
-      for (j, challenge) in challenges.iter().enumerate().skip(1) {
-        let mut slots = (1 << (j + 1)) - 1;
-        while slots > 0 {
-          products[slots] = products[slots / 2] * challenge.0;
-          products[slots - 1] = products[slots / 2] * challenge.1;
-
-          slots = slots.saturating_sub(2);
-        }
-      }
-
-      // Sanity check since if the above failed to populate, it'd be critical
-      for product in &products {
-        debug_assert!(*product != Scalar::ZERO);
-      }
-    }
-
-    products
   }
 
   pub(crate) fn prove<R: RngCore + CryptoRng>(
@@ -409,7 +364,7 @@ impl WipStatement {
         verifier.0.other.push((neg_e_square * inv_e_i_square, *R));
       }
 
-      Self::challenge_products(&challenges)
+      challenge_products(&challenges)
     };
 
     while verifier.0.g_bold.len() < generators.len() {

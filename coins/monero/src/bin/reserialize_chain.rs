@@ -9,7 +9,7 @@ mod binaries {
 
   pub(crate) use monero_serai::{
     Commitment,
-    ringct::{RctPrunable, bulletproofs::batch_verifier::BatchVerifier},
+    ringct::{RctPrunable, bulletproofs::BatchVerifier},
     transaction::{Input, Transaction},
     block::Block,
     rpc::{RpcError, Rpc, HttpRpc},

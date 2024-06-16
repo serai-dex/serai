@@ -49,12 +49,12 @@ pub fn H_pow_2() -> &'static [EdwardsPoint; 64] {
   })
 }
 
-// The maximum amount of commitments proven for within a single range proof.
-const MAX_M: usize = 16;
-// The amount of bits the value within a commitment may use.
-const N: usize = 64;
-// The maximum amount of bits used within a single range proof.
-const MAX_MN: usize = MAX_M * N;
+/// The maximum amount of commitments provable for within a single range proof.
+pub const MAX_COMMITMENTS: usize = 16;
+/// The amount of bits a value within a commitment may use.
+pub const COMMITMENT_BITS: usize = 64;
+/// The logarithm (over 2) of the amount of bits a value within a commitment may use.
+pub const LOG_COMMITMENT_BITS: usize = 6; // 2 ** 6 == N
 
 /// Container struct for Bulletproofs(+) generators.
 #[allow(non_snake_case)]
@@ -68,6 +68,9 @@ pub struct Generators {
 /// Consumers should not call this function ad-hoc, yet call it within a build script or use a
 /// once-initialized static.
 pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
+  // The maximum amount of bits used within a single range proof.
+  const MAX_MN: usize = MAX_COMMITMENTS * COMMITMENT_BITS;
+
   let mut preimage = H().compress().to_bytes().to_vec();
   preimage.extend(dst);
 

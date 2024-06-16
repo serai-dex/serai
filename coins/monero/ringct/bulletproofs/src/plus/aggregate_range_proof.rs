@@ -9,7 +9,7 @@ use monero_primitives::{INV_EIGHT, Commitment, keccak256_to_scalar};
 
 use crate::{
   batch_verifier::BulletproofsPlusBatchVerifier,
-  core::{MAX_M, N, multiexp, multiexp_vartime},
+  core::{MAX_COMMITMENTS, COMMITMENT_BITS, multiexp, multiexp_vartime},
   plus::{
     ScalarVector, PointVector, GeneratorsList, BpPlusGenerators,
     transcript::*,
@@ -36,7 +36,7 @@ pub(crate) struct AggregateRangeWitness(Vec<Commitment>);
 
 impl AggregateRangeWitness {
   pub(crate) fn new(commitments: Vec<Commitment>) -> Option<Self> {
-    if commitments.is_empty() || (commitments.len() > MAX_M) {
+    if commitments.is_empty() || (commitments.len() > MAX_COMMITMENTS) {
       return None;
     }
 
@@ -44,7 +44,8 @@ impl AggregateRangeWitness {
   }
 }
 
-/// Internal structure representing a Bulletproof+, as used in Monero.
+/// Internal structure representing a Bulletproof+, as defined by Monero..
+#[doc(hidden)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct AggregateRangeProof {
   pub(crate) A: EdwardsPoint,
@@ -62,7 +63,7 @@ struct AHatComputation {
 
 impl AggregateRangeStatement {
   pub(crate) fn new(V: Vec<EdwardsPoint>) -> Option<Self> {
-    if V.is_empty() || (V.len() > MAX_M) {
+    if V.is_empty() || (V.len() > MAX_COMMITMENTS) {
       return None;
     }
 
@@ -79,12 +80,12 @@ impl AggregateRangeStatement {
   }
 
   fn d_j(j: usize, m: usize) -> ScalarVector {
-    let mut d_j = Vec::with_capacity(m * N);
-    for _ in 0 .. (j - 1) * N {
+    let mut d_j = Vec::with_capacity(m * COMMITMENT_BITS);
+    for _ in 0 .. (j - 1) * COMMITMENT_BITS {
       d_j.push(Scalar::ZERO);
     }
-    d_j.append(&mut ScalarVector::powers(Scalar::from(2u8), N).0);
-    for _ in 0 .. (m - j) * N {
+    d_j.append(&mut ScalarVector::powers(Scalar::from(2u8), COMMITMENT_BITS).0);
+    for _ in 0 .. (m - j) * COMMITMENT_BITS {
       d_j.push(Scalar::ZERO);
     }
     ScalarVector(d_j)
@@ -102,7 +103,7 @@ impl AggregateRangeStatement {
     while V.len() < padded_pow_of_2(V.len()) {
       V.0.push(EdwardsPoint::identity());
     }
-    let mn = V.len() * N;
+    let mn = V.len() * COMMITMENT_BITS;
 
     // 2, 4, 6, 8... powers of z, of length equivalent to the amount of commitments
     let mut z_pow = Vec::with_capacity(V.len());
@@ -188,10 +189,10 @@ impl AggregateRangeStatement {
       V.push(EdwardsPoint::identity());
     }
 
-    let generators = generators.reduce(V.len() * N);
+    let generators = generators.reduce(V.len() * COMMITMENT_BITS);
 
     let mut d_js = Vec::with_capacity(V.len());
-    let mut a_l = ScalarVector(Vec::with_capacity(V.len() * N));
+    let mut a_l = ScalarVector(Vec::with_capacity(V.len() * COMMITMENT_BITS));
     for j in 1 ..= V.len() {
       d_js.push(Self::d_j(j, V.len()));
       #[allow(clippy::map_unwrap_or)]
@@ -251,7 +252,7 @@ impl AggregateRangeStatement {
     let mut transcript = initial_transcript(V.iter());
     let V = V.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
-    let generators = generators.reduce(V.len() * N);
+    let generators = generators.reduce(V.len() * COMMITMENT_BITS);
 
     let AHatComputation { y, A_hat, .. } =
       Self::compute_A_hat(PointVector(V), &generators, &mut transcript, proof.A);

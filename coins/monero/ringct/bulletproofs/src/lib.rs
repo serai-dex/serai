@@ -4,7 +4,8 @@
 #![allow(non_snake_case)]
 
 use std_shims::{
-  vec, vec::Vec,
+  vec,
+  vec::Vec,
   io::{self, Read, Write},
 };
 
@@ -14,14 +15,16 @@ use zeroize::Zeroizing;
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use monero_io::*;
+pub use monero_generators::MAX_COMMITMENTS;
 use monero_primitives::Commitment;
 
 pub(crate) mod scalar_vector;
 pub(crate) mod core;
-use crate::core::LOG_N;
+use crate::core::LOG_COMMITMENT_BITS;
 
-pub mod batch_verifier;
-use batch_verifier::{InternalBatchVerifier, BulletproofsPlusBatchVerifier, BatchVerifier};
+pub(crate) mod batch_verifier;
+use batch_verifier::{BulletproofsBatchVerifier, BulletproofsPlusBatchVerifier};
+pub use batch_verifier::BatchVerifier;
 
 pub(crate) mod original;
 use crate::original::OriginalStruct;
@@ -32,18 +35,21 @@ use crate::plus::*;
 #[cfg(test)]
 mod tests;
 
-pub const MAX_COMMITMENTS: usize = crate::core::MAX_M;
-
+/// An error from proving/verifying Bulletproofs(+).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum BulletproofError {
+  /// Proving/verifying a Bulletproof(+) range proof with no commitments.
   #[cfg_attr(feature = "std", error("no commitments to prove the range for"))]
   NoCommitments,
+  /// Proving/verifying a Bulletproof(+) range proof with more commitments than supported.
   #[cfg_attr(feature = "std", error("too many commitments to prove the range for"))]
   TooManyCommitments,
 }
 
-/// Bulletproof enum, encapsulating both Bulletproofs and Bulletproofs+.
+/// A Bulletproof(+).
+///
+/// This encapsulates either a Bulletproof or a Bulletproof+.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproof {
@@ -60,6 +66,11 @@ impl Bulletproof {
     }
   }
 
+  /// Calculate the weight penalty for the Bulletproof(+).
+  ///
+  /// Bulletproofs(+) are logarithmically sized yet linearly timed. Evaluating by their size alone
+  /// accordingly doesn't properly represent the burden of the proof. Monero 'claws back' some of
+  /// the weight lost by using a proof smaller than it is fast to compensate for this.
   // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
   //   src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
   pub fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
@@ -70,12 +81,12 @@ impl Bulletproof {
       LR_len += 1;
       n_padded_outputs = 1 << LR_len;
     }
-    LR_len += LOG_N;
+    LR_len += LOG_COMMITMENT_BITS;
 
     let mut bp_clawback = 0;
     if n_padded_outputs > 2 {
       let fields = Bulletproof::bp_fields(plus);
-      let base = ((fields + (2 * (LOG_N + 1))) * 32) / 2;
+      let base = ((fields + (2 * (LOG_COMMITMENT_BITS + 1))) * 32) / 2;
       let size = (fields + (2 * LR_len)) * 32;
       bp_clawback = ((base * n_padded_outputs) - size) * 4 / 5;
     }
@@ -83,6 +94,7 @@ impl Bulletproof {
     (bp_clawback, LR_len)
   }
 
+  /// Calculate the weight of this proof.
   pub fn fee_weight(plus: bool, outputs: usize) -> usize {
     #[allow(non_snake_case)]
     let (bp_clawback, LR_len) = Bulletproof::calculate_bp_clawback(plus, outputs);
@@ -126,9 +138,15 @@ impl Bulletproof {
   #[must_use]
   pub fn verify<R: RngCore + CryptoRng>(&self, rng: &mut R, commitments: &[EdwardsPoint]) -> bool {
     match self {
-      Bulletproof::Original(bp) => bp.verify(rng, commitments),
+      Bulletproof::Original(bp) => {
+        let mut verifier = BulletproofsBatchVerifier::default();
+        if !bp.verify(rng, &mut verifier, commitments) {
+          return false;
+        }
+        verifier.verify()
+      }
       Bulletproof::Plus(bp) => {
-        let mut verifier = BulletproofsPlusBatchVerifier(InternalBatchVerifier::new());
+        let mut verifier = BulletproofsPlusBatchVerifier::default();
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
         };
@@ -140,11 +158,14 @@ impl Bulletproof {
     }
   }
 
-  /// Accumulate the verification for the given Bulletproof into the specified BatchVerifier.
+  /// Accumulate the verification for the given Bulletproof(+) into the specified BatchVerifier.
   ///
-  /// Returns false if the Bulletproof isn't sane, leaving the BatchVerifier in an undefined
+  /// Returns false if the Bulletproof(+) isn't sane, leaving the BatchVerifier in an undefined
   /// state.
-  /// Returns true if the Bulletproof is sane, regardless of their validity.
+  ///
+  /// Returns true if the Bulletproof(+) is sane, regardless of its validity.
+  ///
+  /// The BatchVerifier must have its verification function executed to actually verify this proof.
   #[must_use]
   pub fn batch_verify<R: RngCore + CryptoRng>(
     &self,
@@ -153,7 +174,7 @@ impl Bulletproof {
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproof::Original(bp) => bp.batch_verify(rng, &mut verifier.original, commitments),
+      Bulletproof::Original(bp) => bp.verify(rng, &mut verifier.original, commitments),
       Bulletproof::Plus(bp) => {
         let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
           return false;
@@ -196,16 +217,19 @@ impl Bulletproof {
     }
   }
 
+  /// Write a Bulletproof(+) for the message signed by a transaction's signature.
+  ///
+  /// This has a distinct encoding from the standard encoding.
   pub fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.write_core(w, |points, w| write_raw_vec(write_point, points, w))
   }
 
-  /// Write the Bulletproof(+) to a writer.
+  /// Write a Bulletproof(+).
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.write_core(w, |points, w| write_vec(write_point, points, w))
   }
 
-  /// Serialize the Bulletproof(+) to a `Vec<u8>`.
+  /// Serialize a Bulletproof(+) to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
