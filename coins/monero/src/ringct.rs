@@ -8,27 +8,21 @@ use zeroize::{Zeroize, Zeroizing};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-pub(crate) mod hash_to_point;
-pub use hash_to_point::{raw_hash_to_point, hash_to_point};
-
-/// MLSAG struct, along with verifying functionality.
 pub use monero_mlsag as mlsag;
-/// CLSAG struct, along with signing and verifying functionality.
 pub use monero_clsag as clsag;
-/// BorromeanRange struct, along with verifying functionality.
 pub use monero_borromean as borromean;
-/// Bulletproofs(+) structs, along with proving and verifying functionality.
 pub use monero_bulletproofs as bulletproofs;
 
 use crate::{
-  Protocol,
-  serialize::*,
+  io::*,
+  generators::hash_to_point,
   ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproof},
+  Protocol,
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
 pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
-  hash_to_point(&(ED25519_BASEPOINT_TABLE * secret.deref())) * secret.deref()
+  hash_to_point((ED25519_BASEPOINT_TABLE * secret.deref()).compress().to_bytes()) * secret.deref()
 }
 
 /// An encrypted amount.

@@ -9,10 +9,11 @@ use zeroize::Zeroize;
 use curve25519_dalek::edwards::{EdwardsPoint, CompressedEdwardsY};
 
 use crate::{
-  Protocol, hash,
-  serialize::*,
+  io::*,
+  primitives::keccak256,
   ring_signatures::RingSignature,
   ringct::{bulletproofs::Bulletproof, RctType, RctBase, RctPrunable, RctSignatures},
+  Protocol,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -240,7 +241,7 @@ impl TransactionPrefix {
   }
 
   pub fn hash(&self) -> [u8; 32] {
-    hash(&self.serialize())
+    keccak256(self.serialize())
   }
 }
 
@@ -352,25 +353,25 @@ impl Transaction {
     let mut buf = Vec::with_capacity(2048);
     if self.prefix.version == 1 {
       self.write(&mut buf).unwrap();
-      hash(&buf)
+      keccak256(buf)
     } else {
       let mut hashes = Vec::with_capacity(96);
 
       hashes.extend(self.prefix.hash());
 
       self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
-      hashes.extend(hash(&buf));
+      hashes.extend(keccak256(&buf));
       buf.clear();
 
       hashes.extend(&match self.rct_signatures.prunable {
         RctPrunable::Null => [0; 32],
         _ => {
           self.rct_signatures.prunable.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
-          hash(&buf)
+          keccak256(buf)
         }
       });
 
-      hash(&hashes)
+      keccak256(hashes)
     }
   }
 
@@ -386,13 +387,13 @@ impl Transaction {
     sig_hash.extend(self.prefix.hash());
 
     self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
-    sig_hash.extend(hash(&buf));
+    sig_hash.extend(keccak256(&buf));
     buf.clear();
 
     self.rct_signatures.prunable.signature_write(&mut buf).unwrap();
-    sig_hash.extend(hash(&buf));
+    sig_hash.extend(keccak256(buf));
 
-    hash(&sig_hash)
+    keccak256(sig_hash)
   }
 
   fn is_rct_bulletproof(&self) -> bool {

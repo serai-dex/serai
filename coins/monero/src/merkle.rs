@@ -1,11 +1,11 @@
 use std_shims::vec::Vec;
 
-use crate::hash;
+use crate::primitives::keccak256;
 
 pub(crate) fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
   match leafs.len() {
     0 => root,
-    1 => hash(&[root, leafs[0]].concat()),
+    1 => keccak256([root, leafs[0]].concat()),
     _ => {
       let mut hashes = Vec::with_capacity(1 + leafs.len());
       hashes.push(root);
@@ -29,7 +29,7 @@ pub(crate) fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
         let mut paired_hashes = Vec::with_capacity(overage);
         while let Some(left) = rightmost.next() {
           let right = rightmost.next().unwrap();
-          paired_hashes.push(hash(&[left.as_ref(), &right].concat()));
+          paired_hashes.push(keccak256([left.as_ref(), &right].concat()));
         }
         drop(rightmost);
 
@@ -42,7 +42,7 @@ pub(crate) fn merkle_root(root: [u8; 32], leafs: &[[u8; 32]]) -> [u8; 32] {
       while hashes.len() > 1 {
         let mut i = 0;
         while i < hashes.len() {
-          new_hashes.push(hash(&[hashes[i], hashes[i + 1]].concat()));
+          new_hashes.push(keccak256([hashes[i], hashes[i + 1]].concat()));
           i += 2;
         }
 

@@ -8,10 +8,7 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use crate::serialize::{
-  varint_len, read_byte, read_bytes, read_varint, read_point, read_vec, write_byte, write_varint,
-  write_point, write_vec,
-};
+use crate::io::*;
 
 pub const MAX_TX_EXTRA_PADDING_COUNT: usize = 255;
 pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;

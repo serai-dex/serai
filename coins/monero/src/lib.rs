@@ -2,21 +2,13 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
-#[macro_use]
-extern crate alloc;
-
-use std_shims::io;
+use std_shims::io as stdio;
 
 use zeroize::Zeroize;
 
-use sha3::{Digest, Keccak256};
-
-use curve25519_dalek::scalar::Scalar;
-
-pub use monero_io::decompress_point;
-pub use monero_generators::H;
-pub use monero_primitives::INV_EIGHT;
+pub use monero_io as io;
+pub use monero_generators as generators;
+pub use monero_primitives as primitives;
 
 mod merkle;
 
@@ -114,7 +106,7 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: stdio::Write>(&self, w: &mut W) -> stdio::Result<()> {
     match self {
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
@@ -130,13 +122,13 @@ impl Protocol {
     }
   }
 
-  pub(crate) fn read<R: io::Read>(r: &mut R) -> io::Result<Protocol> {
+  pub(crate) fn read<R: stdio::Read>(r: &mut R) -> stdio::Result<Protocol> {
     Ok(match read_byte(r)? {
       // Monero protocol
       0 => match read_byte(r)? {
         14 => Protocol::v14,
         16 => Protocol::v16,
-        _ => Err(io::Error::other("unrecognized monero protocol"))?,
+        _ => Err(stdio::Error::other("unrecognized monero protocol"))?,
       },
       // Custom
       1 => match read_byte(r)? {
@@ -145,41 +137,24 @@ impl Protocol {
           bp_plus: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
           optimal_rct_type: RctType::from_byte(read_byte(r)?)
-            .ok_or_else(|| io::Error::other("invalid RctType serialization"))?,
+            .ok_or_else(|| stdio::Error::other("invalid RctType serialization"))?,
           view_tags: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
           v16_fee: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
         },
-        _ => Err(io::Error::other("unrecognized custom protocol serialization"))?,
+        _ => Err(stdio::Error::other("unrecognized custom protocol serialization"))?,
       },
-      _ => Err(io::Error::other("unrecognized protocol serialization"))?,
+      _ => Err(stdio::Error::other("unrecognized protocol serialization"))?,
     })
   }
-}
-
-pub use monero_primitives::Commitment;
-
-pub(crate) fn hash(data: &[u8]) -> [u8; 32] {
-  Keccak256::digest(data).into()
-}
-
-/// Hash the provided data to a scalar via keccak256(data) % l.
-pub fn hash_to_scalar(data: &[u8]) -> Scalar {
-  let scalar = Scalar::from_bytes_mod_order(hash(data));
-  // Monero will explicitly error in this case
-  // This library acknowledges its practical impossibility of it occurring, and doesn't bother to
-  // code in logic to handle it. That said, if it ever occurs, something must happen in order to
-  // not generate/verify a proof we believe to be valid when it isn't
-  assert!(scalar != Scalar::ZERO, "ZERO HASH: {data:?}");
-  scalar
 }

@@ -8,7 +8,7 @@ mod binaries {
   pub(crate) use serde_json::json;
 
   pub(crate) use monero_serai::{
-    Commitment,
+    primitives::Commitment,
     ringct::{RctPrunable, bulletproofs::BatchVerifier},
     transaction::{Input, Transaction},
     block::Block,

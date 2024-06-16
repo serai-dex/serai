@@ -444,7 +444,7 @@ impl Wallet {
             SignableTransaction,
           },
           rpc::HttpRpc,
-          decompress_point,
+          io::decompress_point,
         };
         use processor::{additional_key, networks::Monero};
 

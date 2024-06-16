@@ -10,7 +10,9 @@ use curve25519_dalek::{
 };
 
 use crate::{
-  hash, hash_to_scalar, serialize::write_varint, Commitment, ringct::EncryptedAmount,
+  io::write_varint,
+  primitives::{Commitment, keccak256, keccak256_to_scalar},
+  ringct::EncryptedAmount,
   transaction::Input,
 };
 
@@ -62,7 +64,7 @@ pub(crate) fn uniqueness(inputs: &[Input]) -> [u8; 32] {
       Input::ToKey { key_image, .. } => u.extend(key_image.compress().to_bytes()),
     }
   }
-  hash(&u)
+  keccak256(u)
 }
 
 // Hs("view_tag" || 8Ra || o), Hs(8Ra || o), and H(8Ra || 0x8d) with uniqueness inclusion in the
@@ -78,12 +80,12 @@ pub(crate) fn shared_key(
 
   let mut payment_id_xor = [0; 8];
   payment_id_xor
-    .copy_from_slice(&hash(&[output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
+    .copy_from_slice(&keccak256([output_derivation.as_ref(), [0x8d].as_ref()].concat())[.. 8]);
 
   // || o
   write_varint(&o, &mut output_derivation).unwrap();
 
-  let view_tag = hash(&[b"view_tag".as_ref(), &output_derivation].concat())[0];
+  let view_tag = keccak256([b"view_tag".as_ref(), &output_derivation].concat())[0];
 
   // uniqueness ||
   let shared_key = if let Some(uniqueness) = uniqueness {
@@ -92,19 +94,19 @@ pub(crate) fn shared_key(
     output_derivation
   };
 
-  (view_tag, hash_to_scalar(&shared_key), payment_id_xor)
+  (view_tag, keccak256_to_scalar(shared_key), payment_id_xor)
 }
 
 pub(crate) fn commitment_mask(shared_key: Scalar) -> Scalar {
   let mut mask = b"commitment_mask".to_vec();
   mask.extend(shared_key.to_bytes());
-  hash_to_scalar(&mask)
+  keccak256_to_scalar(mask)
 }
 
 pub(crate) fn compact_amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
   let mut amount_mask = b"amount".to_vec();
   amount_mask.extend(key.to_bytes());
-  (amount ^ u64::from_le_bytes(hash(&amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
+  (amount ^ u64::from_le_bytes(keccak256(amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
 }
 
 impl EncryptedAmount {
@@ -116,11 +118,11 @@ impl EncryptedAmount {
     match self {
       // TODO: Add a test vector for this
       EncryptedAmount::Original { mask, amount } => {
-        let mask_shared_sec = hash(key.as_bytes());
+        let mask_shared_sec = keccak256(key.as_bytes());
         let mask =
           Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
 
-        let amount_shared_sec = hash(&mask_shared_sec);
+        let amount_shared_sec = keccak256(mask_shared_sec);
         let amount_scalar =
           Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
         // d2b from rctTypes.cpp
@@ -157,7 +159,7 @@ impl ViewPair {
   }
 
   fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {
-    hash_to_scalar(&Zeroizing::new(
+    keccak256_to_scalar(Zeroizing::new(
       [
         b"SubAddr\0".as_ref(),
         Zeroizing::new(self.view.to_bytes()).as_ref(),

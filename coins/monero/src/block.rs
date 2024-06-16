@@ -4,9 +4,9 @@ use std_shims::{
 };
 
 use crate::{
-  hash,
+  io::*,
+  primitives::keccak256,
   merkle::merkle_root,
-  serialize::*,
   transaction::{Input, Transaction},
 };
 
@@ -99,7 +99,7 @@ impl Block {
     write_varint(&u64::try_from(hashable.len()).unwrap(), &mut hashing_blob).unwrap();
     hashing_blob.append(&mut hashable);
 
-    let hash = hash(&hashing_blob);
+    let hash = keccak256(hashing_blob);
     if hash == CORRECT_BLOCK_HASH_202612 {
       return EXISTING_BLOCK_HASH_202612;
     };

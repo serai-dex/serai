@@ -352,7 +352,7 @@ async fn mint_and_burn_test() {
           ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
           address::{Network, AddressType, AddressMeta, MoneroAddress},
         },
-        decompress_point,
+        io::decompress_point,
       };
 
       // Grab the first output on the chain

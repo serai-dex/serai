@@ -12,8 +12,8 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwar
 use monero_io::decompress_point;
 
 use crate::{
-  Commitment,
-  serialize::{read_byte, read_u32, read_u64, read_bytes, read_scalar, read_point, read_raw_vec},
+  io::*,
+  primitives::Commitment,
   transaction::{Input, Timelock, Transaction},
   block::Block,
   rpc::{RpcError, RpcConnection, Rpc},

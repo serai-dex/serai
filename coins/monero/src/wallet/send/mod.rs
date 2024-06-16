@@ -25,11 +25,9 @@ use frost::FrostError;
 use monero_io::varint_len;
 
 use crate::{
-  Protocol, Commitment, hash,
-  serialize::{
-    read_byte, read_bytes, read_u64, read_scalar, read_point, read_vec, write_byte, write_scalar,
-    write_point, write_raw_vec, write_vec,
-  },
+  io::*,
+  primitives::{Commitment, keccak256},
+  Protocol,
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagContext, Clsag},
@@ -628,8 +626,8 @@ impl SignableTransaction {
       for input in inputs {
         r_uniqueness.extend(input.compress().to_bytes());
       }
-      ChaCha20Rng::from_seed(hash(
-        &[b"monero-serai_outputs".as_ref(), seed.as_ref(), &r_uniqueness].concat(),
+      ChaCha20Rng::from_seed(keccak256(
+        [b"monero-serai_outputs".as_ref(), seed.as_ref(), &r_uniqueness].concat(),
       ))
     };
 

@@ -4,13 +4,12 @@ use rand_core::OsRng;
 
 use curve25519_dalek::scalar::Scalar;
 
-use crate::{
-  hash,
-  wallet::seed::{
-    Seed, SeedType, SeedError,
-    classic::{self, trim_by_lang},
-    polyseed,
-  },
+use monero_primitives::keccak256;
+
+use crate::wallet::seed::{
+  Seed, SeedType, SeedError,
+  classic::{self, trim_by_lang},
+  polyseed,
 };
 
 #[test]
@@ -217,7 +216,7 @@ fn test_classic_seed() {
       let view: [u8; 32] = hex::decode(vector.view).unwrap().try_into().unwrap();
       // Monero then derives the view key as H(spend)
       assert_eq!(
-        Scalar::from_bytes_mod_order(hash(&spend)),
+        Scalar::from_bytes_mod_order(keccak256(spend)),
         Scalar::from_canonical_bytes(view).unwrap()
       );
 

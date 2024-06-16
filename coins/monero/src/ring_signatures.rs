@@ -7,9 +7,7 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::{EdwardsPoint, Scalar};
 
-use monero_generators::hash_to_point;
-
-use crate::{serialize::*, hash_to_scalar};
+use crate::{io::*, generators::hash_to_point, primitives::keccak256_to_scalar};
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Signature {
@@ -67,6 +65,6 @@ impl RingSignature {
       sum += sig.c;
     }
 
-    sum == hash_to_scalar(&buf)
+    sum == keccak256_to_scalar(buf)
   }
 }
