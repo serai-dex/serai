@@ -1,5 +1,5 @@
 use monero_serai::transaction::Transaction;
-use monero_wallet::{TransactionError, extra::MAX_ARBITRARY_DATA_SIZE};
+use monero_wallet::{rpc::Rpc, TransactionError, extra::MAX_ARBITRARY_DATA_SIZE};
 
 mod runner;
 

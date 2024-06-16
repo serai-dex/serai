@@ -22,7 +22,7 @@ use curve25519_dalek::{
 use frost::FrostError;
 
 use monero_rpc::RpcError;
-pub use monero_rpc::{Fee, FeePriority};
+pub use monero_rpc::{FeePriority, FeeRate};
 use monero_serai::{
   io::*,
   primitives::{Commitment, keccak256},
@@ -216,7 +216,7 @@ fn calculate_weight_and_fee(
   decoy_weights: &[usize],
   n_outputs: usize,
   extra: usize,
-  fee_rate: Fee,
+  fee_rate: FeeRate,
 ) -> (usize, u64) {
   // Starting the fee at 0 here is different than core Monero's wallet2.cpp, which starts its fee
   // calculation with an estimate.
@@ -291,7 +291,7 @@ pub struct SignableTransaction {
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee: u64,
-  fee_rate: Fee,
+  fee_rate: FeeRate,
 }
 
 /// Specification for a change output.
@@ -398,7 +398,7 @@ impl SignableTransaction {
     payments: Vec<(MoneroAddress, u64)>,
     change: &Change,
     data: Vec<Vec<u8>>,
-    fee_rate: Fee,
+    fee_rate: FeeRate,
   ) -> Result<SignableTransaction, TransactionError> {
     // Make sure there's only one payment ID
     let mut has_payment_id = {
@@ -559,7 +559,7 @@ impl SignableTransaction {
     self.fee
   }
 
-  pub fn fee_rate(&self) -> Fee {
+  pub fn fee_rate(&self) -> FeeRate {
     self.fee_rate
   }
 

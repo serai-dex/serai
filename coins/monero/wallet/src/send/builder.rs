@@ -4,14 +4,14 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use monero_serai::Protocol;
 use crate::{
-  address::MoneroAddress, Fee, SpendableOutput, Change, Decoys, SignableTransaction,
+  address::MoneroAddress, FeeRate, SpendableOutput, Change, Decoys, SignableTransaction,
   TransactionError, extra::MAX_ARBITRARY_DATA_SIZE,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
 struct SignableTransactionBuilderInternal {
   protocol: Protocol,
-  fee_rate: Fee,
+  fee_rate: FeeRate,
 
   r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<(SpendableOutput, Decoys)>,
@@ -23,7 +23,7 @@ struct SignableTransactionBuilderInternal {
 impl SignableTransactionBuilderInternal {
   // Takes in the change address so users don't miss that they have to manually set one
   // If they don't, all leftover funds will become part of the fee
-  fn new(protocol: Protocol, fee_rate: Fee, change_address: Change) -> Self {
+  fn new(protocol: Protocol, fee_rate: FeeRate, change_address: Change) -> Self {
     Self {
       protocol,
       fee_rate,
@@ -88,7 +88,7 @@ impl SignableTransactionBuilder {
     Self(self.0.clone())
   }
 
-  pub fn new(protocol: Protocol, fee_rate: Fee, change_address: Change) -> Self {
+  pub fn new(protocol: Protocol, fee_rate: FeeRate, change_address: Change) -> Self {
     Self(Arc::new(RwLock::new(SignableTransactionBuilderInternal::new(
       protocol,
       fee_rate,

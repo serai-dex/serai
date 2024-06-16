@@ -1,6 +1,9 @@
-use monero_rpc::{Rpc, OutputResponse};
-use monero_serai::{transaction::Transaction, Protocol, DEFAULT_LOCK_WINDOW};
-use monero_wallet::SpendableOutput;
+use monero_simple_request_rpc::SimpleRequestRpc;
+use monero_wallet::{
+  monero::{transaction::Transaction, Protocol, DEFAULT_LOCK_WINDOW},
+  rpc::{OutputResponse, Rpc},
+  SpendableOutput,
+};
 
 mod runner;
 
@@ -12,7 +15,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, ()| async move {
+    |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 2000000000000);
       SpendableOutput::from(&rpc, output).await.unwrap()
@@ -20,7 +23,7 @@ test!(
   ),
   (
     // Then make a second tx1
-    |protocol: Protocol, rpc: Rpc<_>, mut builder: Builder, addr, state: _| async move {
+    |protocol: Protocol, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
       let output_tx0: SpendableOutput = state;
       let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
@@ -39,7 +42,7 @@ test!(
       (builder.build().unwrap(), (protocol, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
+    |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
       use rand_core::OsRng;
 
       let height = rpc.get_height().await.unwrap();
@@ -89,7 +92,7 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, ()| async move {
+    |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, ()| async move {
       let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
       assert_eq!(output.commitment().amount, 2000000000000);
       SpendableOutput::from(&rpc, output).await.unwrap()
@@ -97,7 +100,7 @@ test!(
   ),
   (
     // Then make a second tx1
-    |protocol: Protocol, rpc: Rpc<_>, mut builder: Builder, addr, state: _| async move {
+    |protocol: Protocol, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
       let output_tx0: SpendableOutput = state;
       let decoys = Decoys::select(
         &mut OsRng,
@@ -116,7 +119,7 @@ test!(
       (builder.build().unwrap(), (protocol, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
-    |rpc: Rpc<_>, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
+    |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
       use rand_core::OsRng;
 
       let height = rpc.get_height().await.unwrap();

@@ -10,7 +10,7 @@ use rand_distr::num_traits::Float;
 use curve25519_dalek::edwards::EdwardsPoint;
 
 use monero_serai::{DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME};
-use monero_rpc::{RpcError, RpcConnection, Rpc};
+use monero_rpc::{RpcError, Rpc};
 use crate::SpendableOutput;
 
 const RECENT_WINDOW: usize = 15;
@@ -19,9 +19,9 @@ const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
 
 #[allow(clippy::too_many_arguments)]
-async fn select_n<'a, R: RngCore + CryptoRng, RPC: RpcConnection>(
+async fn select_n<'a, R: RngCore + CryptoRng>(
   rng: &mut R,
-  rpc: &Rpc<RPC>,
+  rpc: &impl Rpc,
   distribution: &[u64],
   height: usize,
   high: u64,
@@ -129,9 +129,9 @@ fn offset(ring: &[u64]) -> Vec<u64> {
   res
 }
 
-async fn select_decoys<R: RngCore + CryptoRng, RPC: RpcConnection>(
+async fn select_decoys<R: RngCore + CryptoRng>(
   rng: &mut R,
-  rpc: &Rpc<RPC>,
+  rpc: &impl Rpc,
   ring_len: usize,
   height: usize,
   inputs: &[SpendableOutput],
@@ -278,20 +278,17 @@ pub use monero_serai::primitives::Decoys;
 #[cfg(feature = "std")]
 #[async_trait::async_trait]
 pub trait DecoySelection {
-  async fn select<R: Send + Sync + RngCore + CryptoRng, RPC: Send + Sync + RpcConnection>(
+  async fn select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
-    rpc: &Rpc<RPC>,
+    rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
   ) -> Result<Vec<Decoys>, RpcError>;
 
-  async fn fingerprintable_canonical_select<
-    R: Send + Sync + RngCore + CryptoRng,
-    RPC: Send + Sync + RpcConnection,
-  >(
+  async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
-    rpc: &Rpc<RPC>,
+    rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
@@ -303,9 +300,9 @@ pub trait DecoySelection {
 impl DecoySelection for Decoys {
   /// Select decoys using the same distribution as Monero. Relies on the monerod RPC
   /// response for an output's unlocked status, minimizing trips to the daemon.
-  async fn select<R: Send + Sync + RngCore + CryptoRng, RPC: Send + Sync + RpcConnection>(
+  async fn select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
-    rpc: &Rpc<RPC>,
+    rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],
@@ -321,12 +318,9 @@ impl DecoySelection for Decoys {
   ///
   /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
   /// output's unlocked status and remove all usage of fingerprintable_canonical
-  async fn fingerprintable_canonical_select<
-    R: Send + Sync + RngCore + CryptoRng,
-    RPC: Send + Sync + RpcConnection,
-  >(
+  async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
-    rpc: &Rpc<RPC>,
+    rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
     inputs: &[SpendableOutput],

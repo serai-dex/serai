@@ -5,10 +5,10 @@ use rand_core::{OsRng, RngCore};
 use serde::Deserialize;
 use serde_json::json;
 
-use monero_serai::transaction::Transaction;
-use monero_rpc::{EmptyResponse, Rpc};
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
+  monero::transaction::Transaction,
+  rpc::Rpc,
   address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
   extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
   Scanner,
@@ -16,7 +16,10 @@ use monero_wallet::{
 
 mod runner;
 
-async fn make_integrated_address(rpc: &Rpc<SimpleRequestRpc>, payment_id: [u8; 8]) -> String {
+#[derive(Deserialize, Debug)]
+struct EmptyResponse {}
+
+async fn make_integrated_address(rpc: &SimpleRequestRpc, payment_id: [u8; 8]) -> String {
   #[derive(Debug, Deserialize)]
   struct IntegratedAddressResponse {
     integrated_address: String,
@@ -33,7 +36,7 @@ async fn make_integrated_address(rpc: &Rpc<SimpleRequestRpc>, payment_id: [u8; 8
   res.integrated_address
 }
 
-async fn initialize_rpcs() -> (Rpc<SimpleRequestRpc>, Rpc<SimpleRequestRpc>, String) {
+async fn initialize_rpcs() -> (SimpleRequestRpc, SimpleRequestRpc, String) {
   let wallet_rpc = SimpleRequestRpc::new("http://127.0.0.1:18082".to_string()).await.unwrap();
   let daemon_rpc = runner::rpc().await;
 
@@ -89,7 +92,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // TODO: Needs https://github.com/monero-project/monero/pull/9260
   // let fee_rate = daemon_rpc
-  //   .get_fee(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
+  //   .get_fee_rate(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
   //   .await
   //   .unwrap();
 
@@ -173,7 +176,7 @@ test!(
         .add_payment(MoneroAddress::from_str(Network::Mainnet, &wallet_rpc_addr).unwrap(), 1000000);
       (builder.build().unwrap(), wallet_rpc)
     },
-    |_, tx: Transaction, _, data: Rpc<SimpleRequestRpc>| async move {
+    |_, tx: Transaction, _, data: SimpleRequestRpc| async move {
       // confirm receipt
       let _: EmptyResponse = data.json_rpc_call("refresh", None).await.unwrap();
       let transfer: TransfersResponse = data
@@ -207,7 +210,7 @@ test!(
         .add_payment(MoneroAddress::from_str(Network::Mainnet, &addr.address).unwrap(), 1000000);
       (builder.build().unwrap(), (wallet_rpc, addr.account_index))
     },
-    |_, tx: Transaction, _, data: (Rpc<SimpleRequestRpc>, u32)| async move {
+    |_, tx: Transaction, _, data: (SimpleRequestRpc, u32)| async move {
       // confirm receipt
       let _: EmptyResponse = data.0.json_rpc_call("refresh", None).await.unwrap();
       let transfer: TransfersResponse = data
@@ -259,7 +262,7 @@ test!(
       ]);
       (builder.build().unwrap(), (wallet_rpc, daemon_rpc, addrs.address_index))
     },
-    |_, tx: Transaction, _, data: (Rpc<SimpleRequestRpc>, Rpc<SimpleRequestRpc>, u32)| async move {
+    |_, tx: Transaction, _, data: (SimpleRequestRpc, SimpleRequestRpc, u32)| async move {
       // confirm receipt
       let _: EmptyResponse = data.0.json_rpc_call("refresh", None).await.unwrap();
       let transfer: TransfersResponse = data
@@ -304,7 +307,7 @@ test!(
       builder.add_payment(MoneroAddress::from_str(Network::Mainnet, &addr).unwrap(), 1000000);
       (builder.build().unwrap(), (wallet_rpc, payment_id))
     },
-    |_, tx: Transaction, _, data: (Rpc<SimpleRequestRpc>, [u8; 8])| async move {
+    |_, tx: Transaction, _, data: (SimpleRequestRpc, [u8; 8])| async move {
       // confirm receipt
       let _: EmptyResponse = data.0.json_rpc_call("refresh", None).await.unwrap();
       let transfer: TransfersResponse = data
@@ -339,7 +342,7 @@ test!(
 
       (builder.build().unwrap(), wallet_rpc)
     },
-    |_, tx: Transaction, _, data: Rpc<SimpleRequestRpc>| async move {
+    |_, tx: Transaction, _, data: SimpleRequestRpc| async move {
       // confirm receipt
       let _: EmptyResponse = data.json_rpc_call("refresh", None).await.unwrap();
       let transfer: TransfersResponse = data

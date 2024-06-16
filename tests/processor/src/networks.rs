@@ -191,6 +191,7 @@ impl Wallet {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
+          rpc::Rpc,
           ViewPair, Scanner,
           address::{Network, AddressSpec},
         };
@@ -436,6 +437,7 @@ impl Wallet {
         use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
+          rpc::Rpc,
           monero::{Protocol, io::decompress_point},
           address::{Network, AddressType, AddressMeta, Address},
           SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
@@ -490,7 +492,7 @@ impl Wallet {
           vec![(to_addr, AMOUNT)],
           &Change::new(view_pair, false),
           data,
-          rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+          rpc.get_fee_rate(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)

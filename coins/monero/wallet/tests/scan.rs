@@ -1,7 +1,7 @@
 use rand_core::RngCore;
 
 use monero_serai::transaction::Transaction;
-use monero_wallet::{address::SubaddressIndex, extra::PaymentId};
+use monero_wallet::{rpc::Rpc, address::SubaddressIndex, extra::PaymentId};
 
 mod runner;
 

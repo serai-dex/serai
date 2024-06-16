@@ -1,11 +1,12 @@
 use rand_core::OsRng;
 
-use monero_serai::{transaction::Transaction, Protocol};
-use monero_rpc::Rpc;
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  extra::Extra, address::SubaddressIndex, ReceivedOutput, SpendableOutput, DecoySelection, Decoys,
-  SignableTransactionBuilder,
+  monero::{transaction::Transaction, Protocol},
+  rpc::Rpc,
+  extra::Extra,
+  address::SubaddressIndex,
+  ReceivedOutput, SpendableOutput, DecoySelection, Decoys, SignableTransactionBuilder,
 };
 
 mod runner;
@@ -13,7 +14,7 @@ mod runner;
 // Set up inputs, select decoys, then add them to the TX builder
 async fn add_inputs(
   protocol: Protocol,
-  rpc: &Rpc<SimpleRequestRpc>,
+  rpc: &SimpleRequestRpc,
   outputs: Vec<ReceivedOutput>,
   builder: &mut SignableTransactionBuilder,
 ) {
@@ -98,7 +99,7 @@ test!(
     },
   ),
   (
-    |protocol, rpc: Rpc<_>, _, _, outputs: Vec<ReceivedOutput>| async move {
+    |protocol, rpc: SimpleRequestRpc, _, _, outputs: Vec<ReceivedOutput>| async move {
       use monero_wallet::FeePriority;
 
       let change_view = ViewPair::new(
@@ -108,7 +109,7 @@ test!(
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
         Change::new(&change_view, false),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
@@ -287,12 +288,12 @@ test!(
     },
   ),
   (
-    |protocol, rpc: Rpc<_>, _, addr, outputs: Vec<ReceivedOutput>| async move {
+    |protocol, rpc: SimpleRequestRpc, _, addr, outputs: Vec<ReceivedOutput>| async move {
       use monero_wallet::FeePriority;
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
         Change::fingerprintable(None),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;

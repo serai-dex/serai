@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
 
-use monero_rpc::{RpcError, RpcConnection, Rpc};
+use monero_rpc::{RpcError, Rpc};
 use monero_serai::{
   io::*,
   primitives::Commitment,
@@ -240,10 +240,7 @@ pub struct SpendableOutput {
 impl SpendableOutput {
   /// Update the spendable output's global index. This is intended to be called if a
   /// re-organization occurred.
-  pub async fn refresh_global_index<RPC: RpcConnection>(
-    &mut self,
-    rpc: &Rpc<RPC>,
-  ) -> Result<(), RpcError> {
+  pub async fn refresh_global_index(&mut self, rpc: &impl Rpc) -> Result<(), RpcError> {
     self.global_index = *rpc
       .get_o_indexes(self.output.absolute.tx)
       .await?
@@ -254,10 +251,7 @@ impl SpendableOutput {
     Ok(())
   }
 
-  pub async fn from<RPC: RpcConnection>(
-    rpc: &Rpc<RPC>,
-    output: ReceivedOutput,
-  ) -> Result<SpendableOutput, RpcError> {
+  pub async fn from(rpc: &impl Rpc, output: ReceivedOutput) -> Result<SpendableOutput, RpcError> {
     let mut output = SpendableOutput { output, global_index: 0 };
     output.refresh_global_index(rpc).await?;
     Ok(output)
@@ -466,9 +460,9 @@ impl Scanner {
   /// transactions is a dead giveaway for which transactions you successfully scanned. This
   /// function obtains the output indexes for the miner transaction, incrementing from there
   /// instead.
-  pub async fn scan<RPC: RpcConnection>(
+  pub async fn scan(
     &mut self,
-    rpc: &Rpc<RPC>,
+    rpc: &impl Rpc,
     block: &Block,
   ) -> Result<Vec<Timelocked<SpendableOutput>>, RpcError> {
     let mut index = rpc.get_o_indexes(block.miner_tx.hash()).await?[0];

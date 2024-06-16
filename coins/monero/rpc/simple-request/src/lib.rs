@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
-// #![deny(missing_docs)] // TODO
+#![deny(missing_docs)]
 
 use std::{sync::Arc, io::Read, time::Duration};
 
@@ -14,7 +14,7 @@ use simple_request::{
   Response, Client,
 };
 
-use monero_rpc::{RpcError, RpcConnection, Rpc};
+use monero_rpc::{RpcError, Rpc};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -64,7 +64,7 @@ impl SimpleRequestRpc {
   ///
   /// A daemon requiring authentication can be used via including the username and password in the
   /// URL.
-  pub async fn new(url: String) -> Result<Rpc<SimpleRequestRpc>, RpcError> {
+  pub async fn new(url: String) -> Result<SimpleRequestRpc, RpcError> {
     Self::with_custom_timeout(url, DEFAULT_TIMEOUT).await
   }
 
@@ -75,7 +75,7 @@ impl SimpleRequestRpc {
   pub async fn with_custom_timeout(
     mut url: String,
     request_timeout: Duration,
-  ) -> Result<Rpc<SimpleRequestRpc>, RpcError> {
+  ) -> Result<SimpleRequestRpc, RpcError> {
     let authentication = if url.contains('@') {
       // Parse out the username and password
       let url_clone = url;
@@ -123,7 +123,7 @@ impl SimpleRequestRpc {
       Authentication::Unauthenticated(Client::with_connection_pool())
     };
 
-    Ok(Rpc::new(SimpleRequestRpc { authentication, url, request_timeout }))
+    Ok(SimpleRequestRpc { authentication, url, request_timeout })
   }
 }
 
@@ -281,7 +281,7 @@ impl SimpleRequestRpc {
 }
 
 #[async_trait]
-impl RpcConnection for SimpleRequestRpc {
+impl Rpc for SimpleRequestRpc {
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
     tokio::time::timeout(self.request_timeout, self.inner_post(route, body))
       .await

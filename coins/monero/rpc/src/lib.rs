@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
-// #![deny(missing_docs)] // TODO
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
@@ -33,35 +33,63 @@ use monero_serai::{
 //   src/wallet/wallet2.cpp#L121
 const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
 
-/// Fee struct, defined as a per-unit cost and a mask for rounding purposes.
+/// A struct containing a fee rate.
+///
+/// The fee rate is defined as a per-weight cost, along with a mask for rounding purposes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct Fee {
+pub struct FeeRate {
+  /// The fee per-weight of the transaction.
   pub per_weight: u64,
+  /// The mask to round with.
   pub mask: u64,
 }
 
-impl Fee {
+impl FeeRate {
+  /// Construct a new fee rate.
+  pub fn new(per_weight: u64, mask: u64) -> Result<FeeRate, RpcError> {
+    if (per_weight == 0) || (mask == 0) {
+      Err(RpcError::InvalidFee)?;
+    }
+    Ok(FeeRate { per_weight, mask })
+  }
+
+  /// Calculate the fee to use from the weight.
+  ///
+  /// This function may panic if any of the `FeeRate`'s fields are zero.
   pub fn calculate_fee_from_weight(&self, weight: usize) -> u64 {
-    let fee = (((self.per_weight * u64::try_from(weight).unwrap()) + self.mask - 1) / self.mask) *
-      self.mask;
+    let fee = self.per_weight * u64::try_from(weight).unwrap();
+    let fee = ((fee + self.mask - 1) / self.mask) * self.mask;
     debug_assert_eq!(weight, self.calculate_weight_from_fee(fee), "Miscalculated weight from fee");
     fee
   }
 
+  /// Calculate the weight from the fee.
+  ///
+  /// This function may panic if any of the `FeeRate`'s fields are zero.
   pub fn calculate_weight_from_fee(&self, fee: u64) -> usize {
     usize::try_from(fee / self.per_weight).unwrap()
   }
 }
 
-/// Fee priority, determining how quickly a transaction is included in a block.
+/// The priority for the fee.
+///
+/// Higher-priority transactions will be included in blocks earlier.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum FeePriority {
+  /// The `Unimportant` priority, as defined by Monero.
   Unimportant,
+  /// The `Normal` priority, as defined by Monero.
   Normal,
+  /// The `Elevated` priority, as defined by Monero.
   Elevated,
+  /// The `Priority` priority, as defined by Monero.
   Priority,
-  Custom { priority: u32 },
+  /// A custom priority.
+  Custom {
+    /// The numeric representation of the priority, as used within the RPC.
+    priority: u32,
+  },
 }
 
 /// https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
@@ -79,9 +107,9 @@ impl FeePriority {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EmptyResponse {}
+struct EmptyResponse {}
 #[derive(Deserialize, Debug)]
-pub struct JsonRpcResponse<T> {
+struct JsonRpcResponse<T> {
   result: T,
 }
 
@@ -98,36 +126,52 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
+/// The response to an output query.
 #[derive(Deserialize, Debug)]
 pub struct OutputResponse {
+  /// The height of the block this output was added to the chain in.
   pub height: usize,
+  /// If the output is unlocked, per the node's local view.
   pub unlocked: bool,
-  key: String,
-  mask: String,
-  txid: String,
+  /// The output's key.
+  pub key: String,
+  /// The output's commitment.
+  pub mask: String,
+  /// The transaction which created this output.
+  pub txid: String,
 }
 
+/// An error from the RPC.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum RpcError {
+  /// An internal error.
   #[cfg_attr(feature = "std", error("internal error ({0})"))]
   InternalError(&'static str),
+  /// A connection error with the node.
   #[cfg_attr(feature = "std", error("connection error ({0})"))]
   ConnectionError(String),
+  /// The node is invalid per the expected protocol.
   #[cfg_attr(feature = "std", error("invalid node ({0})"))]
   InvalidNode(String),
+  /// The node is running an unsupported protocol.
   #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
   UnsupportedProtocol(usize),
+  /// Requested transactions weren't found.
   #[cfg_attr(feature = "std", error("transactions not found"))]
   TransactionsNotFound(Vec<[u8; 32]>),
-  #[cfg_attr(feature = "std", error("invalid point ({0})"))]
-  InvalidPoint(String),
+  /// The transaction was pruned.
+  ///
+  /// Pruned transactions are not supported at this time.
   #[cfg_attr(feature = "std", error("pruned transaction"))]
   PrunedTransaction,
+  /// A transaction (sent or received) was invalid.
   #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
   InvalidTransaction([u8; 32]),
+  /// The returned fee was unusable.
   #[cfg_attr(feature = "std", error("unexpected fee response"))]
   InvalidFee,
+  /// The priority intended for use wasn't usable.
   #[cfg_attr(feature = "std", error("invalid priority"))]
   InvalidPriority,
 }
@@ -142,9 +186,11 @@ fn hash_hex(hash: &str) -> Result<[u8; 32], RpcError> {
 
 fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
   decompress_point(
-    rpc_hex(point)?.try_into().map_err(|_| RpcError::InvalidPoint(point.to_string()))?,
+    rpc_hex(point)?
+      .try_into()
+      .map_err(|_| RpcError::InvalidNode(format!("invalid point: {point}")))?,
   )
-  .ok_or_else(|| RpcError::InvalidPoint(point.to_string()))
+  .ok_or_else(|| RpcError::InvalidNode(format!("invalid point: {point}")))
 }
 
 // Read an EPEE VarInt, distinct from the VarInts used throughout the rest of the protocol
@@ -164,33 +210,63 @@ fn read_epee_vi<R: io::Read>(reader: &mut R) -> io::Result<u64> {
   Ok(vi)
 }
 
+async fn get_fee_rate_v14(rpc: &impl Rpc, priority: FeePriority) -> Result<FeeRate, RpcError> {
+  #[derive(Deserialize, Debug)]
+  struct FeeResponseV14 {
+    status: String,
+    fee: u64,
+    quantization_mask: u64,
+  }
+
+  // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+  //   src/wallet/wallet2.cpp#L7569-L7584
+  // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+  //   src/wallet/wallet2.cpp#L7660-L7661
+  let priority_idx =
+    usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
+      .map_err(|_| RpcError::InvalidPriority)?;
+  let multipliers = [1, 5, 25, 1000];
+  if priority_idx >= multipliers.len() {
+    // though not an RPC error, it seems sensible to treat as such
+    Err(RpcError::InvalidPriority)?;
+  }
+  let fee_multiplier = multipliers[priority_idx];
+
+  let res: FeeResponseV14 = rpc
+    .json_rpc_call(
+      "get_fee_estimate",
+      Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+    )
+    .await?;
+
+  if res.status != "OK" {
+    Err(RpcError::InvalidFee)?;
+  }
+
+  FeeRate::new(res.fee * fee_multiplier, res.quantization_mask)
+}
+
+/// An RPC connection to a Monero daemon.
+///
+/// This is abstract such that users can use an HTTP library (which being their choice), a
+/// Tor/i2p-based transport, or even a memory buffer an external service somehow routes.
 #[async_trait]
-pub trait RpcConnection: Clone + Debug {
+pub trait Rpc: Sync + Clone + Debug {
   /// Perform a POST request to the specified route with the specified body.
   ///
   /// The implementor is left to handle anything such as authentication.
   async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError>;
-}
-
-// TODO: Make this provided methods for RpcConnection?
-#[derive(Clone, Debug)]
-pub struct Rpc<R: RpcConnection>(R);
-impl<R: RpcConnection> Rpc<R> {
-  pub fn new(connection: R) -> Self {
-    Self(connection)
-  }
 
   /// Perform a RPC call to the specified route with the provided parameters.
   ///
   /// This is NOT a JSON-RPC call. They use a route of "json_rpc" and are available via
   /// `json_rpc_call`.
-  pub async fn rpc_call<Params: Serialize + Debug, Response: DeserializeOwned + Debug>(
+  async fn rpc_call<Params: Send + Serialize + Debug, Response: DeserializeOwned + Debug>(
     &self,
     route: &str,
     params: Option<Params>,
   ) -> Result<Response, RpcError> {
     let res = self
-      .0
       .post(
         route,
         if let Some(params) = params {
@@ -206,8 +282,8 @@ impl<R: RpcConnection> Rpc<R> {
       .map_err(|_| RpcError::InvalidNode(format!("response wasn't json: {res_str}")))
   }
 
-  /// Perform a JSON-RPC call with the specified method with the provided parameters
-  pub async fn json_rpc_call<Response: DeserializeOwned + Debug>(
+  /// Perform a JSON-RPC call with the specified method with the provided parameters.
+  async fn json_rpc_call<Response: DeserializeOwned + Debug>(
     &self,
     method: &str,
     params: Option<Value>,
@@ -220,12 +296,12 @@ impl<R: RpcConnection> Rpc<R> {
   }
 
   /// Perform a binary call to the specified route with the provided parameters.
-  pub async fn bin_call(&self, route: &str, params: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    self.0.post(route, params).await
+  async fn bin_call(&self, route: &str, params: Vec<u8>) -> Result<Vec<u8>, RpcError> {
+    self.post(route, params).await
   }
 
   /// Get the active blockchain protocol version.
-  pub async fn get_protocol(&self) -> Result<Protocol, RpcError> {
+  async fn get_protocol(&self) -> Result<Protocol, RpcError> {
     #[derive(Deserialize, Debug)]
     struct ProtocolResponse {
       major_version: usize,
@@ -250,7 +326,11 @@ impl<R: RpcConnection> Rpc<R> {
     )
   }
 
-  pub async fn get_height(&self) -> Result<usize, RpcError> {
+  /// Get the height of the Monero blockchain.
+  ///
+  /// The height is defined as the amount of blocks on the blockchain. For a blockchain with only
+  /// its genesis block, the height will be 1.
+  async fn get_height(&self) -> Result<usize, RpcError> {
     #[derive(Deserialize, Debug)]
     struct HeightResponse {
       height: usize,
@@ -258,7 +338,11 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
 
-  pub async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
+  /// Get the specified transactions.
+  ///
+  /// The received transactions will be hashed in order to verify the correct transactions were
+  /// returned.
+  async fn get_transactions(&self, hashes: &[[u8; 32]]) -> Result<Vec<Transaction>, RpcError> {
     if hashes.is_empty() {
       return Ok(vec![]);
     }
@@ -322,13 +406,19 @@ impl<R: RpcConnection> Rpc<R> {
       .collect()
   }
 
-  pub async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
+  /// Get the specified transaction.
+  ///
+  /// The received transaction will be hashed in order to verify the correct transaction was
+  /// returned.
+  async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
   }
 
-  /// Get the hash of a block from the node by the block's numbers.
-  /// This function does not verify the returned block hash is actually for the number in question.
-  pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
+  /// Get the hash of a block from the node.
+  ///
+  /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
+  /// `height - 1` for the latest block).
+  async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockHeaderResponse {
       hash: String,
@@ -344,8 +434,9 @@ impl<R: RpcConnection> Rpc<R> {
   }
 
   /// Get a block from the node by its hash.
-  /// This function does not verify the returned block actually has the hash in question.
-  pub async fn get_block(&self, hash: [u8; 32]) -> Result<Block, RpcError> {
+  ///
+  /// The received block will be hashed in order to verify the correct block was returned.
+  async fn get_block(&self, hash: [u8; 32]) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
       blob: String,
@@ -362,7 +453,11 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(block)
   }
 
-  pub async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
+  /// Get a block from the node by its number.
+  ///
+  /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
+  /// `height - 1` for the latest block).
+  async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
       blob: String,
@@ -389,14 +484,26 @@ impl<R: RpcConnection> Rpc<R> {
     }
   }
 
-  pub async fn get_block_transactions(&self, hash: [u8; 32]) -> Result<Vec<Transaction>, RpcError> {
+  /// Get the transactions within a block.
+  ///
+  /// This function returns all transactions in the block, including the miner's transaction.
+  ///
+  /// This function does not verify the returned transactions are the ones committed to by the
+  /// block's header.
+  async fn get_block_transactions(&self, hash: [u8; 32]) -> Result<Vec<Transaction>, RpcError> {
     let block = self.get_block(hash).await?;
     let mut res = vec![block.miner_tx];
     res.extend(self.get_transactions(&block.txs).await?);
     Ok(res)
   }
 
-  pub async fn get_block_transactions_by_number(
+  /// Get the transactions within a block.
+  ///
+  /// This function returns all transactions in the block, including the miner's transaction.
+  ///
+  /// This function does not verify the returned transactions are the ones committed to by the
+  /// block's header.
+  async fn get_block_transactions_by_number(
     &self,
     number: usize,
   ) -> Result<Vec<Transaction>, RpcError> {
@@ -404,7 +511,7 @@ impl<R: RpcConnection> Rpc<R> {
   }
 
   /// Get the output indexes of the specified transaction.
-  pub async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
+  async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
     /*
     TODO: Use these when a suitable epee serde lib exists
 
@@ -558,13 +665,10 @@ impl<R: RpcConnection> Rpc<R> {
     .map_err(|_| RpcError::InvalidNode("invalid binary response".to_string()))
   }
 
-  /// Get the output distribution, from the specified height to the specified height (both
-  /// inclusive).
-  pub async fn get_output_distribution(
-    &self,
-    from: usize,
-    to: usize,
-  ) -> Result<Vec<u64>, RpcError> {
+  /// Get the output distribution.
+  ///
+  /// `from` and `to` are heights, not block numbers, and inclusive.
+  async fn get_output_distribution(&self, from: usize, to: usize) -> Result<Vec<u64>, RpcError> {
     #[derive(Deserialize, Debug)]
     struct Distribution {
       distribution: Vec<u64>,
@@ -591,8 +695,8 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(distributions.distributions.swap_remove(0).distribution)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool
-  pub async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
+  /// Get the specified outputs from the RingCT (zero-amount) pool.
+  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
     #[derive(Deserialize, Debug)]
     struct OutsResponse {
       status: String,
@@ -624,7 +728,13 @@ impl<R: RpcConnection> Rpc<R> {
   ///
   /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
   /// Monero transactions.
-  pub async fn get_unlocked_outputs(
+  ///
+  /// The node is trusted for if the output is unlocked unless `fingerprintable_canonical` is set
+  /// to true. If `fingerprintable_canonical` is set to true, the node's local view isn't used, yet
+  /// the transaction's timelock is checked to be unlocked at the specified `height`. This offers a
+  /// canonical decoy selection, yet is fingerprintable as time-based timelocks aren't evaluated
+  /// (and considered locked, preventing their selection).
+  async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
     height: usize,
@@ -671,47 +781,15 @@ impl<R: RpcConnection> Rpc<R> {
       .collect()
   }
 
-  async fn get_fee_v14(&self, priority: FeePriority) -> Result<Fee, RpcError> {
-    #[derive(Deserialize, Debug)]
-    struct FeeResponseV14 {
-      status: String,
-      fee: u64,
-      quantization_mask: u64,
-    }
-
-    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-    //   src/wallet/wallet2.cpp#L7569-L7584
-    // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-    //   src/wallet/wallet2.cpp#L7660-L7661
-    let priority_idx =
-      usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
-        .map_err(|_| RpcError::InvalidPriority)?;
-    let multipliers = [1, 5, 25, 1000];
-    if priority_idx >= multipliers.len() {
-      // though not an RPC error, it seems sensible to treat as such
-      Err(RpcError::InvalidPriority)?;
-    }
-    let fee_multiplier = multipliers[priority_idx];
-
-    let res: FeeResponseV14 = self
-      .json_rpc_call(
-        "get_fee_estimate",
-        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
-      )
-      .await?;
-
-    if res.status != "OK" {
-      Err(RpcError::InvalidFee)?;
-    }
-
-    Ok(Fee { per_weight: res.fee * fee_multiplier, mask: res.quantization_mask })
-  }
-
-  /// Get the currently estimated fee from the node.
+  /// Get the currently estimated fee rate from the node.
   ///
   /// This may be manipulated to unsafe levels and MUST be sanity checked.
   // TODO: Take a sanity check argument
-  pub async fn get_fee(&self, protocol: Protocol, priority: FeePriority) -> Result<Fee, RpcError> {
+  async fn get_fee_rate(
+    &self,
+    protocol: Protocol,
+    priority: FeePriority,
+  ) -> Result<FeeRate, RpcError> {
     // TODO: Implement wallet2's adjust_priority which by default automatically uses a lower
     // priority than provided depending on the backlog in the pool
     if protocol.v16_fee() {
@@ -743,14 +821,15 @@ impl<R: RpcConnection> Rpc<R> {
       } else if priority_idx >= res.fees.len() {
         Err(RpcError::InvalidPriority)
       } else {
-        Ok(Fee { per_weight: res.fees[priority_idx], mask: res.quantization_mask })
+        FeeRate::new(res.fees[priority_idx], res.quantization_mask)
       }
     } else {
-      self.get_fee_v14(priority).await
+      get_fee_rate_v14(self, priority).await
     }
   }
 
-  pub async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
+  /// Publish a transaction.
+  async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
     #[allow(dead_code)]
     #[derive(Deserialize, Debug)]
     struct SendRawResponse {
@@ -778,8 +857,11 @@ impl<R: RpcConnection> Rpc<R> {
     Ok(())
   }
 
+  /// Generate blocks, with the specified address receiving the block reward.
+  ///
+  /// Returns the hashes of the generated blocks and the last block's number.
   // TODO: Take &Address, not &str?
-  pub async fn generate_blocks(
+  async fn generate_blocks(
     &self,
     address: &str,
     block_count: usize,

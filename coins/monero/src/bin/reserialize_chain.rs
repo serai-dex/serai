@@ -20,7 +20,7 @@ mod binaries {
 
   pub(crate) use tokio::task::JoinHandle;
 
-  pub(crate) async fn check_block(rpc: Arc<Rpc<SimpleRequestRpc>>, block_i: usize) {
+  pub(crate) async fn check_block(rpc: Arc<SimpleRequestRpc>, block_i: usize) {
     let hash = loop {
       match rpc.get_block_hash(block_i).await {
         Ok(hash) => break hash,
@@ -158,7 +158,7 @@ mod binaries {
               }
 
               async fn get_outs(
-                rpc: &Rpc<SimpleRequestRpc>,
+                rpc: &SimpleRequestRpc,
                 amount: u64,
                 indexes: &[u64],
               ) -> Vec<[EdwardsPoint; 2]> {

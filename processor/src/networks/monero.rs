@@ -19,7 +19,7 @@ use monero_wallet::{
   rpc::{RpcError, Rpc},
   ViewPair, Scanner,
   address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
-  Fee, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
+  FeeRate, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
   SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
 };
 
@@ -222,7 +222,7 @@ impl BlockTrait<Monero> for Block {
 
 #[derive(Clone, Debug)]
 pub struct Monero {
-  rpc: Rpc<SimpleRequestRpc>,
+  rpc: SimpleRequestRpc,
 }
 // Shim required for testing/debugging purposes due to generic arguments also necessitating trait
 // bounds
@@ -275,7 +275,7 @@ impl Monero {
     scanner
   }
 
-  async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
+  async fn median_fee(&self, block: &Block) -> Result<FeeRate, NetworkError> {
     let mut fees = vec![];
     for tx_hash in &block.txs {
       let tx =
@@ -294,7 +294,7 @@ impl Monero {
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
     // TODO: Set a sane minimum fee
-    Ok(Fee { per_weight: fee.max(1500000), mask: 10000 })
+    Ok(FeeRate::new(fee.max(1500000), 10000).unwrap())
   }
 
   async fn make_signable_transaction(
@@ -795,7 +795,7 @@ impl Network for Monero {
       vec![(address.into(), amount - fee)],
       &Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
-      self.rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
+      self.rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
     )
     .unwrap()
     .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))

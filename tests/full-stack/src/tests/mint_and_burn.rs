@@ -89,6 +89,7 @@ async fn mint_and_burn_test() {
       let monero_blocks = {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_wallet::{
+          rpc::Rpc,
           ViewPair,
           address::{Network, AddressSpec},
         };
@@ -128,6 +129,8 @@ async fn mint_and_burn_test() {
         }
 
         {
+          use monero_wallet::rpc::Rpc;
+
           let rpc = handles.monero(ops).await;
 
           for (block, txs) in &monero_blocks {
@@ -347,6 +350,7 @@ async fn mint_and_burn_test() {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
       use monero_wallet::{
         monero::{io::decompress_point, Protocol, transaction::Timelock},
+        rpc::Rpc,
         ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
         address::{Network, AddressType, AddressMeta, MoneroAddress},
       };
@@ -393,7 +397,7 @@ async fn mint_and_burn_test() {
         )],
         &Change::new(&view_pair, false),
         vec![Shorthand::transfer(None, serai_addr).encode()],
-        rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
       )
       .unwrap()
       .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))
@@ -482,7 +486,10 @@ async fn mint_and_burn_test() {
     // Get the current blocks
     let mut start_bitcoin_block =
       handles[0].bitcoin(&ops).await.get_latest_block_number().await.unwrap();
-    let mut start_monero_block = handles[0].monero(&ops).await.get_height().await.unwrap();
+    let mut start_monero_block = {
+      use monero_wallet::rpc::Rpc;
+      handles[0].monero(&ops).await.get_height().await.unwrap()
+    };
 
     // Burn the sriBTC/sriXMR
     {
@@ -574,7 +581,7 @@ async fn mint_and_burn_test() {
 
     // Verify the received Monero TX
     {
-      use monero_wallet::{ViewPair, Scanner};
+      use monero_wallet::{rpc::Rpc, ViewPair, Scanner};
       let rpc = handles[0].monero(&ops).await;
       let mut scanner = Scanner::from_view(
         ViewPair::new(monero_spend, Zeroizing::new(monero_view)),

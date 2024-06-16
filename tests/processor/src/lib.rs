@@ -275,6 +275,7 @@ impl Coordinator {
             }
             NetworkId::Monero => {
               use monero_simple_request_rpc::SimpleRequestRpc;
+              use monero_wallet::rpc::Rpc;
 
               // Monero's won't, so call get_height
               if handle
@@ -405,6 +406,7 @@ impl Coordinator {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
+          rpc::Rpc,
           ViewPair,
           address::{Network, AddressSpec},
         };
@@ -516,6 +518,7 @@ impl Coordinator {
       }
       NetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::rpc::Rpc;
 
         let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
         let to = rpc.get_height().await.unwrap();
@@ -576,7 +579,7 @@ impl Coordinator {
       }
       NetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
-        use monero_wallet::monero::transaction::Transaction;
+        use monero_wallet::{rpc::Rpc, monero::transaction::Transaction};
 
         let rpc = SimpleRequestRpc::new(rpc_url)
           .await
@@ -676,6 +679,7 @@ impl Coordinator {
       }
       NetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::rpc::Rpc;
 
         let rpc = SimpleRequestRpc::new(rpc_url)
           .await

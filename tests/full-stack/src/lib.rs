@@ -53,8 +53,9 @@ impl Handles {
   pub async fn monero(
     &self,
     ops: &DockerOperations,
-  ) -> monero_wallet::rpc::Rpc<monero_simple_request_rpc::SimpleRequestRpc> {
+  ) -> monero_simple_request_rpc::SimpleRequestRpc {
     use monero_simple_request_rpc::SimpleRequestRpc;
+    use monero_wallet::rpc::Rpc;
 
     let rpc = ops.handle(&self.monero.0).host_port(self.monero.1).unwrap();
     let rpc = format!("http://{RPC_USER}:{RPC_PASS}@{}:{}", rpc.0, rpc.1);

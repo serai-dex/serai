@@ -2,6 +2,7 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
 
 use monero_serai::transaction::Transaction;
 use monero_wallet::{
+  rpc::Rpc,
   Eventuality,
   address::{AddressType, AddressMeta, MoneroAddress},
 };

@@ -8,13 +8,13 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use tokio::sync::Mutex;
 
-use monero_rpc::Rpc;
 use monero_simple_request_rpc::SimpleRequestRpc;
-use monero_serai::{transaction::Transaction, DEFAULT_LOCK_WINDOW};
 use monero_wallet::{
+  monero::transaction::Transaction,
+  rpc::Rpc,
   ViewPair, Scanner,
   address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
-  SpendableOutput, Fee,
+  SpendableOutput, FeeRate,
 };
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
@@ -34,7 +34,7 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
 
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
-pub async fn mine_until_unlocked(rpc: &Rpc<SimpleRequestRpc>, addr: &str, tx_hash: [u8; 32]) {
+pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u8; 32]) {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
   let mut found = false;
@@ -52,11 +52,11 @@ pub async fn mine_until_unlocked(rpc: &Rpc<SimpleRequestRpc>, addr: &str, tx_has
   // Mine until tx's outputs are unlocked
   let o_indexes: Vec<u64> = rpc.get_o_indexes(tx_hash).await.unwrap();
   while rpc
-    .get_outs(&o_indexes)
+    .get_unlocked_outputs(&o_indexes, height, false)
     .await
     .unwrap()
     .into_iter()
-    .all(|o| (!(o.unlocked && height >= (o.height + DEFAULT_LOCK_WINDOW))))
+    .all(|output| output.is_some())
   {
     height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
   }
@@ -64,7 +64,7 @@ pub async fn mine_until_unlocked(rpc: &Rpc<SimpleRequestRpc>, addr: &str, tx_has
 
 // Mines 60 blocks and returns an unlocked miner TX output.
 #[allow(dead_code)]
-pub async fn get_miner_tx_output(rpc: &Rpc<SimpleRequestRpc>, view: &ViewPair) -> SpendableOutput {
+pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> SpendableOutput {
   let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
 
   // Mine 60 blocks to unlock a miner TX
@@ -79,7 +79,7 @@ pub async fn get_miner_tx_output(rpc: &Rpc<SimpleRequestRpc>, view: &ViewPair) -
 }
 
 /// Make sure the weight and fee match the expected calculation.
-pub fn check_weight_and_fee(tx: &Transaction, fee_rate: Fee) {
+pub fn check_weight_and_fee(tx: &Transaction, fee_rate: FeeRate) {
   let fee = tx.rct_signatures.base.fee;
 
   let weight = tx.weight();
@@ -90,7 +90,7 @@ pub fn check_weight_and_fee(tx: &Transaction, fee_rate: Fee) {
   assert_eq!(fee, expected_fee);
 }
 
-pub async fn rpc() -> Rpc<SimpleRequestRpc> {
+pub async fn rpc() -> SimpleRequestRpc {
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
@@ -216,7 +216,7 @@ macro_rules! test {
 
           let builder = SignableTransactionBuilder::new(
             protocol,
-            rpc.get_fee(protocol, FeePriority::Unimportant).await.unwrap(),
+            rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
             Change::new(
               &ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
