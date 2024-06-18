@@ -95,15 +95,13 @@ async fn get_session(serai: &Serai, network: NetworkId) -> Session {
     .unwrap()
 }
 
-async fn wait_till_next_epoch(serai: &Serai) -> Session {
-  let starting_session = get_session(serai, NetworkId::Serai).await;
+async fn wait_till_session_1(serai: &Serai, network: NetworkId) {
+  let mut current_session = get_session(serai, network).await;
 
-  let mut session = starting_session;
-  while session == starting_session {
+  while current_session.0 < 1 {
     sleep(Duration::from_secs(6)).await;
-    session = get_session(serai, NetworkId::Serai).await;
+    current_session = get_session(serai, network).await;
   }
-  session
 }
 
 async fn most_recent_new_set_event(serai: &Serai, network: NetworkId) -> ValidatorSetsEvent {
@@ -132,12 +130,14 @@ async fn set_rotation_test() {
       let mut excluded = processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);
 
+      // excluded participant
       let pair5 = insecure_pair_from_name("Eve");
       let network = NetworkId::Bitcoin;
       let amount = Amount(1_000_000 * 10_u64.pow(8));
       let serai = processors[0].serai().await;
 
-      // add the last participant into validator set for btc network
+      // allocate now for the last participant so that it is guaranteed to be included into session
+      // 1 set. This doesn't affect the genesis set at all since that is a predetermined set.
       allocate_stake(&serai, network, amount, &pair5, 0).await;
 
       // genesis keygen
@@ -151,7 +151,7 @@ async fn set_rotation_test() {
       }
 
       // wait until next session to see the effect on coordinator
-      wait_till_next_epoch(&serai).await;
+      wait_till_session_1(&serai, network).await;
 
       // verfiy that coordinator received new_set
       assert_eq!(
