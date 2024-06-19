@@ -250,6 +250,10 @@ async fn get_fee_rate_v14(rpc: &impl Rpc, priority: FeePriority) -> Result<FeeRa
 ///
 /// This is abstract such that users can use an HTTP library (which being their choice), a
 /// Tor/i2p-based transport, or even a memory buffer an external service somehow routes.
+///
+/// While no implementors are directly provided, [monero-simple-request-rpc](
+///   https://github.com/serai-dex/serai/tree/develop/coins/monero/rpc/simple-request
+/// ) is recommended.
 #[async_trait]
 pub trait Rpc: Sync + Clone + Debug {
   /// Perform a POST request to the specified route with the specified body.

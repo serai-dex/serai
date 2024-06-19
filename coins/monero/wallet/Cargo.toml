@@ -84,5 +84,6 @@ std = [
   "monero-serai/std",
   "monero-rpc/std",
 ]
+compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-serai/compile-time-generators"]
 multisig = ["transcript", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]
-default = ["std"]
+default = ["std", "compile-time-generators"]

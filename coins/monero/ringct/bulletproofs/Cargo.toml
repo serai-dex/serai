@@ -54,4 +54,4 @@ std = [
   "monero-primitives/std",
 ]
 compile-time-generators = ["curve25519-dalek/precomputed-tables"]
-default = ["std"]
+default = ["std", "compile-time-generators"]

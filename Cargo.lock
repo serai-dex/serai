@@ -4867,7 +4867,6 @@ name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [
  "curve25519-dalek",
- "digest_auth",
  "hex",
  "hex-literal",
  "monero-borromean",
@@ -4881,8 +4880,6 @@ dependencies = [
  "serde",
  "serde_json",
  "std-shims",
- "thiserror",
- "tokio",
  "zeroize",
 ]
 

@@ -118,7 +118,7 @@ impl UnreducedScalar {
   /// reduced. This lead to the scalar stored being interpreted as a different scalar.
   /// This function recovers that scalar.
   ///
-  /// See https://github.com/monero-project/monero/issues/8438 for more info.
+  /// See <https://github.com/monero-project/monero/issues/8438> for more info.
   pub fn recover_monero_slide_scalar(&self) -> Scalar {
     if self.0[31] & 128 == 0 {
       // Computing the w-NAF of a number can only give an output with 1 more bit than
