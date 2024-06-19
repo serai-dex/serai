@@ -153,7 +153,7 @@ async fn set_rotation_test() {
       // wait until next session to see the effect on coordinator
       wait_till_session_1(&serai, network).await;
 
-      // verfiy that coordinator received new_set
+      // Ensure the new validator was included in the new set
       assert_eq!(
         most_recent_new_set_event(&serai, network).await,
         ValidatorSetsEvent::NewSet { set: ValidatorSet { session: Session(1), network } },
