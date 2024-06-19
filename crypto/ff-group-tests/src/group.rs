@@ -178,10 +178,7 @@ pub fn test_prime_group<R: RngCore, G: PrimeGroup>(rng: &mut R) {
 }
 
 /// Run all tests offered by this crate on the group.
-pub fn test_prime_group_bits<R: RngCore, G: PrimeGroup>(rng: &mut R)
-where
-  G::Scalar: PrimeFieldBits,
-{
+pub fn test_prime_group_bits<R: RngCore, G: PrimeGroup<Scalar: PrimeFieldBits>>(rng: &mut R) {
   test_prime_field_bits::<R, G::Scalar>(rng);
   test_prime_group::<R, G>(rng);
 }

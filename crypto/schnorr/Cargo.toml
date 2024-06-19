@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorr"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["schnorr", "ff", "group"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.79"
 
 [package.metadata.docs.rs]
 all-features = true

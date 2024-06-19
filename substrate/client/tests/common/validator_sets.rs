@@ -64,7 +64,12 @@ pub async fn set_keys(
   // Set the key pair
   let block = publish_tx(
     serai,
-    &SeraiValidatorSets::set_keys(set.network, vec![], key_pair.clone(), Signature(sig.to_bytes())),
+    &SeraiValidatorSets::set_keys(
+      set.network,
+      vec![].try_into().unwrap(),
+      key_pair.clone(),
+      Signature(sig.to_bytes()),
+    ),
   )
   .await;
 

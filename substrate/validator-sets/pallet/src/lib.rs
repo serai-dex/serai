@@ -878,7 +878,7 @@ pub mod pallet {
     pub fn set_keys(
       origin: OriginFor<T>,
       network: NetworkId,
-      removed_participants: Vec<Public>,
+      removed_participants: BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
       key_pair: KeyPair,
       signature: Signature,
     ) -> DispatchResult {

@@ -4,7 +4,7 @@ use alloy_core::primitives::{Address, B256, U256};
 
 use alloy_sol_types::{SolInterface, SolEvent};
 
-use alloy_rpc_types::Filter;
+use alloy_rpc_types_eth::Filter;
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
