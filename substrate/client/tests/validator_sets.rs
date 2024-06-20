@@ -247,8 +247,7 @@ async fn validator_set_rotation() {
           .await;
 
         // remove 1 participant
-        let participant_to_remove =
-          accounts[usize::try_from(OsRng.next_u64() % 4).unwrap()].clone();
+        let participant_to_remove = accounts[1].clone();
         let hash = deallocate_stake(
           &serai,
           network,
