@@ -1,4 +1,3 @@
-use sp_core::{ConstU32, bounded::BoundedVec};
 use sp_consensus_grandpa::EquivocationProof;
 
 use serai_primitives::{BlockNumber, SeraiAddress};
@@ -19,7 +18,7 @@ pub enum Call {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
-  NewAuthorities { authority_set: BoundedVec<(SeraiAddress, u64), ConstU32<0>> },
+  NewAuthorities { authority_set: alloc::vec::Vec<(SeraiAddress, u64)> },
   // TODO: Remove these
   Paused,
   Resumed,

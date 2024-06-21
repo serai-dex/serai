@@ -195,10 +195,10 @@ impl Serai {
   }
 
   async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
-    let hash: String = self
+    let validators: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
-    let bytes = Self::hex_decode(hash)?;
+    let bytes = Self::hex_decode(validators)?;
     let r = Vec::<Public>::decode(&mut bytes.as_slice())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(r)

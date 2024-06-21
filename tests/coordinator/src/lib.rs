@@ -60,12 +60,18 @@ pub fn coordinator_instance(
   )
 }
 
-pub fn serai_composition(name: &str) -> TestBodySpecification {
-  serai_docker_tests::build("serai".to_string());
-
-  TestBodySpecification::with_image(
-    Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
-  )
+pub fn serai_composition(name: &str, fast_epoch: bool) -> TestBodySpecification {
+  (if fast_epoch {
+    serai_docker_tests::build("serai-fast-epoch".to_string());
+    TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-serai-fast-epoch").pull_policy(PullPolicy::Never),
+    )
+  } else {
+    serai_docker_tests::build("serai".to_string());
+    TestBodySpecification::with_image(
+      Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
+    )
+  })
   .replace_env(
     [("SERAI_NAME".to_string(), name.to_lowercase()), ("KEY".to_string(), " ".to_string())].into(),
   )

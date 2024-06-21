@@ -1,36 +1,71 @@
 use rand_core::{RngCore, OsRng};
 
-use sp_core::{sr25519::Public, Pair};
+use sp_core::{
+  sr25519::{Public, Pair},
+  Pair as PairTrait,
+};
 
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, insecure_pair_from_name},
+  primitives::{NETWORKS, NetworkId, BlockHash, insecure_pair_from_name},
   validator_sets::{
     primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
+  },
+  in_instructions::{
+    primitives::{Batch, SignedBatch, batch_message},
+    SeraiInInstructions,
   },
   Amount, Serai,
 };
 
 mod common;
-use common::validator_sets::{set_keys, allocate_stake, deallocate_stake};
+use common::{
+  tx::publish_tx,
+  validator_sets::{allocate_stake, deallocate_stake, set_keys},
+};
 
-const EPOCH_INTERVAL: u64 = 5;
+fn get_random_key_pair() -> KeyPair {
+  let mut ristretto_key = [0; 32];
+  OsRng.fill_bytes(&mut ristretto_key);
+  let mut external_key = vec![0; 33];
+  OsRng.fill_bytes(&mut external_key);
+  KeyPair(Public(ristretto_key), external_key.try_into().unwrap())
+}
+
+async fn get_ordered_keys(serai: &Serai, network: NetworkId, accounts: &[Pair]) -> Vec<Pair> {
+  // retrieve the current session validators so that we know the order of the keys
+  // that is necessary for the correct musig signature.
+  let validators = serai
+    .as_of_latest_finalized_block()
+    .await
+    .unwrap()
+    .validator_sets()
+    .active_network_validators(network)
+    .await
+    .unwrap();
+
+  // collect the pairs of the validators
+  let mut pairs = vec![];
+  for v in validators {
+    let p = accounts.iter().find(|pair| pair.public() == v).unwrap().clone();
+    pairs.push(p);
+  }
+
+  pairs
+}
 
 serai_test!(
   set_keys_test: (|serai: Serai| async move {
     let network = NetworkId::Bitcoin;
     let set = ValidatorSet { session: Session(0), network };
 
-    let public = insecure_pair_from_name("Alice").public();
+    let pair = insecure_pair_from_name("Alice");
+    let public = pair.public();
 
     // Neither of these keys are validated
     // The external key is infeasible to validate on-chain, the Ristretto key is feasible
     // TODO: Should the Ristretto key be validated?
-    let mut ristretto_key = [0; 32];
-    OsRng.fill_bytes(&mut ristretto_key);
-    let mut external_key = vec![0; 33];
-    OsRng.fill_bytes(&mut external_key);
-    let key_pair = KeyPair(Public(ristretto_key), external_key.try_into().unwrap());
+    let key_pair = get_random_key_pair();
 
     // Make sure the genesis is as expected
     assert_eq!(
@@ -62,7 +97,7 @@ serai_test!(
       assert_eq!(participants_ref, [public].as_ref());
     }
 
-    let block = set_keys(&serai, set, key_pair.clone()).await;
+    let block = set_keys(&serai, set, key_pair.clone(), &[pair]).await;
 
     // While the set_keys function should handle this, it's beneficial to
     // independently test it
@@ -149,11 +184,13 @@ async fn validator_set_rotation() {
       );
 
       // genesis accounts
-      let pair1 = insecure_pair_from_name("Alice");
-      let pair2 = insecure_pair_from_name("Bob");
-      let pair3 = insecure_pair_from_name("Charlie");
-      let pair4 = insecure_pair_from_name("Dave");
-      let pair5 = insecure_pair_from_name("Eve");
+      let accounts = vec![
+        insecure_pair_from_name("Alice"),
+        insecure_pair_from_name("Bob"),
+        insecure_pair_from_name("Charlie"),
+        insecure_pair_from_name("Dave"),
+        insecure_pair_from_name("Eve"),
+      ];
 
       // amounts for single key share per network
       let key_shares = HashMap::from([
@@ -164,8 +201,9 @@ async fn validator_set_rotation() {
       ]);
 
       // genesis participants per network
+      #[allow(clippy::redundant_closure_for_method_calls)]
       let default_participants =
-        vec![pair1.public(), pair2.public(), pair3.public(), pair4.public()];
+        accounts[.. 4].to_vec().iter().map(|pair| pair.public()).collect::<Vec<_>>();
       let mut participants = HashMap::from([
         (NetworkId::Serai, default_participants.clone()),
         (NetworkId::Bitcoin, default_participants.clone()),
@@ -181,28 +219,83 @@ async fn validator_set_rotation() {
         participants.sort();
         verify_session_and_active_validators(&serai, network, 0, participants).await;
 
-        // add 1 participant & verify
-        let hash =
-          allocate_stake(&serai, network, key_shares[&network], &pair5, i.try_into().unwrap())
-            .await;
-        participants.push(pair5.public());
-        participants.sort();
-        verify_session_and_active_validators(
+        // add 1 participant
+        let last_participant = accounts[4].clone();
+        let hash = allocate_stake(
           &serai,
           network,
-          get_active_session(&serai, network, hash).await,
-          participants,
+          key_shares[&network],
+          &last_participant,
+          i.try_into().unwrap(),
         )
         .await;
+        participants.push(last_participant.public());
+        // the session at which set changes becomes active
+        let activation_session = get_session_at_which_changes_activate(&serai, network, hash).await;
 
-        // remove 1 participant & verify
-        let hash =
-          deallocate_stake(&serai, network, key_shares[&network], &pair2, i.try_into().unwrap())
-            .await;
-        participants.swap_remove(participants.iter().position(|k| *k == pair2.public()).unwrap());
-        let active_session = get_active_session(&serai, network, hash).await;
+        // set the keys if it is an external set
+        if network != NetworkId::Serai {
+          let set = ValidatorSet { session: Session(0), network };
+          let key_pair = get_random_key_pair();
+          let pairs = get_ordered_keys(&serai, network, &accounts).await;
+          set_keys(&serai, set, key_pair, &pairs).await;
+        }
+
+        // verify
         participants.sort();
-        verify_session_and_active_validators(&serai, network, active_session, participants).await;
+        verify_session_and_active_validators(&serai, network, activation_session, participants)
+          .await;
+
+        // remove 1 participant
+        let participant_to_remove = accounts[1].clone();
+        let hash = deallocate_stake(
+          &serai,
+          network,
+          key_shares[&network],
+          &participant_to_remove,
+          i.try_into().unwrap(),
+        )
+        .await;
+        participants.swap_remove(
+          participants.iter().position(|k| *k == participant_to_remove.public()).unwrap(),
+        );
+        let activation_session = get_session_at_which_changes_activate(&serai, network, hash).await;
+
+        if network != NetworkId::Serai {
+          // set the keys if it is an external set
+          let set = ValidatorSet { session: Session(1), network };
+
+          // we need the whole substrate key pair to sign the batch
+          let (substrate_pair, key_pair) = {
+            let pair = insecure_pair_from_name("session-1-key-pair");
+            let public = pair.public();
+
+            let mut external_key = vec![0; 33];
+            OsRng.fill_bytes(&mut external_key);
+
+            (pair, KeyPair(public, external_key.try_into().unwrap()))
+          };
+          let pairs = get_ordered_keys(&serai, network, &accounts).await;
+          set_keys(&serai, set, key_pair, &pairs).await;
+
+          // provide a batch to complete the handover and retire the previous set
+          let mut block_hash = BlockHash([0; 32]);
+          OsRng.fill_bytes(&mut block_hash.0);
+          let batch = Batch { network, id: 0, block: block_hash, instructions: vec![] };
+          publish_tx(
+            &serai,
+            &SeraiInInstructions::execute_batch(SignedBatch {
+              batch: batch.clone(),
+              signature: substrate_pair.sign(&batch_message(&batch)),
+            }),
+          )
+          .await;
+        }
+
+        // verify
+        participants.sort();
+        verify_session_and_active_validators(&serai, network, activation_session, participants)
+          .await;
 
         // check pending deallocations
         let pending = serai
@@ -212,8 +305,8 @@ async fn validator_set_rotation() {
           .validator_sets()
           .pending_deallocations(
             network,
-            pair2.public(),
-            Session(u32::try_from(active_session + 1).unwrap()),
+            participant_to_remove.public(),
+            Session(activation_session + 1),
           )
           .await
           .unwrap();
@@ -223,24 +316,39 @@ async fn validator_set_rotation() {
     .await;
 }
 
+async fn session_for_block(serai: &Serai, block: [u8; 32], network: NetworkId) -> u32 {
+  serai.as_of(block).validator_sets().session(network).await.unwrap().unwrap().0
+}
+
 async fn verify_session_and_active_validators(
   serai: &Serai,
   network: NetworkId,
-  session: u64,
+  session: u32,
   participants: &[Public],
 ) {
-  // wait untill the epoch block finalized
-  let epoch_block = (session * EPOCH_INTERVAL) + 1;
-  while serai.finalized_block_by_number(epoch_block).await.unwrap().is_none() {
-    // sleep 1 block
-    tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
-  }
-  let serai_for_block =
-    serai.as_of(serai.finalized_block_by_number(epoch_block).await.unwrap().unwrap().hash());
+  // wait until the active session. This wait should be max 30 secs since the epoch time.
+  let block = tokio::time::timeout(core::time::Duration::from_secs(2 * 60), async move {
+    loop {
+      let mut block = serai.latest_finalized_block_hash().await.unwrap();
+      if session_for_block(serai, block, network).await < session {
+        // Sleep a block
+        tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+        continue;
+      }
+      while session_for_block(serai, block, network).await > session {
+        block = serai.block(block).await.unwrap().unwrap().header.parent_hash.0;
+      }
+      assert_eq!(session_for_block(serai, block, network).await, session);
+      break block;
+    }
+  })
+  .await
+  .unwrap();
+  let serai_for_block = serai.as_of(block);
 
   // verify session
   let s = serai_for_block.validator_sets().session(network).await.unwrap().unwrap();
-  assert_eq!(u64::from(s.0), session);
+  assert_eq!(s.0, session);
 
   // verify participants
   let mut validators =
@@ -249,10 +357,11 @@ async fn verify_session_and_active_validators(
   assert_eq!(validators, participants);
 
   // make sure finalization continues as usual after the changes
-  tokio::time::timeout(tokio::time::Duration::from_secs(60), async move {
+  let current_finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
+  tokio::time::timeout(core::time::Duration::from_secs(60), async move {
     let mut finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
-    while finalized_block <= epoch_block + 2 {
-      tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
+    while finalized_block <= current_finalized_block + 2 {
+      tokio::time::sleep(core::time::Duration::from_secs(6)).await;
       finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     }
   })
@@ -262,15 +371,18 @@ async fn verify_session_and_active_validators(
   // TODO: verify key shares as well?
 }
 
-async fn get_active_session(serai: &Serai, network: NetworkId, hash: [u8; 32]) -> u64 {
-  let block_number = serai.block(hash).await.unwrap().unwrap().header.number;
-  let epoch = block_number / EPOCH_INTERVAL;
+async fn get_session_at_which_changes_activate(
+  serai: &Serai,
+  network: NetworkId,
+  hash: [u8; 32],
+) -> u32 {
+  let session = session_for_block(serai, hash, network).await;
 
   // changes should be active in the next session
   if network == NetworkId::Serai {
     // it takes 1 extra session for serai net to make the changes active.
-    epoch + 2
+    session + 2
   } else {
-    epoch + 1
+    session + 1
   }
 }
