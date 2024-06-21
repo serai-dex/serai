@@ -2,10 +2,7 @@ use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::{transaction::Transaction, Protocol},
-  rpc::Rpc,
-  extra::Extra,
-  address::SubaddressIndex,
+  monero::transaction::Transaction, Protocol, rpc::Rpc, extra::Extra, address::SubaddressIndex,
   ReceivedOutput, SpendableOutput, DecoySelection, Decoys, SignableTransactionBuilder,
 };
 
@@ -109,7 +106,7 @@ test!(
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         Change::new(&change_view, false),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
@@ -293,7 +290,7 @@ test!(
 
       let mut builder = SignableTransactionBuilder::new(
         protocol,
-        rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         Change::fingerprintable(None),
       );
       add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;

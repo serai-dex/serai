@@ -13,7 +13,6 @@ use crate::{
   primitives::keccak256,
   ring_signatures::RingSignature,
   ringct::{bulletproofs::Bulletproof, RctType, RctBase, RctPrunable, RctSignatures},
-  Protocol,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -254,15 +253,19 @@ pub struct Transaction {
 }
 
 impl Transaction {
+  // TODO: Replace ring_len, decoy_weights for &[&[usize]], where the inner buf is the decoy
+  // offsets
   pub fn fee_weight(
-    protocol: Protocol,
+    view_tags: bool,
+    bp_plus: bool,
+    ring_len: usize,
     decoy_weights: &[usize],
     outputs: usize,
     extra: usize,
     fee: u64,
   ) -> usize {
-    TransactionPrefix::fee_weight(decoy_weights, outputs, protocol.view_tags(), extra) +
-      RctSignatures::fee_weight(protocol, decoy_weights.len(), outputs, fee)
+    TransactionPrefix::fee_weight(decoy_weights, outputs, view_tags, extra) +
+      RctSignatures::fee_weight(bp_plus, ring_len, decoy_weights.len(), outputs, fee)
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {

@@ -23,7 +23,6 @@ use serde_json::{Value, json};
 
 use monero_serai::{
   io::*,
-  Protocol,
   transaction::{Input, Timelock, Transaction},
   block::Block,
 };
@@ -154,9 +153,6 @@ pub enum RpcError {
   /// The node is invalid per the expected protocol.
   #[cfg_attr(feature = "std", error("invalid node ({0})"))]
   InvalidNode(String),
-  /// The node is running an unsupported protocol.
-  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
-  UnsupportedProtocol(usize),
   /// Requested transactions weren't found.
   #[cfg_attr(feature = "std", error("transactions not found"))]
   TransactionsNotFound(Vec<[u8; 32]>),
@@ -208,42 +204,6 @@ fn read_epee_vi<R: io::Read>(reader: &mut R) -> io::Result<u64> {
     vi |= u64::from(read_byte(reader)?) << (((i - 1) * 8) + 6);
   }
   Ok(vi)
-}
-
-async fn get_fee_rate_v14(rpc: &impl Rpc, priority: FeePriority) -> Result<FeeRate, RpcError> {
-  #[derive(Deserialize, Debug)]
-  struct FeeResponseV14 {
-    status: String,
-    fee: u64,
-    quantization_mask: u64,
-  }
-
-  // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-  //   src/wallet/wallet2.cpp#L7569-L7584
-  // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-  //   src/wallet/wallet2.cpp#L7660-L7661
-  let priority_idx =
-    usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
-      .map_err(|_| RpcError::InvalidPriority)?;
-  let multipliers = [1, 5, 25, 1000];
-  if priority_idx >= multipliers.len() {
-    // though not an RPC error, it seems sensible to treat as such
-    Err(RpcError::InvalidPriority)?;
-  }
-  let fee_multiplier = multipliers[priority_idx];
-
-  let res: FeeResponseV14 = rpc
-    .json_rpc_call(
-      "get_fee_estimate",
-      Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
-    )
-    .await?;
-
-  if res.status != "OK" {
-    Err(RpcError::InvalidFee)?;
-  }
-
-  FeeRate::new(res.fee * fee_multiplier, res.quantization_mask)
 }
 
 /// An RPC connection to a Monero daemon.
@@ -305,10 +265,12 @@ pub trait Rpc: Sync + Clone + Debug {
   }
 
   /// Get the active blockchain protocol version.
-  async fn get_protocol(&self) -> Result<Protocol, RpcError> {
+  ///
+  /// This is specifically the major version within the most recent block header.
+  async fn get_protocol(&self) -> Result<u8, RpcError> {
     #[derive(Deserialize, Debug)]
     struct ProtocolResponse {
-      major_version: usize,
+      major_version: u8,
     }
 
     #[derive(Deserialize, Debug)]
@@ -317,16 +279,11 @@ pub trait Rpc: Sync + Clone + Debug {
     }
 
     Ok(
-      match self
+      self
         .json_rpc_call::<LastHeaderResponse>("get_last_block_header", None)
         .await?
         .block_header
-        .major_version
-      {
-        13 | 14 => Protocol::v14,
-        15 | 16 => Protocol::v16,
-        protocol => Err(RpcError::UnsupportedProtocol(protocol))?,
-      },
+        .major_version,
     )
   }
 
@@ -789,28 +746,27 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// This may be manipulated to unsafe levels and MUST be sanity checked.
   // TODO: Take a sanity check argument
-  async fn get_fee_rate(
-    &self,
-    protocol: Protocol,
-    priority: FeePriority,
-  ) -> Result<FeeRate, RpcError> {
-    // TODO: Implement wallet2's adjust_priority which by default automatically uses a lower
-    // priority than provided depending on the backlog in the pool
-    if protocol.v16_fee() {
-      #[derive(Deserialize, Debug)]
-      struct FeeResponse {
-        status: String,
-        fees: Vec<u64>,
-        quantization_mask: u64,
-      }
+  async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
+    #[derive(Deserialize, Debug)]
+    struct FeeResponse {
+      status: String,
+      fees: Option<Vec<u64>>,
+      fee: u64,
+      quantization_mask: u64,
+    }
 
-      let res: FeeResponse = self
-        .json_rpc_call(
-          "get_fee_estimate",
-          Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
-        )
-        .await?;
+    let res: FeeResponse = self
+      .json_rpc_call(
+        "get_fee_estimate",
+        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+      )
+      .await?;
 
+    if res.status != "OK" {
+      Err(RpcError::InvalidFee)?;
+    }
+
+    if let Some(fees) = res.fees {
       // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
       // src/wallet/wallet2.cpp#L7615-L7620
       let priority_idx = usize::try_from(if priority.fee_priority() >= 4 {
@@ -820,15 +776,27 @@ pub trait Rpc: Sync + Clone + Debug {
       })
       .map_err(|_| RpcError::InvalidPriority)?;
 
-      if res.status != "OK" {
-        Err(RpcError::InvalidFee)
-      } else if priority_idx >= res.fees.len() {
+      if priority_idx >= fees.len() {
         Err(RpcError::InvalidPriority)
       } else {
-        FeeRate::new(res.fees[priority_idx], res.quantization_mask)
+        FeeRate::new(fees[priority_idx], res.quantization_mask)
       }
     } else {
-      get_fee_rate_v14(self, priority).await
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      //   src/wallet/wallet2.cpp#L7569-L7584
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      //   src/wallet/wallet2.cpp#L7660-L7661
+      let priority_idx =
+        usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
+          .map_err(|_| RpcError::InvalidPriority)?;
+      let multipliers = [1, 5, 25, 1000];
+      if priority_idx >= multipliers.len() {
+        // though not an RPC error, it seems sensible to treat as such
+        Err(RpcError::InvalidPriority)?;
+      }
+      let fee_multiplier = multipliers[priority_idx];
+
+      FeeRate::new(res.fee * fee_multiplier, res.quantization_mask)
     }
   }
 

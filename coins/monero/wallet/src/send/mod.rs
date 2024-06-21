@@ -26,7 +26,6 @@ pub use monero_rpc::{FeePriority, FeeRate};
 use monero_serai::{
   io::*,
   primitives::{Commitment, keccak256},
-  Protocol,
   ringct::{
     generate_key_image,
     clsag::{ClsagError, ClsagContext, Clsag},
@@ -36,6 +35,7 @@ use monero_serai::{
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
 };
 use crate::{
+  Protocol,
   address::{Network, AddressSpec, MoneroAddress},
   ViewPair, SpendableOutput, Decoys, PaymentId, ExtraField, Extra, key_image_sort, uniqueness,
   shared_key, commitment_mask, compact_amount_encryption,
@@ -239,7 +239,15 @@ fn calculate_weight_and_fee(
   let mut iters = 0;
   let max_iters = 5;
   while !done {
-    weight = Transaction::fee_weight(protocol, decoy_weights, n_outputs, extra, fee);
+    weight = Transaction::fee_weight(
+      protocol.view_tags(),
+      protocol.bp_plus(),
+      protocol.ring_len(),
+      decoy_weights,
+      n_outputs,
+      extra,
+      fee,
+    );
 
     let fee_calculated_from_weight = fee_rate.calculate_fee_from_weight(weight);
 

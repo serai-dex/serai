@@ -109,9 +109,6 @@ pub async fn rpc() -> SimpleRequestRpc {
   // Mine 40 blocks to ensure decoy availability
   rpc.generate_blocks(&addr, 40).await.unwrap();
 
-  // Make sure we recognize the protocol
-  rpc.get_protocol().await.unwrap();
-
   rpc
 }
 
@@ -171,6 +168,7 @@ macro_rules! test {
         };
 
         use monero_wallet::{
+          Protocol,
           address::{Network, AddressSpec},
           ViewPair, Scanner, Change, DecoySelection, Decoys, FeePriority,
           SignableTransaction, SignableTransactionBuilder,
@@ -212,11 +210,11 @@ macro_rules! test {
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
-          let protocol = rpc.get_protocol().await.unwrap();
+          let protocol = Protocol::try_from(rpc.get_protocol().await.unwrap()).unwrap();
 
           let builder = SignableTransactionBuilder::new(
             protocol,
-            rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
+            rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
             Change::new(
               &ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,

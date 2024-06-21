@@ -349,7 +349,8 @@ async fn mint_and_burn_test() {
     {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
       use monero_wallet::{
-        monero::{io::decompress_point, Protocol, transaction::Timelock},
+        monero::{io::decompress_point, transaction::Timelock},
+        Protocol,
         rpc::Rpc,
         ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
         address::{Network, AddressType, AddressMeta, MoneroAddress},
@@ -397,7 +398,7 @@ async fn mint_and_burn_test() {
         )],
         &Change::new(&view_pair, false),
         vec![Shorthand::transfer(None, serai_addr).encode()],
-        rpc.get_fee_rate(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       )
       .unwrap()
       .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))

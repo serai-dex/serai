@@ -17,7 +17,6 @@ use crate::{
   io::*,
   generators::hash_to_point,
   ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproof},
-  Protocol,
 };
 
 /// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
@@ -227,10 +226,13 @@ pub enum RctPrunable {
 }
 
 impl RctPrunable {
-  pub fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize) -> usize {
+  #[rustfmt::skip]
+  pub fn fee_weight(bp_plus: bool, ring_len: usize, inputs: usize, outputs: usize) -> usize {
     // 1 byte for number of BPs (technically a VarInt, yet there's always just zero or one)
-    1 + Bulletproof::fee_weight(protocol.bp_plus(), outputs) +
-      (inputs * (Clsag::fee_weight(protocol.ring_len()) + 32))
+    1 +
+      Bulletproof::fee_weight(bp_plus, outputs) +
+      // There's both the CLSAG and the pseudo-out
+      (inputs * (Clsag::fee_weight(ring_len) + 32))
   }
 
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
@@ -383,8 +385,14 @@ impl RctSignatures {
     }
   }
 
-  pub fn fee_weight(protocol: Protocol, inputs: usize, outputs: usize, fee: u64) -> usize {
-    RctBase::fee_weight(outputs, fee) + RctPrunable::fee_weight(protocol, inputs, outputs)
+  pub fn fee_weight(
+    bp_plus: bool,
+    ring_len: usize,
+    inputs: usize,
+    outputs: usize,
+    fee: u64,
+  ) -> usize {
+    RctBase::fee_weight(outputs, fee) + RctPrunable::fee_weight(bp_plus, ring_len, inputs, outputs)
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {

@@ -92,7 +92,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // TODO: Needs https://github.com/monero-project/monero/pull/9260
   // let fee_rate = daemon_rpc
-  //   .get_fee_rate(daemon_rpc.get_protocol().await.unwrap(), FeePriority::Unimportant)
+  //   .get_fee_rate(FeePriority::Unimportant)
   //   .await
   //   .unwrap();
 

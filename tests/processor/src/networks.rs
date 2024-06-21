@@ -438,7 +438,8 @@ impl Wallet {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
           rpc::Rpc,
-          monero::{Protocol, io::decompress_point},
+          monero::io::decompress_point,
+          Protocol,
           address::{Network, AddressType, AddressMeta, Address},
           SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
           SignableTransaction,
@@ -492,7 +493,7 @@ impl Wallet {
           vec![(to_addr, AMOUNT)],
           &Change::new(view_pair, false),
           data,
-          rpc.get_fee_rate(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+          rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)

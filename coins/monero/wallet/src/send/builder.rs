@@ -2,9 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use monero_serai::Protocol;
 use crate::{
-  address::MoneroAddress, FeeRate, SpendableOutput, Change, Decoys, SignableTransaction,
+  Protocol, address::MoneroAddress, FeeRate, SpendableOutput, Change, Decoys, SignableTransaction,
   TransactionError, extra::MAX_ARBITRARY_DATA_SIZE,
 };
 

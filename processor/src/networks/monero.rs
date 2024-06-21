@@ -15,7 +15,8 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::{Protocol, ringct::RctType, transaction::Transaction, block::Block},
+  monero::{ringct::RctType, transaction::Transaction, block::Block},
+  Protocol,
   rpc::{RpcError, Rpc},
   ViewPair, Scanner,
   address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
@@ -315,25 +316,14 @@ impl Monero {
     let fee_rate = self.median_fee(&block_for_fee).await?;
 
     // Get the protocol for the specified block number
-    // For now, this should just be v16, the latest deployed protocol, since there's no upcoming
-    // hard fork to be mindful of
-    let get_protocol = || Protocol::v16;
-
     #[cfg(not(test))]
-    let protocol = get_protocol();
+    let protocol = Protocol::try_from(block_for_fee.header.major_version)
+      .map_err(|()| NetworkError::ConnectionError)?;
     // If this is a test, we won't be using a mainnet node and need a distinct protocol
     // determination
     // Just use whatever the node expects
     #[cfg(test)]
-    let protocol = self.rpc.get_protocol().await.unwrap();
-
-    // Hedge against the above codegen failing by having an always included runtime check
-    if !cfg!(test) {
-      assert_eq!(protocol, get_protocol());
-    }
-
-    // Check a fork hasn't occurred which this processor hasn't been updated for
-    assert_eq!(protocol, self.rpc.get_protocol().await.map_err(map_rpc_err)?);
+    let protocol = Protocol::try_from(self.rpc.get_protocol().await.unwrap()).unwrap();
 
     let spendable_outputs = inputs.iter().map(|input| input.0.clone()).collect::<Vec<_>>();
 
@@ -774,7 +764,7 @@ impl Network for Monero {
     // The dust should always be sufficient for the fee
     let fee = Monero::DUST;
 
-    let protocol = self.rpc.get_protocol().await.unwrap();
+    let protocol = Protocol::try_from(self.rpc.get_protocol().await.unwrap()).unwrap();
 
     let decoys = Decoys::fingerprintable_canonical_select(
       &mut OsRng,
@@ -795,7 +785,7 @@ impl Network for Monero {
       vec![(address.into(), amount - fee)],
       &Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
-      self.rpc.get_fee_rate(protocol, FeePriority::Unimportant).await.unwrap(),
+      self.rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
     )
     .unwrap()
     .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE.0))
