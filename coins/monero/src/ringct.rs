@@ -219,7 +219,9 @@ impl RctBase {
       RctBase {
         fee: read_varint(r)?,
         // Only read pseudo_outs if they have yet to be moved to RctPrunable
-        // TODO: Shouldn't this be any Mlsag*?
+        // This would apply to AggregateMlsagBorromean and MlsagBorromean, except
+        // AggregateMlsagBorromean doesn't use pseudo_outs due to using the sum of the output
+        // commitments directly as the effective singular pseudo-out
         pseudo_outs: if rct_type == RctType::MlsagBorromean {
           read_raw_vec(read_point, inputs, r)?
         } else {
