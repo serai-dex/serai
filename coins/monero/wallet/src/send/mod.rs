@@ -27,7 +27,7 @@ use monero_serai::{
   io::*,
   primitives::{Commitment, keccak256},
   ringct::{
-    generate_key_image,
+    hash_to_point,
     clsag::{ClsagError, ClsagContext, Clsag},
     bulletproofs::{MAX_COMMITMENTS, Bulletproof},
     RctBase, RctPrunable, RctSignatures,
@@ -52,6 +52,11 @@ mod multisig;
 #[cfg(feature = "multisig")]
 pub use multisig::TransactionMachine;
 use monero_serai::ringct::EncryptedAmount;
+
+/// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
+pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
+  hash_to_point((ED25519_BASEPOINT_TABLE * secret.deref()).compress().to_bytes()) * secret.deref()
+}
 
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]

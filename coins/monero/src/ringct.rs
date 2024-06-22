@@ -19,11 +19,6 @@ use crate::{
   ringct::{mlsag::Mlsag, clsag::Clsag, borromean::BorromeanRange, bulletproofs::Bulletproof},
 };
 
-/// Generate a key image for a given key. Defined as `x * hash_to_point(xG)`.
-pub fn generate_key_image(secret: &Zeroizing<Scalar>) -> EdwardsPoint {
-  hash_to_point((ED25519_BASEPOINT_TABLE * secret.deref()).compress().to_bytes()) * secret.deref()
-}
-
 /// An encrypted amount.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EncryptedAmount {
@@ -58,25 +53,35 @@ impl EncryptedAmount {
 pub enum RctType {
   /// No RCT proofs.
   Null,
-  /// One MLSAG for multiple inputs and Borromean range proofs (RCTTypeFull).
+  /// One MLSAG for multiple inputs and Borromean range proofs.
+  ///
+  /// This lines up with RCTTypeFull.
   MlsagAggregate,
-  // One MLSAG for each input and a Borromean range proof (RCTTypeSimple).
+  // One MLSAG for each input and a Borromean range proof.
+  ///
+  /// This lines up with RCTTypeSimple.
   MlsagIndividual,
-  // One MLSAG for each input and a Bulletproof (RCTTypeBulletproof).
+  // One MLSAG for each input and a Bulletproof.
+  ///
+  /// This lines up with RCTTypeBulletproof.
   Bulletproofs,
-  /// One MLSAG for each input and a Bulletproof, yet starting to use EncryptedAmount::Compact
-  /// (RCTTypeBulletproof2).
+  /// One MLSAG for each input and a Bulletproof, yet using EncryptedAmount::Compact.
+  ///
+  /// This lines up with RCTTypeBulletproof2.
   BulletproofsCompactAmount,
-  /// One CLSAG for each input and a Bulletproof (RCTTypeCLSAG).
+  /// One CLSAG for each input and a Bulletproof.
+  ///
+  /// This lines up with RCTTypeCLSAG.
   Clsag,
-  /// One CLSAG for each input and a Bulletproof+ (RCTTypeBulletproofPlus).
+  /// One CLSAG for each input and a Bulletproof+.
+  ///
+  /// This lines up with RCTTypeBulletproofPlus.
   BulletproofsPlus,
 }
 
-impl RctType {
-  /// Convert the RctType to its byte representation.
-  pub fn to_byte(self) -> u8 {
-    match self {
+impl From<RctType> for u8 {
+  fn from(kind: RctType) -> u8 {
+    match kind {
       RctType::Null => 0,
       RctType::MlsagAggregate => 1,
       RctType::MlsagIndividual => 2,
@@ -86,10 +91,12 @@ impl RctType {
       RctType::BulletproofsPlus => 6,
     }
   }
+}
 
-  /// Convert the RctType from its byte representation.
-  pub fn from_byte(byte: u8) -> Option<Self> {
-    Some(match byte {
+impl TryFrom<u8> for RctType {
+  type Error = ();
+  fn try_from(byte: u8) -> Result<Self, ()> {
+    Ok(match byte {
       0 => RctType::Null,
       1 => RctType::MlsagAggregate,
       2 => RctType::MlsagIndividual,
@@ -97,10 +104,12 @@ impl RctType {
       4 => RctType::BulletproofsCompactAmount,
       5 => RctType::Clsag,
       6 => RctType::BulletproofsPlus,
-      _ => None?,
+      _ => Err(())?,
     })
   }
+}
 
+impl RctType {
   /// Returns true if this RctType uses compact encrypted amounts, false otherwise.
   pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
@@ -125,6 +134,8 @@ pub struct RctBase {
   /// The fee used by this transaction.
   pub fee: u64,
   /// The re-randomized amount commitments used within inputs.
+  ///
+  /// This field was deprecated and is empty for modern RctTypes.
   pub pseudo_outs: Vec<EdwardsPoint>,
   /// The encrypted amounts for the recipient to decrypt.
   pub encrypted_amounts: Vec<EncryptedAmount>,
@@ -133,14 +144,15 @@ pub struct RctBase {
 }
 
 impl RctBase {
+  /// The weight of this RctBase as relevant for fees.
   pub fn fee_weight(outputs: usize, fee: u64) -> usize {
     // 1 byte for the RCT signature type
     1 + (outputs * (8 + 32)) + varint_len(fee)
   }
 
-  /// Write the RctBase to a writer.
+  /// Write the RctBase.
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
-    w.write_all(&[rct_type.to_byte()])?;
+    w.write_all(&[u8::from(rct_type)])?;
     match rct_type {
       RctType::Null => Ok(()),
       _ => {
@@ -156,10 +168,10 @@ impl RctBase {
     }
   }
 
-  /// Read a RctBase from a writer.
+  /// Read a RctBase.
   pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(RctBase, RctType)> {
     let rct_type =
-      RctType::from_byte(read_byte(r)?).ok_or_else(|| io::Error::other("invalid RCT type"))?;
+      RctType::try_from(read_byte(r)?).map_err(|_| io::Error::other("invalid RCT type"))?;
 
     match rct_type {
       RctType::Null | RctType::MlsagAggregate | RctType::MlsagIndividual => {}
@@ -202,30 +214,27 @@ impl RctBase {
   }
 }
 
+/// The prunable part of the RingCT data.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RctPrunable {
+  /// Null.
   Null,
-  AggregateMlsagBorromean {
-    borromean: Vec<BorromeanRange>,
-    mlsag: Mlsag,
-  },
-  MlsagBorromean {
-    borromean: Vec<BorromeanRange>,
-    mlsags: Vec<Mlsag>,
-  },
+  /// An aggregate MLSAG with Borromean range proofs.
+  AggregateMlsagBorromean { borromean: Vec<BorromeanRange>, mlsag: Mlsag },
+  /// MLSAGs with Borromean range proofs.
+  MlsagBorromean { borromean: Vec<BorromeanRange>, mlsags: Vec<Mlsag> },
+  /// MLSAGs with Bulletproofs.
   MlsagBulletproofs {
     bulletproofs: Bulletproof,
     mlsags: Vec<Mlsag>,
     pseudo_outs: Vec<EdwardsPoint>,
   },
-  Clsag {
-    bulletproofs: Bulletproof,
-    clsags: Vec<Clsag>,
-    pseudo_outs: Vec<EdwardsPoint>,
-  },
+  /// CLSAGs with Bulletproofs(+).
+  Clsag { bulletproofs: Bulletproof, clsags: Vec<Clsag>, pseudo_outs: Vec<EdwardsPoint> },
 }
 
 impl RctPrunable {
+  /// The weight of this RctPrunable as relevant for fees.
   #[rustfmt::skip]
   pub fn fee_weight(bp_plus: bool, ring_len: usize, inputs: usize, outputs: usize) -> usize {
     // 1 byte for number of BPs (technically a VarInt, yet there's always just zero or one)
@@ -235,6 +244,7 @@ impl RctPrunable {
       (inputs * (Clsag::fee_weight(ring_len) + 32))
   }
 
+  /// Write the RctPrunable.
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     match self {
       RctPrunable::Null => Ok(()),
@@ -267,12 +277,14 @@ impl RctPrunable {
     }
   }
 
+  /// Serialize the RctPrunable to a Vec<u8>.
   pub fn serialize(&self, rct_type: RctType) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized, rct_type).unwrap();
     serialized
   }
 
+  /// Read a RctPrunable.
   pub fn read<R: Read>(
     rct_type: RctType,
     ring_length: usize,
@@ -280,17 +292,6 @@ impl RctPrunable {
     outputs: usize,
     r: &mut R,
   ) -> io::Result<RctPrunable> {
-    // While we generally don't bother with misc consensus checks, this affects the safety of
-    // the below defined rct_type function
-    // The exact line preventing zero-input transactions is:
-    // https://github.com/monero-project/monero/blob/00fd416a99686f0956361d1cd0337fe56e58d4a7/
-    //   src/ringct/rctSigs.cpp#L609
-    // And then for RctNull, that's only allowed for miner TXs which require one input of
-    // Input::Gen
-    if inputs == 0 {
-      Err(io::Error::other("transaction had no inputs"))?;
-    }
-
     Ok(match rct_type {
       RctType::Null => RctPrunable::Null,
       RctType::MlsagAggregate => RctPrunable::AggregateMlsagBorromean {
@@ -333,16 +334,21 @@ impl RctPrunable {
     })
   }
 
-  pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    match self {
-      RctPrunable::Null => panic!("Serializing RctPrunable::Null for a signature"),
+  /// Write the RctPrunable as necessary for signing the signature.
+  ///
+  /// This function will return None if the object is `RctPrunable::Null` (and has no
+  /// representation here).
+  #[must_use]
+  pub(crate) fn signature_write<W: Write>(&self, w: &mut W) -> Option<io::Result<()>> {
+    Some(match self {
+      RctPrunable::Null => None?,
       RctPrunable::AggregateMlsagBorromean { borromean, .. } |
       RctPrunable::MlsagBorromean { borromean, .. } => {
         borromean.iter().try_for_each(|rs| rs.write(w))
       }
       RctPrunable::MlsagBulletproofs { bulletproofs, .. } |
       RctPrunable::Clsag { bulletproofs, .. } => bulletproofs.signature_write(w),
-    }
+    })
   }
 }
 
@@ -354,22 +360,18 @@ pub struct RctSignatures {
 
 impl RctSignatures {
   /// RctType for a given RctSignatures struct.
-  pub fn rct_type(&self) -> RctType {
-    match &self.prunable {
+  ///
+  /// This is only guaranteed to return the type for a well-formed RctSignatures. For a malformed
+  /// RctSignatures, this will return either the presumed RctType (with no guarantee of compliance
+  /// with that type) or None.
+  #[must_use]
+  pub fn rct_type(&self) -> Option<RctType> {
+    Some(match &self.prunable {
       RctPrunable::Null => RctType::Null,
       RctPrunable::AggregateMlsagBorromean { .. } => RctType::MlsagAggregate,
       RctPrunable::MlsagBorromean { .. } => RctType::MlsagIndividual,
-      // RctBase ensures there's at least one output, making the following
-      // inferences guaranteed/expects impossible on any valid RctSignatures
       RctPrunable::MlsagBulletproofs { .. } => {
-        if matches!(
-          self
-            .base
-            .encrypted_amounts
-            .first()
-            .expect("MLSAG with Bulletproofs didn't have any outputs"),
-          EncryptedAmount::Original { .. }
-        ) {
+        if matches!(self.base.encrypted_amounts.first()?, EncryptedAmount::Original { .. }) {
           RctType::Bulletproofs
         } else {
           RctType::BulletproofsCompactAmount
@@ -382,9 +384,10 @@ impl RctSignatures {
           RctType::BulletproofsPlus
         }
       }
-    }
+    })
   }
 
+  /// The weight of this RctSignatures as relevant for fees.
   pub fn fee_weight(
     bp_plus: bool,
     ring_len: usize,
@@ -395,16 +398,20 @@ impl RctSignatures {
     RctBase::fee_weight(outputs, fee) + RctPrunable::fee_weight(bp_plus, ring_len, inputs, outputs)
   }
 
-  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    let rct_type = self.rct_type();
-    self.base.write(w, rct_type)?;
-    self.prunable.write(w, rct_type)
+  #[must_use]
+  pub fn write<W: Write>(&self, w: &mut W) -> Option<io::Result<()>> {
+    let rct_type = self.rct_type()?;
+    if let Err(e) = self.base.write(w, rct_type) {
+      return Some(Err(e));
+    };
+    Some(self.prunable.write(w, rct_type))
   }
 
-  pub fn serialize(&self) -> Vec<u8> {
+  #[must_use]
+  pub fn serialize(&self) -> Option<Vec<u8>> {
     let mut serialized = vec![];
-    self.write(&mut serialized).unwrap();
-    serialized
+    self.write(&mut serialized)?.unwrap();
+    Some(serialized)
   }
 
   pub fn read<R: Read>(

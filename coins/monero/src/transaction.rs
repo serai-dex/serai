@@ -140,6 +140,7 @@ impl Timelock {
     if raw == 0 {
       Timelock::None
     } else if raw < 500_000_000 {
+      // TODO: This is trivial to have panic
       Timelock::Block(usize::try_from(raw).unwrap())
     } else {
       Timelock::Time(raw)
@@ -150,6 +151,7 @@ impl Timelock {
     write_varint(
       &match self {
         Timelock::None => 0,
+        // TODO: Check this unwrap
         Timelock::Block(block) => (*block).try_into().unwrap(),
         Timelock::Time(time) => *time,
       },
@@ -268,24 +270,33 @@ impl Transaction {
       RctSignatures::fee_weight(bp_plus, ring_len, decoy_weights.len(), outputs, fee)
   }
 
-  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    self.prefix.write(w)?;
+  #[must_use]
+  pub fn write<W: Write>(&self, w: &mut W) -> Option<io::Result<()>> {
+    if let Err(e) = self.prefix.write(w) {
+      return Some(Err(e));
+    };
     if self.prefix.version == 1 {
       for ring_sig in &self.signatures {
-        ring_sig.write(w)?;
+        if let Err(e) = ring_sig.write(w) {
+          return Some(Err(e));
+        };
       }
-      Ok(())
+      Some(Ok(()))
     } else if self.prefix.version == 2 {
-      self.rct_signatures.write(w)
+      if let Err(e) = self.rct_signatures.write(w)? {
+        return Some(Err(e));
+      }
+      Some(Ok(()))
     } else {
-      panic!("Serializing a transaction with an unknown version");
+      Some(Err(io::Error::other("transaction had an unknown version")))
     }
   }
 
-  pub fn serialize(&self) -> Vec<u8> {
+  #[must_use]
+  pub fn serialize(&self) -> Option<Vec<u8>> {
     let mut res = Vec::with_capacity(2048);
-    self.write(&mut res).unwrap();
-    res
+    self.write(&mut res)?.unwrap();
+    Some(res)
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<Transaction> {
@@ -352,36 +363,39 @@ impl Transaction {
     Ok(Transaction { prefix, signatures, rct_signatures })
   }
 
-  pub fn hash(&self) -> [u8; 32] {
+  #[must_use]
+  pub fn hash(&self) -> Option<[u8; 32]> {
     let mut buf = Vec::with_capacity(2048);
     if self.prefix.version == 1 {
-      self.write(&mut buf).unwrap();
-      keccak256(buf)
+      self.write(&mut buf)?.unwrap();
+      Some(keccak256(buf))
     } else {
       let mut hashes = Vec::with_capacity(96);
 
       hashes.extend(self.prefix.hash());
 
-      self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
+      let rct_type = self.rct_signatures.rct_type()?;
+      self.rct_signatures.base.write(&mut buf, rct_type).unwrap();
       hashes.extend(keccak256(&buf));
       buf.clear();
 
       hashes.extend(&match self.rct_signatures.prunable {
         RctPrunable::Null => [0; 32],
         _ => {
-          self.rct_signatures.prunable.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
+          self.rct_signatures.prunable.write(&mut buf, rct_type).unwrap();
           keccak256(buf)
         }
       });
 
-      keccak256(hashes)
+      Some(keccak256(hashes))
     }
   }
 
   /// Calculate the hash of this transaction as needed for signing it.
-  pub fn signature_hash(&self) -> [u8; 32] {
+  #[must_use]
+  pub fn signature_hash(&self) -> Option<[u8; 32]> {
     if self.prefix.version == 1 {
-      return self.prefix.hash();
+      return Some(self.prefix.hash());
     }
 
     let mut buf = Vec::with_capacity(2048);
@@ -389,18 +403,19 @@ impl Transaction {
 
     sig_hash.extend(self.prefix.hash());
 
-    self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()).unwrap();
+    self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()?).unwrap();
     sig_hash.extend(keccak256(&buf));
     buf.clear();
 
-    self.rct_signatures.prunable.signature_write(&mut buf).unwrap();
+    self.rct_signatures.prunable.signature_write(&mut buf)?.unwrap();
     sig_hash.extend(keccak256(buf));
 
-    keccak256(sig_hash)
+    Some(keccak256(sig_hash))
   }
 
   fn is_rct_bulletproof(&self) -> bool {
-    match &self.rct_signatures.rct_type() {
+    let Some(rct_type) = self.rct_signatures.rct_type() else { return false };
+    match rct_type {
       RctType::Bulletproofs | RctType::BulletproofsCompactAmount | RctType::Clsag => true,
       RctType::Null |
       RctType::MlsagAggregate |
@@ -410,7 +425,8 @@ impl Transaction {
   }
 
   fn is_rct_bulletproof_plus(&self) -> bool {
-    match &self.rct_signatures.rct_type() {
+    let Some(rct_type) = self.rct_signatures.rct_type() else { return false };
+    match rct_type {
       RctType::BulletproofsPlus => true,
       RctType::Null |
       RctType::MlsagAggregate |
@@ -422,15 +438,15 @@ impl Transaction {
   }
 
   /// Calculate the transaction's weight.
-  pub fn weight(&self) -> usize {
-    let blob_size = self.serialize().len();
+  pub fn weight(&self) -> Option<usize> {
+    let blob_size = self.serialize()?.len();
 
     let bp = self.is_rct_bulletproof();
     let bp_plus = self.is_rct_bulletproof_plus();
-    if !(bp || bp_plus) {
+    Some(if !(bp || bp_plus) {
       blob_size
     } else {
       blob_size + Bulletproof::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
-    }
+    })
   }
 }
