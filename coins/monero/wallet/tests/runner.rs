@@ -80,7 +80,7 @@ pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> Spe
 
 /// Make sure the weight and fee match the expected calculation.
 pub fn check_weight_and_fee(tx: &Transaction, fee_rate: FeeRate) {
-  let fee = tx.rct_signatures.base.fee;
+  let fee = tx.proofs.base.fee;
 
   let weight = tx.weight();
   let expected_weight = fee_rate.calculate_weight_from_fee(fee);

@@ -270,7 +270,7 @@ pub trait Rpc: Sync + Clone + Debug {
   async fn get_protocol(&self) -> Result<u8, RpcError> {
     #[derive(Deserialize, Debug)]
     struct ProtocolResponse {
-      major_version: u8,
+      hardfork_version: u8,
     }
 
     #[derive(Deserialize, Debug)]
@@ -283,7 +283,7 @@ pub trait Rpc: Sync + Clone + Debug {
         .json_rpc_call::<LastHeaderResponse>("get_last_block_header", None)
         .await?
         .block_header
-        .major_version,
+        .hardfork_version,
     )
   }
 

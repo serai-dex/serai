@@ -18,10 +18,14 @@ const EXISTING_BLOCK_HASH_202612: [u8; 32] =
 /// A Monero block's header.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BlockHeader {
-  /// The major version of the protocol, denoting the hard fork.
-  pub major_version: u8,
-  /// The minor version of the protocol.
-  pub minor_version: u8,
+  /// The hard fork of the protocol this block follows.
+  ///
+  /// Per the C++ codebase, this is the `major_version`.
+  pub hardfork_version: u8,
+  /// A signal for a proposed hard fork.
+  ///
+  /// Per the C++ codebase, this is the `minor_version`.
+  pub hardfork_signal: u8,
   /// Seconds since the epoch.
   pub timestamp: u64,
   /// The previous block's hash.
@@ -36,8 +40,8 @@ pub struct BlockHeader {
 impl BlockHeader {
   /// Write the BlockHeader.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    write_varint(&self.major_version, w)?;
-    write_varint(&self.minor_version, w)?;
+    write_varint(&self.hardfork_version, w)?;
+    write_varint(&self.hardfork_signal, w)?;
     write_varint(&self.timestamp, w)?;
     w.write_all(&self.previous)?;
     w.write_all(&self.nonce.to_le_bytes())
@@ -53,8 +57,8 @@ impl BlockHeader {
   /// Read a BlockHeader.
   pub fn read<R: Read>(r: &mut R) -> io::Result<BlockHeader> {
     Ok(BlockHeader {
-      major_version: read_varint(r)?,
-      minor_version: read_varint(r)?,
+      hardfork_version: read_varint(r)?,
+      hardfork_signal: read_varint(r)?,
       timestamp: read_varint(r)?,
       previous: read_bytes(r)?,
       nonce: read_bytes(r).map(u32::from_le_bytes)?,
@@ -79,13 +83,15 @@ impl Block {
   /// This information comes from the Block's miner transaction. If the miner transaction isn't
   /// structed as expected, this will return None.
   pub fn number(&self) -> Option<u64> {
-    match self.miner_tx.prefix.inputs.first() {
-      Some(Input::Gen(number)) => Some(*number),
-      _ => None,
+    match &self.miner_tx {
+      Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => match prefix.inputs.first() {
+        Some(Input::Gen(number)) => Some(*number),
+        _ => None,
+      }
     }
   }
 
-  /// Write the BlockHeader.
+  /// Write the Block.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.header.write(w)?;
     self.miner_tx.write(w)?;
@@ -96,7 +102,7 @@ impl Block {
     Ok(())
   }
 
-  /// Serialize the BlockHeader to a Vec<u8>.
+  /// Serialize the Block to a Vec<u8>.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
@@ -116,10 +122,10 @@ impl Block {
 
   /// Get the hash of this block.
   pub fn hash(&self) -> [u8; 32] {
-    let mut hashable = self.serialize_hashable();
-    // Monero pre-appends a VarInt of the block hashing blobs length before getting the block hash
+    let mut hashable = self.serialize_pow_hash();
+    // Monero pre-appends a VarInt of the block-to-hash'ss length before getting the block hash,
     // but doesn't do this when getting the proof of work hash :)
-    let mut hashing_blob = Vec::with_capacity(8 + hashable.len());
+    let mut hashing_blob = Vec::with_capacity(9 + hashable.len());
     write_varint(&u64::try_from(hashable.len()).unwrap(), &mut hashing_blob).unwrap();
     hashing_blob.append(&mut hashable);
 
@@ -130,18 +136,11 @@ impl Block {
     hash
   }
 
-  /// Read a BlockHeader.
+  /// Read a Block.
   pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
-    let header = BlockHeader::read(r)?;
-
-    let miner_tx = Transaction::read(r)?;
-    if !matches!(miner_tx.prefix.inputs.as_slice(), &[Input::Gen(_)]) {
-      Err(io::Error::other("Miner transaction has incorrect input type."))?;
-    }
-
     Ok(Block {
-      header,
-      miner_tx,
+      header: BlockHeader::read(r)?,
+      miner_tx: Transaction::read(r)?,
       txs: (0_usize .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
     })
   }

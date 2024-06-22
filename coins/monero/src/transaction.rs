@@ -12,22 +12,34 @@ use crate::{
   io::*,
   primitives::keccak256,
   ring_signatures::RingSignature,
-  ringct::{bulletproofs::Bulletproof, RctType, RctBase, RctPrunable, RctSignatures},
+  ringct::{bulletproofs::Bulletproof, RctProofs},
 };
 
+/// An input in the Monero protocol.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
+  /// An input for a miner transaction, which is generating new coins.
   Gen(u64),
-  ToKey { amount: Option<u64>, key_offsets: Vec<u64>, key_image: EdwardsPoint },
+  /// An input spending an output on-chain.
+  ToKey {
+    /// The pool this input spends an output of.
+    amount: Option<u64>,
+    /// The decoys used by this input's ring, specified as their offset distance from each other.
+    key_offsets: Vec<u64>,
+    /// The key image (linking tag, nullifer) for the spent output.
+    key_image: EdwardsPoint,
+  },
 }
 
 impl Input {
+  /// The weight of this Input, as relevant for fees.
   pub fn fee_weight(offsets_weight: usize) -> usize {
     // Uses 1 byte for the input type
     // Uses 1 byte for the VarInt amount due to amount being 0
     1 + 1 + offsets_weight + 32
   }
 
+  /// Write the Input.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       Input::Gen(height) => {
@@ -44,12 +56,14 @@ impl Input {
     }
   }
 
+  /// Serialize the Input to a Vec<u8>.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
     res
   }
 
+  /// Read an Input.
   pub fn read<R: Read>(r: &mut R) -> io::Result<Input> {
     Ok(match read_byte(r)? {
       255 => Input::Gen(read_varint(r)?),
@@ -72,21 +86,26 @@ impl Input {
   }
 }
 
-// Doesn't bother moving to an enum for the unused Script classes
+/// An output in the Monero protocol.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Output {
+  /// The pool this output should be sorted into.
   pub amount: Option<u64>,
+  /// The key which can spend this output.
   pub key: CompressedEdwardsY,
+  /// The view tag for this output, as used to accelerate scanning.
   pub view_tag: Option<u8>,
 }
 
 impl Output {
+  /// The weight of this Output, as relevant for fees.
   pub fn fee_weight(view_tags: bool) -> usize {
     // Uses 1 byte for the output type
     // Uses 1 byte for the VarInt amount due to amount being 0
     1 + 1 + 32 + if view_tags { 1 } else { 0 }
   }
 
+  /// Write the Output.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(&self.amount.unwrap_or(0), w)?;
     w.write_all(&[2 + u8::from(self.view_tag.is_some())])?;
@@ -97,12 +116,14 @@ impl Output {
     Ok(())
   }
 
+  /// Write the Output to a Vec<u8>.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(8 + 1 + 32);
     self.write(&mut res).unwrap();
     res
   }
 
+  /// Read an Output.
   pub fn read<R: Read>(rct: bool, r: &mut R) -> io::Result<Output> {
     let amount = read_varint(r)?;
     let amount = if rct {
@@ -128,10 +149,17 @@ impl Output {
   }
 }
 
+/// An additional timelock for a Monero transaction.
+///
+/// Monero outputs are locked by a default timelock. If a timelock is explicitly specified, the
+/// longer of the two will be the timelock used.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Timelock {
+  /// No timelock.
   None,
+  /// Locked until this block.
   Block(usize),
+  /// Locked until this many seconds since the epoch.
   Time(u64),
 }
 
@@ -173,16 +201,27 @@ impl PartialOrd for Timelock {
   }
 }
 
+/// The transaction prefix.
+///
+/// This is common to all transaction versions and contains most parts of the transaction needed to
+/// handle it. It excludes any proofs.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TransactionPrefix {
-  pub version: u64,
+  /// The timelock this transaction uses.
   pub timelock: Timelock,
+  /// The inputs for this transaction.
   pub inputs: Vec<Input>,
+  /// The outputs for this transaction.
   pub outputs: Vec<Output>,
+  /// The additional data included within the transaction.
+  ///
+  /// This is an arbitrary data field, yet is used by wallets for containing the data necessary to
+  /// scan the transaction.
   pub extra: Vec<u8>,
 }
 
 impl TransactionPrefix {
+  /// The weight of this TransactionPrefix, as relevant for fees.
   pub fn fee_weight(
     decoy_weights: &[usize],
     outputs: usize,
@@ -191,8 +230,7 @@ impl TransactionPrefix {
   ) -> usize {
     // Assumes Timelock::None since this library won't let you create a TX with a timelock
     // 1 input for every decoy weight
-    1 + 1 +
-      varint_len(decoy_weights.len()) +
+    1 + varint_len(decoy_weights.len()) +
       decoy_weights.iter().map(|&offsets_weight| Input::fee_weight(offsets_weight)).sum::<usize>() +
       varint_len(outputs) +
       (outputs * Output::fee_weight(view_tags)) +
@@ -200,8 +238,10 @@ impl TransactionPrefix {
       extra
   }
 
-  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    write_varint(&self.version, w)?;
+  /// Write a TransactionPrefix.
+  ///
+  /// This is distinct from Monero in that it won't write any version.
+  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.timelock.write(w)?;
     write_vec(Input::write, &self.inputs, w)?;
     write_vec(Output::write, &self.outputs, w)?;
@@ -209,19 +249,11 @@ impl TransactionPrefix {
     w.write_all(&self.extra)
   }
 
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut res = vec![];
-    self.write(&mut res).unwrap();
-    res
-  }
-
-  pub fn read<R: Read>(r: &mut R) -> io::Result<TransactionPrefix> {
-    let version = read_varint(r)?;
-    // TODO: Create an enum out of version
-    if (version == 0) || (version > 2) {
-      Err(io::Error::other("unrecognized transaction version"))?;
-    }
-
+  /// Read a TransactionPrefix.
+  ///
+  /// This is distinct from Monero in that it won't read the version. The version must be passed
+  /// in.
+  pub fn read<R: Read>(r: &mut R, version: u64) -> io::Result<TransactionPrefix> {
     let timelock = Timelock::from_raw(read_varint(r)?);
 
     let inputs = read_vec(|r| Input::read(r), r)?;
@@ -231,7 +263,6 @@ impl TransactionPrefix {
     let is_miner_tx = matches!(inputs[0], Input::Gen { .. });
 
     let mut prefix = TransactionPrefix {
-      version,
       timelock,
       inputs,
       outputs: read_vec(|r| Output::read((!is_miner_tx) && (version == 2), r), r)?,
@@ -241,20 +272,36 @@ impl TransactionPrefix {
     Ok(prefix)
   }
 
-  pub fn hash(&self) -> [u8; 32] {
-    keccak256(self.serialize())
+  fn hash(&self, version: u64) -> [u8; 32] {
+    let mut buf = vec![];
+    write_varint(&version, &mut buf).unwrap();
+    self.write(&mut buf).unwrap();
+    keccak256(buf)
   }
 }
 
-/// Monero transaction. For version 1, rct_signatures still contains an accurate fee value.
+/// A Monero transaction.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Transaction {
-  pub prefix: TransactionPrefix,
-  pub signatures: Vec<RingSignature>,
-  pub rct_signatures: RctSignatures,
+pub enum Transaction {
+  /// A version 1 transaction, used by the original Cryptonote codebase.
+  V1 {
+    /// The transaction's prefix.
+    prefix: TransactionPrefix,
+    /// The transaction's ring signatures.
+    signatures: Vec<RingSignature>,
+  },
+  /// A version 2 transaction, used by the RingCT protocol.
+  V2 {
+    /// The transaction's prefix.
+    prefix: TransactionPrefix,
+    /// The transaction's proofs.
+    proofs: Option<RctProofs>,
+  },
 }
 
 impl Transaction {
+  /// The weight of this Transaction, as relevant for fees.
   // TODO: Replace ring_len, decoy_weights for &[&[usize]], where the inner buf is the decoy
   // offsets
   pub fn fee_weight(
@@ -266,88 +313,58 @@ impl Transaction {
     extra: usize,
     fee: u64,
   ) -> usize {
-    TransactionPrefix::fee_weight(decoy_weights, outputs, view_tags, extra) +
-      RctSignatures::fee_weight(bp_plus, ring_len, decoy_weights.len(), outputs, fee)
+    1 + TransactionPrefix::fee_weight(decoy_weights, outputs, view_tags, extra) +
+      RctProofs::fee_weight(bp_plus, ring_len, decoy_weights.len(), outputs, fee)
   }
 
-  #[must_use]
-  pub fn write<W: Write>(&self, w: &mut W) -> Option<io::Result<()>> {
-    if let Err(e) = self.prefix.write(w) {
-      return Some(Err(e));
-    };
-    if self.prefix.version == 1 {
-      for ring_sig in &self.signatures {
-        if let Err(e) = ring_sig.write(w) {
-          return Some(Err(e));
-        };
+  /// Write the Transaction.
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    match self {
+      Transaction::V1 { prefix, signatures } => {
+        write_varint(&1u8, w)?;
+        prefix.write(w)?;
+        for ring_sig in signatures {
+          ring_sig.write(w)?;
+        }
       }
-      Some(Ok(()))
-    } else if self.prefix.version == 2 {
-      if let Err(e) = self.rct_signatures.write(w)? {
-        return Some(Err(e));
+      Transaction::V2 { prefix, proofs } => {
+        write_varint(&2u8, w)?;
+        prefix.write(w)?;
+        match proofs {
+          None => w.write_all(&[0])?,
+          Some(proofs) => proofs.write(w)?,
+        }
       }
-      Some(Ok(()))
-    } else {
-      Some(Err(io::Error::other("transaction had an unknown version")))
     }
+    Ok(())
   }
 
-  #[must_use]
-  pub fn serialize(&self) -> Option<Vec<u8>> {
+  /// Write the Transaction to a Vec<u8>.
+  pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(2048);
-    self.write(&mut res)?.unwrap();
-    Some(res)
+    self.write(&mut res).unwrap();
+    res
   }
 
+  /// Read a Transaction.
   pub fn read<R: Read>(r: &mut R) -> io::Result<Transaction> {
-    let prefix = TransactionPrefix::read(r)?;
-    let mut signatures = vec![];
-    let mut rct_signatures = RctSignatures {
-      base: RctBase { fee: 0, encrypted_amounts: vec![], pseudo_outs: vec![], commitments: vec![] },
-      prunable: RctPrunable::Null,
-    };
+    let version = read_varint(r)?;
+    let prefix = TransactionPrefix::read(r, version)?;
 
-    if prefix.version == 1 {
-      signatures = prefix
+    if version == 1 {
+      let signatures = prefix
         .inputs
         .iter()
         .filter_map(|input| match input {
+          // TODO: This allows mixing Gen and ToKey, which is likely undefined behavior?
           Input::ToKey { key_offsets, .. } => Some(RingSignature::read(key_offsets.len(), r)),
           _ => None,
         })
         .collect::<Result<_, _>>()?;
 
-      if !matches!(prefix.inputs[0], Input::Gen(..)) {
-        let in_amount = prefix
-          .inputs
-          .iter()
-          .map(|input| match input {
-            Input::Gen(..) => Err(io::Error::other("Input::Gen present in non-coinbase v1 TX"))?,
-            // v1 TXs can burn v2 outputs
-            // dcff3fe4f914d6b6bd4a5b800cc4cca8f2fdd1bd73352f0700d463d36812f328 is one such TX
-            // It includes a pre-RCT signature for a RCT output, yet if you interpret the RCT
-            // output as being worth 0, it passes a sum check (guaranteed since no outputs are RCT)
-            Input::ToKey { amount, .. } => Ok(amount.unwrap_or(0)),
-          })
-          .collect::<io::Result<Vec<_>>>()?
-          .into_iter()
-          .sum::<u64>();
-
-        let mut out = 0;
-        for output in &prefix.outputs {
-          if output.amount.is_none() {
-            Err(io::Error::other("v1 transaction had a 0-amount output"))?;
-          }
-          out += output.amount.unwrap();
-        }
-
-        if in_amount < out {
-          Err(io::Error::other("transaction spent more than it had as inputs"))?;
-        }
-        rct_signatures.base.fee = in_amount - out;
-      }
-    } else if prefix.version == 2 {
-      rct_signatures = RctSignatures::read(
+      Ok(Transaction::V1 { prefix, signatures })
+    } else if version == 2 {
+      let proofs = Some(RctProofs::read(
         prefix.inputs.first().map_or(0, |input| match input {
           Input::Gen(_) => 0,
           Input::ToKey { key_offsets, .. } => key_offsets.len(),
@@ -355,98 +372,109 @@ impl Transaction {
         prefix.inputs.len(),
         prefix.outputs.len(),
         r,
-      )?;
-    } else {
-      Err(io::Error::other("Tried to deserialize unknown version"))?;
-    }
+      )?);
 
-    Ok(Transaction { prefix, signatures, rct_signatures })
+      Ok(Transaction::V2 { prefix, proofs })
+    } else {
+      Err(io::Error::other("tried to deserialize unknown version"))
+    }
   }
 
-  #[must_use]
-  pub fn hash(&self) -> Option<[u8; 32]> {
+  /// The hash of the transaction.
+  pub fn hash(&self) -> [u8; 32] {
     let mut buf = Vec::with_capacity(2048);
-    if self.prefix.version == 1 {
-      self.write(&mut buf)?.unwrap();
-      Some(keccak256(buf))
-    } else {
-      let mut hashes = Vec::with_capacity(96);
+    match self {
+      Transaction::V1 { .. } => {
+        self.write(&mut buf).unwrap();
+        keccak256(buf)
+      }
+      Transaction::V2 { prefix, proofs } => {
+        let mut hashes = Vec::with_capacity(96);
 
-      hashes.extend(self.prefix.hash());
+        hashes.extend(prefix.hash(2));
 
-      let rct_type = self.rct_signatures.rct_type()?;
-      self.rct_signatures.base.write(&mut buf, rct_type).unwrap();
-      hashes.extend(keccak256(&buf));
-      buf.clear();
+        if let Some(proofs) = proofs {
+          let rct_type = proofs.rct_type();
+          proofs.base.write(&mut buf, rct_type).unwrap();
+          hashes.extend(keccak256(&buf));
+          buf.clear();
 
-      hashes.extend(&match self.rct_signatures.prunable {
-        RctPrunable::Null => [0; 32],
-        _ => {
-          self.rct_signatures.prunable.write(&mut buf, rct_type).unwrap();
-          keccak256(buf)
+          proofs.prunable.write(&mut buf, rct_type).unwrap();
+          hashes.extend(keccak256(buf));
+        } else {
+          // Serialization of RctBase::Null
+          hashes.extend(keccak256([0]));
+          hashes.extend([0; 32]);
         }
-      });
 
-      Some(keccak256(hashes))
+        keccak256(hashes)
+      }
     }
   }
 
   /// Calculate the hash of this transaction as needed for signing it.
-  #[must_use]
+  ///
+  /// This returns None if the transaction is without signatures.
   pub fn signature_hash(&self) -> Option<[u8; 32]> {
-    if self.prefix.version == 1 {
-      return Some(self.prefix.hash());
+    match self {
+      Transaction::V1 { prefix, .. } => Some(prefix.hash(1)),
+      Transaction::V2 { prefix, proofs } => {
+        let mut buf = Vec::with_capacity(2048);
+        let mut sig_hash = Vec::with_capacity(96);
+
+        sig_hash.extend(prefix.hash(2));
+
+        let proofs = proofs.as_ref()?;
+        proofs.base.write(&mut buf, proofs.rct_type()).unwrap();
+        sig_hash.extend(keccak256(&buf));
+        buf.clear();
+
+        proofs.prunable.signature_write(&mut buf).unwrap();
+        sig_hash.extend(keccak256(buf));
+
+        Some(keccak256(sig_hash))
+      }
     }
-
-    let mut buf = Vec::with_capacity(2048);
-    let mut sig_hash = Vec::with_capacity(96);
-
-    sig_hash.extend(self.prefix.hash());
-
-    self.rct_signatures.base.write(&mut buf, self.rct_signatures.rct_type()?).unwrap();
-    sig_hash.extend(keccak256(&buf));
-    buf.clear();
-
-    self.rct_signatures.prunable.signature_write(&mut buf)?.unwrap();
-    sig_hash.extend(keccak256(buf));
-
-    Some(keccak256(sig_hash))
   }
 
   fn is_rct_bulletproof(&self) -> bool {
-    let Some(rct_type) = self.rct_signatures.rct_type() else { return false };
-    match rct_type {
-      RctType::Bulletproofs | RctType::BulletproofsCompactAmount | RctType::Clsag => true,
-      RctType::Null |
-      RctType::MlsagAggregate |
-      RctType::MlsagIndividual |
-      RctType::BulletproofsPlus => false,
+    match self {
+      Transaction::V1 { .. } => false,
+      Transaction::V2 { proofs, .. } => {
+        let Some(proofs) = proofs else { return false };
+        proofs.rct_type().bulletproof()
+      }
     }
   }
 
   fn is_rct_bulletproof_plus(&self) -> bool {
-    let Some(rct_type) = self.rct_signatures.rct_type() else { return false };
-    match rct_type {
-      RctType::BulletproofsPlus => true,
-      RctType::Null |
-      RctType::MlsagAggregate |
-      RctType::MlsagIndividual |
-      RctType::Bulletproofs |
-      RctType::BulletproofsCompactAmount |
-      RctType::Clsag => false,
+    match self {
+      Transaction::V1 { .. } => false,
+      Transaction::V2 { proofs, .. } => {
+        let Some(proofs) = proofs else { return false };
+        proofs.rct_type().bulletproof_plus()
+      }
     }
   }
 
   /// Calculate the transaction's weight.
-  pub fn weight(&self) -> Option<usize> {
-    let blob_size = self.serialize()?.len();
+  pub fn weight(&self) -> usize {
+    let blob_size = self.serialize().len();
 
     let bp = self.is_rct_bulletproof();
     let bp_plus = self.is_rct_bulletproof_plus();
-    Some(if !(bp || bp_plus) {
+    if !(bp || bp_plus) {
       blob_size
     } else {
-      blob_size + Bulletproof::calculate_bp_clawback(bp_plus, self.prefix.outputs.len()).0
-    })
+      blob_size +
+        Bulletproof::calculate_bp_clawback(
+          bp_plus,
+          match self {
+            Transaction::V1 { .. } => panic!("v1 transaction was BP(+)"),
+            Transaction::V2 { prefix, .. } => prefix.outputs.len(),
+          },
+        )
+        .0
+    }
   }
 }

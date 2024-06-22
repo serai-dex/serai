@@ -30,7 +30,7 @@ use monero_serai::{
     hash_to_point,
     clsag::{ClsagError, ClsagContext, Clsag},
     bulletproofs::{MAX_COMMITMENTS, Bulletproof},
-    RctBase, RctPrunable, RctSignatures,
+    RctBase, RctPrunable, RctProofs,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
 };
@@ -809,7 +809,7 @@ impl SignableTransaction {
           extra,
         },
         signatures: vec![],
-        rct_signatures: RctSignatures {
+        proofs: RctProofs {
           base: RctBase {
             fee,
             encrypted_amounts,
@@ -855,7 +855,7 @@ impl SignableTransaction {
 
     let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash())
       .map_err(|_| TransactionError::WrongPrivateKey)?;
-    match tx.rct_signatures.prunable {
+    match tx.proofs.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
@@ -867,7 +867,7 @@ impl SignableTransaction {
     if self.has_change {
       debug_assert_eq!(
         self.fee_rate.calculate_fee_from_weight(tx.weight()),
-        tx.rct_signatures.base.fee,
+        tx.proofs.base.fee,
         "transaction used unexpected fee",
       );
     }
@@ -917,7 +917,7 @@ impl Eventuality {
       uniqueness(&tx.prefix.inputs),
     );
 
-    let rct_type = tx.rct_signatures.rct_type();
+    let rct_type = tx.proofs.rct_type();
     if rct_type != self.protocol.optimal_rct_type() {
       return false;
     }
@@ -935,9 +935,9 @@ impl Eventuality {
         key: expected.dest.compress(),
         view_tag: Some(expected.view_tag).filter(|_| self.protocol.view_tags()),
       } != actual) ||
-        (Some(&expected.commitment.calculate()) != tx.rct_signatures.base.commitments.get(o)) ||
+        (Some(&expected.commitment.calculate()) != tx.proofs.base.commitments.get(o)) ||
         (Some(&EncryptedAmount::Compact { amount: expected.amount }) !=
-          tx.rct_signatures.base.encrypted_amounts.get(o))
+          tx.proofs.base.encrypted_amounts.get(o))
       {
         return false;
       }

@@ -419,7 +419,7 @@ impl Scanner {
           commitment.amount = amount;
         // Regular transaction
         } else {
-          commitment = match tx.rct_signatures.base.encrypted_amounts.get(o) {
+          commitment = match tx.proofs.base.encrypted_amounts.get(o) {
             Some(amount) => amount.decrypt(shared_key),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
@@ -428,7 +428,7 @@ impl Scanner {
 
           // If this is a malicious commitment, move to the next output
           // Any other R value will calculate to a different spend key and are therefore ignorable
-          if Some(&commitment.calculate()) != tx.rct_signatures.base.commitments.get(o) {
+          if Some(&commitment.calculate()) != tx.proofs.base.commitments.get(o) {
             break;
           }
         }

@@ -390,7 +390,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
     shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
     let mut tx = self.tx;
-    match tx.rct_signatures.prunable {
+    match tx.proofs.prunable {
       RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
       RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
         for (c, clsag) in self.clsags.drain(..).enumerate() {

@@ -114,7 +114,7 @@ mod binaries {
         );
         assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
 
-        if matches!(tx.rct_signatures.prunable, RctPrunable::Null) {
+        if matches!(tx.proofs.prunable, RctPrunable::Null) {
           assert_eq!(tx.prefix.version, 1);
           assert!(!tx.signatures.is_empty());
           continue;
@@ -126,7 +126,7 @@ mod binaries {
         // multisig explicitly calling verify as part of its signing process
         // Accordingly, making sure our signature_hash algorithm is correct is great, and further
         // making sure the verification functions are valid is appreciated
-        match tx.rct_signatures.prunable {
+        match tx.proofs.prunable {
           RctPrunable::Null |
           RctPrunable::AggregateMlsagBorromean { .. } |
           RctPrunable::MlsagBorromean { .. } => {}
@@ -134,14 +134,14 @@ mod binaries {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
               &mut batch,
-              &tx.rct_signatures.base.commitments
+              &tx.proofs.base.commitments
             ));
           }
           RctPrunable::Clsag { bulletproofs, clsags, pseudo_outs } => {
             assert!(bulletproofs.batch_verify(
               &mut rand_core::OsRng,
               &mut batch,
-              &tx.rct_signatures.base.commitments
+              &tx.proofs.base.commitments
             ));
 
             for (i, clsag) in clsags.into_iter().enumerate() {

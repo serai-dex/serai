@@ -306,7 +306,7 @@ test!(
       assert_eq!(outputs[1].commitment().amount, 50000);
 
       // The remainder should get shunted to fee, which is fingerprintable
-      assert_eq!(tx.rct_signatures.base.fee, 1000000000000 - 10000 - 50000);
+      assert_eq!(tx.proofs.base.fee, 1000000000000 - 10000 - 50000);
     },
   ),
 );

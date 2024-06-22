@@ -70,7 +70,7 @@ test!(
       assert!(eventuality.matches(&tx));
 
       // Mutate the TX
-      tx.rct_signatures.base.commitments[0] += ED25519_BASEPOINT_POINT;
+      tx.proofs.base.commitments[0] += ED25519_BASEPOINT_POINT;
       // Verify it no longer matches
       assert!(!eventuality.matches(&tx));
     },
