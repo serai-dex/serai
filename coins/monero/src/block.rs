@@ -84,9 +84,11 @@ impl Block {
   /// structed as expected, this will return None.
   pub fn number(&self) -> Option<u64> {
     match &self.miner_tx {
-      Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => match prefix.inputs.first() {
-        Some(Input::Gen(number)) => Some(*number),
-        _ => None,
+      Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => {
+        match prefix.inputs.first() {
+          Some(Input::Gen(number)) => Some(*number),
+          _ => None,
+        }
       }
     }
   }

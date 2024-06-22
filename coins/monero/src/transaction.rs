@@ -301,6 +301,13 @@ pub enum Transaction {
 }
 
 impl Transaction {
+  /// Get the TransactionPrefix of this transaction.
+  pub fn prefix(&self) -> &TransactionPrefix {
+    match self {
+      Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => prefix,
+    }
+  }
+
   /// The weight of this Transaction, as relevant for fees.
   // TODO: Replace ring_len, decoy_weights for &[&[usize]], where the inner buf is the decoy
   // offsets
@@ -318,6 +325,9 @@ impl Transaction {
   }
 
   /// Write the Transaction.
+  ///
+  /// Some writable transactions may not be readable if they're malformed, per Monero's consensus
+  /// rules.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       Transaction::V1 { prefix, signatures } => {
@@ -352,15 +362,22 @@ impl Transaction {
     let prefix = TransactionPrefix::read(r, version)?;
 
     if version == 1 {
-      let signatures = prefix
-        .inputs
-        .iter()
-        .filter_map(|input| match input {
-          // TODO: This allows mixing Gen and ToKey, which is likely undefined behavior?
-          Input::ToKey { key_offsets, .. } => Some(RingSignature::read(key_offsets.len(), r)),
-          _ => None,
-        })
-        .collect::<Result<_, _>>()?;
+      let signatures = if (prefix.inputs.len() == 1) && matches!(prefix.inputs[0], Input::Gen(_)) {
+        vec![]
+      } else {
+        let mut signatures = Vec::with_capacity(prefix.inputs.len());
+        for input in &prefix.inputs {
+          match input {
+            Input::ToKey { key_offsets, .. } => {
+              signatures.push(RingSignature::read(key_offsets.len(), r)?)
+            }
+            _ => {
+              Err(io::Error::other("reading signatures for a transaction with non-ToKey inputs"))?
+            }
+          }
+        }
+        signatures
+      };
 
       Ok(Transaction::V1 { prefix, signatures })
     } else if version == 2 {
