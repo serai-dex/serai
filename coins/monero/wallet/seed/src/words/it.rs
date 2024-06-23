@@ -1,4 +1,4 @@
-vec![
+&[
   "abbinare",
   "abbonato",
   "abisso",

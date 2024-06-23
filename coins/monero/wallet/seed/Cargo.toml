@@ -1,9 +1,9 @@
 [package]
-name = "polyseed"
+name = "monero-seed"
 version = "0.1.0"
-description = "Rust implementation of Polyseed"
+description = "Rust implementation of Monero's seed algorithm"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/wallet/polyseed"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/wallet/seed"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 rust-version = "1.79"
@@ -20,12 +20,10 @@ std-shims = { path = "../../../../common/std-shims", version = "^0.1.1", default
 
 thiserror = { version = "1", default-features = false, optional = true }
 
-subtle = { version = "^2.4", default-features = false }
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 rand_core = { version = "0.6", default-features = false }
 
-sha3 = { version = "0.10", default-features = false }
-pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 [features]
 std = [
@@ -33,11 +31,7 @@ std = [
 
   "thiserror",
 
-  "subtle/std",
   "zeroize/std",
   "rand_core/std",
-
-  "sha3/std",
-  "pbkdf2/std",
 ]
 default = ["std"]

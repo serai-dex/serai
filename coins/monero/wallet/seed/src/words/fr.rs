@@ -1,4 +1,4 @@
-vec![
+&[
   "abandon",
   "abattre",
   "aboi",

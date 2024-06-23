@@ -1,4 +1,4 @@
-vec![
+&[
   "aalglad",
   "aalscholver",
   "aambeeld",

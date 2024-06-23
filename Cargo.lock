@@ -4863,6 +4863,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-seed"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "rand_core",
+ "std-shims",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [

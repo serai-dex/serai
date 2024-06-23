@@ -1,4 +1,4 @@
-vec![
+&[
   "abbey",
   "abducts",
   "ability",

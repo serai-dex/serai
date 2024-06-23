@@ -1,4 +1,4 @@
-vec![
+&[
   "Abakus",
   "Abart",
   "abbilden",

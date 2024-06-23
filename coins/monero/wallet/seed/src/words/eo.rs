@@ -1,4 +1,4 @@
-vec![
+&[
   "abako",
   "abdiki",
   "abelo",

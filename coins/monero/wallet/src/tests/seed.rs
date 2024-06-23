@@ -6,11 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 
 use monero_serai::primitives::keccak256;
 
-use crate::seed::{
-  Seed, SeedType, SeedError,
-  classic::{self, trim_by_lang},
-  polyseed,
-};
+use crate::seed::{Seed, SeedType, SeedError, classic, polyseed};
 
 #[test]
 fn test_classic_seed() {
@@ -186,6 +182,14 @@ fn test_classic_seed() {
   ];
 
   for vector in vectors {
+    fn trim_by_lang(word: &str, lang: Language) -> String {
+      if lang != Language::DeprecatedEnglish {
+        word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
+      } else {
+        word.to_string()
+      }
+    }
+
     let trim_seed = |seed: &str| {
       seed
         .split_whitespace()

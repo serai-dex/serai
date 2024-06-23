@@ -1,4 +1,4 @@
-vec![
+&[
   "ábaco",
   "abdomen",
   "abeja",

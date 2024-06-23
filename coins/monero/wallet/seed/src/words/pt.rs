@@ -1,4 +1,4 @@
-vec![
+&[
   "abaular",
   "abdominal",
   "abeto",

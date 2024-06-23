@@ -4,7 +4,7 @@ use std_shims::string::String;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
-pub(crate) mod classic;
+pub(crate) use monero_seed as classic;
 pub(crate) use polyseed;
 use classic::{CLASSIC_SEED_LENGTH, CLASSIC_SEED_LENGTH_WITH_CHECKSUM, ClassicSeed};
 use polyseed::{POLYSEED_LENGTH, Polyseed};

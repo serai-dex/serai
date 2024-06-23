@@ -11,26 +11,55 @@ use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::scalar::Scalar;
 
-use crate::seed::SeedError;
+const CLASSIC_SEED_LENGTH: usize = 24;
+const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
 
-pub(crate) const CLASSIC_SEED_LENGTH: usize = 24;
-pub(crate) const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
+/// An error when working with a seed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum SeedError {
+  /// The deprecated English language option was used with a checksum.
+  ///
+  /// The deprecated English language option did not include a checksum.
+  #[cfg_attr(feature = "std", error("deprecated English language option included a checksum"))]
+  DeprecatedEnglishWithChecksum,
+  #[cfg_attr(feature = "std", error("invalid seed"))]
+  /// The seed was invalid.
+  InvalidSeed,
+  /// The checksum did not match the data.
+  #[cfg_attr(feature = "std", error("invalid checksum"))]
+  InvalidChecksum,
+}
 
+/// Language options.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Zeroize)]
 pub enum Language {
+  /// Chinese language option.
   Chinese,
+  /// English language option.
   English,
+  /// Dutch language option.
   Dutch,
+  /// French language option.
   French,
+  /// Spanish language option.
   Spanish,
+  /// German language option.
   German,
+  /// Italian language option.
   Italian,
+  /// Portuguese language option.
   Portuguese,
+  /// Japanese language option.
   Japanese,
+  /// Russian language option.
   Russian,
+  /// Esperanto language option.
   Esperanto,
+  /// Lojban language option.
   Lojban,
-  EnglishOld,
+  /// The original, and deprecated, English language.
+  DeprecatedEnglish,
 }
 
 fn trim(word: &str, len: usize) -> Zeroizing<String> {
@@ -38,14 +67,14 @@ fn trim(word: &str, len: usize) -> Zeroizing<String> {
 }
 
 struct WordList {
-  word_list: Vec<&'static str>,
+  word_list: &'static [&'static str],
   word_map: HashMap<&'static str, usize>,
   trimmed_word_map: HashMap<String, usize>,
   unique_prefix_length: usize,
 }
 
 impl WordList {
-  fn new(word_list: Vec<&'static str>, prefix_length: usize) -> WordList {
+  fn new(word_list: &'static [&'static str], prefix_length: usize) -> WordList {
     let mut lang = WordList {
       word_list,
       word_map: HashMap::new(),
@@ -67,30 +96,21 @@ static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
 fn LANGUAGES() -> &'static HashMap<Language, WordList> {
   LANGUAGES_CELL.get_or_init(|| {
     HashMap::from([
-      (Language::Chinese, WordList::new(include!("./classic/zh.rs"), 1)),
-      (Language::English, WordList::new(include!("./classic/en.rs"), 3)),
-      (Language::Dutch, WordList::new(include!("./classic/nl.rs"), 4)),
-      (Language::French, WordList::new(include!("./classic/fr.rs"), 4)),
-      (Language::Spanish, WordList::new(include!("./classic/es.rs"), 4)),
-      (Language::German, WordList::new(include!("./classic/de.rs"), 4)),
-      (Language::Italian, WordList::new(include!("./classic/it.rs"), 4)),
-      (Language::Portuguese, WordList::new(include!("./classic/pt.rs"), 4)),
-      (Language::Japanese, WordList::new(include!("./classic/ja.rs"), 3)),
-      (Language::Russian, WordList::new(include!("./classic/ru.rs"), 4)),
-      (Language::Esperanto, WordList::new(include!("./classic/eo.rs"), 4)),
-      (Language::Lojban, WordList::new(include!("./classic/jbo.rs"), 4)),
-      (Language::EnglishOld, WordList::new(include!("./classic/ang.rs"), 4)),
+      (Language::Chinese, WordList::new(include!("./words/zh.rs"), 1)),
+      (Language::English, WordList::new(include!("./words/en.rs"), 3)),
+      (Language::Dutch, WordList::new(include!("./words/nl.rs"), 4)),
+      (Language::French, WordList::new(include!("./words/fr.rs"), 4)),
+      (Language::Spanish, WordList::new(include!("./words/es.rs"), 4)),
+      (Language::German, WordList::new(include!("./words/de.rs"), 4)),
+      (Language::Italian, WordList::new(include!("./words/it.rs"), 4)),
+      (Language::Portuguese, WordList::new(include!("./words/pt.rs"), 4)),
+      (Language::Japanese, WordList::new(include!("./words/ja.rs"), 3)),
+      (Language::Russian, WordList::new(include!("./words/ru.rs"), 4)),
+      (Language::Esperanto, WordList::new(include!("./words/eo.rs"), 4)),
+      (Language::Lojban, WordList::new(include!("./words/jbo.rs"), 4)),
+      (Language::DeprecatedEnglish, WordList::new(include!("./words/ang.rs"), 4)),
     ])
   })
-}
-
-#[cfg(test)]
-pub(crate) fn trim_by_lang(word: &str, lang: Language) -> String {
-  if lang != Language::EnglishOld {
-    word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
-  } else {
-    word.to_string()
-  }
 }
 
 fn checksum_index(words: &[Zeroizing<String>], lang: &WordList) -> usize {
@@ -135,7 +155,7 @@ fn checksum_index(words: &[Zeroizing<String>], lang: &WordList) -> usize {
 
 // Convert a private key to a seed
 #[allow(clippy::needless_pass_by_value)]
-fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
+fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> Seed {
   let bytes = Zeroizing::new(key.to_bytes());
 
   // get the language words
@@ -172,7 +192,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
   indices.zeroize();
 
   // create a checksum word for all languages except old english
-  if lang != Language::EnglishOld {
+  if lang != Language::DeprecatedEnglish {
     let checksum = seed[checksum_index(&seed, &LANGUAGES()[&lang])].clone();
     seed.push(checksum);
   }
@@ -184,11 +204,11 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> ClassicSeed {
     }
     *res += word;
   }
-  ClassicSeed(lang, res)
+  Seed(lang, res)
 }
 
 // Convert a seed to bytes
-pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, SeedError> {
+fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, SeedError> {
   // get seed words
   let words = words.split_whitespace().map(|w| Zeroizing::new(w.to_string())).collect::<Vec<_>>();
   if (words.len() != CLASSIC_SEED_LENGTH) && (words.len() != CLASSIC_SEED_LENGTH_WITH_CHECKSUM) {
@@ -196,8 +216,8 @@ pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8
   }
 
   let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
-  if has_checksum && lang == Language::EnglishOld {
-    Err(SeedError::EnglishOldWithChecksum)?;
+  if has_checksum && lang == Language::DeprecatedEnglish {
+    Err(SeedError::DeprecatedEnglishWithChecksum)?;
   }
 
   // Validate words are in the language word list
@@ -272,15 +292,20 @@ pub(crate) fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8
   Ok(res)
 }
 
+/// A Monero seed.
 #[derive(Clone, PartialEq, Eq, Zeroize)]
-pub struct ClassicSeed(Language, Zeroizing<String>);
-impl ClassicSeed {
-  pub(crate) fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> ClassicSeed {
-    key_to_seed(lang, Zeroizing::new(Scalar::random(rng)))
+pub struct Seed(Language, Zeroizing<String>);
+impl Seed {
+  /// Create a new seed.
+  pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Seed {
+    let mut scalar_bytes = Zeroizing::new([0; 64]);
+    rng.fill_bytes(scalar_bytes.as_mut());
+    key_to_seed(lang, Zeroizing::new(Scalar::from_bytes_mod_order_wide(scalar_bytes.deref())))
   }
 
+  /// Parse a seed from a string.
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_string(lang: Language, words: Zeroizing<String>) -> Result<ClassicSeed, SeedError> {
+  pub fn from_string(lang: Language, words: Zeroizing<String>) -> Result<Seed, SeedError> {
     let entropy = seed_to_bytes(lang, &words)?;
 
     // Make sure this is a valid scalar
@@ -295,17 +320,20 @@ impl ClassicSeed {
     Ok(Self::from_entropy(lang, entropy).unwrap())
   }
 
+  /// Create a seed from entropy.
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<ClassicSeed> {
+  pub fn from_entropy(lang: Language, entropy: Zeroizing<[u8; 32]>) -> Option<Seed> {
     Option::from(Scalar::from_canonical_bytes(*entropy))
       .map(|scalar| key_to_seed(lang, Zeroizing::new(scalar)))
   }
 
-  pub(crate) fn to_string(&self) -> Zeroizing<String> {
+  /// Convert a seed to a string.
+  pub fn to_string(&self) -> Zeroizing<String> {
     self.1.clone()
   }
 
-  pub(crate) fn entropy(&self) -> Zeroizing<[u8; 32]> {
+  /// Return the entropy underlying this seed.
+  pub fn entropy(&self) -> Zeroizing<[u8; 32]> {
     seed_to_bytes(self.0, &self.1).unwrap()
   }
 }
