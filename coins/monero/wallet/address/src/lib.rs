@@ -1,3 +1,8 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+// #![deny(missing_docs)] // TODO
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use core::{marker::PhantomData, fmt};
 use std_shims::string::ToString;
 
@@ -5,9 +10,13 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use monero_serai::io::decompress_point;
+use monero_io::decompress_point;
 
-use base58_monero::base58::{encode_check, decode_check};
+mod base58check;
+use base58check::{encode_check, decode_check};
+
+#[cfg(test)]
+mod tests;
 
 /// The network this address is for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
@@ -226,7 +235,7 @@ impl<B: AddressBytes> fmt::Display for Address<B> {
     if let Some(id) = self.meta.kind.payment_id() {
       data.extend(id);
     }
-    write!(f, "{}", encode_check(&data).unwrap())
+    write!(f, "{}", encode_check(data))
   }
 }
 
@@ -236,7 +245,7 @@ impl<B: AddressBytes> Address<B> {
   }
 
   pub fn from_str_raw(s: &str) -> Result<Self, AddressError> {
-    let raw = decode_check(s).map_err(|_| AddressError::InvalidEncoding)?;
+    let raw = decode_check(s).ok_or(AddressError::InvalidEncoding)?;
     if raw.len() < (1 + 32 + 32) {
       Err(AddressError::InvalidLength)?;
     }

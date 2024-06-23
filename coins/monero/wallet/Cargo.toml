@@ -39,15 +39,14 @@ dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4", def
 frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["ed25519"], optional = true }
 
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-base58-monero = { version = "2", default-features = false, features = ["check"] }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 monero-serai = { path = "..", default-features = false }
 monero-rpc = { path = "../rpc", default-features = false }
+monero-address = { path = "./address", default-features = false }
 
 [dev-dependencies]
-hex-literal = "0.4"
+serde = { version = "1", default-features = false, features = ["derive", "alloc", "std"] }
+serde_json = { version = "1", default-features = false, features = ["alloc", "std"] }
 
 frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["ed25519", "tests"] }
 
@@ -68,13 +67,9 @@ std = [
   "rand_chacha/std",
   "rand_distr/std",
 
-  "hex/std",
-  "base58-monero/std",
-  "serde/std",
-  "serde_json/std",
-
   "monero-serai/std",
   "monero-rpc/std",
+  "monero-address/std",
 ]
 compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-serai/compile-time-generators"]
 multisig = ["transcript", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]

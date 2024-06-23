@@ -31,8 +31,7 @@ pub use monero_rpc as rpc;
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
 
-/// Address encoding and decoding functionality.
-pub mod address;
+pub use monero_address as address;
 use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
 
 mod scan;

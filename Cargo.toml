@@ -53,6 +53,7 @@ members = [
   "coins/monero",
   "coins/monero/rpc",
   "coins/monero/rpc/simple-request",
+  "coins/monero/wallet/address",
   "coins/monero/wallet",
   "coins/monero/wallet/seed",
   "coins/monero/wallet/polyseed",

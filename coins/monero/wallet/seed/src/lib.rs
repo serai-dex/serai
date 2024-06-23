@@ -1,3 +1,8 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use core::{ops::Deref, fmt};
 use std_shims::{
   sync::OnceLock,

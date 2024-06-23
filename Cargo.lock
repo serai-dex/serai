@@ -881,16 +881,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
-name = "base58-monero"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978e81a45367d2409ecd33369a45dda2e9a3ca516153ec194de1fbda4b9fb79d"
-dependencies = [
- "thiserror",
- "tiny-keccak",
-]
-
-[[package]]
 name = "base58ck"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4752,6 +4742,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-address"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "hex",
+ "hex-literal",
+ "monero-io",
+ "monero-primitives",
+ "rand_core",
+ "serde",
+ "serde_json",
+ "std-shims",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "monero-borromean"
 version = "0.1.0"
 dependencies = [
@@ -4910,14 +4917,13 @@ name = "monero-wallet"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "base58-monero",
  "curve25519-dalek",
  "dalek-ff-group",
  "flexible-transcript",
  "group",
  "hex",
- "hex-literal",
  "modular-frost",
+ "monero-address",
  "monero-rpc",
  "monero-serai",
  "monero-simple-request-rpc",
