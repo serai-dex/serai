@@ -1,4 +1,4 @@
-[
+&[
     "abaisser",
     "abandon",
     "abdiquer",

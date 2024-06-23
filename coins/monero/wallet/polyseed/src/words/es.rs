@@ -1,4 +1,4 @@
-[
+&[
     "ábaco",
     "abdomen",
     "abeja",

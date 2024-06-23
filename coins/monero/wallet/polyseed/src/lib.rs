@@ -1,5 +1,10 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use core::fmt;
-use std_shims::{sync::OnceLock, vec::Vec, string::String, collections::HashMap};
+use std_shims::{sync::OnceLock, string::String, collections::HashMap};
 #[cfg(feature = "std")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,8 +14,6 @@ use rand_core::{RngCore, CryptoRng};
 
 use sha3::Sha3_256;
 use pbkdf2::pbkdf2_hmac;
-
-use super::SeedError;
 
 // Features
 const FEATURE_BITS: u8 = 5;
@@ -34,7 +37,7 @@ fn polyseed_features_supported(features: u8) -> bool {
 const DATE_BITS: u8 = 10;
 const DATE_MASK: u16 = (1u16 << DATE_BITS) - 1;
 const POLYSEED_EPOCH: u64 = 1635768000; // 1st November 2021 12:00 UTC
-pub(crate) const TIME_STEP: u64 = 2629746; // 30.436875 days = 1/12 of the Gregorian year
+const TIME_STEP: u64 = 2629746; // 30.436875 days = 1/12 of the Gregorian year
 
 // After ~85 years, this will roll over.
 fn birthday_encode(time: u64) -> u16 {
@@ -61,9 +64,9 @@ const LAST_BYTE_SECRET_BITS_MASK: u8 = ((1 << (BITS_PER_BYTE - CLEAR_BITS)) - 1)
 const SECRET_BITS_PER_WORD: usize = 10;
 
 // Amount of words in a seed
-pub(crate) const POLYSEED_LENGTH: usize = 16;
+const POLYSEED_LENGTH: usize = 16;
 // Amount of characters each word must have if trimmed
-pub(crate) const PREFIX_LEN: usize = 4;
+const PREFIX_LEN: usize = 4;
 
 const POLY_NUM_CHECK_DIGITS: usize = 1;
 const DATA_WORDS: usize = POLYSEED_LENGTH - POLY_NUM_CHECK_DIGITS;
@@ -98,30 +101,58 @@ const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 // See: https://github.com/tevador/polyseed/blob/master/include/polyseed.h#L58
 const COIN: u16 = 0;
 
+/// An error when working with a Polyseed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum PolyseedError {
+  /// Unsupported feature bits were set.
+  #[cfg_attr(feature = "std", error("unsupported features"))]
+  UnsupportedFeatures,
+  /// The entropy was invalid.
+  #[cfg_attr(feature = "std", error("invalid entropy"))]
+  InvalidEntropy,
+  #[cfg_attr(feature = "std", error("invalid seed"))]
+  /// The seed was invalid.
+  InvalidSeed,
+  /// The checksum did not match the data.
+  #[cfg_attr(feature = "std", error("invalid checksum"))]
+  InvalidChecksum,
+}
+
 /// Language options for Polyseed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 pub enum Language {
+  /// English language option.
   English,
+  /// Spanish language option.
   Spanish,
+  /// French language option.
   French,
+  /// Italian language option.
   Italian,
+  /// Japanese language option.
   Japanese,
+  /// Korean language option.
   Korean,
+  /// Czech language option.
   Czech,
+  /// Portuguese language option.
   Portuguese,
+  /// Simplified Chinese language option.
   ChineseSimplified,
+  /// Traditional Chinese language option.
   ChineseTraditional,
 }
 
 struct WordList {
-  words: Vec<String>,
+  words: &'static [&'static str],
   has_prefix: bool,
   has_accent: bool,
 }
 
 impl WordList {
-  fn new(words: &str, has_prefix: bool, has_accent: bool) -> WordList {
-    let res = WordList { words: serde_json::from_str(words).unwrap(), has_prefix, has_accent };
+  fn new(words: &'static [&'static str], has_prefix: bool, has_accent: bool) -> WordList {
+    let res = WordList { words, has_prefix, has_accent };
     // This is needed for a later unwrap to not fails
     assert!(words.len() < usize::from(u16::MAX));
     res
@@ -133,26 +164,27 @@ static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
 fn LANGUAGES() -> &'static HashMap<Language, WordList> {
   LANGUAGES_CELL.get_or_init(|| {
     HashMap::from([
-      (Language::Czech, WordList::new(include_str!("./polyseed/cs.json"), true, false)),
-      (Language::French, WordList::new(include_str!("./polyseed/fr.json"), true, true)),
-      (Language::Korean, WordList::new(include_str!("./polyseed/ko.json"), false, false)),
-      (Language::English, WordList::new(include_str!("./polyseed/en.json"), true, false)),
-      (Language::Italian, WordList::new(include_str!("./polyseed/it.json"), true, false)),
-      (Language::Spanish, WordList::new(include_str!("./polyseed/es.json"), true, true)),
-      (Language::Japanese, WordList::new(include_str!("./polyseed/ja.json"), false, false)),
-      (Language::Portuguese, WordList::new(include_str!("./polyseed/pt.json"), true, false)),
+      (Language::Czech, WordList::new(include!("./words/cs.rs"), true, false)),
+      (Language::French, WordList::new(include!("./words/fr.rs"), true, true)),
+      (Language::Korean, WordList::new(include!("./words/ko.rs"), false, false)),
+      (Language::English, WordList::new(include!("./words/en.rs"), true, false)),
+      (Language::Italian, WordList::new(include!("./words/it.rs"), true, false)),
+      (Language::Spanish, WordList::new(include!("./words/es.rs"), true, true)),
+      (Language::Japanese, WordList::new(include!("./words/ja.rs"), false, false)),
+      (Language::Portuguese, WordList::new(include!("./words/pt.rs"), true, false)),
       (
         Language::ChineseSimplified,
-        WordList::new(include_str!("./polyseed/zh_simplified.json"), false, false),
+        WordList::new(include!("./words/zh_simplified.rs"), false, false),
       ),
       (
         Language::ChineseTraditional,
-        WordList::new(include_str!("./polyseed/zh_traditional.json"), false, false),
+        WordList::new(include!("./words/zh_traditional.rs"), false, false),
       ),
     ])
   })
 }
 
+/// A Polyseed.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Polyseed {
   language: Language,
@@ -222,13 +254,13 @@ impl Polyseed {
     masked_features: u8,
     encoded_birthday: u16,
     entropy: Zeroizing<[u8; 32]>,
-  ) -> Result<Polyseed, SeedError> {
+  ) -> Result<Polyseed, PolyseedError> {
     if !polyseed_features_supported(masked_features) {
-      Err(SeedError::UnsupportedFeatures)?;
+      Err(PolyseedError::UnsupportedFeatures)?;
     }
 
     if !valid_entropy(&entropy) {
-      Err(SeedError::InvalidEntropy)?;
+      Err(PolyseedError::InvalidEntropy)?;
     }
 
     let mut res = Polyseed {
@@ -244,23 +276,24 @@ impl Polyseed {
 
   /// Create a new `Polyseed` with specific internals.
   ///
-  /// `birthday` is defined in seconds since the Unix epoch.
-  pub fn from(
+  /// `birthday` is defined in seconds since the epoch.
+  fn from(
     language: Language,
     features: u8,
     birthday: u64,
     entropy: Zeroizing<[u8; 32]>,
-  ) -> Result<Polyseed, SeedError> {
+  ) -> Result<Polyseed, PolyseedError> {
     Self::from_internal(language, user_features(features), birthday_encode(birthday), entropy)
   }
 
   /// Create a new `Polyseed`.
   ///
-  /// This uses the system's time for the birthday, if available.
+  /// This uses the system's time for the birthday, if available, else 0.
   pub fn new<R: RngCore + CryptoRng>(rng: &mut R, language: Language) -> Polyseed {
     // Get the birthday
     #[cfg(feature = "std")]
-    let birthday = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let birthday =
+      SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(core::time::Duration::ZERO).as_secs();
     #[cfg(not(feature = "std"))]
     let birthday = 0;
 
@@ -275,7 +308,7 @@ impl Polyseed {
 
   /// Create a new `Polyseed` from a String.
   #[allow(clippy::needless_pass_by_value)]
-  pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, SeedError> {
+  pub fn from_string(lang: Language, seed: Zeroizing<String>) -> Result<Polyseed, PolyseedError> {
     // Decode the seed into its polynomial coefficients
     let mut poly = [0; POLYSEED_LENGTH];
 
@@ -325,7 +358,7 @@ impl Polyseed {
       } else {
         check_if_matches(lang_word_list.has_prefix, lang_word_list.words.iter(), word)
       }) else {
-        Err(SeedError::InvalidSeed)?
+        Err(PolyseedError::InvalidSeed)?
       };
 
       // WordList asserts the word list length is less than u16::MAX
@@ -337,7 +370,7 @@ impl Polyseed {
 
     // Validate the checksum
     if poly_eval(&poly) != 0 {
-      Err(SeedError::InvalidChecksum)?;
+      Err(PolyseedError::InvalidChecksum)?;
     }
 
     // Convert the polynomial into entropy
@@ -416,6 +449,7 @@ impl Polyseed {
     key
   }
 
+  /// The String representation of this seed.
   pub fn to_string(&self) -> Zeroizing<String> {
     // Encode the polynomial with the existing checksum
     let mut poly = self.to_poly();
@@ -428,7 +462,7 @@ impl Polyseed {
     let mut seed = Zeroizing::new(String::new());
     let words = &LANGUAGES()[&self.language].words;
     for i in 0 .. poly.len() {
-      seed.push_str(&words[usize::from(poly[i])]);
+      seed.push_str(words[usize::from(poly[i])]);
       if i < poly.len() - 1 {
         seed.push(' ');
       }

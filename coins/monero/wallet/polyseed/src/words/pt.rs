@@ -1,4 +1,4 @@
-[
+&[
     "abacate",
     "abaixo",
     "abalar",

@@ -4867,7 +4867,6 @@ name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [
  "curve25519-dalek",
- "hex",
  "hex-literal",
  "monero-borromean",
  "monero-bulletproofs",
@@ -4877,8 +4876,6 @@ dependencies = [
  "monero-mlsag",
  "monero-primitives",
  "rand_core",
- "serde",
- "serde_json",
  "std-shims",
  "zeroize",
 ]
@@ -4911,16 +4908,13 @@ dependencies = [
  "monero-rpc",
  "monero-serai",
  "monero-simple-request-rpc",
- "pbkdf2 0.12.2",
  "rand",
  "rand_chacha",
  "rand_core",
  "rand_distr",
  "serde",
  "serde_json",
- "sha3",
  "std-shims",
- "subtle",
  "thiserror",
  "tokio",
  "zeroize",
@@ -5807,6 +5801,19 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "polyseed"
+version = "0.1.0"
+dependencies = [
+ "pbkdf2 0.12.2",
+ "rand_core",
+ "sha3",
+ "std-shims",
+ "subtle",
+ "thiserror",
+ "zeroize",
 ]
 
 [[package]]

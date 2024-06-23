@@ -3,7 +3,15 @@
 A modern Monero transaction library. It provides a modern, Rust-friendly view of
 the Monero protocol.
 
-### Purpose and support
+This library is usable under no-std when the `std` feature (on by default) is
+disabled.
+
+### Wallet Functionality
+
+monero-serai originally included wallet functionality. That has been moved to
+monero-wallet.
+
+### Purpose and Support
 
 monero-serai was written for Serai, a decentralized exchange aiming to support
 Monero. Despite this, monero-serai is intended to be a widely usable library,

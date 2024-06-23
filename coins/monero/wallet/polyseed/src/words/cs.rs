@@ -1,4 +1,4 @@
-[
+&[
     "abdikace",
     "abeceda",
     "adresa",

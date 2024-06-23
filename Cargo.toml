@@ -54,6 +54,7 @@ members = [
   "coins/monero/rpc",
   "coins/monero/rpc/simple-request",
   "coins/monero/wallet",
+  "coins/monero/wallet/polyseed",
 
   "message-queue",
 

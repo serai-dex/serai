@@ -32,9 +32,6 @@ monero-borromean = { path = "ringct/borromean", version = "0.1", default-feature
 monero-bulletproofs = { path = "ringct/bulletproofs", version = "0.1", default-features = false }
 
 hex-literal = "0.4"
-hex = { version = "0.4", default-features = false, features = ["alloc"] }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 [features]
 std = [
@@ -50,10 +47,6 @@ std = [
   "monero-mlsag/std",
   "monero-clsag/std",
   "monero-bulletproofs/std",
-
-  "hex/std",
-  "serde/std",
-  "serde_json/std",
 ]
 
 compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-bulletproofs/compile-time-generators"]
