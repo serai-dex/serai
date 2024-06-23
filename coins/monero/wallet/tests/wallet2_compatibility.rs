@@ -7,7 +7,7 @@ use serde_json::json;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::transaction::Transaction,
+  transaction::Transaction,
   rpc::Rpc,
   address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
   extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
@@ -226,7 +226,7 @@ test!(
       assert_eq!(transfer.transfer.payment_id, hex::encode([0u8; 8]));
 
       // Make sure only one R was included in TX extra
-      assert!(Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
+      assert!(Extra::read::<&[u8]>(&mut tx.prefix().extra.as_ref())
         .unwrap()
         .keys()
         .unwrap()
@@ -285,7 +285,7 @@ test!(
 
       // Make sure 3 additional pub keys are included in TX extra
       let keys =
-        Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref()).unwrap().keys().unwrap().1.unwrap();
+        Extra::read::<&[u8]>(&mut tx.prefix().extra.as_ref()).unwrap().keys().unwrap().1.unwrap();
 
       assert_eq!(keys.len(), 3);
     },

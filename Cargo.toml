@@ -56,6 +56,7 @@ members = [
   "coins/monero/wallet",
   "coins/monero/wallet/seed",
   "coins/monero/wallet/polyseed",
+  "coins/monero/wallet/util",
 
   "message-queue",
 

@@ -5,7 +5,7 @@
 
 use core::ops::Deref;
 use std_shims::{
-  io,
+  io as stdio,
   collections::{HashSet, HashMap},
 };
 
@@ -23,15 +23,13 @@ use monero_serai::{
   ringct::{RctType, EncryptedAmount},
   transaction::Input,
 };
-pub use monero_serai as monero;
+
+pub use monero_serai::*;
 
 pub use monero_rpc as rpc;
 
 pub mod extra;
 pub(crate) use extra::{PaymentId, ExtraField, Extra};
-
-/// Seed creation and parsing functionality.
-pub mod seed;
 
 /// Address encoding and decoding functionality.
 pub mod address;
@@ -114,8 +112,8 @@ impl Protocol {
   // TODO: Make this an Option when we support pre-RCT protocols
   pub fn optimal_rct_type(&self) -> RctType {
     match self {
-      Protocol::v14 => RctType::Clsag,
-      Protocol::v16 => RctType::BulletproofsPlus,
+      Protocol::v14 => RctType::ClsagBulletproof,
+      Protocol::v16 => RctType::ClsagBulletproofPlus,
       Protocol::Custom { optimal_rct_type, .. } => *optimal_rct_type,
     }
   }
@@ -139,7 +137,7 @@ impl Protocol {
     }
   }
 
-  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+  pub fn write<W: stdio::Write>(&self, w: &mut W) -> stdio::Result<()> {
     match self {
       Protocol::v14 => w.write_all(&[0, 14]),
       Protocol::v16 => w.write_all(&[0, 16]),
@@ -148,20 +146,20 @@ impl Protocol {
         w.write_all(&[1, 0])?;
         w.write_all(&u16::try_from(*ring_len).unwrap().to_le_bytes())?;
         w.write_all(&[u8::from(*bp_plus)])?;
-        w.write_all(&[optimal_rct_type.to_byte()])?;
+        w.write_all(&[u8::from(*optimal_rct_type)])?;
         w.write_all(&[u8::from(*view_tags)])?;
         w.write_all(&[u8::from(*v16_fee)])
       }
     }
   }
 
-  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Protocol> {
+  pub fn read<R: stdio::Read>(r: &mut R) -> stdio::Result<Protocol> {
     Ok(match read_byte(r)? {
       // Monero protocol
       0 => match read_byte(r)? {
         14 => Protocol::v14,
         16 => Protocol::v16,
-        _ => Err(io::Error::other("unrecognized monero protocol"))?,
+        _ => Err(stdio::Error::other("unrecognized monero protocol"))?,
       },
       // Custom
       1 => match read_byte(r)? {
@@ -170,24 +168,24 @@ impl Protocol {
           bp_plus: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
-          optimal_rct_type: RctType::from_byte(read_byte(r)?)
-            .ok_or_else(|| io::Error::other("invalid RctType serialization"))?,
+          optimal_rct_type: RctType::try_from(read_byte(r)?)
+            .map_err(|()| stdio::Error::other("invalid RctType serialization"))?,
           view_tags: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
           v16_fee: match read_byte(r)? {
             0 => false,
             1 => true,
-            _ => Err(io::Error::other("invalid bool serialization"))?,
+            _ => Err(stdio::Error::other("invalid bool serialization"))?,
           },
         },
-        _ => Err(io::Error::other("unrecognized custom protocol serialization"))?,
+        _ => Err(stdio::Error::other("unrecognized custom protocol serialization"))?,
       },
-      _ => Err(io::Error::other("unrecognized protocol serialization"))?,
+      _ => Err(stdio::Error::other("unrecognized protocol serialization"))?,
     })
   }
 }

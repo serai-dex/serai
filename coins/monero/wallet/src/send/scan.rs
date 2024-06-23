@@ -419,8 +419,9 @@ impl Scanner {
           commitment.amount = amount;
         // Regular transaction
         } else {
-          let Transaction::V2 { proofs: Some(ref proofs), .. } = &tx else {
-            return Timelocked(tx.prefix().timelock, vec![]);
+          let proofs = match &tx {
+            Transaction::V2 { proofs: Some(proofs), .. } => &proofs,
+            _ => return Timelocked(tx.prefix().timelock, vec![]),
           };
 
           commitment = match proofs.base.encrypted_amounts.get(o) {

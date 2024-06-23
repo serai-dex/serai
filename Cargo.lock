@@ -4867,6 +4867,8 @@ name = "monero-seed"
 version = "0.1.0"
 dependencies = [
  "curve25519-dalek",
+ "hex",
+ "monero-primitives",
  "rand_core",
  "std-shims",
  "thiserror",
@@ -4928,6 +4930,21 @@ dependencies = [
  "std-shims",
  "thiserror",
  "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "monero-wallet-util"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "hex",
+ "monero-seed",
+ "monero-wallet",
+ "polyseed",
+ "rand_core",
+ "std-shims",
+ "thiserror",
  "zeroize",
 ]
 
@@ -5818,6 +5835,7 @@ dependencies = [
 name = "polyseed"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "pbkdf2 0.12.2",
  "rand_core",
  "sha3",
@@ -8184,15 +8202,7 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "minimal-ed448",
- "monero-bulletproofs",
- "monero-clsag",
- "monero-generators",
- "monero-io",
- "monero-mlsag",
- "monero-primitives",
- "monero-rpc",
- "monero-serai",
- "monero-wallet",
+ "monero-wallet-util",
  "multiexp",
  "schnorr-signatures",
 ]

@@ -348,7 +348,7 @@ pub trait Rpc: Sync + Clone + Debug {
 
         // https://github.com/monero-project/monero/issues/8311
         if res.as_hex.is_empty() {
-          match tx.prefix.inputs.first() {
+          match tx.prefix().inputs.first() {
             Some(Input::Gen { .. }) => (),
             _ => Err(RpcError::PrunedTransaction)?,
           }
@@ -431,7 +431,7 @@ pub trait Rpc: Sync + Clone + Debug {
       .map_err(|_| RpcError::InvalidNode("invalid block".to_string()))?;
 
     // Make sure this is actually the block for this number
-    match block.miner_tx.prefix.inputs.first() {
+    match block.miner_tx.prefix().inputs.first() {
       Some(Input::Gen(actual)) => {
         if usize::try_from(*actual).unwrap() == number {
           Ok(block)
@@ -733,7 +733,7 @@ pub trait Rpc: Sync + Clone + Debug {
         };
         Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
           if fingerprintable_canonical {
-            Timelock::Block(height) >= txs[i].prefix.timelock
+            Timelock::Block(height) >= txs[i].prefix().timelock
           } else {
             out.unlocked
           }

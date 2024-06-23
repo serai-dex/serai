@@ -20,12 +20,4 @@ pub use frost_schnorrkel;
 
 pub use bitcoin_serai;
 
-pub use monero_io;
-pub use monero_generators;
-pub use monero_primitives;
-pub use monero_mlsag;
-pub use monero_clsag;
-pub use monero_bulletproofs;
-pub use monero_serai;
-pub use monero_rpc;
-pub use monero_wallet;
+pub use monero_wallet_util;

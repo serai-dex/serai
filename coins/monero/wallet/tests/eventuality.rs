@@ -61,16 +61,19 @@ test!(
     },
     |_, mut tx: Transaction, _, eventuality: Eventuality| async move {
       // 4 explicitly outputs added and one change output
-      assert_eq!(tx.prefix.outputs.len(), 5);
+      assert_eq!(tx.prefix().outputs.len(), 5);
 
       // The eventuality's available extra should be the actual TX's
-      assert_eq!(tx.prefix.extra, eventuality.extra());
+      assert_eq!(tx.prefix().extra, eventuality.extra());
 
       // The TX should match
       assert!(eventuality.matches(&tx));
 
       // Mutate the TX
-      tx.proofs.base.commitments[0] += ED25519_BASEPOINT_POINT;
+      let Transaction::V2 { proofs: Some(ref mut proofs), .. } = tx else {
+        panic!("TX wasn't RingCT")
+      };
+      proofs.base.commitments[0] += ED25519_BASEPOINT_POINT;
       // Verify it no longer matches
       assert!(!eventuality.matches(&tx));
     },

@@ -579,7 +579,7 @@ impl Coordinator {
       }
       NetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
-        use monero_wallet::{rpc::Rpc, monero::transaction::Transaction};
+        use monero_wallet::{transaction::Transaction, rpc::Rpc};
 
         let rpc = SimpleRequestRpc::new(rpc_url)
           .await

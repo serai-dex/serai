@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::transaction::Transaction,
+  transaction::Transaction,
   rpc::Rpc,
   ViewPair, Scanner,
   address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
@@ -80,7 +80,8 @@ pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> Spe
 
 /// Make sure the weight and fee match the expected calculation.
 pub fn check_weight_and_fee(tx: &Transaction, fee_rate: FeeRate) {
-  let fee = tx.proofs.base.fee;
+  let Transaction::V2 { proofs: Some(ref proofs), .. } = tx else { panic!("TX wasn't RingCT") };
+  let fee = proofs.base.fee;
 
   let weight = tx.weight();
   let expected_weight = fee_rate.calculate_weight_from_fee(fee);

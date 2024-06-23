@@ -27,6 +27,9 @@ rand_core = { version = "0.6", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 pbkdf2 = { version = "0.12", features = ["simple"], default-features = false }
 
+[dev-dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "std-shims/std",

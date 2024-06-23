@@ -15,7 +15,8 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::{ringct::RctType, transaction::Transaction, block::Block},
+  transaction::Transaction,
+  block::Block,
   Protocol,
   rpc::{RpcError, Rpc},
   ViewPair, Scanner,
@@ -118,7 +119,10 @@ impl TransactionTrait<Monero> for Transaction {
 
   #[cfg(test)]
   async fn fee(&self, _: &Monero) -> u64 {
-    self.rct_signatures.base.fee
+    match self {
+      Transaction::V1 { .. } => panic!("v1 TX in test-only function"),
+      Transaction::V2 { ref proofs, .. } => proofs.as_ref().unwrap().base.fee,
+    }
   }
 }
 
@@ -282,14 +286,11 @@ impl Monero {
       let tx =
         self.rpc.get_transaction(*tx_hash).await.map_err(|_| NetworkError::ConnectionError)?;
       // Only consider fees from RCT transactions, else the fee property read wouldn't be accurate
-      if tx.rct_signatures.rct_type() != RctType::Null {
-        continue;
-      }
-      // This isn't entirely accurate as Bulletproof TXs will have a higher weight than their
-      // serialization length
-      // It's likely 'good enough'
-      // TODO2: Improve
-      fees.push(tx.rct_signatures.base.fee / u64::try_from(tx.serialize().len()).unwrap());
+      let fee = match &tx {
+        Transaction::V2 { proofs: Some(proofs), .. } => proofs.base.fee,
+        _ => continue,
+      };
+      fees.push(fee / u64::try_from(tx.weight()).unwrap());
     }
     fees.sort();
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
@@ -317,7 +318,7 @@ impl Monero {
 
     // Get the protocol for the specified block number
     #[cfg(not(test))]
-    let protocol = Protocol::try_from(block_for_fee.header.major_version)
+    let protocol = Protocol::try_from(block_for_fee.header.hardfork_version)
       .map_err(|()| NetworkError::ConnectionError)?;
     // If this is a test, we won't be using a mainnet node and need a distinct protocol
     // determination
@@ -576,10 +577,10 @@ impl Network for Monero {
           tx.unwrap()
         };
 
-        if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix.extra) {
+        if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix().extra) {
           if eventuality.matches(&tx) {
             res.insert(
-              eventualities.map.remove(&tx.prefix.extra).unwrap().0,
+              eventualities.map.remove(&tx.prefix().extra).unwrap().0,
               (usize::try_from(block.number().unwrap()).unwrap(), tx.id(), tx),
             );
           }

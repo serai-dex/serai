@@ -27,7 +27,7 @@ use frost::{
 use monero_serai::{
   ringct::{
     clsag::{ClsagContext, ClsagMultisigMaskSender, ClsagAddendum, ClsagMultisig},
-    RctPrunable,
+    RctPrunable, RctProofs,
   },
   transaction::{Input, Transaction},
 };
@@ -350,7 +350,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       }
       value.2.send(mask);
 
-      tx.prefix.inputs.push(Input::ToKey {
+      tx.prefix_mut().inputs.push(Input::ToKey {
         amount: None,
         key_offsets: value.1.offsets().to_vec(),
         key_image: value.0,
@@ -360,7 +360,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
       commitments.push(value.4);
     }
 
-    let msg = tx.signature_hash();
+    let msg = tx.signature_hash().unwrap();
 
     // Iterate over each CLSAG calling sign
     let mut shares = Vec::with_capacity(self.clsags.len());
@@ -390,9 +390,15 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
     shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<Transaction, FrostError> {
     let mut tx = self.tx;
-    match tx.proofs.prunable {
-      RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
-      RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
+    match tx {
+      Transaction::V2 {
+        proofs:
+          Some(RctProofs {
+            prunable: RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. },
+            ..
+          }),
+        ..
+      } => {
         for (c, clsag) in self.clsags.drain(..).enumerate() {
           let (clsag, pseudo_out) = clsag.complete(
             shares.iter().map(|(l, shares)| (*l, shares[c].clone())).collect::<HashMap<_, _>>(),
@@ -401,11 +407,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
           pseudo_outs.push(pseudo_out);
         }
       }
-      RctPrunable::AggregateMlsagBorromean { .. } |
-      RctPrunable::MlsagBorromean { .. } |
-      RctPrunable::MlsagBulletproofs { .. } => {
-        unreachable!("attempted to sign a multisig TX which wasn't CLSAG")
-      }
+      _ => unreachable!("attempted to sign a multisig TX which wasn't CLSAG"),
     }
     Ok(tx)
   }

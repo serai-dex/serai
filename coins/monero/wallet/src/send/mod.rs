@@ -25,9 +25,9 @@ use monero_rpc::RpcError;
 pub use monero_rpc::{FeePriority, FeeRate};
 use monero_serai::{
   io::*,
+  generators::hash_to_point,
   primitives::{Commitment, keccak256},
   ringct::{
-    hash_to_point,
     clsag::{ClsagError, ClsagContext, Clsag},
     bulletproofs::{MAX_COMMITMENTS, Bulletproof},
     RctBase, RctPrunable, RctProofs,
@@ -181,7 +181,7 @@ fn prepare_inputs(
         .map_err(TransactionError::ClsagError)?,
     ));
 
-    tx.prefix.inputs.push(Input::ToKey {
+    tx.prefix_mut().inputs.push(Input::ToKey {
       amount: None,
       key_offsets: decoys.offsets().to_vec(),
       key_image: image,
@@ -191,7 +191,7 @@ fn prepare_inputs(
   // We now need to sort the inputs by their key image
   // We take the transaction's inputs, temporarily
   let mut tx_inputs = Vec::with_capacity(inputs.len());
-  core::mem::swap(&mut tx_inputs, &mut tx.prefix.inputs);
+  core::mem::swap(&mut tx_inputs, &mut tx.prefix_mut().inputs);
 
   // Then we join them with their signable contexts
   let mut joint = tx_inputs.into_iter().zip(signable).collect::<Vec<_>>();
@@ -204,11 +204,11 @@ fn prepare_inputs(
     }
   });
 
-  // We now re-create the consumed signable (tx.prefix.inputs already having an empty vector) and
+  // We now re-create the consumed signable (tx.prefix().inputs already having an empty vector) and
   // split the joint iterator back into two Vecs
   let mut signable = Vec::with_capacity(inputs.len());
   for (input, signable_i) in joint {
-    tx.prefix.inputs.push(input);
+    tx.prefix_mut().inputs.push(input);
     signable.push(signable_i);
   }
 
@@ -800,24 +800,22 @@ impl SignableTransaction {
     }
 
     (
-      Transaction {
+      Transaction::V2 {
         prefix: TransactionPrefix {
-          version: 2,
           timelock: Timelock::None,
           inputs: vec![],
           outputs: tx_outputs,
           extra,
         },
-        signatures: vec![],
-        proofs: RctProofs {
+        proofs: Some(RctProofs {
           base: RctBase {
             fee,
             encrypted_amounts,
             pseudo_outs: vec![],
             commitments: commitments.iter().map(Commitment::calculate).collect(),
           },
-          prunable: RctPrunable::Clsag { bulletproofs: bp, clsags: vec![], pseudo_outs: vec![] },
-        },
+          prunable: RctPrunable::Clsag { bulletproof: bp, clsags: vec![], pseudo_outs: vec![] },
+        }),
       },
       sum,
     )
@@ -853,21 +851,28 @@ impl SignableTransaction {
 
     let signable = prepare_inputs(&self.inputs, spend, &mut tx)?;
 
-    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash())
+    let clsag_pairs = Clsag::sign(rng, signable, mask_sum, tx.signature_hash().unwrap())
       .map_err(|_| TransactionError::WrongPrivateKey)?;
-    match tx.proofs.prunable {
-      RctPrunable::Null => panic!("Signing for RctPrunable::Null"),
-      RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. } => {
+    let fee = match tx {
+      Transaction::V2 {
+        proofs:
+          Some(RctProofs {
+            ref base,
+            prunable: RctPrunable::Clsag { ref mut clsags, ref mut pseudo_outs, .. },
+          }),
+        ..
+      } => {
         clsags.append(&mut clsag_pairs.iter().map(|clsag| clsag.0.clone()).collect::<Vec<_>>());
         pseudo_outs.append(&mut clsag_pairs.iter().map(|clsag| clsag.1).collect::<Vec<_>>());
+        base.fee
       }
       _ => unreachable!("attempted to sign a TX which wasn't CLSAG"),
-    }
+    };
 
     if self.has_change {
       debug_assert_eq!(
         self.fee_rate.calculate_fee_from_weight(tx.weight()),
-        tx.proofs.base.fee,
+        fee,
         "transaction used unexpected fee",
       );
     }
@@ -892,7 +897,7 @@ impl Eventuality {
 
   #[must_use]
   pub fn matches(&self, tx: &Transaction) -> bool {
-    if self.payments.len() != tx.prefix.outputs.len() {
+    if self.payments.len() != tx.prefix().outputs.len() {
       return false;
     }
 
@@ -900,12 +905,12 @@ impl Eventuality {
     // Even if all the outputs were correct, a malicious extra could still cause a recipient to
     // fail to receive their funds.
     // This is the cheapest check available to perform as it does not require TX-specific ECC ops.
-    if self.extra != tx.prefix.extra {
+    if self.extra != tx.prefix().extra {
       return false;
     }
 
     // Also ensure no timelock was set.
-    if tx.prefix.timelock != Timelock::None {
+    if tx.prefix().timelock != Timelock::None {
       return false;
     }
 
@@ -914,10 +919,14 @@ impl Eventuality {
       &self.r_seed,
       &self.inputs,
       &mut self.payments.clone(),
-      uniqueness(&tx.prefix.inputs),
+      uniqueness(&tx.prefix().inputs),
     );
 
-    let rct_type = tx.proofs.rct_type();
+    let Transaction::V2 { proofs: Some(ref proofs), .. } = &tx else {
+      return false;
+    };
+
+    let rct_type = proofs.rct_type();
     if rct_type != self.protocol.optimal_rct_type() {
       return false;
     }
@@ -928,16 +937,16 @@ impl Eventuality {
       "created an Eventuality for a very old RctType we don't support proving for"
     );
 
-    for (o, (expected, actual)) in outputs.iter().zip(tx.prefix.outputs.iter()).enumerate() {
+    for (o, (expected, actual)) in outputs.iter().zip(tx.prefix().outputs.iter()).enumerate() {
       // Verify the output, commitment, and encrypted amount.
       if (&Output {
         amount: None,
         key: expected.dest.compress(),
         view_tag: Some(expected.view_tag).filter(|_| self.protocol.view_tags()),
       } != actual) ||
-        (Some(&expected.commitment.calculate()) != tx.proofs.base.commitments.get(o)) ||
+        (Some(&expected.commitment.calculate()) != proofs.base.commitments.get(o)) ||
         (Some(&EncryptedAmount::Compact { amount: expected.amount }) !=
-          tx.proofs.base.encrypted_amounts.get(o))
+          proofs.base.encrypted_amounts.get(o))
       {
         return false;
       }

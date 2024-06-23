@@ -301,8 +301,23 @@ pub enum Transaction {
 }
 
 impl Transaction {
+  /// Get the version of this transaction.
+  pub fn version(&self) -> u8 {
+    match self {
+      Transaction::V1 { .. } => 1,
+      Transaction::V2 { .. } => 2,
+    }
+  }
+
   /// Get the TransactionPrefix of this transaction.
   pub fn prefix(&self) -> &TransactionPrefix {
+    match self {
+      Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => prefix,
+    }
+  }
+
+  /// Get a mutable reference to the TransactionPrefix of this transaction.
+  pub fn prefix_mut(&mut self) -> &mut TransactionPrefix {
     match self {
       Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => prefix,
     }
@@ -329,16 +344,15 @@ impl Transaction {
   /// Some writable transactions may not be readable if they're malformed, per Monero's consensus
   /// rules.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    write_varint(&self.version(), w)?;
     match self {
       Transaction::V1 { prefix, signatures } => {
-        write_varint(&1u8, w)?;
         prefix.write(w)?;
         for ring_sig in signatures {
           ring_sig.write(w)?;
         }
       }
       Transaction::V2 { prefix, proofs } => {
-        write_varint(&2u8, w)?;
         prefix.write(w)?;
         match proofs {
           None => w.write_all(&[0])?,

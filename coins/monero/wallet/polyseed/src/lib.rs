@@ -15,6 +15,9 @@ use rand_core::{RngCore, CryptoRng};
 use sha3::Sha3_256;
 use pbkdf2::pbkdf2_hmac;
 
+#[cfg(test)]
+mod tests;
+
 // Features
 const FEATURE_BITS: u8 = 5;
 #[allow(dead_code)]
@@ -63,10 +66,10 @@ const LAST_BYTE_SECRET_BITS_MASK: u8 = ((1 << (BITS_PER_BYTE - CLEAR_BITS)) - 1)
 
 const SECRET_BITS_PER_WORD: usize = 10;
 
-// Amount of words in a seed
+// The amount of words in a seed.
 const POLYSEED_LENGTH: usize = 16;
 // Amount of characters each word must have if trimmed
-const PREFIX_LEN: usize = 4;
+pub(crate) const PREFIX_LEN: usize = 4;
 
 const POLY_NUM_CHECK_DIGITS: usize = 1;
 const DATA_WORDS: usize = POLYSEED_LENGTH - POLY_NUM_CHECK_DIGITS;
@@ -105,18 +108,18 @@ const COIN: u16 = 0;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum PolyseedError {
-  /// Unsupported feature bits were set.
-  #[cfg_attr(feature = "std", error("unsupported features"))]
-  UnsupportedFeatures,
+  /// The seed was invalid.
+  #[cfg_attr(feature = "std", error("invalid seed"))]
+  InvalidSeed,
   /// The entropy was invalid.
   #[cfg_attr(feature = "std", error("invalid entropy"))]
   InvalidEntropy,
-  #[cfg_attr(feature = "std", error("invalid seed"))]
-  /// The seed was invalid.
-  InvalidSeed,
   /// The checksum did not match the data.
   #[cfg_attr(feature = "std", error("invalid checksum"))]
   InvalidChecksum,
+  /// Unsupported feature bits were set.
+  #[cfg_attr(feature = "std", error("unsupported features"))]
+  UnsupportedFeatures,
 }
 
 /// Language options for Polyseed.
@@ -277,7 +280,7 @@ impl Polyseed {
   /// Create a new `Polyseed` with specific internals.
   ///
   /// `birthday` is defined in seconds since the epoch.
-  fn from(
+  pub fn from(
     language: Language,
     features: u8,
     birthday: u64,

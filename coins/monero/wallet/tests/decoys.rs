@@ -1,6 +1,7 @@
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::{transaction::Transaction, DEFAULT_LOCK_WINDOW},
+  DEFAULT_LOCK_WINDOW,
+  transaction::Transaction,
   rpc::{OutputResponse, Rpc},
   SpendableOutput,
 };

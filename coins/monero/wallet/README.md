@@ -43,3 +43,6 @@ It also won't act as a wallet, just as a wallet functionality library. wallet2
 has several *non-transaction-level* policies, such as always attempting to use
 two inputs to create transactions. These are considered out of scope to
 monero-serai.
+
+Finally, this library only supports producing transactions with CLSAG
+signatures. That means this library cannot spend non-RingCT outputs.

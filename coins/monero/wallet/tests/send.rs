@@ -2,7 +2,7 @@ use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  monero::transaction::Transaction, Protocol, rpc::Rpc, extra::Extra, address::SubaddressIndex,
+  transaction::Transaction, Protocol, rpc::Rpc, extra::Extra, address::SubaddressIndex,
   ReceivedOutput, SpendableOutput, DecoySelection, Decoys, SignableTransactionBuilder,
 };
 
@@ -136,7 +136,7 @@ test!(
       assert_eq!(sub_outputs[0].commitment().amount, 1);
 
       // Make sure only one R was included in TX extra
-      assert!(Extra::read::<&[u8]>(&mut tx.prefix.extra.as_ref())
+      assert!(Extra::read::<&[u8]>(&mut tx.prefix().extra.as_ref())
         .unwrap()
         .keys()
         .unwrap()
@@ -306,7 +306,8 @@ test!(
       assert_eq!(outputs[1].commitment().amount, 50000);
 
       // The remainder should get shunted to fee, which is fingerprintable
-      assert_eq!(tx.proofs.base.fee, 1000000000000 - 10000 - 50000);
+      let Transaction::V2 { proofs: Some(ref proofs), .. } = tx else { panic!("TX wasn't RingCT") };
+      assert_eq!(proofs.base.fee, 1000000000000 - 10000 - 50000);
     },
   ),
 );

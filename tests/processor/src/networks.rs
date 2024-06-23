@@ -437,8 +437,8 @@ impl Wallet {
         use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
+          io::decompress_point,
           rpc::Rpc,
-          monero::io::decompress_point,
           Protocol,
           address::{Network, AddressType, AddressMeta, Address},
           SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,

@@ -115,7 +115,7 @@ impl TryFrom<u8> for RctType {
 
 impl RctType {
   /// True if this RctType uses compact encrypted amounts, false otherwise.
-  fn compact_encrypted_amounts(&self) -> bool {
+  pub fn compact_encrypted_amounts(&self) -> bool {
     match self {
       RctType::AggregateMlsagBorromean | RctType::MlsagBorromean | RctType::MlsagBulletproofs => {
         false

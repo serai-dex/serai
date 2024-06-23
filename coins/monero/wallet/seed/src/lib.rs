@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::{ops::Deref, fmt};
 use std_shims::{
   sync::OnceLock,
   vec::Vec,
@@ -11,24 +11,29 @@ use rand_core::{RngCore, CryptoRng};
 
 use curve25519_dalek::scalar::Scalar;
 
-const CLASSIC_SEED_LENGTH: usize = 24;
-const CLASSIC_SEED_LENGTH_WITH_CHECKSUM: usize = 25;
+#[cfg(test)]
+mod tests;
+
+// The amount of words in a seed without a checksum.
+const SEED_LENGTH: usize = 24;
+// The amount of words in a seed with a checksum.
+const SEED_LENGTH_WITH_CHECKSUM: usize = 25;
 
 /// An error when working with a seed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum SeedError {
-  /// The deprecated English language option was used with a checksum.
-  ///
-  /// The deprecated English language option did not include a checksum.
-  #[cfg_attr(feature = "std", error("deprecated English language option included a checksum"))]
-  DeprecatedEnglishWithChecksum,
   #[cfg_attr(feature = "std", error("invalid seed"))]
   /// The seed was invalid.
   InvalidSeed,
   /// The checksum did not match the data.
   #[cfg_attr(feature = "std", error("invalid checksum"))]
   InvalidChecksum,
+  /// The deprecated English language option was used with a checksum.
+  ///
+  /// The deprecated English language option did not include a checksum.
+  #[cfg_attr(feature = "std", error("deprecated English language option included a checksum"))]
+  DeprecatedEnglishWithChecksum,
 }
 
 /// Language options.
@@ -211,11 +216,11 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> Seed {
 fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, SeedError> {
   // get seed words
   let words = words.split_whitespace().map(|w| Zeroizing::new(w.to_string())).collect::<Vec<_>>();
-  if (words.len() != CLASSIC_SEED_LENGTH) && (words.len() != CLASSIC_SEED_LENGTH_WITH_CHECKSUM) {
+  if (words.len() != SEED_LENGTH) && (words.len() != SEED_LENGTH_WITH_CHECKSUM) {
     panic!("invalid seed passed to seed_to_bytes");
   }
 
-  let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
+  let has_checksum = words.len() == SEED_LENGTH_WITH_CHECKSUM;
   if has_checksum && lang == Language::DeprecatedEnglish {
     Err(SeedError::DeprecatedEnglishWithChecksum)?;
   }
@@ -223,7 +228,7 @@ fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, See
   // Validate words are in the language word list
   let lang_word_list: &WordList = &LANGUAGES()[&lang];
   let matched_indices = (|| {
-    let has_checksum = words.len() == CLASSIC_SEED_LENGTH_WITH_CHECKSUM;
+    let has_checksum = words.len() == SEED_LENGTH_WITH_CHECKSUM;
     let mut matched_indices = Zeroizing::new(vec![]);
 
     // Iterate through all the words and see if they're all present
@@ -295,6 +300,13 @@ fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, See
 /// A Monero seed.
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct Seed(Language, Zeroizing<String>);
+
+impl fmt::Debug for Seed {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    f.debug_struct("Seed").finish_non_exhaustive()
+  }
+}
+
 impl Seed {
   /// Create a new seed.
   pub fn new<R: RngCore + CryptoRng>(rng: &mut R, lang: Language) -> Seed {

@@ -349,7 +349,8 @@ async fn mint_and_burn_test() {
     {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
       use monero_wallet::{
-        monero::{io::decompress_point, transaction::Timelock},
+        io::decompress_point,
+        transaction::Timelock,
         Protocol,
         rpc::Rpc,
         ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
@@ -582,7 +583,7 @@ async fn mint_and_burn_test() {
 
     // Verify the received Monero TX
     {
-      use monero_wallet::{rpc::Rpc, ViewPair, Scanner};
+      use monero_wallet::{transaction::Transaction, rpc::Rpc, ViewPair, Scanner};
       let rpc = handles[0].monero(&ops).await;
       let mut scanner = Scanner::from_view(
         ViewPair::new(monero_spend, Zeroizing::new(monero_view)),
@@ -603,7 +604,10 @@ async fn mint_and_burn_test() {
 
             assert_eq!(block.txs.len(), 1);
             let tx = rpc.get_transaction(block.txs[0]).await.unwrap();
-            let tx_fee = tx.rct_signatures.base.fee;
+            let tx_fee = match &tx {
+              Transaction::V2 { proofs: Some(proofs), .. } => proofs.base.fee,
+              _ => panic!("fetched TX wasn't a signed V2 TX"),
+            };
 
             assert_eq!(outputs[0].commitment().amount, 1_000_000_000_000 - tx_fee);
             found = true;
