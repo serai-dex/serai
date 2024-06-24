@@ -124,7 +124,9 @@ pub mod pallet {
   #[pallet::getter(fn allocation_per_key_share)]
   pub type AllocationPerKeyShare<T: Config> =
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
-  /// The validators selected to be in-set.
+  /// The validators selected to be in-set (and their key shares), regardless of if removed.
+  ///
+  /// This method allows iterating over all validators and their stake.
   #[pallet::storage]
   #[pallet::getter(fn participants_for_latest_decided_set)]
   pub(crate) type Participants<T: Config> = StorageMap<
@@ -134,8 +136,10 @@ pub mod pallet {
     BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET }>>,
     OptionQuery,
   >;
-  /// The validators selected to be in-set, regardless of if removed, with the ability to perform a
-  /// check for presence.
+  /// The validators selected to be in-set, regardless of if removed.
+  ///
+  /// This method allows quickly checking for presence in-set and looking up a validator's key
+  /// shares.
   // Uses Identity for NetworkId to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
   pub(crate) type InSet<T: Config> =
@@ -364,7 +368,6 @@ pub mod pallet {
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
       let mut participants = vec![];
-      let mut total_stake = 0;
       {
         let mut iter = SortedAllocationsIter::<T>::new(network);
         let mut key_shares = 0;
@@ -376,7 +379,6 @@ pub mod pallet {
           participants.push((key, these_key_shares));
 
           key_shares += these_key_shares;
-          total_stake += amount.0;
         }
         amortize_excess_key_shares(&mut participants);
       }
@@ -384,7 +386,6 @@ pub mod pallet {
       for (key, shares) in &participants {
         InSet::<T>::set(network, key, Some(*shares));
       }
-      TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
@@ -523,11 +524,16 @@ pub mod pallet {
         Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
       }
 
-      if InSet::<T>::contains_key(network, account) {
-        TotalAllocatedStake::<T>::set(
-          network,
-          Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
-        );
+      // If they're in the current set, and the current set has completed its handover (so its
+      // currently being tracked by TotalAllocatedStake), update the TotalAllocatedStake
+      if let Some(session) = Self::session(network) {
+        if InSet::<T>::contains_key(network, account) && Self::handover_completed(network, session)
+        {
+          TotalAllocatedStake::<T>::set(
+            network,
+            Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
+          );
+        }
       }
 
       Ok(())
@@ -695,7 +701,7 @@ pub mod pallet {
         });
       }
 
-      // Serai network slashes are handled by BABE/GRANDPA
+      // Serai doesn't set keys and network slashes are handled by BABE/GRANDPA
       if set.network != NetworkId::Serai {
         // This overwrites the prior value as the prior to-report set's stake presumably just
         // unlocked, making their report unenforceable
@@ -707,6 +713,14 @@ pub mod pallet {
       Self::deposit_event(Event::AcceptedHandover {
         set: ValidatorSet { network: set.network, session: Session(set.session.0 + 1) },
       });
+
+      // Update the total allocated stake to be for the current set
+      let participants =
+        Participants::<T>::get(set.network).expect("set retired without a new set");
+      let total_stake = participants.iter().fold(0, |acc, (addr, _)| {
+        acc + Allocations::<T>::get((set.network, addr)).unwrap_or(Amount(0)).0
+      });
+      TotalAllocatedStake::<T>::set(set.network, Some(Amount(total_stake)));
     }
 
     /// Take the amount deallocatable.
