@@ -204,7 +204,7 @@ impl Serai {
     let validators: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
-    let bytes = hex_decode(hash)
+    let bytes = hex_decode(validators)
       .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
     let r = Vec::<Public>::decode(&mut bytes.as_slice())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;

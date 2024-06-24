@@ -7,7 +7,7 @@ use serai_abi::Call;
 use crate::{
   Vec,
   primitives::{PublicKey, SeraiAddress},
-  timestamp, coins, dex,
+  timestamp, coins, dex, genesis_liquidity,
   validator_sets::{self, MembershipProof},
   in_instructions, signals, babe, grandpa, RuntimeCall,
 };
@@ -88,6 +88,17 @@ impl From<Call> for RuntimeCall {
           amount_in_max,
           send_to: send_to.into(),
         }),
+      },
+      Call::GenesisLiquidity(gl) => match gl {
+        serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::remove_coin_liquidity { balance })
+        }
+        serai_abi::genesis_liquidity::Call::set_initial_price { prices, signature } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::set_initial_price {
+            prices,
+            signature,
+          })
+        }
       },
       Call::ValidatorSets(vs) => match vs {
         serai_abi::validator_sets::Call::set_keys {
@@ -258,6 +269,15 @@ impl TryInto<Call> for RuntimeCall {
             amount_in_max,
             send_to: send_to.into(),
           }
+        }
+        _ => Err(())?,
+      }),
+      RuntimeCall::GenesisLiquidity(call) => Call::GenesisLiquidity(match call {
+        genesis_liquidity::Call::remove_coin_liquidity { balance } => {
+          serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance }
+        }
+        genesis_liquidity::Call::set_initial_price { prices, signature } => {
+          serai_abi::genesis_liquidity::Call::set_initial_price { prices, signature }
         }
         _ => Err(())?,
       }),
