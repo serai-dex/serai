@@ -46,3 +46,13 @@ monero-serai.
 
 Finally, this library only supports producing transactions with CLSAG
 signatures. That means this library cannot spend non-RingCT outputs.
+
+### Cargo Features
+
+- `std` (on by default): Enables `std` (and with it, more efficient internal
+  implementations).
+- `compile-time-generators` (on by default): Derives the generators at
+  compile-time so they don't need to be derived at runtime. This is recommended
+  if program size doesn't need to be kept minimal.
+- `multisig`: Adds support for creation of transactions using a threshold
+  multisignature wallet.
