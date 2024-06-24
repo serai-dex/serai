@@ -763,7 +763,7 @@ pub mod pallet {
       Grandpa::<T>::new_session(
         true,
         session,
-        next_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+        now_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
       );
 
       // Clear SeraiDisabledIndices, only preserving keys still present in the new session
