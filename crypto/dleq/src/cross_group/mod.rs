@@ -112,15 +112,12 @@ pub enum DLEqError {
 // anyone who wants it
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct __DLEqProof<
-  G0: PrimeGroup + Zeroize,
-  G1: PrimeGroup + Zeroize,
+  G0: PrimeGroup<Scalar: PrimeFieldBits> + Zeroize,
+  G1: PrimeGroup<Scalar: PrimeFieldBits> + Zeroize,
   const SIGNATURE: u8,
   const RING_LEN: usize,
   const REMAINDER_RING_LEN: usize,
-> where
-  G0::Scalar: PrimeFieldBits,
-  G1::Scalar: PrimeFieldBits,
-{
+> {
   bits: Vec<Bits<G0, G1, SIGNATURE, RING_LEN>>,
   remainder: Option<Bits<G0, G1, SIGNATURE, REMAINDER_RING_LEN>>,
   poks: (SchnorrPoK<G0>, SchnorrPoK<G1>),
@@ -200,15 +197,12 @@ dleq!(
 );
 
 impl<
-    G0: PrimeGroup + Zeroize,
-    G1: PrimeGroup + Zeroize,
+    G0: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
+    G1: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
     const SIGNATURE: u8,
     const RING_LEN: usize,
     const REMAINDER_RING_LEN: usize,
   > __DLEqProof<G0, G1, SIGNATURE, RING_LEN, REMAINDER_RING_LEN>
-where
-  G0::Scalar: PrimeFieldBits + Zeroize,
-  G1::Scalar: PrimeFieldBits + Zeroize,
 {
   pub(crate) fn transcript<T: Transcript>(
     transcript: &mut T,

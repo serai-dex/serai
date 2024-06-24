@@ -122,7 +122,7 @@ impl QueuedBatchesDb {
 
   pub fn take(txn: &mut impl DbTxn, set: ValidatorSet) -> Vec<Transaction> {
     let batches_vec = Self::get(txn, set).unwrap_or_default();
-    txn.del(&Self::key(set));
+    txn.del(Self::key(set));
 
     let mut batches: &[u8] = &batches_vec;
     let mut res = vec![];

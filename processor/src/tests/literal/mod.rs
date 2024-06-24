@@ -70,7 +70,7 @@ mod bitcoin {
       // btc key pair to send from
       let private_key = PrivateKey::new(SecretKey::new(&mut rand_core::OsRng), BNetwork::Regtest);
       let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-      let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+      let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
 
       // get unlocked coins
       let new_block = btc.get_latest_block_number().await.unwrap() + 1;
@@ -107,7 +107,7 @@ mod bitcoin {
         version: Version(2),
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-          previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+          previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
           script_sig: Script::new().into(),
           sequence: Sequence(u32::MAX),
           witness: Witness::default(),
@@ -128,14 +128,14 @@ mod bitcoin {
         version: Version(2),
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-          previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+          previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
           script_sig: Script::new().into(),
           sequence: Sequence(u32::MAX),
           witness: Witness::new(),
         }],
         output: vec![TxOut {
           value: tx.output[0].value - BAmount::from_sat(10000),
-          script_pubkey: serai_btc_address.as_ref().script_pubkey(),
+          script_pubkey: serai_btc_address.into(),
         }],
       };
 
@@ -143,12 +143,14 @@ mod bitcoin {
       // This is the standard script with an extra argument of the InInstruction
       let mut sig = SECP256K1
         .sign_ecdsa_low_r(
-          &Message::from(
+          &Message::from_digest_slice(
             SighashCache::new(&tx)
               .p2wsh_signature_hash(0, &script, initial_output_value, EcdsaSighashType::All)
               .unwrap()
-              .to_raw_hash(),
-          ),
+              .to_raw_hash()
+              .as_ref(),
+          )
+          .unwrap(),
           &private_key.inner,
         )
         .serialize_der()
@@ -421,7 +423,7 @@ mod ethereum {
           });
         }
 
-        Ethereum::new(db, url.clone()).await
+        Ethereum::new(db, url.clone(), String::new()).await
       })
     }
   }

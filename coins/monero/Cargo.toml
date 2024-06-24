@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.79"
 
 [package.metadata.docs.rs]
 all-features = true

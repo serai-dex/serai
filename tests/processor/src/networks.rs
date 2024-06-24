@@ -96,6 +96,7 @@ pub enum Wallet {
     input_tx: bitcoin_serai::bitcoin::Transaction,
   },
   Ethereum {
+    rpc_url: String,
     key: <ciphersuite::Secp256k1 as Ciphersuite>::F,
     nonce: u64,
   },
@@ -125,7 +126,7 @@ impl Wallet {
         let secret_key = SecretKey::new(&mut rand_core::OsRng);
         let private_key = PrivateKey::new(secret_key, Network::Regtest);
         let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-        let main_addr = Address::p2pkh(&public_key, Network::Regtest);
+        let main_addr = Address::p2pkh(public_key, Network::Regtest);
 
         let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
 
@@ -155,7 +156,7 @@ impl Wallet {
       }
 
       NetworkId::Ethereum => {
-        use ciphersuite::{group::ff::Field, Ciphersuite, Secp256k1};
+        use ciphersuite::{group::ff::Field, Secp256k1};
         use ethereum_serai::alloy::{
           primitives::{U256, Address},
           simple_request_transport::SimpleRequest,
@@ -183,7 +184,7 @@ impl Wallet {
           .await
           .unwrap();
 
-        Wallet::Ethereum { key, nonce: 0 }
+        Wallet::Ethereum { rpc_url: rpc_url.clone(), key, nonce: 0 }
       }
 
       NetworkId::Monero => {
@@ -257,7 +258,6 @@ impl Wallet {
           consensus::Encodable,
           sighash::{EcdsaSighashType, SighashCache},
           script::{PushBytesBuf, Script, ScriptBuf, Builder},
-          address::Payload,
           OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
           absolute::LockTime,
           transaction::{Version, Transaction},
@@ -268,7 +268,7 @@ impl Wallet {
           version: Version(2),
           lock_time: LockTime::ZERO,
           input: vec![TxIn {
-            previous_output: OutPoint { txid: input_tx.txid(), vout: 0 },
+            previous_output: OutPoint { txid: input_tx.compute_txid(), vout: 0 },
             script_sig: Script::new().into(),
             sequence: Sequence(u32::MAX),
             witness: Witness::default(),
@@ -280,10 +280,11 @@ impl Wallet {
             },
             TxOut {
               value: Amount::from_sat(AMOUNT),
-              script_pubkey: Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(
-                XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
-              ))
-              .script_pubkey(),
+              script_pubkey: ScriptBuf::new_p2tr_tweaked(
+                TweakedPublicKey::dangerous_assume_tweaked(
+                  XOnlyPublicKey::from_slice(&to[1 ..]).unwrap(),
+                ),
+              ),
             },
           ],
         };
@@ -302,7 +303,7 @@ impl Wallet {
 
         let mut der = SECP256K1
           .sign_ecdsa_low_r(
-            &Message::from(
+            &Message::from_digest_slice(
               SighashCache::new(&tx)
                 .legacy_signature_hash(
                   0,
@@ -310,8 +311,10 @@ impl Wallet {
                   EcdsaSighashType::All.to_u32(),
                 )
                 .unwrap()
-                .to_raw_hash(),
-            ),
+                .to_raw_hash()
+                .as_ref(),
+            )
+            .unwrap(),
             &private_key.inner,
           )
           .serialize_der()
@@ -328,22 +331,107 @@ impl Wallet {
         (buf, Balance { coin: Coin::Bitcoin, amount: Amount(AMOUNT) })
       }
 
-      Wallet::Ethereum { key, ref mut nonce } => {
-        /*
-        use ethereum_serai::alloy::primitives::U256;
+      Wallet::Ethereum { rpc_url, key, ref mut nonce } => {
+        use std::sync::Arc;
+        use ethereum_serai::{
+          alloy::{
+            primitives::{U256, TxKind},
+            sol_types::SolCall,
+            simple_request_transport::SimpleRequest,
+            consensus::{TxLegacy, SignableTransaction},
+            rpc_client::ClientBuilder,
+            provider::{Provider, RootProvider},
+            network::Ethereum,
+          },
+          crypto::PublicKey,
+          deployer::Deployer,
+        };
 
         let eight_decimals = U256::from(100_000_000u64);
         let nine_decimals = eight_decimals * U256::from(10u64);
         let eighteen_decimals = nine_decimals * nine_decimals;
+        let one_eth = eighteen_decimals;
 
-        let tx = todo!("send to router");
+        let provider = Arc::new(RootProvider::<_, Ethereum>::new(
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+        ));
+
+        let to_as_key = PublicKey::new(
+          <ciphersuite::Secp256k1 as Ciphersuite>::read_G(&mut to.as_slice()).unwrap(),
+        )
+        .unwrap();
+        let router_addr = {
+          // Find the deployer
+          let deployer = Deployer::new(provider.clone()).await.unwrap().unwrap();
+
+          // Find the router, deploying if non-existent
+          let router = if let Some(router) =
+            deployer.find_router(provider.clone(), &to_as_key).await.unwrap()
+          {
+            router
+          } else {
+            let mut tx = deployer.deploy_router(&to_as_key);
+            tx.gas_price = 1_000_000_000u64.into();
+            let tx = ethereum_serai::crypto::deterministically_sign(&tx);
+            let signer = tx.recover_signer().unwrap();
+            let (tx, sig, _) = tx.into_parts();
+
+            provider
+              .raw_request::<_, ()>(
+                "anvil_setBalance".into(),
+                [signer.to_string(), (tx.gas_limit * tx.gas_price).to_string()],
+              )
+              .await
+              .unwrap();
+
+            let mut bytes = vec![];
+            tx.encode_with_signature_fields(&sig, &mut bytes);
+            let _ = provider.send_raw_transaction(&bytes).await.unwrap();
+
+            provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
+
+            deployer.find_router(provider.clone(), &to_as_key).await.unwrap().unwrap()
+          };
+
+          router.address()
+        };
+
+        let tx = TxLegacy {
+          chain_id: None,
+          nonce: *nonce,
+          gas_price: 1_000_000_000u128,
+          gas_limit: 200_000u128,
+          to: TxKind::Call(router_addr.into()),
+          // 1 ETH
+          value: one_eth,
+          input: ethereum_serai::router::abi::inInstructionCall::new((
+            [0; 20].into(),
+            one_eth,
+            if let Some(instruction) = instruction {
+              Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode().into()
+            } else {
+              vec![].into()
+            },
+          ))
+          .abi_encode()
+          .into(),
+        };
 
         *nonce += 1;
-        (tx, Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) })
-        */
-        let _ = key;
-        let _ = nonce;
-        todo!()
+
+        let sig =
+          k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(*key).unwrap())
+            .sign_prehash_recoverable(tx.signature_hash().as_ref())
+            .unwrap();
+
+        let mut bytes = vec![];
+        tx.encode_with_signature_fields(&sig.into(), &mut bytes);
+
+        // We drop the bottom 10 decimals
+        (
+          bytes,
+          Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) },
+        )
       }
 
       Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
@@ -430,21 +518,18 @@ impl Wallet {
 
     match self {
       Wallet::Bitcoin { public_key, .. } => {
-        use bitcoin_serai::bitcoin::{Network, Address};
+        use bitcoin_serai::bitcoin::ScriptBuf;
         ExternalAddress::new(
-          networks::bitcoin::Address::new(Address::p2pkh(public_key, Network::Regtest))
+          networks::bitcoin::Address::new(ScriptBuf::new_p2pkh(&public_key.pubkey_hash()))
             .unwrap()
             .into(),
         )
         .unwrap()
       }
-      Wallet::Ethereum { key, .. } => {
-        use ciphersuite::{Ciphersuite, Secp256k1};
-        ExternalAddress::new(
-          ethereum_serai::crypto::address(&(Secp256k1::generator() * key)).into(),
-        )
-        .unwrap()
-      }
+      Wallet::Ethereum { key, .. } => ExternalAddress::new(
+        ethereum_serai::crypto::address(&(ciphersuite::Secp256k1::generator() * key)).into(),
+      )
+      .unwrap(),
       Wallet::Monero { view_pair, .. } => {
         use monero_serai::wallet::address::{Network, AddressSpec};
         ExternalAddress::new(

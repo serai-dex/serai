@@ -432,7 +432,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
     }
 
     // If there's a UTXO to restore, restore it
-    // This is down now as if there is a to_restore output, and it was inserted into self.utxos
+    // This is done now as if there is a to_restore output, and it was inserted into self.utxos
     // earlier, self.utxos.len() may become `N::MAX_INPUTS + 1`
     // The prior block requires the len to be `<= N::MAX_INPUTS`
     if let Some(to_restore) = to_restore {
@@ -442,9 +442,10 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
     txn.put(scheduler_key::<D, _>(&self.key), self.serialize());
 
     log::info!(
-      "created {} plans containing {} payments to sign",
+      "created {} plans containing {} payments to sign, with {} payments pending scheduling",
       plans.len(),
       payments_at_start - self.payments.len(),
+      self.payments.len(),
     );
     plans
   }
@@ -589,7 +590,8 @@ impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     output: N::Output,
     refund_to: N::Address,
   ) -> Plan<N> {
-    Plan {
+    let output_id = output.id().as_ref().to_vec();
+    let res = Plan {
       key: output.key(),
       // Uses a payment as this will still be successfully sent due to fee amortization,
       // and because change is currently always a Serai key
@@ -597,7 +599,9 @@ impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
       inputs: vec![output],
       change: None,
       scheduler_addendum: (),
-    }
+    };
+    log::info!("refund plan for {} has ID {}", hex::encode(output_id), hex::encode(res.id()));
+    res
   }
 
   fn shim_forward_plan(output: N::Output, to: <N::Curve as Ciphersuite>::G) -> Option<Plan<N>> {

@@ -63,9 +63,22 @@ fn instruction_from_output<N: Network>(
     return (presumed_origin, None);
   }
 
-  let Ok(shorthand) = Shorthand::decode(&mut data) else { return (presumed_origin, None) };
-  let Ok(instruction) = RefundableInInstruction::try_from(shorthand) else {
-    return (presumed_origin, None);
+  let shorthand = match Shorthand::decode(&mut data) {
+    Ok(shorthand) => shorthand,
+    Err(e) => {
+      info!("data in output {} wasn't valid shorthand: {e:?}", hex::encode(output.id()));
+      return (presumed_origin, None);
+    }
+  };
+  let instruction = match RefundableInInstruction::try_from(shorthand) {
+    Ok(instruction) => instruction,
+    Err(e) => {
+      info!(
+        "shorthand in output {} wasn't convertible to a RefundableInInstruction: {e:?}",
+        hex::encode(output.id())
+      );
+      return (presumed_origin, None);
+    }
   };
 
   let mut balance = output.balance();

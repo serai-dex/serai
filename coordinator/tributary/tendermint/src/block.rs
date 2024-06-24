@@ -177,14 +177,14 @@ impl<N: Network> BlockData<N> {
       let new_block = last_block_or_round(&mut txn, LATEST_BLOCK_KEY, self.number.0)?;
       if new_block {
         // Delete the latest round key
-        txn.del(&key(LATEST_ROUND_KEY));
+        txn.del(key(LATEST_ROUND_KEY));
       }
       let new_round = last_block_or_round(&mut txn, LATEST_ROUND_KEY, round_number.0.into())?;
       if new_block || new_round {
         // Delete the messages for the old round
-        txn.del(&key(PROPOSE_KEY));
-        txn.del(&key(PEVOTE_KEY));
-        txn.del(&key(PRECOMMIT_KEY));
+        txn.del(key(PROPOSE_KEY));
+        txn.del(key(PEVOTE_KEY));
+        txn.del(key(PRECOMMIT_KEY));
       }
 
       // Check we haven't sent this message within this round

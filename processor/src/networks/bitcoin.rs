@@ -20,12 +20,11 @@ use bitcoin_serai::{
     key::{Parity, XOnlyPublicKey},
     consensus::{Encodable, Decodable},
     script::Instruction,
-    address::{NetworkChecked, Address as BAddress},
-    Transaction, Block, Network as BNetwork, ScriptBuf,
+    Transaction, Block, ScriptBuf,
     opcodes::all::{OP_SHA256, OP_EQUALVERIFY},
   },
   wallet::{
-    tweak_keys, address_payload, ReceivedOutput, Scanner, TransactionError,
+    tweak_keys, p2tr_script_buf, ReceivedOutput, Scanner, TransactionError,
     SignableTransaction as BSignableTransaction, TransactionMachine,
   },
   rpc::{RpcError, Rpc},
@@ -175,7 +174,7 @@ pub struct Fee(u64);
 impl TransactionTrait<Bitcoin> for Transaction {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    let mut hash = *self.txid().as_raw_hash().as_byte_array();
+    let mut hash = *self.compute_txid().as_raw_hash().as_byte_array();
     hash.reverse();
     hash
   }
@@ -243,7 +242,8 @@ impl EventualityTrait for Eventuality {
     buf
   }
   fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
-    Transaction::consensus_decode(reader).map_err(|e| io::Error::other(format!("{e}")))
+    Transaction::consensus_decode(&mut io::BufReader::with_capacity(0, reader))
+      .map_err(|e| io::Error::other(format!("{e}")))
   }
 }
 
@@ -453,7 +453,7 @@ impl Bitcoin {
     match BSignableTransaction::new(
       inputs.iter().map(|input| input.output.clone()).collect(),
       &payments,
-      change.as_ref().map(AsRef::as_ref),
+      change.clone().map(Into::into),
       None,
       fee.0,
     ) {
@@ -534,12 +534,14 @@ impl Bitcoin {
     input_index: usize,
     private_key: &PrivateKey,
   ) -> ScriptBuf {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     let public_key = PublicKey::from_private_key(SECP256K1, private_key);
-    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+    let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
 
     let mut der = SECP256K1
       .sign_ecdsa_low_r(
-        &Message::from(
+        &Message::from_digest_slice(
           SighashCache::new(tx)
             .legacy_signature_hash(
               input_index,
@@ -547,8 +549,10 @@ impl Bitcoin {
               EcdsaSighashType::All.to_u32(),
             )
             .unwrap()
-            .to_raw_hash(),
-        ),
+            .to_raw_hash()
+            .as_ref(),
+        )
+        .unwrap(),
         &private_key.inner,
       )
       .serialize_der()
@@ -577,8 +581,10 @@ const MAX_INPUTS: usize = 520;
 const MAX_OUTPUTS: usize = 520;
 
 fn address_from_key(key: ProjectivePoint) -> Address {
-  Address::new(BAddress::<NetworkChecked>::new(BNetwork::Bitcoin, address_payload(key).unwrap()))
-    .unwrap()
+  Address::new(
+    p2tr_script_buf(key).expect("creating address from key which isn't properly tweaked"),
+  )
+  .expect("couldn't create Serai-representable address for P2TR script")
 }
 
 #[async_trait]
@@ -724,9 +730,7 @@ impl Network for Bitcoin {
           }
           tx.unwrap().output.swap_remove(usize::try_from(input.previous_output.vout).unwrap())
         };
-        BAddress::from_script(&spent_output.script_pubkey, BNetwork::Bitcoin)
-          .ok()
-          .and_then(Address::new)
+        Address::new(spent_output.script_pubkey)
       };
       let data = Self::extract_serai_data(tx);
       for output in &mut outputs {
@@ -858,7 +862,7 @@ impl Network for Bitcoin {
       Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
-      Err(e) => panic!("failed to publish TX {}: {e}", tx.txid()),
+      Err(e) => panic!("failed to publish TX {}: {e}", tx.compute_txid()),
     }
     Ok(())
   }
@@ -894,6 +898,8 @@ impl Network for Bitcoin {
 
   #[cfg(test)]
   async fn mine_block(&self) {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     self
       .rpc
       .rpc_call::<Vec<String>>(
@@ -906,10 +912,12 @@ impl Network for Bitcoin {
 
   #[cfg(test)]
   async fn test_send(&self, address: Address) -> Block {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
     let secret_key = SecretKey::new(&mut rand_core::OsRng);
     let private_key = PrivateKey::new(secret_key, BNetwork::Regtest);
     let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
-    let main_addr = BAddress::p2pkh(&public_key, BNetwork::Regtest);
+    let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     self
@@ -923,14 +931,14 @@ impl Network for Bitcoin {
       version: Version(2),
       lock_time: LockTime::ZERO,
       input: vec![TxIn {
-        previous_output: OutPoint { txid: tx.txid(), vout: 0 },
+        previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
         script_sig: Script::new().into(),
         sequence: Sequence(u32::MAX),
         witness: Witness::default(),
       }],
       output: vec![TxOut {
         value: tx.output[0].value - BAmount::from_sat(10000),
-        script_pubkey: address.as_ref().script_pubkey(),
+        script_pubkey: address.clone().into(),
       }],
     };
     tx.input[0].script_sig = Self::sign_btc_input_for_p2pkh(&tx, 0, &private_key);

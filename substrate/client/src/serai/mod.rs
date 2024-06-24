@@ -4,7 +4,7 @@ use thiserror::Error;
 use async_lock::RwLock;
 use simple_request::{hyper, Request, Client};
 
-use scale::{Compact, Decode, Encode};
+use scale::{Decode, Encode};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 pub use sp_core::{
@@ -48,8 +48,8 @@ impl Block {
   /// Returns the time of this block, set by its producer, in milliseconds since the epoch.
   pub fn time(&self) -> Result<u64, SeraiError> {
     for transaction in &self.transactions {
-      if let Call::Timestamp(timestamp::Call::set { now }) = &transaction.call {
-        return Ok(u64::from(*now));
+      if let Call::Timestamp(timestamp::Call::set { now }) = transaction.call() {
+        return Ok(*now);
       }
     }
     Err(SeraiError::InvalidNode("no time was present in block".to_string()))
@@ -167,15 +167,14 @@ impl Serai {
   }
 
   fn unsigned(call: Call) -> Transaction {
-    Transaction { call, signature: None }
+    Transaction::new(call, None)
   }
 
   pub fn sign(&self, signer: &Pair, call: Call, nonce: u32, tip: u64) -> Transaction {
     const SPEC_VERSION: u32 = 1;
     const TX_VERSION: u32 = 1;
 
-    let extra =
-      Extra { era: sp_runtime::generic::Era::Immortal, nonce: Compact(nonce), tip: Compact(tip) };
+    let extra = Extra { era: sp_runtime::generic::Era::Immortal, nonce, tip };
     let signature_payload = (
       &call,
       &extra,
@@ -189,7 +188,7 @@ impl Serai {
       .encode();
     let signature = signer.sign(&signature_payload);
 
-    Transaction { call, signature: Some((signer.public().into(), signature, extra)) }
+    Transaction::new(call, Some((signer.public().into(), signature, extra)))
   }
 
   pub async fn publish(&self, tx: &Transaction) -> Result<(), SeraiError> {
@@ -202,7 +201,7 @@ impl Serai {
 
   // TODO: move this into substrate/client/src/validator_sets.rs
   async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
-    let hash: String = self
+    let validators: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
     let bytes = hex_decode(hash)
@@ -378,7 +377,10 @@ impl<'a> TemporalSerai<'a> {
     let res = hex_decode(res)
       .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
     Ok(Some(R::decode(&mut res.as_slice()).map_err(|_| {
-      SeraiError::InvalidRuntime("different type present at storage location".to_string())
+      SeraiError::InvalidRuntime(format!(
+        "different type present at storage location, raw value: {}",
+        hex::encode(res)
+      ))
     })?))
   }
 

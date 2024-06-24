@@ -260,21 +260,29 @@ pub async fn batch(
 
 #[tokio::test]
 async fn batch_test() {
-  new_test(|mut processors: Vec<Processor>| async move {
-    let (processor_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
-    batch(
-      &mut processors,
-      &processor_is,
-      Session(0),
-      &substrate_key,
-      Batch {
-        network: NetworkId::Bitcoin,
-        id: 0,
-        block: BlockHash([0x22; 32]),
-        instructions: vec![],
-      },
-    )
-    .await;
-  })
+  new_test(
+    |mut processors: Vec<Processor>| async move {
+      // pop the last participant since genesis keygen has only 4 participants
+      processors.pop().unwrap();
+      assert_eq!(processors.len(), COORDINATORS);
+
+      let (processor_is, substrate_key, _) =
+        key_gen::<Secp256k1>(&mut processors, Session(0)).await;
+      batch(
+        &mut processors,
+        &processor_is,
+        Session(0),
+        &substrate_key,
+        Batch {
+          network: NetworkId::Bitcoin,
+          id: 0,
+          block: BlockHash([0x22; 32]),
+          instructions: vec![],
+        },
+      )
+      .await;
+    },
+    false,
+  )
   .await;
 }

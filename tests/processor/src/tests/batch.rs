@@ -17,7 +17,8 @@ use serai_client::{
   validator_sets::primitives::Session,
 };
 
-use processor::networks::{Network, Bitcoin, Monero};
+use serai_db::MemDb;
+use processor::networks::{Network, Bitcoin, Ethereum, Monero};
 
 use crate::{*, tests::*};
 
@@ -188,7 +189,7 @@ pub(crate) async fn substrate_block(
 
 #[test]
 fn batch_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Monero] {
+  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
@@ -228,7 +229,7 @@ fn batch_test() {
         let (tx, balance_sent) =
           wallet.send_to_address(&ops, &key_pair.1, instruction.clone()).await;
         for coordinator in &mut coordinators {
-          coordinator.publish_transacton(&ops, &tx).await;
+          coordinator.publish_transaction(&ops, &tx).await;
         }
 
         // Put the TX past the confirmation depth
@@ -245,6 +246,8 @@ fn batch_test() {
         // The scanner works on a 5s interval, so this leaves a few s for any processing/latency
         tokio::time::sleep(Duration::from_secs(10)).await;
 
+        println!("sent in transaction. with in instruction: {}", instruction.is_some());
+
         let expected_batch = Batch {
           network,
           id: i,
@@ -256,10 +259,11 @@ fn batch_test() {
                 coin: balance_sent.coin,
                 amount: Amount(
                   balance_sent.amount.0 -
-                    (2 * if network == NetworkId::Bitcoin {
-                      Bitcoin::COST_TO_AGGREGATE
-                    } else {
-                      Monero::COST_TO_AGGREGATE
+                    (2 * match network {
+                      NetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
+                      NetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
+                      NetworkId::Monero => Monero::COST_TO_AGGREGATE,
+                      NetworkId::Serai => panic!("minted for Serai?"),
                     }),
                 ),
               },
@@ -271,6 +275,8 @@ fn batch_test() {
             vec![]
           },
         };
+
+        println!("receiving batch preprocesses...");
 
         // Make sure the processors picked it up by checking they're trying to sign a batch for it
         let (mut id, mut preprocesses) =
@@ -290,6 +296,8 @@ fn batch_test() {
           (id, preprocesses) =
             recv_batch_preprocesses(&mut coordinators, Session(0), &expected_batch, attempt).await;
         }
+
+        println!("signing batch...");
 
         // Continue with signing the batch
         let batch = sign_batch(&mut coordinators, key_pair.0 .0, id, preprocesses).await;

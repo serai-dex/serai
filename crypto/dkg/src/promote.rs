@@ -64,10 +64,7 @@ pub struct GeneratorPromotion<C1: Ciphersuite, C2: Ciphersuite> {
   _c2: PhantomData<C2>,
 }
 
-impl<C1: Ciphersuite, C2: Ciphersuite> GeneratorPromotion<C1, C2>
-where
-  C2: Ciphersuite<F = C1::F, G = C1::G>,
-{
+impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<C1, C2> {
   /// Begin promoting keys from one generator to another. Returns a proof this share was properly
   /// promoted.
   pub fn promote<R: RngCore + CryptoRng>(

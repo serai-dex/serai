@@ -11,7 +11,7 @@ use alloy_core::{
 };
 use alloy_consensus::{SignableTransaction, TxLegacy};
 
-use alloy_rpc_types::{BlockNumberOrTag, TransactionReceipt};
+use alloy_rpc_types_eth::TransactionReceipt;
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
@@ -57,15 +57,14 @@ pub async fn send(
   // let chain_id = provider.get_chain_id().await.unwrap();
   // tx.chain_id = Some(chain_id);
   tx.chain_id = None;
-  tx.nonce =
-    provider.get_transaction_count(address, BlockNumberOrTag::Latest.into()).await.unwrap();
+  tx.nonce = provider.get_transaction_count(address).await.unwrap();
   // 100 gwei
   tx.gas_price = 100_000_000_000u128;
 
   let sig = wallet.sign_prehash_recoverable(tx.signature_hash().as_ref()).unwrap();
   assert_eq!(address, tx.clone().into_signed(sig.into()).recover_signer().unwrap());
   assert!(
-    provider.get_balance(address, BlockNumberOrTag::Latest.into()).await.unwrap() >
+    provider.get_balance(address).await.unwrap() >
       ((U256::from(tx.gas_price) * U256::from(tx.gas_limit)) + tx.value)
   );
 

@@ -364,8 +364,8 @@ impl Change {
   /// 1) The change in the tx is shunted to the fee (fingerprintable fee).
   ///
   /// 2) If there are 2 outputs in the tx, there would be no payment ID as is the case when the
-  /// reference wallet creates 2 output txs, since monero-serai doesn't know which output
-  /// to tie the dummy payment ID to.
+  ///    reference wallet creates 2 output txs, since monero-serai doesn't know which output
+  ///    to tie the dummy payment ID to.
   pub fn fingerprintable(address: Option<MoneroAddress>) -> Change {
     Change { address, view: None }
   }

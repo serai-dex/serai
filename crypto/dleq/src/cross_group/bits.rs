@@ -76,14 +76,11 @@ pub(crate) struct Bits<
 }
 
 impl<
-    G0: PrimeGroup + Zeroize,
-    G1: PrimeGroup + Zeroize,
+    G0: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
+    G1: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
     const SIGNATURE: u8,
     const RING_LEN: usize,
   > Bits<G0, G1, SIGNATURE, RING_LEN>
-where
-  G0::Scalar: PrimeFieldBits + Zeroize,
-  G1::Scalar: PrimeFieldBits + Zeroize,
 {
   fn transcript<T: Transcript>(transcript: &mut T, i: usize, commitments: (G0, G1)) {
     transcript.domain_separate(b"bits");

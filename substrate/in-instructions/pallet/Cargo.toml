@@ -62,3 +62,6 @@ std = [
   "genesis-liquidity-pallet/std",
 ]
 default = ["std"]
+
+# TODO
+try-runtime = []

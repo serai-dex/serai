@@ -13,7 +13,7 @@ pub fn message_queue(
   monero_key: <Ristretto as Ciphersuite>::G,
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service(network.release(), network.db(), "serai-message-queue");
+    &build_serai_service("", network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [
     ("COORDINATOR_KEY", hex::encode(coordinator_key.to_bytes())),

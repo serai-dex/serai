@@ -144,7 +144,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
 
 #[test]
 fn key_gen_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Monero] {
+  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {

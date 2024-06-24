@@ -18,10 +18,7 @@ mod batch;
 use batch::test_batch;
 
 #[allow(dead_code)]
-fn benchmark_internal<G: Group>(straus_bool: bool)
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+fn benchmark_internal<G: Group<Scalar: PrimeFieldBits + Zeroize>>(straus_bool: bool) {
   let runs: usize = 20;
 
   let mut start = 0;
@@ -86,10 +83,7 @@ where
   }
 }
 
-fn test_multiexp<G: Group>()
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+fn test_multiexp<G: Group<Scalar: PrimeFieldBits + Zeroize>>() {
   let test = |pairs: &[_], sum| {
     // These should automatically determine the best algorithm
     assert_eq!(multiexp(pairs), sum);

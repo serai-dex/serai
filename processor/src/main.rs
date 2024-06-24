@@ -748,7 +748,15 @@ async fn main() {
     #[cfg(feature = "bitcoin")]
     NetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
     #[cfg(feature = "ethereum")]
-    NetworkId::Ethereum => run(db.clone(), Ethereum::new(db, url).await, coordinator).await,
+    NetworkId::Ethereum => {
+      let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
+        .expect("ethereum relayer hostname wasn't specified")
+        .to_string();
+      let relayer_port =
+        env::var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
+      let relayer_url = relayer_hostname + ":" + &relayer_port;
+      run(db.clone(), Ethereum::new(db, url, relayer_url).await, coordinator).await
+    }
     #[cfg(feature = "monero")]
     NetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
     _ => panic!("spawning a processor for an unsupported network"),

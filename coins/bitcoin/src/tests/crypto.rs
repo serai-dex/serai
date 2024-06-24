@@ -39,7 +39,7 @@ fn test_algorithm() {
     .verify_schnorr(
       &Signature::from_slice(&sig)
         .expect("couldn't convert produced signature to secp256k1::Signature"),
-      &Message::from(Hash::hash(MESSAGE)),
+      &Message::from_digest_slice(Hash::hash(MESSAGE).as_ref()).unwrap(),
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
     .unwrap()

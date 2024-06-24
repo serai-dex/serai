@@ -168,161 +168,172 @@ pub async fn sign(
 
 #[tokio::test]
 async fn sign_test() {
-  new_test(|mut processors: Vec<Processor>| async move {
-    let (participant_is, substrate_key, _) = key_gen::<Secp256k1>(&mut processors).await;
+  new_test(
+    |mut processors: Vec<Processor>| async move {
+      // pop the last participant since genesis keygen has only 4 participant.
+      processors.pop().unwrap();
+      assert_eq!(processors.len(), COORDINATORS);
 
-    // 'Send' external coins into Serai
-    let serai = processors[0].serai().await;
-    let (serai_pair, serai_addr) = {
-      let mut name = [0; 4];
-      OsRng.fill_bytes(&mut name);
-      let pair = insecure_pair_from_name(&hex::encode(name));
-      let address = SeraiAddress::from(pair.public());
+      let (participant_is, substrate_key, _) =
+        key_gen::<Secp256k1>(&mut processors, Session(0)).await;
 
-      // Fund the new account to pay for fees
-      let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
+      // 'Send' external coins into Serai
+      let serai = processors[0].serai().await;
+      let (serai_pair, serai_addr) = {
+        let mut name = [0; 4];
+        OsRng.fill_bytes(&mut name);
+        let pair = insecure_pair_from_name(&hex::encode(name));
+        let address = SeraiAddress::from(pair.public());
+
+        // Fund the new account to pay for fees
+        let balance = Balance { coin: Coin::Serai, amount: Amount(1_000_000_000) };
+        serai
+          .publish(&serai.sign(
+            &insecure_pair_from_name("Ferdie"),
+            SeraiCoins::transfer(address, balance),
+            0,
+            Default::default(),
+          ))
+          .await
+          .unwrap();
+
+        (pair, address)
+      };
+
+      #[allow(clippy::inconsistent_digit_grouping)]
+      let amount = Amount(1_000_000_00);
+      let balance = Balance { coin: Coin::Bitcoin, amount };
+
+      let coin_block = BlockHash([0x33; 32]);
+      let block_included_in = batch(
+        &mut processors,
+        &participant_is,
+        Session(0),
+        &substrate_key,
+        Batch {
+          network: NetworkId::Bitcoin,
+          id: 0,
+          block: coin_block,
+          instructions: vec![InInstructionWithBalance {
+            instruction: InInstruction::Transfer(serai_addr),
+            balance,
+          }],
+        },
+      )
+      .await;
+
+      {
+        let block_included_in_hash =
+          serai.finalized_block_by_number(block_included_in).await.unwrap().unwrap().hash();
+
+        let serai = serai.as_of(block_included_in_hash);
+        let serai = serai.coins();
+        assert_eq!(
+          serai.coin_balance(Coin::Serai, serai_addr).await.unwrap(),
+          Amount(1_000_000_000)
+        );
+
+        // Verify the mint occurred as expected
+        assert_eq!(
+          serai.mint_events().await.unwrap(),
+          vec![CoinsEvent::Mint { to: serai_addr, balance }]
+        );
+        assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), amount);
+        assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
+      }
+
+      // Trigger a burn
+      let out_instruction = OutInstructionWithBalance {
+        balance,
+        instruction: OutInstruction {
+          address: ExternalAddress::new(b"external".to_vec()).unwrap(),
+          data: None,
+        },
+      };
       serai
         .publish(&serai.sign(
-          &insecure_pair_from_name("Ferdie"),
-          SeraiCoins::transfer(address, balance),
+          &serai_pair,
+          SeraiCoins::burn_with_instruction(out_instruction.clone()),
           0,
           Default::default(),
         ))
         .await
         .unwrap();
 
-      (pair, address)
-    };
-
-    #[allow(clippy::inconsistent_digit_grouping)]
-    let amount = Amount(1_000_000_00);
-    let balance = Balance { coin: Coin::Bitcoin, amount };
-
-    let coin_block = BlockHash([0x33; 32]);
-    let block_included_in = batch(
-      &mut processors,
-      &participant_is,
-      Session(0),
-      &substrate_key,
-      Batch {
-        network: NetworkId::Bitcoin,
-        id: 0,
-        block: coin_block,
-        instructions: vec![InInstructionWithBalance {
-          instruction: InInstruction::Transfer(serai_addr),
-          balance,
-        }],
-      },
-    )
-    .await;
-
-    {
-      let block_included_in_hash =
-        serai.finalized_block_by_number(block_included_in).await.unwrap().unwrap().hash();
-
-      let serai = serai.as_of(block_included_in_hash);
-      let serai = serai.coins();
-      assert_eq!(serai.coin_balance(Coin::Serai, serai_addr).await.unwrap(), Amount(1_000_000_000));
-
-      // Verify the mint occurred as expected
-      assert_eq!(
-        serai.mint_events().await.unwrap(),
-        vec![CoinsEvent::Mint { to: serai_addr, balance }]
-      );
-      assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), amount);
-      assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
-    }
-
-    // Trigger a burn
-    let out_instruction = OutInstructionWithBalance {
-      balance,
-      instruction: OutInstruction {
-        address: ExternalAddress::new(b"external".to_vec()).unwrap(),
-        data: None,
-      },
-    };
-    serai
-      .publish(&serai.sign(
-        &serai_pair,
-        SeraiCoins::burn_with_instruction(out_instruction.clone()),
-        0,
-        Default::default(),
-      ))
-      .await
-      .unwrap();
-
-    // TODO: We *really* need a helper for this pattern
-    let mut last_serai_block = block_included_in;
-    'outer: for _ in 0 .. 20 {
-      tokio::time::sleep(Duration::from_secs(6)).await;
-      if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+      // TODO: We *really* need a helper for this pattern
+      let mut last_serai_block = block_included_in;
+      'outer: for _ in 0 .. 20 {
         tokio::time::sleep(Duration::from_secs(6)).await;
-      }
-
-      while last_serai_block <= serai.latest_finalized_block().await.unwrap().number() {
-        let burn_events = serai
-          .as_of(serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
-          .coins()
-          .burn_with_instruction_events()
-          .await
-          .unwrap();
-
-        if !burn_events.is_empty() {
-          assert_eq!(burn_events.len(), 1);
-          assert_eq!(
-            burn_events[0],
-            CoinsEvent::BurnWithInstruction {
-              from: serai_addr,
-              instruction: out_instruction.clone()
-            }
-          );
-          break 'outer;
+        if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+          tokio::time::sleep(Duration::from_secs(6)).await;
         }
-        last_serai_block += 1;
-      }
-    }
 
-    let last_serai_block =
-      serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
-    let last_serai_block_hash = last_serai_block.hash();
-    let serai = serai.as_of(last_serai_block_hash);
-    let serai = serai.coins();
-    assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
-    assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
+        while last_serai_block <= serai.latest_finalized_block().await.unwrap().number() {
+          let burn_events = serai
+            .as_of(serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap().hash())
+            .coins()
+            .burn_with_instruction_events()
+            .await
+            .unwrap();
 
-    let mut plan_id = [0; 32];
-    OsRng.fill_bytes(&mut plan_id);
-    let plan_id = plan_id;
-
-    // We should now get a SubstrateBlock
-    for processor in &mut processors {
-      assert_eq!(
-        processor.recv_message().await,
-        messages::CoordinatorMessage::Substrate(
-          messages::substrate::CoordinatorMessage::SubstrateBlock {
-            context: SubstrateContext {
-              serai_time: last_serai_block.time().unwrap() / 1000,
-              network_latest_finalized_block: coin_block,
-            },
-            block: last_serai_block.number(),
-            burns: vec![out_instruction.clone()],
-            batches: vec![],
+          if !burn_events.is_empty() {
+            assert_eq!(burn_events.len(), 1);
+            assert_eq!(
+              burn_events[0],
+              CoinsEvent::BurnWithInstruction {
+                from: serai_addr,
+                instruction: out_instruction.clone()
+              }
+            );
+            break 'outer;
           }
-        )
-      );
+          last_serai_block += 1;
+        }
+      }
 
-      // Send the ACK, claiming there's a plan to sign
-      processor
-        .send_message(messages::ProcessorMessage::Coordinator(
-          messages::coordinator::ProcessorMessage::SubstrateBlockAck {
-            block: last_serai_block.number(),
-            plans: vec![PlanMeta { session: Session(0), id: plan_id }],
-          },
-        ))
-        .await;
-    }
+      let last_serai_block =
+        serai.finalized_block_by_number(last_serai_block).await.unwrap().unwrap();
+      let last_serai_block_hash = last_serai_block.hash();
+      let serai = serai.as_of(last_serai_block_hash);
+      let serai = serai.coins();
+      assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
+      assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
 
-    sign(&mut processors, &participant_is, Session(0), plan_id).await;
-  })
+      let mut plan_id = [0; 32];
+      OsRng.fill_bytes(&mut plan_id);
+      let plan_id = plan_id;
+
+      // We should now get a SubstrateBlock
+      for processor in &mut processors {
+        assert_eq!(
+          processor.recv_message().await,
+          messages::CoordinatorMessage::Substrate(
+            messages::substrate::CoordinatorMessage::SubstrateBlock {
+              context: SubstrateContext {
+                serai_time: last_serai_block.time().unwrap() / 1000,
+                network_latest_finalized_block: coin_block,
+              },
+              block: last_serai_block.number(),
+              burns: vec![out_instruction.clone()],
+              batches: vec![],
+            }
+          )
+        );
+
+        // Send the ACK, claiming there's a plan to sign
+        processor
+          .send_message(messages::ProcessorMessage::Coordinator(
+            messages::coordinator::ProcessorMessage::SubstrateBlockAck {
+              block: last_serai_block.number(),
+              plans: vec![PlanMeta { session: Session(0), id: plan_id }],
+            },
+          ))
+          .await;
+      }
+
+      sign(&mut processors, &participant_is, Session(0), plan_id).await;
+    },
+    false,
+  )
   .await;
 }

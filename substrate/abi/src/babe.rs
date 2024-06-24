@@ -4,7 +4,7 @@ use serai_primitives::{Header, SeraiAddress};
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
 pub struct ReportEquivocation {
-  pub equivocation_proof: Box<EquivocationProof<Header>>,
+  pub equivocation_proof: alloc::boxed::Box<EquivocationProof<Header>>,
   pub key_owner_proof: SeraiAddress,
 }
 

@@ -14,7 +14,6 @@ use frost::dkg::musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
-  primitives::insecure_pair_from_name,
   validator_sets::{
     primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
@@ -25,33 +24,52 @@ use serai_client::{
 use crate::common::tx::publish_tx;
 
 #[allow(dead_code)]
-pub async fn set_keys(serai: &Serai, set: ValidatorSet, key_pair: KeyPair) -> [u8; 32] {
-  let pair = insecure_pair_from_name("Alice");
-  let public = pair.public();
+pub async fn set_keys(
+  serai: &Serai,
+  set: ValidatorSet,
+  key_pair: KeyPair,
+  pairs: &[Pair],
+) -> [u8; 32] {
+  let mut pub_keys = vec![];
+  for pair in pairs {
+    let public_key =
+      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut pair.public().0.as_ref()).unwrap();
+    pub_keys.push(public_key);
+  }
 
-  let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
-  let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
-    &mut pair.as_ref().secret.to_bytes()[.. 32].as_ref(),
-  )
-  .unwrap();
-  assert_eq!(Ristretto::generator() * secret_key, public_key);
-  let threshold_keys =
-    musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &[public_key]).unwrap();
+  let mut threshold_keys = vec![];
+  for i in 0 .. pairs.len() {
+    let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
+      &mut pairs[i].as_ref().secret.to_bytes()[.. 32].as_ref(),
+    )
+    .unwrap();
+    assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
+
+    threshold_keys.push(
+      musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &pub_keys).unwrap(),
+    );
+  }
+
+  let mut musig_keys = HashMap::new();
+  for tk in threshold_keys {
+    musig_keys.insert(tk.params().i(), tk.into());
+  }
 
   let sig = frost::tests::sign_without_caching(
     &mut OsRng,
-    frost::tests::algorithm_machines(
-      &mut OsRng,
-      &Schnorrkel::new(b"substrate"),
-      &HashMap::from([(threshold_keys.params().i(), threshold_keys.into())]),
-    ),
+    frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
     &set_keys_message(&set, &[], &key_pair),
   );
 
   // Set the key pair
   let block = publish_tx(
     serai,
-    &SeraiValidatorSets::set_keys(set.network, vec![], key_pair.clone(), Signature(sig.to_bytes())),
+    &SeraiValidatorSets::set_keys(
+      set.network,
+      vec![].try_into().unwrap(),
+      key_pair.clone(),
+      Signature(sig.to_bytes()),
+    ),
   )
   .await;
 

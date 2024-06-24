@@ -12,27 +12,21 @@ use crate::{multiexp, multiexp_vartime};
 // Flatten the contained statements to a single Vec.
 // Wrapped in Zeroizing in case any of the included statements contain private values.
 #[allow(clippy::type_complexity)]
-fn flat<Id: Copy + Zeroize, G: Group + Zeroize>(
+fn flat<Id: Copy + Zeroize, G: Group<Scalar: PrimeFieldBits + Zeroize> + Zeroize>(
   slice: &[(Id, Vec<(G::Scalar, G)>)],
-) -> Zeroizing<Vec<(G::Scalar, G)>>
-where
-  <G as Group>::Scalar: PrimeFieldBits + Zeroize,
-{
+) -> Zeroizing<Vec<(G::Scalar, G)>> {
   Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).copied().collect::<Vec<_>>())
 }
 
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
 #[allow(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
-pub struct BatchVerifier<Id: Copy + Zeroize, G: Group + Zeroize>(
+pub struct BatchVerifier<Id: Copy + Zeroize, G: Group<Scalar: PrimeFieldBits + Zeroize> + Zeroize>(
   Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>,
-)
-where
-  <G as Group>::Scalar: PrimeFieldBits + Zeroize;
+);
 
-impl<Id: Copy + Zeroize, G: Group + Zeroize> BatchVerifier<Id, G>
-where
-  <G as Group>::Scalar: PrimeFieldBits + Zeroize,
+impl<Id: Copy + Zeroize, G: Group<Scalar: PrimeFieldBits + Zeroize> + Zeroize>
+  BatchVerifier<Id, G>
 {
   /// Create a new batch verifier, expected to verify the following amount of statements.
   ///

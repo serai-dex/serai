@@ -512,6 +512,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         ProcessorMessage::GeneratedKeyPair {
           id,
           substrate_key: generated_substrate_key.unwrap().to_bytes(),
+          // TODO: This can be made more efficient since tweaked keys may be a subset of keys
           network_key: generated_network_key.unwrap().to_bytes().as_ref().to_vec(),
         }
       }

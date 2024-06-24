@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
   # Version patches
+  "patches/parking_lot_core",
+  "patches/parking_lot",
   "patches/zstd",
   "patches/rocksdb",
   "patches/proc-macro-crate",
@@ -36,8 +38,11 @@ members = [
   "crypto/schnorrkel",
 
   "coins/bitcoin",
+
   "coins/ethereum/alloy-simple-request-transport",
   "coins/ethereum",
+  "coins/ethereum/relayer",
+
   "coins/monero/generators",
   "coins/monero",
 
@@ -112,6 +117,8 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 # Needed due to dockertest's usage of `Rc`s when we need `Arc`s
 dockertest = { git = "https://github.com/orcalabs/dockertest-rs", rev = "4dd6ae24738aa6dc5c89444cc822ea4745517493" }
 
+parking_lot_core = { path = "patches/parking_lot_core" }
+parking_lot = { path = "patches/parking_lot" }
 # wasmtime pulls in an old version for this
 zstd = { path = "patches/zstd" }
 # Needed for WAL compression

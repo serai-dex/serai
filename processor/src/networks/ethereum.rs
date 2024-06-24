@@ -13,7 +13,7 @@ use frost::ThresholdKeys;
 use ethereum_serai::{
   alloy::{
     primitives::U256,
-    rpc_types::{BlockNumberOrTag, Transaction},
+    rpc_types::{BlockTransactionsKind, BlockNumberOrTag, Transaction},
     simple_request_transport::SimpleRequest,
     rpc_client::ClientBuilder,
     provider::{Provider, RootProvider},
@@ -30,6 +30,11 @@ use ethereum_serai::alloy::primitives::B256;
 use tokio::{
   time::sleep,
   sync::{RwLock, RwLockReadGuard},
+};
+#[cfg(not(test))]
+use tokio::{
+  io::{AsyncReadExt, AsyncWriteExt},
+  net::TcpStream,
 };
 
 use serai_client::{
@@ -290,6 +295,8 @@ pub struct Ethereum<D: Db> {
   // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
   // first key (regardless of local state), and this is safe.
   db: D,
+  #[cfg_attr(test, allow(unused))]
+  relayer_url: String,
   provider: Arc<RootProvider<SimpleRequest>>,
   deployer: Deployer,
   router: Arc<RwLock<Option<Router>>>,
@@ -309,9 +316,9 @@ impl<D: Db> fmt::Debug for Ethereum<D> {
   }
 }
 impl<D: Db> Ethereum<D> {
-  pub async fn new(db: D, url: String) -> Self {
+  pub async fn new(db: D, daemon_url: String, relayer_url: String) -> Self {
     let provider = Arc::new(RootProvider::new(
-      ClientBuilder::default().transport(SimpleRequest::new(url), true),
+      ClientBuilder::default().transport(SimpleRequest::new(daemon_url), true),
     ));
 
     let mut deployer = Deployer::new(provider.clone()).await;
@@ -322,7 +329,9 @@ impl<D: Db> Ethereum<D> {
     }
     let deployer = deployer.unwrap().unwrap();
 
-    Ethereum { db, provider, deployer, router: Arc::new(RwLock::new(None)) }
+    dbg!(&relayer_url);
+    dbg!(relayer_url.len());
+    Ethereum { db, relayer_url, provider, deployer, router: Arc::new(RwLock::new(None)) }
   }
 
   // Obtain a reference to the Router, sleeping until it's deployed if it hasn't already been.
@@ -423,10 +432,10 @@ impl<D: Db> Network for Ethereum<D> {
   async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
     let actual_number = self
       .provider
-      .get_block(BlockNumberOrTag::Finalized.into(), false)
+      .get_block(BlockNumberOrTag::Finalized.into(), BlockTransactionsKind::Hashes)
       .await
       .map_err(|_| NetworkError::ConnectionError)?
-      .expect("no blocks were finalized")
+      .ok_or(NetworkError::ConnectionError)?
       .header
       .number
       .unwrap();
@@ -451,7 +460,7 @@ impl<D: Db> Network for Ethereum<D> {
     } else {
       self
         .provider
-        .get_block(u64::try_from(start - 1).unwrap().into(), false)
+        .get_block(u64::try_from(start - 1).unwrap().into(), BlockTransactionsKind::Hashes)
         .await
         .ok()
         .flatten()
@@ -464,7 +473,7 @@ impl<D: Db> Network for Ethereum<D> {
 
     let end_header = self
       .provider
-      .get_block(u64::try_from(start + 31).unwrap().into(), false)
+      .get_block(u64::try_from(start + 31).unwrap().into(), BlockTransactionsKind::Hashes)
       .await
       .ok()
       .flatten()
@@ -714,8 +723,32 @@ impl<D: Db> Network for Ethereum<D> {
     // Publish this to the dedicated TX server for a solver to actually publish
     #[cfg(not(test))]
     {
-      let _ = completion;
-      todo!("TODO");
+      let mut msg = vec![];
+      match completion.command() {
+        RouterCommand::UpdateSeraiKey { nonce, .. } | RouterCommand::Execute { nonce, .. } => {
+          msg.extend(&u32::try_from(nonce).unwrap().to_le_bytes());
+        }
+      }
+      completion.write(&mut msg).unwrap();
+
+      let Ok(mut socket) = TcpStream::connect(&self.relayer_url).await else {
+        log::warn!("couldn't connect to the relayer server");
+        Err(NetworkError::ConnectionError)?
+      };
+      let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
+        log::warn!("couldn't send the message's len to the relayer server");
+        Err(NetworkError::ConnectionError)?
+      };
+      let Ok(()) = socket.write_all(&msg).await else {
+        log::warn!("couldn't write the message to the relayer server");
+        Err(NetworkError::ConnectionError)?
+      };
+      if socket.read_u8().await.ok() != Some(1) {
+        log::warn!("didn't get the ack from the relayer server");
+        Err(NetworkError::ConnectionError)?;
+      }
+
+      Ok(())
     }
 
     // Publish this using a dummy account we fund with magic RPC commands
@@ -774,7 +807,7 @@ impl<D: Db> Network for Ethereum<D> {
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
     self
       .provider
-      .get_block(B256::from(*id).into(), false)
+      .get_block(B256::from(*id).into(), BlockTransactionsKind::Hashes)
       .await
       .unwrap()
       .unwrap()

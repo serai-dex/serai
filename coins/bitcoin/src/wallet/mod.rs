@@ -4,7 +4,7 @@ use std_shims::{
   io::{self, Write},
 };
 #[cfg(feature = "std")]
-use std_shims::io::Read;
+use std::io::{Read, BufReader};
 
 use k256::{
   elliptic_curve::sec1::{Tag, ToEncodedPoint},
@@ -18,8 +18,8 @@ use frost::{
 };
 
 use bitcoin::{
-  consensus::encode::serialize, key::TweakedPublicKey, address::Payload, OutPoint, ScriptBuf,
-  TxOut, Transaction, Block,
+  consensus::encode::serialize, key::TweakedPublicKey, OutPoint, ScriptBuf, TxOut, Transaction,
+  Block,
 };
 #[cfg(feature = "std")]
 use bitcoin::consensus::encode::Decodable;
@@ -46,12 +46,12 @@ pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
 /// Return the Taproot address payload for a public key.
 ///
 /// If the key is odd, this will return None.
-pub fn address_payload(key: ProjectivePoint) -> Option<Payload> {
+pub fn p2tr_script_buf(key: ProjectivePoint) -> Option<ScriptBuf> {
   if key.to_encoded_point(true).tag() != Tag::CompressedEvenY {
     return None;
   }
 
-  Some(Payload::p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key))))
+  Some(ScriptBuf::new_p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(x_only(&key))))
 }
 
 /// A spendable output.
@@ -89,11 +89,17 @@ impl ReceivedOutput {
   /// Read a ReceivedOutput from a generic satisfying Read.
   #[cfg(feature = "std")]
   pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
-    Ok(ReceivedOutput {
-      offset: Secp256k1::read_F(r)?,
-      output: TxOut::consensus_decode(r).map_err(|_| io::Error::other("invalid TxOut"))?,
-      outpoint: OutPoint::consensus_decode(r).map_err(|_| io::Error::other("invalid OutPoint"))?,
-    })
+    let offset = Secp256k1::read_F(r)?;
+    let output;
+    let outpoint;
+    {
+      let mut buf_r = BufReader::with_capacity(0, r);
+      output =
+        TxOut::consensus_decode(&mut buf_r).map_err(|_| io::Error::other("invalid TxOut"))?;
+      outpoint =
+        OutPoint::consensus_decode(&mut buf_r).map_err(|_| io::Error::other("invalid OutPoint"))?;
+    }
+    Ok(ReceivedOutput { offset, output, outpoint })
   }
 
   /// Write a ReceivedOutput to a generic satisfying Write.
@@ -124,7 +130,7 @@ impl Scanner {
   /// Returns None if this key can't be scanned for.
   pub fn new(key: ProjectivePoint) -> Option<Scanner> {
     let mut scripts = HashMap::new();
-    scripts.insert(address_payload(key)?.script_pubkey(), Scalar::ZERO);
+    scripts.insert(p2tr_script_buf(key)?, Scalar::ZERO);
     Some(Scanner { key, scripts })
   }
 
@@ -141,9 +147,8 @@ impl Scanner {
     // chance of being even
     // That means this should terminate within a very small amount of iterations
     loop {
-      match address_payload(self.key + (ProjectivePoint::GENERATOR * offset)) {
-        Some(address) => {
-          let script = address.script_pubkey();
+      match p2tr_script_buf(self.key + (ProjectivePoint::GENERATOR * offset)) {
+        Some(script) => {
           if self.scripts.contains_key(&script) {
             None?;
           }
@@ -166,7 +171,7 @@ impl Scanner {
         res.push(ReceivedOutput {
           offset: *offset,
           output: output.clone(),
-          outpoint: OutPoint::new(tx.txid(), vout),
+          outpoint: OutPoint::new(tx.compute_txid(), vout),
         });
       }
     }

@@ -12,9 +12,9 @@ use alloy_consensus::TxLegacy;
 
 use alloy_sol_types::{SolValue, SolConstructor, SolCall, SolEvent};
 
-use alloy_rpc_types::Filter;
+use alloy_rpc_types_eth::Filter;
 #[cfg(test)]
-use alloy_rpc_types::{BlockId, TransactionRequest, TransactionInput};
+use alloy_rpc_types_eth::{BlockId, TransactionRequest, TransactionInput};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 

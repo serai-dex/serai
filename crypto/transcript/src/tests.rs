@@ -1,10 +1,7 @@
 use crate::Transcript;
 
 /// Test the sanity of a transcript.
-pub fn test_transcript<T: Transcript>()
-where
-  T::Challenge: PartialEq,
-{
+pub fn test_transcript<T: Transcript<Challenge: PartialEq>>() {
   // Ensure distinct names cause distinct challenges
   {
     let mut t1 = T::new(b"1");
