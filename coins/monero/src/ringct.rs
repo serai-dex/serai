@@ -194,9 +194,17 @@ impl RctBase {
   }
 
   /// Read a RctBase.
-  pub fn read<R: Read>(inputs: usize, outputs: usize, r: &mut R) -> io::Result<(RctBase, RctType)> {
+  pub fn read<R: Read>(
+    inputs: usize,
+    outputs: usize,
+    r: &mut R,
+  ) -> io::Result<Option<(RctType, RctBase)>> {
+    let rct_type = read_byte(r)?;
+    if rct_type == 0 {
+      return Ok(None);
+    }
     let rct_type =
-      RctType::try_from(read_byte(r)?).map_err(|()| io::Error::other("invalid RCT type"))?;
+      RctType::try_from(rct_type).map_err(|()| io::Error::other("invalid RCT type"))?;
 
     match rct_type {
       RctType::AggregateMlsagBorromean | RctType::MlsagBorromean => {}
@@ -215,7 +223,8 @@ impl RctBase {
       }
     }
 
-    Ok((
+    Ok(Some((
+      rct_type,
       RctBase {
         fee: read_varint(r)?,
         // Only read pseudo_outs if they have yet to be moved to RctPrunable
@@ -232,8 +241,7 @@ impl RctBase {
           .collect::<Result<_, _>>()?,
         commitments: read_raw_vec(read_point, outputs, r)?,
       },
-      rct_type,
-    ))
+    )))
   }
 }
 
@@ -469,11 +477,11 @@ impl RctProofs {
     inputs: usize,
     outputs: usize,
     r: &mut R,
-  ) -> io::Result<RctProofs> {
-    let base = RctBase::read(inputs, outputs, r)?;
-    Ok(RctProofs {
-      base: base.0,
-      prunable: RctPrunable::read(base.1, ring_length, inputs, outputs, r)?,
-    })
+  ) -> io::Result<Option<RctProofs>> {
+    let Some((rct_type, base)) = RctBase::read(inputs, outputs, r)? else { return Ok(None) };
+    Ok(Some(RctProofs {
+      base,
+      prunable: RctPrunable::read(rct_type, ring_length, inputs, outputs, r)?,
+    }))
   }
 }

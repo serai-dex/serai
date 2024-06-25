@@ -395,7 +395,7 @@ impl Transaction {
 
       Ok(Transaction::V1 { prefix, signatures })
     } else if version == 2 {
-      let proofs = Some(RctProofs::read(
+      let proofs = RctProofs::read(
         prefix.inputs.first().map_or(0, |input| match input {
           Input::Gen(_) => 0,
           Input::ToKey { key_offsets, .. } => key_offsets.len(),
@@ -403,7 +403,7 @@ impl Transaction {
         prefix.inputs.len(),
         prefix.outputs.len(),
         r,
-      )?);
+      )?;
 
       Ok(Transaction::V2 { prefix, proofs })
     } else {
