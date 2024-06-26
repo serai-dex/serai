@@ -8221,7 +8221,6 @@ dependencies = [
  "frame-system",
  "frame-system-rpc-runtime-api",
  "hashbrown 0.14.5",
- "pallet-authorship",
  "pallet-babe",
  "pallet-grandpa",
  "pallet-timestamp",
