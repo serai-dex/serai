@@ -222,9 +222,12 @@ fn core(
 /// The CLSAG signature, as used in Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Clsag {
-  D: EdwardsPoint,
-  s: Vec<Scalar>,
-  c1: Scalar,
+  /// The difference of the commitment randomnesses, scaling the key image generator.
+  pub D: EdwardsPoint,
+  /// The responses for each ring member.
+  pub s: Vec<Scalar>,
+  /// The first challenge in the ring.
+  pub c1: Scalar,
 }
 
 struct ClsagSignCore {
@@ -383,7 +386,7 @@ impl Clsag {
     Ok(())
   }
 
-  /// The weight a CLSAG will take within a Monero transaction.
+  /// The length a CLSAG will take once serialized.
   pub fn fee_weight(ring_len: usize) -> usize {
     (ring_len * 32) + 32 + 32
   }

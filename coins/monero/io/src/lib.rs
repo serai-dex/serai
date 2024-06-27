@@ -54,7 +54,7 @@ pub fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {
   w.write_all(&[*byte])
 }
 
-/// Write a number, VarInt-encoded,.
+/// Write a number, VarInt-encoded.
 ///
 /// This will panic if the VarInt exceeds u64::MAX.
 pub fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -> io::Result<()> {
@@ -81,7 +81,7 @@ pub fn write_point<W: Write>(point: &EdwardsPoint, w: &mut W) -> io::Result<()> 
   w.write_all(&point.compress().to_bytes())
 }
 
-/// Write a list of elements, without length-prefixing,.
+/// Write a list of elements, without length-prefixing.
 pub fn write_raw_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   f: F,
   values: &[T],
@@ -93,7 +93,7 @@ pub fn write_raw_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   Ok(())
 }
 
-/// Write a list of elements, with length-prefixing,.
+/// Write a list of elements, with length-prefixing.
 pub fn write_vec<T, W: Write, F: Fn(&T, &mut W) -> io::Result<()>>(
   f: F,
   values: &[T],
@@ -115,17 +115,17 @@ pub fn read_byte<R: Read>(r: &mut R) -> io::Result<u8> {
   Ok(read_bytes::<_, 1>(r)?[0])
 }
 
-/// Read a u16, little-endian encoded,.
+/// Read a u16, little-endian encoded.
 pub fn read_u16<R: Read>(r: &mut R) -> io::Result<u16> {
   read_bytes(r).map(u16::from_le_bytes)
 }
 
-/// Read a u32, little-endian encoded,.
+/// Read a u32, little-endian encoded.
 pub fn read_u32<R: Read>(r: &mut R) -> io::Result<u32> {
   read_bytes(r).map(u32::from_le_bytes)
 }
 
-/// Read a u64, little-endian encoded,.
+/// Read a u64, little-endian encoded.
 pub fn read_u64<R: Read>(r: &mut R) -> io::Result<u64> {
   read_bytes(r).map(u64::from_le_bytes)
 }

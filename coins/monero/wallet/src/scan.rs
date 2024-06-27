@@ -1,13 +1,18 @@
 use core::ops::Deref;
 use std_shims::{
+  io::{self, Read, Write},
   vec::Vec,
   string::ToString,
-  io::{self, Read, Write},
+  collections::{HashSet, HashMap},
 };
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar, edwards::EdwardsPoint};
+use curve25519_dalek::{
+  constants::ED25519_BASEPOINT_TABLE,
+  Scalar,
+  edwards::{EdwardsPoint, CompressedEdwardsY},
+};
 
 use monero_rpc::{RpcError, Rpc};
 use monero_serai::{
@@ -16,15 +21,13 @@ use monero_serai::{
   transaction::{Input, Timelock, Transaction},
   block::Block,
 };
-use crate::{
-  PaymentId, Extra, address::SubaddressIndex, Scanner, EncryptedAmountExt, uniqueness, shared_key,
-};
+use crate::{address::SubaddressIndex, ViewPair, PaymentId, Extra, SharedKeyDerivations};
 
 /// An absolute output ID, defined as its transaction hash and output index.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct AbsoluteId {
   pub tx: [u8; 32],
-  pub o: u8,
+  pub o: u32,
 }
 
 impl core::fmt::Debug for AbsoluteId {
@@ -36,17 +39,17 @@ impl core::fmt::Debug for AbsoluteId {
 impl AbsoluteId {
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(&self.tx)?;
-    w.write_all(&[self.o])
+    w.write_all(&self.o.to_le_bytes())
   }
 
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = Vec::with_capacity(32 + 1);
+    let mut serialized = Vec::with_capacity(32 + 4);
     self.write(&mut serialized).unwrap();
     serialized
   }
 
   pub fn read<R: Read>(r: &mut R) -> io::Result<AbsoluteId> {
-    Ok(AbsoluteId { tx: read_bytes(r)?, o: read_byte(r)? })
+    Ok(AbsoluteId { tx: read_bytes(r)?, o: read_u32(r)? })
   }
 }
 
@@ -244,7 +247,10 @@ impl SpendableOutput {
     self.global_index = *rpc
       .get_o_indexes(self.output.absolute.tx)
       .await?
-      .get(usize::from(self.output.absolute.o))
+      .get(
+        usize::try_from(self.output.absolute.o)
+          .map_err(|_| RpcError::InternalError("output's index didn't fit within a usize"))?,
+      )
       .ok_or(RpcError::InvalidNode(
         "node returned output indexes didn't include an index for this output".to_string(),
       ))?;
@@ -330,6 +336,72 @@ impl<O: Clone + Zeroize> Timelocked<O> {
   }
 }
 
+/// Transaction scanner.
+///
+/// This scanner is capable of generating subaddresses, additionally scanning for them once they've
+/// been explicitly generated. If the burning bug is attempted, any secondary outputs will be
+/// ignored.
+#[derive(Clone)]
+pub struct Scanner {
+  pair: ViewPair,
+  // Also contains the spend key as None
+  pub(crate) subaddresses: HashMap<CompressedEdwardsY, Option<SubaddressIndex>>,
+  pub(crate) burning_bug: Option<HashSet<CompressedEdwardsY>>,
+}
+
+impl Zeroize for Scanner {
+  fn zeroize(&mut self) {
+    self.pair.zeroize();
+
+    // These may not be effective, unfortunately
+    for (mut key, mut value) in self.subaddresses.drain() {
+      key.zeroize();
+      value.zeroize();
+    }
+    if let Some(ref mut burning_bug) = self.burning_bug.take() {
+      for mut output in burning_bug.drain() {
+        output.zeroize();
+      }
+    }
+  }
+}
+
+impl Drop for Scanner {
+  fn drop(&mut self) {
+    self.zeroize();
+  }
+}
+
+impl ZeroizeOnDrop for Scanner {}
+
+impl Scanner {
+  /// Create a Scanner from a ViewPair.
+  ///
+  /// burning_bug is a HashSet of used keys, intended to prevent key reuse which would burn funds.
+  ///
+  /// When an output is successfully scanned, the output key MUST be saved to disk.
+  ///
+  /// When a new scanner is created, ALL saved output keys must be passed in to be secure.
+  ///
+  /// If None is passed, a modified shared key derivation is used which is immune to the burning
+  /// bug (specifically the Guaranteed feature from Featured Addresses).
+  pub fn from_view(pair: ViewPair, burning_bug: Option<HashSet<CompressedEdwardsY>>) -> Scanner {
+    let mut subaddresses = HashMap::new();
+    subaddresses.insert(pair.spend.compress(), None);
+    Scanner { pair, subaddresses, burning_bug }
+  }
+
+  /// Register a subaddress.
+  // There used to be an address function here, yet it wasn't safe. It could generate addresses
+  // incompatible with the Scanner. While we could return None for that, then we have the issue
+  // of runtime failures to generate an address.
+  // Removing that API was the simplest option.
+  pub fn register_subaddress(&mut self, subaddress: SubaddressIndex) {
+    let (spend, _) = self.pair.subaddress_keys(subaddress);
+    self.subaddresses.insert(spend.compress(), Some(subaddress));
+  }
+}
+
 impl Scanner {
   /// Scan a transaction to discover the received outputs.
   pub fn scan_transaction(&mut self, tx: &Transaction) -> Timelocked<ReceivedOutput> {
@@ -379,23 +451,29 @@ impl Scanner {
             break;
           }
         };
-        let (view_tag, shared_key, payment_id_xor) = shared_key(
-          if self.burning_bug.is_none() { Some(uniqueness(&tx.prefix().inputs)) } else { None },
-          self.pair.view.deref() * key,
+        let ecdh = Zeroizing::new(self.pair.view.deref() * key);
+        let output_derivations = SharedKeyDerivations::output_derivations(
+          if self.burning_bug.is_none() {
+            Some(SharedKeyDerivations::uniqueness(&tx.prefix().inputs))
+          } else {
+            None
+          },
+          ecdh.clone(),
           o,
         );
 
-        let payment_id = payment_id.map(|id| id ^ payment_id_xor);
+        let payment_id = payment_id.map(|id| id ^ SharedKeyDerivations::payment_id_xor(ecdh));
 
         if let Some(actual_view_tag) = output.view_tag {
-          if actual_view_tag != view_tag {
+          if actual_view_tag != output_derivations.view_tag {
             continue;
           }
         }
 
         // P - shared == spend
-        let subaddress =
-          self.subaddresses.get(&(output_key - (&shared_key * ED25519_BASEPOINT_TABLE)).compress());
+        let subaddress = self.subaddresses.get(
+          &(output_key - (&output_derivations.shared_key * ED25519_BASEPOINT_TABLE)).compress(),
+        );
         if subaddress.is_none() {
           continue;
         }
@@ -407,7 +485,7 @@ impl Scanner {
         // If we did though, it'd enable bypassing the included burning bug protection
         assert!(output_key.is_torsion_free());
 
-        let mut key_offset = shared_key;
+        let mut key_offset = output_derivations.shared_key;
         if let Some(subaddress) = subaddress {
           key_offset += self.pair.subaddress_derivation(subaddress);
         }
@@ -424,7 +502,7 @@ impl Scanner {
           };
 
           commitment = match proofs.base.encrypted_amounts.get(o) {
-            Some(amount) => amount.decrypt(shared_key),
+            Some(amount) => output_derivations.decrypt(amount),
             // This should never happen, yet it may be possible with miner transactions?
             // Using get just decreases the possibility of a panic and lets us move on in that case
             None => break,

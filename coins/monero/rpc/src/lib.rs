@@ -745,6 +745,8 @@ pub trait Rpc: Sync + Clone + Debug {
   /// Get the currently estimated fee rate from the node.
   ///
   /// This may be manipulated to unsafe levels and MUST be sanity checked.
+  ///
+  /// This MUST NOT be expected to be deterministic in any way.
   // TODO: Take a sanity check argument
   async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
     #[derive(Deserialize, Debug)]

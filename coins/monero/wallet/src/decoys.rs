@@ -11,7 +11,7 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use monero_serai::{DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME};
 use monero_rpc::{RpcError, Rpc};
-use crate::SpendableOutput;
+use crate::scan::SpendableOutput;
 
 const RECENT_WINDOW: usize = 15;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;

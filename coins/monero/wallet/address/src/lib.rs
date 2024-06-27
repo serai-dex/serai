@@ -74,6 +74,7 @@ impl AddressType {
       matches!(self, AddressType::Featured { subaddress: true, .. })
   }
 
+  // TODO: wallet-core PaymentId? TX extra crate imported here?
   pub fn payment_id(&self) -> Option<[u8; 8]> {
     if let AddressType::Integrated(id) = self {
       Some(*id)
