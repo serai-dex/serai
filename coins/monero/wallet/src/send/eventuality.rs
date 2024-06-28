@@ -1,3 +1,5 @@
+use std_shims::io;
+
 use zeroize::Zeroize;
 
 use crate::{
@@ -94,85 +96,15 @@ impl Eventuality {
     true
   }
 
-  /*
   pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
-    self.protocol.write(w)?;
-    write_raw_vec(write_byte, self.r_seed.as_ref(), w)?;
-    write_vec(write_point, &self.inputs, w)?;
-
-    fn write_payment<W: io::Write>(payment: &InternalPayment, w: &mut W) -> io::Result<()> {
-      match payment {
-        InternalPayment::Payment(payment, need_dummy_payment_id) => {
-          w.write_all(&[0])?;
-          write_vec(write_byte, payment.0.to_string().as_bytes(), w)?;
-          w.write_all(&payment.1.to_le_bytes())?;
-          if *need_dummy_payment_id {
-            w.write_all(&[1])
-          } else {
-            w.write_all(&[0])
-          }
-        }
-        InternalPayment::Change(change, change_view) => {
-          w.write_all(&[1])?;
-          write_vec(write_byte, change.0.to_string().as_bytes(), w)?;
-          w.write_all(&change.1.to_le_bytes())?;
-          if let Some(view) = change_view.as_ref() {
-            w.write_all(&[1])?;
-            write_scalar(view, w)
-          } else {
-            w.write_all(&[0])
-          }
-        }
-      }
-    }
-    write_vec(write_payment, &self.payments, w)?;
-
-    write_vec(write_byte, &self.extra, w)
+    self.0.write(w)
   }
 
   pub fn serialize(&self) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(128);
-    self.write(&mut buf).unwrap();
-    buf
+    self.0.serialize()
   }
 
   pub fn read<R: io::Read>(r: &mut R) -> io::Result<Eventuality> {
-    fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
-      String::from_utf8(read_vec(read_byte, r)?)
-        .ok()
-        .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
-        .ok_or_else(|| io::Error::other("invalid address"))
-    }
-
-    fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
-      Ok(match read_byte(r)? {
-        0 => InternalPayment::Payment(
-          (read_address(r)?, read_u64(r)?),
-          match read_byte(r)? {
-            0 => false,
-            1 => true,
-            _ => Err(io::Error::other("invalid need additional"))?,
-          },
-        ),
-        1 => InternalPayment::Change(
-          (read_address(r)?, read_u64(r)?),
-          match read_byte(r)? {
-            0 => None,
-            1 => Some(Zeroizing::new(read_scalar(r)?)),
-            _ => Err(io::Error::other("invalid change view"))?,
-          },
-        ),
-        _ => Err(io::Error::other("invalid payment"))?,
-      })
-    }
-
-    Ok(Eventuality {
-      protocol: RctType::read(r)?,
-      r_seed: Zeroizing::new(read_bytes::<_, 32>(r)?),
-      inputs: read_vec(read_point, r)?,
-      payments: read_vec(read_payment, r)?,
-      extra: read_vec(read_byte, r)?,
-    })
+    Ok(Eventuality(SignableTransaction::read(r)?))
   }
-  */
 }

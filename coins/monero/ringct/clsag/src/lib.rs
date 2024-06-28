@@ -386,11 +386,6 @@ impl Clsag {
     Ok(())
   }
 
-  /// The length a CLSAG will take once serialized.
-  pub fn fee_weight(ring_len: usize) -> usize {
-    (ring_len * 32) + 32 + 32
-  }
-
   /// Write a CLSAG.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_raw_vec(write_scalar, &self.s, w)?;

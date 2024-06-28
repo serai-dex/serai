@@ -52,6 +52,24 @@ impl FeeRate {
     Ok(FeeRate { per_weight, mask })
   }
 
+  /// Write the FeeRate.
+  pub fn write(&self, w: &mut impl io::Write) -> io::Result<()> {
+    w.write_all(&self.per_weight.to_le_bytes())?;
+    w.write_all(&self.mask.to_le_bytes())
+  }
+
+  /// Serialize the FeeRate to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(16);
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  /// Read a FeeRate.
+  pub fn read(r: &mut impl io::Read) -> io::Result<FeeRate> {
+    Ok(FeeRate { per_weight: read_u64(r)?, mask: read_u64(r)? })
+  }
+
   /// Calculate the fee to use from the weight.
   ///
   /// This function may panic if any of the `FeeRate`'s fields are zero.

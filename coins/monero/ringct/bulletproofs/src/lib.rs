@@ -97,13 +97,6 @@ impl Bulletproof {
     (bp_clawback, LR_len)
   }
 
-  /// Calculate the weight of this proof.
-  pub fn fee_weight(plus: bool, outputs: usize) -> usize {
-    #[allow(non_snake_case)]
-    let (bp_clawback, LR_len) = Bulletproof::calculate_bp_clawback(plus, outputs);
-    32 * (Bulletproof::bp_fields(plus) + (2 * LR_len)) + 2 + bp_clawback
-  }
-
   /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof.
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,

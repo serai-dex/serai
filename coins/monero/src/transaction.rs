@@ -32,13 +32,6 @@ pub enum Input {
 }
 
 impl Input {
-  /// The weight of this Input, as relevant for fees.
-  pub fn fee_weight(offsets_weight: usize) -> usize {
-    // Uses 1 byte for the input type
-    // Uses 1 byte for the VarInt amount due to amount being 0
-    1 + 1 + offsets_weight + 32
-  }
-
   /// Write the Input.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
@@ -98,13 +91,6 @@ pub struct Output {
 }
 
 impl Output {
-  /// The weight of this Output, as relevant for fees.
-  pub fn fee_weight(view_tags: bool) -> usize {
-    // Uses 1 byte for the output type
-    // Uses 1 byte for the VarInt amount due to amount being 0
-    1 + 1 + 32 + if view_tags { 1 } else { 0 }
-  }
-
   /// Write the Output.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     write_varint(&self.amount.unwrap_or(0), w)?;
@@ -221,23 +207,6 @@ pub struct TransactionPrefix {
 }
 
 impl TransactionPrefix {
-  /// The weight of this TransactionPrefix, as relevant for fees.
-  pub fn fee_weight(
-    decoy_weights: &[usize],
-    outputs: usize,
-    view_tags: bool,
-    extra: usize,
-  ) -> usize {
-    // Assumes Timelock::None since this library won't let you create a TX with a timelock
-    // 1 input for every decoy weight
-    1 + varint_len(decoy_weights.len()) +
-      decoy_weights.iter().map(|&offsets_weight| Input::fee_weight(offsets_weight)).sum::<usize>() +
-      varint_len(outputs) +
-      (outputs * Output::fee_weight(view_tags)) +
-      varint_len(extra) +
-      extra
-  }
-
   /// Write a TransactionPrefix.
   ///
   /// This is distinct from Monero in that it won't write any version.
@@ -321,22 +290,6 @@ impl Transaction {
     match self {
       Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => prefix,
     }
-  }
-
-  /// The weight of this Transaction, as relevant for fees.
-  // TODO: Replace ring_len, decoy_weights for &[&[usize]], where the inner buf is the decoy
-  // offsets
-  pub fn fee_weight(
-    view_tags: bool,
-    bp_plus: bool,
-    ring_len: usize,
-    decoy_weights: &[usize],
-    outputs: usize,
-    extra: usize,
-    fee: u64,
-  ) -> usize {
-    1 + TransactionPrefix::fee_weight(decoy_weights, outputs, view_tags, extra) +
-      RctProofs::fee_weight(bp_plus, ring_len, decoy_weights.len(), outputs, fee)
   }
 
   /// Write the Transaction.

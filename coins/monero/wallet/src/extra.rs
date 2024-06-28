@@ -208,23 +208,6 @@ impl Extra {
     self.0.push(field);
   }
 
-  #[rustfmt::skip]
-  pub fn fee_weight(
-    outputs: usize,
-    additional: bool,
-    payment_id: bool,
-    data: &[Vec<u8>]
-  ) -> usize {
-    // PublicKey, key
-    (1 + 32) +
-    // PublicKeys, length, additional keys
-    (if additional { 1 + 1 + (outputs * 32) } else { 0 }) +
-    // PaymentId (Nonce), length, encrypted, ID
-    (if payment_id { 1 + 1 + 1 + 8 } else { 0 }) +
-    // Nonce, length, ARBITRARY_DATA_MARKER, data
-    data.iter().map(|v| 1 + varint_len(1 + v.len()) + 1 + v.len()).sum::<usize>()
-  }
-
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
       field.write(w)?;

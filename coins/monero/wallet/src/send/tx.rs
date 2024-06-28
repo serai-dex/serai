@@ -216,7 +216,7 @@ impl SignableTransaction {
 }
 
 impl SignableTransactionWithKeyImages {
-  pub(crate) fn transaction_without_clsags_and_pseudo_outs(&self) -> Transaction {
+  pub(crate) fn transaction_without_signatures(&self) -> Transaction {
     let commitments_and_encrypted_amounts =
       self.intent.commitments_and_encrypted_amounts(&self.key_images);
     let mut commitments = Vec::with_capacity(self.intent.payments.len());

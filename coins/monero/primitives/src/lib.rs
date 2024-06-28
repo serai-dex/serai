@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use std_shims::vec::Vec;
+use std_shims::{io, vec::Vec};
 #[cfg(feature = "std")]
 use std_shims::sync::OnceLock;
 
@@ -17,6 +17,7 @@ use curve25519_dalek::{
   edwards::{EdwardsPoint, VartimeEdwardsPrecomputation},
 };
 
+use monero_io::*;
 use monero_generators::H;
 
 mod unreduced_scalar;
@@ -165,5 +166,35 @@ impl Decoys {
   /// The [key, commitment] pair of the signer.
   pub fn signer_ring_members(&self) -> [EdwardsPoint; 2] {
     self.ring[usize::from(self.signer_index)]
+  }
+
+  /// Write the Decoys.
+  pub fn write(&self, w: &mut impl io::Write) -> io::Result<()> {
+    write_vec(write_varint, &self.offsets, w)?;
+    w.write_all(&[self.signer_index])?;
+    write_vec(
+      |pair, w| {
+        write_point(&pair[0], w)?;
+        write_point(&pair[1], w)
+      },
+      &self.ring,
+      w,
+    )
+  }
+  /// Serialize the Decoys to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res =
+      Vec::with_capacity((1 + (2 * self.offsets.len())) + 1 + 1 + (self.ring.len() * 64));
+    self.write(&mut res).unwrap();
+    res
+  }
+  /// Read a set of Decoys.
+  pub fn read(r: &mut impl io::Read) -> io::Result<Decoys> {
+    Decoys::new(
+      read_vec(read_varint, r)?,
+      read_byte(r)?,
+      read_vec(|r| Ok([read_point(r)?, read_point(r)?]), r)?,
+    )
+    .ok_or_else(|| io::Error::other("invalid Decoys"))
   }
 }

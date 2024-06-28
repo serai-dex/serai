@@ -173,12 +173,6 @@ pub struct RctBase {
 }
 
 impl RctBase {
-  /// The weight of this RctBase as relevant for fees.
-  pub fn fee_weight(outputs: usize, fee: u64) -> usize {
-    // 1 byte for the RCT signature type
-    1 + (outputs * (8 + 32)) + varint_len(fee)
-  }
-
   /// Write the RctBase.
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     w.write_all(&[u8::from(rct_type)])?;
@@ -295,16 +289,6 @@ pub enum RctPrunable {
 }
 
 impl RctPrunable {
-  /// The weight of this RctPrunable as relevant for fees.
-  #[rustfmt::skip]
-  pub fn fee_weight(bp_plus: bool, ring_len: usize, inputs: usize, outputs: usize) -> usize {
-    // 1 byte for number of BPs (technically a VarInt, yet there's always just zero or one)
-    1 +
-      Bulletproof::fee_weight(bp_plus, outputs) +
-      // There's both the CLSAG and the pseudo-out
-      (inputs * (Clsag::fee_weight(ring_len) + 32))
-  }
-
   /// Write the RctPrunable.
   pub fn write<W: Write>(&self, w: &mut W, rct_type: RctType) -> io::Result<()> {
     match self {
@@ -444,17 +428,6 @@ impl RctProofs {
         }
       }
     }
-  }
-
-  /// The weight of this RctProofs, as relevant for fees.
-  pub fn fee_weight(
-    bp_plus: bool,
-    ring_len: usize,
-    inputs: usize,
-    outputs: usize,
-    fee: u64,
-  ) -> usize {
-    RctBase::fee_weight(outputs, fee) + RctPrunable::fee_weight(bp_plus, ring_len, inputs, outputs)
   }
 
   /// Write the RctProofs.

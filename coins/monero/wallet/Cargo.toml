@@ -30,11 +30,11 @@ rand_chacha = { version = "0.3", default-features = false }
 # Used to select decoys
 rand_distr = { version = "0.4", default-features = false }
 
-group = { version = "0.13", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "group"] }
 
 # Multisig dependencies
 transcript = { package = "flexible-transcript", path = "../../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
+group = { version = "0.13", default-features = false, optional = true }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4", default-features = false, optional = true }
 frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["ed25519"], optional = true }
 
@@ -72,5 +72,5 @@ std = [
   "monero-address/std",
 ]
 compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-serai/compile-time-generators"]
-multisig = ["transcript", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]
+multisig = ["transcript", "group", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]
 default = ["std", "compile-time-generators"]

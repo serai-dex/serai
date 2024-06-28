@@ -1,4 +1,5 @@
 use core::{ops::Deref, fmt};
+use std_shims::io;
 
 use zeroize::{Zeroize, Zeroizing};
 
@@ -10,6 +11,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint}
 use frost::FrostError;
 
 use crate::{
+  io::*,
   generators::{MAX_COMMITMENTS, hash_to_point},
   primitives::Decoys,
   ringct::{
@@ -158,7 +160,12 @@ pub enum SendError {
   #[cfg_attr(feature = "std", error("invalid amount of key images specified"))]
   InvalidAmountOfKeyImages,
   #[cfg_attr(feature = "std", error("wrong spend private key"))]
-  WrongPrivateKey, // TODO
+  WrongPrivateKey,
+  #[cfg_attr(
+    feature = "std",
+    error("this SignableTransaction was created by deserializing a malicious serialization")
+  )]
+  MaliciousSerialization,
   #[cfg_attr(feature = "std", error("clsag error ({0})"))]
   ClsagError(ClsagError),
   #[cfg(feature = "multisig")]
@@ -176,27 +183,24 @@ pub struct SignableTransaction {
   fee_rate: FeeRate,
 }
 
+struct SignableTransactionWithKeyImages {
+  intent: SignableTransaction,
+  key_images: Vec<EdwardsPoint>,
+}
+
 impl SignableTransaction {
-  pub fn new(
-    rct_type: RctType,
-    sender_view_key: Zeroizing<Scalar>,
-    inputs: Vec<(SpendableOutput, Decoys)>,
-    payments: Vec<(MoneroAddress, u64)>,
-    change: Change,
-    data: Vec<Vec<u8>>,
-    fee_rate: FeeRate,
-  ) -> Result<SignableTransaction, SendError> {
-    match rct_type {
+  fn validate(&self) -> Result<(), SendError> {
+    match self.rct_type {
       RctType::ClsagBulletproof | RctType::ClsagBulletproofPlus => {}
       _ => Err(SendError::UnsupportedRctType)?,
-    };
+    }
 
-    if inputs.is_empty() {
+    if self.inputs.is_empty() {
       Err(SendError::NoInputs)?;
     }
-    for (_, decoys) in &inputs {
+    for (_, decoys) in &self.inputs {
       if decoys.len() !=
-        match rct_type {
+        match self.rct_type {
           RctType::ClsagBulletproof => 11,
           RctType::ClsagBulletproofPlus => 16,
           _ => panic!("unsupported RctType"),
@@ -206,74 +210,69 @@ impl SignableTransaction {
       }
     }
 
-    if payments.is_empty() {
+    // Check we have at least one non-change output
+    if !self.payments.iter().any(|payment| matches!(payment, InternalPayment::Payment(_, _))) {
       Err(SendError::NoOutputs)?;
     }
     // If we don't have at least two outputs, as required by Monero, error
-    if (payments.len() == 1) && matches!(change, Change(ChangeEnum::None)) {
+    if self.payments.len() < 2 {
       Err(SendError::NoChange)?;
+    }
+    // Check we don't have multiple Change outputs due to decoding a malicious serialization
+    {
+      let mut change_count = 0;
+      for payment in &self.payments {
+        change_count += usize::from(u8::from(matches!(payment, InternalPayment::Change(_, _))));
+      }
+      if change_count > 1 {
+        Err(SendError::MaliciousSerialization)?;
+      }
     }
 
     // Make sure there's at most one payment ID
     {
       let mut payment_ids = 0;
-      let mut count = |addr: MoneroAddress| {
-        if addr.payment_id().is_some() {
-          payment_ids += 1
-        }
-      };
-      for payment in &payments {
-        count(payment.0);
-      }
-      match &change.0 {
-        ChangeEnum::None => (),
-        ChangeEnum::AddressOnly(addr) | ChangeEnum::AddressWithView(addr, _) => count(*addr),
+      for payment in &self.payments {
+        payment_ids += usize::from(u8::from(payment.address().payment_id().is_some()));
       }
       if payment_ids > 1 {
         Err(SendError::MultiplePaymentIds)?;
       }
     }
 
-    // Re-format the payments and change into a consolidated payments list
-    let payments_amount = payments.iter().map(|(_, amount)| amount).sum::<u64>();
-    let mut payments = payments
-      .into_iter()
-      .map(|(addr, amount)| InternalPayment::Payment(addr, amount))
-      .collect::<Vec<_>>();
-    match change.0 {
-      ChangeEnum::None => {}
-      ChangeEnum::AddressOnly(addr) => payments.push(InternalPayment::Change(addr, None)),
-      ChangeEnum::AddressWithView(addr, view) => {
-        payments.push(InternalPayment::Change(addr, Some(view)))
-      }
-    }
-    if payments.len() > MAX_COMMITMENTS {
+    if self.payments.len() > MAX_COMMITMENTS {
       Err(SendError::TooManyOutputs)?;
     }
 
     // Check the length of each arbitrary data
-    for part in &data {
+    for part in &self.data {
       if part.len() > MAX_ARBITRARY_DATA_SIZE {
         Err(SendError::TooMuchData)?;
       }
     }
 
-    let res = SignableTransaction { rct_type, sender_view_key, inputs, payments, data, fee_rate };
-
     // Check the length of TX extra
     // https://github.com/monero-project/monero/pull/8733
     const MAX_EXTRA_SIZE: usize = 1060;
-    if res.extra().len() > MAX_EXTRA_SIZE {
+    if self.extra().len() > MAX_EXTRA_SIZE {
       Err(SendError::TooMuchData)?;
     }
 
     // Make sure we have enough funds
-    let in_amount = res.inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
+    let in_amount = self.inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
+    let payments_amount = self
+      .payments
+      .iter()
+      .filter_map(|payment| match payment {
+        InternalPayment::Payment(_, amount) => Some(amount),
+        InternalPayment::Change(_, _) => None,
+      })
+      .sum::<u64>();
     // Necessary so weight_and_fee doesn't underflow
     if in_amount < payments_amount {
       Err(SendError::NotEnoughFunds { inputs: in_amount, outputs: payments_amount, fee: None })?;
     }
-    let (weight, fee) = res.weight_and_fee();
+    let (weight, fee) = self.weight_and_fee();
     if in_amount < (payments_amount + fee) {
       Err(SendError::NotEnoughFunds {
         inputs: in_amount,
@@ -290,6 +289,116 @@ impl SignableTransaction {
       Err(SendError::TooLargeTransaction)?;
     }
 
+    Ok(())
+  }
+
+  pub fn new(
+    rct_type: RctType,
+    sender_view_key: Zeroizing<Scalar>,
+    inputs: Vec<(SpendableOutput, Decoys)>,
+    payments: Vec<(MoneroAddress, u64)>,
+    change: Change,
+    data: Vec<Vec<u8>>,
+    fee_rate: FeeRate,
+  ) -> Result<SignableTransaction, SendError> {
+    // Re-format the payments and change into a consolidated payments list
+    let mut payments = payments
+      .into_iter()
+      .map(|(addr, amount)| InternalPayment::Payment(addr, amount))
+      .collect::<Vec<_>>();
+    match change.0 {
+      ChangeEnum::None => {}
+      ChangeEnum::AddressOnly(addr) => payments.push(InternalPayment::Change(addr, None)),
+      ChangeEnum::AddressWithView(addr, view) => {
+        payments.push(InternalPayment::Change(addr, Some(view)))
+      }
+    }
+
+    let res = SignableTransaction { rct_type, sender_view_key, inputs, payments, data, fee_rate };
+    res.validate()?;
+    Ok(res)
+  }
+
+  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    fn write_input<W: io::Write>(input: &(SpendableOutput, Decoys), w: &mut W) -> io::Result<()> {
+      input.0.write(w)?;
+      input.1.write(w)
+    }
+
+    fn write_payment<W: io::Write>(payment: &InternalPayment, w: &mut W) -> io::Result<()> {
+      match payment {
+        InternalPayment::Payment(addr, amount) => {
+          w.write_all(&[0])?;
+          write_vec(write_byte, addr.to_string().as_bytes(), w)?;
+          w.write_all(&amount.to_le_bytes())
+        }
+        InternalPayment::Change(addr, change_view) => {
+          w.write_all(&[1])?;
+          write_vec(write_byte, addr.to_string().as_bytes(), w)?;
+          if let Some(view) = change_view.as_ref() {
+            w.write_all(&[1])?;
+            write_scalar(view, w)
+          } else {
+            w.write_all(&[0])
+          }
+        }
+      }
+    }
+
+    write_byte(&u8::from(self.rct_type), w)?;
+    write_scalar(&self.sender_view_key, w)?;
+    write_vec(write_input, &self.inputs, w)?;
+    write_vec(write_payment, &self.payments, w)?;
+    write_vec(|data, w| write_vec(write_byte, data, w), &self.data, w)?;
+    self.fee_rate.write(w)
+  }
+
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(256);
+    self.write(&mut buf).unwrap();
+    buf
+  }
+
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<SignableTransaction> {
+    fn read_input(r: &mut impl io::Read) -> io::Result<(SpendableOutput, Decoys)> {
+      Ok((SpendableOutput::read(r)?, Decoys::read(r)?))
+    }
+
+    fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
+      String::from_utf8(read_vec(read_byte, r)?)
+        .ok()
+        .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
+        .ok_or_else(|| io::Error::other("invalid address"))
+    }
+
+    fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
+      Ok(match read_byte(r)? {
+        0 => InternalPayment::Payment(read_address(r)?, read_u64(r)?),
+        1 => InternalPayment::Change(
+          read_address(r)?,
+          match read_byte(r)? {
+            0 => None,
+            1 => Some(Zeroizing::new(read_scalar(r)?)),
+            _ => Err(io::Error::other("invalid change view"))?,
+          },
+        ),
+        _ => Err(io::Error::other("invalid payment"))?,
+      })
+    }
+
+    let res = SignableTransaction {
+      rct_type: RctType::try_from(read_byte(r)?)
+        .map_err(|()| io::Error::other("unsupported/invalid RctType"))?,
+      sender_view_key: Zeroizing::new(read_scalar(r)?),
+      inputs: read_vec(read_input, r)?,
+      payments: read_vec(read_payment, r)?,
+      data: read_vec(|r| read_vec(read_byte, r), r)?,
+      fee_rate: FeeRate::read(r)?,
+    };
+    match res.validate() {
+      Ok(()) => {}
+      Err(e) => Err(io::Error::other(e))?,
+    }
     Ok(res)
   }
 
@@ -360,7 +469,7 @@ impl SignableTransaction {
       .sum::<Scalar>();
 
     // Get the actual TX, just needing the CLSAGs
-    let mut tx = tx.transaction_without_clsags_and_pseudo_outs();
+    let mut tx = tx.transaction_without_signatures();
 
     // Sign the CLSAGs
     let clsags_and_pseudo_outs =
@@ -390,9 +499,4 @@ impl SignableTransaction {
     // Return the signed TX
     Ok(tx)
   }
-}
-
-struct SignableTransactionWithKeyImages {
-  intent: SignableTransaction,
-  key_images: Vec<EdwardsPoint>,
 }
