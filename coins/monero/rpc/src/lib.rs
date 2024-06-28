@@ -261,7 +261,7 @@ pub trait Rpc: Sync + Clone + Debug {
     let res_str = std_shims::str::from_utf8(&res)
       .map_err(|_| RpcError::InvalidNode("response wasn't utf-8".to_string()))?;
     serde_json::from_str(res_str)
-      .map_err(|_| RpcError::InvalidNode(format!("response wasn't json: {res_str}")))
+      .map_err(|_| RpcError::InvalidNode(format!("response wasn't the expected json: {res_str}")))
   }
 
   /// Perform a JSON-RPC call with the specified method with the provided parameters.
@@ -285,15 +285,15 @@ pub trait Rpc: Sync + Clone + Debug {
   /// Get the active blockchain protocol version.
   ///
   /// This is specifically the major version within the most recent block header.
-  async fn get_protocol(&self) -> Result<u8, RpcError> {
+  async fn get_hardfork_version(&self) -> Result<u8, RpcError> {
     #[derive(Deserialize, Debug)]
-    struct ProtocolResponse {
-      hardfork_version: u8,
+    struct HeaderResponse {
+      major_version: u8,
     }
 
     #[derive(Deserialize, Debug)]
     struct LastHeaderResponse {
-      block_header: ProtocolResponse,
+      block_header: HeaderResponse,
     }
 
     Ok(
@@ -301,7 +301,7 @@ pub trait Rpc: Sync + Clone + Debug {
         .json_rpc_call::<LastHeaderResponse>("get_last_block_header", None)
         .await?
         .block_header
-        .hardfork_version,
+        .major_version,
     )
   }
 
