@@ -3,8 +3,8 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
 use monero_serai::transaction::Transaction;
 use monero_wallet::{
   rpc::Rpc,
-  Eventuality,
   address::{AddressType, AddressMeta, MoneroAddress},
+  send::Eventuality,
 };
 
 mod runner;
@@ -50,9 +50,8 @@ test!(
         ),
         4,
       );
-      builder.set_r_seed(Zeroizing::new([0xbb; 32]));
       let tx = builder.build().unwrap();
-      let eventuality = tx.eventuality().unwrap();
+      let eventuality = Eventuality::from(tx.clone());
       assert_eq!(
         eventuality,
         Eventuality::read::<&[u8]>(&mut eventuality.serialize().as_ref()).unwrap()

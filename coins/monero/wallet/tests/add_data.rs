@@ -1,5 +1,5 @@
 use monero_serai::transaction::Transaction;
-use monero_wallet::{rpc::Rpc, TransactionError, extra::MAX_ARBITRARY_DATA_SIZE};
+use monero_wallet::{rpc::Rpc, extra::MAX_ARBITRARY_DATA_SIZE, send::SendError};
 
 mod runner;
 
@@ -56,7 +56,7 @@ test!(
       let mut data = vec![b'a'; MAX_ARBITRARY_DATA_SIZE + 1];
 
       // Make sure we get an error if we try to add it to the TX
-      assert_eq!(builder.add_data(data.clone()), Err(TransactionError::TooMuchData));
+      assert_eq!(builder.add_data(data.clone()), Err(SendError::TooMuchData));
 
       // Reduce data size and retry. The data will now be 255 bytes long (including the added
       // marker), exactly

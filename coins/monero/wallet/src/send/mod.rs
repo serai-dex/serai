@@ -321,9 +321,25 @@ impl SignableTransaction {
       }
     }
 
-    let res = SignableTransaction { rct_type, sender_view_key, inputs, payments, data, fee_rate };
+    let mut res =
+      SignableTransaction { rct_type, sender_view_key, inputs, payments, data, fee_rate };
     res.validate()?;
+
+    // Shuffle the payments
+    {
+      let mut rng = res.seeded_rng(b"shuffle_payments");
+      res.payments.shuffle(&mut rng);
+    }
+
     Ok(res)
+  }
+
+  pub fn fee_rate(&self) -> FeeRate {
+    self.fee_rate
+  }
+
+  pub fn fee(&self) -> u64 {
+    self.weight_and_fee().1
   }
 
   pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
@@ -422,12 +438,6 @@ impl SignableTransaction {
     for (input, key_image) in sorted_inputs {
       self.inputs.push(input);
       key_images.push(key_image);
-    }
-
-    // Shuffle the payments
-    {
-      let mut rng = self.seeded_rng(b"shuffle_payments");
-      self.payments.shuffle(&mut rng);
     }
 
     SignableTransactionWithKeyImages { intent: self, key_images }

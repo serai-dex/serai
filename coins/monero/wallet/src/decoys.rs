@@ -32,7 +32,7 @@ async fn select_n<'a, R: RngCore + CryptoRng>(
   fingerprintable_canonical: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   // TODO: consider removing this extra RPC and expect the caller to handle it
-  if fingerprintable_canonical && height > rpc.get_height().await? {
+  if fingerprintable_canonical && (height > rpc.get_height().await?) {
     // TODO: Don't use InternalError for the caller's failure
     Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
   }

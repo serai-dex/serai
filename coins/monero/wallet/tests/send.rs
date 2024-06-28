@@ -2,15 +2,22 @@ use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  transaction::Transaction, Protocol, rpc::Rpc, extra::Extra, address::SubaddressIndex,
-  ReceivedOutput, SpendableOutput, DecoySelection, Decoys, SignableTransactionBuilder,
+  primitives::Decoys,
+  ringct::RctType,
+  transaction::Transaction,
+  rpc::Rpc,
+  address::SubaddressIndex,
+  extra::Extra,
+  scan::{ReceivedOutput, SpendableOutput},
+  DecoySelection,
 };
 
 mod runner;
+use runner::{SignableTransactionBuilder, ring_len};
 
 // Set up inputs, select decoys, then add them to the TX builder
 async fn add_inputs(
-  protocol: Protocol,
+  rct_type: RctType,
   rpc: &SimpleRequestRpc,
   outputs: Vec<ReceivedOutput>,
   builder: &mut SignableTransactionBuilder,
@@ -23,7 +30,7 @@ async fn add_inputs(
   let decoys = Decoys::fingerprintable_canonical_select(
     &mut OsRng,
     rpc,
-    protocol.ring_len(),
+    ring_len(rct_type),
     rpc.get_height().await.unwrap(),
     &spendable_outputs,
   )
@@ -66,8 +73,8 @@ test!(
     },
   ),
   (
-    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
-      add_inputs(protocol, &rpc, outputs, &mut builder).await;
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+      add_inputs(rct_type, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
     },
@@ -96,20 +103,20 @@ test!(
     },
   ),
   (
-    |protocol, rpc: SimpleRequestRpc, _, _, outputs: Vec<ReceivedOutput>| async move {
-      use monero_wallet::FeePriority;
+    |rct_type, rpc: SimpleRequestRpc, _, _, outputs: Vec<ReceivedOutput>| async move {
+      use monero_wallet::rpc::FeePriority;
 
-      let change_view = ViewPair::new(
-        &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-        Zeroizing::new(Scalar::random(&mut OsRng)),
-      );
+      let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
+      let change_view =
+        ViewPair::new(&Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE, view_priv.clone());
 
       let mut builder = SignableTransactionBuilder::new(
-        protocol,
-        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
+        rct_type,
+        view_priv,
         Change::new(&change_view, false),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );
-      add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
+      add_inputs(rct_type, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
 
       // Send to a subaddress
       let sub_view = ViewPair::new(
@@ -161,8 +168,8 @@ test!(
     },
   ),
   (
-    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
-      add_inputs(protocol, &rpc, outputs, &mut builder).await;
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+      add_inputs(rct_type, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 2);
       (builder.build().unwrap(), ())
     },
@@ -188,8 +195,8 @@ test!(
     },
   ),
   (
-    |protocol: Protocol, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
-      add_inputs(protocol, &rpc, outputs, &mut builder).await;
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+      add_inputs(rct_type, &rpc, outputs, &mut builder).await;
 
       for i in 0 .. 15 {
         builder.add_payment(addr, i + 1);
@@ -228,8 +235,8 @@ test!(
     },
   ),
   (
-    |protocol: Protocol, rpc, mut builder: Builder, _, outputs: Vec<ReceivedOutput>| async move {
-      add_inputs(protocol, &rpc, outputs, &mut builder).await;
+    |rct_type: RctType, rpc, mut builder: Builder, _, outputs: Vec<ReceivedOutput>| async move {
+      add_inputs(rct_type, &rpc, outputs, &mut builder).await;
 
       let view = runner::random_address().1;
       let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
@@ -285,15 +292,16 @@ test!(
     },
   ),
   (
-    |protocol, rpc: SimpleRequestRpc, _, addr, outputs: Vec<ReceivedOutput>| async move {
-      use monero_wallet::FeePriority;
+    |rct_type, rpc: SimpleRequestRpc, _, addr, outputs: Vec<ReceivedOutput>| async move {
+      use monero_wallet::rpc::FeePriority;
 
       let mut builder = SignableTransactionBuilder::new(
-        protocol,
-        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
+        rct_type,
+        Zeroizing::new(Scalar::random(&mut OsRng)),
         Change::fingerprintable(None),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );
-      add_inputs(protocol, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
+      add_inputs(rct_type, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
       builder.add_payment(addr, 10000);
       builder.add_payment(addr, 50000);
 

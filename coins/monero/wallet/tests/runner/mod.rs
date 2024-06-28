@@ -10,12 +10,24 @@ use tokio::sync::Mutex;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
+  ringct::RctType,
   transaction::Transaction,
-  rpc::Rpc,
-  ViewPair, Scanner,
+  rpc::{Rpc, FeeRate},
+  ViewPair,
   address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
-  SpendableOutput, FeeRate,
+  scan::{SpendableOutput, Scanner},
 };
+
+mod builder;
+pub use builder::SignableTransactionBuilder;
+
+pub fn ring_len(rct_type: RctType) -> usize {
+  match rct_type {
+    RctType::ClsagBulletproof => 11,
+    RctType::ClsagBulletproofPlus => 16,
+    _ => panic!("ring size unknown for RctType"),
+  }
+}
 
 pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
   let spend = Scalar::random(&mut OsRng);
@@ -56,7 +68,7 @@ pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u
     .await
     .unwrap()
     .into_iter()
-    .all(|output| output.is_some())
+    .any(|output| output.is_none())
   {
     height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
   }
@@ -160,8 +172,6 @@ macro_rules! test {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
         #[cfg(feature = "multisig")]
-        use transcript::{Transcript, RecommendedTranscript};
-        #[cfg(feature = "multisig")]
         use frost::{
           curve::Ed25519,
           Participant,
@@ -169,15 +179,19 @@ macro_rules! test {
         };
 
         use monero_wallet::{
-          Protocol,
+          primitives::Decoys,
+          ringct::RctType,
+          rpc::FeePriority,
           address::{Network, AddressSpec},
-          ViewPair, Scanner, Change, DecoySelection, Decoys, FeePriority,
-          SignableTransaction, SignableTransactionBuilder,
+          ViewPair,
+          DecoySelection,
+          scan::Scanner,
+          send::{Change, SignableTransaction},
         };
 
         use runner::{
-          random_address, rpc, mine_until_unlocked, get_miner_tx_output,
-          check_weight_and_fee,
+          SignableTransactionBuilder, ring_len, random_address, rpc, mine_until_unlocked,
+          get_miner_tx_output, check_weight_and_fee,
         };
 
         type Builder = SignableTransactionBuilder;
@@ -206,16 +220,21 @@ macro_rules! test {
 
           let rpc = rpc().await;
 
-          let view = ViewPair::new(spend_pub, Zeroizing::new(Scalar::random(&mut OsRng)));
+          let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
+          let view = ViewPair::new(spend_pub, view_priv.clone());
           let addr = view.address(Network::Mainnet, AddressSpec::Standard);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
-          let protocol = Protocol::try_from(rpc.get_protocol().await.unwrap()).unwrap();
+          let rct_type = match rpc.get_hardfork_version().await.unwrap() {
+            14 => RctType::ClsagBulletproof,
+            15 | 16 => RctType::ClsagBulletproofPlus,
+            _ => panic!("unrecognized hardfork version"),
+          };
 
           let builder = SignableTransactionBuilder::new(
-            protocol,
-            rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
+            rct_type,
+            view_priv,
             Change::new(
               &ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
@@ -223,6 +242,7 @@ macro_rules! test {
               ),
               false
             ),
+            rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
           );
 
           let sign = |tx: SignableTransaction| {
@@ -239,16 +259,7 @@ macro_rules! test {
                 {
                   let mut machines = HashMap::new();
                   for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-                    machines.insert(
-                      i,
-                      tx
-                        .clone()
-                        .multisig(
-                          &keys[&i],
-                          RecommendedTranscript::new(b"Monero Serai Test Transaction"),
-                        )
-                        .unwrap(),
-                    );
+                    machines.insert(i, tx.clone().multisig(&keys[&i]).unwrap());
                   }
 
                   frost::tests::sign_without_caching(&mut OsRng, machines, &[])
@@ -266,7 +277,7 @@ macro_rules! test {
             let decoys = Decoys::fingerprintable_canonical_select(
               &mut OsRng,
               &rpc,
-              protocol.ring_len(),
+              ring_len(rct_type),
               rpc.get_height().await.unwrap(),
               &[miner_tx.clone()],
             )
@@ -290,7 +301,7 @@ macro_rules! test {
 
           $(
             let (tx, state) = ($tx)(
-              protocol,
+              rct_type,
               rpc.clone(),
               builder.clone(),
               next_addr,

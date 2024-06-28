@@ -11,7 +11,7 @@ use monero_wallet::{
   rpc::Rpc,
   address::{Network, AddressSpec, SubaddressIndex, MoneroAddress},
   extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
-  Scanner,
+  scan::Scanner,
 };
 
 mod runner;

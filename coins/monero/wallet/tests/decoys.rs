@@ -3,7 +3,7 @@ use monero_wallet::{
   DEFAULT_LOCK_WINDOW,
   transaction::Transaction,
   rpc::{OutputResponse, Rpc},
-  SpendableOutput,
+  scan::SpendableOutput,
 };
 
 mod runner;
@@ -24,12 +24,12 @@ test!(
   ),
   (
     // Then make a second tx1
-    |protocol: Protocol, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
+    |rct_type: RctType, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
       let output_tx0: SpendableOutput = state;
       let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
-        protocol.ring_len(),
+        ring_len(rct_type),
         rpc.get_height().await.unwrap(),
         &[output_tx0.clone()],
       )
@@ -40,7 +40,7 @@ test!(
       builder.add_inputs(&inputs);
       builder.add_payment(addr, 1000000000000);
 
-      (builder.build().unwrap(), (protocol, output_tx0))
+      (builder.build().unwrap(), (rct_type, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
     |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
@@ -61,14 +61,14 @@ test!(
 
       // Select decoys using spendable output from tx0 as the real, and make sure DSA selects
       // the freshly unlocked output from tx1 as a decoy
-      let (protocol, output_tx0): (Protocol, SpendableOutput) = state;
+      let (rct_type, output_tx0): (RctType, SpendableOutput) = state;
       let mut selected_fresh_decoy = false;
       let mut attempts = 1000;
       while !selected_fresh_decoy && attempts > 0 {
         let decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng, // TODO: use a seeded RNG to consistently select the latest output
           &rpc,
-          protocol.ring_len(),
+          ring_len(rct_type),
           height,
           &[output_tx0.clone()],
         )
@@ -101,12 +101,12 @@ test!(
   ),
   (
     // Then make a second tx1
-    |protocol: Protocol, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
+    |rct_type: RctType, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
       let output_tx0: SpendableOutput = state;
       let decoys = Decoys::select(
         &mut OsRng,
         &rpc,
-        protocol.ring_len(),
+        ring_len(rct_type),
         rpc.get_height().await.unwrap(),
         &[output_tx0.clone()],
       )
@@ -117,7 +117,7 @@ test!(
       builder.add_inputs(&inputs);
       builder.add_payment(addr, 1000000000000);
 
-      (builder.build().unwrap(), (protocol, output_tx0))
+      (builder.build().unwrap(), (rct_type, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
     |rpc: SimpleRequestRpc, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
@@ -138,14 +138,14 @@ test!(
 
       // Select decoys using spendable output from tx0 as the real, and make sure DSA selects
       // the freshly unlocked output from tx1 as a decoy
-      let (protocol, output_tx0): (Protocol, SpendableOutput) = state;
+      let (rct_type, output_tx0): (RctType, SpendableOutput) = state;
       let mut selected_fresh_decoy = false;
       let mut attempts = 1000;
       while !selected_fresh_decoy && attempts > 0 {
         let decoys = Decoys::select(
           &mut OsRng, // TODO: use a seeded RNG to consistently select the latest output
           &rpc,
-          protocol.ring_len(),
+          ring_len(rct_type),
           height,
           &[output_tx0.clone()],
         )
