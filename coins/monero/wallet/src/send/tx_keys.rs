@@ -228,4 +228,12 @@ impl SignableTransaction {
     }
     res
   }
+
+  pub(crate) fn sum_output_masks(&self, key_images: &[EdwardsPoint]) -> Scalar {
+    self
+      .commitments_and_encrypted_amounts(key_images)
+      .into_iter()
+      .map(|(commitment, _)| commitment.mask)
+      .sum()
+  }
 }

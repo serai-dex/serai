@@ -11,7 +11,6 @@ use crate::{
 struct SignableTransactionBuilderInternal {
   protocol: WalletProtocol,
   fee_rate: FeeRate,
-
   r_seed: Option<Zeroizing<[u8; 32]>>,
   inputs: Vec<(SpendableOutput, Decoys)>,
   payments: Vec<(MoneroAddress, u64)>,

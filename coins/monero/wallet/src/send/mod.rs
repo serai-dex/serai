@@ -31,6 +31,13 @@ mod tx;
 mod eventuality;
 pub use eventuality::Eventuality;
 
+#[cfg(feature = "multisig")]
+mod multisig;
+
+pub(crate) fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
+  x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
+}
+
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 enum ChangeEnum {
   None,
@@ -406,9 +413,6 @@ impl SignableTransaction {
     debug_assert_eq!(self.inputs.len(), key_images.len());
 
     // Sort the inputs by their key images
-    fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
-      x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
-    }
     let mut sorted_inputs = self.inputs.into_iter().zip(key_images).collect::<Vec<_>>();
     sorted_inputs
       .sort_by(|(_, key_image_a), (_, key_image_b)| key_image_sort(key_image_a, key_image_b));
@@ -461,12 +465,7 @@ impl SignableTransaction {
     }
 
     // Get the output commitments' mask sum
-    let mask_sum = tx
-      .intent
-      .commitments_and_encrypted_amounts(&tx.key_images)
-      .into_iter()
-      .map(|(commitment, _)| commitment.mask)
-      .sum::<Scalar>();
+    let mask_sum = tx.intent.sum_output_masks(&tx.key_images);
 
     // Get the actual TX, just needing the CLSAGs
     let mut tx = tx.transaction_without_signatures();
