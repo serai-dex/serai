@@ -54,13 +54,22 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
+  /// Keeps shares and the amount of coins per account.
   #[pallet::storage]
-  pub(crate) type Liquidity<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Blake2_128Concat, PublicKey, SubstrateAmount, OptionQuery>;
+  pub(crate) type Liquidity<T: Config> = StorageDoubleMap<
+    _,
+    Identity,
+    Coin,
+    Blake2_128Concat,
+    PublicKey,
+    (SubstrateAmount, SubstrateAmount),
+    OptionQuery,
+  >;
 
   /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
-  pub(crate) type Supply<T: Config> = StorageMap<_, Identity, Coin, (u64, u64), OptionQuery>;
+  pub(crate) type Supply<T: Config> =
+    StorageMap<_, Identity, Coin, (SubstrateAmount, SubstrateAmount), OptionQuery>;
 
   #[pallet::storage]
   pub(crate) type EconomicSecurityReached<T: Config> =
@@ -190,18 +199,20 @@ pub mod pallet {
         let shares = Self::mul_div(supply.0, balance.amount.0, supply.1)?;
 
         // get new shares for this account
-        let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
-        let new = existing.checked_add(shares).ok_or(Error::<T>::AmountOverflowed)?;
-
+        let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or((0, 0));
         (
-          new,
+          (
+            existing.0.checked_add(shares).ok_or(Error::<T>::AmountOverflowed)?,
+            existing.1.checked_add(balance.amount.0).ok_or(Error::<T>::AmountOverflowed)?,
+          ),
           (
             supply.0.checked_add(shares).ok_or(Error::<T>::AmountOverflowed)?,
             supply.1.checked_add(balance.amount.0).ok_or(Error::<T>::AmountOverflowed)?,
           ),
         )
       } else {
-        (GENESIS_LP_SHARES, (GENESIS_LP_SHARES, balance.amount.0))
+        let first_amounts = (GENESIS_LP_SHARES, balance.amount.0);
+        (first_amounts, first_amounts)
       };
 
       // save
@@ -266,15 +277,17 @@ pub mod pallet {
     pub fn remove_coin_liquidity(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
       let account = ensure_signed(origin)?;
       let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
+      let supply = Supply::<T>::get(balance.coin).ok_or(Error::<T>::NotEnoughLiquidity)?;
 
       // check we are still in genesis period
-      if Self::genesis_ended() {
+      let (new_shares, new_supply) = if Self::genesis_ended() {
         // see how much liq tokens we have
         let total_liq_tokens =
           LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai).0;
 
         // get how much user wants to remove
-        let user_shares = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
+        let (user_shares, user_coins) =
+          Liquidity::<T>::get(balance.coin, account).unwrap_or((0, 0));
         let total_shares = Supply::<T>::get(balance.coin).unwrap_or((0, 0)).0;
         let user_liq_tokens = Self::mul_div(total_liq_tokens, user_shares, total_shares)?;
         let amount_to_remove = Self::mul_div(user_liq_tokens, balance.amount.0, GENESIS_LP_SHARES)?;
@@ -318,30 +331,47 @@ pub mod pallet {
           Balance { coin: Coin::Serai, amount: Amount(sri) },
         )?;
 
-        // save
-        let new_shares =
-          user_shares.checked_sub(amount_to_remove).ok_or(Error::<T>::AmountOverflowed)?;
-        if new_shares == 0 {
-          Liquidity::<T>::set(balance.coin, account, None);
-        } else {
-          Liquidity::<T>::set(balance.coin, account, Some(new_shares));
-        }
+        // return new amounts
+        (
+          (
+            user_shares.checked_sub(amount_to_remove).ok_or(Error::<T>::AmountOverflowed)?,
+            user_coins.checked_sub(coin_out).ok_or(Error::<T>::AmountOverflowed)?,
+          ),
+          (
+            supply.0.checked_sub(amount_to_remove).ok_or(Error::<T>::AmountOverflowed)?,
+            supply.1.checked_sub(coin_out).ok_or(Error::<T>::AmountOverflowed)?,
+          ),
+        )
       } else {
-        let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
-        if balance.amount.0 > existing || balance.amount.0 == 0 {
-          Err(Error::<T>::NotEnoughLiquidity)?;
-        }
-        if balance.amount.0 < existing {
+        if balance.amount.0 != GENESIS_LP_SHARES {
           Err(Error::<T>::CanOnlyRemoveFullAmount)?;
         }
+        let existing =
+          Liquidity::<T>::get(balance.coin, account).ok_or(Error::<T>::NotEnoughLiquidity)?;
 
-        // TODO: do external transfer instead for making it easier for the user?
-        // or do we even want to make it easier?
-        Coins::<T>::transfer(origin.into(), account, balance)?;
+        // transfer to the user
+        Coins::<T>::transfer(
+          origin.into(),
+          account,
+          Balance { coin: balance.coin, amount: Amount(existing.1) },
+        )?;
 
-        // save
+        (
+          (0, 0),
+          (
+            supply.0.checked_sub(existing.0).ok_or(Error::<T>::AmountOverflowed)?,
+            supply.1.checked_sub(existing.1).ok_or(Error::<T>::AmountOverflowed)?,
+          ),
+        )
+      };
+
+      // save
+      if new_shares.0 == 0 {
         Liquidity::<T>::set(balance.coin, account, None);
+      } else {
+        Liquidity::<T>::set(balance.coin, account, Some(new_shares));
       }
+      Supply::<T>::set(balance.coin, Some(new_supply));
 
       Self::deposit_event(Event::GenesisLiquidityRemoved { by: account.into(), balance });
       Ok(())

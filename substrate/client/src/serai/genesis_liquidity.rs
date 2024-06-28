@@ -41,7 +41,11 @@ impl<'a> SeraiGenesisLiquidity<'a> {
     })
   }
 
-  pub async fn liquidity(&self, address: &SeraiAddress, coin: Coin) -> Result<Amount, SeraiError> {
+  pub async fn liquidity(
+    &self,
+    address: &SeraiAddress,
+    coin: Coin,
+  ) -> Result<(Amount, Amount), SeraiError> {
     Ok(
       self
         .0
@@ -51,7 +55,7 @@ impl<'a> SeraiGenesisLiquidity<'a> {
           (coin, sp_core::hashing::blake2_128(&address.encode()), &address.0),
         )
         .await?
-        .unwrap_or(Amount(0)),
+        .unwrap_or((Amount(0), Amount(0))),
     )
   }
 

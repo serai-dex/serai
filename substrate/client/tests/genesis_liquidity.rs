@@ -147,7 +147,8 @@ async fn test_genesis_liquidity(serai: Serai) {
   // check each btc liq provider got liq tokens proportional to their value
   let btc_liq_supply = serai.genesis_liquidity().supply(Coin::Bitcoin).await.unwrap();
   for (acc, amount) in btc_addresses {
-    let acc_liq_shares = serai.genesis_liquidity().liquidity(&acc, Coin::Bitcoin).await.unwrap().0;
+    let acc_liq_shares =
+      serai.genesis_liquidity().liquidity(&acc, Coin::Bitcoin).await.unwrap().0 .0;
 
     // since we can't test the ratios directly(due to integer division giving 0)
     // we test whether they give the same result when multiplied by another constant.
@@ -160,7 +161,9 @@ async fn test_genesis_liquidity(serai: Serai) {
   // check each xmr liq provider got liq tokens proportional to their value
   let xmr_liq_supply = serai.genesis_liquidity().supply(Coin::Monero).await.unwrap();
   for (acc, amount) in xmr_addresses {
-    let acc_liq_shares = serai.genesis_liquidity().liquidity(&acc, Coin::Monero).await.unwrap().0;
+    let acc_liq_shares =
+      serai.genesis_liquidity().liquidity(&acc, Coin::Monero).await.unwrap().0 .0;
+
     let shares_ratio = (GENESIS_LP_SHARES * acc_liq_shares) / xmr_liq_supply.0 .0;
     let amounts_ratio = (GENESIS_LP_SHARES * amount.0) / u64::try_from(pool_xmr).unwrap();
     assert_eq!(shares_ratio, amounts_ratio);
