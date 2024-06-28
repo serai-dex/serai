@@ -7966,6 +7966,7 @@ dependencies = [
  "serai-dex-pallet",
  "serai-genesis-liquidity-primitives",
  "serai-primitives",
+ "serai-validator-sets-pallet",
  "serai-validator-sets-primitives",
  "sp-application-crypto",
  "sp-core",

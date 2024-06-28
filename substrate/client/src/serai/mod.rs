@@ -1,4 +1,3 @@
-use hex::FromHexError;
 use thiserror::Error;
 
 use async_lock::RwLock;
@@ -87,14 +86,6 @@ impl<'a> Clone for TemporalSerai<'a> {
   }
 }
 
-pub fn hex_decode(str: String) -> Result<Vec<u8>, FromHexError> {
-  if let Some(stripped) = str.strip_prefix("0x") {
-    hex::decode(stripped)
-  } else {
-    hex::decode(str)
-  }
-}
-
 impl Serai {
   pub async fn call<Req: Serialize, Res: DeserializeOwned>(
     &self,
@@ -147,11 +138,19 @@ impl Serai {
     }
   }
 
+  fn hex_decode(str: String) -> Result<Vec<u8>, SeraiError> {
+    (if let Some(stripped) = str.strip_prefix("0x") {
+      hex::decode(stripped)
+    } else {
+      hex::decode(str)
+    })
+    .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))
+  }
+
   pub async fn block_hash(&self, number: u64) -> Result<Option<[u8; 32]>, SeraiError> {
     let hash: Option<String> = self.call("chain_getBlockHash", [number]).await?;
     let Some(hash) = hash else { return Ok(None) };
-    hex_decode(hash)
-      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?
+    Self::hex_decode(hash)?
       .try_into()
       .map_err(|_| SeraiError::InvalidNode("didn't respond to getBlockHash with hash".to_string()))
       .map(Some)
@@ -204,8 +203,7 @@ impl Serai {
     let validators: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
       .await?;
-    let bytes = hex_decode(validators)
-      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
+    let bytes = Self::hex_decode(validators)?;
     let r = Vec::<Public>::decode(&mut bytes.as_slice())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(r)
@@ -213,12 +211,9 @@ impl Serai {
 
   pub async fn latest_finalized_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     let hash: String = self.call("chain_getFinalizedHead", ()).await?;
-    hex_decode(hash)
-      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?
-      .try_into()
-      .map_err(|_| {
-        SeraiError::InvalidNode("didn't respond to getFinalizedHead with hash".to_string())
-      })
+    Self::hex_decode(hash)?.try_into().map_err(|_| {
+      SeraiError::InvalidNode("didn't respond to getFinalizedHead with hash".to_string())
+    })
   }
 
   pub async fn header(&self, hash: [u8; 32]) -> Result<Option<Header>, SeraiError> {
@@ -228,7 +223,7 @@ impl Serai {
   pub async fn block(&self, hash: [u8; 32]) -> Result<Option<Block>, SeraiError> {
     let block: Option<String> = self.call("chain_getBlockBin", [hex::encode(hash)]).await?;
     let Some(block) = block else { return Ok(None) };
-    let Ok(bytes) = hex_decode(block) else {
+    let Ok(bytes) = Self::hex_decode(block) else {
       Err(SeraiError::InvalidNode("didn't return a hex-encoded block".to_string()))?
     };
     let Ok(block) = Block::decode(&mut bytes.as_slice()) else {
@@ -374,8 +369,7 @@ impl<'a> TemporalSerai<'a> {
     let res: Option<String> =
       self.serai.call("state_getStorage", [hex::encode(full_key), hex::encode(self.block)]).await?;
     let Some(res) = res else { return Ok(None) };
-    let res = hex_decode(res)
-      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
+    let res = Serai::hex_decode(res)?;
     Ok(Some(R::decode(&mut res.as_slice()).map_err(|_| {
       SeraiError::InvalidRuntime(format!(
         "different type present at storage location, raw value: {}",

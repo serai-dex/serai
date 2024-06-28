@@ -18,14 +18,7 @@ use scale_info::TypeInfo;
 use serai_primitives::*;
 use validator_sets_primitives::ValidatorSet;
 
-// amount of blocks in 30 days for 6s per block.
-pub const BLOCKS_PER_MONTH: u32 = 10 * 60 * 24 * 30;
-
-/// 180 days of blocks
-pub const GENESIS_SRI_TRICKLE_FEED: u64 = 10 * 60 * 24 * 180;
-
-// 100 Million SRI
-pub const GENESIS_SRI: u64 = 100_000_000 * 10_u64.pow(8);
+pub const GENESIS_LP_SHARES: u64 = 10_000;
 
 // This is the account to hold and manage the genesis liquidity.
 pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");

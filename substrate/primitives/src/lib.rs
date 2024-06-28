@@ -37,6 +37,9 @@ pub use balance::*;
 mod account;
 pub use account::*;
 
+mod constants;
+pub use constants::*;
+
 pub type BlockNumber = u64;
 pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
 

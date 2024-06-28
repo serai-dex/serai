@@ -5,19 +5,17 @@
 pub mod pallet {
   use super::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
-  use frame_support::{
-    pallet_prelude::*,
-    sp_runtime::{self, SaturatedConversion},
-  };
+  use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
-  use sp_std::{vec, vec::Vec, collections::btree_map::BTreeMap};
+  use sp_std::{vec, vec::Vec};
   use sp_core::sr25519::Signature;
   use sp_application_crypto::RuntimePublic;
 
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
+  use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
 
-  use serai_primitives::*;
+  use serai_primitives::{Coin, COINS, *};
   use validator_sets_primitives::{ValidatorSet, Session, musig_key};
   pub use genesis_liquidity_primitives as primitives;
   use primitives::*;
@@ -27,22 +25,13 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config + DexConfig + CoinsConfig + coins_pallet::Config<coins_pallet::Instance1>
+    frame_system::Config
+    + VsConfig
+    + DexConfig
+    + CoinsConfig
+    + coins_pallet::Config<coins_pallet::Instance1>
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-  }
-
-  #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-  pub struct GenesisConfig<T: Config> {
-    /// List of participants to place in the initial validator sets.
-    pub participants: Vec<T::AccountId>,
-  }
-
-  impl<T: Config> Default for GenesisConfig<T> {
-    fn default() -> Self {
-      GenesisConfig { participants: Default::default() }
-    }
   }
 
   #[pallet::error]
@@ -69,39 +58,34 @@ pub mod pallet {
   pub(crate) type Liquidity<T: Config> =
     StorageDoubleMap<_, Identity, Coin, Blake2_128Concat, PublicKey, SubstrateAmount, OptionQuery>;
 
+  /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
-  pub(crate) type LiquidityTokensPerAddress<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Blake2_128Concat, PublicKey, SubstrateAmount, OptionQuery>;
+  pub(crate) type Supply<T: Config> = StorageMap<_, Identity, Coin, (u64, u64), OptionQuery>;
 
   #[pallet::storage]
   pub(crate) type EconomicSecurityReached<T: Config> =
-    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, ValueQuery>;
+    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
 
   #[pallet::storage]
-  pub(crate) type Participants<T: Config> =
-    StorageMap<_, Identity, NetworkId, BoundedVec<PublicKey, ConstU32<150>>, ValueQuery>;
+  pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
-  pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, ValueQuery>;
-
-  #[pallet::genesis_build]
-  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-    fn build(&self) {
-      Participants::<T>::set(NetworkId::Serai, self.participants.clone().try_into().unwrap());
-    }
-  }
+  pub(crate) type GenesisComplete<T: Config> = StorageValue<_, bool, OptionQuery>;
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
       #[cfg(feature = "fast-epoch")]
-      let final_block = 25u32;
+      let final_block = 10u64;
 
       #[cfg(not(feature = "fast-epoch"))]
-      let final_block = BLOCKS_PER_MONTH;
+      let final_block = MONTHS;
 
       // Distribute the genesis sri to pools after a month
-      if n == final_block.into() {
+      if n.saturated_into::<u64>() >= final_block &&
+        Self::oraclization_is_done() &&
+        GenesisComplete::<T>::get().is_none()
+      {
         // mint the SRI
         Coins::<T>::mint(
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -109,8 +93,7 @@ pub mod pallet {
         )
         .unwrap();
 
-        // get coin values & total
-        let mut account_values = BTreeMap::new();
+        // get pool & total values
         let mut pool_values = vec![];
         let mut total_value: u128 = 0;
         for coin in COINS {
@@ -119,20 +102,11 @@ pub mod pallet {
           }
 
           // initial coin value in terms of btc
-          let value = Oracle::<T>::get(coin);
+          let Some(value) = Oracle::<T>::get(coin) else {
+            continue;
+          };
 
-          // get the pool & individual address values
-          account_values.insert(coin, vec![]);
-          let mut pool_amount: u128 = 0;
-          for (account, amount) in Liquidity::<T>::iter_prefix(coin) {
-            pool_amount = pool_amount.saturating_add(amount.into());
-            let value_this_addr =
-              u128::from(amount).saturating_mul(value.into()) / 10u128.pow(coin.decimals());
-            account_values.get_mut(&coin).unwrap().push((account, value_this_addr))
-          }
-          // sort, so that everyone has a consistent accounts vector per coin
-          account_values.get_mut(&coin).unwrap().sort();
-
+          let pool_amount = u128::from(Supply::<T>::get(coin).unwrap_or((0, 0)).1);
           let pool_value = pool_amount.saturating_mul(value.into()) / 10u128.pow(coin.decimals());
           total_value = total_value.saturating_add(pool_value);
           pool_values.push((coin, pool_amount, pool_value));
@@ -173,30 +147,6 @@ pub mod pallet {
             coin1: Balance { coin, amount: Amount(u64::try_from(pool_amount).unwrap()) },
             coin2: Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
           });
-
-          // set liquidity tokens per account
-          let tokens =
-            u128::from(LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin).0);
-          let mut total_tokens_this_coin: u128 = 0;
-
-          let accounts = account_values.get(&coin).unwrap();
-          for (i, (acc, acc_value)) in accounts.iter().enumerate() {
-            // give whatever left to the last account not to have rounding errors.
-            let liq_tokens_this_acc = if i == accounts.len() - 1 {
-              tokens - total_tokens_this_coin
-            } else {
-              tokens.saturating_mul(*acc_value) / pool_value
-            };
-
-            total_tokens_this_coin = total_tokens_this_coin.saturating_add(liq_tokens_this_acc);
-
-            LiquidityTokensPerAddress::<T>::set(
-              coin,
-              acc,
-              Some(u64::try_from(liq_tokens_this_acc).unwrap()),
-            );
-          }
-          assert_eq!(tokens, total_tokens_this_coin);
         }
         assert_eq!(total_sri_distributed, GENESIS_SRI);
 
@@ -205,15 +155,17 @@ pub mod pallet {
         for coin in COINS {
           assert_eq!(Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin), Amount(0));
         }
+
+        GenesisComplete::<T>::set(Some(true));
       }
 
       // we accept we reached economic security once we can mint smallest amount of a network's coin
       for coin in COINS {
         let existing = EconomicSecurityReached::<T>::get(coin.network());
-        if existing == 0u32.into() &&
+        if existing.is_none() &&
           <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
         {
-          EconomicSecurityReached::<T>::set(coin.network(), n);
+          EconomicSecurityReached::<T>::set(coin.network(), Some(n));
           Self::deposit_event(Event::EconomicSecurityReached { network: coin.network() });
         }
       }
@@ -232,36 +184,77 @@ pub mod pallet {
       // mint the coins
       Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), balance)?;
 
-      // save
-      let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
-      let new = existing.checked_add(balance.amount.0).ok_or(Error::<T>::AmountOverflowed)?;
-      Liquidity::<T>::set(balance.coin, account, Some(new));
+      // calculate new shares & supply
+      let (new_shares, new_supply) = if let Some(supply) = Supply::<T>::get(balance.coin) {
+        // calculate amount of shares for this amount
+        let shares = Self::mul_div(supply.0, balance.amount.0, supply.1)?;
 
+        // get new shares for this account
+        let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
+        let new = existing.checked_add(shares).ok_or(Error::<T>::AmountOverflowed)?;
+
+        (
+          new,
+          (
+            supply.0.checked_add(shares).ok_or(Error::<T>::AmountOverflowed)?,
+            supply.1.checked_add(balance.amount.0).ok_or(Error::<T>::AmountOverflowed)?,
+          ),
+        )
+      } else {
+        (GENESIS_LP_SHARES, (GENESIS_LP_SHARES, balance.amount.0))
+      };
+
+      // save
+      Liquidity::<T>::set(balance.coin, account, Some(new_shares));
+      Supply::<T>::set(balance.coin, Some(new_supply));
       Self::deposit_event(Event::GenesisLiquidityAdded { by: account.into(), balance });
       Ok(())
     }
 
-    /// Returns the number of blocks since the coin's network reached economic security first time.
-    /// If the network is yet to be reached that threshold, 0 is returned. And maximum of
-    /// `GENESIS_SRI_TRICKLE_FEED` returned.
-    fn blocks_since_ec_security(coin: &Coin) -> u64 {
-      let ec_security_block =
-        EconomicSecurityReached::<T>::get(coin.network()).saturated_into::<u64>();
-      let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
-      if ec_security_block > 0 {
-        let diff = current - ec_security_block;
-        if diff > GENESIS_SRI_TRICKLE_FEED {
-          return GENESIS_SRI_TRICKLE_FEED;
-        }
-
-        return diff;
+    /// Returns the number of blocks since the all networks reached economic security first time.
+    /// If networks is yet to be reached that threshold, None is returned.
+    fn blocks_since_ec_security() -> Option<u64> {
+      let mut min = u64::MAX;
+      for n in NETWORKS {
+        let ec_security_block = EconomicSecurityReached::<T>::get(n)?.saturated_into::<u64>();
+        let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
+        let diff = current.saturating_sub(ec_security_block);
+        min = diff.min(min);
       }
-
-      0
+      Some(min)
     }
 
     fn genesis_ended() -> bool {
-      <frame_system::Pallet<T>>::block_number() >= BLOCKS_PER_MONTH.into()
+      Self::oraclization_is_done() &&
+        <frame_system::Pallet<T>>::block_number().saturated_into::<u64>() >= MONTHS
+    }
+
+    fn oraclization_is_done() -> bool {
+      for c in COINS {
+        if c == Coin::Serai {
+          continue;
+        }
+
+        if Oracle::<T>::get(c).is_none() {
+          return false;
+        }
+      }
+
+      true
+    }
+
+    fn mul_div(a: u64, b: u64, c: u64) -> Result<u64, Error<T>> {
+      let a = u128::from(a);
+      let b = u128::from(b);
+      let c = u128::from(c);
+
+      let result = a
+        .checked_mul(b)
+        .ok_or(Error::<T>::AmountOverflowed)?
+        .checked_div(c)
+        .ok_or(Error::<T>::AmountOverflowed)?;
+
+      result.try_into().map_err(|_| Error::<T>::AmountOverflowed)
     }
   }
 
@@ -276,11 +269,15 @@ pub mod pallet {
 
       // check we are still in genesis period
       if Self::genesis_ended() {
-        // check user have enough to remove
-        let existing = LiquidityTokensPerAddress::<T>::get(balance.coin, account).unwrap_or(0);
-        if balance.amount.0 > existing {
-          Err(Error::<T>::NotEnoughLiquidity)?;
-        }
+        // see how much liq tokens we have
+        let total_liq_tokens =
+          LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai).0;
+
+        // get how much user wants to remove
+        let user_shares = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
+        let total_shares = Supply::<T>::get(balance.coin).unwrap_or((0, 0)).0;
+        let user_liq_tokens = Self::mul_div(total_liq_tokens, user_shares, total_shares)?;
+        let amount_to_remove = Self::mul_div(user_liq_tokens, balance.amount.0, GENESIS_LP_SHARES)?;
 
         // remove liquidity from pool
         let prev_sri = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
@@ -288,7 +285,7 @@ pub mod pallet {
         Dex::<T>::remove_liquidity(
           origin.clone().into(),
           balance.coin,
-          balance.amount.0,
+          amount_to_remove,
           1,
           1,
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -297,9 +294,10 @@ pub mod pallet {
         let current_coin = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin);
 
         // burn the SRI if necessary
+        // TODO: take into consideration movement between pools.
         let mut sri = current_sri.0.saturating_sub(prev_sri.0);
         let distance_to_full_pay =
-          GENESIS_SRI_TRICKLE_FEED - Self::blocks_since_ec_security(&balance.coin);
+          GENESIS_SRI_TRICKLE_FEED.saturating_sub(Self::blocks_since_ec_security().unwrap_or(0));
         let burn_sri_amount = sri.saturating_mul(distance_to_full_pay) / GENESIS_SRI_TRICKLE_FEED;
         Coins::<T>::burn(
           origin.clone().into(),
@@ -321,9 +319,13 @@ pub mod pallet {
         )?;
 
         // save
-        let existing = LiquidityTokensPerAddress::<T>::get(balance.coin, account).unwrap_or(0);
-        let new = existing.checked_sub(balance.amount.0).ok_or(Error::<T>::AmountOverflowed)?;
-        LiquidityTokensPerAddress::<T>::set(balance.coin, account, Some(new));
+        let new_shares =
+          user_shares.checked_sub(amount_to_remove).ok_or(Error::<T>::AmountOverflowed)?;
+        if new_shares == 0 {
+          Liquidity::<T>::set(balance.coin, account, None);
+        } else {
+          Liquidity::<T>::set(balance.coin, account, Some(new_shares));
+        }
       } else {
         let existing = Liquidity::<T>::get(balance.coin, account).unwrap_or(0);
         if balance.amount.0 > existing || balance.amount.0 == 0 {
@@ -345,7 +347,7 @@ pub mod pallet {
       Ok(())
     }
 
-    /// A call to submit the initial coi values.
+    /// A call to submit the initial coin values in terms of BTC.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn set_initial_price(
@@ -356,10 +358,10 @@ pub mod pallet {
       ensure_none(origin)?;
 
       // set the prices
-      Oracle::<T>::set(Coin::Bitcoin, prices.bitcoin);
-      Oracle::<T>::set(Coin::Monero, prices.monero);
-      Oracle::<T>::set(Coin::Ether, prices.ethereum);
-      Oracle::<T>::set(Coin::Dai, prices.dai);
+      Oracle::<T>::set(Coin::Bitcoin, Some(prices.bitcoin));
+      Oracle::<T>::set(Coin::Monero, Some(prices.monero));
+      Oracle::<T>::set(Coin::Ether, Some(prices.ethereum));
+      Oracle::<T>::set(Coin::Dai, Some(prices.dai));
       Ok(())
     }
   }
@@ -371,8 +373,26 @@ pub mod pallet {
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       match call {
         Call::set_initial_price { ref prices, ref signature } => {
+          // TODO: if this is supposed to be called after a month, serai set won't still be
+          // in the session 0? Ideally this should pull the session from Vs pallet?
           let set = ValidatorSet { network: NetworkId::Serai, session: Session(0) };
-          let signers = Participants::<T>::get(NetworkId::Serai);
+          let signers = ValidatorSets::<T>::participants_for_latest_decided_set(NetworkId::Serai)
+            .expect("no participant in the current set")
+            .into_iter()
+            .map(|(p, _)| p)
+            .collect::<Vec<_>>();
+
+          // check this didn't get called before
+          if Self::oraclization_is_done() {
+            Err(InvalidTransaction::Custom(0))?;
+          }
+
+          // make sure signers settings the price at the end of the genesis period.
+          // we don't need this check for tests.
+          #[cfg(not(feature = "fast-epoch"))]
+          if <frame_system::Pallet<T>>::block_number().saturated_into::<u64>() < MONTHS {
+            Err(InvalidTransaction::Custom(1))?;
+          }
 
           if !musig_key(set, &signers).verify(&set_initial_price_message(&set, prices), signature) {
             Err(InvalidTransaction::BadProof)?;

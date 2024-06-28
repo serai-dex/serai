@@ -32,6 +32,7 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../primitives", default-features = false }
@@ -51,6 +52,7 @@ std = [
 
   "coins-pallet/std",
   "dex-pallet/std",
+  "validator-sets-pallet/std",
 
   "serai-primitives/std",
   "genesis-liquidity-primitives/std",

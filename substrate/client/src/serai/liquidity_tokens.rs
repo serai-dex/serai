@@ -32,10 +32,10 @@ impl<'a> SeraiLiquidityTokens<'a> {
   }
 
   pub fn transfer(to: SeraiAddress, balance: Balance) -> serai_abi::Call {
-    serai_abi::Call::Coins(serai_abi::coins::Call::transfer { to, balance })
+    serai_abi::Call::LiquidityTokens(serai_abi::liquidity_tokens::Call::transfer { to, balance })
   }
 
   pub fn burn(balance: Balance) -> serai_abi::Call {
-    serai_abi::Call::Coins(serai_abi::coins::Call::burn { balance })
+    serai_abi::Call::LiquidityTokens(serai_abi::liquidity_tokens::Call::burn { balance })
   }
 }

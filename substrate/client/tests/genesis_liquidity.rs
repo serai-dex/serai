@@ -9,7 +9,7 @@ use schnorrkel::Schnorrkel;
 
 use serai_client::{
   genesis_liquidity::{
-    primitives::{GENESIS_LIQUIDITY_ACCOUNT, GENESIS_SRI},
+    primitives::{GENESIS_LIQUIDITY_ACCOUNT, GENESIS_LP_SHARES},
     SeraiGenesisLiquidity,
   },
   validator_sets::primitives::{musig_context, Session, ValidatorSet},
@@ -24,7 +24,7 @@ use sp_core::{sr25519::Signature, Pair as PairTrait};
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, insecure_pair_from_name,
+    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, insecure_pair_from_name, GENESIS_SRI,
   },
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
   Serai,
@@ -63,8 +63,6 @@ async fn test_genesis_liquidity(serai: Serai) {
       xmr_addresses.push((address, amount));
     }
   }
-  btc_addresses.sort_by(|a1, a2| a1.0.cmp(&a2.0));
-  xmr_addresses.sort_by(|a1, a2| a1.0.cmp(&a2.0));
 
   // btc batch
   let mut block_hash = BlockHash([0; 32]);
@@ -93,23 +91,25 @@ async fn test_genesis_liquidity(serai: Serai) {
   let batch = Batch { network: NetworkId::Monero, id: 0, block: block_hash, instructions: xmr_ins };
   provide_batch(&serai, batch).await;
 
-  // set prices
-  let prices = Prices { bitcoin: 10u64.pow(8), monero: 184100, ethereum: 4785000, dai: 1500 };
-  set_prices(&serai, &prices).await;
-
   // wait until genesis ends..
   tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
-    while serai.latest_finalized_block().await.unwrap().number() < 25 {
+    while serai.latest_finalized_block().await.unwrap().number() < 10 {
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
   })
   .await
   .unwrap();
 
+  // set prices
+  let prices = Prices { bitcoin: 10u64.pow(8), monero: 184100, ethereum: 4785000, dai: 1500 };
+  set_prices(&serai, &prices).await;
+
+  // wait little bit..
+  tokio::time::sleep(Duration::from_secs(12)).await;
+
   // check total SRI supply is +100M
   let last_block = serai.latest_finalized_block().await.unwrap().hash();
   let serai = serai.as_of(last_block);
-  // Check balance instead of supply
   let sri = serai.coins().coin_supply(Coin::Serai).await.unwrap();
   // there are 6 endowed accounts in dev-net. Take this into consideration when checking
   // for the total sri minted at this time.
@@ -136,65 +136,37 @@ async fn test_genesis_liquidity(serai: Serai) {
   let btc_sri = (pool_btc_value * u128::from(GENESIS_SRI)) / total_value;
   let xmr_sri = ((pool_xmr_value * u128::from(GENESIS_SRI)) / total_value) + 1;
 
-  let btc_reserves = serai.dex().get_reserves(Coin::Bitcoin, Coin::Serai).await.unwrap().unwrap();
+  let btc_reserves = serai.dex().get_reserves(Coin::Bitcoin).await.unwrap().unwrap();
   assert_eq!(u128::from(btc_reserves.0 .0), pool_btc);
   assert_eq!(u128::from(btc_reserves.1 .0), btc_sri);
 
-  let xmr_reserves = serai.dex().get_reserves(Coin::Monero, Coin::Serai).await.unwrap().unwrap();
+  let xmr_reserves = serai.dex().get_reserves(Coin::Monero).await.unwrap().unwrap();
   assert_eq!(u128::from(xmr_reserves.0 .0), pool_xmr);
   assert_eq!(u128::from(xmr_reserves.1 .0), xmr_sri);
 
   // check each btc liq provider got liq tokens proportional to their value
-  let btc_liq_token_supply = u128::from(
-    serai
-      .liquidity_tokens()
-      .token_balance(Coin::Bitcoin, GENESIS_LIQUIDITY_ACCOUNT)
-      .await
-      .unwrap()
-      .0,
-  );
-  let mut total_tokens_this_coin: u128 = 0;
-  for (i, (addr, amount)) in btc_addresses.iter().enumerate() {
-    let addr_value = (u128::from(amount.0) * u128::from(prices.bitcoin)) / 10u128.pow(8);
-    let addr_liq_tokens = if i == btc_addresses.len() - 1 {
-      btc_liq_token_supply - total_tokens_this_coin
-    } else {
-      (addr_value * btc_liq_token_supply) / pool_btc_value
-    };
+  let btc_liq_supply = serai.genesis_liquidity().supply(Coin::Bitcoin).await.unwrap();
+  for (acc, amount) in btc_addresses {
+    let acc_liq_shares = serai.genesis_liquidity().liquidity(&acc, Coin::Bitcoin).await.unwrap().0;
 
-    let addr_actual_token_amount =
-      serai.genesis_liquidity().liquidity_tokens(addr, Coin::Bitcoin).await.unwrap();
-
-    assert_eq!(addr_liq_tokens, addr_actual_token_amount.0.into());
-    total_tokens_this_coin += addr_liq_tokens;
+    // since we can't test the ratios directly(due to integer division giving 0)
+    // we test whether they give the same result when multiplied by another constant.
+    // Following test ensures the account in fact has the right amount of shares.
+    let shares_ratio = (GENESIS_LP_SHARES * acc_liq_shares) / btc_liq_supply.0 .0;
+    let amounts_ratio = (GENESIS_LP_SHARES * amount.0) / u64::try_from(pool_btc).unwrap();
+    assert_eq!(shares_ratio, amounts_ratio);
   }
 
   // check each xmr liq provider got liq tokens proportional to their value
-  let xmr_liq_token_supply = u128::from(
-    serai
-      .liquidity_tokens()
-      .token_balance(Coin::Monero, GENESIS_LIQUIDITY_ACCOUNT)
-      .await
-      .unwrap()
-      .0,
-  );
-  total_tokens_this_coin = 0;
-  for (i, (addr, amount)) in xmr_addresses.iter().enumerate() {
-    let addr_value = (u128::from(amount.0) * u128::from(prices.monero)) / 10u128.pow(12);
-    let addr_liq_tokens = if i == xmr_addresses.len() - 1 {
-      xmr_liq_token_supply - total_tokens_this_coin
-    } else {
-      (addr_value * xmr_liq_token_supply) / pool_xmr_value
-    };
-
-    let addr_actual_token_amount =
-      serai.genesis_liquidity().liquidity_tokens(addr, Coin::Monero).await.unwrap();
-
-    assert_eq!(addr_liq_tokens, addr_actual_token_amount.0.into());
-    total_tokens_this_coin += addr_liq_tokens;
+  let xmr_liq_supply = serai.genesis_liquidity().supply(Coin::Monero).await.unwrap();
+  for (acc, amount) in xmr_addresses {
+    let acc_liq_shares = serai.genesis_liquidity().liquidity(&acc, Coin::Monero).await.unwrap().0;
+    let shares_ratio = (GENESIS_LP_SHARES * acc_liq_shares) / xmr_liq_supply.0 .0;
+    let amounts_ratio = (GENESIS_LP_SHARES * amount.0) / u64::try_from(pool_xmr).unwrap();
+    assert_eq!(shares_ratio, amounts_ratio);
   }
 
-  // TODO: remove the liq before/after genesis ended.
+  // TODO: test remove the liq before/after genesis ended.
 }
 
 async fn set_prices(serai: &Serai, prices: &Prices) {

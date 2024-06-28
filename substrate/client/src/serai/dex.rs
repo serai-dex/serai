@@ -3,7 +3,7 @@ use serai_abi::primitives::{SeraiAddress, Amount, Coin};
 
 use scale::{decode_from_bytes, Encode};
 
-use crate::{SeraiError, hex_decode, TemporalSerai};
+use crate::{Serai, SeraiError, TemporalSerai};
 
 pub type DexEvent = serai_abi::dex::Event;
 
@@ -60,20 +60,19 @@ impl<'a> SeraiDex<'a> {
     })
   }
 
-  pub async fn get_reserves(
-    &self,
-    coin1: Coin,
-    coin2: Coin,
-  ) -> Result<Option<(Amount, Amount)>, SeraiError> {
-    let hash = self
+  /// Returns the reserves of `coin:SRI` pool.
+  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(Amount, Amount)>, SeraiError> {
+    let reserves = self
       .0
       .serai
-      .call("state_call", ["DexApi_get_reserves".to_string(), hex::encode((coin1, coin2).encode())])
+      .call(
+        "state_call",
+        ["DexApi_get_reserves".to_string(), hex::encode((coin, Coin::Serai).encode())],
+      )
       .await?;
-    let bytes = hex_decode(hash)
-      .map_err(|_| SeraiError::InvalidNode("expected hex from node wasn't hex".to_string()))?;
-    let resut = decode_from_bytes::<Option<(u64, u64)>>(bytes.into())
+    let bytes = Serai::hex_decode(reserves)?;
+    let result = decode_from_bytes::<Option<(u64, u64)>>(bytes.into())
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
-    Ok(resut.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
+    Ok(result.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
   }
 }
