@@ -169,7 +169,7 @@ macro_rules! test {
         use std::collections::HashMap;
 
         use zeroize::Zeroizing;
-        use rand_core::OsRng;
+        use rand_core::{RngCore, OsRng};
 
         use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
@@ -223,6 +223,8 @@ macro_rules! test {
           let rpc = rpc().await;
 
           let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
+          let mut outgoing_view = Zeroizing::new([0; 32]);
+          OsRng.fill_bytes(outgoing_view.as_mut());
           let view = ViewPair::new(spend_pub, view_priv.clone());
           let addr = view.address(Network::Mainnet, AddressSpec::Legacy);
 
@@ -236,7 +238,7 @@ macro_rules! test {
 
           let builder = SignableTransactionBuilder::new(
             rct_type,
-            view_priv,
+            outgoing_view,
             Change::new(
               &ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,

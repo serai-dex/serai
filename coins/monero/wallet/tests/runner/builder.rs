@@ -1,7 +1,5 @@
 use zeroize::{Zeroize, Zeroizing};
 
-use curve25519_dalek::Scalar;
-
 use monero_wallet::{
   primitives::Decoys,
   ringct::RctType,
@@ -16,7 +14,7 @@ use monero_wallet::{
 #[derive(Clone, PartialEq, Eq, Zeroize, Debug)]
 pub struct SignableTransactionBuilder {
   rct_type: RctType,
-  sender_view_key: Zeroizing<Scalar>,
+  outgoing_view_key: Zeroizing<[u8; 32]>,
   inputs: Vec<(SpendableOutput, Decoys)>,
   payments: Vec<(MoneroAddress, u64)>,
   change: Change,
@@ -27,13 +25,13 @@ pub struct SignableTransactionBuilder {
 impl SignableTransactionBuilder {
   pub fn new(
     rct_type: RctType,
-    sender_view_key: Zeroizing<Scalar>,
+    outgoing_view_key: Zeroizing<[u8; 32]>,
     change: Change,
     fee_rate: FeeRate,
   ) -> Self {
     Self {
       rct_type,
-      sender_view_key,
+      outgoing_view_key,
       inputs: vec![],
       payments: vec![],
       change,
@@ -74,7 +72,7 @@ impl SignableTransactionBuilder {
   pub fn build(self) -> Result<SignableTransaction, SendError> {
     SignableTransaction::new(
       self.rct_type,
-      self.sender_view_key,
+      self.outgoing_view_key,
       self.inputs,
       self.payments,
       self.change,

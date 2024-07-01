@@ -104,7 +104,7 @@ pub enum Wallet {
     handle: String,
     spend_key: Zeroizing<curve25519_dalek::scalar::Scalar>,
     view_pair: monero_wallet::ViewPair,
-    inputs: Vec<monero_wallet::ReceivedOutput>,
+    inputs: Vec<monero_wallet::scan::ReceivedOutput>,
   },
 }
 
@@ -192,8 +192,9 @@ impl Wallet {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
           rpc::Rpc,
-          ViewPair, Scanner,
           address::{Network, AddressSpec},
+          ViewPair,
+          scan::Scanner,
         };
 
         let mut bytes = [0; 64];
@@ -215,7 +216,7 @@ impl Wallet {
             Some(serde_json::json!({
               "wallet_address": view_pair.address(
                 Network::Mainnet,
-                AddressSpec::Standard
+                AddressSpec::Legacy
               ).to_string(),
               "amount_of_blocks": 200,
             })),
@@ -438,11 +439,12 @@ impl Wallet {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{
           io::decompress_point,
-          rpc::Rpc,
-          Protocol,
-          address::{Network, AddressType, AddressMeta, Address},
-          SpendableOutput, DecoySelection, Decoys, Change, FeePriority, Scanner,
-          SignableTransaction,
+          ringct::RctType,
+          rpc::{FeePriority, Rpc},
+          address::{Network, AddressType, Address},
+          DecoySelection, Decoys,
+          scan::{SpendableOutput, Scanner},
+          send::{Change, SignableTransaction},
         };
         use processor::{additional_key, networks::Monero};
 
@@ -462,7 +464,7 @@ impl Wallet {
         let mut decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng,
           &rpc,
-          Protocol::v16.ring_len(),
+          16,
           rpc.get_height().await.unwrap(),
           &these_inputs,
         )
@@ -472,10 +474,8 @@ impl Wallet {
         let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
         let to_addr = Address::new(
-          AddressMeta::new(
-            Network::Mainnet,
-            AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
-          ),
+          Network::Mainnet,
+          AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
           to_spend_key,
           ED25519_BASEPOINT_POINT * to_view_key.0,
         );
@@ -486,12 +486,14 @@ impl Wallet {
         if let Some(instruction) = instruction {
           data.push(Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode());
         }
+        let mut outgoing_view_key = Zeroizing::new([0; 32]);
+        OsRng.fill_bytes(outgoing_view_key.as_mut());
         let tx = SignableTransaction::new(
-          Protocol::v16,
-          None,
+          RctType::ClsagBulletproofPlus,
+          outgoing_view_key,
           these_inputs.drain(..).zip(decoys.drain(..)).collect(),
           vec![(to_addr, AMOUNT)],
-          &Change::new(view_pair, false),
+          Change::new(view_pair, false),
           data,
           rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         )
@@ -532,11 +534,9 @@ impl Wallet {
       Wallet::Monero { view_pair, .. } => {
         use monero_wallet::address::{Network, AddressSpec};
         ExternalAddress::new(
-          networks::monero::Address::new(
-            view_pair.address(Network::Mainnet, AddressSpec::Standard),
-          )
-          .unwrap()
-          .into(),
+          networks::monero::Address::new(view_pair.address(Network::Mainnet, AddressSpec::Legacy))
+            .unwrap()
+            .into(),
         )
         .unwrap()
       }

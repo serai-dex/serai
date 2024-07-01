@@ -419,7 +419,7 @@ impl Coordinator {
               "wallet_address": ViewPair::new(
                 ED25519_BASEPOINT_POINT,
                 Zeroizing::new(Scalar::ONE),
-              ).address(Network::Mainnet, AddressSpec::Standard).to_string(),
+              ).address(Network::Mainnet, AddressSpec::Legacy).to_string(),
               "amount_of_blocks": 1,
             })),
           )

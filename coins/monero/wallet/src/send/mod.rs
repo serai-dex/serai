@@ -33,6 +33,7 @@ pub use eventuality::Eventuality;
 
 #[cfg(feature = "multisig")]
 mod multisig;
+pub use multisig::TransactionMachine;
 
 pub(crate) fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -164,8 +165,6 @@ pub enum SendError {
     error("not enough funds (inputs {inputs}, outputs {outputs}, fee {fee:?})")
   )]
   NotEnoughFunds { inputs: u64, outputs: u64, fee: Option<u64> },
-  #[cfg_attr(feature = "std", error("invalid amount of key images specified"))]
-  InvalidAmountOfKeyImages,
   #[cfg_attr(feature = "std", error("wrong spend private key"))]
   WrongPrivateKey,
   #[cfg_attr(
@@ -183,7 +182,7 @@ pub enum SendError {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SignableTransaction {
   rct_type: RctType,
-  sender_view_key: Zeroizing<Scalar>,
+  outgoing_view_key: Zeroizing<[u8; 32]>,
   inputs: Vec<(SpendableOutput, Decoys)>,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
@@ -301,7 +300,7 @@ impl SignableTransaction {
 
   pub fn new(
     rct_type: RctType,
-    sender_view_key: Zeroizing<Scalar>,
+    outgoing_view_key: Zeroizing<[u8; 32]>,
     inputs: Vec<(SpendableOutput, Decoys)>,
     payments: Vec<(MoneroAddress, u64)>,
     change: Change,
@@ -322,7 +321,7 @@ impl SignableTransaction {
     }
 
     let mut res =
-      SignableTransaction { rct_type, sender_view_key, inputs, payments, data, fee_rate };
+      SignableTransaction { rct_type, outgoing_view_key, inputs, payments, data, fee_rate };
     res.validate()?;
 
     // Shuffle the payments
@@ -369,7 +368,7 @@ impl SignableTransaction {
     }
 
     write_byte(&u8::from(self.rct_type), w)?;
-    write_scalar(&self.sender_view_key, w)?;
+    w.write_all(self.outgoing_view_key.as_slice())?;
     write_vec(write_input, &self.inputs, w)?;
     write_vec(write_payment, &self.payments, w)?;
     write_vec(|data, w| write_vec(write_byte, data, w), &self.data, w)?;
@@ -412,7 +411,7 @@ impl SignableTransaction {
     let res = SignableTransaction {
       rct_type: RctType::try_from(read_byte(r)?)
         .map_err(|()| io::Error::other("unsupported/invalid RctType"))?,
-      sender_view_key: Zeroizing::new(read_scalar(r)?),
+      outgoing_view_key: Zeroizing::new(read_bytes(r)?),
       inputs: read_vec(read_input, r)?,
       payments: read_vec(read_payment, r)?,
       data: read_vec(|r| read_vec(read_byte, r), r)?,

@@ -15,14 +15,16 @@ use frost::{curve::Ed25519, ThresholdKeys};
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
+  ringct::RctType,
   transaction::Transaction,
   block::Block,
-  Protocol,
-  rpc::{RpcError, Rpc},
-  ViewPair, Scanner,
+  rpc::{FeeRate, RpcError, Rpc},
   address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
-  FeeRate, SpendableOutput, Change, DecoySelection, Decoys, TransactionError,
-  SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
+  ViewPair, DecoySelection, Decoys,
+  scan::{SpendableOutput, Scanner},
+  send::{
+    SendError, Change, SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
+  },
 };
 
 use tokio::time::sleep;
@@ -135,7 +137,7 @@ impl EventualityTrait for Eventuality {
   // Extra includess the one time keys which are derived from the plan ID, so a collision here is a
   // hash collision
   fn lookup(&self) -> Vec<u8> {
-    self.extra().to_vec()
+    self.extra()
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
@@ -157,13 +159,10 @@ impl EventualityTrait for Eventuality {
 }
 
 #[derive(Clone, Debug)]
-pub struct SignableTransaction {
-  transcript: RecommendedTranscript,
-  actual: MSignableTransaction,
-}
+pub struct SignableTransaction(MSignableTransaction);
 impl SignableTransactionTrait for SignableTransaction {
   fn fee(&self) -> u64 {
-    self.actual.fee()
+    self.0.fee()
   }
 }
 
@@ -307,7 +306,7 @@ impl Monero {
     payments: &[Payment<Self>],
     change: &Option<Address>,
     calculating_fee: bool,
-  ) -> Result<Option<(RecommendedTranscript, MSignableTransaction)>, NetworkError> {
+  ) -> Result<Option<MSignableTransaction>, NetworkError> {
     for payment in payments {
       assert_eq!(payment.balance.coin, Coin::Monero);
     }
@@ -316,15 +315,13 @@ impl Monero {
     let block_for_fee = self.get_block(block_number).await?;
     let fee_rate = self.median_fee(&block_for_fee).await?;
 
-    // Get the protocol for the specified block number
-    #[cfg(not(test))]
-    let protocol = Protocol::try_from(block_for_fee.header.hardfork_version)
-      .map_err(|()| NetworkError::ConnectionError)?;
-    // If this is a test, we won't be using a mainnet node and need a distinct protocol
-    // determination
-    // Just use whatever the node expects
-    #[cfg(test)]
-    let protocol = Protocol::try_from(self.rpc.get_protocol().await.unwrap()).unwrap();
+    // Determine the RCT proofs to make based off the hard fork
+    // TODO: Make a fn for this block which is duplicated with tests
+    let rct_type = match block_for_fee.header.hardfork_version {
+      14 => RctType::ClsagBulletproof,
+      15 | 16 => RctType::ClsagBulletproofPlus,
+      _ => panic!("Monero hard forked and the processor wasn't updated for it"),
+    };
 
     let spendable_outputs = inputs.iter().map(|input| input.0.clone()).collect::<Vec<_>>();
 
@@ -337,7 +334,12 @@ impl Monero {
     let decoys = Decoys::fingerprintable_canonical_select(
       &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
       &self.rpc,
-      protocol.ring_len(),
+      // TODO: Have Decoys take RctType
+      match rct_type {
+        RctType::ClsagBulletproof => 11,
+        RctType::ClsagBulletproofPlus => 16,
+        _ => panic!("selecting decoys for an unsupported RctType"),
+      },
       block_number + 1,
       &spendable_outputs,
     )
@@ -356,7 +358,7 @@ impl Monero {
       payments.push(Payment {
         address: Address::new(
           ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
-            .address(MoneroNetwork::Mainnet, AddressSpec::Standard),
+            .address(MoneroNetwork::Mainnet, AddressSpec::Legacy),
         )
         .unwrap(),
         balance: Balance { coin: Coin::Monero, amount: Amount(0) },
@@ -374,48 +376,43 @@ impl Monero {
       .collect::<Vec<_>>();
 
     match MSignableTransaction::new(
-      protocol,
-      // Use the plan ID as the r_seed
-      // This perfectly binds the plan while simultaneously allowing verifying the plan was
-      // executed with no additional communication
-      Some(Zeroizing::new(*plan_id)),
+      rct_type,
+      // Use the plan ID as the outgoing view key
+      Zeroizing::new(*plan_id),
       inputs.clone(),
       payments,
-      &Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
+      Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
       vec![],
       fee_rate,
     ) {
-      Ok(signable) => Ok(Some((transcript, signable))),
+      Ok(signable) => Ok(Some(signable)),
       Err(e) => match e {
-        TransactionError::MultiplePaymentIds => {
-          panic!("multiple payment IDs despite not supporting integrated addresses");
+        SendError::UnsupportedRctType => {
+          panic!("trying to use an RctType unsupported by monero-wallet")
         }
-        TransactionError::NoInputs |
-        TransactionError::NoOutputs |
-        TransactionError::InvalidDecoyQuantity |
-        TransactionError::NoChange |
-        TransactionError::TooManyOutputs |
-        TransactionError::TooMuchData |
-        TransactionError::TooLargeTransaction |
-        TransactionError::WrongPrivateKey => {
+        SendError::NoInputs |
+        SendError::InvalidDecoyQuantity |
+        SendError::NoOutputs |
+        SendError::TooManyOutputs |
+        SendError::NoChange |
+        SendError::TooMuchData |
+        SendError::TooLargeTransaction |
+        SendError::WrongPrivateKey => {
           panic!("created an Monero invalid transaction: {e}");
         }
-        TransactionError::ClsagError(_) |
-        TransactionError::InvalidTransaction(_) |
-        TransactionError::FrostError(_) => {
-          panic!("supposedly unreachable (at this time) Monero error: {e}");
+        SendError::MultiplePaymentIds => {
+          panic!("multiple payment IDs despite not supporting integrated addresses");
         }
-        TransactionError::NotEnoughFunds { inputs, outputs, fee } => {
+        SendError::NotEnoughFunds { inputs, outputs, fee } => {
           log::debug!(
-            "Monero NotEnoughFunds. inputs: {:?}, outputs: {:?}, fee: {fee}",
+            "Monero NotEnoughFunds. inputs: {:?}, outputs: {:?}, fee: {fee:?}",
             inputs,
             outputs
           );
           Ok(None)
         }
-        TransactionError::RpcError(e) => {
-          log::error!("RpcError when preparing transaction: {e:?}");
-          Err(map_rpc_err(e))
+        SendError::MaliciousSerialization | SendError::ClsagError(_) | SendError::FrostError(_) => {
+          panic!("supposedly unreachable (at this time) Monero error: {e}");
         }
       },
     }
@@ -433,7 +430,7 @@ impl Monero {
 
   #[cfg(test)]
   fn test_address() -> Address {
-    Address::new(Self::test_view_pair().address(MoneroNetwork::Mainnet, AddressSpec::Standard))
+    Address::new(Self::test_view_pair().address(MoneroNetwork::Mainnet, AddressSpec::Legacy))
       .unwrap()
   }
 }
@@ -627,7 +624,7 @@ impl Network for Monero {
       self
         .make_signable_transaction(block_number, &[0; 32], inputs, payments, change, true)
         .await?
-        .map(|(_, signable)| signable.fee()),
+        .map(|signable| signable.fee()),
     )
   }
 
@@ -645,9 +642,9 @@ impl Network for Monero {
       self
         .make_signable_transaction(block_number, plan_id, inputs, payments, change, false)
         .await?
-        .map(|(transcript, signable)| {
-          let signable = SignableTransaction { transcript, actual: signable };
-          let eventuality = signable.actual.eventuality().unwrap();
+        .map(|signable| {
+          let signable = SignableTransaction(signable);
+          let eventuality = signable.0.clone().into();
           (signable, eventuality)
         }),
     )
@@ -658,7 +655,7 @@ impl Network for Monero {
     keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    match transaction.actual.clone().multisig(&keys, transaction.transcript) {
+    match transaction.0.clone().multisig(&keys) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }
@@ -746,16 +743,17 @@ impl Network for Monero {
   #[cfg(test)]
   async fn test_send(&self, address: Address) -> Block {
     use zeroize::Zeroizing;
-    use rand_core::OsRng;
-    use monero_wallet::FeePriority;
+    use rand_core::{RngCore, OsRng};
+    use monero_wallet::rpc::FeePriority;
 
     let new_block = self.get_latest_block_number().await.unwrap() + 1;
     for _ in 0 .. 80 {
       self.mine_block().await;
     }
 
+    let new_block = self.rpc.get_block_by_number(new_block).await.unwrap();
     let outputs = Self::test_scanner()
-      .scan(&self.rpc, &self.rpc.get_block_by_number(new_block).await.unwrap())
+      .scan(&self.rpc, &new_block)
       .await
       .unwrap()
       .swap_remove(0)
@@ -765,12 +763,20 @@ impl Network for Monero {
     // The dust should always be sufficient for the fee
     let fee = Monero::DUST;
 
-    let protocol = Protocol::try_from(self.rpc.get_protocol().await.unwrap()).unwrap();
+    let rct_type = match new_block.header.hardfork_version {
+      14 => RctType::ClsagBulletproof,
+      15 | 16 => RctType::ClsagBulletproofPlus,
+      _ => panic!("Monero hard forked and the processor wasn't updated for it"),
+    };
 
     let decoys = Decoys::fingerprintable_canonical_select(
       &mut OsRng,
       &self.rpc,
-      protocol.ring_len(),
+      match rct_type {
+        RctType::ClsagBulletproof => 11,
+        RctType::ClsagBulletproofPlus => 16,
+        _ => panic!("selecting decoys for an unsupported RctType"),
+      },
       self.rpc.get_height().await.unwrap(),
       &outputs,
     )
@@ -779,12 +785,14 @@ impl Network for Monero {
 
     let inputs = outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
+    let mut outgoing_view_key = Zeroizing::new([0; 32]);
+    OsRng.fill_bytes(outgoing_view_key.as_mut());
     let tx = MSignableTransaction::new(
-      protocol,
-      None,
+      rct_type,
+      outgoing_view_key,
       inputs,
       vec![(address.into(), amount - fee)],
-      &Change::fingerprintable(Some(Self::test_address().into())),
+      Change::fingerprintable(Some(Self::test_address().into())),
       vec![],
       self.rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
     )

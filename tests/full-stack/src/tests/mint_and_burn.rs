@@ -95,7 +95,7 @@ async fn mint_and_burn_test() {
         };
 
         let addr = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
-          .address(Network::Mainnet, AddressSpec::Standard)
+          .address(Network::Mainnet, AddressSpec::Legacy)
           .to_string();
 
         let rpc = producer_handles.monero(ops).await;
@@ -350,11 +350,13 @@ async fn mint_and_burn_test() {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
       use monero_wallet::{
         io::decompress_point,
+        ringct::RctType,
         transaction::Timelock,
-        Protocol,
-        rpc::Rpc,
-        ViewPair, Scanner, DecoySelection, Decoys, Change, FeePriority, SignableTransaction,
-        address::{Network, AddressType, AddressMeta, MoneroAddress},
+        rpc::{FeePriority, Rpc},
+        ViewPair, DecoySelection, Decoys,
+        address::{Network, AddressType, MoneroAddress},
+        scan::Scanner,
+        send::{Change, SignableTransaction},
       };
 
       // Grab the first output on the chain
@@ -373,7 +375,7 @@ async fn mint_and_burn_test() {
       let decoys = Decoys::fingerprintable_canonical_select(
         &mut OsRng,
         &rpc,
-        Protocol::v16.ring_len(),
+        16,
         rpc.get_height().await.unwrap(),
         &[output.clone()],
       )
@@ -381,23 +383,23 @@ async fn mint_and_burn_test() {
       .unwrap()
       .swap_remove(0);
 
+      let mut outgoing_view_key = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(outgoing_view_key.as_mut());
       let tx = SignableTransaction::new(
-        Protocol::v16,
-        None,
+        RctType::ClsagBulletproofPlus,
+        outgoing_view_key,
         vec![(output, decoys)],
         vec![(
           MoneroAddress::new(
-            AddressMeta::new(
-              Network::Mainnet,
-              AddressType::Featured { guaranteed: true, subaddress: false, payment_id: None },
-            ),
+            Network::Mainnet,
+            AddressType::Featured { guaranteed: true, subaddress: false, payment_id: None },
             decompress_point(monero_key_pair.1.to_vec().try_into().unwrap()).unwrap(),
             ED25519_BASEPOINT_POINT *
               processor::additional_key::<processor::networks::monero::Monero>(0).0,
           ),
           1_100_000_000_000,
         )],
-        &Change::new(&view_pair, false),
+        Change::new(&view_pair, false),
         vec![Shorthand::transfer(None, serai_addr).encode()],
         rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       )
@@ -475,9 +477,10 @@ async fn mint_and_burn_test() {
       let spend = ED25519_BASEPOINT_TABLE * &Scalar::random(&mut OsRng);
       let view = Scalar::random(&mut OsRng);
 
-      use monero_wallet::address::{Network, AddressType, AddressMeta, MoneroAddress};
+      use monero_wallet::address::{Network, AddressType, MoneroAddress};
       let addr = MoneroAddress::new(
-        AddressMeta::new(Network::Mainnet, AddressType::Standard),
+        Network::Mainnet,
+        AddressType::Legacy,
         spend,
         ED25519_BASEPOINT_TABLE * &view,
       );
@@ -583,7 +586,7 @@ async fn mint_and_burn_test() {
 
     // Verify the received Monero TX
     {
-      use monero_wallet::{transaction::Transaction, rpc::Rpc, ViewPair, Scanner};
+      use monero_wallet::{transaction::Transaction, rpc::Rpc, ViewPair, scan::Scanner};
       let rpc = handles[0].monero(&ops).await;
       let mut scanner = Scanner::from_view(
         ViewPair::new(monero_spend, Zeroizing::new(monero_view)),

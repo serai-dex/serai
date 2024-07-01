@@ -107,12 +107,14 @@ test!(
       use monero_wallet::rpc::FeePriority;
 
       let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
+      let mut outgoing_view = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(outgoing_view.as_mut());
       let change_view =
         ViewPair::new(&Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE, view_priv.clone());
 
       let mut builder = SignableTransactionBuilder::new(
         rct_type,
-        view_priv,
+        outgoing_view,
         Change::new(&change_view, false),
         rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );
@@ -295,9 +297,11 @@ test!(
     |rct_type, rpc: SimpleRequestRpc, _, addr, outputs: Vec<ReceivedOutput>| async move {
       use monero_wallet::rpc::FeePriority;
 
+      let mut outgoing_view = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(outgoing_view.as_mut());
       let mut builder = SignableTransactionBuilder::new(
         rct_type,
-        Zeroizing::new(Scalar::random(&mut OsRng)),
+        outgoing_view,
         Change::fingerprintable(None),
         rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );

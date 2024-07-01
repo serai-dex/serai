@@ -16,14 +16,14 @@ use crate::{
 
 fn seeded_rng(
   dst: &'static [u8],
-  view_key: &Zeroizing<Scalar>,
+  outgoing_view_key: &Zeroizing<[u8; 32]>,
   output_keys: impl Iterator<Item = EdwardsPoint>,
 ) -> ChaCha20Rng {
   // Apply the DST
   let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
   transcript.extend(dst);
-  // Bind to the private view key to prevent foreign entities from rebuilding the transcript
-  transcript.extend(view_key.to_bytes());
+  // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
+  transcript.extend(outgoing_view_key.as_slice());
   // Ensure uniqueness across transactions by binding to a use-once object
   // The output key is also binding to the output's key image, making this use-once
   for key in output_keys {
@@ -34,7 +34,11 @@ fn seeded_rng(
 
 impl SignableTransaction {
   pub(crate) fn seeded_rng(&self, dst: &'static [u8]) -> ChaCha20Rng {
-    seeded_rng(dst, &self.sender_view_key, self.inputs.iter().map(|(input, _)| input.output.key()))
+    seeded_rng(
+      dst,
+      &self.outgoing_view_key,
+      self.inputs.iter().map(|(input, _)| input.output.key()),
+    )
   }
 
   fn has_payments_to_subaddresses(&self) -> bool {
