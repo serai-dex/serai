@@ -3,7 +3,7 @@ use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
 use monero_serai::transaction::Transaction;
 use monero_wallet::{
   rpc::Rpc,
-  address::{AddressType, AddressMeta, MoneroAddress},
+  address::{AddressType, MoneroAddress},
   send::Eventuality,
 };
 
@@ -17,7 +17,8 @@ test!(
       // Each have their own slight implications to eventualities
       builder.add_payment(
         MoneroAddress::new(
-          AddressMeta::new(Network::Mainnet, AddressType::Standard),
+          Network::Mainnet,
+          AddressType::Legacy,
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
         ),
@@ -25,7 +26,8 @@ test!(
       );
       builder.add_payment(
         MoneroAddress::new(
-          AddressMeta::new(Network::Mainnet, AddressType::Integrated([0xaa; 8])),
+          Network::Mainnet,
+          AddressType::LegacyIntegrated([0xaa; 8]),
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
         ),
@@ -33,7 +35,8 @@ test!(
       );
       builder.add_payment(
         MoneroAddress::new(
-          AddressMeta::new(Network::Mainnet, AddressType::Subaddress),
+          Network::Mainnet,
+          AddressType::Subaddress,
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
         ),
@@ -41,10 +44,8 @@ test!(
       );
       builder.add_payment(
         MoneroAddress::new(
-          AddressMeta::new(
-            Network::Mainnet,
-            AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
-          ),
+          Network::Mainnet,
+          AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
         ),

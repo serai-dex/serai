@@ -6,7 +6,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, scalar::Scalar};
 
 use monero_io::decompress_point;
 
-use crate::{Network, AddressType, AddressMeta, MoneroAddress};
+use crate::{Network, AddressType, MoneroAddress};
 
 const SPEND: [u8; 32] = hex!("f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7");
 const VIEW: [u8; 32] = hex!("4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce");
@@ -65,11 +65,11 @@ fn base58check() {
 #[test]
 fn standard_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, STANDARD).unwrap();
-  assert_eq!(addr.meta.network, Network::Mainnet);
-  assert_eq!(addr.meta.kind, AddressType::Standard);
-  assert!(!addr.meta.kind.is_subaddress());
-  assert_eq!(addr.meta.kind.payment_id(), None);
-  assert!(!addr.meta.kind.is_guaranteed());
+  assert_eq!(addr.network(), Network::Mainnet);
+  assert_eq!(addr.kind(), &AddressType::Legacy);
+  assert!(!addr.is_subaddress());
+  assert_eq!(addr.payment_id(), None);
+  assert!(!addr.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), STANDARD);
@@ -78,11 +78,11 @@ fn standard_address() {
 #[test]
 fn integrated_address() {
   let addr = MoneroAddress::from_str(Network::Mainnet, INTEGRATED).unwrap();
-  assert_eq!(addr.meta.network, Network::Mainnet);
-  assert_eq!(addr.meta.kind, AddressType::Integrated(PAYMENT_ID));
-  assert!(!addr.meta.kind.is_subaddress());
-  assert_eq!(addr.meta.kind.payment_id(), Some(PAYMENT_ID));
-  assert!(!addr.meta.kind.is_guaranteed());
+  assert_eq!(addr.network(), Network::Mainnet);
+  assert_eq!(addr.kind(), &AddressType::LegacyIntegrated(PAYMENT_ID));
+  assert!(!addr.is_subaddress());
+  assert_eq!(addr.payment_id(), Some(PAYMENT_ID));
+  assert!(!addr.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SPEND);
   assert_eq!(addr.view.compress().to_bytes(), VIEW);
   assert_eq!(addr.to_string(), INTEGRATED);
@@ -91,11 +91,11 @@ fn integrated_address() {
 #[test]
 fn subaddress() {
   let addr = MoneroAddress::from_str(Network::Mainnet, SUBADDRESS).unwrap();
-  assert_eq!(addr.meta.network, Network::Mainnet);
-  assert_eq!(addr.meta.kind, AddressType::Subaddress);
-  assert!(addr.meta.kind.is_subaddress());
-  assert_eq!(addr.meta.kind.payment_id(), None);
-  assert!(!addr.meta.kind.is_guaranteed());
+  assert_eq!(addr.network(), Network::Mainnet);
+  assert_eq!(addr.kind(), &AddressType::Subaddress);
+  assert!(addr.is_subaddress());
+  assert_eq!(addr.payment_id(), None);
+  assert!(!addr.is_guaranteed());
   assert_eq!(addr.spend.compress().to_bytes(), SUB_SPEND);
   assert_eq!(addr.view.compress().to_bytes(), SUB_VIEW);
   assert_eq!(addr.to_string(), SUBADDRESS);
@@ -125,8 +125,7 @@ fn featured() {
         let guaranteed = (features & GUARANTEED_FEATURE_BIT) == GUARANTEED_FEATURE_BIT;
 
         let kind = AddressType::Featured { subaddress, payment_id, guaranteed };
-        let meta = AddressMeta::new(network, kind);
-        let addr = MoneroAddress::new(meta, spend, view);
+        let addr = MoneroAddress::new(network, kind, spend, view);
 
         assert_eq!(addr.to_string().chars().next().unwrap(), first);
         assert_eq!(MoneroAddress::from_str(network, &addr.to_string()).unwrap(), addr);
@@ -190,14 +189,12 @@ fn featured_vectors() {
 
     assert_eq!(
       MoneroAddress::new(
-        AddressMeta::new(
-          network,
-          AddressType::Featured {
-            subaddress: vector.subaddress,
-            payment_id: vector.payment_id,
-            guaranteed: vector.guaranteed
-          }
-        ),
+        network,
+        AddressType::Featured {
+          subaddress: vector.subaddress,
+          payment_id: vector.payment_id,
+          guaranteed: vector.guaranteed
+        },
         spend,
         view
       )

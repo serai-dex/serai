@@ -24,7 +24,7 @@ pub mod extra;
 pub(crate) use extra::{PaymentId, Extra};
 
 pub use monero_address as address;
-use address::{Network, AddressType, SubaddressIndex, AddressSpec, AddressMeta, MoneroAddress};
+use address::{Network, AddressType, SubaddressIndex, AddressSpec, MoneroAddress};
 
 pub mod scan;
 
@@ -88,28 +88,23 @@ impl ViewPair {
     let mut spend = self.spend;
     let mut view: EdwardsPoint = self.view.deref() * ED25519_BASEPOINT_TABLE;
 
-    // construct the address meta
-    let meta = match spec {
-      AddressSpec::Standard => AddressMeta::new(network, AddressType::Standard),
-      AddressSpec::Integrated(payment_id) => {
-        AddressMeta::new(network, AddressType::Integrated(payment_id))
-      }
+    // construct the address type
+    let kind = match spec {
+      AddressSpec::Legacy => AddressType::Legacy,
+      AddressSpec::LegacyIntegrated(payment_id) => AddressType::LegacyIntegrated(payment_id),
       AddressSpec::Subaddress(index) => {
         (spend, view) = self.subaddress_keys(index);
-        AddressMeta::new(network, AddressType::Subaddress)
+        AddressType::Subaddress
       }
       AddressSpec::Featured { subaddress, payment_id, guaranteed } => {
         if let Some(index) = subaddress {
           (spend, view) = self.subaddress_keys(index);
         }
-        AddressMeta::new(
-          network,
-          AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed },
-        )
+        AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed }
       }
     };
 
-    MoneroAddress::new(meta, spend, view)
+    MoneroAddress::new(network, kind, spend, view)
   }
 }
 

@@ -117,11 +117,11 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
       assert_eq!(output.metadata.subaddress, Some(index));
       assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
     }
-    AddressSpec::Integrated(payment_id) => {
+    AddressSpec::LegacyIntegrated(payment_id) => {
       assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted(payment_id)));
       assert_eq!(output.metadata.subaddress, None);
     }
-    AddressSpec::Standard | AddressSpec::Featured { .. } => {
+    AddressSpec::Legacy | AddressSpec::Featured { .. } => {
       assert_eq!(output.metadata.subaddress, None);
       assert_eq!(output.metadata.payment_id, Some(PaymentId::Encrypted([0u8; 8])));
     }
@@ -131,7 +131,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
 async_sequential!(
   async fn receipt_of_wallet_rpc_tx_standard() {
-    from_wallet_rpc_to_self(AddressSpec::Standard).await;
+    from_wallet_rpc_to_self(AddressSpec::Legacy).await;
   }
 
   async fn receipt_of_wallet_rpc_tx_subaddress() {
@@ -141,7 +141,7 @@ async_sequential!(
   async fn receipt_of_wallet_rpc_tx_integrated() {
     let mut payment_id = [0u8; 8];
     OsRng.fill_bytes(&mut payment_id);
-    from_wallet_rpc_to_self(AddressSpec::Integrated(payment_id)).await;
+    from_wallet_rpc_to_self(AddressSpec::LegacyIntegrated(payment_id)).await;
   }
 );
 

@@ -106,7 +106,7 @@ impl SignableTransaction {
       let ecdh = match payment {
         // If we don't have the view key, use the key dedicated for this address (r A)
         InternalPayment::Payment(_, _) | InternalPayment::Change(_, None) => {
-          Zeroizing::new(key_to_use.deref() * addr.view)
+          Zeroizing::new(key_to_use.deref() * addr.view())
         }
         // If we do have the view key, use the commitment to the key (a R)
         InternalPayment::Change(_, Some(view)) => Zeroizing::new(view.deref() * tx_key_pub),
@@ -173,7 +173,7 @@ impl SignableTransaction {
       // TODO: Support subaddresses as change?
       debug_assert!(addr.is_subaddress());
 
-      return (tx_key.deref() * addr.spend, vec![]);
+      return (tx_key.deref() * addr.spend(), vec![]);
     }
 
     if should_use_additional_keys {
@@ -182,7 +182,7 @@ impl SignableTransaction {
         let addr = payment.address();
         // TODO: Double check this against wallet2
         if addr.is_subaddress() {
-          additional_keys_pub.push(additional_key.deref() * addr.spend);
+          additional_keys_pub.push(additional_key.deref() * addr.spend());
         } else {
           additional_keys_pub.push(additional_key.deref() * ED25519_BASEPOINT_TABLE)
         }

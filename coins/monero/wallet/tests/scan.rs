@@ -11,7 +11,7 @@ test!(
     |_, mut builder: Builder, _| async move {
       let view = runner::random_address().1;
       let scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
-      builder.add_payment(view.address(Network::Mainnet, AddressSpec::Standard), 5);
+      builder.add_payment(view.address(Network::Mainnet, AddressSpec::Legacy), 5);
       (builder.build().unwrap(), scanner)
     },
     |_, tx: Transaction, _, mut state: Scanner| async move {
@@ -54,7 +54,8 @@ test!(
       let mut payment_id = [0u8; 8];
       OsRng.fill_bytes(&mut payment_id);
 
-      builder.add_payment(view.address(Network::Mainnet, AddressSpec::Integrated(payment_id)), 5);
+      builder
+        .add_payment(view.address(Network::Mainnet, AddressSpec::LegacyIntegrated(payment_id)), 5);
       (builder.build().unwrap(), (scanner, payment_id))
     },
     |_, tx: Transaction, _, mut state: (Scanner, [u8; 8])| async move {

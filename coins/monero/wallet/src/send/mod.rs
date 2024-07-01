@@ -75,7 +75,7 @@ impl Change {
         // Which network doesn't matter as the derivations will all be the same
         Network::Mainnet,
         if !guaranteed {
-          AddressSpec::Standard
+          AddressSpec::Legacy
         } else {
           AddressSpec::Featured { subaddress: None, payment_id: None, guaranteed: true }
         },
@@ -390,7 +390,7 @@ impl SignableTransaction {
     fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
       String::from_utf8(read_vec(read_byte, r)?)
         .ok()
-        .and_then(|str| MoneroAddress::from_str_raw(&str).ok())
+        .and_then(|str| MoneroAddress::from_str_with_unchecked_network(&str).ok())
         .ok_or_else(|| io::Error::other("invalid address"))
     }
 

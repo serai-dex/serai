@@ -42,7 +42,7 @@ impl SignableTransaction {
     let mut res = Vec::with_capacity(self.payments.len());
     for (payment, shared_key_derivations) in self.payments.iter().zip(&shared_key_derivations) {
       let key =
-        (&shared_key_derivations.shared_key * ED25519_BASEPOINT_TABLE) + payment.address().spend;
+        (&shared_key_derivations.shared_key * ED25519_BASEPOINT_TABLE) + payment.address().spend();
       res.push(Output {
         key: key.compress(),
         amount: None,

@@ -14,7 +14,7 @@ use monero_wallet::{
   transaction::Transaction,
   rpc::{Rpc, FeeRate},
   ViewPair,
-  address::{Network, AddressType, AddressSpec, AddressMeta, MoneroAddress},
+  address::{Network, AddressType, AddressSpec, MoneroAddress},
   scan::{SpendableOutput, Scanner},
 };
 
@@ -36,11 +36,12 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
   (
     spend,
     ViewPair::new(spend_pub, view.clone()),
-    MoneroAddress {
-      meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
-      spend: spend_pub,
-      view: view.deref() * ED25519_BASEPOINT_TABLE,
-    },
+    MoneroAddress::new(
+      Network::Mainnet,
+      AddressType::Legacy,
+      spend_pub,
+      view.deref() * ED25519_BASEPOINT_TABLE,
+    ),
   )
 }
 
@@ -82,7 +83,7 @@ pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> Spe
   // Mine 60 blocks to unlock a miner TX
   let start = rpc.get_height().await.unwrap();
   rpc
-    .generate_blocks(&view.address(Network::Mainnet, AddressSpec::Standard).to_string(), 60)
+    .generate_blocks(&view.address(Network::Mainnet, AddressSpec::Legacy).to_string(), 60)
     .await
     .unwrap();
 
@@ -112,11 +113,12 @@ pub async fn rpc() -> SimpleRequestRpc {
     return rpc;
   }
 
-  let addr = MoneroAddress {
-    meta: AddressMeta::new(Network::Mainnet, AddressType::Standard),
-    spend: &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-    view: &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-  }
+  let addr = MoneroAddress::new(
+    Network::Mainnet,
+    AddressType::Legacy,
+    &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+    &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+  )
   .to_string();
 
   // Mine 40 blocks to ensure decoy availability
@@ -222,7 +224,7 @@ macro_rules! test {
 
           let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
           let view = ViewPair::new(spend_pub, view_priv.clone());
-          let addr = view.address(Network::Mainnet, AddressSpec::Standard);
+          let addr = view.address(Network::Mainnet, AddressSpec::Legacy);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
