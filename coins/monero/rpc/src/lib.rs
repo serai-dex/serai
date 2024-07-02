@@ -147,7 +147,7 @@ struct TransactionsResponse {
 #[derive(Deserialize, Debug)]
 pub struct OutputResponse {
   /// The height of the block this output was added to the chain in.
-  pub height: usize,
+  pub height: u32,
   /// If the output is unlocked, per the node's local view.
   pub unlocked: bool,
   /// The output's key.
@@ -309,10 +309,10 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// The height is defined as the amount of blocks on the blockchain. For a blockchain with only
   /// its genesis block, the height will be 1.
-  async fn get_height(&self) -> Result<usize, RpcError> {
+  async fn get_height(&self) -> Result<u32, RpcError> {
     #[derive(Deserialize, Debug)]
     struct HeightResponse {
-      height: usize,
+      height: u32,
     }
     Ok(self.rpc_call::<Option<()>, HeightResponse>("get_height", None).await?.height)
   }
@@ -397,7 +397,7 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
   /// `height - 1` for the latest block).
-  async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
+  async fn get_block_hash(&self, number: u32) -> Result<[u8; 32], RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockHeaderResponse {
       hash: String,
@@ -436,7 +436,7 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
   /// `height - 1` for the latest block).
-  async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
+  async fn get_block_by_number(&self, number: u32) -> Result<Block, RpcError> {
     #[derive(Deserialize, Debug)]
     struct BlockResponse {
       blob: String,
@@ -451,7 +451,7 @@ pub trait Rpc: Sync + Clone + Debug {
     // Make sure this is actually the block for this number
     match block.miner_tx.prefix().inputs.first() {
       Some(Input::Gen(actual)) => {
-        if usize::try_from(*actual).unwrap() == number {
+        if u32::try_from(*actual) == Ok(number) {
           Ok(block)
         } else {
           Err(RpcError::InvalidNode("different block than requested (number)".to_string()))
@@ -484,7 +484,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// block's header.
   async fn get_block_transactions_by_number(
     &self,
-    number: usize,
+    number: u32,
   ) -> Result<Vec<Transaction>, RpcError> {
     self.get_block_transactions(self.get_block_hash(number).await?).await
   }
@@ -647,7 +647,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// Get the output distribution.
   ///
   /// `from` and `to` are heights, not block numbers, and inclusive.
-  async fn get_output_distribution(&self, from: usize, to: usize) -> Result<Vec<u64>, RpcError> {
+  async fn get_output_distribution(&self, from: u32, to: u32) -> Result<Vec<u64>, RpcError> {
     #[derive(Deserialize, Debug)]
     struct Distribution {
       distribution: Vec<u64>,
@@ -716,7 +716,7 @@ pub trait Rpc: Sync + Clone + Debug {
   async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
-    height: usize,
+    height: u32,
     fingerprintable_canonical: bool,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
@@ -857,11 +857,11 @@ pub trait Rpc: Sync + Clone + Debug {
     &self,
     address: &str,
     block_count: usize,
-  ) -> Result<(Vec<[u8; 32]>, usize), RpcError> {
+  ) -> Result<(Vec<[u8; 32]>, u32), RpcError> {
     #[derive(Debug, Deserialize)]
     struct BlocksResponse {
       blocks: Vec<String>,
-      height: usize,
+      height: u32,
     }
 
     let res = self
