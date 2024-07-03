@@ -751,7 +751,7 @@ pub trait Rpc: Sync + Clone + Debug {
         };
         Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
           if fingerprintable_canonical {
-            Timelock::Block(height) >= txs[i].prefix().timelock
+            Timelock::Block(height) >= txs[i].prefix().additional_timelock
           } else {
             out.unlocked
           }

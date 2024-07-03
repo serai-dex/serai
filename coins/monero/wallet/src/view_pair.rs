@@ -6,7 +6,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint}
 
 use crate::{
   primitives::keccak256_to_scalar,
-  address::{Network, AddressType, SubaddressIndex, AddressCreationError, MoneroAddress},
+  address::{Network, AddressType, SubaddressIndex, MoneroAddress},
 };
 
 /// The pair of keys necessary to scan transactions.
@@ -57,40 +57,20 @@ impl ViewPair {
   ///
   /// Subaddresses SHOULD be used instead.
   pub fn legacy_address(&self, network: Network) -> MoneroAddress {
-    match MoneroAddress::new(network, AddressType::Legacy, self.spend, self.view()) {
-      Ok(addr) => addr,
-      Err(AddressCreationError::SmallOrderView) => {
-        panic!("small-order view key error despite not making a guaranteed address")
-      }
-    }
+    MoneroAddress::new(network, AddressType::Legacy, self.spend, self.view())
   }
 
   /// Derive a legacy integrated address from this ViewPair.
   ///
   /// Subaddresses SHOULD be used instead.
   pub fn legacy_integrated_address(&self, network: Network, payment_id: [u8; 8]) -> MoneroAddress {
-    match MoneroAddress::new(
-      network,
-      AddressType::LegacyIntegrated(payment_id),
-      self.spend,
-      self.view(),
-    ) {
-      Ok(addr) => addr,
-      Err(AddressCreationError::SmallOrderView) => {
-        panic!("small-order view key error despite not making a guaranteed address")
-      }
-    }
+    MoneroAddress::new(network, AddressType::LegacyIntegrated(payment_id), self.spend, self.view())
   }
 
   /// Derive a subaddress from this ViewPair.
   pub fn subaddress(&self, network: Network, subaddress: SubaddressIndex) -> MoneroAddress {
     let (spend, view) = self.subaddress_keys(subaddress);
-    match MoneroAddress::new(network, AddressType::Subaddress, spend, view) {
-      Ok(addr) => addr,
-      Err(AddressCreationError::SmallOrderView) => {
-        panic!("small-order view key error despite not making a guaranteed address")
-      }
-    }
+    MoneroAddress::new(network, AddressType::Subaddress, spend, view)
   }
 }
 
@@ -106,14 +86,8 @@ pub struct GuaranteedViewPair(pub(crate) ViewPair);
 
 impl GuaranteedViewPair {
   /// Create a new GuaranteedViewPair.
-  ///
-  /// This will return None if the view key is of small order (if it's zero).
-  // Internal doc comment: These scalars are of prime order so 0 is the only small order Scalar
-  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Option<Self> {
-    if view.deref() == &Scalar::ZERO {
-      None?;
-    }
-    Some(GuaranteedViewPair(ViewPair::new(spend, view)))
+  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Self {
+    GuaranteedViewPair(ViewPair::new(spend, view))
   }
 
   /// The public spend key for this GuaranteedViewPair.
@@ -142,16 +116,11 @@ impl GuaranteedViewPair {
       (self.spend(), self.view())
     };
 
-    match MoneroAddress::new(
+    MoneroAddress::new(
       network,
       AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed: true },
       spend,
       view,
-    ) {
-      Ok(addr) => addr,
-      Err(AddressCreationError::SmallOrderView) => {
-        panic!("created a ViewPair with identity as the view key")
-      }
-    }
+    )
   }
 }

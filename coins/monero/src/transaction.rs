@@ -141,11 +141,11 @@ impl Output {
 /// longer of the two will be the timelock used.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum Timelock {
-  /// No timelock.
+  /// No additional timelock.
   None,
-  /// Locked until this block.
+  /// Additionally locked until this block.
   Block(usize),
-  /// Locked until this many seconds since the epoch.
+  /// Additionally locked until this many seconds since the epoch.
   Time(u64),
 }
 
@@ -199,9 +199,11 @@ impl PartialOrd for Timelock {
 /// handle it. It excludes any proofs.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TransactionPrefix {
-  /// The timelock this transaction uses.
-  // TODO: Rename to additional timelock?
-  pub timelock: Timelock,
+  /// The timelock this transaction is additionally constrained by.
+  ///
+  /// All transactions on the blockchain are subject to a 10-block lock. This adds a further
+  /// constraint.
+  pub additional_timelock: Timelock,
   /// The inputs for this transaction.
   pub inputs: Vec<Input>,
   /// The outputs for this transaction.
@@ -218,7 +220,7 @@ impl TransactionPrefix {
   ///
   /// This is distinct from Monero in that it won't write any version.
   fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    self.timelock.write(w)?;
+    self.additional_timelock.write(w)?;
     write_vec(Input::write, &self.inputs, w)?;
     write_vec(Output::write, &self.outputs, w)?;
     write_varint(&self.extra.len(), w)?;
@@ -230,7 +232,7 @@ impl TransactionPrefix {
   /// This is distinct from Monero in that it won't read the version. The version must be passed
   /// in.
   pub fn read<R: Read>(r: &mut R, version: u64) -> io::Result<TransactionPrefix> {
-    let timelock = Timelock::read(r)?;
+    let additional_timelock = Timelock::read(r)?;
 
     let inputs = read_vec(|r| Input::read(r), r)?;
     if inputs.is_empty() {
@@ -239,7 +241,7 @@ impl TransactionPrefix {
     let is_miner_tx = matches!(inputs[0], Input::Gen { .. });
 
     let mut prefix = TransactionPrefix {
-      timelock,
+      additional_timelock,
       inputs,
       outputs: read_vec(|r| Output::read((!is_miner_tx) && (version == 2), r), r)?,
       extra: vec![],

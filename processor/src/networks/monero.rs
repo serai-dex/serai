@@ -256,7 +256,7 @@ impl Monero {
   }
 
   fn view_pair(spend: EdwardsPoint) -> GuaranteedViewPair {
-    GuaranteedViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0)).unwrap()
+    GuaranteedViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
   }
 
   fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {

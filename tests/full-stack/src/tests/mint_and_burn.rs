@@ -387,8 +387,7 @@ async fn mint_and_burn_test() {
             decompress_point(monero_key_pair.1.to_vec().try_into().unwrap()).unwrap(),
             ED25519_BASEPOINT_POINT *
               processor::additional_key::<processor::networks::monero::Monero>(0).0,
-          )
-          .unwrap(),
+          ),
           1_100_000_000_000,
         )],
         Change::new(&view_pair),
@@ -475,8 +474,7 @@ async fn mint_and_burn_test() {
         AddressType::Legacy,
         spend,
         ED25519_BASEPOINT_TABLE * &view,
-      )
-      .unwrap();
+      );
 
       (spend, view, addr)
     };

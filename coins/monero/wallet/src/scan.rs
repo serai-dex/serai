@@ -231,7 +231,7 @@ impl InternalScanner {
             key: output_key,
             key_offset,
             commitment,
-            additional_timelock: tx.prefix().timelock,
+            additional_timelock: tx.prefix().additional_timelock,
           },
           metadata: Metadata { subaddress, payment_id, arbitrary_data: extra.data() },
         });

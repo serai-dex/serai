@@ -62,7 +62,7 @@ impl Eventuality {
     }
 
     // Also ensure no timelock was set
-    if tx.prefix().timelock != Timelock::None {
+    if tx.prefix().additional_timelock != Timelock::None {
       return false;
     }
 

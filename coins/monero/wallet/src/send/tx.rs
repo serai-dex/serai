@@ -151,7 +151,7 @@ impl SignableTransaction {
       // `- 1` to remove the one byte for the 0 fee
       Transaction::V2 {
         prefix: TransactionPrefix {
-          timelock: Timelock::None,
+          additional_timelock: Timelock::None,
           inputs: self.inputs(&key_images),
           outputs: self.outputs(&key_images),
           extra: self.extra(),
@@ -239,7 +239,7 @@ impl SignableTransactionWithKeyImages {
 
     Transaction::V2 {
       prefix: TransactionPrefix {
-        timelock: Timelock::None,
+        additional_timelock: Timelock::None,
         inputs: self.intent.inputs(&self.key_images),
         outputs: self.intent.outputs(&self.key_images),
         extra: self.intent.extra(),

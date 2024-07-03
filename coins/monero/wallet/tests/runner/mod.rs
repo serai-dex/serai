@@ -41,8 +41,7 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
       AddressType::Legacy,
       spend_pub,
       view.deref() * ED25519_BASEPOINT_TABLE,
-    )
-    .unwrap(),
+    ),
   )
 }
 
@@ -53,14 +52,13 @@ pub fn random_guaranteed_address() -> (Scalar, GuaranteedViewPair, MoneroAddress
   let view = Zeroizing::new(Scalar::random(&mut OsRng));
   (
     spend,
-    GuaranteedViewPair::new(spend_pub, view.clone()).unwrap(),
+    GuaranteedViewPair::new(spend_pub, view.clone()),
     MoneroAddress::new(
       Network::Mainnet,
       AddressType::Legacy,
       spend_pub,
       view.deref() * ED25519_BASEPOINT_TABLE,
-    )
-    .unwrap(),
+    ),
   )
 }
 
@@ -141,7 +139,6 @@ pub async fn rpc() -> SimpleRequestRpc {
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
   )
-  .unwrap()
   .to_string();
 
   // Mine 40 blocks to ensure decoy availability

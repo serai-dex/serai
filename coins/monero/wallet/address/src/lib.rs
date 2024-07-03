@@ -8,7 +8,7 @@ use std_shims::string::ToString;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::{traits::IsIdentity, EdwardsPoint};
+use curve25519_dalek::EdwardsPoint;
 
 use monero_io::*;
 
@@ -341,15 +341,6 @@ pub const MONERO_BYTES: NetworkedAddressBytes = match NetworkedAddressBytes::new
   None => panic!("Monero network byte constants conflicted"),
 };
 
-/// Errors when creating an address.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
-pub enum AddressCreationError {
-  /// The view key was of small order despite being in a guaranteed address.
-  #[cfg_attr(feature = "std", error("small-order view key in guaranteed address"))]
-  SmallOrderView,
-}
-
 /// A Monero address.
 #[derive(Clone, Copy, PartialEq, Eq, Zeroize)]
 pub struct Address<const ADDRESS_BYTES: u128> {
@@ -404,16 +395,8 @@ impl<const ADDRESS_BYTES: u128> fmt::Display for Address<ADDRESS_BYTES> {
 
 impl<const ADDRESS_BYTES: u128> Address<ADDRESS_BYTES> {
   /// Create a new address.
-  pub fn new(
-    network: Network,
-    kind: AddressType,
-    spend: EdwardsPoint,
-    view: EdwardsPoint,
-  ) -> Result<Self, AddressCreationError> {
-    if kind.is_guaranteed() && view.mul_by_cofactor().is_identity() {
-      Err(AddressCreationError::SmallOrderView)?;
-    }
-    Ok(Address { network, kind, spend, view })
+  pub fn new(network: Network, kind: AddressType, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
+    Address { network, kind, spend, view }
   }
 
   /// Parse an address from a String, accepting any network it is.
@@ -453,11 +436,6 @@ impl<const ADDRESS_BYTES: u128> Address<ADDRESS_BYTES> {
 
     if !raw.is_empty() {
       Err(AddressError::InvalidLength)?;
-    }
-
-    // If this is a guaranteed address, reject small-order view keys
-    if kind.is_guaranteed() && view.mul_by_cofactor().is_identity() {
-      Err(AddressError::SmallOrderView)?;
     }
 
     Ok(Address { network, kind, spend, view })

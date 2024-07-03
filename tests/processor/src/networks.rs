@@ -463,8 +463,7 @@ impl Wallet {
           AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
           to_spend_key,
           ED25519_BASEPOINT_POINT * to_view_key.0,
-        )
-        .unwrap();
+        );
 
         // Create and sign the TX
         const AMOUNT: u64 = 1_000_000_000_000;
