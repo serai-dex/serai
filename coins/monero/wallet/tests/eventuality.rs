@@ -21,7 +21,8 @@ test!(
           AddressType::Legacy,
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
-        ),
+        )
+        .unwrap(),
         1,
       );
       builder.add_payment(
@@ -30,7 +31,8 @@ test!(
           AddressType::LegacyIntegrated([0xaa; 8]),
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
-        ),
+        )
+        .unwrap(),
         2,
       );
       builder.add_payment(
@@ -39,7 +41,8 @@ test!(
           AddressType::Subaddress,
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
-        ),
+        )
+        .unwrap(),
         3,
       );
       builder.add_payment(
@@ -48,7 +51,8 @@ test!(
           AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
           ED25519_BASEPOINT_POINT,
           ED25519_BASEPOINT_POINT,
-        ),
+        )
+        .unwrap(),
         4,
       );
       let tx = builder.build().unwrap();
@@ -59,7 +63,7 @@ test!(
       );
       (tx, eventuality)
     },
-    |_, mut tx: Transaction, _, eventuality: Eventuality| async move {
+    |_, _, mut tx: Transaction, _, eventuality: Eventuality| async move {
       // 4 explicitly outputs added and one change output
       assert_eq!(tx.prefix().outputs.len(), 5);
 

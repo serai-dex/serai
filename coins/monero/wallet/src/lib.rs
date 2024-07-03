@@ -3,11 +3,9 @@
 // #![deny(missing_docs)] // TODO
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::ops::Deref;
+use zeroize::{Zeroize, Zeroizing};
 
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-
-use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint};
+use curve25519_dalek::{Scalar, EdwardsPoint};
 
 use monero_serai::{
   io::write_varint,
@@ -20,99 +18,34 @@ pub use monero_serai::*;
 
 pub use monero_rpc as rpc;
 
+pub use monero_address as address;
+
+mod view_pair;
+pub use view_pair::{ViewPair, GuaranteedViewPair};
+
 pub mod extra;
 pub(crate) use extra::{PaymentId, Extra};
 
-pub use monero_address as address;
-use address::{Network, AddressType, SubaddressIndex, AddressSpec, MoneroAddress};
+pub(crate) mod output;
+pub use output::WalletOutput;
 
-pub mod scan;
+mod scan;
+pub use scan::{Scanner, GuaranteedScanner};
 
 #[cfg(feature = "std")]
-pub mod decoys;
+mod decoys;
 #[cfg(not(feature = "std"))]
-pub mod decoys {
+mod decoys {
   pub use monero_serai::primitives::Decoys;
   pub trait DecoySelection {}
 }
 pub use decoys::{DecoySelection, Decoys};
 
+/// Structs and functionality for sending transactions.
 pub mod send;
 
-/* TODO
 #[cfg(test)]
 mod tests;
-*/
-
-/// The private view key and public spend key, enabling scanning transactions.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct ViewPair {
-  spend: EdwardsPoint,
-  view: Zeroizing<Scalar>,
-}
-
-impl ViewPair {
-  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> ViewPair {
-    ViewPair { spend, view }
-  }
-
-  pub fn spend(&self) -> EdwardsPoint {
-    self.spend
-  }
-
-  pub fn view(&self) -> EdwardsPoint {
-    self.view.deref() * ED25519_BASEPOINT_TABLE
-  }
-
-  fn subaddress_derivation(&self, index: SubaddressIndex) -> Scalar {
-    keccak256_to_scalar(Zeroizing::new(
-      [
-        b"SubAddr\0".as_ref(),
-        Zeroizing::new(self.view.to_bytes()).as_ref(),
-        &index.account().to_le_bytes(),
-        &index.address().to_le_bytes(),
-      ]
-      .concat(),
-    ))
-  }
-
-  fn subaddress_keys(&self, index: SubaddressIndex) -> (EdwardsPoint, EdwardsPoint) {
-    let scalar = self.subaddress_derivation(index);
-    let spend = self.spend + (&scalar * ED25519_BASEPOINT_TABLE);
-    let view = self.view.deref() * spend;
-    (spend, view)
-  }
-
-  /// Returns an address with the provided specification.
-  pub fn address(&self, network: Network, spec: AddressSpec) -> MoneroAddress {
-    let mut spend = self.spend;
-    let mut view: EdwardsPoint = self.view.deref() * ED25519_BASEPOINT_TABLE;
-
-    // construct the address type
-    let kind = match spec {
-      AddressSpec::Legacy => AddressType::Legacy,
-      AddressSpec::LegacyIntegrated(payment_id) => AddressType::LegacyIntegrated(payment_id),
-      AddressSpec::Subaddress(index) => {
-        (spend, view) = self.subaddress_keys(index);
-        AddressType::Subaddress
-      }
-      AddressSpec::Featured { subaddress, payment_id, guaranteed } => {
-        if let Some(index) = subaddress {
-          (spend, view) = self.subaddress_keys(index);
-        }
-        AddressType::Featured { subaddress: subaddress.is_some(), payment_id, guaranteed }
-      }
-    };
-
-    MoneroAddress::new(network, kind, spend, view)
-  }
-}
-
-pub(crate) fn compact_amount_encryption(amount: u64, key: Scalar) -> [u8; 8] {
-  let mut amount_mask = b"amount".to_vec();
-  amount_mask.extend(key.to_bytes());
-  (amount ^ u64::from_le_bytes(keccak256(amount_mask)[.. 8].try_into().unwrap())).to_le_bytes()
-}
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 struct SharedKeyDerivations {
@@ -194,6 +127,18 @@ impl SharedKeyDerivations {
     res
   }
 
+  fn compact_amount_encryption(&self, amount: u64) -> [u8; 8] {
+    let mut amount_mask = Zeroizing::new(b"amount".to_vec());
+    amount_mask.extend(self.shared_key.to_bytes());
+    let mut amount_mask = keccak256(&amount_mask);
+
+    let mut amount_mask_8 = [0; 8];
+    amount_mask_8.copy_from_slice(&amount_mask[.. 8]);
+    amount_mask.zeroize();
+
+    (amount ^ u64::from_le_bytes(amount_mask_8)).to_le_bytes()
+  }
+
   fn decrypt(&self, enc_amount: &EncryptedAmount) -> Commitment {
     match enc_amount {
       // TODO: Add a test vector for this
@@ -212,7 +157,7 @@ impl SharedKeyDerivations {
       }
       EncryptedAmount::Compact { amount } => Commitment::new(
         self.commitment_mask(),
-        u64::from_le_bytes(compact_amount_encryption(u64::from_le_bytes(*amount), self.shared_key)),
+        u64::from_le_bytes(self.compact_amount_encryption(u64::from_le_bytes(*amount))),
       ),
     }
   }

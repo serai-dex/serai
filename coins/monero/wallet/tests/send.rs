@@ -1,15 +1,11 @@
+use std::collections::HashSet;
+
 use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  primitives::Decoys,
-  ringct::RctType,
-  transaction::Transaction,
-  rpc::Rpc,
-  address::SubaddressIndex,
-  extra::Extra,
-  scan::{ReceivedOutput, SpendableOutput},
-  DecoySelection,
+  primitives::Decoys, ringct::RctType, transaction::Transaction, rpc::Rpc,
+  address::SubaddressIndex, extra::Extra, WalletOutput, DecoySelection,
 };
 
 mod runner;
@@ -19,25 +15,20 @@ use runner::{SignableTransactionBuilder, ring_len};
 async fn add_inputs(
   rct_type: RctType,
   rpc: &SimpleRequestRpc,
-  outputs: Vec<ReceivedOutput>,
+  outputs: Vec<WalletOutput>,
   builder: &mut SignableTransactionBuilder,
 ) {
-  let mut spendable_outputs = Vec::with_capacity(outputs.len());
-  for output in outputs {
-    spendable_outputs.push(SpendableOutput::from(rpc, output).await.unwrap());
-  }
-
   let decoys = Decoys::fingerprintable_canonical_select(
     &mut OsRng,
     rpc,
     ring_len(rct_type),
     rpc.get_height().await.unwrap(),
-    &spendable_outputs,
+    &outputs,
   )
   .await
   .unwrap();
 
-  let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
+  let inputs = outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
   builder.add_inputs(&inputs);
 }
@@ -49,8 +40,10 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output =
+        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+      assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
     },
   ),
@@ -64,8 +57,11 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 2);
+      assert_eq!(outputs[0].transaction(), tx.hash());
+      assert_eq!(outputs[0].transaction(), tx.hash());
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
       assert_eq!(outputs[1].commitment().amount, 2000000000000);
@@ -73,13 +69,15 @@ test!(
     },
   ),
   (
-    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<WalletOutput>| async move {
       add_inputs(rct_type, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output =
+        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+      assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 6);
     },
   ),
@@ -95,15 +93,16 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
-      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
       outputs
     },
   ),
   (
-    |rct_type, rpc: SimpleRequestRpc, _, _, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type, rpc: SimpleRequestRpc, _, _, outputs: Vec<WalletOutput>| async move {
       use monero_wallet::rpc::FeePriority;
 
       let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
@@ -115,7 +114,7 @@ test!(
       let mut builder = SignableTransactionBuilder::new(
         rct_type,
         outgoing_view,
-        Change::new(&change_view, false),
+        Change::new(&change_view),
         rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );
       add_inputs(rct_type, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
@@ -125,23 +124,23 @@ test!(
         &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
         Zeroizing::new(Scalar::random(&mut OsRng)),
       );
-      builder.add_payment(
-        sub_view
-          .address(Network::Mainnet, AddressSpec::Subaddress(SubaddressIndex::new(0, 1).unwrap())),
-        1,
-      );
+      builder
+        .add_payment(sub_view.subaddress(Network::Mainnet, SubaddressIndex::new(0, 1).unwrap()), 1);
       (builder.build().unwrap(), (change_view, sub_view))
     },
-    |_, tx: Transaction, _, views: (ViewPair, ViewPair)| async move {
+    |rpc, block, tx: Transaction, _, views: (ViewPair, ViewPair)| async move {
       // Make sure the change can pick up its output
-      let mut change_scanner = Scanner::from_view(views.0, Some(HashSet::new()));
-      assert!(change_scanner.scan_transaction(&tx).not_locked().len() == 1);
+      let mut change_scanner = Scanner::new(views.0);
+      assert!(
+        change_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().len() == 1
+      );
 
       // Make sure the subaddress can pick up its output
-      let mut sub_scanner = Scanner::from_view(views.1, Some(HashSet::new()));
+      let mut sub_scanner = Scanner::new(views.1);
       sub_scanner.register_subaddress(SubaddressIndex::new(0, 1).unwrap());
-      let sub_outputs = sub_scanner.scan_transaction(&tx).not_locked();
+      let sub_outputs = sub_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
       assert!(sub_outputs.len() == 1);
+      assert_eq!(sub_outputs[0].transaction(), tx.hash());
       assert_eq!(sub_outputs[0].commitment().amount, 1);
 
       // Make sure only one R was included in TX extra
@@ -162,21 +161,24 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
-      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 2000000000000);
       outputs
     },
   ),
   (
-    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<WalletOutput>| async move {
       add_inputs(rct_type, &rpc, outputs, &mut builder).await;
       builder.add_payment(addr, 2);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output = scanner.scan_transaction(&tx).not_locked().swap_remove(0);
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output =
+        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+      assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 2);
     },
   ),
@@ -189,15 +191,16 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
-      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
       outputs
     },
   ),
   (
-    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type: RctType, rpc, mut builder: Builder, addr, outputs: Vec<WalletOutput>| async move {
       add_inputs(rct_type, &rpc, outputs, &mut builder).await;
 
       for i in 0 .. 15 {
@@ -205,8 +208,8 @@ test!(
       }
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut scanned_tx = scanner.scan_transaction(&tx).not_locked();
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut scanned_tx = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
 
       let mut output_amounts = HashSet::new();
       for i in 0 .. 15 {
@@ -214,10 +217,11 @@ test!(
       }
       for _ in 0 .. 15 {
         let output = scanned_tx.swap_remove(0);
+        assert_eq!(output.transaction(), tx.hash());
         let amount = output.commitment().amount;
-        assert!(output_amounts.contains(&amount));
-        output_amounts.remove(&amount);
+        assert!(output_amounts.remove(&amount));
       }
+      assert_eq!(output_amounts.len(), 0);
     },
   ),
 );
@@ -229,38 +233,36 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
-      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
       outputs
     },
   ),
   (
-    |rct_type: RctType, rpc, mut builder: Builder, _, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type: RctType, rpc, mut builder: Builder, _, outputs: Vec<WalletOutput>| async move {
       add_inputs(rct_type, &rpc, outputs, &mut builder).await;
 
       let view = runner::random_address().1;
-      let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
+      let mut scanner = Scanner::new(view.clone());
 
       let mut subaddresses = vec![];
       for i in 0 .. 15 {
         let subaddress = SubaddressIndex::new(0, i + 1).unwrap();
         scanner.register_subaddress(subaddress);
 
-        builder.add_payment(
-          view.address(Network::Mainnet, AddressSpec::Subaddress(subaddress)),
-          u64::from(i + 1),
-        );
+        builder.add_payment(view.subaddress(Network::Mainnet, subaddress), u64::from(i + 1));
         subaddresses.push(subaddress);
       }
 
       (builder.build().unwrap(), (scanner, subaddresses))
     },
-    |_, tx: Transaction, _, mut state: (Scanner, Vec<SubaddressIndex>)| async move {
+    |rpc, block, tx: Transaction, _, mut state: (Scanner, Vec<SubaddressIndex>)| async move {
       use std::collections::HashMap;
 
-      let mut scanned_tx = state.0.scan_transaction(&tx).not_locked();
+      let mut scanned_tx = state.0.scan(&rpc, &block).await.unwrap().not_additionally_locked();
 
       let mut output_amounts_by_subaddress = HashMap::new();
       for i in 0 .. 15 {
@@ -268,13 +270,15 @@ test!(
       }
       for _ in 0 .. 15 {
         let output = scanned_tx.swap_remove(0);
+        assert_eq!(output.transaction(), tx.hash());
         let amount = output.commitment().amount;
 
-        assert!(output_amounts_by_subaddress.contains_key(&amount));
-        assert_eq!(output.metadata.subaddress, Some(output_amounts_by_subaddress[&amount]));
-
-        output_amounts_by_subaddress.remove(&amount);
+        assert_eq!(
+          output.subaddress().unwrap(),
+          output_amounts_by_subaddress.remove(&amount).unwrap()
+        );
       }
+      assert_eq!(output_amounts_by_subaddress.len(), 0);
     },
   ),
 );
@@ -286,15 +290,16 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
-      outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
       outputs
     },
   ),
   (
-    |rct_type, rpc: SimpleRequestRpc, _, addr, outputs: Vec<ReceivedOutput>| async move {
+    |rct_type, rpc: SimpleRequestRpc, _, addr, outputs: Vec<WalletOutput>| async move {
       use monero_wallet::rpc::FeePriority;
 
       let mut outgoing_view = Zeroizing::new([0; 32]);
@@ -311,8 +316,11 @@ test!(
 
       (builder.build().unwrap(), ())
     },
-    |_, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan_transaction(&tx).not_locked();
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 2);
+      assert_eq!(outputs[0].transaction(), tx.hash());
+      assert_eq!(outputs[1].transaction(), tx.hash());
       outputs.sort_by(|x, y| x.commitment().amount.cmp(&y.commitment().amount));
       assert_eq!(outputs[0].commitment().amount, 10000);
       assert_eq!(outputs[1].commitment().amount, 50000);

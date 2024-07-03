@@ -70,8 +70,8 @@ impl SignableTransaction {
         Err(SendError::WrongPrivateKey)?;
       }
 
-      let context =
-        ClsagContext::new(decoys.clone(), input.commitment()).map_err(SendError::ClsagError)?;
+      let context = ClsagContext::new(decoys.clone(), input.commitment().clone())
+        .map_err(SendError::ClsagError)?;
       let (clsag, clsag_mask_send) = ClsagMultisig::new(
         RecommendedTranscript::new(b"Monero Multisignature Transaction"),
         context,

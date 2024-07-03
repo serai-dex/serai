@@ -14,7 +14,7 @@ disabled.
 - Scanning Monero transactions
 - Sending Monero transactions
 - Sending Monero transactions with a FROST-inspired threshold multisignature
-  protocol, orders of magnitude more performant than Monero's own.
+  protocol, orders of magnitude more performant than Monero's own
 
 ### Caveats
 

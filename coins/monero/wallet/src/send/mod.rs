@@ -20,10 +20,9 @@ use crate::{
   },
   transaction::Transaction,
   extra::MAX_ARBITRARY_DATA_SIZE,
-  address::{Network, AddressSpec, MoneroAddress},
+  address::{Network, MoneroAddress},
   rpc::FeeRate,
-  ViewPair,
-  scan::SpendableOutput,
+  ViewPair, GuaranteedViewPair, WalletOutput,
 };
 
 mod tx_keys;
@@ -33,7 +32,8 @@ pub use eventuality::Eventuality;
 
 #[cfg(feature = "multisig")]
 mod multisig;
-pub use multisig::TransactionMachine;
+#[cfg(feature = "multisig")]
+pub use multisig::{TransactionMachine, TransactionSignMachine, TransactionSignatureMachine};
 
 pub(crate) fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::Ordering {
   x.compress().to_bytes().cmp(&y.compress().to_bytes()).reverse()
@@ -70,18 +70,25 @@ impl Change {
   /// This take the view key as Monero assumes it has the view key for change outputs. It optimizes
   /// its wallet protocol accordingly.
   // TODO: Accept AddressSpec, not `guaranteed: bool`
-  pub fn new(view: &ViewPair, guaranteed: bool) -> Change {
+  pub fn new(view: &ViewPair) -> Change {
+    Change(ChangeEnum::AddressWithView(
+      // Which network doesn't matter as the derivations will all be the same
+      // TODO: Support subaddresses
+      view.legacy_address(Network::Mainnet),
+      view.view.clone(),
+    ))
+  }
+
+  pub fn guaranteed(view: &GuaranteedViewPair) -> Change {
     Change(ChangeEnum::AddressWithView(
       view.address(
         // Which network doesn't matter as the derivations will all be the same
         Network::Mainnet,
-        if !guaranteed {
-          AddressSpec::Legacy
-        } else {
-          AddressSpec::Featured { subaddress: None, payment_id: None, guaranteed: true }
-        },
+        // TODO: Support subaddresses
+        None,
+        None,
       ),
-      view.view.clone(),
+      view.0.view.clone(),
     ))
   }
 
@@ -183,7 +190,7 @@ pub enum SendError {
 pub struct SignableTransaction {
   rct_type: RctType,
   outgoing_view_key: Zeroizing<[u8; 32]>,
-  inputs: Vec<(SpendableOutput, Decoys)>,
+  inputs: Vec<(WalletOutput, Decoys)>,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee_rate: FeeRate,
@@ -301,7 +308,7 @@ impl SignableTransaction {
   pub fn new(
     rct_type: RctType,
     outgoing_view_key: Zeroizing<[u8; 32]>,
-    inputs: Vec<(SpendableOutput, Decoys)>,
+    inputs: Vec<(WalletOutput, Decoys)>,
     payments: Vec<(MoneroAddress, u64)>,
     change: Change,
     data: Vec<Vec<u8>>,
@@ -341,8 +348,12 @@ impl SignableTransaction {
     self.weight_and_fee().1
   }
 
+  /// Write a SignableTransaction.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
-    fn write_input<W: io::Write>(input: &(SpendableOutput, Decoys), w: &mut W) -> io::Result<()> {
+    fn write_input<W: io::Write>(input: &(WalletOutput, Decoys), w: &mut W) -> io::Result<()> {
       input.0.write(w)?;
       input.1.write(w)
     }
@@ -375,15 +386,23 @@ impl SignableTransaction {
     self.fee_rate.write(w)
   }
 
+  /// Serialize the SignableTransaction to a `Vec<u8>`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = Vec::with_capacity(256);
     self.write(&mut buf).unwrap();
     buf
   }
 
+  /// Read a `SignableTransaction`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn read<R: io::Read>(r: &mut R) -> io::Result<SignableTransaction> {
-    fn read_input(r: &mut impl io::Read) -> io::Result<(SpendableOutput, Decoys)> {
-      Ok((SpendableOutput::read(r)?, Decoys::read(r)?))
+    fn read_input(r: &mut impl io::Read) -> io::Result<(WalletOutput, Decoys)> {
+      Ok((WalletOutput::read(r)?, Decoys::read(r)?))
     }
 
     fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {

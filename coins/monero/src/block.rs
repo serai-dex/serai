@@ -47,7 +47,7 @@ impl BlockHeader {
     w.write_all(&self.nonce.to_le_bytes())
   }
 
-  /// Serialize the BlockHeader to a Vec<u8>.
+  /// Serialize the BlockHeader to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
@@ -72,9 +72,9 @@ pub struct Block {
   /// The block's header.
   pub header: BlockHeader,
   /// The miner's transaction.
-  pub miner_tx: Transaction,
+  pub miner_transaction: Transaction,
   /// The transactions within this block.
-  pub txs: Vec<[u8; 32]>,
+  pub transactions: Vec<[u8; 32]>,
 }
 
 impl Block {
@@ -83,7 +83,7 @@ impl Block {
   /// This information comes from the Block's miner transaction. If the miner transaction isn't
   /// structed as expected, this will return None.
   pub fn number(&self) -> Option<u64> {
-    match &self.miner_tx {
+    match &self.miner_transaction {
       Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => {
         match prefix.inputs.first() {
           Some(Input::Gen(number)) => Some(*number),
@@ -96,15 +96,15 @@ impl Block {
   /// Write the Block.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     self.header.write(w)?;
-    self.miner_tx.write(w)?;
-    write_varint(&self.txs.len(), w)?;
-    for tx in &self.txs {
+    self.miner_transaction.write(w)?;
+    write_varint(&self.transactions.len(), w)?;
+    for tx in &self.transactions {
       w.write_all(tx)?;
     }
     Ok(())
   }
 
-  /// Serialize the Block to a Vec<u8>.
+  /// Serialize the Block to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();
@@ -117,8 +117,8 @@ impl Block {
   /// use the [`Block::hash`] function.
   pub fn serialize_pow_hash(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
-    blob.extend_from_slice(&merkle_root(self.miner_tx.hash(), &self.txs));
-    write_varint(&(1 + u64::try_from(self.txs.len()).unwrap()), &mut blob).unwrap();
+    blob.extend_from_slice(&merkle_root(self.miner_transaction.hash(), &self.transactions));
+    write_varint(&(1 + u64::try_from(self.transactions.len()).unwrap()), &mut blob).unwrap();
     blob
   }
 
@@ -142,8 +142,10 @@ impl Block {
   pub fn read<R: Read>(r: &mut R) -> io::Result<Block> {
     Ok(Block {
       header: BlockHeader::read(r)?,
-      miner_tx: Transaction::read(r)?,
-      txs: (0_usize .. read_varint(r)?).map(|_| read_bytes(r)).collect::<Result<_, _>>()?,
+      miner_transaction: Transaction::read(r)?,
+      transactions: (0_usize .. read_varint(r)?)
+        .map(|_| read_bytes(r))
+        .collect::<Result<_, _>>()?,
     })
   }
 }

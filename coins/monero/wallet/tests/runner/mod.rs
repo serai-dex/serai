@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std_shims::{sync::OnceLock, collections::HashSet};
+use std_shims::sync::OnceLock;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
@@ -12,10 +12,10 @@ use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
   ringct::RctType,
   transaction::Transaction,
+  block::Block,
   rpc::{Rpc, FeeRate},
-  ViewPair,
-  address::{Network, AddressType, AddressSpec, MoneroAddress},
-  scan::{SpendableOutput, Scanner},
+  address::{Network, AddressType, MoneroAddress},
+  ViewPair, GuaranteedViewPair, WalletOutput, Scanner,
 };
 
 mod builder;
@@ -41,20 +41,43 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
       AddressType::Legacy,
       spend_pub,
       view.deref() * ED25519_BASEPOINT_TABLE,
-    ),
+    )
+    .unwrap(),
+  )
+}
+
+#[allow(unused)]
+pub fn random_guaranteed_address() -> (Scalar, GuaranteedViewPair, MoneroAddress) {
+  let spend = Scalar::random(&mut OsRng);
+  let spend_pub = &spend * ED25519_BASEPOINT_TABLE;
+  let view = Zeroizing::new(Scalar::random(&mut OsRng));
+  (
+    spend,
+    GuaranteedViewPair::new(spend_pub, view.clone()).unwrap(),
+    MoneroAddress::new(
+      Network::Mainnet,
+      AddressType::Legacy,
+      spend_pub,
+      view.deref() * ED25519_BASEPOINT_TABLE,
+    )
+    .unwrap(),
   )
 }
 
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
-pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u8; 32]) {
+pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u8; 32]) -> Block {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
   let mut found = false;
+  let mut block = None;
   while !found {
-    let block = rpc.get_block_by_number(height - 1).await.unwrap();
-    found = match block.txs.iter().find(|&&x| x == tx_hash) {
-      Some(_) => true,
+    let inner_block = rpc.get_block_by_number(height - 1).await.unwrap();
+    found = match inner_block.transactions.iter().find(|&&x| x == tx_hash) {
+      Some(_) => {
+        block = Some(inner_block);
+        true
+      }
       None => {
         height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
         false
@@ -73,22 +96,21 @@ pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u
   {
     height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
   }
+
+  block.unwrap()
 }
 
 // Mines 60 blocks and returns an unlocked miner TX output.
 #[allow(dead_code)]
-pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> SpendableOutput {
-  let mut scanner = Scanner::from_view(view.clone(), Some(HashSet::new()));
+pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> WalletOutput {
+  let mut scanner = Scanner::new(view.clone());
 
   // Mine 60 blocks to unlock a miner TX
   let start = rpc.get_height().await.unwrap();
-  rpc
-    .generate_blocks(&view.address(Network::Mainnet, AddressSpec::Legacy).to_string(), 60)
-    .await
-    .unwrap();
+  rpc.generate_blocks(&view.legacy_address(Network::Mainnet).to_string(), 60).await.unwrap();
 
   let block = rpc.get_block_by_number(start).await.unwrap();
-  scanner.scan(rpc, &block).await.unwrap().swap_remove(0).ignore_timelock().swap_remove(0)
+  scanner.scan(rpc, &block).await.unwrap().ignore_additional_timelock().swap_remove(0)
 }
 
 /// Make sure the weight and fee match the expected calculation.
@@ -119,6 +141,7 @@ pub async fn rpc() -> SimpleRequestRpc {
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
   )
+  .unwrap()
   .to_string();
 
   // Mine 40 blocks to ensure decoy availability
@@ -164,7 +187,6 @@ macro_rules! test {
     async_sequential! {
       async fn $name() {
         use core::{ops::Deref, any::Any};
-        use std::collections::HashSet;
         #[cfg(feature = "multisig")]
         use std::collections::HashMap;
 
@@ -184,10 +206,10 @@ macro_rules! test {
           primitives::Decoys,
           ringct::RctType,
           rpc::FeePriority,
-          address::{Network, AddressSpec},
+          address::Network,
           ViewPair,
           DecoySelection,
-          scan::Scanner,
+          Scanner,
           send::{Change, SignableTransaction},
         };
 
@@ -226,7 +248,7 @@ macro_rules! test {
           let mut outgoing_view = Zeroizing::new([0; 32]);
           OsRng.fill_bytes(outgoing_view.as_mut());
           let view = ViewPair::new(spend_pub, view_priv.clone());
-          let addr = view.address(Network::Mainnet, AddressSpec::Legacy);
+          let addr = view.legacy_address(Network::Mainnet);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
 
@@ -244,7 +266,6 @@ macro_rules! test {
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
                 Zeroizing::new(Scalar::random(&mut OsRng))
               ),
-              false
             ),
             rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
           );
@@ -293,12 +314,12 @@ macro_rules! test {
             let fee_rate = tx.fee_rate().clone();
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
-            mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
+            let block =
+              mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             check_weight_and_fee(&tx, fee_rate);
-            let scanner =
-              Scanner::from_view(view.clone(), Some(HashSet::new()));
-            ($first_checks)(rpc.clone(), tx, scanner, state).await
+            let scanner = Scanner::new(view.clone());
+            ($first_checks)(rpc.clone(), block, tx, scanner, state).await
           });
           #[allow(unused_variables, unused_mut, unused_assignments)]
           let mut carried_state: Box<dyn Any> = temp;
@@ -314,7 +335,8 @@ macro_rules! test {
             let fee_rate = tx.fee_rate().clone();
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
-            mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
+            let block =
+              mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             if stringify!($name) != "spend_one_input_to_two_outputs_no_change" {
               // Skip weight and fee check for the above test because when there is no change,
@@ -323,10 +345,8 @@ macro_rules! test {
             }
             #[allow(unused_assignments)]
             {
-              let scanner =
-                Scanner::from_view(view.clone(), Some(HashSet::new()));
-              carried_state =
-                Box::new(($checks)(rpc.clone(), tx, scanner, state).await);
+              let scanner = Scanner::new(view.clone());
+              carried_state = Box::new(($checks)(rpc.clone(), block, tx, scanner, state).await);
             }
           )*
         }

@@ -5,7 +5,7 @@ use monero_wallet::{
   ringct::RctType,
   rpc::FeeRate,
   address::MoneroAddress,
-  scan::SpendableOutput,
+  WalletOutput,
   send::{Change, SendError, SignableTransaction},
   extra::MAX_ARBITRARY_DATA_SIZE,
 };
@@ -15,7 +15,7 @@ use monero_wallet::{
 pub struct SignableTransactionBuilder {
   rct_type: RctType,
   outgoing_view_key: Zeroizing<[u8; 32]>,
-  inputs: Vec<(SpendableOutput, Decoys)>,
+  inputs: Vec<(WalletOutput, Decoys)>,
   payments: Vec<(MoneroAddress, u64)>,
   change: Change,
   data: Vec<Vec<u8>>,
@@ -40,12 +40,12 @@ impl SignableTransactionBuilder {
     }
   }
 
-  pub fn add_input(&mut self, input: (SpendableOutput, Decoys)) -> &mut Self {
+  pub fn add_input(&mut self, input: (WalletOutput, Decoys)) -> &mut Self {
     self.inputs.push(input);
     self
   }
   #[allow(unused)]
-  pub fn add_inputs(&mut self, inputs: &[(SpendableOutput, Decoys)]) -> &mut Self {
+  pub fn add_inputs(&mut self, inputs: &[(WalletOutput, Decoys)]) -> &mut Self {
     self.inputs.extend(inputs.iter().cloned());
     self
   }

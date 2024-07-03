@@ -49,7 +49,7 @@ impl Input {
     }
   }
 
-  /// Serialize the Input to a Vec<u8>.
+  /// Serialize the Input to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
     self.write(&mut res).unwrap();
@@ -102,7 +102,7 @@ impl Output {
     Ok(())
   }
 
-  /// Write the Output to a Vec<u8>.
+  /// Write the Output to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(8 + 1 + 32);
     self.write(&mut res).unwrap();
@@ -150,27 +150,33 @@ pub enum Timelock {
 }
 
 impl Timelock {
-  fn from_raw(raw: u64) -> Timelock {
-    if raw == 0 {
-      Timelock::None
-    } else if raw < 500_000_000 {
-      // TODO: This is trivial to have panic
-      Timelock::Block(usize::try_from(raw).unwrap())
-    } else {
-      Timelock::Time(raw)
+  /// Write the Timelock.
+  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    match self {
+      Timelock::None => write_varint(&0u8, w),
+      Timelock::Block(block) => write_varint(block, w),
+      Timelock::Time(time) => write_varint(time, w),
     }
   }
 
-  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    write_varint(
-      &match self {
-        Timelock::None => 0,
-        // TODO: Check this unwrap
-        Timelock::Block(block) => (*block).try_into().unwrap(),
-        Timelock::Time(time) => *time,
-      },
-      w,
-    )
+  /// Serialize the Timelock to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(1);
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  /// Read a Timelock.
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    let raw = read_varint::<_, u64>(r)?;
+    Ok(if raw == 0 {
+      Timelock::None
+    } else if raw < u64::from(500_000_000u32) {
+      // TODO: const-assert 32 or 64 bits
+      Timelock::Block(usize::try_from(raw).expect("timelock (<32 bits) overflowed usize"))
+    } else {
+      Timelock::Time(raw)
+    })
   }
 }
 
@@ -194,6 +200,7 @@ impl PartialOrd for Timelock {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TransactionPrefix {
   /// The timelock this transaction uses.
+  // TODO: Rename to additional timelock?
   pub timelock: Timelock,
   /// The inputs for this transaction.
   pub inputs: Vec<Input>,
@@ -223,7 +230,7 @@ impl TransactionPrefix {
   /// This is distinct from Monero in that it won't read the version. The version must be passed
   /// in.
   pub fn read<R: Read>(r: &mut R, version: u64) -> io::Result<TransactionPrefix> {
-    let timelock = Timelock::from_raw(read_varint(r)?);
+    let timelock = Timelock::read(r)?;
 
     let inputs = read_vec(|r| Input::read(r), r)?;
     if inputs.is_empty() {
@@ -316,7 +323,7 @@ impl Transaction {
     Ok(())
   }
 
-  /// Write the Transaction to a Vec<u8>.
+  /// Write the Transaction to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(2048);
     self.write(&mut res).unwrap();

@@ -169,6 +169,9 @@ impl Decoys {
   }
 
   /// Write the Decoys.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn write(&self, w: &mut impl io::Write) -> io::Result<()> {
     write_vec(write_varint, &self.offsets, w)?;
     w.write_all(&[self.signer_index])?;
@@ -181,14 +184,22 @@ impl Decoys {
       w,
     )
   }
+
   /// Serialize the Decoys to a `Vec<u8>`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res =
       Vec::with_capacity((1 + (2 * self.offsets.len())) + 1 + 1 + (self.ring.len() * 64));
     self.write(&mut res).unwrap();
     res
   }
+
   /// Read a set of Decoys.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn read(r: &mut impl io::Read) -> io::Result<Decoys> {
     Decoys::new(
       read_vec(read_varint, r)?,

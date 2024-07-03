@@ -405,11 +405,7 @@ impl Coordinator {
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_simple_request_rpc::SimpleRequestRpc;
-        use monero_wallet::{
-          rpc::Rpc,
-          ViewPair,
-          address::{Network, AddressSpec},
-        };
+        use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
 
         let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
         let _: EmptyResponse = rpc
@@ -419,7 +415,7 @@ impl Coordinator {
               "wallet_address": ViewPair::new(
                 ED25519_BASEPOINT_POINT,
                 Zeroizing::new(Scalar::ONE),
-              ).address(Network::Mainnet, AddressSpec::Legacy).to_string(),
+              ).legacy_address(Network::Mainnet).to_string(),
               "amount_of_blocks": 1,
             })),
           )

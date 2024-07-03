@@ -10,7 +10,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint}
 use crate::{
   primitives::{keccak256, Commitment},
   ringct::EncryptedAmount,
-  SharedKeyDerivations, compact_amount_encryption,
+  SharedKeyDerivations,
   send::{InternalPayment, SignableTransaction},
 };
 
@@ -34,11 +34,7 @@ fn seeded_rng(
 
 impl SignableTransaction {
   pub(crate) fn seeded_rng(&self, dst: &'static [u8]) -> ChaCha20Rng {
-    seeded_rng(
-      dst,
-      &self.outgoing_view_key,
-      self.inputs.iter().map(|(input, _)| input.output.key()),
-    )
+    seeded_rng(dst, &self.outgoing_view_key, self.inputs.iter().map(|(input, _)| input.key()))
   }
 
   fn has_payments_to_subaddresses(&self) -> bool {
@@ -226,7 +222,7 @@ impl SignableTransaction {
       };
       let commitment = Commitment::new(shared_key_derivations.commitment_mask(), amount);
       let encrypted_amount = EncryptedAmount::Compact {
-        amount: compact_amount_encryption(amount, shared_key_derivations.shared_key),
+        amount: shared_key_derivations.compact_amount_encryption(amount),
       };
       res.push((commitment, encrypted_amount));
     }

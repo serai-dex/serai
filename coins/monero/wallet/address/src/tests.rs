@@ -125,7 +125,7 @@ fn featured() {
         let guaranteed = (features & GUARANTEED_FEATURE_BIT) == GUARANTEED_FEATURE_BIT;
 
         let kind = AddressType::Featured { subaddress, payment_id, guaranteed };
-        let addr = MoneroAddress::new(network, kind, spend, view);
+        let addr = MoneroAddress::new(network, kind, spend, view).unwrap();
 
         assert_eq!(addr.to_string().chars().next().unwrap(), first);
         assert_eq!(MoneroAddress::from_str(network, &addr.to_string()).unwrap(), addr);
@@ -198,6 +198,7 @@ fn featured_vectors() {
         spend,
         view
       )
+      .unwrap()
       .to_string(),
       vector.address
     );

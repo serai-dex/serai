@@ -9,9 +9,11 @@ use rand_distr::num_traits::Float;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-use monero_serai::{DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME};
-use monero_rpc::{RpcError, Rpc};
-use crate::scan::SpendableOutput;
+use crate::{
+  DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME,
+  rpc::{RpcError, Rpc},
+  WalletOutput,
+};
 
 const RECENT_WINDOW: usize = 15;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
@@ -34,7 +36,7 @@ async fn select_n<'a, R: RngCore + CryptoRng>(
   // TODO: consider removing this extra RPC and expect the caller to handle it
   if fingerprintable_canonical && (height > rpc.get_height().await?) {
     // TODO: Don't use InternalError for the caller's failure
-    Err(RpcError::InternalError("decoys being requested from too young blocks"))?;
+    Err(RpcError::InternalError("decoys being requested from too young blocks".to_string()))?;
   }
 
   #[cfg(test)]
@@ -52,7 +54,7 @@ async fn select_n<'a, R: RngCore + CryptoRng>(
         iters += 1;
         // This is cheap and on fresh chains, a lot of rounds may be needed
         if iters == 100 {
-          Err(RpcError::InternalError("hit decoy selection round limit"))?;
+          Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
         }
       }
 
@@ -134,7 +136,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   rpc: &impl Rpc,
   ring_len: usize,
   height: usize,
-  inputs: &[SpendableOutput],
+  inputs: &[WalletOutput],
   fingerprintable_canonical: bool,
 ) -> Result<Vec<Decoys>, RpcError> {
   let mut distribution = vec![];
@@ -145,7 +147,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   let mut real = Vec::with_capacity(inputs.len());
   let mut outputs = Vec::with_capacity(inputs.len());
   for input in inputs {
-    real.push(input.global_index);
+    real.push(input.relative_id.index_on_blockchain);
     outputs.push((real[real.len() - 1], [input.key(), input.commitment().calculate()]));
   }
 
@@ -160,7 +162,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   distribution.truncate(height);
 
   if distribution.len() < DEFAULT_LOCK_WINDOW {
-    Err(RpcError::InternalError("not enough decoy candidates"))?;
+    Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
   }
 
   #[allow(clippy::cast_precision_loss)]
@@ -181,7 +183,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   if high.saturating_sub(COINBASE_LOCK_WINDOW as u64) <
     u64::try_from(inputs.len() * ring_len).unwrap()
   {
-    Err(RpcError::InternalError("not enough coinbase candidates"))?;
+    Err(RpcError::InternalError("not enough coinbase candidates".to_string()))?;
   }
 
   // Select all decoys for this transaction, assuming we generate a sane transaction
@@ -283,7 +285,7 @@ pub trait DecoySelection {
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[SpendableOutput],
+    inputs: &[WalletOutput],
   ) -> Result<Vec<Decoys>, RpcError>;
 
   async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
@@ -291,7 +293,7 @@ pub trait DecoySelection {
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[SpendableOutput],
+    inputs: &[WalletOutput],
   ) -> Result<Vec<Decoys>, RpcError>;
 }
 
@@ -305,7 +307,7 @@ impl DecoySelection for Decoys {
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[SpendableOutput],
+    inputs: &[WalletOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
     select_decoys(rng, rpc, ring_len, height, inputs, false).await
   }
@@ -323,7 +325,7 @@ impl DecoySelection for Decoys {
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[SpendableOutput],
+    inputs: &[WalletOutput],
   ) -> Result<Vec<Decoys>, RpcError> {
     select_decoys(rng, rpc, ring_len, height, inputs, true).await
   }

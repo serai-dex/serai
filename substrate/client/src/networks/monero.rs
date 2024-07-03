@@ -51,24 +51,27 @@ impl TryFrom<Vec<u8>> for Address {
     // Decode as SCALE
     let addr = EncodedAddress::decode(&mut data.as_ref()).map_err(|_| ())?;
     // Convert over
-    Ok(Address(MoneroAddress::new(
-      Network::Mainnet,
-      match addr.kind {
-        EncodedAddressType::Legacy => AddressType::Legacy,
-        EncodedAddressType::Subaddress => AddressType::Subaddress,
-        EncodedAddressType::Featured(flags) => {
-          let subaddress = (flags & 1) != 0;
-          let integrated = (flags & (1 << 1)) != 0;
-          let guaranteed = (flags & (1 << 2)) != 0;
-          if integrated {
-            Err(())?;
+    Ok(Address(
+      MoneroAddress::new(
+        Network::Mainnet,
+        match addr.kind {
+          EncodedAddressType::Legacy => AddressType::Legacy,
+          EncodedAddressType::Subaddress => AddressType::Subaddress,
+          EncodedAddressType::Featured(flags) => {
+            let subaddress = (flags & 1) != 0;
+            let integrated = (flags & (1 << 1)) != 0;
+            let guaranteed = (flags & (1 << 2)) != 0;
+            if integrated {
+              Err(())?;
+            }
+            AddressType::Featured { subaddress, payment_id: None, guaranteed }
           }
-          AddressType::Featured { subaddress, payment_id: None, guaranteed }
-        }
-      },
-      Ed25519::read_G::<&[u8]>(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
-      Ed25519::read_G::<&[u8]>(&mut addr.view.as_ref()).map_err(|_| ())?.0,
-    )))
+        },
+        Ed25519::read_G::<&[u8]>(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
+        Ed25519::read_G::<&[u8]>(&mut addr.view.as_ref()).map_err(|_| ())?.0,
+      )
+      .map_err(|_| ())?,
+    ))
   }
 }
 

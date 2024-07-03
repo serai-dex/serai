@@ -221,6 +221,8 @@ impl Extra {
     buf
   }
 
+  // TODO: Is this supposed to silently drop trailing gibberish?
+  #[allow(clippy::unnecessary_wraps)]
   pub fn read<R: BufRead>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
     let mut field;

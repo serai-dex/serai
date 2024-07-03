@@ -19,13 +19,14 @@ use monero_wallet::{
   transaction::Transaction,
   block::Block,
   rpc::{FeeRate, RpcError, Rpc},
-  address::{Network as MoneroNetwork, SubaddressIndex, AddressSpec},
-  ViewPair, DecoySelection, Decoys,
-  scan::{SpendableOutput, Scanner},
+  address::{Network as MoneroNetwork, SubaddressIndex},
+  ViewPair, GuaranteedViewPair, WalletOutput, GuaranteedScanner, DecoySelection, Decoys,
   send::{
     SendError, Change, SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
 };
+#[cfg(test)]
+use monero_wallet::Scanner;
 
 use tokio::time::sleep;
 
@@ -45,7 +46,7 @@ use crate::{
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Output(SpendableOutput, Vec<u8>);
+pub struct Output(WalletOutput);
 
 const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
 const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
@@ -59,7 +60,7 @@ impl OutputTrait<Monero> for Output {
   type Id = [u8; 32];
 
   fn kind(&self) -> OutputType {
-    match self.0.output.metadata.subaddress {
+    match self.0.subaddress() {
       EXTERNAL_SUBADDRESS => OutputType::External,
       BRANCH_SUBADDRESS => OutputType::Branch,
       CHANGE_SUBADDRESS => OutputType::Change,
@@ -69,15 +70,15 @@ impl OutputTrait<Monero> for Output {
   }
 
   fn id(&self) -> Self::Id {
-    self.0.output.data.key.compress().to_bytes()
+    self.0.key().compress().to_bytes()
   }
 
   fn tx_id(&self) -> [u8; 32] {
-    self.0.output.absolute.tx
+    self.0.transaction()
   }
 
   fn key(&self) -> EdwardsPoint {
-    EdwardsPoint(self.0.output.data.key - (EdwardsPoint::generator().0 * self.0.key_offset()))
+    EdwardsPoint(self.0.key() - (EdwardsPoint::generator().0 * self.0.key_offset()))
   }
 
   fn presumed_origin(&self) -> Option<Address> {
@@ -89,26 +90,22 @@ impl OutputTrait<Monero> for Output {
   }
 
   fn data(&self) -> &[u8] {
-    &self.1
+    let Some(data) = self.0.arbitrary_data().first() else { return &[] };
+    // If the data is too large, prune it
+    // This should cause decoding the instruction to fail, and trigger a refund as appropriate
+    if data.len() > usize::try_from(MAX_DATA_LEN).unwrap() {
+      return &[];
+    }
+    data
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.0.write(writer)?;
-    writer.write_all(&u16::try_from(self.1.len()).unwrap().to_le_bytes())?;
-    writer.write_all(&self.1)?;
     Ok(())
   }
 
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let output = SpendableOutput::read(reader)?;
-
-    let mut data_len = [0; 2];
-    reader.read_exact(&mut data_len)?;
-
-    let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
-    reader.read_exact(&mut data)?;
-
-    Ok(Output(output, data))
+    Ok(Output(WalletOutput::read(reader)?))
   }
 }
 
@@ -258,20 +255,16 @@ impl Monero {
     Monero { rpc: res.unwrap() }
   }
 
-  fn view_pair(spend: EdwardsPoint) -> ViewPair {
-    ViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
+  fn view_pair(spend: EdwardsPoint) -> GuaranteedViewPair {
+    GuaranteedViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0)).unwrap()
   }
 
   fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
-    Address::new(Self::view_pair(spend).address(
-      MoneroNetwork::Mainnet,
-      AddressSpec::Featured { subaddress, payment_id: None, guaranteed: true },
-    ))
-    .unwrap()
+    Address::new(Self::view_pair(spend).address(MoneroNetwork::Mainnet, subaddress, None)).unwrap()
   }
 
-  fn scanner(spend: EdwardsPoint) -> Scanner {
-    let mut scanner = Scanner::from_view(Self::view_pair(spend), None);
+  fn scanner(spend: EdwardsPoint) -> GuaranteedScanner {
+    let mut scanner = GuaranteedScanner::new(Self::view_pair(spend));
     debug_assert!(EXTERNAL_SUBADDRESS.is_none());
     scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
     scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
@@ -281,7 +274,7 @@ impl Monero {
 
   async fn median_fee(&self, block: &Block) -> Result<FeeRate, NetworkError> {
     let mut fees = vec![];
-    for tx_hash in &block.txs {
+    for tx_hash in &block.transactions {
       let tx =
         self.rpc.get_transaction(*tx_hash).await.map_err(|_| NetworkError::ConnectionError)?;
       // Only consider fees from RCT transactions, else the fee property read wouldn't be accurate
@@ -358,7 +351,7 @@ impl Monero {
       payments.push(Payment {
         address: Address::new(
           ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
-            .address(MoneroNetwork::Mainnet, AddressSpec::Legacy),
+            .legacy_address(MoneroNetwork::Mainnet),
         )
         .unwrap(),
         balance: Balance { coin: Coin::Monero, amount: Amount(0) },
@@ -425,13 +418,12 @@ impl Monero {
 
   #[cfg(test)]
   fn test_scanner() -> Scanner {
-    Scanner::from_view(Self::test_view_pair(), Some(std::collections::HashSet::new()))
+    Scanner::new(Self::test_view_pair())
   }
 
   #[cfg(test)]
   fn test_address() -> Address {
-    Address::new(Self::test_view_pair().address(MoneroNetwork::Mainnet, AddressSpec::Legacy))
-      .unwrap()
+    Address::new(Self::test_view_pair().legacy_address(MoneroNetwork::Mainnet)).unwrap()
   }
 }
 
@@ -512,34 +504,17 @@ impl Network for Monero {
       }
     };
 
-    let mut txs = outputs
-      .iter()
-      .filter_map(|outputs| Some(outputs.not_locked()).filter(|outputs| !outputs.is_empty()))
-      .collect::<Vec<_>>();
+    // Miner transactions are required to explicitly state their timelock, so this does exclude
+    // those (which have an extended timelock we don't want to deal with)
+    let raw_outputs = outputs.not_additionally_locked();
+    let mut outputs = Vec::with_capacity(raw_outputs.len());
+    for output in raw_outputs {
+      // This should be pointless as we shouldn't be able to scan for any other subaddress
+      // This just helps ensures nothing invalid makes it through
+      assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARD_SUBADDRESS]
+        .contains(&output.subaddress()));
 
-    // This should be pointless as we shouldn't be able to scan for any other subaddress
-    // This just ensures nothing invalid makes it through
-    for tx_outputs in &txs {
-      for output in tx_outputs {
-        assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARD_SUBADDRESS]
-          .contains(&output.output.metadata.subaddress));
-      }
-    }
-
-    let mut outputs = Vec::with_capacity(txs.len());
-    for mut tx_outputs in txs.drain(..) {
-      for output in tx_outputs.drain(..) {
-        let mut data = output.arbitrary_data().first().cloned().unwrap_or(vec![]);
-
-        // The Output serialization code above uses u16 to represent length
-        data.truncate(u16::MAX.into());
-        // Monero data segments should be <= 255 already, and MAX_DATA_LEN is currently 512
-        // This just allows either Monero to change, or MAX_DATA_LEN to change, without introducing
-        // complicationso
-        data.truncate(MAX_DATA_LEN.try_into().unwrap());
-
-        outputs.push(Output(output, data));
-      }
+      outputs.push(Output(output));
     }
 
     outputs
@@ -561,7 +536,7 @@ impl Network for Monero {
       block: &Block,
       res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
     ) {
-      for hash in &block.txs {
+      for hash in &block.transactions {
         let tx = {
           let mut tx;
           while {
@@ -708,7 +683,7 @@ impl Network for Monero {
     eventuality: &Eventuality,
   ) -> Transaction {
     let block = self.rpc.get_block_by_number(block).await.unwrap();
-    for tx in &block.txs {
+    for tx in &block.transactions {
       let tx = self.rpc.get_transaction(*tx).await.unwrap();
       if eventuality.matches(&tx) {
         return tx;
@@ -752,12 +727,8 @@ impl Network for Monero {
     }
 
     let new_block = self.rpc.get_block_by_number(new_block).await.unwrap();
-    let outputs = Self::test_scanner()
-      .scan(&self.rpc, &new_block)
-      .await
-      .unwrap()
-      .swap_remove(0)
-      .ignore_timelock();
+    let outputs =
+      Self::test_scanner().scan(&self.rpc, &new_block).await.unwrap().ignore_additional_timelock();
 
     let amount = outputs[0].commitment().amount;
     // The dust should always be sufficient for the fee

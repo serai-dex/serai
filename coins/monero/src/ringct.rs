@@ -322,7 +322,7 @@ impl RctPrunable {
     }
   }
 
-  /// Serialize the RctPrunable to a Vec<u8>.
+  /// Serialize the RctPrunable to a `Vec<u8>`.
   pub fn serialize(&self, rct_type: RctType) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized, rct_type).unwrap();
@@ -437,7 +437,7 @@ impl RctProofs {
     self.prunable.write(w, rct_type)
   }
 
-  /// Serialize the RctProofs to a Vec<u8>.
+  /// Serialize the RctProofs to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
     self.write(&mut serialized).unwrap();

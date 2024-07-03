@@ -8,7 +8,7 @@ use std_shims::string::ToString;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::{traits::IsIdentity, EdwardsPoint};
 
 use monero_io::*;
 
@@ -112,43 +112,6 @@ impl SubaddressIndex {
   }
 }
 
-/// A specification for an address to be derived.
-///
-/// This contains all the information an address will embed once derived.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub enum AddressSpec {
-  /// A legacy address type.
-  Legacy,
-  /// A legacy address with a payment ID embedded.
-  LegacyIntegrated([u8; 8]),
-  /// A subaddress.
-  ///
-  /// This is what SHOULD be used if specific functionality isn't needed.
-  Subaddress(SubaddressIndex),
-  /// A featured address.
-  ///
-  /// Featured Addresses are an unofficial address specification which is meant to be extensible
-  /// and support a variety of functionality. This functionality includes being a subaddresses AND
-  /// having a payment ID, along with being immune to the burning bug.
-  ///
-  /// At this time, support for featured addresses is limited to this crate. There should be no
-  /// expectation of interoperability.
-  Featured {
-    /// The subaddress index to derive this address with.
-    ///
-    /// If None, no subaddress derivation occurs.
-    subaddress: Option<SubaddressIndex>,
-    /// The payment ID to embed in this address.
-    payment_id: Option<[u8; 8]>,
-    /// If this address should be guaranteed.
-    ///
-    /// A guaranteed address is one where any outputs scanned to it are guaranteed to be spendable
-    /// under the hardness of various cryptographic problems (which are assumed hard). This is via
-    /// a modified shared-key derivation which eliminates the burning bug.
-    guaranteed: bool,
-  },
-}
-
 /// Bytes used as prefixes when encoding addresses.
 ///
 /// These distinguish the address's type.
@@ -227,7 +190,7 @@ pub enum Network {
   Testnet,
 }
 
-/// Error when decoding an address.
+/// Errors when decoding an address.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum AddressError {
@@ -257,6 +220,9 @@ pub enum AddressError {
     /// The Network embedded within the Address.
     actual: Network,
   },
+  /// The view key was of small order despite being in a guaranteed address.
+  #[cfg_attr(feature = "std", error("small-order view key in guaranteed address"))]
+  SmallOrderView,
 }
 
 /// Bytes used as prefixes when encoding addresses, variable to the network instance.
@@ -375,6 +341,15 @@ pub const MONERO_BYTES: NetworkedAddressBytes = match NetworkedAddressBytes::new
   None => panic!("Monero network byte constants conflicted"),
 };
 
+/// Errors when creating an address.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum AddressCreationError {
+  /// The view key was of small order despite being in a guaranteed address.
+  #[cfg_attr(feature = "std", error("small-order view key in guaranteed address"))]
+  SmallOrderView,
+}
+
 /// A Monero address.
 #[derive(Clone, Copy, PartialEq, Eq, Zeroize)]
 pub struct Address<const ADDRESS_BYTES: u128> {
@@ -429,8 +404,16 @@ impl<const ADDRESS_BYTES: u128> fmt::Display for Address<ADDRESS_BYTES> {
 
 impl<const ADDRESS_BYTES: u128> Address<ADDRESS_BYTES> {
   /// Create a new address.
-  pub fn new(network: Network, kind: AddressType, spend: EdwardsPoint, view: EdwardsPoint) -> Self {
-    Address { network, kind, spend, view }
+  pub fn new(
+    network: Network,
+    kind: AddressType,
+    spend: EdwardsPoint,
+    view: EdwardsPoint,
+  ) -> Result<Self, AddressCreationError> {
+    if kind.is_guaranteed() && view.mul_by_cofactor().is_identity() {
+      Err(AddressCreationError::SmallOrderView)?;
+    }
+    Ok(Address { network, kind, spend, view })
   }
 
   /// Parse an address from a String, accepting any network it is.
@@ -470,6 +453,11 @@ impl<const ADDRESS_BYTES: u128> Address<ADDRESS_BYTES> {
 
     if !raw.is_empty() {
       Err(AddressError::InvalidLength)?;
+    }
+
+    // If this is a guaranteed address, reject small-order view keys
+    if kind.is_guaranteed() && view.mul_by_cofactor().is_identity() {
+      Err(AddressError::SmallOrderView)?;
     }
 
     Ok(Address { network, kind, spend, view })
