@@ -50,5 +50,4 @@ std = [
 
 compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-bulletproofs/compile-time-generators"]
 multisig = ["monero-clsag/multisig", "std"]
-#binaries = ["tokio/rt-multi-thread", "tokio/macros", "http-rpc"]
 default = ["std", "compile-time-generators"]

@@ -257,9 +257,11 @@ impl OriginalStruct {
     let res = OriginalStruct { A, S, T1, T2, tau_x, mu, L, R, a: a[0], b: b[0], t };
 
     #[cfg(debug_assertions)]
-    let mut verifier = BulletproofsBatchVerifier::default();
-    debug_assert!(res.verify(rng, &mut verifier, &commitments_points));
-    debug_assert!(verifier.verify());
+    {
+      let mut verifier = BulletproofsBatchVerifier::default();
+      debug_assert!(res.verify(rng, &mut verifier, &commitments_points));
+      debug_assert!(verifier.verify());
+    }
 
     res
   }

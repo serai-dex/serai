@@ -4901,6 +4901,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "monero-serai-verify-chain"
+version = "0.1.0"
+dependencies = [
+ "curve25519-dalek",
+ "hex",
+ "monero-rpc",
+ "monero-serai",
+ "monero-simple-request-rpc",
+ "rand_core",
+ "serde",
+ "serde_json",
+ "std-shims",
+ "tokio",
+]
+
+[[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
 dependencies = [
