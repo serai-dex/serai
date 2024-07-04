@@ -169,12 +169,18 @@ impl Timelock {
 
   /// Read a Timelock.
   pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
+    const TIMELOCK_BLOCK_THRESHOLD: usize = 500_000_000;
+
     let raw = read_varint::<_, u64>(r)?;
     Ok(if raw == 0 {
       Timelock::None
-    } else if raw < u64::from(500_000_000u32) {
-      // TODO: const-assert 32 or 64 bits
-      Timelock::Block(usize::try_from(raw).expect("timelock (<32 bits) overflowed usize"))
+    } else if raw <
+      u64::try_from(TIMELOCK_BLOCK_THRESHOLD)
+        .expect("TIMELOCK_BLOCK_THRESHOLD didn't fit in a u64")
+    {
+      Timelock::Block(usize::try_from(raw).expect(
+        "timelock overflowed usize despite being less than a const representable with a usize",
+      ))
     } else {
       Timelock::Time(raw)
     })
