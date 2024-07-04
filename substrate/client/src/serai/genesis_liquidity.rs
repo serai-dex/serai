@@ -29,9 +29,9 @@ impl<'a> SeraiGenesisLiquidity<'a> {
       .await
   }
 
-  pub fn set_initial_price(prices: Prices, signature: Signature) -> Transaction {
+  pub fn oraclize_values(prices: Prices, signature: Signature) -> Transaction {
     Serai::unsigned(serai_abi::Call::GenesisLiquidity(
-      serai_abi::genesis_liquidity::Call::set_initial_price { prices, signature },
+      serai_abi::genesis_liquidity::Call::oraclize_values { prices, signature },
     ))
   }
 

@@ -33,6 +33,7 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 
 serai-primitives = { path = "../../primitives", default-features = false }
 in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../primitives", default-features = false }
+genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../../genesis-liquidity/primitives", default-features = false }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
@@ -55,6 +56,7 @@ std = [
 
   "serai-primitives/std",
   "in-instructions-primitives/std",
+  "genesis-liquidity-primitives/std",
 
   "coins-pallet/std",
   "dex-pallet/std",

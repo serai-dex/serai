@@ -16,7 +16,7 @@ use serai_client::{
 };
 
 use serai_abi::{
-  genesis_liquidity::primitives::{set_initial_price_message, Prices},
+  genesis_liquidity::primitives::{oraclize_values_message, Prices},
   primitives::COINS,
 };
 
@@ -101,7 +101,7 @@ async fn test_genesis_liquidity(serai: Serai) {
   .unwrap();
 
   // set prices
-  let prices = Prices { bitcoin: 10u64.pow(8), monero: 184100, ethereum: 4785000, dai: 1500 };
+  let prices = Prices { monero: 184100, ethereum: 4785000, dai: 1500 };
   set_prices(&serai, &prices).await;
 
   // wait little bit..
@@ -127,7 +127,7 @@ async fn test_genesis_liquidity(serai: Serai) {
   let pool_btc = btc_addresses.iter().fold(0u128, |acc, value| acc + u128::from(value.1 .0));
   let pool_xmr = xmr_addresses.iter().fold(0u128, |acc, value| acc + u128::from(value.1 .0));
 
-  let pool_btc_value = (pool_btc * u128::from(prices.bitcoin)) / 10u128.pow(8);
+  let pool_btc_value = pool_btc;
   let pool_xmr_value = (pool_xmr * u128::from(prices.monero)) / 10u128.pow(12);
   let total_value = pool_btc_value + pool_xmr_value;
 
@@ -176,7 +176,8 @@ async fn set_prices(serai: &Serai, prices: &Prices) {
   // prepare a Musig tx to set the initial prices
   let pair = insecure_pair_from_name("Alice");
   let public = pair.public();
-  let set = ValidatorSet { session: Session(0), network: NetworkId::Serai };
+  // we publish the tx in set 2
+  let set = ValidatorSet { session: Session(2), network: NetworkId::Serai };
 
   let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
   let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
@@ -195,13 +196,11 @@ async fn set_prices(serai: &Serai, prices: &Prices) {
       &Schnorrkel::new(b"substrate"),
       &HashMap::from([(threshold_keys.params().i(), threshold_keys.into())]),
     ),
-    &set_initial_price_message(&set, prices),
+    &oraclize_values_message(&set, prices),
   );
 
   // set initial prices
-  let _ = publish_tx(
-    serai,
-    &SeraiGenesisLiquidity::set_initial_price(*prices, Signature(sig.to_bytes())),
-  )
-  .await;
+  let _ =
+    publish_tx(serai, &SeraiGenesisLiquidity::oraclize_values(*prices, Signature(sig.to_bytes())))
+      .await;
 }

@@ -19,6 +19,7 @@ pub mod pallet {
   use sp_core::sr25519::Public;
 
   use serai_primitives::{Coin, Amount, Balance};
+  use genesis_liquidity_primitives::GENESIS_LIQUIDITY_ACCOUNT;
 
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
@@ -205,6 +206,7 @@ pub mod pallet {
           }
         }
         InInstruction::GenesisLiquidity(address) => {
+          Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance)?;
           GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
         }
       }

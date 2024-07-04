@@ -28,13 +28,27 @@ pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liq
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Prices {
-  pub bitcoin: u64,
   pub monero: u64,
   pub ethereum: u64,
   pub dai: u64,
 }
 
-/// The message for the set_initial_price signature.
-pub fn set_initial_price_message(set: &ValidatorSet, prices: &Prices) -> Vec<u8> {
-  (b"GenesisLiquidity-set_initial_price", set, prices).encode()
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct LiquidityAmount {
+  pub shares: u64,
+  pub coins: u64,
+}
+
+impl LiquidityAmount {
+  pub fn zero() -> Self {
+    LiquidityAmount { shares: 0, coins: 0 }
+  }
+}
+
+/// The message for the oraclize_values signature.
+pub fn oraclize_values_message(set: &ValidatorSet, prices: &Prices) -> Vec<u8> {
+  (b"GenesisLiquidity-oraclize_values", set, prices).encode()
 }

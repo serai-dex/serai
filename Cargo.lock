@@ -7998,6 +7998,7 @@ dependencies = [
  "serai-coins-pallet",
  "serai-dex-pallet",
  "serai-genesis-liquidity-pallet",
+ "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-pallet",
