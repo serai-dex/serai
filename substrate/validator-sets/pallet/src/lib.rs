@@ -724,7 +724,7 @@ pub mod pallet {
       });
 
       // Update the total allocated stake to be for the current set
-      self.set_total_allocated_stake(set.network);
+      Self::set_total_allocated_stake(set.network);
     }
 
     /// Take the amount deallocatable.
@@ -912,8 +912,10 @@ pub mod pallet {
       Keys::<T>::set(set, Some(key_pair.clone()));
 
       // If this is the first ever set for this network, set TotalAllocatedStake now
+      // We generally set TotalAllocatedStake when the prior set retires, and the new set is fully
+      // active and liable. Since this is the first set, there is no prior set to wait to retire
       if session == Session(0) {
-        self.set_total_allocated_stake(network);
+        Self::set_total_allocated_stake(network);
       }
 
       // This does not remove from TotalAllocatedStake or InSet in order to:
