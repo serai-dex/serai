@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
-// #![deny(missing_docs)] // TODO
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use zeroize::{Zeroize, Zeroizing};
@@ -23,6 +23,7 @@ pub use monero_address as address;
 mod view_pair;
 pub use view_pair::{ViewPair, GuaranteedViewPair};
 
+/// Structures and functionality for working with transactions' extra fields.
 pub mod extra;
 pub(crate) use extra::{PaymentId, Extra};
 
@@ -37,6 +38,7 @@ mod decoys;
 #[cfg(not(feature = "std"))]
 mod decoys {
   pub use monero_serai::primitives::Decoys;
+  /// TODO: Document/remove
   pub trait DecoySelection {}
 }
 pub use decoys::{DecoySelection, Decoys};

@@ -8,7 +8,7 @@ use monero_wallet::{
   transaction::Transaction,
   rpc::Rpc,
   address::{Network, SubaddressIndex, MoneroAddress},
-  extra::{MAX_TX_EXTRA_NONCE_SIZE, Extra, PaymentId},
+  extra::{MAX_ARBITRARY_DATA_SIZE, Extra, PaymentId},
   Scanner,
 };
 
@@ -347,8 +347,7 @@ test!(
 
       // Make 2 data that is the full 255 bytes
       for _ in 0 .. 2 {
-        // Subtract 1 since we prefix data with 127
-        let data = vec![b'a'; MAX_TX_EXTRA_NONCE_SIZE - 1];
+        let data = vec![b'a'; MAX_ARBITRARY_DATA_SIZE];
         builder.add_data(data).unwrap();
       }
 

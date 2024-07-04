@@ -60,7 +60,7 @@ test!(
       let mut data = vec![b'a'; MAX_ARBITRARY_DATA_SIZE + 1];
 
       // Make sure we get an error if we try to add it to the TX
-      assert_eq!(builder.add_data(data.clone()), Err(SendError::TooMuchData));
+      assert_eq!(builder.add_data(data.clone()), Err(SendError::TooMuchArbitraryData));
 
       // Reduce data size and retry. The data will now be 255 bytes long (including the added
       // marker), exactly

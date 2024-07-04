@@ -1,3 +1,5 @@
+// TODO: Clean this
+
 use std_shims::{vec::Vec, collections::HashSet};
 
 use zeroize::Zeroize;
@@ -277,9 +279,12 @@ async fn select_decoys<R: RngCore + CryptoRng>(
 pub use monero_serai::primitives::Decoys;
 
 // TODO: Remove this trait
+/// TODO: Document
 #[cfg(feature = "std")]
 #[async_trait::async_trait]
 pub trait DecoySelection {
+  /// Select decoys using the same distribution as Monero. Relies on the monerod RPC
+  /// response for an output's unlocked status, minimizing trips to the daemon.
   async fn select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &impl Rpc,
@@ -288,6 +293,14 @@ pub trait DecoySelection {
     inputs: &[WalletOutput],
   ) -> Result<Vec<Decoys>, RpcError>;
 
+  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
+  /// function will use the same distribution to select decoys. It is fingerprintable
+  /// because a caller using this will not be able to select decoys that are timelocked
+  /// with a timestamp. Any transaction which includes timestamp timelocked decoys in its
+  /// rings could not be constructed using this function.
+  ///
+  /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
+  /// output's unlocked status and remove all usage of fingerprintable_canonical
   async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &impl Rpc,
@@ -300,8 +313,6 @@ pub trait DecoySelection {
 #[cfg(feature = "std")]
 #[async_trait::async_trait]
 impl DecoySelection for Decoys {
-  /// Select decoys using the same distribution as Monero. Relies on the monerod RPC
-  /// response for an output's unlocked status, minimizing trips to the daemon.
   async fn select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &impl Rpc,
@@ -312,14 +323,6 @@ impl DecoySelection for Decoys {
     select_decoys(rng, rpc, ring_len, height, inputs, false).await
   }
 
-  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
-  /// function will use the same distribution to select decoys. It is fingerprintable
-  /// because a caller using this will not be able to select decoys that are timelocked
-  /// with a timestamp. Any transaction which includes timestamp timelocked decoys in its
-  /// rings could not be constructed using this function.
-  ///
-  /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
-  /// output's unlocked status and remove all usage of fingerprintable_canonical
   async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
     rng: &mut R,
     rpc: &impl Rpc,

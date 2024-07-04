@@ -63,7 +63,7 @@ impl SignableTransactionBuilder {
   #[allow(unused)]
   pub fn add_data(&mut self, data: Vec<u8>) -> Result<&mut Self, SendError> {
     if data.len() > MAX_ARBITRARY_DATA_SIZE {
-      Err(SendError::TooMuchData)?;
+      Err(SendError::TooMuchArbitraryData)?;
     }
     self.data.push(data);
     Ok(self)

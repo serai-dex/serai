@@ -388,7 +388,7 @@ impl Monero {
         SendError::NoOutputs |
         SendError::TooManyOutputs |
         SendError::NoChange |
-        SendError::TooMuchData |
+        SendError::TooMuchArbitraryData |
         SendError::TooLargeTransaction |
         SendError::WrongPrivateKey => {
           panic!("created an Monero invalid transaction: {e}");

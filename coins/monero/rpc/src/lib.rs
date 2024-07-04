@@ -85,12 +85,18 @@ impl FeeRate {
   }
 
   /// Write the FeeRate.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn write(&self, w: &mut impl io::Write) -> io::Result<()> {
     w.write_all(&self.per_weight.to_le_bytes())?;
     w.write_all(&self.mask.to_le_bytes())
   }
 
   /// Serialize the FeeRate to a `Vec<u8>`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(16);
     self.write(&mut res).unwrap();
@@ -98,6 +104,9 @@ impl FeeRate {
   }
 
   /// Read a FeeRate.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
   pub fn read(r: &mut impl io::Read) -> io::Result<FeeRate> {
     Ok(FeeRate { per_weight: read_u64(r)?, mask: read_u64(r)? })
   }
@@ -486,7 +495,10 @@ pub trait Rpc: Sync + Clone + Debug {
     &self,
     number: usize,
   ) -> Result<Vec<Transaction>, RpcError> {
-    self.get_block_transactions(self.get_block_hash(number).await?).await
+    let block = self.get_block_by_number(number).await?;
+    let mut res = vec![block.miner_transaction];
+    res.extend(self.get_transactions(&block.transactions).await?);
+    Ok(res)
   }
 
   /// Get the output indexes of the specified transaction.

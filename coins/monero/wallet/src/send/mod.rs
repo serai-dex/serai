@@ -69,7 +69,6 @@ impl Change {
   ///
   /// This take the view key as Monero assumes it has the view key for change outputs. It optimizes
   /// its wallet protocol accordingly.
-  // TODO: Accept AddressSpec, not `guaranteed: bool`
   pub fn new(view: &ViewPair) -> Change {
     Change(ChangeEnum::AddressWithView(
       // Which network doesn't matter as the derivations will all be the same
@@ -79,6 +78,10 @@ impl Change {
     ))
   }
 
+  /// Create a change output specification for a guaranteed view pair.
+  ///
+  /// This take the view key as Monero assumes it has the view key for change outputs. It optimizes
+  /// its wallet protocol accordingly.
   pub fn guaranteed(view: &GuaranteedViewPair) -> Change {
     Change(ChangeEnum::AddressWithView(
       view.address(
@@ -146,46 +149,78 @@ impl fmt::Debug for InternalPayment {
   }
 }
 
+/// An error while sending Monero.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "std", derive(thiserror::Error))]
 pub enum SendError {
+  /// The RingCT type to produce proofs for this transaction with weren't supported.
   #[cfg_attr(feature = "std", error("this library doesn't yet support that RctType"))]
   UnsupportedRctType,
+  /// The transaction had no inputs specified.
   #[cfg_attr(feature = "std", error("no inputs"))]
   NoInputs,
+  /// The decoy quantity was invalid for the specified RingCT type.
   #[cfg_attr(feature = "std", error("invalid number of decoys"))]
   InvalidDecoyQuantity,
+  /// The transaction had no outputs specified.
   #[cfg_attr(feature = "std", error("no outputs"))]
   NoOutputs,
+  /// The transaction had too many outputs specified.
   #[cfg_attr(feature = "std", error("too many outputs"))]
   TooManyOutputs,
+  /// The transaction did not have a change output, and did not have two outputs.
+  ///
+  /// Monero requires all transactions have at least two outputs, assuming one payment and one
+  /// change (or at least one dummy and one change). Accordingly, specifying no change and only
+  /// one payment prevents creating a valid transaction
   #[cfg_attr(feature = "std", error("only one output and no change address"))]
   NoChange,
+  /// Multiple addresses had payment IDs specified.
+  ///
+  /// Only one payment ID is allowed per transaction.
   #[cfg_attr(feature = "std", error("multiple addresses with payment IDs"))]
   MultiplePaymentIds,
+  /// Too much arbitrary data was specified.
   #[cfg_attr(feature = "std", error("too much data"))]
-  TooMuchData,
-  #[cfg_attr(feature = "std", error("too many inputs/too much arbitrary data"))]
+  TooMuchArbitraryData,
+  /// The created transaction was too large.
+  #[cfg_attr(feature = "std", error("too large of a transaction"))]
   TooLargeTransaction,
+  /// This transaction could not pay for itself.
   #[cfg_attr(
     feature = "std",
     error("not enough funds (inputs {inputs}, outputs {outputs}, fee {fee:?})")
   )]
-  NotEnoughFunds { inputs: u64, outputs: u64, fee: Option<u64> },
+  NotEnoughFunds {
+    /// The amount of funds the inputs contributed.
+    inputs: u64,
+    /// The amount of funds the outputs required.
+    outputs: u64,
+    /// The fee which would be paid on top.
+    ///
+    /// If this is None, it is because the fee was not calculated as the outputs alone caused this
+    /// error.
+    fee: Option<u64>,
+  },
+  /// This transaction is being signed with the wrong private key.
   #[cfg_attr(feature = "std", error("wrong spend private key"))]
   WrongPrivateKey,
+  /// This transaction was read from a bytestream which was malicious.
   #[cfg_attr(
     feature = "std",
     error("this SignableTransaction was created by deserializing a malicious serialization")
   )]
   MaliciousSerialization,
+  /// There was an error when working with the CLSAGs.
   #[cfg_attr(feature = "std", error("clsag error ({0})"))]
   ClsagError(ClsagError),
+  /// There was an error when working with FROST.
   #[cfg(feature = "multisig")]
   #[cfg_attr(feature = "std", error("frost error {0}"))]
   FrostError(FrostError),
 }
 
+/// A signable transaction.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SignableTransaction {
   rct_type: RctType,
@@ -260,7 +295,7 @@ impl SignableTransaction {
     // Check the length of each arbitrary data
     for part in &self.data {
       if part.len() > MAX_ARBITRARY_DATA_SIZE {
-        Err(SendError::TooMuchData)?;
+        Err(SendError::TooMuchArbitraryData)?;
       }
     }
 
@@ -268,7 +303,7 @@ impl SignableTransaction {
     // https://github.com/monero-project/monero/pull/8733
     const MAX_EXTRA_SIZE: usize = 1060;
     if self.extra().len() > MAX_EXTRA_SIZE {
-      Err(SendError::TooMuchData)?;
+      Err(SendError::TooMuchArbitraryData)?;
     }
 
     // Make sure we have enough funds
@@ -305,6 +340,15 @@ impl SignableTransaction {
     Ok(())
   }
 
+  /// Create a new SignableTransaction.
+  ///
+  /// `outgoing_view_key` is used to seed the RNGs for this transaction. Anyone with knowledge of
+  /// the outgoing view key will be able to identify a transaction produced with this methodology,
+  /// and the data within it. Accordingly, it must be treated as a private key.
+  ///
+  /// `data` represents arbitrary data which will be embedded into the transaction's `extra` field.
+  /// The embedding occurs using an `ExtraField::Nonce` with a custom marker byte (as to not
+  /// conflict with a payment ID).
   pub fn new(
     rct_type: RctType,
     outgoing_view_key: Zeroizing<[u8; 32]>,
@@ -340,10 +384,12 @@ impl SignableTransaction {
     Ok(res)
   }
 
+  /// The fee rate this transaction uses.
   pub fn fee_rate(&self) -> FeeRate {
     self.fee_rate
   }
 
+  /// The fee this transaction will use.
   pub fn fee(&self) -> u64 {
     self.weight_and_fee().1
   }
@@ -461,6 +507,7 @@ impl SignableTransaction {
     SignableTransactionWithKeyImages { intent: self, key_images }
   }
 
+  /// Sign this transaction.
   pub fn sign(
     self,
     rng: &mut (impl RngCore + CryptoRng),

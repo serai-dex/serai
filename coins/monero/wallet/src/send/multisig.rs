@@ -30,7 +30,7 @@ use monero_serai::{
 };
 use crate::send::{SendError, SignableTransaction, key_image_sort};
 
-/// FROST signing machine to produce a signed transaction.
+/// Initial FROST machine to produce a signed transaction.
 pub struct TransactionMachine {
   signable: SignableTransaction,
 
@@ -41,6 +41,7 @@ pub struct TransactionMachine {
   clsags: Vec<(ClsagMultisigMaskSender, AlgorithmMachine<Ed25519, ClsagMultisig>)>,
 }
 
+/// Second FROST machine to produce a signed transaction.
 pub struct TransactionSignMachine {
   signable: SignableTransaction,
 
@@ -52,6 +53,7 @@ pub struct TransactionSignMachine {
   our_preprocess: Vec<Preprocess<Ed25519, ClsagAddendum>>,
 }
 
+/// Final FROST machine to produce a signed transaction.
 pub struct TransactionSignatureMachine {
   tx: Transaction,
   clsags: Vec<AlgorithmSignatureMachine<Ed25519, ClsagMultisig>>,

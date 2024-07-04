@@ -10,20 +10,26 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use monero_serai::io::*;
 
-pub const MAX_TX_EXTRA_PADDING_COUNT: usize = 255;
-pub const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
+pub(crate) const MAX_TX_EXTRA_PADDING_COUNT: usize = 255;
+const MAX_TX_EXTRA_NONCE_SIZE: usize = 255;
 
-pub const PAYMENT_ID_MARKER: u8 = 0;
-pub const ENCRYPTED_PAYMENT_ID_MARKER: u8 = 1;
+const PAYMENT_ID_MARKER: u8 = 0;
+const ENCRYPTED_PAYMENT_ID_MARKER: u8 = 1;
 // Used as it's the highest value not interpretable as a continued VarInt
-pub const ARBITRARY_DATA_MARKER: u8 = 127;
+pub(crate) const ARBITRARY_DATA_MARKER: u8 = 127;
 
+/// The max amount of data which will fit within a blob of arbitrary data.
 // 1 byte is used for the marker
 pub const MAX_ARBITRARY_DATA_SIZE: usize = MAX_TX_EXTRA_NONCE_SIZE - 1;
 
+/// A Payment ID.
+///
+/// This is a legacy method of identifying why Monero was sent to the receiver.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum PaymentId {
+  /// A deprecated form of payment ID which is no longer supported.
   Unencrypted([u8; 32]),
+  /// An encrypted payment ID.
   Encrypted([u8; 8]),
 }
 
@@ -42,6 +48,7 @@ impl BitXor<[u8; 8]> for PaymentId {
 }
 
 impl PaymentId {
+  /// Write the PaymentId.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       PaymentId::Unencrypted(id) => {
@@ -56,6 +63,14 @@ impl PaymentId {
     Ok(())
   }
 
+  /// Serialize the PaymentId to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(1 + 8);
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  /// Read a PaymentId.
   pub fn read<R: Read>(r: &mut R) -> io::Result<PaymentId> {
     Ok(match read_byte(r)? {
       0 => PaymentId::Unencrypted(read_bytes(r)?),
@@ -65,18 +80,39 @@ impl PaymentId {
   }
 }
 
-// Doesn't bother with padding nor MinerGate
+/// A field within the TX extra.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub enum ExtraField {
+  /// Padding.
+  ///
+  /// This is a block of zeroes within the TX extra.
   Padding(usize),
+  /// The transaction key.
+  ///
+  /// This is a commitment to the randomness used for deriving outputs.
   PublicKey(EdwardsPoint),
+  /// The nonce field.
+  ///
+  /// This is used for data, such as payment IDs.
   Nonce(Vec<u8>),
+  /// The field for merge-mining.
+  ///
+  /// This is used within miner transactions who are merge-mining Monero to specify the foreign
+  /// block they mined.
   MergeMining(usize, [u8; 32]),
+  /// The additional transaction keys.
+  ///
+  /// These are the per-output commitments to the randomness used for deriving outputs.
   PublicKeys(Vec<EdwardsPoint>),
+  /// The 'mysterious' Minergate tag.
+  ///
+  /// This was used by a closed source entity without documentation. Support for parsing it was
+  /// added to reduce extra which couldn't be decoded.
   MysteriousMinergate(Vec<u8>),
 }
 
 impl ExtraField {
+  /// Write the ExtraField.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     match self {
       ExtraField::Padding(size) => {
@@ -110,6 +146,14 @@ impl ExtraField {
     Ok(())
   }
 
+  /// Serialize the ExtraField to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(1 + 8);
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  /// Read an ExtraField.
   pub fn read<R: BufRead>(r: &mut R) -> io::Result<ExtraField> {
     Ok(match read_byte(r)? {
       0 => ExtraField::Padding({
@@ -151,9 +195,15 @@ impl ExtraField {
   }
 }
 
+/// The result of decoding a transaction's extra field.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct Extra(pub(crate) Vec<ExtraField>);
 impl Extra {
+  /// The keys within this extra.
+  ///
+  /// This returns all keys specified with `PublicKey` and the first set of keys specified with
+  /// `PublicKeys`, so long as they're well-formed.
+  // TODO: Cite this
   pub fn keys(&self) -> Option<(Vec<EdwardsPoint>, Option<Vec<EdwardsPoint>>)> {
     let mut keys = vec![];
     let mut additional = None;
@@ -174,6 +224,8 @@ impl Extra {
     }
   }
 
+  /// The payment ID embedded within this extra.
+  // TODO: Monero distinguishes encrypted/unencrypted payment ID retrieval
   pub fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {
@@ -183,6 +235,9 @@ impl Extra {
     None
   }
 
+  /// The arbitrary data within this extra.
+  ///
+  /// This uses a marker custom to monero-wallet.
   pub fn data(&self) -> Vec<Vec<u8>> {
     let mut res = vec![];
     for field in &self.0 {
@@ -208,6 +263,7 @@ impl Extra {
     self.0.push(field);
   }
 
+  /// Write the Extra.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
       field.write(w)?;
@@ -215,6 +271,7 @@ impl Extra {
     Ok(())
   }
 
+  /// Serialize the Extra to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();
@@ -222,6 +279,7 @@ impl Extra {
   }
 
   // TODO: Is this supposed to silently drop trailing gibberish?
+  /// Read an `Extra`.
   #[allow(clippy::unnecessary_wraps)]
   pub fn read<R: BufRead>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
