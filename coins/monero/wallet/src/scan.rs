@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std_shims::{vec::Vec, string::ToString, collections::HashMap};
+use std_shims::{alloc::format, vec, vec::Vec, string::ToString, collections::HashMap};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 

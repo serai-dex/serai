@@ -1,6 +1,7 @@
 use std_shims::{
-  io::{self, Read, Write},
+  vec,
   vec::Vec,
+  io::{self, Read, Write},
 };
 
 use zeroize::{Zeroize, ZeroizeOnDrop};

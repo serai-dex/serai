@@ -4,7 +4,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::{self, Write};
-use std_shims::string::ToString;
+use std_shims::{
+  vec,
+  string::{String, ToString},
+};
 
 use zeroize::Zeroize;
 

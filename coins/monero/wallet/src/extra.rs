@@ -1,5 +1,6 @@
 use core::ops::BitXor;
 use std_shims::{
+  vec,
   vec::Vec,
   io::{self, Read, BufRead, Write},
 };

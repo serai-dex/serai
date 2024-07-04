@@ -4,9 +4,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
 use std_shims::{
+  alloc::{boxed::Box, format},
+  vec,
   vec::Vec,
   io,
   string::{String, ToString},

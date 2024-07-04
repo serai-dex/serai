@@ -1,4 +1,5 @@
 use core::ops::Deref;
+use std_shims::{vec, vec::Vec};
 
 use zeroize::Zeroizing;
 

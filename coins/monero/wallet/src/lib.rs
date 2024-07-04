@@ -3,6 +3,8 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use std_shims::vec::Vec;
+
 use zeroize::{Zeroize, Zeroizing};
 
 use curve25519_dalek::{Scalar, EdwardsPoint};

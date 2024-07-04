@@ -1,4 +1,5 @@
 use std_shims::{
+  vec,
   vec::Vec,
   io::{self, Read, Write},
 };

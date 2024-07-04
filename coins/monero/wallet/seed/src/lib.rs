@@ -6,6 +6,7 @@
 use core::{ops::Deref, fmt};
 use std_shims::{
   sync::OnceLock,
+  vec,
   vec::Vec,
   string::{String, ToString},
   collections::HashMap,

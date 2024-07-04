@@ -1,5 +1,9 @@
 use core::{ops::Deref, fmt};
-use std_shims::io;
+use std_shims::{
+  io, vec,
+  vec::Vec,
+  string::{String, ToString},
+};
 
 use zeroize::{Zeroize, Zeroizing};
 

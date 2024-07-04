@@ -1,3 +1,5 @@
+use std_shims::{vec::Vec, string::String};
+
 use monero_primitives::keccak256;
 
 const ALPHABET_LEN: u64 = 58;

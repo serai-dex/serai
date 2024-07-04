@@ -1,3 +1,5 @@
+use std_shims::{vec, vec::Vec};
+
 use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
