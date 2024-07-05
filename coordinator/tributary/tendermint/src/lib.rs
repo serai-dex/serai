@@ -1068,6 +1068,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           let mut message_tape = txn.get(&message_tape_key).unwrap_or(vec![]);
           message_tape.extend(signed_msg.encode());
           txn.put(&message_tape_key, message_tape);
+          txn.commit();
         }
 
         // Re-broadcast this since it's an original consensus message worth handling
