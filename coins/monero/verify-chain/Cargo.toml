@@ -7,6 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/verif
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 rust-version = "1.79"
+publish = false
 
 [package.metadata.docs.rs]
 all-features = true
@@ -16,8 +17,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
-
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }

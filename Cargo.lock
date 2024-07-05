@@ -4895,7 +4895,6 @@ dependencies = [
  "monero-io",
  "monero-mlsag",
  "monero-primitives",
- "rand_core",
  "std-shims",
  "zeroize",
 ]
@@ -4912,7 +4911,6 @@ dependencies = [
  "rand_core",
  "serde",
  "serde_json",
- "std-shims",
  "tokio",
 ]
 

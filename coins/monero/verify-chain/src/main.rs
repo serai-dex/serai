@@ -248,7 +248,8 @@ async fn main() {
   let args = std::env::args().collect::<Vec<String>>();
 
   // Read start block as the first arg
-  let mut block_i = args.get(1).expect("no start block specified").parse::<usize>().expect("invalid start block");
+  let mut block_i =
+    args.get(1).expect("no start block specified").parse::<usize>().expect("invalid start block");
 
   // How many blocks to work on at once
   let async_parallelism: usize =

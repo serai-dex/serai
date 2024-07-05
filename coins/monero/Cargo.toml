@@ -19,7 +19,6 @@ workspace = true
 std-shims = { path = "../../common/std-shims", version = "^0.1.1", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
-rand_core = { version = "0.6", default-features = false }
 
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
@@ -38,13 +37,13 @@ std = [
   "std-shims/std",
 
   "zeroize/std",
-  "rand_core/std",
 
   "monero-io/std",
   "monero-generators/std",
   "monero-primitives/std",
   "monero-mlsag/std",
   "monero-clsag/std",
+  "monero-borromean/std",
   "monero-bulletproofs/std",
 ]
 

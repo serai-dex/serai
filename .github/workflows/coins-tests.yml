@@ -32,5 +32,19 @@ jobs:
             -p bitcoin-serai \
             -p alloy-simple-request-transport \
             -p ethereum-serai \
+            -p monero-io \
             -p monero-generators \
-            -p monero-serai
+            -p monero-primitives \
+            -p monero-mlsag \
+            -p monero-clsag \
+            -p monero-borromean \
+            -p monero-bulletproofs \
+            -p monero-serai \
+            -p monero-rpc \
+            -p monero-simple-request-rpc \
+            -p monero-address \
+            -p monero-wallet \
+            -p monero-seed \
+            -p polyseed \
+            -p monero-wallet-util \
+            -p monero-serai-verify-chain
