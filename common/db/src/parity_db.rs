@@ -4,6 +4,7 @@ pub use ::parity_db::{Options, Db as ParityDb};
 
 use crate::*;
 
+#[must_use]
 pub struct Transaction<'a>(&'a Arc<ParityDb>, Vec<(u8, Vec<u8>, Option<Vec<u8>>)>);
 
 impl Get for Transaction<'_> {

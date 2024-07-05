@@ -369,7 +369,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // Clear the message tape
     {
       let mut txn = self.db.txn();
-      txn.del(&message_tape_key(self.genesis));
+      txn.del(message_tape_key(self.genesis));
       txn.commit();
     }
 
