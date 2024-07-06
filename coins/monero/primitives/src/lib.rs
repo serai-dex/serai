@@ -147,7 +147,7 @@ impl Decoys {
   pub fn positions(&self) -> Vec<u64> {
     let mut res = Vec::with_capacity(self.len());
     res.push(self.offsets[0]);
-    for m in 1 .. res.len() {
+    for m in 1 .. self.len() {
       res.push(res[m - 1] + self.offsets[m]);
     }
     res

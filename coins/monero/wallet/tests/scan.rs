@@ -72,21 +72,17 @@ test!(
   scan_guaranteed,
   (
     |_, mut builder: Builder, _| async move {
-      let subaddress = SubaddressIndex::new(0, 2).unwrap();
-
       let view = runner::random_guaranteed_address().1;
-      let mut scanner = GuaranteedScanner::new(view.clone());
-      scanner.register_subaddress(subaddress);
-
+      let scanner = GuaranteedScanner::new(view.clone());
       builder.add_payment(view.address(Network::Mainnet, None, None), 5);
-      (builder.build().unwrap(), (scanner, subaddress))
+      (builder.build().unwrap(), scanner)
     },
-    |rpc, block, tx: Transaction, _, mut state: (GuaranteedScanner, SubaddressIndex)| async move {
+    |rpc, block, tx: Transaction, _, mut scanner: GuaranteedScanner| async move {
       let output =
-        state.0.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
-      assert_eq!(output.subaddress(), Some(state.1));
+      assert_eq!(output.subaddress(), None);
     },
   ),
 );

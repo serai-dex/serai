@@ -12,30 +12,31 @@ use crate::{
   primitives::{keccak256, Commitment},
   ringct::EncryptedAmount,
   SharedKeyDerivations,
-  send::{InternalPayment, SignableTransaction},
+  send::{InternalPayment, SignableTransaction, key_image_sort},
 };
-
-fn seeded_rng(
-  dst: &'static [u8],
-  outgoing_view_key: &Zeroizing<[u8; 32]>,
-  output_keys: impl Iterator<Item = EdwardsPoint>,
-) -> ChaCha20Rng {
-  // Apply the DST
-  let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
-  transcript.extend(dst);
-  // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
-  transcript.extend(outgoing_view_key.as_slice());
-  // Ensure uniqueness across transactions by binding to a use-once object
-  // The output key is also binding to the output's key image, making this use-once
-  for key in output_keys {
-    transcript.extend(key.compress().to_bytes());
-  }
-  ChaCha20Rng::from_seed(keccak256(&transcript))
-}
 
 impl SignableTransaction {
   pub(crate) fn seeded_rng(&self, dst: &'static [u8]) -> ChaCha20Rng {
-    seeded_rng(dst, &self.outgoing_view_key, self.inputs.iter().map(|(input, _)| input.key()))
+    // Apply the DST
+    let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
+    transcript.extend(dst);
+
+    // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
+    transcript.extend(self.outgoing_view_key.as_slice());
+
+    // Ensure uniqueness across transactions by binding to a use-once object
+    // The keys for the inputs is binding to their key images, making them use-once
+    let mut input_keys = self.inputs.iter().map(|(input, _)| input.key()).collect::<Vec<_>>();
+    // We sort the inputs mid-way through TX construction, so apply our own sort to ensure a
+    // consistent order
+    // We use the key image sort as it's applicable and well-defined, not because these are key
+    // images
+    input_keys.sort_by(key_image_sort);
+    for key in input_keys {
+      transcript.extend(key.compress().to_bytes());
+    }
+
+    ChaCha20Rng::from_seed(keccak256(&transcript))
   }
 
   fn has_payments_to_subaddresses(&self) -> bool {

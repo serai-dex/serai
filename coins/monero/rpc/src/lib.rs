@@ -788,7 +788,7 @@ pub trait Rpc: Sync + Clone + Debug {
         )
         .await?
     } else {
-      Vec::new()
+      vec![]
     };
 
     // TODO: https://github.com/serai-dex/serai/issues/104
@@ -811,6 +811,7 @@ pub trait Rpc: Sync + Clone + Debug {
         Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
           if fingerprintable_canonical {
             // TODO: Are timelock blocks by height or number?
+            // TODO: This doesn't check the default timelock has been passed
             Timelock::Block(height) >= txs[i].prefix().additional_timelock
           } else {
             out.unlocked
