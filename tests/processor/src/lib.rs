@@ -408,16 +408,11 @@ impl Coordinator {
         use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
 
         let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
-        let _: EmptyResponse = rpc
-          .json_rpc_call(
-            "generateblocks",
-            Some(serde_json::json!({
-              "wallet_address": ViewPair::new(
-                ED25519_BASEPOINT_POINT,
-                Zeroizing::new(Scalar::ONE),
-              ).legacy_address(Network::Mainnet).to_string(),
-              "amount_of_blocks": 1,
-            })),
+        rpc
+          .generate_blocks(
+            &ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
+              .legacy_address(Network::Mainnet),
+            1,
           )
           .await
           .unwrap();

@@ -41,7 +41,7 @@ async fn make_integrated_address(rpc: &SimpleRequestRpc, payment_id: [u8; 8]) ->
   res.integrated_address
 }
 
-async fn initialize_rpcs() -> (SimpleRequestRpc, SimpleRequestRpc, String) {
+async fn initialize_rpcs() -> (SimpleRequestRpc, SimpleRequestRpc, MoneroAddress) {
   let wallet_rpc = SimpleRequestRpc::new("http://127.0.0.1:18082".to_string()).await.unwrap();
   let daemon_rpc = runner::rpc().await;
 
@@ -64,9 +64,10 @@ async fn initialize_rpcs() -> (SimpleRequestRpc, SimpleRequestRpc, String) {
     wallet_rpc.json_rpc_call("get_address", Some(json!({ "account_index": 0 }))).await.unwrap();
 
   // Fund the new wallet
-  daemon_rpc.generate_blocks(&address.address, 70).await.unwrap();
+  let address = MoneroAddress::from_str(Network::Mainnet, &address.address).unwrap();
+  daemon_rpc.generate_blocks(&address, 70).await.unwrap();
 
-  (wallet_rpc, daemon_rpc, address.address)
+  (wallet_rpc, daemon_rpc, address)
 }
 
 async fn from_wallet_rpc_to_self(spec: AddressSpec) {
@@ -184,8 +185,7 @@ test!(
       let (wallet_rpc, _, wallet_rpc_addr) = initialize_rpcs().await;
 
       // add destination
-      builder
-        .add_payment(MoneroAddress::from_str(Network::Mainnet, &wallet_rpc_addr).unwrap(), 1000000);
+      builder.add_payment(wallet_rpc_addr, 1000000);
       (builder.build().unwrap(), wallet_rpc)
     },
     |_, _, tx: Transaction, _, data: SimpleRequestRpc| async move {
@@ -342,8 +342,7 @@ test!(
       let (wallet_rpc, _, wallet_rpc_addr) = initialize_rpcs().await;
 
       // add destination
-      builder
-        .add_payment(MoneroAddress::from_str(Network::Mainnet, &wallet_rpc_addr).unwrap(), 1000000);
+      builder.add_payment(wallet_rpc_addr, 1000000);
 
       // Make 2 data that is the full 255 bytes
       for _ in 0 .. 2 {

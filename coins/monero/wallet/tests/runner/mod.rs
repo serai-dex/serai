@@ -64,7 +64,11 @@ pub fn random_guaranteed_address() -> (Scalar, GuaranteedViewPair, MoneroAddress
 
 // TODO: Support transactions already on-chain
 // TODO: Don't have a side effect of mining blocks more blocks than needed under race conditions
-pub async fn mine_until_unlocked(rpc: &SimpleRequestRpc, addr: &str, tx_hash: [u8; 32]) -> Block {
+pub async fn mine_until_unlocked(
+  rpc: &SimpleRequestRpc,
+  addr: &MoneroAddress,
+  tx_hash: [u8; 32],
+) -> Block {
   // mine until tx is in a block
   let mut height = rpc.get_height().await.unwrap();
   let mut found = false;
@@ -105,7 +109,7 @@ pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> Wal
 
   // Mine 60 blocks to unlock a miner TX
   let start = rpc.get_height().await.unwrap();
-  rpc.generate_blocks(&view.legacy_address(Network::Mainnet).to_string(), 60).await.unwrap();
+  rpc.generate_blocks(&view.legacy_address(Network::Mainnet), 60).await.unwrap();
 
   let block = rpc.get_block_by_number(start).await.unwrap();
   scanner.scan(rpc, &block).await.unwrap().ignore_additional_timelock().swap_remove(0)
@@ -138,8 +142,7 @@ pub async fn rpc() -> SimpleRequestRpc {
     AddressType::Legacy,
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
-  )
-  .to_string();
+  );
 
   // Mine 40 blocks to ensure decoy availability
   rpc.generate_blocks(&addr, 40).await.unwrap();
@@ -312,7 +315,7 @@ macro_rules! test {
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
-              mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
+              mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             check_weight_and_fee(&tx, fee_rate);
             let scanner = Scanner::new(view.clone());
@@ -333,7 +336,7 @@ macro_rules! test {
             let signed = sign(tx).await;
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
-              mine_until_unlocked(&rpc, &random_address().2.to_string(), signed.hash()).await;
+              mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             if stringify!($name) != "spend_one_input_to_two_outputs_no_change" {
               // Skip weight and fee check for the above test because when there is no change,

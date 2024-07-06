@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Input {
   /// An input for a miner transaction, which is generating new coins.
-  Gen(u64),
+  Gen(usize),
   /// An input spending an output on-chain.
   ToKey {
     /// The pool this input spends an output of.

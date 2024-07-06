@@ -83,7 +83,7 @@ impl Block {
   ///
   /// This information comes from the Block's miner transaction. If the miner transaction isn't
   /// structed as expected, this will return None.
-  pub fn number(&self) -> Option<u64> {
+  pub fn number(&self) -> Option<usize> {
     match &self.miner_transaction {
       Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => {
         match prefix.inputs.first() {

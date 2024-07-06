@@ -113,6 +113,11 @@ struct Interim {
 }
 
 /// FROST-inspired algorithm for producing a CLSAG signature.
+///
+/// Before this has its `process_addendum` called, a mask must be set. Else this will panic.
+///
+/// The message signed is expected to be a 32-byte value. Per Monero, it's the keccak256 hash of
+/// the transaction data which is signed. This will panic if the message is not a 32-byte value.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct ClsagMultisig {
@@ -133,8 +138,6 @@ pub struct ClsagMultisig {
 
 impl ClsagMultisig {
   /// Construct a new instance of multisignature CLSAG signing.
-  ///
-  /// Before this has its `process_addendum` called, a mask must be set. Else this will panic.
   pub fn new(
     transcript: RecommendedTranscript,
     context: ClsagContext,
@@ -261,7 +264,6 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // opening of the commitment being re-randomized (and what it's re-randomized to)
     let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
-    // TODO: Accept the message preimage and remove this panic
     self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
 
     let sign_core = Clsag::sign_core(

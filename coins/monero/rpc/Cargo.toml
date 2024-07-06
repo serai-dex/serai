@@ -29,6 +29,7 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 monero-serai = { path = "..", default-features = false }
+monero-address = { path = "../wallet/address", default-features = false }
 
 [features]
 std = [
@@ -42,5 +43,6 @@ std = [
   "serde_json/std",
 
   "monero-serai/std",
+  "monero-address/std",
 ]
 default = ["std"]

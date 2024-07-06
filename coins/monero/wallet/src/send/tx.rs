@@ -1,15 +1,12 @@
 use std_shims::{vec, vec::Vec};
 
-use rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
 use curve25519_dalek::{
   constants::{ED25519_BASEPOINT_POINT, ED25519_BASEPOINT_TABLE},
   Scalar, EdwardsPoint,
 };
 
 use crate::{
-  io::varint_len,
+  io::{varint_len, write_varint},
   primitives::Commitment,
   ringct::{
     clsag::Clsag, bulletproofs::Bulletproof, EncryptedAmount, RctType, RctBase, RctPrunable,
@@ -138,17 +135,69 @@ impl SignableTransaction {
         bp_commitments.push(Commitment::zero());
         commitments.push(ED25519_BASEPOINT_POINT);
       }
-      // TODO: Remove this. Deserialize an empty BP?
-      let bulletproof = (match self.rct_type {
+
+      let padded_log2 = {
+        let mut log2_find = 0;
+        while (1 << log2_find) < self.payments.len() {
+          log2_find += 1;
+        }
+        log2_find
+      };
+      // This is log2 the padded amount of IPA rows
+      // We have 64 rows per commitment, so we need 64 * c IPA rows
+      // We rewrite this as 2**6 * c
+      // By finding the padded log2 of c, we get 2**6 * 2**p
+      // This declares the log2 to be 6 + p
+      let lr_len = 6 + padded_log2;
+
+      let bulletproof = match self.rct_type {
         RctType::ClsagBulletproof => {
-          Bulletproof::prove(&mut ChaCha20Rng::from_seed([0; 32]), &bp_commitments)
+          let mut bp = Vec::with_capacity(((9 + (2 * lr_len)) * 32) + 2);
+          let push_point = |bp: &mut Vec<u8>| {
+            bp.push(1);
+            bp.extend([0; 31]);
+          };
+          let push_scalar = |bp: &mut Vec<u8>| bp.extend([0; 32]);
+          for _ in 0 .. 4 {
+            push_point(&mut bp);
+          }
+          for _ in 0 .. 2 {
+            push_scalar(&mut bp);
+          }
+          for _ in 0 .. 2 {
+            write_varint(&lr_len, &mut bp).unwrap();
+            for _ in 0 .. lr_len {
+              push_point(&mut bp);
+            }
+          }
+          for _ in 0 .. 3 {
+            push_scalar(&mut bp);
+          }
+          Bulletproof::read(&mut bp.as_slice()).expect("made an invalid dummy BP")
         }
         RctType::ClsagBulletproofPlus => {
-          Bulletproof::prove_plus(&mut ChaCha20Rng::from_seed([0; 32]), bp_commitments)
+          let mut bp = Vec::with_capacity(((6 + (2 * lr_len)) * 32) + 2);
+          let push_point = |bp: &mut Vec<u8>| {
+            bp.push(1);
+            bp.extend([0; 31]);
+          };
+          let push_scalar = |bp: &mut Vec<u8>| bp.extend([0; 32]);
+          for _ in 0 .. 3 {
+            push_point(&mut bp);
+          }
+          for _ in 0 .. 3 {
+            push_scalar(&mut bp);
+          }
+          for _ in 0 .. 2 {
+            write_varint(&lr_len, &mut bp).unwrap();
+            for _ in 0 .. lr_len {
+              push_point(&mut bp);
+            }
+          }
+          Bulletproof::read_plus(&mut bp.as_slice()).expect("made an invalid dummy BP+")
         }
         _ => panic!("unsupported RctType"),
-      })
-      .expect("couldn't prove BP(+)s for this many payments despite checking in constructor?");
+      };
 
       // `- 1` to remove the one byte for the 0 fee
       Transaction::V2 {

@@ -200,16 +200,7 @@ impl Wallet {
 
         let height = rpc.get_height().await.unwrap();
         // Mines 200 blocks so sufficient decoys exist, as only 60 is needed for maturity
-        let _: EmptyResponse = rpc
-          .json_rpc_call(
-            "generateblocks",
-            Some(serde_json::json!({
-              "wallet_address": view_pair.legacy_address(Network::Mainnet).to_string(),
-              "amount_of_blocks": 200,
-            })),
-          )
-          .await
-          .unwrap();
+        rpc.generate_blocks(&view_pair.legacy_address(Network::Mainnet), 200).await.unwrap();
         let block = rpc.get_block(rpc.get_block_hash(height).await.unwrap()).await.unwrap();
 
         Wallet::Monero {

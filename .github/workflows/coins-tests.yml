@@ -32,6 +32,7 @@ jobs:
             -p bitcoin-serai \
             -p alloy-simple-request-transport \
             -p ethereum-serai \
+            -p serai-ethereum-relayer \
             -p monero-io \
             -p monero-generators \
             -p monero-primitives \

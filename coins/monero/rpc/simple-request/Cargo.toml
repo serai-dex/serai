@@ -24,3 +24,8 @@ simple-request = { path = "../../../../common/request", version = "0.1", default
 tokio = { version = "1", default-features = false }
 
 monero-rpc = { path = "..", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+monero-address = { path = "../../wallet/address", default-features = false, features = ["std"] }
+
+tokio = { version = "1", default-features = false, features = ["macros"] }

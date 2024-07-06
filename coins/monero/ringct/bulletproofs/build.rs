@@ -43,10 +43,10 @@ fn generators(prefix: &'static str, path: &str) {
           static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
           pub(crate) fn GENERATORS() -> &'static Generators {{
             GENERATORS_CELL.get_or_init(|| Generators {{
-              G: vec![
+              G: std_shims::vec![
                 {G_str}
               ],
-              H: vec![
+              H: std_shims::vec![
                 {H_str}
               ],
             }})

@@ -90,8 +90,7 @@ async fn mint_and_burn_test() {
         use monero_wallet::{rpc::Rpc, ViewPair, address::Network};
 
         let addr = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
-          .legacy_address(Network::Mainnet)
-          .to_string();
+          .legacy_address(Network::Mainnet);
 
         let rpc = producer_handles.monero(ops).await;
         let mut res = Vec::with_capacity(count);

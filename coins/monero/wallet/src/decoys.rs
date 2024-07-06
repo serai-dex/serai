@@ -155,8 +155,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
 
   if distribution.len() < height {
     // TODO: verify distribution elems are strictly increasing
-    let extension =
-      rpc.get_output_distribution(distribution.len(), height.saturating_sub(1)).await?;
+    let extension = rpc.get_output_distribution(distribution.len() .. height).await?;
     distribution.extend(extension);
   }
   // If asked to use an older height than previously asked, truncate to ensure accuracy

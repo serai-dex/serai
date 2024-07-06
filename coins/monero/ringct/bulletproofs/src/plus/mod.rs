@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use std_shims::{sync::OnceLock, vec};
+use std_shims::sync::OnceLock;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwards::EdwardsPoint};
 

@@ -64,6 +64,7 @@ jobs:
       - name: Run Integration Tests Without Features
         run: |
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai --test '*'
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-simple-request-rpc --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet-util --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai-verify-chain --test '*'
@@ -73,6 +74,7 @@ jobs:
         if: ${{ matrix.version != 'v0.18.2.0' }}
         run: |
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai --all-features --test '*'
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-simple-request-rpc --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet --all-features --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet-util --all-features --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai-verify-chain --test '*'

@@ -74,11 +74,13 @@ members = [
   "substrate/coins/primitives",
   "substrate/coins/pallet",
 
-  "substrate/in-instructions/primitives",
-  "substrate/in-instructions/pallet",
+  "substrate/dex/pallet",
 
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
+
+  "substrate/in-instructions/primitives",
+  "substrate/in-instructions/pallet",
 
   "substrate/signals/primitives",
   "substrate/signals/pallet",

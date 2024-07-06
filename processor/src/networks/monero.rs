@@ -176,17 +176,17 @@ impl BlockTrait<Monero> for Block {
 
   async fn time(&self, rpc: &Monero) -> u64 {
     // Constant from Monero
-    const BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW: u64 = 60;
+    const BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW: usize = 60;
 
     // If Monero doesn't have enough blocks to build a window, it doesn't define a network time
     if (self.number().unwrap() + 1) < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
       // Use the block number as the time
-      return self.number().unwrap();
+      return u64::try_from(self.number().unwrap()).unwrap();
     }
 
     let mut timestamps = vec![self.header.timestamp];
     let mut parent = self.parent();
-    while u64::try_from(timestamps.len()).unwrap() < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
+    while timestamps.len() < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
       let mut parent_block;
       while {
         parent_block = rpc.rpc.get_block(parent).await;
@@ -217,7 +217,7 @@ impl BlockTrait<Monero> for Block {
     // Monero also solely requires the block's time not be less than the median, it doesn't ensure
     // it advances the median forward
     // Ensure monotonicity despite both these issues by adding the block number to the median time
-    res + self.number().unwrap()
+    res + u64::try_from(self.number().unwrap()).unwrap()
   }
 }
 
@@ -553,19 +553,17 @@ impl Network for Monero {
           if eventuality.matches(&tx) {
             res.insert(
               eventualities.map.remove(&tx.prefix().extra).unwrap().0,
-              (usize::try_from(block.number().unwrap()).unwrap(), tx.id(), tx),
+              (block.number().unwrap(), tx.id(), tx),
             );
           }
         }
       }
 
       eventualities.block_number += 1;
-      assert_eq!(eventualities.block_number, usize::try_from(block.number().unwrap()).unwrap());
+      assert_eq!(eventualities.block_number, block.number().unwrap());
     }
 
-    for block_num in
-      (eventualities.block_number + 1) .. usize::try_from(block.number().unwrap()).unwrap()
-    {
+    for block_num in (eventualities.block_number + 1) .. block.number().unwrap() {
       let block = {
         let mut block;
         while {
@@ -583,7 +581,7 @@ impl Network for Monero {
 
     // Also check the current block
     check_block(self, eventualities, block, &mut res).await;
-    assert_eq!(eventualities.block_number, usize::try_from(block.number().unwrap()).unwrap());
+    assert_eq!(eventualities.block_number, block.number().unwrap());
 
     res
   }
@@ -664,7 +662,7 @@ impl Network for Monero {
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
-    self.rpc.get_block(*id).await.unwrap().number().unwrap().try_into().unwrap()
+    self.rpc.get_block(*id).await.unwrap().number().unwrap()
   }
 
   #[cfg(test)]
@@ -696,23 +694,7 @@ impl Network for Monero {
   async fn mine_block(&self) {
     // https://github.com/serai-dex/serai/issues/198
     sleep(std::time::Duration::from_millis(100)).await;
-
-    #[derive(Debug, serde::Deserialize)]
-    struct EmptyResponse {}
-    let _: EmptyResponse = self
-      .rpc
-      .rpc_call(
-        "json_rpc",
-        Some(serde_json::json!({
-          "method": "generateblocks",
-          "params": {
-            "wallet_address": Self::test_address().to_string(),
-            "amount_of_blocks": 1
-          },
-        })),
-      )
-      .await
-      .unwrap();
+    self.rpc.generate_blocks(&Self::test_address().into(), 1).await.unwrap();
   }
 
   #[cfg(test)]
