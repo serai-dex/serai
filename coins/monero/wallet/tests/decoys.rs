@@ -45,20 +45,18 @@ test!(
       (builder.build().unwrap(), (rct_type, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
-    |rpc, block, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
+    |rpc, _, tx: Transaction, _: Scanner, state: (_, _)| async move {
       use rand_core::OsRng;
 
       let rpc: SimpleRequestRpc = rpc;
 
       let height = rpc.get_height().await.unwrap();
 
-      let output_tx1 =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
-      assert_eq!(output_tx1.transaction(), tx.hash());
+      let most_recent_o_index = rpc.get_o_indexes(tx.hash()).await.unwrap().pop().unwrap();
 
       // Make sure output from tx1 is in the block in which it unlocks
       let out_tx1: OutputResponse =
-        rpc.get_outs(&[output_tx1.index_on_blockchain()]).await.unwrap().swap_remove(0);
+        rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
       assert_eq!(out_tx1.height, height - DEFAULT_LOCK_WINDOW);
       assert!(out_tx1.unlocked);
 
@@ -78,7 +76,7 @@ test!(
         .await
         .unwrap();
 
-        selected_fresh_decoy = decoys[0].positions().contains(&output_tx1.index_on_blockchain());
+        selected_fresh_decoy = decoys[0].positions().contains(&most_recent_o_index);
         attempts -= 1;
       }
 
@@ -101,6 +99,7 @@ test!(
         scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 2000000000000);
+      output
     },
   ),
   (
@@ -125,20 +124,18 @@ test!(
       (builder.build().unwrap(), (rct_type, output_tx0))
     },
     // Then make sure DSA selects freshly unlocked output from tx1 as a decoy
-    |rpc, block, tx: Transaction, mut scanner: Scanner, state: (_, _)| async move {
+    |rpc, _, tx: Transaction, _: Scanner, state: (_, _)| async move {
       use rand_core::OsRng;
 
       let rpc: SimpleRequestRpc = rpc;
 
       let height = rpc.get_height().await.unwrap();
 
-      let output_tx1 =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
-      assert_eq!(output_tx1.transaction(), tx.hash());
+      let most_recent_o_index = rpc.get_o_indexes(tx.hash()).await.unwrap().pop().unwrap();
 
       // Make sure output from tx1 is in the block in which it unlocks
       let out_tx1: OutputResponse =
-        rpc.get_outs(&[output_tx1.index_on_blockchain()]).await.unwrap().swap_remove(0);
+        rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
       assert_eq!(out_tx1.height, height - DEFAULT_LOCK_WINDOW);
       assert!(out_tx1.unlocked);
 
@@ -158,7 +155,7 @@ test!(
         .await
         .unwrap();
 
-        selected_fresh_decoy = decoys[0].positions().contains(&output_tx1.index_on_blockchain());
+        selected_fresh_decoy = decoys[0].positions().contains(&most_recent_o_index);
         attempts -= 1;
       }
 
