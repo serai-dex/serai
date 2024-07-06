@@ -169,11 +169,11 @@ const MONERO_MAINNET_BYTES: AddressBytes = match AddressBytes::new(18, 19, 42, 7
   Some(bytes) => bytes,
   None => panic!("mainnet byte constants conflicted"),
 };
-const MONERO_STAGENET_BYTES: AddressBytes = match AddressBytes::new(53, 54, 63, 111) {
+const MONERO_STAGENET_BYTES: AddressBytes = match AddressBytes::new(24, 25, 36, 86) {
   Some(bytes) => bytes,
   None => panic!("stagenet byte constants conflicted"),
 };
-const MONERO_TESTNET_BYTES: AddressBytes = match AddressBytes::new(24, 25, 36, 86) {
+const MONERO_TESTNET_BYTES: AddressBytes = match AddressBytes::new(53, 54, 63, 111) {
   Some(bytes) => bytes,
   None => panic!("testnet byte constants conflicted"),
 };
