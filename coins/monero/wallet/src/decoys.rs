@@ -181,7 +181,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
 
   // TODO: Create a TX with less than the target amount, as allowed by the protocol
   let high = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
-  if high.saturating_sub(COINBASE_LOCK_WINDOW as u64) <
+  if high.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
     u64::try_from(inputs.len() * ring_len).unwrap()
   {
     Err(RpcError::InternalError("not enough coinbase candidates".to_string()))?;

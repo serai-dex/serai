@@ -137,8 +137,8 @@ pub async fn rpc() -> SimpleRequestRpc {
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
   );
 
-  // Mine 40 blocks to ensure decoy availability
-  rpc.generate_blocks(&addr, 40).await.unwrap();
+  // Mine 80 blocks to ensure decoy availability
+  rpc.generate_blocks(&addr, 80).await.unwrap();
 
   rpc
 }

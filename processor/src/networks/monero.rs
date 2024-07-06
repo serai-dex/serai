@@ -244,6 +244,11 @@ fn map_rpc_err(err: RpcError) -> NetworkError {
   NetworkError::ConnectionError
 }
 
+enum MakeSignableTransactionResult {
+  Fee(u64),
+  SignableTransaction(MSignableTransaction),
+}
+
 impl Monero {
   pub async fn new(url: String) -> Monero {
     let mut res = SimpleRequestRpc::new(url.clone()).await;
@@ -299,7 +304,7 @@ impl Monero {
     payments: &[Payment<Self>],
     change: &Option<Address>,
     calculating_fee: bool,
-  ) -> Result<Option<MSignableTransaction>, NetworkError> {
+  ) -> Result<Option<MakeSignableTransactionResult>, NetworkError> {
     for payment in payments {
       assert_eq!(payment.balance.coin, Coin::Monero);
     }
@@ -362,11 +367,7 @@ impl Monero {
 
     let payments = payments
       .into_iter()
-      // If we're solely estimating the fee, don't actually specify an amount
-      // This won't affect the fee calculation yet will ensure we don't hit an out of funds error
-      .map(|payment| {
-        (payment.address.into(), if calculating_fee { 0 } else { payment.balance.amount.0 })
-      })
+      .map(|payment| (payment.address.into(), payment.balance.amount.0))
       .collect::<Vec<_>>();
 
     match MSignableTransaction::new(
@@ -379,7 +380,13 @@ impl Monero {
       vec![],
       fee_rate,
     ) {
-      Ok(signable) => Ok(Some(signable)),
+      Ok(signable) => Ok(Some({
+        if calculating_fee {
+          MakeSignableTransactionResult::Fee(signable.fee())
+        } else {
+          MakeSignableTransactionResult::SignableTransaction(signable)
+        }
+      })),
       Err(e) => match e {
         SendError::UnsupportedRctType => {
           panic!("trying to use an RctType unsupported by monero-wallet")
@@ -403,7 +410,23 @@ impl Monero {
             inputs,
             outputs
           );
-          Ok(None)
+          match fee {
+            Some(fee) => {
+              // If we're solely calculating the fee, return the fee this TX will cost
+              if calculating_fee {
+                Ok(Some(MakeSignableTransactionResult::Fee(fee)))
+              } else {
+                // If we're actually trying to make the TX, return None
+                Ok(None)
+              }
+            }
+            // We didn't have enough funds to even cover the outputs
+            None => {
+              // Ensure we're not misinterpreting this
+              assert!(outputs > inputs);
+              Ok(None)
+            }
+          }
         }
         SendError::MaliciousSerialization | SendError::ClsagError(_) | SendError::FrostError(_) => {
           panic!("supposedly unreachable (at this time) Monero error: {e}");
@@ -594,12 +617,14 @@ impl Network for Monero {
     payments: &[Payment<Self>],
     change: &Option<Address>,
   ) -> Result<Option<u64>, NetworkError> {
-    Ok(
-      self
-        .make_signable_transaction(block_number, &[0; 32], inputs, payments, change, true)
-        .await?
-        .map(|signable| signable.fee()),
-    )
+    let res = self
+      .make_signable_transaction(block_number, &[0; 32], inputs, payments, change, true)
+      .await?;
+    let Some(res) = res else { return Ok(None) };
+    let MakeSignableTransactionResult::Fee(fee) = res else {
+      panic!("told make_signable_transaction calculating_fee and got transaction")
+    };
+    Ok(Some(fee))
   }
 
   async fn signable_transaction(
@@ -612,16 +637,17 @@ impl Network for Monero {
     change: &Option<Address>,
     (): &(),
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    Ok(
-      self
-        .make_signable_transaction(block_number, plan_id, inputs, payments, change, false)
-        .await?
-        .map(|signable| {
-          let signable = SignableTransaction(signable);
-          let eventuality = signable.0.clone().into();
-          (signable, eventuality)
-        }),
-    )
+    let res = self
+      .make_signable_transaction(block_number, plan_id, inputs, payments, change, false)
+      .await?;
+    let Some(res) = res else { return Ok(None) };
+    let MakeSignableTransactionResult::SignableTransaction(signable) = res else {
+      panic!("told make_signable_transaction not calculating_fee and got fee")
+    };
+
+    let signable = SignableTransaction(signable);
+    let eventuality = signable.0.clone().into();
+    Ok(Some((signable, eventuality)))
   }
 
   async fn attempt_sign(
