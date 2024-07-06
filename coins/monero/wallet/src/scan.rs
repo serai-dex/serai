@@ -9,7 +9,7 @@ use monero_rpc::{RpcError, Rpc};
 use monero_serai::{
   io::*,
   primitives::Commitment,
-  transaction::{Input, Timelock, Transaction},
+  transaction::{Timelock, Transaction},
   block::Block,
 };
 use crate::{
@@ -111,7 +111,8 @@ impl InternalScanner {
     tx_start_index_on_blockchain: u64,
     tx: &Transaction,
   ) -> Result<Timelocked, RpcError> {
-    // Only scan RCT TXs since we can only spend RCT outputs
+    // Only scan TXs creating RingCT outputs
+    // For the full details on why this check is equivalent, please see the documentation in `scan`
     if tx.version() != 2 {
       return Ok(Timelocked(vec![]));
     }
@@ -254,17 +255,71 @@ impl InternalScanner {
 
     let block_hash = block.hash();
 
-    // We get the output indexes for the miner transaction as a reference point
-    // TODO: Are miner transactions since v2 guaranteed to have an output?
-    let mut tx_start_index_on_blockchain = *rpc
-      .get_o_indexes(block.miner_transaction.hash())
-      .await?
-      .first()
-      .ok_or(RpcError::InvalidNode("miner transaction without outputs".to_string()))?;
-
     // We obtain all TXs in full
     let mut txs = vec![block.miner_transaction.clone()];
     txs.extend(rpc.get_transactions(&block.transactions).await?);
+
+    /*
+      Requesting the output index for each output we sucessfully scan would cause a loss of privacy
+      We could instead request the output indexes for all outputs we scan, yet this would notably
+      increase the amount of RPC calls we make.
+
+      We solve this by requesting the output index for the first RingCT output in the block, which
+      should be within the miner transaction. Then, as we scan transactions, we update the output
+      index ourselves.
+
+      Please note we only will scan RingCT outputs so we only need to track the RingCT output
+      index. This decision was made due to spending CN outputs potentially having burdensome
+      requirements (the need to make a v1 TX due to insufficient decoys).
+
+      We bound ourselves to only scanning RingCT outputs by only scanning v2 transactions. This is
+      safe and correct since:
+
+      1) v1 transactions cannot create RingCT outputs.
+
+         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+           /src/cryptonote_basic/cryptonote_format_utils.cpp#L866-L869
+
+      2) v2 miner transactions implicitly create RingCT outputs.
+
+         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+           /src/blockchain_db/blockchain_db.cpp#L232-L241
+
+      3) v2 transactions must create RingCT outputs.
+
+         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c45
+           /src/cryptonote_core/blockchain.cpp#L3055-L3065
+
+         That does bound on the hard fork version being >= 3, yet all v2 TXs have a hard fork
+         version > 3.
+
+         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+           /src/cryptonote_core/blockchain.cpp#L3417
+    */
+
+    // Get the starting index
+    let mut tx_start_index_on_blockchain = {
+      let mut tx_start_index_on_blockchain = None;
+      for tx in &txs {
+        // If this isn't a RingCT output, or there are no outputs, move to the next TX
+        if (!matches!(tx, Transaction::V2 { .. })) || tx.prefix().outputs.is_empty() {
+          continue;
+        }
+
+        let index = *rpc.get_o_indexes(tx.hash()).await?.first().ok_or_else(|| {
+          RpcError::InvalidNode(
+            "requested output indexes for a TX with outputs and got none".to_string(),
+          )
+        })?;
+        tx_start_index_on_blockchain = Some(index);
+        break;
+      }
+      let Some(tx_start_index_on_blockchain) = tx_start_index_on_blockchain else {
+        // Block had no RingCT outputs
+        return Ok(Timelocked(vec![]));
+      };
+      tx_start_index_on_blockchain
+    };
 
     let mut res = Timelocked(vec![]);
     for tx in txs {
@@ -278,20 +333,10 @@ impl InternalScanner {
         res.0.extend(this_txs_outputs);
       }
 
-      // Update the TX start index for the next TX
-      tx_start_index_on_blockchain += u64::try_from(
-        tx.prefix()
-          .outputs
-          .iter()
-          // Filter to v2 miner TX outputs/RCT outputs since we're tracking the RCT output index
-          .filter(|output| {
-            let is_v2_miner_tx =
-              (tx.version() == 2) && matches!(tx.prefix().inputs.first(), Some(Input::Gen(..)));
-            is_v2_miner_tx || output.amount.is_none()
-          })
-          .count(),
-      )
-      .unwrap()
+      // Update the RingCT starting index for the next TX
+      if matches!(tx, Transaction::V2 { .. }) {
+        tx_start_index_on_blockchain += u64::try_from(tx.prefix().outputs.len()).unwrap()
+      }
     }
 
     // If the block's version is >= 12, drop all unencrypted payment IDs

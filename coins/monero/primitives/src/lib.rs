@@ -107,6 +107,33 @@ impl Commitment {
   pub fn calculate(&self) -> EdwardsPoint {
     EdwardsPoint::vartime_double_scalar_mul_basepoint(&Scalar::from(self.amount), &H(), &self.mask)
   }
+
+  /// Write the Commitment.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    w.write_all(&self.mask.to_bytes())?;
+    w.write_all(&self.amount.to_le_bytes())
+  }
+
+  /// Serialize the Commitment to a `Vec<u8>`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(32 + 8);
+    self.write(&mut res).unwrap();
+    res
+  }
+
+  /// Read a Commitment.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Commitment> {
+    Ok(Commitment::new(read_scalar(r)?, read_u64(r)?))
+  }
 }
 
 /// Decoy data, as used for producing Monero's ring signatures.

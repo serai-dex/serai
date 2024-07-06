@@ -119,9 +119,7 @@ impl OutputData {
   fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(&self.key.compress().to_bytes())?;
     w.write_all(&self.key_offset.to_bytes())?;
-    // TODO: Commitment::write?
-    w.write_all(&self.commitment.mask.to_bytes())?;
-    w.write_all(&self.commitment.amount.to_le_bytes())?;
+    self.commitment.write(w)?;
     self.additional_timelock.write(w)
   }
 
@@ -133,7 +131,7 @@ impl OutputData {
     Ok(OutputData {
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
-      commitment: Commitment::new(read_scalar(r)?, read_u64(r)?),
+      commitment: Commitment::read(r)?,
       additional_timelock: Timelock::read(r)?,
     })
   }
