@@ -4,7 +4,6 @@ use monero_serai::transaction::Transaction;
 use monero_wallet::{
   rpc::Rpc,
   address::{AddressType, MoneroAddress},
-  send::Eventuality,
 };
 
 mod runner;

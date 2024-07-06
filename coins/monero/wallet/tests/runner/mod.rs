@@ -15,7 +15,7 @@ use monero_wallet::{
   block::Block,
   rpc::{Rpc, FeeRate},
   address::{Network, AddressType, MoneroAddress},
-  ViewPair, GuaranteedViewPair, WalletOutput, Scanner,
+  DEFAULT_LOCK_WINDOW, ViewPair, GuaranteedViewPair, WalletOutput, Scanner,
 };
 
 mod builder;
@@ -88,15 +88,8 @@ pub async fn mine_until_unlocked(
   }
 
   // Mine until tx's outputs are unlocked
-  let o_indexes: Vec<u64> = rpc.get_o_indexes(tx_hash).await.unwrap();
-  while rpc
-    .get_unlocked_outputs(&o_indexes, height, false)
-    .await
-    .unwrap()
-    .into_iter()
-    .any(|output| output.is_none())
-  {
-    height = rpc.generate_blocks(addr, 1).await.unwrap().1 + 1;
+  for _ in 0 .. (DEFAULT_LOCK_WINDOW - 1) {
+    rpc.generate_blocks(addr, 1).await.unwrap();
   }
 
   block.unwrap()
@@ -210,7 +203,7 @@ macro_rules! test {
           ViewPair,
           DecoySelection,
           Scanner,
-          send::{Change, SignableTransaction},
+          send::{Change, SignableTransaction, Eventuality},
         };
 
         use runner::{
@@ -274,23 +267,29 @@ macro_rules! test {
             let spend = spend.clone();
             #[cfg(feature = "multisig")]
             let keys = keys.clone();
-            async move {
-              if !multisig {
-                tx.sign(&mut OsRng, &spend).unwrap()
-              } else {
-                #[cfg(not(feature = "multisig"))]
-                panic!("Multisig branch called without the multisig feature");
-                #[cfg(feature = "multisig")]
-                {
-                  let mut machines = HashMap::new();
-                  for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-                    machines.insert(i, tx.clone().multisig(&keys[&i]).unwrap());
-                  }
 
-                  frost::tests::sign_without_caching(&mut OsRng, machines, &[])
+            let eventuality = Eventuality::from(tx.clone());
+
+            let tx = if !multisig {
+              tx.sign(&mut OsRng, &spend).unwrap()
+            } else {
+              #[cfg(not(feature = "multisig"))]
+              panic!("multisig branch called without the multisig feature");
+              #[cfg(feature = "multisig")]
+              {
+                let mut machines = HashMap::new();
+                for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
+                  machines.insert(i, tx.clone().multisig(&keys[&i]).unwrap());
                 }
+
+                frost::tests::sign_without_caching(&mut OsRng, machines, &[])
               }
-            }
+            };
+
+            assert_eq!(&eventuality.extra(), &tx.prefix().extra);
+            assert!(eventuality.matches(&tx));
+
+            tx
           };
 
           // TODO: Generate a distinct wallet for each transaction to prevent overlap
@@ -312,7 +311,7 @@ macro_rules! test {
 
             let (tx, state) = ($first_tx)(rpc.clone(), builder, next_addr).await;
             let fee_rate = tx.fee_rate().clone();
-            let signed = sign(tx).await;
+            let signed = sign(tx);
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
               mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
@@ -333,7 +332,7 @@ macro_rules! test {
               *carried_state.downcast().unwrap()
             ).await;
             let fee_rate = tx.fee_rate().clone();
-            let signed = sign(tx).await;
+            let signed = sign(tx);
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
               mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
