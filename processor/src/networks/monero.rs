@@ -256,7 +256,7 @@ impl Monero {
   }
 
   fn view_pair(spend: EdwardsPoint) -> GuaranteedViewPair {
-    GuaranteedViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0))
+    GuaranteedViewPair::new(spend.0, Zeroizing::new(additional_key::<Monero>(0).0)).unwrap()
   }
 
   fn address_internal(spend: EdwardsPoint, subaddress: Option<SubaddressIndex>) -> Address {
@@ -351,6 +351,7 @@ impl Monero {
       payments.push(Payment {
         address: Address::new(
           ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
+            .unwrap()
             .legacy_address(MoneroNetwork::Mainnet),
         )
         .unwrap(),
@@ -413,7 +414,7 @@ impl Monero {
 
   #[cfg(test)]
   fn test_view_pair() -> ViewPair {
-    ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::ONE.0))
+    ViewPair::new(*EdwardsPoint::generator(), Zeroizing::new(Scalar::ONE.0)).unwrap()
   }
 
   #[cfg(test)]

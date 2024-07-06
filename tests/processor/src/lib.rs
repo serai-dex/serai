@@ -411,6 +411,7 @@ impl Coordinator {
         rpc
           .generate_blocks(
             &ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
+              .unwrap()
               .legacy_address(Network::Mainnet),
             1,
           )

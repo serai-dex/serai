@@ -109,7 +109,8 @@ test!(
       let mut outgoing_view = Zeroizing::new([0; 32]);
       OsRng.fill_bytes(outgoing_view.as_mut());
       let change_view =
-        ViewPair::new(&Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE, view_priv.clone());
+        ViewPair::new(&Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE, view_priv.clone())
+          .unwrap();
 
       let mut builder = SignableTransactionBuilder::new(
         rct_type,
@@ -123,7 +124,8 @@ test!(
       let sub_view = ViewPair::new(
         &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
         Zeroizing::new(Scalar::random(&mut OsRng)),
-      );
+      )
+      .unwrap();
       builder
         .add_payment(sub_view.subaddress(Network::Mainnet, SubaddressIndex::new(0, 1).unwrap()), 1);
       (builder.build().unwrap(), (change_view, sub_view))

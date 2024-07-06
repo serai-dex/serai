@@ -172,7 +172,6 @@ impl InternalScanner {
           // Our subtracting of a prime-order element means any torsion will be preserved
           // If someone wanted to malleate output keys with distinct torsions, only one will be
           // scanned accordingly (the one which has matching torsion of the spend key)
-          // TODO: If there's a torsioned spend key, can we spend outputs to it?
           let subaddress_spend_key =
             output_key - (&output_derivations.shared_key * ED25519_BASEPOINT_TABLE);
           self.subaddresses.get(&subaddress_spend_key.compress())

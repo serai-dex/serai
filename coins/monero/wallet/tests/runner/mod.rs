@@ -35,7 +35,7 @@ pub fn random_address() -> (Scalar, ViewPair, MoneroAddress) {
   let view = Zeroizing::new(Scalar::random(&mut OsRng));
   (
     spend,
-    ViewPair::new(spend_pub, view.clone()),
+    ViewPair::new(spend_pub, view.clone()).unwrap(),
     MoneroAddress::new(
       Network::Mainnet,
       AddressType::Legacy,
@@ -52,7 +52,7 @@ pub fn random_guaranteed_address() -> (Scalar, GuaranteedViewPair, MoneroAddress
   let view = Zeroizing::new(Scalar::random(&mut OsRng));
   (
     spend,
-    GuaranteedViewPair::new(spend_pub, view.clone()),
+    GuaranteedViewPair::new(spend_pub, view.clone()).unwrap(),
     MoneroAddress::new(
       Network::Mainnet,
       AddressType::Legacy,
@@ -240,7 +240,7 @@ macro_rules! test {
           let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
           let mut outgoing_view = Zeroizing::new([0; 32]);
           OsRng.fill_bytes(outgoing_view.as_mut());
-          let view = ViewPair::new(spend_pub, view_priv.clone());
+          let view = ViewPair::new(spend_pub, view_priv.clone()).unwrap();
           let addr = view.legacy_address(Network::Mainnet);
 
           let miner_tx = get_miner_tx_output(&rpc, &view).await;
@@ -258,7 +258,7 @@ macro_rules! test {
               &ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
                 Zeroizing::new(Scalar::random(&mut OsRng))
-              ),
+              ).unwrap(),
             ),
             rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
           );

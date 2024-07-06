@@ -194,7 +194,7 @@ impl Wallet {
         let view_key = Scalar::random(&mut OsRng);
 
         let view_pair =
-          ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key));
+          ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key)).unwrap();
 
         let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 

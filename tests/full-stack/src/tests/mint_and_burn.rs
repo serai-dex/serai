@@ -90,6 +90,7 @@ async fn mint_and_burn_test() {
         use monero_wallet::{rpc::Rpc, ViewPair, address::Network};
 
         let addr = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
+          .unwrap()
           .legacy_address(Network::Mainnet);
 
         let rpc = producer_handles.monero(ops).await;
@@ -353,7 +354,7 @@ async fn mint_and_burn_test() {
 
       // Grab the first output on the chain
       let rpc = handles[0].monero(&ops).await;
-      let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE));
+      let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE)).unwrap();
       let mut scanner = Scanner::new(view_pair.clone());
       let output = scanner
         .scan(&rpc, &rpc.get_block_by_number(1).await.unwrap())
@@ -578,7 +579,8 @@ async fn mint_and_burn_test() {
     {
       use monero_wallet::{transaction::Transaction, rpc::Rpc, ViewPair, Scanner};
       let rpc = handles[0].monero(&ops).await;
-      let mut scanner = Scanner::new(ViewPair::new(monero_spend, Zeroizing::new(monero_view)));
+      let mut scanner =
+        Scanner::new(ViewPair::new(monero_spend, Zeroizing::new(monero_view)).unwrap());
 
       // Check for up to 5 minutes
       let mut found = false;

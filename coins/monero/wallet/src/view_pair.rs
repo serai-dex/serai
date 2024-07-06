@@ -9,6 +9,21 @@ use crate::{
   address::{Network, AddressType, SubaddressIndex, MoneroAddress},
 };
 
+/// An error while working with a ViewPair.
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum ViewPairError {
+  /// The spend key was torsioned.
+  ///
+  /// Torsioned spend keys are of questionable spendability. This library avoids that question by
+  /// rejecting such ViewPairs.
+  // CLSAG seems to support it if the challenge does a torsion clear, FCMP++ should ship with a
+  // torsion clear, yet it's not worth it to modify CLSAG sign to generate challenges until the
+  // torsion clears and ensure spendability (nor can we reasonably guarantee that in the future)
+  #[cfg_attr(feature = "std", error("torsioned spend key"))]
+  TorsionedSpendKey,
+}
+
 /// The pair of keys necessary to scan transactions.
 ///
 /// This is composed of the public spend key and the private view key.
@@ -20,8 +35,11 @@ pub struct ViewPair {
 
 impl ViewPair {
   /// Create a new ViewPair.
-  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Self {
-    ViewPair { spend, view }
+  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Result<Self, ViewPairError> {
+    if !spend.is_torsion_free() {
+      Err(ViewPairError::TorsionedSpendKey)?;
+    }
+    Ok(ViewPair { spend, view })
   }
 
   /// The public spend key for this ViewPair.
@@ -86,8 +104,8 @@ pub struct GuaranteedViewPair(pub(crate) ViewPair);
 
 impl GuaranteedViewPair {
   /// Create a new GuaranteedViewPair.
-  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Self {
-    GuaranteedViewPair(ViewPair::new(spend, view))
+  pub fn new(spend: EdwardsPoint, view: Zeroizing<Scalar>) -> Result<Self, ViewPairError> {
+    ViewPair::new(spend, view).map(GuaranteedViewPair)
   }
 
   /// The public spend key for this GuaranteedViewPair.
