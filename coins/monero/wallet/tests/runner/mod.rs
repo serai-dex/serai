@@ -125,8 +125,10 @@ pub async fn rpc() -> SimpleRequestRpc {
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
+  const BLOCKS_TO_MINE: usize = 200;
+
   // Only run once
-  if rpc.get_height().await.unwrap() < 120 {
+  if rpc.get_height().await.unwrap() < BLOCKS_TO_MINE {
     return rpc;
   }
 
@@ -137,8 +139,8 @@ pub async fn rpc() -> SimpleRequestRpc {
     &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
   );
 
-  // Mine 100 blocks to ensure decoy availability
-  rpc.generate_blocks(&addr, 120).await.unwrap();
+  // Mine enough blocks to ensure decoy availability
+  rpc.generate_blocks(&addr, BLOCKS_TO_MINE).await.unwrap();
 
   rpc
 }

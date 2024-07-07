@@ -163,7 +163,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   distribution.truncate(height);
 
   if distribution.len() < DEFAULT_LOCK_WINDOW {
-    Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+    Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
   }
 
   #[allow(clippy::cast_precision_loss)]
@@ -181,10 +181,12 @@ async fn select_decoys<R: RngCore + CryptoRng>(
 
   // TODO: Create a TX with less than the target amount, as allowed by the protocol
   let high = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
+  // This assumes that each miner TX had one output (as sane) and checks we have sufficient
+  // outputs even when excluding them (due to their own timelock requirements)
   if high.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
     u64::try_from(inputs.len() * ring_len).unwrap()
   {
-    Err(RpcError::InternalError("not enough coinbase candidates".to_string()))?;
+    Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
   }
 
   // Select all decoys for this transaction, assuming we generate a sane transaction
