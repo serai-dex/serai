@@ -122,7 +122,14 @@ impl SignableTransaction {
         key_images.push(ED25519_BASEPOINT_POINT);
         clsags.push(Clsag {
           D: ED25519_BASEPOINT_POINT,
-          s: vec![Scalar::ZERO; 16],
+          s: vec![
+            Scalar::ZERO;
+            match self.rct_type {
+              RctType::ClsagBulletproof => 11,
+              RctType::ClsagBulletproofPlus => 16,
+              _ => unreachable!("unsupported RCT type"),
+            }
+          ],
           c1: Scalar::ZERO,
         });
         pseudo_outs.push(ED25519_BASEPOINT_POINT);

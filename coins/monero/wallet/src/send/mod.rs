@@ -251,6 +251,7 @@ impl SignableTransaction {
       Err(SendError::NoInputs)?;
     }
     for (_, decoys) in &self.inputs {
+      // TODO: Add a function for the ring length
       if decoys.len() !=
         match self.rct_type {
           RctType::ClsagBulletproof => 11,
