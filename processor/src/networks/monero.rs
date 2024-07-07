@@ -293,7 +293,7 @@ impl Monero {
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
     // TODO: Set a sane minimum fee
-    const MINIMUM_FEE: u64 = 50_000;
+    const MINIMUM_FEE: u64 = 1_500_000;
     Ok(FeeRate::new(fee.max(MINIMUM_FEE), 10000).unwrap())
   }
 
