@@ -71,7 +71,7 @@ CMD ["/run.sh"]
 pub fn monero(orchestration_path: &Path, network: Network) {
   monero_internal(
     network,
-    if network == Network::Dev { Os::Alpine } else { Os::Debian },
+    Os::Debian,
     orchestration_path,
     "monero",
     "monerod",
