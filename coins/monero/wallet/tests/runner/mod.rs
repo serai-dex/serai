@@ -125,10 +125,10 @@ pub async fn rpc() -> SimpleRequestRpc {
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
-  const BLOCKS_TO_MINE: usize = 200;
+  const BLOCKS_TO_MINE: usize = 110;
 
   // Only run once
-  if rpc.get_height().await.unwrap() < BLOCKS_TO_MINE {
+  if rpc.get_height().await.unwrap() > BLOCKS_TO_MINE {
     return rpc;
   }
 
