@@ -105,7 +105,7 @@ impl SignableTransaction {
     serialized
   }
 
-  pub(crate) fn weight_and_fee(&self) -> (usize, u64) {
+  pub(crate) fn weight_and_necessary_fee(&self) -> (usize, u64) {
     /*
       This transaction is variable length to:
         - The decoy offsets (fixed)
@@ -223,22 +223,6 @@ impl SignableTransaction {
         1
     };
 
-    // If we don't have a change output, the difference is the fee
-    if !self.payments.iter().any(|payment| matches!(payment, InternalPayment::Change(_, _))) {
-      let inputs = self.inputs.iter().map(|input| input.0.commitment().amount).sum::<u64>();
-      let payments = self
-        .payments
-        .iter()
-        .filter_map(|payment| match payment {
-          InternalPayment::Payment(_, amount) => Some(amount),
-          InternalPayment::Change(_, _) => None,
-        })
-        .sum::<u64>();
-      // Safe since the constructor checks inputs > payments before any calls to weight_and_fee
-      let fee = inputs - payments;
-      return (base_weight + varint_len(fee), fee);
-    }
-
     // We now have the base weight, without the fee encoded
     // The fee itself will impact the weight as its encoding is [1, 9] bytes long
     let mut possible_weights = Vec::with_capacity(9);
@@ -255,17 +239,17 @@ impl SignableTransaction {
 
     // We now look for the fee whose length matches the length used to derive it
     let mut weight_and_fee = None;
-    for (len, possible_fee) in possible_fees.into_iter().enumerate() {
-      let len = 1 + len;
-      debug_assert!(1 <= len);
-      debug_assert!(len <= 9);
+    for (fee_len, possible_fee) in possible_fees.into_iter().enumerate() {
+      let fee_len = 1 + fee_len;
+      debug_assert!(1 <= fee_len);
+      debug_assert!(fee_len <= 9);
 
       // We use the first fee whose encoded length is not larger than the length used within this
       // weight
       // This should be because the lengths are equal, yet means if somehow none are equal, this
       // will still terminate successfully
-      if varint_len(possible_fee) <= len {
-        weight_and_fee = Some((base_weight + len, possible_fee));
+      if varint_len(possible_fee) <= fee_len {
+        weight_and_fee = Some((base_weight + fee_len, possible_fee));
         break;
       }
     }
@@ -304,7 +288,30 @@ impl SignableTransactionWithKeyImages {
       },
       proofs: Some(RctProofs {
         base: RctBase {
-          fee: self.intent.weight_and_fee().1,
+          fee: if self
+            .intent
+            .payments
+            .iter()
+            .any(|payment| matches!(payment, InternalPayment::Change(_, _)))
+          {
+            // The necessary fee is the fee
+            self.intent.weight_and_necessary_fee().1
+          } else {
+            // If we don't have a change output, the difference is the fee
+            let inputs =
+              self.intent.inputs.iter().map(|input| input.0.commitment().amount).sum::<u64>();
+            let payments = self
+              .intent
+              .payments
+              .iter()
+              .filter_map(|payment| match payment {
+                InternalPayment::Payment(_, amount) => Some(amount),
+                InternalPayment::Change(_, _) => None,
+              })
+              .sum::<u64>();
+            // Safe since the constructor checks inputs >= (payments + fee)
+            inputs - payments
+          },
           encrypted_amounts,
           pseudo_outs: vec![],
           commitments,

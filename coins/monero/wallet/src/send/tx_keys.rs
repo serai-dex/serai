@@ -217,9 +217,9 @@ impl SignableTransaction {
               InternalPayment::Change(_, _) => None,
             })
             .sum::<u64>();
-          let fee = self.weight_and_fee().1;
-          // Safe since the constructor checked this
-          inputs - (payments + fee)
+          let necessary_fee = self.weight_and_necessary_fee().1;
+          // Safe since the constructor checked this TX has enough funds for itself
+          inputs - (payments + necessary_fee)
         }
       };
       let commitment = Commitment::new(shared_key_derivations.commitment_mask(), amount);

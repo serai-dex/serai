@@ -193,18 +193,20 @@ pub enum SendError {
   /// This transaction could not pay for itself.
   #[cfg_attr(
     feature = "std",
-    error("not enough funds (inputs {inputs}, outputs {outputs}, fee {fee:?})")
+    error(
+      "not enough funds (inputs {inputs}, outputs {outputs}, necessary_fee {necessary_fee:?})"
+    )
   )]
   NotEnoughFunds {
     /// The amount of funds the inputs contributed.
     inputs: u64,
     /// The amount of funds the outputs required.
     outputs: u64,
-    /// The fee which would be paid on top.
+    /// The fee necessary to be paid on top.
     ///
     /// If this is None, it is because the fee was not calculated as the outputs alone caused this
     /// error.
-    fee: Option<u64>,
+    necessary_fee: Option<u64>,
   },
   /// This transaction is being signed with the wrong private key.
   #[cfg_attr(feature = "std", error("wrong spend private key"))]
@@ -321,22 +323,19 @@ impl SignableTransaction {
         InternalPayment::Change(_, _) => None,
       })
       .sum::<u64>();
-    // Necessary so weight_and_fee doesn't underflow
-    if in_amount < payments_amount {
-      Err(SendError::NotEnoughFunds { inputs: in_amount, outputs: payments_amount, fee: None })?;
-    }
-    let (weight, fee) = self.weight_and_fee();
-    if in_amount < (payments_amount + fee) {
+    let (weight, necessary_fee) = self.weight_and_necessary_fee();
+    if in_amount < (payments_amount + necessary_fee) {
       Err(SendError::NotEnoughFunds {
         inputs: in_amount,
         outputs: payments_amount,
-        fee: Some(fee),
+        necessary_fee: Some(necessary_fee),
       })?;
     }
 
     // The actual limit is half the block size, and for the minimum block size of 300k, that'd be
     // 150k
     // wallet2 will only create transactions up to 100k bytes however
+    // TODO: Cite
     const MAX_TX_SIZE: usize = 100_000;
     if weight >= MAX_TX_SIZE {
       Err(SendError::TooLargeTransaction)?;
@@ -394,9 +393,12 @@ impl SignableTransaction {
     self.fee_rate
   }
 
-  /// The fee this transaction will use.
-  pub fn fee(&self) -> u64 {
-    self.weight_and_fee().1
+  /// The fee this transaction requires.
+  ///
+  /// This is distinct from the fee this transaction will use. If no change output is specified,
+  /// all unspent coins will be shunted to the fee.
+  pub fn necessary_fee(&self) -> u64 {
+    self.weight_and_necessary_fee().1
   }
 
   /// Write a SignableTransaction.

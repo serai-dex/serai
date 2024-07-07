@@ -159,7 +159,7 @@ impl EventualityTrait for Eventuality {
 pub struct SignableTransaction(MSignableTransaction);
 impl SignableTransactionTrait for SignableTransaction {
   fn fee(&self) -> u64 {
-    self.0.fee()
+    self.0.necessary_fee()
   }
 }
 
@@ -293,7 +293,7 @@ impl Monero {
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
     // TODO: Set a sane minimum fee
-    const MINIMUM_FEE: u64 = 5_000_000;
+    const MINIMUM_FEE: u64 = 50_000;
     Ok(FeeRate::new(fee.max(MINIMUM_FEE), 10000).unwrap())
   }
 
@@ -383,7 +383,7 @@ impl Monero {
     ) {
       Ok(signable) => Ok(Some({
         if calculating_fee {
-          MakeSignableTransactionResult::Fee(signable.fee())
+          MakeSignableTransactionResult::Fee(signable.necessary_fee())
         } else {
           MakeSignableTransactionResult::SignableTransaction(signable)
         }
@@ -405,17 +405,17 @@ impl Monero {
         SendError::MultiplePaymentIds => {
           panic!("multiple payment IDs despite not supporting integrated addresses");
         }
-        SendError::NotEnoughFunds { inputs, outputs, fee } => {
+        SendError::NotEnoughFunds { inputs, outputs, necessary_fee } => {
           log::debug!(
-            "Monero NotEnoughFunds. inputs: {:?}, outputs: {:?}, fee: {fee:?}",
+            "Monero NotEnoughFunds. inputs: {:?}, outputs: {:?}, necessary_fee: {necessary_fee:?}",
             inputs,
             outputs
           );
-          match fee {
-            Some(fee) => {
+          match necessary_fee {
+            Some(necessary_fee) => {
               // If we're solely calculating the fee, return the fee this TX will cost
               if calculating_fee {
-                Ok(Some(MakeSignableTransactionResult::Fee(fee)))
+                Ok(Some(MakeSignableTransactionResult::Fee(necessary_fee)))
               } else {
                 // If we're actually trying to make the TX, return None
                 Ok(None)
