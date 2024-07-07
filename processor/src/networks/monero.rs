@@ -292,8 +292,8 @@ impl Monero {
     fees.sort();
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
-    // TODO: Set a sane minimum fee
-    Ok(FeeRate::new(fee.max(1500000), 10000).unwrap())
+    // TODO: Set a sane minimum/maximum fee
+    Ok(FeeRate::new(fee.min(50_000).max(5_000_000), 10000).unwrap())
   }
 
   async fn make_signable_transaction(
