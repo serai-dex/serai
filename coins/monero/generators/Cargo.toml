@@ -1,7 +1,7 @@
 [package]
 name = "monero-generators"
 version = "0.4.0"
-description = "Monero's hash_to_point and generators"
+description = "Monero's hash to point function and generators"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/generators"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
@@ -20,15 +20,27 @@ std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-fe
 subtle = { version = "^2.4", default-features = false }
 
 sha3 = { version = "0.10", default-features = false }
-
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize", "precomputed-tables"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 group = { version = "0.13", default-features = false }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", version = "0.4", default-features = false }
+
+monero-io = { path = "../io", version = "0.1", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"
 
 [features]
-std = ["std-shims/std", "subtle/std", "sha3/std", "dalek-ff-group/std"]
+std = [
+  "std-shims/std",
+
+  "subtle/std",
+
+  "sha3/std",
+
+  "group/alloc",
+  "dalek-ff-group/std",
+
+  "monero-io/std"
+]
 default = ["std"]

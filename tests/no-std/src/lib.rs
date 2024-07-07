@@ -20,5 +20,4 @@ pub use frost_schnorrkel;
 
 pub use bitcoin_serai;
 
-pub use monero_generators;
-pub use monero_serai;
+pub use monero_wallet_util;

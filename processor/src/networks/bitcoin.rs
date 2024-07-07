@@ -465,7 +465,9 @@ impl Bitcoin {
       Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds) => Ok(None),
       // amortize_fee removes payments which fall below the dust threshold
       Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
-      Err(TransactionError::TooMuchData) => panic!("too much data despite not specifying data"),
+      Err(TransactionError::TooMuchData) => {
+        panic!("too much data despite not specifying data")
+      }
       Err(TransactionError::TooLowFee) => {
         panic!("created a transaction whose fee is below the minimum")
       }

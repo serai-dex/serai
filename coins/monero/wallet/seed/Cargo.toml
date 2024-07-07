@@ -1,0 +1,41 @@
+[package]
+name = "monero-seed"
+version = "0.1.0"
+description = "Rust implementation of Monero's seed algorithm"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/wallet/seed"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { path = "../../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+thiserror = { version = "1", default-features = false, optional = true }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+rand_core = { version = "0.6", default-features = false }
+
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
+
+[dev-dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+monero-primitives = { path = "../../primitives", default-features = false, features = ["std"] }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "zeroize/std",
+  "rand_core/std",
+]
+default = ["std"]

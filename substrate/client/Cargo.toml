@@ -39,7 +39,7 @@ simple-request = { path = "../../common/request", version = "0.1", optional = tr
 bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
-monero-serai = { path = "../../coins/monero", version = "0.1.4-alpha", optional = true }
+monero-wallet = { path = "../../coins/monero/wallet", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
@@ -62,7 +62,7 @@ borsh = ["serai-abi/borsh"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
-monero = ["networks", "ciphersuite/ed25519", "monero-serai"]
+monero = ["networks", "ciphersuite/ed25519", "monero-wallet"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

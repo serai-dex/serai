@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
@@ -103,8 +101,8 @@ pub enum Wallet {
   Monero {
     handle: String,
     spend_key: Zeroizing<curve25519_dalek::scalar::Scalar>,
-    view_pair: monero_serai::wallet::ViewPair,
-    inputs: Vec<monero_serai::wallet::ReceivedOutput>,
+    view_pair: monero_wallet::ViewPair,
+    last_tx: (usize, [u8; 32]),
   },
 }
 
@@ -189,55 +187,27 @@ impl Wallet {
 
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-        use monero_serai::{
-          wallet::{
-            ViewPair, Scanner,
-            address::{Network, AddressSpec},
-          },
-          rpc::HttpRpc,
-        };
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
 
-        let mut bytes = [0; 64];
-        OsRng.fill_bytes(&mut bytes);
-        let spend_key = Scalar::from_bytes_mod_order_wide(&bytes);
-        OsRng.fill_bytes(&mut bytes);
-        let view_key = Scalar::from_bytes_mod_order_wide(&bytes);
+        let spend_key = Scalar::random(&mut OsRng);
+        let view_key = Scalar::random(&mut OsRng);
 
         let view_pair =
-          ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key));
+          ViewPair::new(ED25519_BASEPOINT_POINT * spend_key, Zeroizing::new(view_key)).unwrap();
 
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         let height = rpc.get_height().await.unwrap();
         // Mines 200 blocks so sufficient decoys exist, as only 60 is needed for maturity
-        let _: EmptyResponse = rpc
-          .json_rpc_call(
-            "generateblocks",
-            Some(serde_json::json!({
-              "wallet_address": view_pair.address(
-                Network::Mainnet,
-                AddressSpec::Standard
-              ).to_string(),
-              "amount_of_blocks": 200,
-            })),
-          )
-          .await
-          .unwrap();
+        rpc.generate_blocks(&view_pair.legacy_address(Network::Mainnet), 200).await.unwrap();
         let block = rpc.get_block(rpc.get_block_hash(height).await.unwrap()).await.unwrap();
-
-        let output = Scanner::from_view(view_pair.clone(), Some(HashSet::new()))
-          .scan(&rpc, &block)
-          .await
-          .unwrap()
-          .remove(0)
-          .ignore_timelock()
-          .remove(0);
 
         Wallet::Monero {
           handle,
           spend_key: Zeroizing::new(spend_key),
           view_pair,
-          inputs: vec![output.output.clone()],
+          last_tx: (height, block.miner_transaction.hash()),
         }
       }
       NetworkId::Serai => panic!("creating a wallet for for Serai"),
@@ -434,38 +404,45 @@ impl Wallet {
         )
       }
 
-      Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut inputs } => {
+      Wallet::Monero { handle, ref spend_key, ref view_pair, ref mut last_tx } => {
         use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
-        use monero_serai::{
-          Protocol,
-          wallet::{
-            address::{Network, AddressType, AddressMeta, Address},
-            SpendableOutput, Decoys, Change, FeePriority, Scanner, SignableTransaction,
-          },
-          rpc::HttpRpc,
-          decompress_point,
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{
+          io::decompress_point,
+          ringct::RctType,
+          rpc::{FeePriority, Rpc},
+          address::{Network, AddressType, Address},
+          Scanner, DecoySelection, Decoys,
+          send::{Change, SignableTransaction},
         };
         use processor::{additional_key, networks::Monero};
 
         let rpc_url = network_rpc(NetworkId::Monero, ops, handle);
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         // Prepare inputs
-        let outputs = std::mem::take(inputs);
-        let mut these_inputs = vec![];
-        for output in outputs {
-          these_inputs.push(
-            SpendableOutput::from(&rpc, output)
+        let current_height = rpc.get_height().await.unwrap();
+        let mut inputs = vec![];
+        for block in last_tx.0 .. current_height {
+          let block = rpc.get_block_by_number(block).await.unwrap();
+          if (block.miner_transaction.hash() == last_tx.1) ||
+            block.transactions.contains(&last_tx.1)
+          {
+            inputs = Scanner::new(view_pair.clone())
+              .scan(&rpc, &block)
               .await
-              .expect("prior transaction was never published"),
-          );
+              .unwrap()
+              .ignore_additional_timelock();
+          }
         }
+        assert!(!inputs.is_empty());
+
         let mut decoys = Decoys::fingerprintable_canonical_select(
           &mut OsRng,
           &rpc,
-          Protocol::v16.ring_len(),
+          16,
           rpc.get_height().await.unwrap(),
-          &these_inputs,
+          &inputs,
         )
         .await
         .unwrap();
@@ -473,10 +450,8 @@ impl Wallet {
         let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
         let to_addr = Address::new(
-          AddressMeta::new(
-            Network::Mainnet,
-            AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
-          ),
+          Network::Mainnet,
+          AddressType::Featured { subaddress: false, payment_id: None, guaranteed: true },
           to_spend_key,
           ED25519_BASEPOINT_POINT * to_view_key.0,
         );
@@ -487,26 +462,24 @@ impl Wallet {
         if let Some(instruction) = instruction {
           data.push(Shorthand::Raw(RefundableInInstruction { origin: None, instruction }).encode());
         }
+        let mut outgoing_view_key = Zeroizing::new([0; 32]);
+        OsRng.fill_bytes(outgoing_view_key.as_mut());
         let tx = SignableTransaction::new(
-          Protocol::v16,
-          None,
-          these_inputs.drain(..).zip(decoys.drain(..)).collect(),
+          RctType::ClsagBulletproofPlus,
+          outgoing_view_key,
+          inputs.drain(..).zip(decoys.drain(..)).collect(),
           vec![(to_addr, AMOUNT)],
-          &Change::new(view_pair, false),
+          Change::new(view_pair),
           data,
-          rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+          rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         )
         .unwrap()
         .sign(&mut OsRng, spend_key)
         .unwrap();
 
-        // Push the change output
-        inputs.push(
-          Scanner::from_view(view_pair.clone(), Some(HashSet::new()))
-            .scan_transaction(&tx)
-            .ignore_timelock()
-            .remove(0),
-        );
+        // Update the last TX to track the change output
+        last_tx.0 = current_height;
+        last_tx.1 = tx.hash();
 
         (tx.serialize(), Balance { coin: Coin::Monero, amount: Amount(AMOUNT) })
       }
@@ -531,13 +504,11 @@ impl Wallet {
       )
       .unwrap(),
       Wallet::Monero { view_pair, .. } => {
-        use monero_serai::wallet::address::{Network, AddressSpec};
+        use monero_wallet::address::Network;
         ExternalAddress::new(
-          networks::monero::Address::new(
-            view_pair.address(Network::Mainnet, AddressSpec::Standard),
-          )
-          .unwrap()
-          .into(),
+          networks::monero::Address::new(view_pair.legacy_address(Network::Mainnet))
+            .unwrap()
+            .into(),
         )
         .unwrap()
       }

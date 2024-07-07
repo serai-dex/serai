@@ -1,0 +1,51 @@
+[package]
+name = "monero-wallet-util"
+version = "0.1.0"
+description = "Additional utility functions for monero-wallet"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/wallet/util"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { path = "../../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+thiserror = { version = "1", default-features = false, optional = true }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+rand_core = { version = "0.6", default-features = false }
+
+monero-wallet = { path = "..", default-features = false }
+
+monero-seed = { path = "../seed", default-features = false }
+polyseed = { path = "../polyseed", default-features = false }
+
+[dev-dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "zeroize/std",
+  "rand_core/std",
+
+  "monero-wallet/std",
+
+  "monero-seed/std",
+  "polyseed/std",
+]
+compile-time-generators = ["monero-wallet/compile-time-generators"]
+multisig = ["monero-wallet/multisig", "std"]
+default = ["std", "compile-time-generators"]

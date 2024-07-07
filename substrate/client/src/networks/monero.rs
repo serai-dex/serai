@@ -4,7 +4,7 @@ use scale::{Encode, Decode};
 
 use ciphersuite::{Ciphersuite, Ed25519};
 
-use monero_serai::wallet::address::{AddressError, Network, AddressType, AddressMeta, MoneroAddress};
+use monero_wallet::address::{AddressError, Network, AddressType, MoneroAddress};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Address(MoneroAddress);
@@ -33,7 +33,7 @@ impl fmt::Display for Address {
 // SCALE-encoded variant of Monero addresses.
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 enum EncodedAddressType {
-  Standard,
+  Legacy,
   Subaddress,
   Featured(u8),
 }
@@ -52,22 +52,20 @@ impl TryFrom<Vec<u8>> for Address {
     let addr = EncodedAddress::decode(&mut data.as_ref()).map_err(|_| ())?;
     // Convert over
     Ok(Address(MoneroAddress::new(
-      AddressMeta::new(
-        Network::Mainnet,
-        match addr.kind {
-          EncodedAddressType::Standard => AddressType::Standard,
-          EncodedAddressType::Subaddress => AddressType::Subaddress,
-          EncodedAddressType::Featured(flags) => {
-            let subaddress = (flags & 1) != 0;
-            let integrated = (flags & (1 << 1)) != 0;
-            let guaranteed = (flags & (1 << 2)) != 0;
-            if integrated {
-              Err(())?;
-            }
-            AddressType::Featured { subaddress, payment_id: None, guaranteed }
+      Network::Mainnet,
+      match addr.kind {
+        EncodedAddressType::Legacy => AddressType::Legacy,
+        EncodedAddressType::Subaddress => AddressType::Subaddress,
+        EncodedAddressType::Featured(flags) => {
+          let subaddress = (flags & 1) != 0;
+          let integrated = (flags & (1 << 1)) != 0;
+          let guaranteed = (flags & (1 << 2)) != 0;
+          if integrated {
+            Err(())?;
           }
-        },
-      ),
+          AddressType::Featured { subaddress, payment_id: None, guaranteed }
+        }
+      },
       Ed25519::read_G::<&[u8]>(&mut addr.spend.as_ref()).map_err(|_| ())?.0,
       Ed25519::read_G::<&[u8]>(&mut addr.view.as_ref()).map_err(|_| ())?.0,
     )))
@@ -85,16 +83,19 @@ impl Into<MoneroAddress> for Address {
 impl Into<Vec<u8>> for Address {
   fn into(self) -> Vec<u8> {
     EncodedAddress {
-      kind: match self.0.meta.kind {
-        AddressType::Standard => EncodedAddressType::Standard,
+      kind: match self.0.kind() {
+        AddressType::Legacy => EncodedAddressType::Legacy,
+        AddressType::LegacyIntegrated(_) => {
+          panic!("integrated address became Serai Monero address")
+        }
         AddressType::Subaddress => EncodedAddressType::Subaddress,
-        AddressType::Integrated(_) => panic!("integrated address became Serai Monero address"),
-        AddressType::Featured { subaddress, payment_id: _, guaranteed } => {
-          EncodedAddressType::Featured(u8::from(subaddress) + (u8::from(guaranteed) << 2))
+        AddressType::Featured { subaddress, payment_id, guaranteed } => {
+          debug_assert!(payment_id.is_none());
+          EncodedAddressType::Featured(u8::from(*subaddress) + (u8::from(*guaranteed) << 2))
         }
       },
-      spend: self.0.spend.compress().0,
-      view: self.0.view.compress().0,
+      spend: self.0.spend().compress().0,
+      view: self.0.view().compress().0,
     }
     .encode()
   }

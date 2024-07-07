@@ -1,0 +1,24 @@
+[package]
+name = "monero-io"
+version = "0.1.0"
+description = "Serialization functions, as within the Monero protocol"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/coins/monero/io"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
+
+[features]
+std = ["std-shims/std"]
+default = ["std"]
