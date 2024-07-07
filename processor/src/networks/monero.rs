@@ -292,8 +292,9 @@ impl Monero {
     fees.sort();
     let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
 
-    // TODO: Set a sane minimum/maximum fee
-    Ok(FeeRate::new(fee.min(50_000).max(5_000_000), 10000).unwrap())
+    // TODO: Set a sane minimum fee
+    const MINIMUM_FEE: u64 = 5_000_000;
+    Ok(FeeRate::new(fee.max(MINIMUM_FEE), 10000).unwrap())
   }
 
   async fn make_signable_transaction(
@@ -475,7 +476,6 @@ impl Network for Monero {
   const MAX_OUTPUTS: usize = 16;
 
   // 0.01 XMR
-  // TODO: Set a sane dust
   const DUST: u64 = 10000000000;
 
   // TODO
