@@ -1,5 +1,3 @@
-// TODO: Clean this
-
 use std_shims::{io, vec::Vec, collections::HashSet};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -13,7 +11,7 @@ use curve25519_dalek::{Scalar, EdwardsPoint};
 
 use crate::{
   DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME,
-  primitives::Commitment,
+  primitives::{Commitment, Decoys},
   rpc::{RpcError, Rpc},
   output::OutputData,
   WalletOutput,
@@ -24,45 +22,78 @@ const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 #[allow(clippy::cast_precision_loss)]
 const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
 
-#[allow(clippy::too_many_arguments)]
-async fn select_n<'a, R: RngCore + CryptoRng>(
-  rng: &mut R,
+async fn select_n(
+  rng: &mut (impl RngCore + CryptoRng),
   rpc: &impl Rpc,
-  distribution: &[u64],
   height: usize,
-  high: u64,
-  per_second: f64,
-  real: &[u64],
-  used: &mut HashSet<u64>,
-  count: usize,
+  real_output: u64,
+  ring_len: usize,
   fingerprintable_canonical: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
-  // TODO: consider removing this extra RPC and expect the caller to handle it
-  if fingerprintable_canonical && (height > rpc.get_height().await?) {
-    // TODO: Don't use InternalError for the caller's failure
-    Err(RpcError::InternalError("decoys being requested from too young blocks".to_string()))?;
+  if height < DEFAULT_LOCK_WINDOW {
+    Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
+  }
+  if height > rpc.get_height().await? {
+    Err(RpcError::InternalError(
+      "decoys being requested from blocks this node doesn't have".to_string(),
+    ))?;
   }
 
-  #[cfg(test)]
+  let decoy_count = ring_len - 1;
+
+  // Get the distribution
+  let distribution = rpc.get_output_distribution(.. height).await?;
+  let highest_output_exclusive_bound = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
+  // This assumes that each miner TX had one output (as sane) and checks we have sufficient
+  // outputs even when excluding them (due to their own timelock requirements)
+  // Considering this a temporal error for very new chains, it's sufficiently sane to have
+  if highest_output_exclusive_bound.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
+    u64::try_from(decoy_count).unwrap()
+  {
+    Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
+  }
+
+  // Determine the outputs per second
+  #[allow(clippy::cast_precision_loss)]
+  let per_second = {
+    let blocks = distribution.len().min(BLOCKS_PER_YEAR);
+    let initial = distribution[distribution.len().saturating_sub(blocks + 1)];
+    let outputs = distribution[distribution.len() - 1].saturating_sub(initial);
+    (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
+  };
+
+  // Don't select the real output
+  let mut do_not_select = HashSet::new();
+  do_not_select.insert(real_output);
+
+  let decoy_count = ring_len - 1;
+  let mut res = Vec::with_capacity(decoy_count);
+
   let mut iters = 0;
-  let mut confirmed = Vec::with_capacity(count);
-  // Retries on failure. Retries are obvious as decoys, yet should be minimal
-  while confirmed.len() != count {
-    let remaining = count - confirmed.len();
-    // TODO: over-request candidates in case some are locked to avoid needing
-    // round trips to the daemon (and revealing obvious decoys to the daemon)
+  // Iterates until we have enough decoys
+  // If an iteration only returns a partial set of decoys, the remainder will be obvious as decoys
+  // to the RPC
+  // The length of that remainder is expected to be minimal
+  while res.len() != decoy_count {
+    let remaining = decoy_count - res.len();
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
+      // Ensure this isn't infinitely looping
+      iters += 1;
+
+      #[cfg(not(test))]
+      const MAX_ITERS: usize = 10;
+      // When testing on fresh chains, increased iterations can be useful and we don't necessitate
+      // reasonable performance
       #[cfg(test)]
-      {
-        iters += 1;
-        // This is cheap and on fresh chains, a lot of rounds may be needed
-        if iters == 100 {
-          Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
-        }
+      const MAX_ITERS: usize = 100;
+
+      if iters == MAX_ITERS {
+        Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
       }
 
-      // Use a gamma distribution
+      // Use a gamma distribution, as Monero does
+      // TODO: Cite these constants
       let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
       #[allow(clippy::cast_precision_loss)]
       if age > TIP_APPLICATION {
@@ -74,16 +105,19 @@ async fn select_n<'a, R: RngCore + CryptoRng>(
 
       #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
       let o = (age * per_second) as u64;
-      if o < high {
-        let i = distribution.partition_point(|s| *s < (high - 1 - o));
+      if o < highest_output_exclusive_bound {
+        // Find which block this points to
+        let i = distribution.partition_point(|s| *s < (highest_output_exclusive_bound - 1 - o));
         let prev = i.saturating_sub(1);
         let n = distribution[i] - distribution[prev];
         if n != 0 {
+          // Select an output from within this block
           let o = distribution[prev] + (rng.next_u64() % n);
-          if !used.contains(&o) {
-            // It will either actually be used, or is unusable and this prevents trying it again
-            used.insert(o);
+          if !do_not_select.contains(&o) {
             candidates.push(o);
+            // This output will either be used or is unusable
+            // In either case, we should not try it again
+            do_not_select.insert(o);
           }
         }
       }
@@ -92,47 +126,39 @@ async fn select_n<'a, R: RngCore + CryptoRng>(
     // If this is the first time we're requesting these outputs, include the real one as well
     // Prevents the node we're connected to from having a list of known decoys and then seeing a
     // TX which uses all of them, with one additional output (the true spend)
-    let mut real_indexes = HashSet::with_capacity(real.len());
-    if confirmed.is_empty() {
-      for real in real {
-        candidates.push(*real);
-      }
+    let real_index = if iters == 0 {
+      candidates.push(real_output);
       // Sort candidates so the real spends aren't the ones at the end
       candidates.sort();
-      for real in real {
-        real_indexes.insert(candidates.binary_search(real).unwrap());
-      }
-    }
+      Some(candidates.binary_search(&real_output).unwrap())
+    } else {
+      None
+    };
 
-    // TODO: make sure that the real output is included in the response, and
-    // that mask and key are equal to expected
     for (i, output) in rpc
       .get_unlocked_outputs(&candidates, height, fingerprintable_canonical)
       .await?
       .iter_mut()
       .enumerate()
     {
-      // Don't include the real spend as a decoy, despite requesting it
-      if real_indexes.contains(&i) {
+      // We could check the returned info is equivalent to our expectations, yet that'd allow the
+      // node to malleate the returned info to see if they can cause this error (allowing them to
+      // figure out the output being spent)
+      //
+      // Some degree of this attack (forcing resampling/trying to observe errors) is likely
+      // always possible
+      if real_index == Some(i) {
         continue;
       }
 
+      // If this is an unlocked output, push it to the result
       if let Some(output) = output.take() {
-        confirmed.push((candidates[i], output));
+        res.push((candidates[i], output));
       }
     }
   }
 
-  Ok(confirmed)
-}
-
-fn offset(ring: &[u64]) -> Vec<u64> {
-  let mut res = vec![ring[0]];
-  res.resize(ring.len(), 0);
-  for m in (1 .. ring.len()).rev() {
-    res[m] = ring[m] - ring[m - 1];
-  }
-  res
+  Ok(res)
 }
 
 async fn select_decoys<R: RngCore + CryptoRng>(
@@ -141,134 +167,56 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   ring_len: usize,
   height: usize,
   input: &WalletOutput,
+  // TODO: Decide "canonical" or "deterministic" (updating RPC terminology accordingly)
   fingerprintable_canonical: bool,
 ) -> Result<Decoys, RpcError> {
-  let mut distribution = vec![];
-
-  let decoy_count = ring_len - 1;
-
-  // Convert the inputs in question to the raw output data
-  let mut real = vec![input.relative_id.index_on_blockchain];
-  let output = (real[0], [input.key(), input.commitment().calculate()]);
-
-  if distribution.len() < height {
-    // TODO: verify distribution elems are strictly increasing
-    let extension = rpc.get_output_distribution(distribution.len() .. height).await?;
-    distribution.extend(extension);
-  }
-  // If asked to use an older height than previously asked, truncate to ensure accuracy
-  // Should never happen, yet risks desyncing if it did
-  distribution.truncate(height);
-
-  if distribution.len() < DEFAULT_LOCK_WINDOW {
-    Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
-  }
-
-  #[allow(clippy::cast_precision_loss)]
-  let per_second = {
-    let blocks = distribution.len().min(BLOCKS_PER_YEAR);
-    let initial = distribution[distribution.len().saturating_sub(blocks + 1)];
-    let outputs = distribution[distribution.len() - 1].saturating_sub(initial);
-    (outputs as f64) / ((blocks * BLOCK_TIME) as f64)
-  };
-
-  let mut used = HashSet::<u64>::new();
-  used.insert(output.0);
-
-  // TODO: Create a TX with less than the target amount, as allowed by the protocol
-  let high = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
-  // This assumes that each miner TX had one output (as sane) and checks we have sufficient
-  // outputs even when excluding them (due to their own timelock requirements)
-  if high.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
-    u64::try_from(ring_len).unwrap()
-  {
-    Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
-  }
-
   // Select all decoys for this transaction, assuming we generate a sane transaction
   // We should almost never naturally generate an insane transaction, hence why this doesn't
   // bother with an overage
-  let mut decoys = select_n(
+  let decoys = select_n(
     rng,
     rpc,
-    &distribution,
     height,
-    high,
-    per_second,
-    &real,
-    &mut used,
-    decoy_count,
+    input.relative_id.index_on_blockchain,
+    ring_len,
     fingerprintable_canonical,
   )
   .await?;
-  real.zeroize();
 
-  // Grab the decoys for this specific output
-  let mut ring = decoys.drain((decoys.len() - decoy_count) ..).collect::<Vec<_>>();
-  ring.push(output);
+  // Form the complete ring
+  let mut ring = decoys;
+  ring.push((input.relative_id.index_on_blockchain, [input.key(), input.commitment().calculate()]));
   ring.sort_by(|a, b| a.0.cmp(&b.0));
 
-  // Sanity checks are only run when 1000 outputs are available in Monero
-  // We run this check whenever the highest output index, which we acknowledge, is > 500
-  // This means we assume (for presumably test blockchains) the height being used has not had
-  // 500 outputs since while itself not being a sufficiently mature blockchain
-  // Considering Monero's p2p layer doesn't actually check transaction sanity, it should be
-  // fine for us to not have perfectly matching rules, especially since this code will infinite
-  // loop if it can't determine sanity, which is possible with sufficient inputs on
-  // sufficiently small chains
-  if high > 500 {
-    // Make sure the TX passes the sanity check that the median output is within the last 40%
-    let target_median = high * 3 / 5;
-    while ring[ring_len / 2].0 < target_median {
-      // If it's not, update the bottom half with new values to ensure the median only moves up
-      for removed in ring.drain(0 .. (ring_len / 2)).collect::<Vec<_>>() {
-        // If we removed the real spend, add it back
-        if removed.0 == output.0 {
-          ring.push(output);
-        } else {
-          // We could not remove this, saving CPU time and removing low values as
-          // possibilities, yet it'd increase the amount of decoys required to create this
-          // transaction and some removed outputs may be the best option (as we drop the first
-          // half, not just the bottom n)
-          used.remove(&removed.0);
-        }
-      }
+  /*
+    Monero does have sanity checks which it applies to the selected ring.
 
-      // Select new outputs until we have a full sized ring again
-      ring.extend(
-        select_n(
-          rng,
-          rpc,
-          &distribution,
-          height,
-          high,
-          per_second,
-          &[],
-          &mut used,
-          ring_len - ring.len(),
-          fingerprintable_canonical,
-        )
-        .await?,
-      );
-      ring.sort_by(|a, b| a.0.cmp(&b.0));
+    They're statistically unlikely to be hit and only occur when the transaction is published over
+    the RPC (so they are not a relay rule). The RPC allows disabling them, which monero-rpc does to
+    ensure they don't pose a problem.
+
+    They aren't worth the complexity to implement here, especially since they're non-deterministic.
+  */
+
+  // We need to convert our positional indexes to offset indexes
+  let mut offsets = Vec::with_capacity(ring.len());
+  {
+    offsets.push(ring[0].0);
+    for m in 1 .. ring.len() {
+      offsets.push(ring[m].0 - ring[m - 1].0);
     }
-
-    // The other sanity check rule is about duplicates, yet we already enforce unique ring
-    // members
   }
 
   Ok(
     Decoys::new(
-      offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
+      offsets,
       // Binary searches for the real spend since we don't know where it sorted to
-      u8::try_from(ring.partition_point(|x| x.0 < output.0)).unwrap(),
-      ring.iter().map(|output| output.1).collect(),
+      u8::try_from(ring.partition_point(|x| x.0 < input.relative_id.index_on_blockchain)).unwrap(),
+      ring.into_iter().map(|output| output.1).collect(),
     )
     .unwrap(),
   )
 }
-
-pub use monero_serai::primitives::Decoys;
 
 /// An output with decoys selected.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]

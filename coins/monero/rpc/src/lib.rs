@@ -910,7 +910,10 @@ pub trait Rpc: Sync + Clone + Debug {
     }
 
     let res: SendRawResponse = self
-      .rpc_call("send_raw_transaction", Some(json!({ "tx_as_hex": hex::encode(tx.serialize()) })))
+      .rpc_call(
+        "send_raw_transaction",
+        Some(json!({ "tx_as_hex": hex::encode(tx.serialize()), "do_sanity_checks": false })),
+      )
       .await?;
 
     if res.status != "OK" {
