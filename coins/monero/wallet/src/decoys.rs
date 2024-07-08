@@ -39,8 +39,6 @@ async fn select_n(
     ))?;
   }
 
-  let decoy_count = ring_len - 1;
-
   // Get the distribution
   let distribution = rpc.get_output_distribution(.. height).await?;
   let highest_output_exclusive_bound = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
@@ -48,7 +46,7 @@ async fn select_n(
   // outputs even when excluding them (due to their own timelock requirements)
   // Considering this a temporal error for very new chains, it's sufficiently sane to have
   if highest_output_exclusive_bound.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
-    u64::try_from(decoy_count).unwrap()
+    u64::try_from(ring_len).unwrap()
   {
     Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
   }
@@ -75,23 +73,26 @@ async fn select_n(
   // to the RPC
   // The length of that remainder is expected to be minimal
   while res.len() != decoy_count {
+    iters += 1;
+    #[cfg(not(test))]
+    const MAX_ITERS: usize = 10;
+    // When testing on fresh chains, increased iterations can be useful and we don't necessitate
+    // reasonable performance
+    #[cfg(test)]
+    const MAX_ITERS: usize = 100;
+    // Ensure this isn't infinitely looping
+    // We check both that we aren't at the maximum amount of iterations and that the not-yet
+    // selected candidates exceed the amount of candidates necessary to trigger the next iteration
+    if (iters == MAX_ITERS) ||
+      ((highest_output_exclusive_bound - u64::try_from(do_not_select.len()).unwrap()) <
+        u64::try_from(ring_len).unwrap())
+    {
+      Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
+    }
+
     let remaining = decoy_count - res.len();
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
-      // Ensure this isn't infinitely looping
-      iters += 1;
-
-      #[cfg(not(test))]
-      const MAX_ITERS: usize = 10;
-      // When testing on fresh chains, increased iterations can be useful and we don't necessitate
-      // reasonable performance
-      #[cfg(test)]
-      const MAX_ITERS: usize = 100;
-
-      if iters == MAX_ITERS {
-        Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
-      }
-
       // Use a gamma distribution, as Monero does
       // TODO: Cite these constants
       let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
