@@ -492,6 +492,129 @@ pub trait Rpc: Sync + Clone + Debug {
     Ok(res)
   }
 
+  /// Get the currently estimated fee rate from the node.
+  ///
+  /// This may be manipulated to unsafe levels and MUST be sanity checked.
+  ///
+  /// This MUST NOT be expected to be deterministic in any way.
+  // TODO: Take a sanity check argument
+  async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
+    #[derive(Deserialize, Debug)]
+    struct FeeResponse {
+      status: String,
+      fees: Option<Vec<u64>>,
+      fee: u64,
+      quantization_mask: u64,
+    }
+
+    let res: FeeResponse = self
+      .json_rpc_call(
+        "get_fee_estimate",
+        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
+      )
+      .await?;
+
+    if res.status != "OK" {
+      Err(RpcError::InvalidFee)?;
+    }
+
+    if let Some(fees) = res.fees {
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      // src/wallet/wallet2.cpp#L7615-L7620
+      let priority_idx = usize::try_from(if priority.fee_priority() >= 4 {
+        3
+      } else {
+        priority.fee_priority().saturating_sub(1)
+      })
+      .map_err(|_| RpcError::InvalidPriority)?;
+
+      if priority_idx >= fees.len() {
+        Err(RpcError::InvalidPriority)
+      } else {
+        FeeRate::new(fees[priority_idx], res.quantization_mask)
+      }
+    } else {
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      //   src/wallet/wallet2.cpp#L7569-L7584
+      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
+      //   src/wallet/wallet2.cpp#L7660-L7661
+      let priority_idx =
+        usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
+          .map_err(|_| RpcError::InvalidPriority)?;
+      let multipliers = [1, 5, 25, 1000];
+      if priority_idx >= multipliers.len() {
+        // though not an RPC error, it seems sensible to treat as such
+        Err(RpcError::InvalidPriority)?;
+      }
+      let fee_multiplier = multipliers[priority_idx];
+
+      FeeRate::new(res.fee * fee_multiplier, res.quantization_mask)
+    }
+  }
+
+  /// Publish a transaction.
+  async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug)]
+    struct SendRawResponse {
+      status: String,
+      double_spend: bool,
+      fee_too_low: bool,
+      invalid_input: bool,
+      invalid_output: bool,
+      low_mixin: bool,
+      not_relayed: bool,
+      overspend: bool,
+      too_big: bool,
+      too_few_outputs: bool,
+      reason: String,
+    }
+
+    let res: SendRawResponse = self
+      .rpc_call(
+        "send_raw_transaction",
+        Some(json!({ "tx_as_hex": hex::encode(tx.serialize()), "do_sanity_checks": false })),
+      )
+      .await?;
+
+    if res.status != "OK" {
+      Err(RpcError::InvalidTransaction(tx.hash()))?;
+    }
+
+    Ok(())
+  }
+
+  /// Generate blocks, with the specified address receiving the block reward.
+  ///
+  /// Returns the hashes of the generated blocks and the last block's number.
+  async fn generate_blocks<const ADDR_BYTES: u128>(
+    &self,
+    address: &Address<ADDR_BYTES>,
+    block_count: usize,
+  ) -> Result<(Vec<[u8; 32]>, usize), RpcError> {
+    #[derive(Debug, Deserialize)]
+    struct BlocksResponse {
+      blocks: Vec<String>,
+      height: usize,
+    }
+
+    let res = self
+      .json_rpc_call::<BlocksResponse>(
+        "generateblocks",
+        Some(json!({
+          "wallet_address": address.to_string(),
+          "amount_of_blocks": block_count
+        })),
+      )
+      .await?;
+
+    let mut blocks = Vec::with_capacity(res.blocks.len());
+    for block in res.blocks {
+      blocks.push(hash_hex(&block)?);
+    }
+    Ok((blocks, res.height))
+  }
+
   /// Get the output indexes of the specified transaction.
   async fn get_o_indexes(&self, hash: [u8; 32]) -> Result<Vec<u64>, RpcError> {
     // Given the immaturity of Rust epee libraries, this is a homegrown one which is only validated
@@ -673,10 +796,57 @@ pub trait Rpc: Sync + Clone + Debug {
     })()
     .map_err(|e| RpcError::InvalidNode(format!("invalid binary response: {e:?}")))
   }
+}
+
+/// A trait for any object which can be used to select decoys.
+///
+/// An implementation is provided for any satisfier of `Rpc`. The benefit of this trait is the
+/// ability to select decoys off of a locally stored output distribution, preventing potential
+/// attacks a remote node can perform.
+#[async_trait]
+pub trait DecoyRpc: Sync + Clone + Debug {
+  /// Get the length of the output distribution.
+  ///
+  /// This is equivalent to the hight of the blockchain it's for. This is intended to be cheaper
+  /// than fetching the entire output distribution.
+  async fn get_output_distribution_len(&self) -> Result<usize, RpcError>;
 
   /// Get the output distribution.
   ///
   /// `range` is in terms of block numbers.
+  async fn get_output_distribution(
+    &self,
+    range: impl Send + RangeBounds<usize>,
+  ) -> Result<Vec<u64>, RpcError>;
+
+  /// Get the specified outputs from the RingCT (zero-amount) pool.
+  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError>;
+
+  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
+  /// timelock has been satisfied.
+  ///
+  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
+  /// Monero transactions.
+  ///
+  /// The node is trusted for if the output is unlocked unless `fingerprintable_canonical` is set
+  /// to true. If `fingerprintable_canonical` is set to true, the node's local view isn't used, yet
+  /// the transaction's timelock is checked to be unlocked at the specified `height`. This offers a
+  /// canonical decoy selection, yet is fingerprintable as time-based timelocks aren't evaluated
+  /// (and considered locked, preventing their selection).
+  async fn get_unlocked_outputs(
+    &self,
+    indexes: &[u64],
+    height: usize,
+    fingerprintable_canonical: bool,
+  ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError>;
+}
+
+#[async_trait]
+impl<R: Rpc> DecoyRpc for R {
+  async fn get_output_distribution_len(&self) -> Result<usize, RpcError> {
+    <Self as Rpc>::get_height(self).await
+  }
+
   async fn get_output_distribution(
     &self,
     range: impl Send + RangeBounds<usize>,
@@ -743,7 +913,6 @@ pub trait Rpc: Sync + Clone + Debug {
     Ok(distribution)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool.
   async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
     #[derive(Deserialize, Debug)]
     struct OutsResponse {
@@ -771,17 +940,6 @@ pub trait Rpc: Sync + Clone + Debug {
     Ok(res.outs)
   }
 
-  /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
-  /// timelock has been satisfied.
-  ///
-  /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
-  /// Monero transactions.
-  ///
-  /// The node is trusted for if the output is unlocked unless `fingerprintable_canonical` is set
-  /// to true. If `fingerprintable_canonical` is set to true, the node's local view isn't used, yet
-  /// the transaction's timelock is checked to be unlocked at the specified `height`. This offers a
-  /// canonical decoy selection, yet is fingerprintable as time-based timelocks aren't evaluated
-  /// (and considered locked, preventing their selection).
   async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
@@ -829,128 +987,5 @@ pub trait Rpc: Sync + Clone + Debug {
         }))
       })
       .collect()
-  }
-
-  /// Get the currently estimated fee rate from the node.
-  ///
-  /// This may be manipulated to unsafe levels and MUST be sanity checked.
-  ///
-  /// This MUST NOT be expected to be deterministic in any way.
-  // TODO: Take a sanity check argument
-  async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
-    #[derive(Deserialize, Debug)]
-    struct FeeResponse {
-      status: String,
-      fees: Option<Vec<u64>>,
-      fee: u64,
-      quantization_mask: u64,
-    }
-
-    let res: FeeResponse = self
-      .json_rpc_call(
-        "get_fee_estimate",
-        Some(json!({ "grace_blocks": GRACE_BLOCKS_FOR_FEE_ESTIMATE })),
-      )
-      .await?;
-
-    if res.status != "OK" {
-      Err(RpcError::InvalidFee)?;
-    }
-
-    if let Some(fees) = res.fees {
-      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-      // src/wallet/wallet2.cpp#L7615-L7620
-      let priority_idx = usize::try_from(if priority.fee_priority() >= 4 {
-        3
-      } else {
-        priority.fee_priority().saturating_sub(1)
-      })
-      .map_err(|_| RpcError::InvalidPriority)?;
-
-      if priority_idx >= fees.len() {
-        Err(RpcError::InvalidPriority)
-      } else {
-        FeeRate::new(fees[priority_idx], res.quantization_mask)
-      }
-    } else {
-      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-      //   src/wallet/wallet2.cpp#L7569-L7584
-      // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-      //   src/wallet/wallet2.cpp#L7660-L7661
-      let priority_idx =
-        usize::try_from(if priority.fee_priority() == 0 { 1 } else { priority.fee_priority() - 1 })
-          .map_err(|_| RpcError::InvalidPriority)?;
-      let multipliers = [1, 5, 25, 1000];
-      if priority_idx >= multipliers.len() {
-        // though not an RPC error, it seems sensible to treat as such
-        Err(RpcError::InvalidPriority)?;
-      }
-      let fee_multiplier = multipliers[priority_idx];
-
-      FeeRate::new(res.fee * fee_multiplier, res.quantization_mask)
-    }
-  }
-
-  /// Publish a transaction.
-  async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
-    #[allow(dead_code)]
-    #[derive(Deserialize, Debug)]
-    struct SendRawResponse {
-      status: String,
-      double_spend: bool,
-      fee_too_low: bool,
-      invalid_input: bool,
-      invalid_output: bool,
-      low_mixin: bool,
-      not_relayed: bool,
-      overspend: bool,
-      too_big: bool,
-      too_few_outputs: bool,
-      reason: String,
-    }
-
-    let res: SendRawResponse = self
-      .rpc_call(
-        "send_raw_transaction",
-        Some(json!({ "tx_as_hex": hex::encode(tx.serialize()), "do_sanity_checks": false })),
-      )
-      .await?;
-
-    if res.status != "OK" {
-      Err(RpcError::InvalidTransaction(tx.hash()))?;
-    }
-
-    Ok(())
-  }
-
-  /// Generate blocks, with the specified address receiving the block reward.
-  ///
-  /// Returns the hashes of the generated blocks and the last block's number.
-  async fn generate_blocks<const ADDR_BYTES: u128>(
-    &self,
-    address: &Address<ADDR_BYTES>,
-    block_count: usize,
-  ) -> Result<(Vec<[u8; 32]>, usize), RpcError> {
-    #[derive(Debug, Deserialize)]
-    struct BlocksResponse {
-      blocks: Vec<String>,
-      height: usize,
-    }
-
-    let res = self
-      .json_rpc_call::<BlocksResponse>(
-        "generateblocks",
-        Some(json!({
-          "wallet_address": address.to_string(),
-          "amount_of_blocks": block_count
-        })),
-      )
-      .await?;
-
-    let mut blocks = Vec::with_capacity(res.blocks.len());
-    for block in res.blocks {
-      blocks.push(hash_hex(&block)?);
-    }
-    Ok((blocks, res.height))
   }
 }

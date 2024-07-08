@@ -3,7 +3,6 @@ use monero_address::{Network, MoneroAddress};
 // monero-rpc doesn't include a transport
 // We can't include the simple-request crate there as then we'd have a cyclical dependency
 // Accordingly, we test monero-rpc here (implicitly testing the simple-request transport)
-use monero_rpc::*;
 use monero_simple_request_rpc::*;
 
 const ADDRESS: &str =
@@ -11,6 +10,8 @@ const ADDRESS: &str =
 
 #[tokio::test]
 async fn test_rpc() {
+  use monero_rpc::Rpc;
+
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
@@ -52,17 +53,35 @@ async fn test_rpc() {
     }
     assert_eq!(blocks, actual_blocks);
   }
+}
+
+#[tokio::test]
+async fn test_decoy_rpc() {
+  use monero_rpc::{Rpc, DecoyRpc};
+
+  let rpc =
+    SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
   // Test get_output_distribution
   // It's documented to take two inclusive block numbers
   {
-    let height = rpc.get_height().await.unwrap();
+    let distribution_len = rpc.get_output_distribution_len().await.unwrap();
+    assert_eq!(distribution_len, rpc.get_height().await.unwrap());
 
-    rpc.get_output_distribution(0 ..= height).await.unwrap_err();
-    assert_eq!(rpc.get_output_distribution(0 .. height).await.unwrap().len(), height);
+    rpc.get_output_distribution(0 ..= distribution_len).await.unwrap_err();
+    assert_eq!(
+      rpc.get_output_distribution(0 .. distribution_len).await.unwrap().len(),
+      distribution_len
+    );
 
-    assert_eq!(rpc.get_output_distribution(0 .. (height - 1)).await.unwrap().len(), height - 1);
-    assert_eq!(rpc.get_output_distribution(1 .. height).await.unwrap().len(), height - 1);
+    assert_eq!(
+      rpc.get_output_distribution(0 .. (distribution_len - 1)).await.unwrap().len(),
+      distribution_len - 1
+    );
+    assert_eq!(
+      rpc.get_output_distribution(1 .. distribution_len).await.unwrap().len(),
+      distribution_len - 1
+    );
 
     assert_eq!(rpc.get_output_distribution(0 ..= 0).await.unwrap().len(), 1);
     assert_eq!(rpc.get_output_distribution(0 ..= 1).await.unwrap().len(), 2);

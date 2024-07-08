@@ -12,7 +12,7 @@ use curve25519_dalek::{Scalar, EdwardsPoint};
 use crate::{
   DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME,
   primitives::{Commitment, Decoys},
-  rpc::{RpcError, Rpc},
+  rpc::{RpcError, DecoyRpc},
   output::OutputData,
   WalletOutput,
 };
@@ -24,7 +24,7 @@ const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
 
 async fn select_n(
   rng: &mut (impl RngCore + CryptoRng),
-  rpc: &impl Rpc,
+  rpc: &impl DecoyRpc,
   height: usize,
   real_output: u64,
   ring_len: usize,
@@ -33,7 +33,7 @@ async fn select_n(
   if height < DEFAULT_LOCK_WINDOW {
     Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
   }
-  if height > rpc.get_height().await? {
+  if height > rpc.get_output_distribution_len().await? {
     Err(RpcError::InternalError(
       "decoys being requested from blocks this node doesn't have".to_string(),
     ))?;
@@ -164,7 +164,7 @@ async fn select_n(
 
 async fn select_decoys<R: RngCore + CryptoRng>(
   rng: &mut R,
-  rpc: &impl Rpc,
+  rpc: &impl DecoyRpc,
   ring_len: usize,
   height: usize,
   input: &WalletOutput,
@@ -230,7 +230,7 @@ impl OutputWithDecoys {
   /// Select decoys for this output.
   pub async fn new(
     rng: &mut (impl Send + Sync + RngCore + CryptoRng),
-    rpc: &impl Rpc,
+    rpc: &impl DecoyRpc,
     ring_len: usize,
     height: usize,
     output: WalletOutput,
@@ -249,7 +249,7 @@ impl OutputWithDecoys {
   /// methodology.
   pub async fn fingerprintable_deterministic_new(
     rng: &mut (impl Send + Sync + RngCore + CryptoRng),
-    rpc: &impl Rpc,
+    rpc: &impl DecoyRpc,
     ring_len: usize,
     height: usize,
     output: WalletOutput,
