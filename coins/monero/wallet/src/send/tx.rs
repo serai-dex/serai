@@ -23,10 +23,10 @@ impl SignableTransaction {
     debug_assert_eq!(self.inputs.len(), key_images.len());
 
     let mut res = Vec::with_capacity(self.inputs.len());
-    for ((_, decoys), key_image) in self.inputs.iter().zip(key_images) {
+    for (input, key_image) in self.inputs.iter().zip(key_images) {
       res.push(Input::ToKey {
         amount: None,
-        key_offsets: decoys.offsets().to_vec(),
+        key_offsets: input.decoys().offsets().to_vec(),
         key_image: *key_image,
       });
     }
@@ -299,7 +299,7 @@ impl SignableTransactionWithKeyImages {
           } else {
             // If we don't have a change output, the difference is the fee
             let inputs =
-              self.intent.inputs.iter().map(|input| input.0.commitment().amount).sum::<u64>();
+              self.intent.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
             let payments = self
               .intent
               .payments

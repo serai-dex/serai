@@ -11,7 +11,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, Scalar, EdwardsPoint}
 use crate::{
   primitives::{keccak256, Commitment},
   ringct::EncryptedAmount,
-  SharedKeyDerivations,
+  SharedKeyDerivations, OutputWithDecoys,
   send::{InternalPayment, SignableTransaction, key_image_sort},
 };
 
@@ -26,7 +26,7 @@ impl SignableTransaction {
 
     // Ensure uniqueness across transactions by binding to a use-once object
     // The keys for the inputs is binding to their key images, making them use-once
-    let mut input_keys = self.inputs.iter().map(|(input, _)| input.key()).collect::<Vec<_>>();
+    let mut input_keys = self.inputs.iter().map(OutputWithDecoys::key).collect::<Vec<_>>();
     // We sort the inputs mid-way through TX construction, so apply our own sort to ensure a
     // consistent order
     // We use the key image sort as it's applicable and well-defined, not because these are key
@@ -208,7 +208,7 @@ impl SignableTransaction {
       let amount = match payment {
         InternalPayment::Payment(_, amount) => *amount,
         InternalPayment::Change(_, _) => {
-          let inputs = self.inputs.iter().map(|input| input.0.commitment().amount).sum::<u64>();
+          let inputs = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
           let payments = self
             .payments
             .iter()

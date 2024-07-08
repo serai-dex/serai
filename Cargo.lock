@@ -4932,7 +4932,6 @@ dependencies = [
 name = "monero-wallet"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "curve25519-dalek",
  "dalek-ff-group",
  "flexible-transcript",

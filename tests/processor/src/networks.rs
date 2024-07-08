@@ -412,7 +412,7 @@ impl Wallet {
           ringct::RctType,
           rpc::{FeePriority, Rpc},
           address::{Network, AddressType, Address},
-          Scanner, DecoySelection, Decoys,
+          Scanner, OutputWithDecoys,
           send::{Change, SignableTransaction},
         };
         use processor::{additional_key, networks::Monero};
@@ -422,30 +422,35 @@ impl Wallet {
 
         // Prepare inputs
         let current_height = rpc.get_height().await.unwrap();
-        let mut inputs = vec![];
+        let mut outputs = vec![];
         for block in last_tx.0 .. current_height {
           let block = rpc.get_block_by_number(block).await.unwrap();
           if (block.miner_transaction.hash() == last_tx.1) ||
             block.transactions.contains(&last_tx.1)
           {
-            inputs = Scanner::new(view_pair.clone())
+            outputs = Scanner::new(view_pair.clone())
               .scan(&rpc, &block)
               .await
               .unwrap()
               .ignore_additional_timelock();
           }
         }
-        assert!(!inputs.is_empty());
+        assert!(!outputs.is_empty());
 
-        let mut decoys = Decoys::fingerprintable_canonical_select(
-          &mut OsRng,
-          &rpc,
-          16,
-          rpc.get_height().await.unwrap(),
-          &inputs,
-        )
-        .await
-        .unwrap();
+        let mut inputs = Vec::with_capacity(outputs.len());
+        for output in outputs {
+          inputs.push(
+            OutputWithDecoys::fingerprintable_deterministic_new(
+              &mut OsRng,
+              &rpc,
+              16,
+              rpc.get_height().await.unwrap(),
+              output,
+            )
+            .await
+            .unwrap(),
+          );
+        }
 
         let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
@@ -467,7 +472,7 @@ impl Wallet {
         let tx = SignableTransaction::new(
           RctType::ClsagBulletproofPlus,
           outgoing_view_key,
-          inputs.drain(..).zip(decoys.drain(..)).collect(),
+          inputs,
           vec![(to_addr, AMOUNT)],
           Change::new(view_pair),
           data,

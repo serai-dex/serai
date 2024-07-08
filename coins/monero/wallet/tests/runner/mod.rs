@@ -198,13 +198,10 @@ macro_rules! test {
         };
 
         use monero_wallet::{
-          primitives::Decoys,
           ringct::RctType,
           rpc::FeePriority,
           address::Network,
-          ViewPair,
-          DecoySelection,
-          Scanner,
+          ViewPair, Scanner, OutputWithDecoys,
           send::{Change, SignableTransaction, Eventuality},
         };
 
@@ -300,16 +297,14 @@ macro_rules! test {
           let temp = Box::new({
             let mut builder = builder.clone();
 
-            let decoys = Decoys::fingerprintable_canonical_select(
+            let input = OutputWithDecoys::fingerprintable_deterministic_new(
               &mut OsRng,
               &rpc,
               ring_len(rct_type),
               rpc.get_height().await.unwrap(),
-              &[miner_tx.clone()],
-            )
-            .await
-            .unwrap();
-            builder.add_input((miner_tx, decoys.first().unwrap().clone()));
+              miner_tx,
+            ).await.unwrap();
+            builder.add_input(input);
 
             let (tx, state) = ($first_tx)(rpc.clone(), builder, next_addr).await;
             let fee_rate = tx.fee_rate().clone();

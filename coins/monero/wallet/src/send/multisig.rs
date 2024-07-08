@@ -65,14 +65,14 @@ impl SignableTransaction {
     let mut clsags = vec![];
 
     let mut key_image_generators_and_offsets = vec![];
-    for (i, (input, decoys)) in self.inputs.iter().enumerate() {
+    for input in &self.inputs {
       // Check this is the right set of keys
       let offset = keys.offset(dfg::Scalar(input.key_offset()));
       if offset.group_key().0 != input.key() {
         Err(SendError::WrongPrivateKey)?;
       }
 
-      let context = ClsagContext::new(decoys.clone(), input.commitment().clone())
+      let context = ClsagContext::new(input.decoys().clone(), input.commitment().clone())
         .map_err(SendError::ClsagError)?;
       let (clsag, clsag_mask_send) = ClsagMultisig::new(
         RecommendedTranscript::new(b"Monero Multisignature Transaction"),
@@ -80,7 +80,7 @@ impl SignableTransaction {
       );
       key_image_generators_and_offsets.push((
         clsag.key_image_generator(),
-        keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + self.inputs[i].0.key_offset(),
+        keys.current_offset().unwrap_or(dfg::Scalar::ZERO).0 + input.key_offset(),
       ));
       clsags.push((clsag_mask_send, AlgorithmMachine::new(clsag, offset)));
     }

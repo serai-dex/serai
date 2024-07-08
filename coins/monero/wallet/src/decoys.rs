@@ -1,19 +1,21 @@
 // TODO: Clean this
 
-use std_shims::{vec::Vec, collections::HashSet};
+use std_shims::{io, vec::Vec, collections::HashSet};
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use rand_core::{RngCore, CryptoRng};
 use rand_distr::{Distribution, Gamma};
 #[cfg(not(feature = "std"))]
 use rand_distr::num_traits::Float;
 
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::{Scalar, EdwardsPoint};
 
 use crate::{
   DEFAULT_LOCK_WINDOW, COINBASE_LOCK_WINDOW, BLOCK_TIME,
+  primitives::Commitment,
   rpc::{RpcError, Rpc},
+  output::OutputData,
   WalletOutput,
 };
 
@@ -138,20 +140,16 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   rpc: &impl Rpc,
   ring_len: usize,
   height: usize,
-  inputs: &[WalletOutput],
+  input: &WalletOutput,
   fingerprintable_canonical: bool,
-) -> Result<Vec<Decoys>, RpcError> {
+) -> Result<Decoys, RpcError> {
   let mut distribution = vec![];
 
   let decoy_count = ring_len - 1;
 
   // Convert the inputs in question to the raw output data
-  let mut real = Vec::with_capacity(inputs.len());
-  let mut outputs = Vec::with_capacity(inputs.len());
-  for input in inputs {
-    real.push(input.relative_id.index_on_blockchain);
-    outputs.push((real[real.len() - 1], [input.key(), input.commitment().calculate()]));
-  }
+  let mut real = vec![input.relative_id.index_on_blockchain];
+  let output = (real[0], [input.key(), input.commitment().calculate()]);
 
   if distribution.len() < height {
     // TODO: verify distribution elems are strictly increasing
@@ -175,16 +173,14 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   };
 
   let mut used = HashSet::<u64>::new();
-  for o in &outputs {
-    used.insert(o.0);
-  }
+  used.insert(output.0);
 
   // TODO: Create a TX with less than the target amount, as allowed by the protocol
   let high = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
   // This assumes that each miner TX had one output (as sane) and checks we have sufficient
   // outputs even when excluding them (due to their own timelock requirements)
   if high.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
-    u64::try_from(inputs.len() * ring_len).unwrap()
+    u64::try_from(ring_len).unwrap()
   {
     Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
   }
@@ -201,136 +197,163 @@ async fn select_decoys<R: RngCore + CryptoRng>(
     per_second,
     &real,
     &mut used,
-    inputs.len() * decoy_count,
+    decoy_count,
     fingerprintable_canonical,
   )
   .await?;
   real.zeroize();
 
-  let mut res = Vec::with_capacity(inputs.len());
-  for o in outputs {
-    // Grab the decoys for this specific output
-    let mut ring = decoys.drain((decoys.len() - decoy_count) ..).collect::<Vec<_>>();
-    ring.push(o);
-    ring.sort_by(|a, b| a.0.cmp(&b.0));
+  // Grab the decoys for this specific output
+  let mut ring = decoys.drain((decoys.len() - decoy_count) ..).collect::<Vec<_>>();
+  ring.push(output);
+  ring.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Sanity checks are only run when 1000 outputs are available in Monero
-    // We run this check whenever the highest output index, which we acknowledge, is > 500
-    // This means we assume (for presumably test blockchains) the height being used has not had
-    // 500 outputs since while itself not being a sufficiently mature blockchain
-    // Considering Monero's p2p layer doesn't actually check transaction sanity, it should be
-    // fine for us to not have perfectly matching rules, especially since this code will infinite
-    // loop if it can't determine sanity, which is possible with sufficient inputs on
-    // sufficiently small chains
-    if high > 500 {
-      // Make sure the TX passes the sanity check that the median output is within the last 40%
-      let target_median = high * 3 / 5;
-      while ring[ring_len / 2].0 < target_median {
-        // If it's not, update the bottom half with new values to ensure the median only moves up
-        for removed in ring.drain(0 .. (ring_len / 2)).collect::<Vec<_>>() {
-          // If we removed the real spend, add it back
-          if removed.0 == o.0 {
-            ring.push(o);
-          } else {
-            // We could not remove this, saving CPU time and removing low values as
-            // possibilities, yet it'd increase the amount of decoys required to create this
-            // transaction and some removed outputs may be the best option (as we drop the first
-            // half, not just the bottom n)
-            used.remove(&removed.0);
-          }
+  // Sanity checks are only run when 1000 outputs are available in Monero
+  // We run this check whenever the highest output index, which we acknowledge, is > 500
+  // This means we assume (for presumably test blockchains) the height being used has not had
+  // 500 outputs since while itself not being a sufficiently mature blockchain
+  // Considering Monero's p2p layer doesn't actually check transaction sanity, it should be
+  // fine for us to not have perfectly matching rules, especially since this code will infinite
+  // loop if it can't determine sanity, which is possible with sufficient inputs on
+  // sufficiently small chains
+  if high > 500 {
+    // Make sure the TX passes the sanity check that the median output is within the last 40%
+    let target_median = high * 3 / 5;
+    while ring[ring_len / 2].0 < target_median {
+      // If it's not, update the bottom half with new values to ensure the median only moves up
+      for removed in ring.drain(0 .. (ring_len / 2)).collect::<Vec<_>>() {
+        // If we removed the real spend, add it back
+        if removed.0 == output.0 {
+          ring.push(output);
+        } else {
+          // We could not remove this, saving CPU time and removing low values as
+          // possibilities, yet it'd increase the amount of decoys required to create this
+          // transaction and some removed outputs may be the best option (as we drop the first
+          // half, not just the bottom n)
+          used.remove(&removed.0);
         }
-
-        // Select new outputs until we have a full sized ring again
-        ring.extend(
-          select_n(
-            rng,
-            rpc,
-            &distribution,
-            height,
-            high,
-            per_second,
-            &[],
-            &mut used,
-            ring_len - ring.len(),
-            fingerprintable_canonical,
-          )
-          .await?,
-        );
-        ring.sort_by(|a, b| a.0.cmp(&b.0));
       }
 
-      // The other sanity check rule is about duplicates, yet we already enforce unique ring
-      // members
+      // Select new outputs until we have a full sized ring again
+      ring.extend(
+        select_n(
+          rng,
+          rpc,
+          &distribution,
+          height,
+          high,
+          per_second,
+          &[],
+          &mut used,
+          ring_len - ring.len(),
+          fingerprintable_canonical,
+        )
+        .await?,
+      );
+      ring.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
-    res.push(
-      Decoys::new(
-        offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
-        // Binary searches for the real spend since we don't know where it sorted to
-        u8::try_from(ring.partition_point(|x| x.0 < o.0)).unwrap(),
-        ring.iter().map(|output| output.1).collect(),
-      )
-      .unwrap(),
-    );
+    // The other sanity check rule is about duplicates, yet we already enforce unique ring
+    // members
   }
 
-  Ok(res)
+  Ok(
+    Decoys::new(
+      offset(&ring.iter().map(|output| output.0).collect::<Vec<_>>()),
+      // Binary searches for the real spend since we don't know where it sorted to
+      u8::try_from(ring.partition_point(|x| x.0 < output.0)).unwrap(),
+      ring.iter().map(|output| output.1).collect(),
+    )
+    .unwrap(),
+  )
 }
 
 pub use monero_serai::primitives::Decoys;
 
-// TODO: Remove this trait
-/// TODO: Document
-#[cfg(feature = "std")]
-#[async_trait::async_trait]
-pub trait DecoySelection {
-  /// Select decoys using the same distribution as Monero. Relies on the monerod RPC
-  /// response for an output's unlocked status, minimizing trips to the daemon.
-  async fn select<R: Send + Sync + RngCore + CryptoRng>(
-    rng: &mut R,
-    rpc: &impl Rpc,
-    ring_len: usize,
-    height: usize,
-    inputs: &[WalletOutput],
-  ) -> Result<Vec<Decoys>, RpcError>;
-
-  /// If no reorg has occurred and an honest RPC, any caller who passes the same height to this
-  /// function will use the same distribution to select decoys. It is fingerprintable
-  /// because a caller using this will not be able to select decoys that are timelocked
-  /// with a timestamp. Any transaction which includes timestamp timelocked decoys in its
-  /// rings could not be constructed using this function.
-  ///
-  /// TODO: upstream change to monerod get_outs RPC to accept a height param for checking
-  /// output's unlocked status and remove all usage of fingerprintable_canonical
-  async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
-    rng: &mut R,
-    rpc: &impl Rpc,
-    ring_len: usize,
-    height: usize,
-    inputs: &[WalletOutput],
-  ) -> Result<Vec<Decoys>, RpcError>;
+/// An output with decoys selected.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct OutputWithDecoys {
+  output: OutputData,
+  decoys: Decoys,
 }
 
-#[cfg(feature = "std")]
-#[async_trait::async_trait]
-impl DecoySelection for Decoys {
-  async fn select<R: Send + Sync + RngCore + CryptoRng>(
-    rng: &mut R,
+impl OutputWithDecoys {
+  /// Select decoys for this output.
+  pub async fn new(
+    rng: &mut (impl Send + Sync + RngCore + CryptoRng),
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[WalletOutput],
-  ) -> Result<Vec<Decoys>, RpcError> {
-    select_decoys(rng, rpc, ring_len, height, inputs, false).await
+    output: WalletOutput,
+  ) -> Result<OutputWithDecoys, RpcError> {
+    let decoys = select_decoys(rng, rpc, ring_len, height, &output, false).await?;
+    Ok(OutputWithDecoys { output: output.data.clone(), decoys })
   }
 
-  async fn fingerprintable_canonical_select<R: Send + Sync + RngCore + CryptoRng>(
-    rng: &mut R,
+  /// Select a set of decoys for this output with a deterministic process.
+  ///
+  /// This function will always output the same set of decoys when called with the same arguments.
+  /// This makes it very useful in multisignature contexts, where instead of having one participant
+  /// select the decoys, everyone can locally select the decoys while coming to the same result.
+  ///
+  /// The set of decoys selected may be fingerprintable as having been produced by this
+  /// methodology.
+  pub async fn fingerprintable_deterministic_new(
+    rng: &mut (impl Send + Sync + RngCore + CryptoRng),
     rpc: &impl Rpc,
     ring_len: usize,
     height: usize,
-    inputs: &[WalletOutput],
-  ) -> Result<Vec<Decoys>, RpcError> {
-    select_decoys(rng, rpc, ring_len, height, inputs, true).await
+    output: WalletOutput,
+  ) -> Result<OutputWithDecoys, RpcError> {
+    let decoys = select_decoys(rng, rpc, ring_len, height, &output, true).await?;
+    Ok(OutputWithDecoys { output: output.data.clone(), decoys })
+  }
+
+  /// The key this output may be spent by.
+  pub fn key(&self) -> EdwardsPoint {
+    self.output.key()
+  }
+
+  /// The scalar to add to the private spend key for it to be the discrete logarithm of this
+  /// output's key.
+  pub fn key_offset(&self) -> Scalar {
+    self.output.key_offset
+  }
+
+  /// The commitment this output created.
+  pub fn commitment(&self) -> &Commitment {
+    &self.output.commitment
+  }
+
+  /// The decoys this output selected.
+  pub fn decoys(&self) -> &Decoys {
+    &self.decoys
+  }
+
+  /// Write the OutputWithDecoys.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
+    self.output.write(w)?;
+    self.decoys.write(w)
+  }
+
+  /// Serialize the OutputWithDecoys to a `Vec<u8>`.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut serialized = Vec::with_capacity(128);
+    self.write(&mut serialized).unwrap();
+    serialized
+  }
+
+  /// Read an OutputWithDecoys.
+  ///
+  /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
+  /// defined serialization.
+  pub fn read<R: io::Read>(r: &mut R) -> io::Result<Self> {
+    Ok(Self { output: OutputData::read(r)?, decoys: Decoys::read(r)? })
   }
 }

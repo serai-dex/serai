@@ -20,7 +20,7 @@ use monero_wallet::{
   block::Block,
   rpc::{FeeRate, RpcError, Rpc},
   address::{Network as MoneroNetwork, SubaddressIndex},
-  ViewPair, GuaranteedViewPair, WalletOutput, GuaranteedScanner, DecoySelection, Decoys,
+  ViewPair, GuaranteedViewPair, WalletOutput, OutputWithDecoys, GuaranteedScanner,
   send::{
     SendError, Change, SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
   },
@@ -322,30 +322,31 @@ impl Monero {
       _ => panic!("Monero hard forked and the processor wasn't updated for it"),
     };
 
-    let spendable_outputs = inputs.iter().map(|input| input.0.clone()).collect::<Vec<_>>();
-
     let mut transcript =
       RecommendedTranscript::new(b"Serai Processor Monero Transaction Transcript");
     transcript.append_message(b"plan", plan_id);
 
     // All signers need to select the same decoys
     // All signers use the same height and a seeded RNG to make sure they do so.
-    let decoys = Decoys::fingerprintable_canonical_select(
-      &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
-      &self.rpc,
-      // TODO: Have Decoys take RctType
-      match rct_type {
-        RctType::ClsagBulletproof => 11,
-        RctType::ClsagBulletproofPlus => 16,
-        _ => panic!("selecting decoys for an unsupported RctType"),
-      },
-      block_number + 1,
-      &spendable_outputs,
-    )
-    .await
-    .map_err(map_rpc_err)?;
-
-    let inputs = spendable_outputs.into_iter().zip(decoys).collect::<Vec<_>>();
+    let mut inputs_actual = Vec::with_capacity(inputs.len());
+    for input in inputs {
+      inputs_actual.push(
+        OutputWithDecoys::fingerprintable_deterministic_new(
+          &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
+          &self.rpc,
+          // TODO: Have Decoys take RctType
+          match rct_type {
+            RctType::ClsagBulletproof => 11,
+            RctType::ClsagBulletproofPlus => 16,
+            _ => panic!("selecting decoys for an unsupported RctType"),
+          },
+          block_number + 1,
+          input.0.clone(),
+        )
+        .await
+        .map_err(map_rpc_err)?,
+      );
+    }
 
     // Monero requires at least two outputs
     // If we only have one output planned, add a dummy payment
@@ -375,7 +376,7 @@ impl Monero {
       rct_type,
       // Use the plan ID as the outgoing view key
       Zeroizing::new(*plan_id),
-      inputs.clone(),
+      inputs_actual,
       payments,
       Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
       vec![],
@@ -400,7 +401,7 @@ impl Monero {
         SendError::TooMuchArbitraryData |
         SendError::TooLargeTransaction |
         SendError::WrongPrivateKey => {
-          panic!("created an Monero invalid transaction: {e}");
+          panic!("created an invalid Monero transaction: {e}");
         }
         SendError::MultiplePaymentIds => {
           panic!("multiple payment IDs despite not supporting integrated addresses");
@@ -736,10 +737,11 @@ impl Network for Monero {
     }
 
     let new_block = self.rpc.get_block_by_number(new_block).await.unwrap();
-    let outputs =
+    let mut outputs =
       Self::test_scanner().scan(&self.rpc, &new_block).await.unwrap().ignore_additional_timelock();
+    let output = outputs.swap_remove(0);
 
-    let amount = outputs[0].commitment().amount;
+    let amount = output.commitment().amount;
     // The dust should always be sufficient for the fee
     let fee = Monero::DUST;
 
@@ -749,7 +751,7 @@ impl Network for Monero {
       _ => panic!("Monero hard forked and the processor wasn't updated for it"),
     };
 
-    let decoys = Decoys::fingerprintable_canonical_select(
+    let output = OutputWithDecoys::fingerprintable_deterministic_new(
       &mut OsRng,
       &self.rpc,
       match rct_type {
@@ -758,19 +760,17 @@ impl Network for Monero {
         _ => panic!("selecting decoys for an unsupported RctType"),
       },
       self.rpc.get_height().await.unwrap(),
-      &outputs,
+      output,
     )
     .await
     .unwrap();
-
-    let inputs = outputs.into_iter().zip(decoys).collect::<Vec<_>>();
 
     let mut outgoing_view_key = Zeroizing::new([0; 32]);
     OsRng.fill_bytes(outgoing_view_key.as_mut());
     let tx = MSignableTransaction::new(
       rct_type,
       outgoing_view_key,
-      inputs,
+      vec![output],
       vec![(address.into(), amount - fee)],
       Change::fingerprintable(Some(Self::test_address().into())),
       vec![],

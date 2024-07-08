@@ -35,15 +35,8 @@ pub use output::WalletOutput;
 mod scan;
 pub use scan::{Scanner, GuaranteedScanner};
 
-#[cfg(feature = "std")]
 mod decoys;
-#[cfg(not(feature = "std"))]
-mod decoys {
-  pub use monero_serai::primitives::Decoys;
-  /// TODO: Document/remove
-  pub trait DecoySelection {}
-}
-pub use decoys::{DecoySelection, Decoys};
+pub use decoys::OutputWithDecoys;
 
 /// Structs and functionality for sending transactions.
 pub mod send;

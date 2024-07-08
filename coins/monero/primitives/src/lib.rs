@@ -137,11 +137,21 @@ impl Commitment {
 }
 
 /// Decoy data, as used for producing Monero's ring signatures.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Decoys {
   offsets: Vec<u64>,
   signer_index: u8,
   ring: Vec<[EdwardsPoint; 2]>,
+}
+
+impl core::fmt::Debug for Decoys {
+  fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+    fmt
+      .debug_struct("Decoys")
+      .field("offsets", &self.offsets)
+      .field("ring", &self.ring)
+      .finish_non_exhaustive()
+  }
 }
 
 #[allow(clippy::len_without_is_empty)]

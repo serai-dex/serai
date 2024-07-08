@@ -4,8 +4,8 @@ use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  primitives::Decoys, ringct::RctType, transaction::Transaction, rpc::Rpc,
-  address::SubaddressIndex, extra::Extra, WalletOutput, DecoySelection,
+  ringct::RctType, transaction::Transaction, rpc::Rpc, address::SubaddressIndex, extra::Extra,
+  WalletOutput, OutputWithDecoys,
 };
 
 mod runner;
@@ -18,19 +18,19 @@ async fn add_inputs(
   outputs: Vec<WalletOutput>,
   builder: &mut SignableTransactionBuilder,
 ) {
-  let decoys = Decoys::fingerprintable_canonical_select(
-    &mut OsRng,
-    rpc,
-    ring_len(rct_type),
-    rpc.get_height().await.unwrap(),
-    &outputs,
-  )
-  .await
-  .unwrap();
-
-  let inputs = outputs.into_iter().zip(decoys).collect::<Vec<_>>();
-
-  builder.add_inputs(&inputs);
+  for output in outputs {
+    builder.add_input(
+      OutputWithDecoys::fingerprintable_deterministic_new(
+        &mut OsRng,
+        rpc,
+        ring_len(rct_type),
+        rpc.get_height().await.unwrap(),
+        output,
+      )
+      .await
+      .unwrap(),
+    );
+  }
 }
 
 test!(

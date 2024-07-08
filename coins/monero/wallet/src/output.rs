@@ -52,21 +52,15 @@ impl AbsoluteId {
 
 /// An output's relative ID.
 ///
-/// This id defined as the block which contains the transaction creating the output and the
-/// output's index on the blockchain.
+/// This is defined as the output's index on the blockchain.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct RelativeId {
-  pub(crate) block: [u8; 32],
   pub(crate) index_on_blockchain: u64,
 }
 
 impl core::fmt::Debug for RelativeId {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
-    fmt
-      .debug_struct("RelativeId")
-      .field("block", &hex::encode(self.block))
-      .field("index_on_blockchain", &self.index_on_blockchain)
-      .finish()
+    fmt.debug_struct("RelativeId").field("index_on_blockchain", &self.index_on_blockchain).finish()
   }
 }
 
@@ -76,7 +70,6 @@ impl RelativeId {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    w.write_all(&self.block)?;
     w.write_all(&self.index_on_blockchain.to_le_bytes())
   }
 
@@ -85,18 +78,16 @@ impl RelativeId {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   fn read<R: Read>(r: &mut R) -> io::Result<Self> {
-    Ok(RelativeId { block: read_bytes(r)?, index_on_blockchain: read_u64(r)? })
+    Ok(RelativeId { index_on_blockchain: read_u64(r)? })
   }
 }
 
-/// The data within an output as necessary to spend an output, and the output's additional
-/// timelock.
+/// The data within an output, as necessary to spend the output.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct OutputData {
   pub(crate) key: EdwardsPoint,
   pub(crate) key_offset: Scalar,
   pub(crate) commitment: Commitment,
-  pub(crate) additional_timelock: Timelock,
 }
 
 impl core::fmt::Debug for OutputData {
@@ -106,33 +97,55 @@ impl core::fmt::Debug for OutputData {
       .field("key", &hex::encode(self.key.compress().0))
       .field("key_offset", &hex::encode(self.key_offset.to_bytes()))
       .field("commitment", &self.commitment)
-      .field("additional_timelock", &self.additional_timelock)
       .finish()
   }
 }
 
 impl OutputData {
-  // Write the OutputData.
+  /// The key this output may be spent by.
+  pub(crate) fn key(&self) -> EdwardsPoint {
+    self.key
+  }
+
+  /// The scalar to add to the private spend key for it to be the discrete logarithm of this
+  /// output's key.
+  pub(crate) fn key_offset(&self) -> Scalar {
+    self.key_offset
+  }
+
+  /// The commitment this output created.
+  pub(crate) fn commitment(&self) -> &Commitment {
+    &self.commitment
+  }
+
+  /// Write the OutputData.
   ///
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
-  fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+  pub(crate) fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     w.write_all(&self.key.compress().to_bytes())?;
     w.write_all(&self.key_offset.to_bytes())?;
-    self.commitment.write(w)?;
-    self.additional_timelock.write(w)
+    self.commitment.write(w)
   }
+
+  /*
+  /// Serialize the OutputData to a `Vec<u8>`.
+  pub fn serialize(&self) -> Vec<u8> {
+    let mut res = Vec::with_capacity(32 + 32 + 40);
+    self.write(&mut res).unwrap();
+    res
+  }
+  */
 
   /// Read an OutputData.
   ///
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
-  fn read<R: Read>(r: &mut R) -> io::Result<OutputData> {
+  pub(crate) fn read<R: Read>(r: &mut R) -> io::Result<OutputData> {
     Ok(OutputData {
       key: read_point(r)?,
       key_offset: read_scalar(r)?,
       commitment: Commitment::read(r)?,
-      additional_timelock: Timelock::read(r)?,
     })
   }
 }
@@ -140,6 +153,7 @@ impl OutputData {
 /// The metadata for an output.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct Metadata {
+  pub(crate) additional_timelock: Timelock,
   pub(crate) subaddress: Option<SubaddressIndex>,
   pub(crate) payment_id: Option<PaymentId>,
   pub(crate) arbitrary_data: Vec<Vec<u8>>,
@@ -149,6 +163,7 @@ impl core::fmt::Debug for Metadata {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
     fmt
       .debug_struct("Metadata")
+      .field("additional_timelock", &self.additional_timelock)
       .field("subaddress", &self.subaddress)
       .field("payment_id", &self.payment_id)
       .field("arbitrary_data", &self.arbitrary_data.iter().map(hex::encode).collect::<Vec<_>>())
@@ -162,6 +177,8 @@ impl Metadata {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+    self.additional_timelock.write(w)?;
+
     if let Some(subaddress) = self.subaddress {
       w.write_all(&[1])?;
       w.write_all(&subaddress.account().to_le_bytes())?;
@@ -190,6 +207,8 @@ impl Metadata {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   fn read<R: Read>(r: &mut R) -> io::Result<Metadata> {
+    let additional_timelock = Timelock::read(r)?;
+
     let subaddress = match read_byte(r)? {
       0 => None,
       1 => Some(
@@ -200,6 +219,7 @@ impl Metadata {
     };
 
     Ok(Metadata {
+      additional_timelock,
       subaddress,
       payment_id: if read_byte(r)? == 1 { PaymentId::read(r).ok() } else { None },
       arbitrary_data: {
@@ -214,7 +234,7 @@ impl Metadata {
   }
 }
 
-/// A received output.
+/// A scanned output and all associated data.
 ///
 /// This struct contains all data necessary to spend this output, or handle it as a payment.
 ///
@@ -244,11 +264,6 @@ impl WalletOutput {
     self.absolute_id.index_in_transaction
   }
 
-  /// The block containing the transaction which created this output.
-  pub fn block(&self) -> [u8; 32] {
-    self.relative_id.block
-  }
-
   /// The index of the output on the blockchain.
   pub fn index_on_blockchain(&self) -> u64 {
     self.relative_id.index_on_blockchain
@@ -256,18 +271,18 @@ impl WalletOutput {
 
   /// The key this output may be spent by.
   pub fn key(&self) -> EdwardsPoint {
-    self.data.key
+    self.data.key()
   }
 
   /// The scalar to add to the private spend key for it to be the discrete logarithm of this
   /// output's key.
   pub fn key_offset(&self) -> Scalar {
-    self.data.key_offset
+    self.data.key_offset()
   }
 
   /// The commitment this output created.
   pub fn commitment(&self) -> &Commitment {
-    &self.data.commitment
+    self.data.commitment()
   }
 
   /// The additional timelock this output is subject to.
@@ -276,7 +291,7 @@ impl WalletOutput {
   /// on-chain during which they cannot be spent. Outputs may be additionally timelocked. This
   /// function only returns the additional timelock.
   pub fn additional_timelock(&self) -> Timelock {
-    self.data.additional_timelock
+    self.metadata.additional_timelock
   }
 
   /// The index of the subaddress this output was identified as sent to.

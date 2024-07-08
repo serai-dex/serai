@@ -107,7 +107,6 @@ impl InternalScanner {
 
   fn scan_transaction(
     &self,
-    block_hash: [u8; 32],
     tx_start_index_on_blockchain: u64,
     tx: &Transaction,
   ) -> Result<Timelocked, RpcError> {
@@ -224,16 +223,15 @@ impl InternalScanner {
             index_in_transaction: o.try_into().unwrap(),
           },
           relative_id: RelativeId {
-            block: block_hash,
             index_on_blockchain: tx_start_index_on_blockchain + u64::try_from(o).unwrap(),
           },
-          data: OutputData {
-            key: output_key,
-            key_offset,
-            commitment,
+          data: OutputData { key: output_key, key_offset, commitment },
+          metadata: Metadata {
             additional_timelock: tx.prefix().additional_timelock,
+            subaddress,
+            payment_id,
+            arbitrary_data: extra.data(),
           },
-          metadata: Metadata { subaddress, payment_id, arbitrary_data: extra.data() },
         });
 
         // Break to prevent public keys from being included multiple times, triggering multiple
@@ -252,8 +250,6 @@ impl InternalScanner {
         block.header.hardfork_version
       )))?;
     }
-
-    let block_hash = block.hash();
 
     // We obtain all TXs in full
     let mut txs = vec![block.miner_transaction.clone()];
@@ -327,7 +323,7 @@ impl InternalScanner {
       {
         let mut this_txs_outputs = vec![];
         core::mem::swap(
-          &mut self.scan_transaction(block_hash, tx_start_index_on_blockchain, &tx)?.0,
+          &mut self.scan_transaction(tx_start_index_on_blockchain, &tx)?.0,
           &mut this_txs_outputs,
         );
         res.0.extend(this_txs_outputs);
@@ -379,27 +375,6 @@ impl Scanner {
     self.0.register_subaddress(subaddress)
   }
 
-  /*
-  /// Scan a transaction.
-  ///
-  /// This takes in the block hash the transaction is contained in. This method is NOT recommended
-  /// and MUST be used carefully. The node will receive a request for the output indexes of the
-  /// specified transactions, which may de-anonymize which transactions belong to a user.
-  pub async fn scan_transaction(
-    &self,
-    rpc: &impl Rpc,
-    block_hash: [u8; 32],
-    tx: &Transaction,
-  ) -> Result<Timelocked, RpcError> {
-    // This isn't technically illegal due to a lack of minimum output rules for a while
-    let Some(tx_start_index_on_blockchain) =
-      rpc.get_o_indexes(tx.hash()).await?.first().copied() else {
-        return Ok(Timelocked(vec![]))
-      };
-    self.0.scan_transaction(block_hash, tx_start_index_on_blockchain, tx)
-  }
-  */
-
   /// Scan a block.
   pub async fn scan(&mut self, rpc: &impl Rpc, block: &Block) -> Result<Timelocked, RpcError> {
     self.0.scan(rpc, block).await
@@ -428,27 +403,6 @@ impl GuaranteedScanner {
   pub fn register_subaddress(&mut self, subaddress: SubaddressIndex) {
     self.0.register_subaddress(subaddress)
   }
-
-  /*
-  /// Scan a transaction.
-  ///
-  /// This takes in the block hash the transaction is contained in. This method is NOT recommended
-  /// and MUST be used carefully. The node will receive a request for the output indexes of the
-  /// specified transactions, which may de-anonymize which transactions belong to a user.
-  pub async fn scan_transaction(
-    &self,
-    rpc: &impl Rpc,
-    block_hash: [u8; 32],
-    tx: &Transaction,
-  ) -> Result<Timelocked, RpcError> {
-    // This isn't technically illegal due to a lack of minimum output rules for a while
-    let Some(tx_start_index_on_blockchain) =
-      rpc.get_o_indexes(tx.hash()).await?.first().copied() else {
-        return Ok(Timelocked(vec![]))
-      };
-    self.0.scan_transaction(block_hash, tx_start_index_on_blockchain, tx)
-  }
-  */
 
   /// Scan a block.
   pub async fn scan(&mut self, rpc: &impl Rpc, block: &Block) -> Result<Timelocked, RpcError> {

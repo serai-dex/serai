@@ -17,7 +17,6 @@ use frost::FrostError;
 use crate::{
   io::*,
   generators::{MAX_COMMITMENTS, hash_to_point},
-  primitives::Decoys,
   ringct::{
     clsag::{ClsagError, ClsagContext, Clsag},
     RctType, RctPrunable, RctProofs,
@@ -26,7 +25,7 @@ use crate::{
   extra::MAX_ARBITRARY_DATA_SIZE,
   address::{Network, MoneroAddress},
   rpc::FeeRate,
-  ViewPair, GuaranteedViewPair, WalletOutput,
+  ViewPair, GuaranteedViewPair, OutputWithDecoys,
 };
 
 mod tx_keys;
@@ -231,7 +230,7 @@ pub enum SendError {
 pub struct SignableTransaction {
   rct_type: RctType,
   outgoing_view_key: Zeroizing<[u8; 32]>,
-  inputs: Vec<(WalletOutput, Decoys)>,
+  inputs: Vec<OutputWithDecoys>,
   payments: Vec<InternalPayment>,
   data: Vec<Vec<u8>>,
   fee_rate: FeeRate,
@@ -252,9 +251,9 @@ impl SignableTransaction {
     if self.inputs.is_empty() {
       Err(SendError::NoInputs)?;
     }
-    for (_, decoys) in &self.inputs {
+    for input in &self.inputs {
       // TODO: Add a function for the ring length
-      if decoys.len() !=
+      if input.decoys().len() !=
         match self.rct_type {
           RctType::ClsagBulletproof => 11,
           RctType::ClsagBulletproofPlus => 16,
@@ -314,7 +313,7 @@ impl SignableTransaction {
     }
 
     // Make sure we have enough funds
-    let in_amount = self.inputs.iter().map(|(input, _)| input.commitment().amount).sum::<u64>();
+    let in_amount = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
     let payments_amount = self
       .payments
       .iter()
@@ -356,7 +355,7 @@ impl SignableTransaction {
   pub fn new(
     rct_type: RctType,
     outgoing_view_key: Zeroizing<[u8; 32]>,
-    inputs: Vec<(WalletOutput, Decoys)>,
+    inputs: Vec<OutputWithDecoys>,
     payments: Vec<(MoneroAddress, u64)>,
     change: Change,
     data: Vec<Vec<u8>>,
@@ -406,11 +405,6 @@ impl SignableTransaction {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   pub fn write<W: io::Write>(&self, w: &mut W) -> io::Result<()> {
-    fn write_input<W: io::Write>(input: &(WalletOutput, Decoys), w: &mut W) -> io::Result<()> {
-      input.0.write(w)?;
-      input.1.write(w)
-    }
-
     fn write_payment<W: io::Write>(payment: &InternalPayment, w: &mut W) -> io::Result<()> {
       match payment {
         InternalPayment::Payment(addr, amount) => {
@@ -433,7 +427,7 @@ impl SignableTransaction {
 
     write_byte(&u8::from(self.rct_type), w)?;
     w.write_all(self.outgoing_view_key.as_slice())?;
-    write_vec(write_input, &self.inputs, w)?;
+    write_vec(OutputWithDecoys::write, &self.inputs, w)?;
     write_vec(write_payment, &self.payments, w)?;
     write_vec(|data, w| write_vec(write_byte, data, w), &self.data, w)?;
     self.fee_rate.write(w)
@@ -454,10 +448,6 @@ impl SignableTransaction {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   pub fn read<R: io::Read>(r: &mut R) -> io::Result<SignableTransaction> {
-    fn read_input(r: &mut impl io::Read) -> io::Result<(WalletOutput, Decoys)> {
-      Ok((WalletOutput::read(r)?, Decoys::read(r)?))
-    }
-
     fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
       String::from_utf8(read_vec(read_byte, r)?)
         .ok()
@@ -484,7 +474,7 @@ impl SignableTransaction {
       rct_type: RctType::try_from(read_byte(r)?)
         .map_err(|()| io::Error::other("unsupported/invalid RctType"))?,
       outgoing_view_key: Zeroizing::new(read_bytes(r)?),
-      inputs: read_vec(read_input, r)?,
+      inputs: read_vec(OutputWithDecoys::read, r)?,
       payments: read_vec(read_payment, r)?,
       data: read_vec(|r| read_vec(read_byte, r), r)?,
       fee_rate: FeeRate::read(r)?,
@@ -522,7 +512,7 @@ impl SignableTransaction {
   ) -> Result<Transaction, SendError> {
     // Calculate the key images
     let mut key_images = vec![];
-    for (input, _) in &self.inputs {
+    for input in &self.inputs {
       let input_key = Zeroizing::new(sender_spend_key.deref() + input.key_offset());
       if (input_key.deref() * ED25519_BASEPOINT_TABLE) != input.key() {
         Err(SendError::WrongPrivateKey)?;
@@ -536,12 +526,12 @@ impl SignableTransaction {
 
     // Prepare the CLSAG signatures
     let mut clsag_signs = Vec::with_capacity(tx.intent.inputs.len());
-    for (input, decoys) in &tx.intent.inputs {
+    for input in &tx.intent.inputs {
       // Re-derive the input key as this will be in a different order
       let input_key = Zeroizing::new(sender_spend_key.deref() + input.key_offset());
       clsag_signs.push((
         input_key,
-        ClsagContext::new(decoys.clone(), input.commitment().clone())
+        ClsagContext::new(input.decoys().clone(), input.commitment().clone())
           .map_err(SendError::ClsagError)?,
       ));
     }

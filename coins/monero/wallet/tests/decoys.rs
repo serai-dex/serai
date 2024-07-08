@@ -28,18 +28,17 @@ test!(
     // Then make a second tx1
     |rct_type: RctType, rpc: SimpleRequestRpc, mut builder: Builder, addr, state: _| async move {
       let output_tx0: WalletOutput = state;
-      let decoys = Decoys::fingerprintable_canonical_select(
+
+      let input = OutputWithDecoys::fingerprintable_deterministic_new(
         &mut OsRng,
         &rpc,
         ring_len(rct_type),
         rpc.get_height().await.unwrap(),
-        &[output_tx0.clone()],
+        output_tx0.clone(),
       )
       .await
       .unwrap();
-
-      let inputs = [output_tx0.clone()].into_iter().zip(decoys).collect::<Vec<_>>();
-      builder.add_inputs(&inputs);
+      builder.add_input(input);
       builder.add_payment(addr, 1000000000000);
 
       (builder.build().unwrap(), (rct_type, output_tx0))
@@ -66,17 +65,19 @@ test!(
       let mut selected_fresh_decoy = false;
       let mut attempts = 1000;
       while !selected_fresh_decoy && attempts > 0 {
-        let decoys = Decoys::fingerprintable_canonical_select(
+        let decoys = OutputWithDecoys::fingerprintable_deterministic_new(
           &mut OsRng, // TODO: use a seeded RNG to consistently select the latest output
           &rpc,
           ring_len(rct_type),
           height,
-          &[output_tx0.clone()],
+          output_tx0.clone(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .decoys()
+        .clone();
 
-        selected_fresh_decoy = decoys[0].positions().contains(&most_recent_o_index);
+        selected_fresh_decoy = decoys.positions().contains(&most_recent_o_index);
         attempts -= 1;
       }
 
@@ -107,18 +108,16 @@ test!(
     |rct_type: RctType, rpc, mut builder: Builder, addr, output_tx0: WalletOutput| async move {
       let rpc: SimpleRequestRpc = rpc;
 
-      let decoys = Decoys::select(
+      let input = OutputWithDecoys::new(
         &mut OsRng,
         &rpc,
         ring_len(rct_type),
         rpc.get_height().await.unwrap(),
-        &[output_tx0.clone()],
+        output_tx0.clone(),
       )
       .await
       .unwrap();
-
-      let inputs = [output_tx0.clone()].into_iter().zip(decoys).collect::<Vec<_>>();
-      builder.add_inputs(&inputs);
+      builder.add_input(input);
       builder.add_payment(addr, 1000000000000);
 
       (builder.build().unwrap(), (rct_type, output_tx0))
@@ -145,17 +144,19 @@ test!(
       let mut selected_fresh_decoy = false;
       let mut attempts = 1000;
       while !selected_fresh_decoy && attempts > 0 {
-        let decoys = Decoys::select(
+        let decoys = OutputWithDecoys::new(
           &mut OsRng, // TODO: use a seeded RNG to consistently select the latest output
           &rpc,
           ring_len(rct_type),
           height,
-          &[output_tx0.clone()],
+          output_tx0.clone(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .decoys()
+        .clone();
 
-        selected_fresh_decoy = decoys[0].positions().contains(&most_recent_o_index);
+        selected_fresh_decoy = decoys.positions().contains(&most_recent_o_index);
         attempts -= 1;
       }
 

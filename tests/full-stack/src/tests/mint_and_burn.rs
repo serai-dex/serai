@@ -348,7 +348,7 @@ async fn mint_and_burn_test() {
         ringct::RctType,
         rpc::{FeePriority, Rpc},
         address::{Network, AddressType, MoneroAddress},
-        ViewPair, Scanner, DecoySelection, Decoys,
+        ViewPair, Scanner, OutputWithDecoys,
         send::{Change, SignableTransaction},
       };
 
@@ -363,23 +363,22 @@ async fn mint_and_burn_test() {
         .additional_timelock_satisfied_by(rpc.get_height().await.unwrap(), 0)
         .swap_remove(0);
 
-      let decoys = Decoys::fingerprintable_canonical_select(
+      let input = OutputWithDecoys::fingerprintable_deterministic_new(
         &mut OsRng,
         &rpc,
         16,
         rpc.get_height().await.unwrap(),
-        &[output.clone()],
+        output.clone(),
       )
       .await
-      .unwrap()
-      .swap_remove(0);
+      .unwrap();
 
       let mut outgoing_view_key = Zeroizing::new([0; 32]);
       OsRng.fill_bytes(outgoing_view_key.as_mut());
       let tx = SignableTransaction::new(
         RctType::ClsagBulletproofPlus,
         outgoing_view_key,
-        vec![(output, decoys)],
+        vec![input],
         vec![(
           MoneroAddress::new(
             Network::Mainnet,
