@@ -62,6 +62,12 @@ async fn test_decoy_rpc() {
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
 
+  // Ensure there's blocks on-chain
+  rpc
+    .generate_blocks(&MoneroAddress::from_str(Network::Mainnet, ADDRESS).unwrap(), 100)
+    .await
+    .unwrap();
+
   // Test get_output_distribution
   // It's documented to take two inclusive block numbers
   {
@@ -73,9 +79,13 @@ async fn test_decoy_rpc() {
       rpc.get_output_distribution(0 .. distribution_len).await.unwrap().len(),
       distribution_len
     );
+    assert_eq!(
+      rpc.get_output_distribution(.. distribution_len).await.unwrap().len(),
+      distribution_len
+    );
 
     assert_eq!(
-      rpc.get_output_distribution(0 .. (distribution_len - 1)).await.unwrap().len(),
+      rpc.get_output_distribution(.. (distribution_len - 1)).await.unwrap().len(),
       distribution_len - 1
     );
     assert_eq!(

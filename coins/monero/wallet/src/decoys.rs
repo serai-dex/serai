@@ -1,4 +1,4 @@
-use std_shims::{io, vec::Vec, collections::HashSet};
+use std_shims::{io, vec::Vec, string::ToString, collections::HashSet};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
