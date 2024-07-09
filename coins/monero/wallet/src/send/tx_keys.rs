@@ -12,7 +12,7 @@ use crate::{
   primitives::{keccak256, Commitment},
   ringct::EncryptedAmount,
   SharedKeyDerivations, OutputWithDecoys,
-  send::{InternalPayment, SignableTransaction, key_image_sort},
+  send::{ChangeEnum, InternalPayment, SignableTransaction, key_image_sort},
 };
 
 impl SignableTransaction {
@@ -42,15 +42,13 @@ impl SignableTransaction {
   fn has_payments_to_subaddresses(&self) -> bool {
     self.payments.iter().any(|payment| match payment {
       InternalPayment::Payment(addr, _) => addr.is_subaddress(),
-      InternalPayment::Change(addr, view) => {
-        if view.is_some() {
-          // It should not be possible to construct a change specification to a subaddress with a
-          // view key
-          // TODO
-          debug_assert!(!addr.is_subaddress());
-        }
-        addr.is_subaddress()
-      }
+      InternalPayment::Change(change) => match change {
+        ChangeEnum::AddressOnly(addr) => addr.is_subaddress(),
+        // These aren't considered payments to subaddresses as we don't need to send to them as
+        // subaddresses
+        // We can calculate the shared key using the view key, as if we were receiving, instead
+        ChangeEnum::Standard { .. } | ChangeEnum::Guaranteed { .. } => false,
+      },
     })
   }
 
@@ -62,7 +60,10 @@ impl SignableTransaction {
 
     let has_change_view = self.payments.iter().any(|payment| match payment {
       InternalPayment::Payment(_, _) => false,
-      InternalPayment::Change(_, view) => view.is_some(),
+      InternalPayment::Change(change) => match change {
+        ChangeEnum::AddressOnly(_) => false,
+        ChangeEnum::Standard { .. } | ChangeEnum::Guaranteed { .. } => true,
+      },
     });
 
     /*
@@ -107,11 +108,17 @@ impl SignableTransaction {
 
       let ecdh = match payment {
         // If we don't have the view key, use the key dedicated for this address (r A)
-        InternalPayment::Payment(_, _) | InternalPayment::Change(_, None) => {
+        InternalPayment::Payment(_, _) |
+        InternalPayment::Change(ChangeEnum::AddressOnly { .. }) => {
           Zeroizing::new(key_to_use.deref() * addr.view())
         }
         // If we do have the view key, use the commitment to the key (a R)
-        InternalPayment::Change(_, Some(view)) => Zeroizing::new(view.deref() * tx_key_pub),
+        InternalPayment::Change(ChangeEnum::Standard { view_pair, .. }) => {
+          Zeroizing::new(view_pair.view.deref() * tx_key_pub)
+        }
+        InternalPayment::Change(ChangeEnum::Guaranteed { view_pair, .. }) => {
+          Zeroizing::new(view_pair.0.view.deref() * tx_key_pub)
+        }
       };
 
       res.push(ecdh);
@@ -172,9 +179,6 @@ impl SignableTransaction {
         panic!("filtered payment wasn't a payment")
       };
 
-      // TODO: Support subaddresses as change?
-      debug_assert!(addr.is_subaddress());
-
       return (tx_key.deref() * addr.spend(), vec![]);
     }
 
@@ -207,14 +211,14 @@ impl SignableTransaction {
     for (payment, shared_key_derivations) in self.payments.iter().zip(shared_key_derivations) {
       let amount = match payment {
         InternalPayment::Payment(_, amount) => *amount,
-        InternalPayment::Change(_, _) => {
+        InternalPayment::Change(_) => {
           let inputs = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
           let payments = self
             .payments
             .iter()
             .filter_map(|payment| match payment {
               InternalPayment::Payment(_, amount) => Some(amount),
-              InternalPayment::Change(_, _) => None,
+              InternalPayment::Change(_) => None,
             })
             .sum::<u64>();
           let necessary_fee = self.weight_and_necessary_fee().1;

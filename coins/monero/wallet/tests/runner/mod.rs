@@ -254,10 +254,11 @@ macro_rules! test {
             rct_type,
             outgoing_view,
             Change::new(
-              &ViewPair::new(
+              ViewPair::new(
                 &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
                 Zeroizing::new(Scalar::random(&mut OsRng))
               ).unwrap(),
+              None,
             ),
             rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
           );
@@ -266,6 +267,8 @@ macro_rules! test {
             let spend = spend.clone();
             #[cfg(feature = "multisig")]
             let keys = keys.clone();
+
+            assert_eq!(&SignableTransaction::read(&mut tx.serialize().as_slice()).unwrap(), &tx);
 
             let eventuality = Eventuality::from(tx.clone());
 

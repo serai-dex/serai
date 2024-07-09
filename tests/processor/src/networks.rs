@@ -474,7 +474,7 @@ impl Wallet {
           outgoing_view_key,
           inputs,
           vec![(to_addr, AMOUNT)],
-          Change::new(view_pair),
+          Change::new(view_pair.clone(), None),
           data,
           rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
         )

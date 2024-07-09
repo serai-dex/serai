@@ -78,7 +78,7 @@ impl SignableTransaction {
     } else {
       // If there's no payment ID, we push a dummy (as wallet2 does) if there's only one payment
       if (self.payments.len() == 2) &&
-        self.payments.iter().any(|payment| matches!(payment, InternalPayment::Change(_, _)))
+        self.payments.iter().any(|payment| matches!(payment, InternalPayment::Change(_)))
       {
         let (_, payment_id_xor) = self
           .payments
@@ -292,7 +292,7 @@ impl SignableTransactionWithKeyImages {
             .intent
             .payments
             .iter()
-            .any(|payment| matches!(payment, InternalPayment::Change(_, _)))
+            .any(|payment| matches!(payment, InternalPayment::Change(_)))
           {
             // The necessary fee is the fee
             self.intent.weight_and_necessary_fee().1
@@ -306,7 +306,7 @@ impl SignableTransactionWithKeyImages {
               .iter()
               .filter_map(|payment| match payment {
                 InternalPayment::Payment(_, amount) => Some(amount),
-                InternalPayment::Change(_, _) => None,
+                InternalPayment::Change(_) => None,
               })
               .sum::<u64>();
             // Safe since the constructor checks inputs >= (payments + fee)

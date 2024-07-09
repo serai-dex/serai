@@ -22,8 +22,8 @@ use crate::{
     RctType, RctPrunable, RctProofs,
   },
   transaction::Transaction,
+  address::{Network, SubaddressIndex, MoneroAddress},
   extra::MAX_ARBITRARY_DATA_SIZE,
-  address::{Network, MoneroAddress},
   rpc::FeeRate,
   ViewPair, GuaranteedViewPair, OutputWithDecoys,
 };
@@ -44,58 +44,48 @@ pub(crate) fn key_image_sort(x: &EdwardsPoint, y: &EdwardsPoint) -> core::cmp::O
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 enum ChangeEnum {
-  None,
   AddressOnly(MoneroAddress),
-  AddressWithView(MoneroAddress, Zeroizing<Scalar>),
+  Standard { view_pair: ViewPair, subaddress: Option<SubaddressIndex> },
+  Guaranteed { view_pair: GuaranteedViewPair, subaddress: Option<SubaddressIndex> },
 }
 
 impl fmt::Debug for ChangeEnum {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      ChangeEnum::None => f.debug_struct("ChangeEnum::None").finish_non_exhaustive(),
       ChangeEnum::AddressOnly(addr) => {
         f.debug_struct("ChangeEnum::AddressOnly").field("addr", &addr).finish()
       }
-      ChangeEnum::AddressWithView(addr, _) => {
-        f.debug_struct("ChangeEnum::AddressWithView").field("addr", &addr).finish_non_exhaustive()
-      }
+      ChangeEnum::Standard { subaddress, .. } => f
+        .debug_struct("ChangeEnum::Standard")
+        .field("subaddress", &subaddress)
+        .finish_non_exhaustive(),
+      ChangeEnum::Guaranteed { subaddress, .. } => f
+        .debug_struct("ChangeEnum::Guaranteed")
+        .field("subaddress", &subaddress)
+        .finish_non_exhaustive(),
     }
   }
 }
 
 /// Specification for a change output.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct Change(ChangeEnum);
+pub struct Change(Option<ChangeEnum>);
 
 impl Change {
   /// Create a change output specification.
   ///
   /// This take the view key as Monero assumes it has the view key for change outputs. It optimizes
   /// its wallet protocol accordingly.
-  pub fn new(view: &ViewPair) -> Change {
-    Change(ChangeEnum::AddressWithView(
-      // Which network doesn't matter as the derivations will all be the same
-      // TODO: Support subaddresses
-      view.legacy_address(Network::Mainnet),
-      view.view.clone(),
-    ))
+  pub fn new(view_pair: ViewPair, subaddress: Option<SubaddressIndex>) -> Change {
+    Change(Some(ChangeEnum::Standard { view_pair, subaddress }))
   }
 
   /// Create a change output specification for a guaranteed view pair.
   ///
   /// This take the view key as Monero assumes it has the view key for change outputs. It optimizes
   /// its wallet protocol accordingly.
-  pub fn guaranteed(view: &GuaranteedViewPair) -> Change {
-    Change(ChangeEnum::AddressWithView(
-      view.address(
-        // Which network doesn't matter as the derivations will all be the same
-        Network::Mainnet,
-        // TODO: Support subaddresses
-        None,
-        None,
-      ),
-      view.0.view.clone(),
-    ))
+  pub fn guaranteed(view_pair: GuaranteedViewPair, subaddress: Option<SubaddressIndex>) -> Change {
+    Change(Some(ChangeEnum::Guaranteed { view_pair, subaddress }))
   }
 
   /// Create a fingerprintable change output specification.
@@ -116,38 +106,34 @@ impl Change {
   ///    monero-wallet TX without change.
   pub fn fingerprintable(address: Option<MoneroAddress>) -> Change {
     if let Some(address) = address {
-      Change(ChangeEnum::AddressOnly(address))
+      Change(Some(ChangeEnum::AddressOnly(address)))
     } else {
-      Change(ChangeEnum::None)
+      Change(None)
     }
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 enum InternalPayment {
   Payment(MoneroAddress, u64),
-  Change(MoneroAddress, Option<Zeroizing<Scalar>>),
+  Change(ChangeEnum),
 }
 
 impl InternalPayment {
-  fn address(&self) -> &MoneroAddress {
+  fn address(&self) -> MoneroAddress {
     match self {
-      InternalPayment::Payment(addr, _) | InternalPayment::Change(addr, _) => addr,
-    }
-  }
-}
-
-impl fmt::Debug for InternalPayment {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      InternalPayment::Payment(addr, amount) => f
-        .debug_struct("InternalPayment::Payment")
-        .field("addr", &addr)
-        .field("amount", &amount)
-        .finish(),
-      InternalPayment::Change(addr, _) => {
-        f.debug_struct("InternalPayment::Change").field("addr", &addr).finish_non_exhaustive()
-      }
+      InternalPayment::Payment(addr, _) => *addr,
+      InternalPayment::Change(change) => match change {
+        ChangeEnum::AddressOnly(addr) => *addr,
+        // Network::Mainnet as the network won't effect the derivations
+        ChangeEnum::Standard { view_pair, subaddress } => match subaddress {
+          Some(subaddress) => view_pair.subaddress(Network::Mainnet, *subaddress),
+          None => view_pair.legacy_address(Network::Mainnet),
+        },
+        ChangeEnum::Guaranteed { view_pair, subaddress } => {
+          view_pair.address(Network::Mainnet, *subaddress, None)
+        }
+      },
     }
   }
 }
@@ -276,7 +262,7 @@ impl SignableTransaction {
     {
       let mut change_count = 0;
       for payment in &self.payments {
-        change_count += usize::from(u8::from(matches!(payment, InternalPayment::Change(_, _))));
+        change_count += usize::from(u8::from(matches!(payment, InternalPayment::Change(_))));
       }
       if change_count > 1 {
         Err(SendError::MaliciousSerialization)?;
@@ -319,7 +305,7 @@ impl SignableTransaction {
       .iter()
       .filter_map(|payment| match payment {
         InternalPayment::Payment(_, amount) => Some(amount),
-        InternalPayment::Change(_, _) => None,
+        InternalPayment::Change(_) => None,
       })
       .sum::<u64>();
     let (weight, necessary_fee) = self.weight_and_necessary_fee();
@@ -366,12 +352,9 @@ impl SignableTransaction {
       .into_iter()
       .map(|(addr, amount)| InternalPayment::Payment(addr, amount))
       .collect::<Vec<_>>();
-    match change.0 {
-      ChangeEnum::None => {}
-      ChangeEnum::AddressOnly(addr) => payments.push(InternalPayment::Change(addr, None)),
-      ChangeEnum::AddressWithView(addr, view) => {
-        payments.push(InternalPayment::Change(addr, Some(view)))
-      }
+
+    if let Some(change) = change.0 {
+      payments.push(InternalPayment::Change(change));
     }
 
     let mut res =
@@ -412,16 +395,36 @@ impl SignableTransaction {
           write_vec(write_byte, addr.to_string().as_bytes(), w)?;
           w.write_all(&amount.to_le_bytes())
         }
-        InternalPayment::Change(addr, change_view) => {
-          w.write_all(&[1])?;
-          write_vec(write_byte, addr.to_string().as_bytes(), w)?;
-          if let Some(view) = change_view.as_ref() {
+        InternalPayment::Change(change) => match change {
+          ChangeEnum::AddressOnly(addr) => {
             w.write_all(&[1])?;
-            write_scalar(view, w)
-          } else {
-            w.write_all(&[0])
+            write_vec(write_byte, addr.to_string().as_bytes(), w)
           }
-        }
+          ChangeEnum::Standard { view_pair, subaddress } => {
+            w.write_all(&[2])?;
+            write_point(&view_pair.spend(), w)?;
+            write_scalar(&view_pair.view, w)?;
+            if let Some(subaddress) = subaddress {
+              w.write_all(&subaddress.account().to_le_bytes())?;
+              w.write_all(&subaddress.address().to_le_bytes())
+            } else {
+              w.write_all(&0u32.to_le_bytes())?;
+              w.write_all(&0u32.to_le_bytes())
+            }
+          }
+          ChangeEnum::Guaranteed { view_pair, subaddress } => {
+            w.write_all(&[3])?;
+            write_point(&view_pair.spend(), w)?;
+            write_scalar(&view_pair.0.view, w)?;
+            if let Some(subaddress) = subaddress {
+              w.write_all(&subaddress.account().to_le_bytes())?;
+              w.write_all(&subaddress.address().to_le_bytes())
+            } else {
+              w.write_all(&0u32.to_le_bytes())?;
+              w.write_all(&0u32.to_le_bytes())
+            }
+          }
+        },
       }
     }
 
@@ -458,14 +461,17 @@ impl SignableTransaction {
     fn read_payment<R: io::Read>(r: &mut R) -> io::Result<InternalPayment> {
       Ok(match read_byte(r)? {
         0 => InternalPayment::Payment(read_address(r)?, read_u64(r)?),
-        1 => InternalPayment::Change(
-          read_address(r)?,
-          match read_byte(r)? {
-            0 => None,
-            1 => Some(Zeroizing::new(read_scalar(r)?)),
-            _ => Err(io::Error::other("invalid change view"))?,
-          },
-        ),
+        1 => InternalPayment::Change(ChangeEnum::AddressOnly(read_address(r)?)),
+        2 => InternalPayment::Change(ChangeEnum::Standard {
+          view_pair: ViewPair::new(read_point(r)?, Zeroizing::new(read_scalar(r)?))
+            .map_err(io::Error::other)?,
+          subaddress: SubaddressIndex::new(read_u32(r)?, read_u32(r)?),
+        }),
+        3 => InternalPayment::Change(ChangeEnum::Guaranteed {
+          view_pair: GuaranteedViewPair::new(read_point(r)?, Zeroizing::new(read_scalar(r)?))
+            .map_err(io::Error::other)?,
+          subaddress: SubaddressIndex::new(read_u32(r)?, read_u32(r)?),
+        }),
         _ => Err(io::Error::other("invalid payment"))?,
       })
     }

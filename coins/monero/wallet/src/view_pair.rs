@@ -27,7 +27,7 @@ pub enum ViewPairError {
 /// The pair of keys necessary to scan transactions.
 ///
 /// This is composed of the public spend key and the private view key.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct ViewPair {
   spend: EdwardsPoint,
   pub(crate) view: Zeroizing<Scalar>,
@@ -99,7 +99,7 @@ impl ViewPair {
 /// 'Guaranteed' outputs, or transactions outputs to the burning bug, are not officially specified
 /// by the Monero project. They should only be used if necessary. No support outside of
 /// monero-wallet is promised.
-#[derive(Clone, Zeroize)]
+#[derive(Clone, PartialEq, Eq, Zeroize)]
 pub struct GuaranteedViewPair(pub(crate) ViewPair);
 
 impl GuaranteedViewPair {

@@ -115,7 +115,7 @@ test!(
       let mut builder = SignableTransactionBuilder::new(
         rct_type,
         outgoing_view,
-        Change::new(&change_view),
+        Change::new(change_view.clone(), None),
         rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       );
       add_inputs(rct_type, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
@@ -144,6 +144,8 @@ test!(
       assert!(sub_outputs.len() == 1);
       assert_eq!(sub_outputs[0].transaction(), tx.hash());
       assert_eq!(sub_outputs[0].commitment().amount, 1);
+      assert!(sub_outputs[0].subaddress().unwrap().account() == 0);
+      assert!(sub_outputs[0].subaddress().unwrap().address() == 1);
 
       // Make sure only one R was included in TX extra
       assert!(Extra::read::<&[u8]>(&mut tx.prefix().extra.as_ref())
@@ -330,6 +332,63 @@ test!(
       // The remainder should get shunted to fee, which is fingerprintable
       let Transaction::V2 { proofs: Some(ref proofs), .. } = tx else { panic!("TX wasn't RingCT") };
       assert_eq!(proofs.base.fee, 1000000000000 - 10000 - 50000);
+    },
+  ),
+);
+
+test!(
+  subaddress_change,
+  (
+    // Consume this builder for an output we can use in the future
+    // This is needed because we can't get the input from the passed in builder
+    |_, mut builder: Builder, addr| async move {
+      builder.add_payment(addr, 1000000000000);
+      (builder.build().unwrap(), ())
+    },
+    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert_eq!(outputs.len(), 1);
+      assert_eq!(outputs[0].transaction(), tx.hash());
+      assert_eq!(outputs[0].commitment().amount, 1000000000000);
+      outputs
+    },
+  ),
+  (
+    |rct_type, rpc: SimpleRequestRpc, _, _, outputs: Vec<WalletOutput>| async move {
+      use monero_wallet::rpc::FeePriority;
+
+      let view_priv = Zeroizing::new(Scalar::random(&mut OsRng));
+      let mut outgoing_view = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(outgoing_view.as_mut());
+      let change_view =
+        ViewPair::new(&Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE, view_priv.clone())
+          .unwrap();
+
+      let mut builder = SignableTransactionBuilder::new(
+        rct_type,
+        outgoing_view,
+        Change::new(change_view.clone(), Some(SubaddressIndex::new(0, 1).unwrap())),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
+      );
+      add_inputs(rct_type, &rpc, vec![outputs.first().unwrap().clone()], &mut builder).await;
+
+      // Send to a random address
+      let view = ViewPair::new(
+        &Scalar::random(&mut OsRng) * ED25519_BASEPOINT_TABLE,
+        Zeroizing::new(Scalar::random(&mut OsRng)),
+      )
+      .unwrap();
+      builder.add_payment(view.legacy_address(Network::Mainnet), 1);
+      (builder.build().unwrap(), change_view)
+    },
+    |rpc, block, _, _, change_view: ViewPair| async move {
+      // Make sure the change can pick up its output
+      let mut change_scanner = Scanner::new(change_view);
+      change_scanner.register_subaddress(SubaddressIndex::new(0, 1).unwrap());
+      let outputs = change_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      assert!(outputs.len() == 1);
+      assert!(outputs[0].subaddress().unwrap().account() == 0);
+      assert!(outputs[0].subaddress().unwrap().address() == 1);
     },
   ),
 );
