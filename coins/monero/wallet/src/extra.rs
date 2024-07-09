@@ -226,7 +226,9 @@ impl Extra {
   }
 
   /// The payment ID embedded within this extra.
-  // TODO: Monero distinguishes encrypted/unencrypted payment ID retrieval
+  // Monero finds the first nonce field and reads the payment ID from it:
+  // https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
+  //   src/wallet/wallet2.cpp#L2709-L2752
   pub fn payment_id(&self) -> Option<PaymentId> {
     for field in &self.0 {
       if let ExtraField::Nonce(data) = field {

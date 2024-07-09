@@ -94,7 +94,8 @@ async fn select_n(
     let mut candidates = Vec::with_capacity(remaining);
     while candidates.len() != remaining {
       // Use a gamma distribution, as Monero does
-      // TODO: Cite these constants
+      // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c45
+      //   /src/wallet/wallet2.cpp#L142-L143
       let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
       #[allow(clippy::cast_precision_loss)]
       if age > TIP_APPLICATION {

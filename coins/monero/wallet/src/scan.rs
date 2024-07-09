@@ -336,8 +336,8 @@ impl InternalScanner {
     }
 
     // If the block's version is >= 12, drop all unencrypted payment IDs
-    // TODO: Cite rule
-    // TODO: What if TX extra had multiple payment IDs embedded?
+    // https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
+    //   src/wallet/wallet2.cpp#L2739-L2744
     if block.header.hardfork_version >= 12 {
       for output in &mut res.0 {
         if matches!(output.metadata.payment_id, Some(PaymentId::Unencrypted(_))) {
@@ -354,8 +354,10 @@ impl InternalScanner {
 ///
 /// When an output is successfully scanned, the output key MUST be checked against the local
 /// database for lack of prior observation. If it was prior observed, that output is an instance
-/// of the burning bug (TODO: cite) and MAY be unspendable. Only the prior received output(s) or
-/// the newly received output will be spendable (as spending one will burn all of them).
+/// of the
+/// [burning bug](https://web.getmonero.org/2018/09/25/a-post-mortum-of-the-burning-bug.html) and
+/// MAY be unspendable. Only the prior received output(s) or the newly received output will be
+/// spendable (as spending one will burn all of them).
 ///
 /// Once checked, the output key MUST be saved to the local database so future checks can be
 /// performed.

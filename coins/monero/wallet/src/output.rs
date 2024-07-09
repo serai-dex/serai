@@ -301,7 +301,7 @@ impl WalletOutput {
 
   /// The payment ID included with this output.
   ///
-  /// This field may be `Some` even if wallet would not return a payment ID. This will happen if
+  /// This field may be `Some` even if wallet2 would not return a payment ID. This will happen if
   /// the scanned output belongs to the subaddress which spent Monero within the transaction which
   /// created the output. If multiple subaddresses spent Monero within this transactions, the key
   /// image with the highest index is determined to be the subaddress considered as the one

@@ -238,7 +238,6 @@ impl SignableTransaction {
       Err(SendError::NoInputs)?;
     }
     for input in &self.inputs {
-      // TODO: Add a function for the ring length
       if input.decoys().len() !=
         match self.rct_type {
           RctType::ClsagBulletproof => 11,
@@ -317,11 +316,14 @@ impl SignableTransaction {
       })?;
     }
 
-    // The actual limit is half the block size, and for the minimum block size of 300k, that'd be
-    // 150k
-    // wallet2 will only create transactions up to 100k bytes however
-    // TODO: Cite
-    const MAX_TX_SIZE: usize = 100_000;
+    // The limit is half the no-penalty block size
+    // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+    //   /src/wallet/wallet2.cpp#L110766-L11085
+    // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+    //   /src/cryptonote_config.h#L61
+    // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+    //   /src/cryptonote_config.h#L64
+    const MAX_TX_SIZE: usize = (300_000 / 2) - 600;
     if weight >= MAX_TX_SIZE {
       Err(SendError::TooLargeTransaction)?;
     }
