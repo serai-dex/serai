@@ -6,10 +6,7 @@ use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwar
 
 use monero_generators::{H, Generators};
 
-pub(crate) use crate::scalar_vector::ScalarVector;
-
-mod point_vector;
-pub(crate) use point_vector::PointVector;
+pub(crate) use crate::{scalar_vector::ScalarVector, point_vector::PointVector};
 
 pub(crate) mod transcript;
 pub(crate) mod weighted_inner_product;
@@ -31,7 +28,6 @@ pub(crate) enum GeneratorsList {
   HBold,
 }
 
-// TODO: Table these
 #[derive(Clone, Debug)]
 pub(crate) struct BpPlusGenerators {
   g_bold: &'static [EdwardsPoint],

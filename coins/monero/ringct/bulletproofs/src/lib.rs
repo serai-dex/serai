@@ -20,6 +20,8 @@ pub use monero_generators::MAX_COMMITMENTS;
 use monero_primitives::Commitment;
 
 pub(crate) mod scalar_vector;
+pub(crate) mod point_vector;
+
 pub(crate) mod core;
 use crate::core::LOG_COMMITMENT_BITS;
 
@@ -28,10 +30,16 @@ use batch_verifier::{BulletproofsBatchVerifier, BulletproofsPlusBatchVerifier};
 pub use batch_verifier::BatchVerifier;
 
 pub(crate) mod original;
-use crate::original::OriginalStruct;
+use crate::original::{
+  IpProof, AggregateRangeStatement as OriginalStatement, AggregateRangeWitness as OriginalWitness,
+  AggregateRangeProof as OriginalProof,
+};
 
 pub(crate) mod plus;
-use crate::plus::*;
+use crate::plus::{
+  WipProof, AggregateRangeStatement as PlusStatement, AggregateRangeWitness as PlusWitness,
+  AggregateRangeProof as PlusProof,
+};
 
 #[cfg(test)]
 mod tests;
@@ -55,9 +63,9 @@ pub enum BulletproofError {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Bulletproof {
   /// A Bulletproof.
-  Original(OriginalStruct),
+  Original(OriginalProof),
   /// A Bulletproof+.
-  Plus(AggregateRangeProof),
+  Plus(PlusProof),
 }
 
 impl Bulletproof {
@@ -100,7 +108,7 @@ impl Bulletproof {
   /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof.
   pub fn prove<R: RngCore + CryptoRng>(
     rng: &mut R,
-    outputs: &[Commitment],
+    outputs: Vec<Commitment>,
   ) -> Result<Bulletproof, BulletproofError> {
     if outputs.is_empty() {
       Err(BulletproofError::NoCommitments)?;
@@ -108,7 +116,13 @@ impl Bulletproof {
     if outputs.len() > MAX_COMMITMENTS {
       Err(BulletproofError::TooManyCommitments)?;
     }
-    Ok(Bulletproof::Original(OriginalStruct::prove(rng, outputs)))
+    let commitments = outputs.iter().map(Commitment::calculate).collect::<Vec<_>>();
+    Ok(Bulletproof::Original(
+      OriginalStatement::new(&commitments)
+        .unwrap()
+        .prove(rng, OriginalWitness::new(outputs).unwrap())
+        .unwrap(),
+    ))
   }
 
   /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof+.
@@ -122,10 +136,11 @@ impl Bulletproof {
     if outputs.len() > MAX_COMMITMENTS {
       Err(BulletproofError::TooManyCommitments)?;
     }
+    let commitments = outputs.iter().map(Commitment::calculate).collect::<Vec<_>>();
     Ok(Bulletproof::Plus(
-      AggregateRangeStatement::new(outputs.iter().map(Commitment::calculate).collect())
+      PlusStatement::new(&commitments)
         .unwrap()
-        .prove(rng, &Zeroizing::new(AggregateRangeWitness::new(outputs).unwrap()))
+        .prove(rng, &Zeroizing::new(PlusWitness::new(outputs).unwrap()))
         .unwrap(),
     ))
   }
@@ -136,14 +151,17 @@ impl Bulletproof {
     match self {
       Bulletproof::Original(bp) => {
         let mut verifier = BulletproofsBatchVerifier::default();
-        if !bp.verify(rng, &mut verifier, commitments) {
+        let Some(statement) = OriginalStatement::new(commitments) else {
+          return false;
+        };
+        if !statement.verify(rng, &mut verifier, bp.clone()) {
           return false;
         }
         verifier.verify()
       }
       Bulletproof::Plus(bp) => {
         let mut verifier = BulletproofsPlusBatchVerifier::default();
-        let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
+        let Some(statement) = PlusStatement::new(commitments) else {
           return false;
         };
         if !statement.verify(rng, &mut verifier, bp.clone()) {
@@ -170,9 +188,14 @@ impl Bulletproof {
     commitments: &[EdwardsPoint],
   ) -> bool {
     match self {
-      Bulletproof::Original(bp) => bp.verify(rng, &mut verifier.original, commitments),
+      Bulletproof::Original(bp) => {
+        let Some(statement) = OriginalStatement::new(commitments) else {
+          return false;
+        };
+        statement.verify(rng, &mut verifier.original, bp.clone())
+      }
       Bulletproof::Plus(bp) => {
-        let Some(statement) = AggregateRangeStatement::new(commitments.to_vec()) else {
+        let Some(statement) = PlusStatement::new(commitments) else {
           return false;
         };
         statement.verify(rng, &mut verifier.plus, bp.clone())
@@ -193,11 +216,11 @@ impl Bulletproof {
         write_point(&bp.T2, w)?;
         write_scalar(&bp.tau_x, w)?;
         write_scalar(&bp.mu, w)?;
-        specific_write_vec(&bp.L, w)?;
-        specific_write_vec(&bp.R, w)?;
-        write_scalar(&bp.a, w)?;
-        write_scalar(&bp.b, w)?;
-        write_scalar(&bp.t, w)
+        specific_write_vec(&bp.ip.L, w)?;
+        specific_write_vec(&bp.ip.R, w)?;
+        write_scalar(&bp.ip.a, w)?;
+        write_scalar(&bp.ip.b, w)?;
+        write_scalar(&bp.t_hat, w)
       }
 
       Bulletproof::Plus(bp) => {
@@ -234,24 +257,26 @@ impl Bulletproof {
 
   /// Read a Bulletproof.
   pub fn read<R: Read>(r: &mut R) -> io::Result<Bulletproof> {
-    Ok(Bulletproof::Original(OriginalStruct {
+    Ok(Bulletproof::Original(OriginalProof {
       A: read_point(r)?,
       S: read_point(r)?,
       T1: read_point(r)?,
       T2: read_point(r)?,
       tau_x: read_scalar(r)?,
       mu: read_scalar(r)?,
-      L: read_vec(read_point, r)?,
-      R: read_vec(read_point, r)?,
-      a: read_scalar(r)?,
-      b: read_scalar(r)?,
-      t: read_scalar(r)?,
+      ip: IpProof {
+        L: read_vec(read_point, r)?,
+        R: read_vec(read_point, r)?,
+        a: read_scalar(r)?,
+        b: read_scalar(r)?,
+      },
+      t_hat: read_scalar(r)?,
     }))
   }
 
   /// Read a Bulletproof+.
   pub fn read_plus<R: Read>(r: &mut R) -> io::Result<Bulletproof> {
-    Ok(Bulletproof::Plus(AggregateRangeProof {
+    Ok(Bulletproof::Plus(PlusProof {
       A: read_point(r)?,
       wip: WipProof {
         A: read_point(r)?,

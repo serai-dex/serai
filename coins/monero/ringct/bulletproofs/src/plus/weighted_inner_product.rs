@@ -107,9 +107,6 @@ impl WipStatement {
   // Prover's variant of the shared code block to calculate G/H/P when n > 1
   // Returns each permutation of G/H since the prover needs to do operation on each permutation
   // P is dropped as it's unused in the prover's path
-  // TODO: It'd still probably be faster to keep in terms of the original generators, both between
-  // the reduced amount of group operations and the potential tabling of the generators under
-  // multiexp
   #[allow(clippy::too_many_arguments)]
   fn next_G_H(
     transcript: &mut Scalar,

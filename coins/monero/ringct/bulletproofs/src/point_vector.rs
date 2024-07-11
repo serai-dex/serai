@@ -1,14 +1,16 @@
 use core::ops::{Index, IndexMut};
 use std_shims::vec::Vec;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use curve25519_dalek::edwards::EdwardsPoint;
 
-#[cfg(test)]
-use crate::{core::multiexp, plus::ScalarVector};
+use crate::scalar_vector::ScalarVector;
 
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, ZeroizeOnDrop)]
+#[cfg(test)]
+use crate::core::multiexp;
+
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub(crate) struct PointVector(pub(crate) Vec<EdwardsPoint>);
 
 impl Index<usize> for PointVector {
@@ -25,6 +27,15 @@ impl IndexMut<usize> for PointVector {
 }
 
 impl PointVector {
+  pub(crate) fn mul_vec(&self, vector: &ScalarVector) -> Self {
+    assert_eq!(self.len(), vector.len());
+    let mut res = self.clone();
+    for (i, val) in res.0.iter_mut().enumerate() {
+      *val *= vector.0[i];
+    }
+    res
+  }
+
   #[cfg(test)]
   pub(crate) fn multiexp(&self, vector: &ScalarVector) -> EdwardsPoint {
     debug_assert_eq!(self.len(), vector.len());

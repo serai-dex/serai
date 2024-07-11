@@ -20,15 +20,9 @@ use crate::{
 
 // Figure 3 of the Bulletproofs+ Paper
 #[derive(Clone, Debug)]
-pub(crate) struct AggregateRangeStatement {
+pub(crate) struct AggregateRangeStatement<'a> {
   generators: BpPlusGenerators,
-  V: Vec<EdwardsPoint>,
-}
-
-impl Zeroize for AggregateRangeStatement {
-  fn zeroize(&mut self) {
-    self.V.zeroize();
-  }
+  V: &'a [EdwardsPoint],
 }
 
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
@@ -61,8 +55,8 @@ struct AHatComputation {
   A_hat: EdwardsPoint,
 }
 
-impl AggregateRangeStatement {
-  pub(crate) fn new(V: Vec<EdwardsPoint>) -> Option<Self> {
+impl<'a> AggregateRangeStatement<'a> {
+  pub(crate) fn new(V: &'a [EdwardsPoint]) -> Option<Self> {
     if V.is_empty() || (V.len() > MAX_COMMITMENTS) {
       return None;
     }
@@ -180,7 +174,7 @@ impl AggregateRangeStatement {
     // Commitments aren't transmitted INV_EIGHT though, so this multiplies by INV_EIGHT to enable
     // clearing its cofactor without mutating the value
     // For some reason, these values are transcripted * INV_EIGHT, not as transmitted
-    let V = V.into_iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
+    let V = V.iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
     let mut V = V.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
@@ -248,7 +242,7 @@ impl AggregateRangeStatement {
   ) -> bool {
     let Self { generators, V } = self;
 
-    let V = V.into_iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
+    let V = V.iter().map(|V| V * INV_EIGHT()).collect::<Vec<_>>();
     let mut transcript = initial_transcript(V.iter());
     let V = V.iter().map(EdwardsPoint::mul_by_cofactor).collect::<Vec<_>>();
 
