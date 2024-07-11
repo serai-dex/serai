@@ -168,20 +168,20 @@ impl FeePriority {
   }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct EmptyResponse {}
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct JsonRpcResponse<T> {
   result: T,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct TransactionResponse {
   tx_hash: String,
   as_hex: String,
   pruned_as_hex: String,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct TransactionsResponse {
   #[serde(default)]
   missed_tx: Vec<String>,
@@ -189,7 +189,7 @@ struct TransactionsResponse {
 }
 
 /// The response to an output query.
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 pub struct OutputResponse {
   /// The height of the block this output was added to the chain in.
   pub height: usize,
@@ -282,12 +282,12 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// This is specifically the major version within the most recent block header.
   async fn get_hardfork_version(&self) -> Result<u8, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct HeaderResponse {
       major_version: u8,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct LastHeaderResponse {
       block_header: HeaderResponse,
     }
@@ -306,7 +306,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// The height is defined as the amount of blocks on the blockchain. For a blockchain with only
   /// its genesis block, the height will be 1.
   async fn get_height(&self) -> Result<usize, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct HeightResponse {
       height: usize,
     }
@@ -398,11 +398,11 @@ pub trait Rpc: Sync + Clone + Debug {
   /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
   /// `height - 1` for the latest block).
   async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct BlockHeaderResponse {
       hash: String,
     }
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct BlockHeaderByHeightResponse {
       block_header: BlockHeaderResponse,
     }
@@ -416,7 +416,7 @@ pub trait Rpc: Sync + Clone + Debug {
   ///
   /// The received block will be hashed in order to verify the correct block was returned.
   async fn get_block(&self, hash: [u8; 32]) -> Result<Block, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct BlockResponse {
       blob: String,
     }
@@ -437,7 +437,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// `number` is the block's zero-indexed position on the blockchain (`0` for the genesis block,
   /// `height - 1` for the latest block).
   async fn get_block_by_number(&self, number: usize) -> Result<Block, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct BlockResponse {
       blob: String,
     }
@@ -499,7 +499,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// This MUST NOT be expected to be deterministic in any way.
   // TODO: Take a sanity check argument
   async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct FeeResponse {
       status: String,
       fees: Option<Vec<u64>>,
@@ -555,7 +555,7 @@ pub trait Rpc: Sync + Clone + Debug {
   /// Publish a transaction.
   async fn publish_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
     #[allow(dead_code)]
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct SendRawResponse {
       status: String,
       double_spend: bool,
@@ -798,22 +798,23 @@ pub trait Rpc: Sync + Clone + Debug {
   }
 }
 
-/// A trait for any object which can be used to select decoys.
+/// A trait for any object which can be used to select RingCT decoys.
 ///
-/// An implementation is provided for any satisfier of `Rpc`. The benefit of this trait is the
-/// ability to select decoys off of a locally stored output distribution, preventing potential
-/// attacks a remote node can perform.
+/// An implementation is provided for any satisfier of `Rpc`. It is not recommended to use an `Rpc`
+/// object to satisfy this. This should be satisfied by a local store of the output distribution,
+/// both for performance and to prevent potential attacks a remote node can perform.
 #[async_trait]
 pub trait DecoyRpc: Sync + Clone + Debug {
-  /// Get the length of the output distribution.
+  /// Get the height the output distribution ends at.
   ///
   /// This is equivalent to the hight of the blockchain it's for. This is intended to be cheaper
   /// than fetching the entire output distribution.
-  async fn get_output_distribution_len(&self) -> Result<usize, RpcError>;
+  async fn get_output_distribution_end_height(&self) -> Result<usize, RpcError>;
 
-  /// Get the output distribution.
+  /// Get the RingCT (zero-amount) output distribution.
   ///
-  /// `range` is in terms of block numbers.
+  /// `range` is in terms of block numbers. The result may be smaller than the requested range if
+  /// the range starts before RingCT outputs were created on-chain.
   async fn get_output_distribution(
     &self,
     range: impl Send + RangeBounds<usize>,
@@ -843,7 +844,7 @@ pub trait DecoyRpc: Sync + Clone + Debug {
 
 #[async_trait]
 impl<R: Rpc> DecoyRpc for R {
-  async fn get_output_distribution_len(&self) -> Result<usize, RpcError> {
+  async fn get_output_distribution_end_height(&self) -> Result<usize, RpcError> {
     <Self as Rpc>::get_height(self).await
   }
 
@@ -851,14 +852,17 @@ impl<R: Rpc> DecoyRpc for R {
     &self,
     range: impl Send + RangeBounds<usize>,
   ) -> Result<Vec<u64>, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Default, Debug, Deserialize)]
     struct Distribution {
       distribution: Vec<u64>,
+      // A blockchain with just its genesis block has a height of 1
+      start_height: usize,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct Distributions {
       distributions: [Distribution; 1],
+      status: String,
     }
 
     let from = match range.start_bound() {
@@ -889,15 +893,39 @@ impl<R: Rpc> DecoyRpc for R {
           "binary": false,
           "amounts": [0],
           "cumulative": true,
+          // These are actually block numbers, not heights
           "from_height": from,
           "to_height": if zero_zero_case { 1 } else { to },
         })),
       )
       .await?;
-    let mut distributions = distributions.distributions;
-    let mut distribution = core::mem::take(&mut distributions[0].distribution);
 
-    let expected_len = if zero_zero_case { 2 } else { (to - from) + 1 };
+    if distributions.status != "OK" {
+      Err(RpcError::ConnectionError(
+        "node couldn't service this request for the output distribution".to_string(),
+      ))?;
+    }
+
+    let mut distributions = distributions.distributions;
+    let Distribution { start_height, mut distribution } = core::mem::take(&mut distributions[0]);
+    // start_height is also actually a block number, and it should be at least `from`
+    // It may be after depending on when these outputs first appeared on the blockchain
+    // Unfortunately, we can't validate without a binary search to find the RingCT activation block
+    // and an iterative search from there, so we solely sanity check it
+    if start_height < from {
+      Err(RpcError::InvalidNode(format!(
+        "requested distribution from {from} and got from {start_height}"
+      )))?;
+    }
+    // It shouldn't be after `to` though
+    if start_height > to {
+      Err(RpcError::InvalidNode(format!(
+        "requested distribution to {to} and got from {start_height}"
+      )))?;
+    }
+
+    let expected_len = if zero_zero_case { 2 } else { (to - start_height) + 1 };
+    // Yet this is actually a height
     if expected_len != distribution.len() {
       Err(RpcError::InvalidNode(format!(
         "distribution length ({}) wasn't of the requested length ({})",
@@ -905,7 +933,7 @@ impl<R: Rpc> DecoyRpc for R {
         expected_len
       )))?;
     }
-    // Requesting 0, 0 returns the distribution for the entire chain
+    // Requesting to = 0 returns the distribution for the entire chain
     // We work-around this by requesting 0, 1 (yielding two blocks), then popping the second block
     if zero_zero_case {
       distribution.pop();
@@ -914,7 +942,7 @@ impl<R: Rpc> DecoyRpc for R {
   }
 
   async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct OutsResponse {
       status: String,
       outs: Vec<OutputResponse>,

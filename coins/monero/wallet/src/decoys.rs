@@ -33,7 +33,7 @@ async fn select_n(
   if height < DEFAULT_LOCK_WINDOW {
     Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
   }
-  if height > rpc.get_output_distribution_len().await? {
+  if height > rpc.get_output_distribution_end_height().await? {
     Err(RpcError::InternalError(
       "decoys being requested from blocks this node doesn't have".to_string(),
     ))?;
@@ -41,6 +41,9 @@ async fn select_n(
 
   // Get the distribution
   let distribution = rpc.get_output_distribution(.. height).await?;
+  if distribution.len() < DEFAULT_LOCK_WINDOW {
+    Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
+  }
   let highest_output_exclusive_bound = distribution[distribution.len() - DEFAULT_LOCK_WINDOW];
   // This assumes that each miner TX had one output (as sane) and checks we have sufficient
   // outputs even when excluding them (due to their own timelock requirements)

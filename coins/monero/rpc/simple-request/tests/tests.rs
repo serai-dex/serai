@@ -69,9 +69,9 @@ async fn test_decoy_rpc() {
     .unwrap();
 
   // Test get_output_distribution
-  // It's documented to take two inclusive block numbers
+  // Our documentation for our Rust fn defines it as taking two block numbers
   {
-    let distribution_len = rpc.get_output_distribution_len().await.unwrap();
+    let distribution_len = rpc.get_output_distribution_end_height().await.unwrap();
     assert_eq!(distribution_len, rpc.get_height().await.unwrap());
 
     rpc.get_output_distribution(0 ..= distribution_len).await.unwrap_err();
