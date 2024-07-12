@@ -4781,7 +4781,6 @@ dependencies = [
  "monero-primitives",
  "rand_core",
  "std-shims",
- "subtle",
  "thiserror",
  "zeroize",
 ]

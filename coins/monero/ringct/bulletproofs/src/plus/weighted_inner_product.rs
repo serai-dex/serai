@@ -166,6 +166,17 @@ impl WipStatement {
     let mut g_bold = PointVector(g_bold);
     let mut h_bold = PointVector(h_bold);
 
+    let mut y_inv = {
+      let mut i = 1;
+      let mut to_invert = vec![];
+      while i < g_bold.len() {
+        to_invert.push(y[i - 1]);
+        i *= 2;
+      }
+      Scalar::batch_invert(&mut to_invert);
+      to_invert
+    };
+
     // Check P has the expected relationship
     #[cfg(debug_assertions)]
     {
@@ -219,8 +230,7 @@ impl WipStatement {
       let c_l = a1.clone().weighted_inner_product(&b2, &y);
       let c_r = (a2.clone() * y_n_hat).weighted_inner_product(&b1, &y);
 
-      // TODO: Calculate these with a batch inversion
-      let y_inv_n_hat = y_n_hat.invert();
+      let y_inv_n_hat = y_inv.pop().unwrap();
 
       let mut L_terms = (a1.clone() * y_inv_n_hat)
         .0

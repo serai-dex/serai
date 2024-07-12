@@ -167,19 +167,18 @@ impl<'a> AggregateRangeStatement<'a> {
 
     let (y, z) = Self::transcript_A_S(transcript, A, S);
     transcript = z;
+    let z = ScalarVector::powers(z, 3 + padded_pow_of_2);
 
     let twos = ScalarVector::powers(Scalar::from(2u8), COMMITMENT_BITS);
 
-    let l = [aL - z, sL];
+    let l = [aL - z[1], sL];
     let y_pow_n = ScalarVector::powers(y, aR.len());
-    let mut r = [((aR + z) * &y_pow_n), sR * &y_pow_n];
+    let mut r = [((aR + z[1]) * &y_pow_n), sR * &y_pow_n];
     {
-      let mut z_current = z * z;
       for j in 0 .. padded_pow_of_2 {
         for i in 0 .. COMMITMENT_BITS {
-          r[0].0[(j * COMMITMENT_BITS) + i] += z_current * twos[i];
+          r[0].0[(j * COMMITMENT_BITS) + i] += z[2 + j] * twos[i];
         }
-        z_current *= z;
       }
     }
     let t1 = (l[0].clone().inner_product(&r[1])) + (r[0].clone().inner_product(&l[1]));
@@ -216,10 +215,8 @@ impl<'a> AggregateRangeStatement<'a> {
     let t_hat = l.clone().inner_product(&r);
     let mut tau_x = ((tau_2 * x) + tau_1) * x;
     {
-      let mut z_current = z * z;
-      for commitment in &witness.commitments {
-        tau_x += z_current * commitment.mask;
-        z_current *= z;
+      for (i, commitment) in witness.commitments.iter().enumerate() {
+        tau_x += z[2 + i] * commitment.mask;
       }
     }
     let mu = alpha + (rho * x);
@@ -268,6 +265,7 @@ impl<'a> AggregateRangeStatement<'a> {
 
     let (y, z) = Self::transcript_A_S(transcript, proof.A, proof.S);
     transcript = z;
+    let z = ScalarVector::powers(z, 3 + padded_pow_of_2);
     transcript = Self::transcript_T12(transcript, proof.T1, proof.T2);
     let x = transcript;
     transcript = Self::transcript_tau_x_mu_t_hat(transcript, proof.tau_x, proof.mu, proof.t_hat);
@@ -293,18 +291,14 @@ impl<'a> AggregateRangeStatement<'a> {
       // These will now sum to 0 if equal
       let weight = -weight;
 
-      verifier.0.h += weight * (z - (z * z)) * y_pow_n.sum();
+      verifier.0.h += weight * (z[1] - (z[2])) * y_pow_n.sum();
 
-      let mut z_current = z * z;
-      for commitment in &commitments {
-        verifier.0.other.push((weight * z_current, *commitment));
-        z_current *= z;
+      for (i, commitment) in commitments.iter().enumerate() {
+        verifier.0.other.push((weight * z[2 + i], *commitment));
       }
 
-      let mut z_current = z * z * z;
-      for _ in 0 .. padded_pow_of_2 {
-        verifier.0.h -= weight * z_current * twos.clone().sum();
-        z_current *= z;
+      for i in 0 .. padded_pow_of_2 {
+        verifier.0.h -= weight * z[3 + i] * twos.clone().sum();
       }
       verifier.0.other.push((weight * x, proof.T1));
       verifier.0.other.push((weight * (x * x), proof.T2));
@@ -315,22 +309,23 @@ impl<'a> AggregateRangeStatement<'a> {
     // 66
     verifier.0.other.push((ip_weight, proof.A));
     verifier.0.other.push((ip_weight * x, proof.S));
-    // TODO: g_sum
+    // We can replace these with a g_sum, h_sum scalar in the batch verifier
+    // It'd trade `2 * ip_rows` scalar additions (per proof) for one scalar addition and an
+    // additional term in the MSM
+    let ip_z = ip_weight * z[1];
     for i in 0 .. ip_rows {
-      verifier.0.g_bold[i] += ip_weight * -z;
+      verifier.0.h_bold[i] += ip_z;
     }
-    // TODO: h_sum
+    let neg_ip_z = -ip_z;
     for i in 0 .. ip_rows {
-      verifier.0.h_bold[i] += ip_weight * z;
+      verifier.0.g_bold[i] += neg_ip_z;
     }
     {
-      let mut z_current = z * z;
       for j in 0 .. padded_pow_of_2 {
         for i in 0 .. COMMITMENT_BITS {
           let full_i = (j * COMMITMENT_BITS) + i;
-          verifier.0.h_bold[full_i] += ip_weight * y_inv_pow_n[full_i] * z_current * twos[i];
+          verifier.0.h_bold[full_i] += ip_weight * y_inv_pow_n[full_i] * z[2 + j] * twos[i];
         }
-        z_current *= z;
       }
     }
     verifier.0.h += ip_weight * x_ip * proof.t_hat;
