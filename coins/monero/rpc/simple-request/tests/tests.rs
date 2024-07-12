@@ -102,3 +102,26 @@ async fn test_decoy_rpc() {
     rpc.get_output_distribution(1 .. 0).await.unwrap_err();
   }
 }
+
+// This test passes yet requires a mainnet node, which we don't have reliable access to in CI.
+/*
+#[tokio::test]
+async fn test_zero_out_tx_o_indexes() {
+  use monero_rpc::Rpc;
+
+  let rpc = SimpleRequestRpc::new("https://node.sethforprivacy.com".to_string()).await.unwrap();
+
+  assert_eq!(
+    rpc
+      .get_o_indexes(
+        hex::decode("17ce4c8feeb82a6d6adaa8a89724b32bf4456f6909c7f84c8ce3ee9ebba19163")
+          .unwrap()
+          .try_into()
+          .unwrap()
+      )
+      .await
+      .unwrap(),
+    Vec::<u64>::new()
+  );
+}
+*/

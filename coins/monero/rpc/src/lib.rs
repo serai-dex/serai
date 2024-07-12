@@ -19,7 +19,7 @@ use zeroize::Zeroize;
 
 use async_trait::async_trait;
 
-use curve25519_dalek::edwards::EdwardsPoint;
+use curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -28,6 +28,7 @@ use monero_serai::{
   io::*,
   transaction::{Input, Timelock, Transaction},
   block::Block,
+  DEFAULT_LOCK_WINDOW,
 };
 use monero_address::Address;
 
@@ -188,19 +189,24 @@ struct TransactionsResponse {
   txs: Vec<TransactionResponse>,
 }
 
-/// The response to an output query.
-#[derive(Debug, Deserialize)]
-pub struct OutputResponse {
-  /// The height of the block this output was added to the chain in.
+/// The response to an query for the information of a RingCT output.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OutputInformation {
+  /// The block number of the block this output was added to the chain in.
+  ///
+  /// This is equivalent to he height of the blockchain at the time the block was added.
   pub height: usize,
   /// If the output is unlocked, per the node's local view.
   pub unlocked: bool,
   /// The output's key.
-  pub key: String,
+  ///
+  /// This is a CompressedEdwardsY, not an EdwardsPoint, as it may be invalid. CompressedEdwardsY
+  /// only asserts validity on decompression and allows representing compressed types.
+  pub key: CompressedEdwardsY,
   /// The output's commitment.
-  pub mask: String,
+  pub commitment: EdwardsPoint,
   /// The transaction which created this output.
-  pub txid: String,
+  pub transaction: [u8; 32],
 }
 
 fn rpc_hex(value: &str) -> Result<Vec<u8>, RpcError> {
@@ -497,7 +503,6 @@ pub trait Rpc: Sync + Clone + Debug {
   /// This may be manipulated to unsafe levels and MUST be sanity checked.
   ///
   /// This MUST NOT be expected to be deterministic in any way.
-  // TODO: Take a sanity check argument
   async fn get_fee_rate(&self, priority: FeePriority) -> Result<FeeRate, RpcError> {
     #[derive(Debug, Deserialize)]
     struct FeeResponse {
@@ -788,7 +793,6 @@ pub trait Rpc: Sync + Clone + Debug {
         }
 
         // If the Vec was empty, it would've been omitted, hence the unwrap_or
-        // TODO: Test against a 0-output TX, such as the ones found in block 202612
         Ok(res.unwrap_or(vec![]))
       };
 
@@ -821,7 +825,7 @@ pub trait DecoyRpc: Sync + Clone + Debug {
   ) -> Result<Vec<u64>, RpcError>;
 
   /// Get the specified outputs from the RingCT (zero-amount) pool.
-  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError>;
+  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputInformation>, RpcError>;
 
   /// Get the specified outputs from the RingCT (zero-amount) pool, but only return them if their
   /// timelock has been satisfied.
@@ -941,7 +945,16 @@ impl<R: Rpc> DecoyRpc for R {
     Ok(distribution)
   }
 
-  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputResponse>, RpcError> {
+  async fn get_outs(&self, indexes: &[u64]) -> Result<Vec<OutputInformation>, RpcError> {
+    #[derive(Debug, Deserialize)]
+    struct OutputResponse {
+      height: usize,
+      unlocked: bool,
+      key: String,
+      mask: String,
+      txid: String,
+    }
+
     #[derive(Debug, Deserialize)]
     struct OutsResponse {
       status: String,
@@ -965,7 +978,25 @@ impl<R: Rpc> DecoyRpc for R {
       Err(RpcError::InvalidNode("bad response to get_outs".to_string()))?;
     }
 
-    Ok(res.outs)
+    Ok(
+      res
+        .outs
+        .into_iter()
+        .map(|output| {
+          Ok(OutputInformation {
+            height: output.height,
+            unlocked: output.unlocked,
+            key: CompressedEdwardsY(
+              rpc_hex(&output.key)?
+                .try_into()
+                .map_err(|_| RpcError::InvalidNode("output key wasn't 32 bytes".to_string()))?,
+            ),
+            commitment: rpc_point(&output.mask)?,
+            transaction: hash_hex(&output.txid)?,
+          })
+        })
+        .collect::<Result<Vec<_>, RpcError>>()?,
+    )
   }
 
   async fn get_unlocked_outputs(
@@ -974,15 +1005,11 @@ impl<R: Rpc> DecoyRpc for R {
     height: usize,
     fingerprintable_deterministic: bool,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
-    let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
+    let outs = self.get_outs(indexes).await?;
 
     // Only need to fetch txs to do deterministic check on timelock
     let txs = if fingerprintable_deterministic {
-      self
-        .get_transactions(
-          &outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
-        )
-        .await?
+      self.get_transactions(&outs.iter().map(|out| out.transaction).collect::<Vec<_>>()).await?
     } else {
       vec![]
     };
@@ -996,19 +1023,20 @@ impl<R: Rpc> DecoyRpc for R {
         // decoy
         // Only valid keys can be used in CLSAG proofs, hence the need for re-selection, yet
         // invalid keys may honestly exist on the blockchain
-        // Only a recent hard fork checked output keys were valid points
-        let Some(key) = decompress_point(
-          rpc_hex(&out.key)?
-            .try_into()
-            .map_err(|_| RpcError::InvalidNode("non-32-byte point".to_string()))?,
-        ) else {
+        let Some(key) = out.key.decompress() else {
           return Ok(None);
         };
-        Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
+        Ok(Some([key, out.commitment]).filter(|_| {
           if fingerprintable_deterministic {
-            // TODO: Are timelock blocks by height or number?
-            // TODO: This doesn't check the default timelock has been passed
-            Timelock::Block(height) >= txs[i].prefix().additional_timelock
+            // https://github.com/monero-project/monero/blob
+            //   /cc73fe71162d564ffda8e549b79a350bca53c454/src/cryptonote_core/blockchain.cpp#L90
+            const ACCEPTED_TIMELOCK_DELTA: usize = 1;
+
+            // https://github.com/monero-project/monero/blob
+            //   /cc73fe71162d564ffda8e549b79a350bca53c454/src/cryptonote_core/blockchain.cpp#L3836
+            ((out.height + DEFAULT_LOCK_WINDOW) <= height) &&
+              (Timelock::Block(height - 1 + ACCEPTED_TIMELOCK_DELTA) >=
+                txs[i].prefix().additional_timelock)
           } else {
             out.unlocked
           }

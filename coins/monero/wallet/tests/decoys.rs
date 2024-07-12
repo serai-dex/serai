@@ -2,7 +2,7 @@ use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
   DEFAULT_LOCK_WINDOW,
   transaction::Transaction,
-  rpc::{OutputResponse, Rpc, DecoyRpc},
+  rpc::{Rpc, DecoyRpc},
   WalletOutput,
 };
 
@@ -54,8 +54,7 @@ test!(
       let most_recent_o_index = rpc.get_o_indexes(tx.hash()).await.unwrap().pop().unwrap();
 
       // Make sure output from tx1 is in the block in which it unlocks
-      let out_tx1: OutputResponse =
-        rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
+      let out_tx1 = rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
       assert_eq!(out_tx1.height, height - DEFAULT_LOCK_WINDOW);
       assert!(out_tx1.unlocked);
 
@@ -133,8 +132,7 @@ test!(
       let most_recent_o_index = rpc.get_o_indexes(tx.hash()).await.unwrap().pop().unwrap();
 
       // Make sure output from tx1 is in the block in which it unlocks
-      let out_tx1: OutputResponse =
-        rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
+      let out_tx1 = rpc.get_outs(&[most_recent_o_index]).await.unwrap().swap_remove(0);
       assert_eq!(out_tx1.height, height - DEFAULT_LOCK_WINDOW);
       assert!(out_tx1.unlocked);
 

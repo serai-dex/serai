@@ -65,7 +65,6 @@ impl AddressType {
   }
 
   /// The payment ID within this address.
-  // TODO: wallet-core PaymentId? TX extra crate imported here?
   pub fn payment_id(&self) -> Option<[u8; 8]> {
     if let AddressType::LegacyIntegrated(id) = self {
       Some(*id)

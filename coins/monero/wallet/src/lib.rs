@@ -102,7 +102,6 @@ impl SharedKeyDerivations {
   }
 
   // H(8Ra || 0x8d)
-  // TODO: Make this itself a PaymentId
   #[allow(clippy::needless_pass_by_value)]
   fn payment_id_xor(ecdh: Zeroizing<EdwardsPoint>) -> [u8; 8] {
     // 8Ra
