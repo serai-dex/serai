@@ -204,7 +204,10 @@ impl Extra {
   ///
   /// This returns all keys specified with `PublicKey` and the first set of keys specified with
   /// `PublicKeys`, so long as they're well-formed.
-  // TODO: Cite this
+  // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c45
+  //   /src/wallet/wallet2.cpp#L2290-L2300
+  // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+  // /src/wallet/wallet2.cpp#L2337-L2340
   pub fn keys(&self) -> Option<(Vec<EdwardsPoint>, Option<Vec<EdwardsPoint>>)> {
     let mut keys = vec![];
     let mut additional = None;
@@ -255,18 +258,24 @@ impl Extra {
 
   pub(crate) fn new(key: EdwardsPoint, additional: Vec<EdwardsPoint>) -> Extra {
     let mut res = Extra(Vec::with_capacity(3));
-    res.push(ExtraField::PublicKey(key));
+    // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+    //   /src/cryptonote_basic/cryptonote_format_utils.cpp#L627-L633
+    // We only support pushing nonces which come after these in the sort order
+    res.0.push(ExtraField::PublicKey(key));
     if !additional.is_empty() {
-      res.push(ExtraField::PublicKeys(additional));
+      res.0.push(ExtraField::PublicKeys(additional));
     }
     res
   }
 
-  pub(crate) fn push(&mut self, field: ExtraField) {
-    self.0.push(field);
+  pub(crate) fn push_nonce(&mut self, nonce: Vec<u8>) {
+    self.0.push(ExtraField::Nonce(nonce));
   }
 
   /// Write the Extra.
+  ///
+  /// This is not of deterministic length nor length-prefixed. It should only be written to a
+  /// buffer which will be delimited.
   pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
     for field in &self.0 {
       field.write(w)?;
@@ -281,17 +290,19 @@ impl Extra {
     buf
   }
 
-  // TODO: Is this supposed to silently drop trailing gibberish?
   /// Read an `Extra`.
+  ///
+  /// This is not of deterministic length nor length-prefixed. It should only be read from a buffer
+  /// already delimited.
   #[allow(clippy::unnecessary_wraps)]
   pub fn read<R: BufRead>(r: &mut R) -> io::Result<Extra> {
     let mut res = Extra(vec![]);
-    let mut field;
-    while {
-      field = ExtraField::read(r);
-      field.is_ok()
-    } {
-      res.0.push(field.unwrap());
+    // Extra reads until EOF
+    // We take a BufRead so we can detect when the buffer is empty
+    // `fill_buf` returns the current buffer, filled if empty, only empty if the reader is
+    // exhausted
+    while !r.fill_buf()?.is_empty() {
+      res.0.push(ExtraField::read(r)?);
     }
     Ok(res)
   }

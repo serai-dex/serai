@@ -186,7 +186,8 @@ impl SignableTransaction {
       let mut additional_keys_pub = vec![];
       for (additional_key, payment) in additional_keys.into_iter().zip(&self.payments) {
         let addr = payment.address();
-        // TODO: Double check this against wallet2
+        // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+        //   /src/device/device_default.cpp#L308-L312
         if addr.is_subaddress() {
           additional_keys_pub.push(additional_key.deref() * addr.spend());
         } else {

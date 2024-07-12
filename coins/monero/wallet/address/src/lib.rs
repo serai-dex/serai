@@ -164,15 +164,19 @@ impl AddressBytes {
   }
 }
 
-// TODO: Cite origin
+// https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+//   /src/cryptonote_config.h#L216-L225
+// https://gist.github.com/kayabaNerve/01c50bbc35441e0bbdcee63a9d823789 for featured
 const MONERO_MAINNET_BYTES: AddressBytes = match AddressBytes::new(18, 19, 42, 70) {
   Some(bytes) => bytes,
   None => panic!("mainnet byte constants conflicted"),
 };
+// https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h#L277-L281
 const MONERO_STAGENET_BYTES: AddressBytes = match AddressBytes::new(24, 25, 36, 86) {
   Some(bytes) => bytes,
   None => panic!("stagenet byte constants conflicted"),
 };
+// https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h#L262-L266
 const MONERO_TESTNET_BYTES: AddressBytes = match AddressBytes::new(53, 54, 63, 111) {
   Some(bytes) => bytes,
   None => panic!("testnet byte constants conflicted"),

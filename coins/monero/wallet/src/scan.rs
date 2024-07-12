@@ -135,9 +135,8 @@ impl InternalScanner {
       // This will be None if there's no additional keys, Some(None) if there's additional keys
       // yet not one for this output (which is non-standard), and Some(Some(_)) if there's an
       // additional key for this output
-      // https://github.com/monero-project/monero/
-      //   blob/04a1e2875d6e35e27bb21497988a6c822d319c28/
-      //   src/cryptonote_basic/cryptonote_format_utils.cpp#L1062
+      // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+      //   /src/cryptonote_basic/cryptonote_format_utils.cpp#L1060-L1070
       let additional = additional.as_ref().map(|additional| additional.get(o));
 
       #[allow(clippy::manual_let_else)]

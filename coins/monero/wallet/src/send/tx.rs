@@ -13,7 +13,7 @@ use crate::{
     RctProofs,
   },
   transaction::{Input, Output, Timelock, TransactionPrefix, Transaction},
-  extra::{ARBITRARY_DATA_MARKER, PaymentId, ExtraField, Extra},
+  extra::{ARBITRARY_DATA_MARKER, PaymentId, Extra},
   send::{InternalPayment, SignableTransaction, SignableTransactionWithKeyImages},
 };
 
@@ -74,7 +74,7 @@ impl SignableTransaction {
       let id = (u64::from_le_bytes(id) ^ u64::from_le_bytes(*id_xor)).to_le_bytes();
       let mut id_vec = Vec::with_capacity(1 + 8);
       PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
-      extra.push(ExtraField::Nonce(id_vec));
+      extra.push_nonce(id_vec);
     } else {
       // If there's no payment ID, we push a dummy (as wallet2 does) if there's only one payment
       if (self.payments.len() == 2) &&
@@ -89,7 +89,7 @@ impl SignableTransaction {
         let mut id_vec = Vec::with_capacity(1 + 8);
         // The dummy payment ID is [0; 8], which when xor'd with the mask, is just the mask
         PaymentId::Encrypted(*payment_id_xor).write(&mut id_vec).unwrap();
-        extra.push(ExtraField::Nonce(id_vec));
+        extra.push_nonce(id_vec);
       }
     }
 
@@ -97,7 +97,7 @@ impl SignableTransaction {
     for part in &self.data {
       let mut arb = vec![ARBITRARY_DATA_MARKER];
       arb.extend(part);
-      extra.push(ExtraField::Nonce(arb));
+      extra.push_nonce(arb);
     }
 
     let mut serialized = Vec::with_capacity(32 * amount_of_keys);

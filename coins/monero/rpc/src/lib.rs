@@ -829,16 +829,16 @@ pub trait DecoyRpc: Sync + Clone + Debug {
   /// The timelock being satisfied is distinct from being free of the 10-block lock applied to all
   /// Monero transactions.
   ///
-  /// The node is trusted for if the output is unlocked unless `fingerprintable_canonical` is set
-  /// to true. If `fingerprintable_canonical` is set to true, the node's local view isn't used, yet
-  /// the transaction's timelock is checked to be unlocked at the specified `height`. This offers a
-  /// canonical decoy selection, yet is fingerprintable as time-based timelocks aren't evaluated
-  /// (and considered locked, preventing their selection).
+  /// The node is trusted for if the output is unlocked unless `fingerprintable_deterministic` is
+  /// set to true. If `fingerprintable_deterministic` is set to true, the node's local view isn't
+  /// used, yet the transaction's timelock is checked to be unlocked at the specified `height`.
+  /// This offers a deterministic decoy selection, yet is fingerprintable as time-based timelocks
+  /// aren't evaluated (and considered locked, preventing their selection).
   async fn get_unlocked_outputs(
     &self,
     indexes: &[u64],
     height: usize,
-    fingerprintable_canonical: bool,
+    fingerprintable_deterministic: bool,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError>;
 }
 
@@ -972,12 +972,12 @@ impl<R: Rpc> DecoyRpc for R {
     &self,
     indexes: &[u64],
     height: usize,
-    fingerprintable_canonical: bool,
+    fingerprintable_deterministic: bool,
   ) -> Result<Vec<Option<[EdwardsPoint; 2]>>, RpcError> {
     let outs: Vec<OutputResponse> = self.get_outs(indexes).await?;
 
-    // Only need to fetch txs to do canonical check on timelock
-    let txs = if fingerprintable_canonical {
+    // Only need to fetch txs to do deterministic check on timelock
+    let txs = if fingerprintable_deterministic {
       self
         .get_transactions(
           &outs.iter().map(|out| hash_hex(&out.txid)).collect::<Result<Vec<_>, _>>()?,
@@ -1005,7 +1005,7 @@ impl<R: Rpc> DecoyRpc for R {
           return Ok(None);
         };
         Ok(Some([key, rpc_point(&out.mask)?]).filter(|_| {
-          if fingerprintable_canonical {
+          if fingerprintable_deterministic {
             // TODO: Are timelock blocks by height or number?
             // TODO: This doesn't check the default timelock has been passed
             Timelock::Block(height) >= txs[i].prefix().additional_timelock

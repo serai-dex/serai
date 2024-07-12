@@ -28,7 +28,7 @@ async fn select_n(
   height: usize,
   real_output: u64,
   ring_len: usize,
-  fingerprintable_canonical: bool,
+  fingerprintable_deterministic: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   if height < DEFAULT_LOCK_WINDOW {
     Err(RpcError::InternalError("not enough blocks to select decoys".to_string()))?;
@@ -141,7 +141,7 @@ async fn select_n(
     };
 
     for (i, output) in rpc
-      .get_unlocked_outputs(&candidates, height, fingerprintable_canonical)
+      .get_unlocked_outputs(&candidates, height, fingerprintable_deterministic)
       .await?
       .iter_mut()
       .enumerate()
@@ -172,8 +172,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
   ring_len: usize,
   height: usize,
   input: &WalletOutput,
-  // TODO: Decide "canonical" or "deterministic" (updating RPC terminology accordingly)
-  fingerprintable_canonical: bool,
+  fingerprintable_deterministic: bool,
 ) -> Result<Decoys, RpcError> {
   // Select all decoys for this transaction, assuming we generate a sane transaction
   // We should almost never naturally generate an insane transaction, hence why this doesn't
@@ -184,7 +183,7 @@ async fn select_decoys<R: RngCore + CryptoRng>(
     height,
     input.relative_id.index_on_blockchain,
     ring_len,
-    fingerprintable_canonical,
+    fingerprintable_deterministic,
   )
   .await?;
 
