@@ -13,7 +13,7 @@ use crate::{
   io::*,
   primitives::keccak256,
   ring_signatures::RingSignature,
-  ringct::{bulletproofs::Bulletproof, RctProofs},
+  ringct::{bulletproofs::Bulletproof, PrunedRctProofs},
 };
 
 /// An input in the Monero protocol.
@@ -265,27 +265,143 @@ impl TransactionPrefix {
   }
 }
 
+mod sealed {
+  use core::fmt::Debug;
+  use crate::ringct::*;
+  use super::*;
+
+  pub(crate) trait RingSignatures: Clone + PartialEq + Eq + Default + Debug {
+    fn signatures_to_write(&self) -> &[RingSignature];
+    fn read_signatures(inputs: &[Input], r: &mut impl Read) -> io::Result<Self>;
+  }
+
+  impl RingSignatures for Vec<RingSignature> {
+    fn signatures_to_write(&self) -> &[RingSignature] {
+      self
+    }
+    fn read_signatures(inputs: &[Input], r: &mut impl Read) -> io::Result<Self> {
+      let mut signatures = Vec::with_capacity(inputs.len());
+      for input in inputs {
+        match input {
+          Input::ToKey { key_offsets, .. } => {
+            signatures.push(RingSignature::read(key_offsets.len(), r)?)
+          }
+          _ => Err(io::Error::other("reading signatures for a transaction with non-ToKey inputs"))?,
+        }
+      }
+      Ok(signatures)
+    }
+  }
+
+  impl RingSignatures for () {
+    fn signatures_to_write(&self) -> &[RingSignature] {
+      &[]
+    }
+    fn read_signatures(_: &[Input], _: &mut impl Read) -> io::Result<Self> {
+      Ok(())
+    }
+  }
+
+  pub(crate) trait RctProofsTrait: Clone + PartialEq + Eq + Debug {
+    fn write(&self, w: &mut impl Write) -> io::Result<()>;
+    fn read(
+      ring_length: usize,
+      inputs: usize,
+      outputs: usize,
+      r: &mut impl Read,
+    ) -> io::Result<Option<Self>>;
+    fn rct_type(&self) -> RctType;
+    fn base(&self) -> &RctBase;
+  }
+
+  impl RctProofsTrait for RctProofs {
+    fn write(&self, w: &mut impl Write) -> io::Result<()> {
+      self.write(w)
+    }
+    fn read(
+      ring_length: usize,
+      inputs: usize,
+      outputs: usize,
+      r: &mut impl Read,
+    ) -> io::Result<Option<Self>> {
+      RctProofs::read(ring_length, inputs, outputs, r)
+    }
+    fn rct_type(&self) -> RctType {
+      self.rct_type()
+    }
+    fn base(&self) -> &RctBase {
+      &self.base
+    }
+  }
+
+  impl RctProofsTrait for PrunedRctProofs {
+    fn write(&self, w: &mut impl Write) -> io::Result<()> {
+      self.base.write(w, self.rct_type)
+    }
+    fn read(
+      _ring_length: usize,
+      inputs: usize,
+      outputs: usize,
+      r: &mut impl Read,
+    ) -> io::Result<Option<Self>> {
+      Ok(RctBase::read(inputs, outputs, r)?.map(|(rct_type, base)| Self { rct_type, base }))
+    }
+    fn rct_type(&self) -> RctType {
+      self.rct_type
+    }
+    fn base(&self) -> &RctBase {
+      &self.base
+    }
+  }
+
+  pub(crate) trait PotentiallyPruned {
+    type RingSignatures: RingSignatures;
+    type RctProofs: RctProofsTrait;
+  }
+  /// A transaction which isn't pruned.
+  #[derive(Clone, PartialEq, Eq, Debug)]
+  pub struct NotPruned;
+  impl PotentiallyPruned for NotPruned {
+    type RingSignatures = Vec<RingSignature>;
+    type RctProofs = RctProofs;
+  }
+  /// A transaction which is pruned.
+  #[derive(Clone, PartialEq, Eq, Debug)]
+  pub struct Pruned;
+  impl PotentiallyPruned for Pruned {
+    type RingSignatures = ();
+    type RctProofs = PrunedRctProofs;
+  }
+}
+pub use sealed::*;
+
 /// A Monero transaction.
-#[allow(clippy::large_enum_variant)]
+#[allow(private_bounds, private_interfaces, clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Transaction {
+pub enum Transaction<P: PotentiallyPruned = NotPruned> {
   /// A version 1 transaction, used by the original Cryptonote codebase.
   V1 {
     /// The transaction's prefix.
     prefix: TransactionPrefix,
     /// The transaction's ring signatures.
-    signatures: Vec<RingSignature>,
+    signatures: P::RingSignatures,
   },
   /// A version 2 transaction, used by the RingCT protocol.
   V2 {
     /// The transaction's prefix.
     prefix: TransactionPrefix,
     /// The transaction's proofs.
-    proofs: Option<RctProofs>,
+    proofs: Option<P::RctProofs>,
   },
 }
 
-impl Transaction {
+enum PrunableHash<'a> {
+  V1(&'a [RingSignature]),
+  V2([u8; 32]),
+}
+
+#[allow(private_bounds)]
+impl<P: PotentiallyPruned> Transaction<P> {
   /// Get the version of this transaction.
   pub fn version(&self) -> u8 {
     match self {
@@ -317,7 +433,7 @@ impl Transaction {
     match self {
       Transaction::V1 { prefix, signatures } => {
         prefix.write(w)?;
-        for ring_sig in signatures {
+        for ring_sig in signatures.signatures_to_write() {
           ring_sig.write(w)?;
         }
       }
@@ -340,31 +456,20 @@ impl Transaction {
   }
 
   /// Read a Transaction.
-  pub fn read<R: Read>(r: &mut R) -> io::Result<Transaction> {
+  pub fn read<R: Read>(r: &mut R) -> io::Result<Self> {
     let version = read_varint(r)?;
     let prefix = TransactionPrefix::read(r, version)?;
 
     if version == 1 {
       let signatures = if (prefix.inputs.len() == 1) && matches!(prefix.inputs[0], Input::Gen(_)) {
-        vec![]
+        Default::default()
       } else {
-        let mut signatures = Vec::with_capacity(prefix.inputs.len());
-        for input in &prefix.inputs {
-          match input {
-            Input::ToKey { key_offsets, .. } => {
-              signatures.push(RingSignature::read(key_offsets.len(), r)?)
-            }
-            _ => {
-              Err(io::Error::other("reading signatures for a transaction with non-ToKey inputs"))?
-            }
-          }
-        }
-        signatures
+        P::RingSignatures::read_signatures(&prefix.inputs, r)?
       };
 
       Ok(Transaction::V1 { prefix, signatures })
     } else if version == 2 {
-      let proofs = RctProofs::read(
+      let proofs = P::RctProofs::read(
         prefix.inputs.first().map_or(0, |input| match input {
           Input::Gen(_) => 0,
           Input::ToKey { key_offsets, .. } => key_offsets.len(),
@@ -380,12 +485,25 @@ impl Transaction {
     }
   }
 
-  /// The hash of the transaction.
-  pub fn hash(&self) -> [u8; 32] {
-    let mut buf = Vec::with_capacity(2048);
+  // The hash of the transaction.
+  #[allow(clippy::needless_pass_by_value)]
+  fn hash_with_prunable_hash(&self, prunable: PrunableHash<'_>) -> [u8; 32] {
     match self {
-      Transaction::V1 { .. } => {
-        self.write(&mut buf).unwrap();
+      Transaction::V1 { prefix, .. } => {
+        let mut buf = Vec::with_capacity(512);
+
+        // We don't use `self.write` as that may write the signatures (if this isn't pruned)
+        write_varint(&self.version(), &mut buf).unwrap();
+        prefix.write(&mut buf).unwrap();
+
+        // We explicitly write the signatures ourselves here
+        let PrunableHash::V1(signatures) = prunable else {
+          panic!("hashing v1 TX with non-v1 prunable data")
+        };
+        for signature in signatures {
+          signature.write(&mut buf).unwrap();
+        }
+
         keccak256(buf)
       }
       Transaction::V2 { prefix, proofs } => {
@@ -394,20 +512,39 @@ impl Transaction {
         hashes.extend(prefix.hash(2));
 
         if let Some(proofs) = proofs {
-          let rct_type = proofs.rct_type();
-          proofs.base.write(&mut buf, rct_type).unwrap();
+          let mut buf = Vec::with_capacity(512);
+          proofs.base().write(&mut buf, proofs.rct_type()).unwrap();
           hashes.extend(keccak256(&buf));
-          buf.clear();
-
-          proofs.prunable.write(&mut buf, rct_type).unwrap();
-          hashes.extend(keccak256(buf));
         } else {
           // Serialization of RctBase::Null
           hashes.extend(keccak256([0]));
-          hashes.extend([0; 32]);
         }
+        let PrunableHash::V2(prunable_hash) = prunable else {
+          panic!("hashing v2 TX with non-v2 prunable data")
+        };
+        hashes.extend(prunable_hash);
 
         keccak256(hashes)
+      }
+    }
+  }
+}
+
+impl Transaction<NotPruned> {
+  /// The hash of the transaction.
+  pub fn hash(&self) -> [u8; 32] {
+    match self {
+      Transaction::V1 { signatures, .. } => {
+        self.hash_with_prunable_hash(PrunableHash::V1(signatures))
+      }
+      Transaction::V2 { proofs, .. } => {
+        self.hash_with_prunable_hash(PrunableHash::V2(if let Some(proofs) = proofs {
+          let mut buf = Vec::with_capacity(1024);
+          proofs.prunable.write(&mut buf, proofs.rct_type()).unwrap();
+          keccak256(buf)
+        } else {
+          [0; 32]
+        }))
       }
     }
   }
@@ -416,25 +553,20 @@ impl Transaction {
   ///
   /// This returns None if the transaction is without signatures.
   pub fn signature_hash(&self) -> Option<[u8; 32]> {
-    match self {
-      Transaction::V1 { prefix, .. } => Some(prefix.hash(1)),
-      Transaction::V2 { prefix, proofs } => {
-        let mut buf = Vec::with_capacity(2048);
-        let mut sig_hash = Vec::with_capacity(96);
-
-        sig_hash.extend(prefix.hash(2));
-
-        let proofs = proofs.as_ref()?;
-        proofs.base.write(&mut buf, proofs.rct_type()).unwrap();
-        sig_hash.extend(keccak256(&buf));
-        buf.clear();
-
-        proofs.prunable.signature_write(&mut buf).unwrap();
-        sig_hash.extend(keccak256(buf));
-
-        Some(keccak256(sig_hash))
+    Some(match self {
+      Transaction::V1 { prefix, signatures } => {
+        if (prefix.inputs.len() == 1) && matches!(prefix.inputs[0], Input::Gen(_)) {
+          None?;
+        }
+        self.hash_with_prunable_hash(PrunableHash::V1(signatures))
       }
-    }
+      Transaction::V2 { proofs, .. } => self.hash_with_prunable_hash({
+        let Some(proofs) = proofs else { None? };
+        let mut buf = Vec::with_capacity(1024);
+        proofs.prunable.signature_write(&mut buf).unwrap();
+        PrunableHash::V2(keccak256(buf))
+      }),
+    })
   }
 
   fn is_rct_bulletproof(&self) -> bool {
@@ -475,6 +607,19 @@ impl Transaction {
           },
         )
         .0
+    }
+  }
+}
+
+impl From<Transaction<NotPruned>> for Transaction<Pruned> {
+  fn from(tx: Transaction<NotPruned>) -> Transaction<Pruned> {
+    match tx {
+      Transaction::V1 { prefix, .. } => Transaction::V1 { prefix, signatures: () },
+      Transaction::V2 { prefix, proofs } => Transaction::V2 {
+        prefix,
+        proofs: proofs
+          .map(|proofs| PrunedRctProofs { rct_type: proofs.rct_type(), base: proofs.base }),
+      },
     }
   }
 }

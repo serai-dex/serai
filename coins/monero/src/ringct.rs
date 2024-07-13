@@ -87,8 +87,8 @@ pub enum RctType {
 }
 
 impl From<RctType> for u8 {
-  fn from(kind: RctType) -> u8 {
-    match kind {
+  fn from(rct_type: RctType) -> u8 {
+    match rct_type {
       RctType::AggregateMlsagBorromean => 1,
       RctType::MlsagBorromean => 2,
       RctType::MlsagBulletproofs => 3,
@@ -458,4 +458,13 @@ impl RctProofs {
       prunable: RctPrunable::read(rct_type, ring_length, inputs, outputs, r)?,
     }))
   }
+}
+
+/// A pruned set of RingCT proofs.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PrunedRctProofs {
+  /// The type of RctProofs this used to be.
+  pub rct_type: RctType,
+  /// The data necessary for handling this transaction.
+  pub base: RctBase,
 }
