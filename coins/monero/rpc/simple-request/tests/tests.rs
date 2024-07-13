@@ -1,3 +1,6 @@
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
+
 use monero_address::{Network, MoneroAddress};
 
 // monero-rpc doesn't include a transport
@@ -5,12 +8,16 @@ use monero_address::{Network, MoneroAddress};
 // Accordingly, we test monero-rpc here (implicitly testing the simple-request transport)
 use monero_simple_request_rpc::*;
 
+static SEQUENTIAL: OnceLock<Mutex<()>> = OnceLock::new();
+
 const ADDRESS: &str =
   "4B33mFPMq6mKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KQH4pNey";
 
 #[tokio::test]
 async fn test_rpc() {
   use monero_rpc::Rpc;
+
+  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
 
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
@@ -53,11 +60,15 @@ async fn test_rpc() {
     }
     assert_eq!(blocks, actual_blocks);
   }
+
+  drop(guard);
 }
 
 #[tokio::test]
 async fn test_decoy_rpc() {
   use monero_rpc::{Rpc, DecoyRpc};
+
+  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
 
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
@@ -101,6 +112,8 @@ async fn test_decoy_rpc() {
     #[allow(clippy::reversed_empty_ranges)]
     rpc.get_output_distribution(1 .. 0).await.unwrap_err();
   }
+
+  drop(guard);
 }
 
 // This test passes yet requires a mainnet node, which we don't have reliable access to in CI.
@@ -108,6 +121,8 @@ async fn test_decoy_rpc() {
 #[tokio::test]
 async fn test_zero_out_tx_o_indexes() {
   use monero_rpc::Rpc;
+
+  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
 
   let rpc = SimpleRequestRpc::new("https://node.sethforprivacy.com".to_string()).await.unwrap();
 
@@ -123,5 +138,7 @@ async fn test_zero_out_tx_o_indexes() {
       .unwrap(),
     Vec::<u64>::new()
   );
+
+  drop(guard);
 }
 */

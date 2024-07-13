@@ -101,7 +101,8 @@ const POLYSEED_SALT: &[u8] = b"POLYSEED key";
 const POLYSEED_KEYGEN_ITERATIONS: u32 = 10000;
 
 // Polyseed technically supports multiple coins, and the value for Monero is 0
-// See: https://github.com/tevador/polyseed/blob/master/include/polyseed.h#L58
+// See: https://github.com/tevador/polyseed/blob/dfb05d8edb682b0e8f743b1b70c9131712ff4157
+//   /include/polyseed.h#L57
 const COIN: u16 = 0;
 
 /// An error when working with a Polyseed.
