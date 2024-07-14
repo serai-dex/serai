@@ -289,7 +289,7 @@ macro_rules! test {
             };
 
             assert_eq!(&eventuality.extra(), &tx.prefix().extra, "eventuality extra was distinct");
-            assert!(eventuality.matches(&tx), "eventuality didn't match");
+            assert!(eventuality.matches(&tx.clone().into()), "eventuality didn't match");
 
             tx
           };

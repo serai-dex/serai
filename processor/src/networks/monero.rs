@@ -109,6 +109,7 @@ impl OutputTrait<Monero> for Output {
   }
 }
 
+// TODO: Consider ([u8; 32], TransactionPruned)
 #[async_trait]
 impl TransactionTrait<Monero> for Transaction {
   type Id = [u8; 32];
@@ -575,7 +576,7 @@ impl Network for Monero {
         };
 
         if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix().extra) {
-          if eventuality.matches(&tx) {
+          if eventuality.matches(&tx.clone().into()) {
             res.insert(
               eventualities.map.remove(&tx.prefix().extra).unwrap().0,
               (block.number().unwrap(), tx.id(), tx),
@@ -681,7 +682,7 @@ impl Network for Monero {
     id: &[u8; 32],
   ) -> Result<Option<Transaction>, NetworkError> {
     let tx = self.rpc.get_transaction(*id).await.map_err(map_rpc_err)?;
-    if eventuality.matches(&tx) {
+    if eventuality.matches(&tx.clone().into()) {
       Ok(Some(tx))
     } else {
       Ok(None)
@@ -699,7 +700,7 @@ impl Network for Monero {
     eventuality: &Self::Eventuality,
     claim: &[u8; 32],
   ) -> bool {
-    return eventuality.matches(&self.rpc.get_transaction(*claim).await.unwrap());
+    return eventuality.matches(&self.rpc.get_pruned_transaction(*claim).await.unwrap());
   }
 
   #[cfg(test)]
@@ -711,7 +712,7 @@ impl Network for Monero {
     let block = self.rpc.get_block_by_number(block).await.unwrap();
     for tx in &block.transactions {
       let tx = self.rpc.get_transaction(*tx).await.unwrap();
-      if eventuality.matches(&tx) {
+      if eventuality.matches(&tx.clone().into()) {
         return tx;
       }
     }

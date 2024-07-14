@@ -57,63 +57,31 @@ async fn check_block(rpc: impl Rpc, block_i: usize) {
   let txs_len = 1 + block.transactions.len();
 
   if !block.transactions.is_empty() {
-    #[derive(Deserialize, Debug)]
-    struct TransactionResponse {
-      tx_hash: String,
-      as_hex: String,
-    }
-    #[derive(Deserialize, Debug)]
-    struct TransactionsResponse {
-      #[serde(default)]
-      missed_tx: Vec<String>,
-      txs: Vec<TransactionResponse>,
+    // Test getting pruned transactions
+    loop {
+      match rpc.get_pruned_transactions(&block.transactions).await {
+        Ok(_) => break,
+        Err(RpcError::ConnectionError(e)) => {
+          println!("get_pruned_transactions ConnectionError: {e}");
+          continue;
+        }
+        Err(e) => panic!("couldn't call get_pruned_transactions: {e:?}"),
+      }
     }
 
-    let mut hashes_hex = block.transactions.iter().map(hex::encode).collect::<Vec<_>>();
-    let mut all_txs = vec![];
-    while !hashes_hex.is_empty() {
-      let txs: TransactionsResponse = loop {
-        match rpc
-          .rpc_call(
-            "get_transactions",
-            Some(json!({
-              "txs_hashes": hashes_hex.drain(.. hashes_hex.len().min(100)).collect::<Vec<_>>(),
-            })),
-          )
-          .await
-        {
-          Ok(txs) => break txs,
-          Err(RpcError::ConnectionError(e)) => {
-            println!("get_transactions ConnectionError: {e}");
-            continue;
-          }
-          Err(e) => panic!("couldn't call get_transactions: {e:?}"),
+    let txs = loop {
+      match rpc.get_transactions(&block.transactions).await {
+        Ok(txs) => break txs,
+        Err(RpcError::ConnectionError(e)) => {
+          println!("get_transactions ConnectionError: {e}");
+          continue;
         }
-      };
-      assert!(txs.missed_tx.is_empty());
-      all_txs.extend(txs.txs);
-    }
+        Err(e) => panic!("couldn't call get_transactions: {e:?}"),
+      }
+    };
 
     let mut batch = BatchVerifier::new();
-    for (tx_hash, tx_res) in block.transactions.into_iter().zip(all_txs) {
-      assert_eq!(
-        tx_res.tx_hash,
-        hex::encode(tx_hash),
-        "node returned a transaction with different hash"
-      );
-
-      let tx = Transaction::read(
-        &mut hex::decode(&tx_res.as_hex).expect("node returned non-hex transaction").as_slice(),
-      )
-      .expect("couldn't deserialize transaction");
-
-      assert_eq!(
-        hex::encode(tx.serialize()),
-        tx_res.as_hex,
-        "Transaction serialization was different"
-      );
-      assert_eq!(tx.hash(), tx_hash, "Transaction hash was different");
-
+    for tx in txs {
       match tx {
         Transaction::V1 { prefix: _, signatures } => {
           assert!(!signatures.is_empty());

@@ -26,7 +26,7 @@ use serde_json::{Value, json};
 
 use monero_serai::{
   io::*,
-  transaction::{Input, Timelock, Transaction},
+  transaction::{Input, Timelock, Pruned, Transaction},
   block::Block,
   DEFAULT_LOCK_WINDOW,
 };
@@ -361,14 +361,15 @@ pub trait Rpc: Sync + Clone + Debug {
       .iter()
       .enumerate()
       .map(|(i, res)| {
-        let tx = Transaction::read::<&[u8]>(
-          &mut rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex })?
-            .as_ref(),
-        )
-        .map_err(|_| match hash_hex(&res.tx_hash) {
+        let buf = rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex })?;
+        let mut buf = buf.as_slice();
+        let tx = Transaction::read(&mut buf).map_err(|_| match hash_hex(&res.tx_hash) {
           Ok(hash) => RpcError::InvalidTransaction(hash),
           Err(err) => err,
         })?;
+        if !buf.is_empty() {
+          Err(RpcError::InvalidNode("transaction had extra bytes after it".to_string()))?;
+        }
 
         // https://github.com/monero-project/monero/issues/8311
         if res.as_hex.is_empty() {
@@ -391,12 +392,72 @@ pub trait Rpc: Sync + Clone + Debug {
       .collect()
   }
 
+  /// Get the specified transactions in their pruned format.
+  async fn get_pruned_transactions(
+    &self,
+    hashes: &[[u8; 32]],
+  ) -> Result<Vec<Transaction<Pruned>>, RpcError> {
+    if hashes.is_empty() {
+      return Ok(vec![]);
+    }
+
+    let mut hashes_hex = hashes.iter().map(hex::encode).collect::<Vec<_>>();
+    let mut all_txs = Vec::with_capacity(hashes.len());
+    while !hashes_hex.is_empty() {
+      // Monero errors if more than 100 is requested unless using a non-restricted RPC
+      // TODO: Cite
+      // TODO: Deduplicate with above
+      const TXS_PER_REQUEST: usize = 100;
+      let this_count = TXS_PER_REQUEST.min(hashes_hex.len());
+
+      let txs: TransactionsResponse = self
+        .rpc_call(
+          "get_transactions",
+          Some(json!({
+            "txs_hashes": hashes_hex.drain(.. this_count).collect::<Vec<_>>(),
+            "prune": true,
+          })),
+        )
+        .await?;
+
+      if !txs.missed_tx.is_empty() {
+        Err(RpcError::TransactionsNotFound(
+          txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
+        ))?;
+      }
+
+      all_txs.extend(txs.txs);
+    }
+
+    all_txs
+      .iter()
+      .map(|res| {
+        let buf = rpc_hex(&res.pruned_as_hex)?;
+        let mut buf = buf.as_slice();
+        let tx =
+          Transaction::<Pruned>::read(&mut buf).map_err(|_| match hash_hex(&res.tx_hash) {
+            Ok(hash) => RpcError::InvalidTransaction(hash),
+            Err(err) => err,
+          })?;
+        if !buf.is_empty() {
+          Err(RpcError::InvalidNode("pruned transaction had extra bytes after it".to_string()))?;
+        }
+        Ok(tx)
+      })
+      .collect()
+  }
+
   /// Get the specified transaction.
   ///
   /// The received transaction will be hashed in order to verify the correct transaction was
   /// returned.
   async fn get_transaction(&self, tx: [u8; 32]) -> Result<Transaction, RpcError> {
     self.get_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
+  }
+
+  /// Get the specified transaction in its pruned format.
+  async fn get_pruned_transaction(&self, tx: [u8; 32]) -> Result<Transaction<Pruned>, RpcError> {
+    self.get_pruned_transactions(&[tx]).await.map(|mut txs| txs.swap_remove(0))
   }
 
   /// Get the hash of a block from the node.
@@ -467,35 +528,6 @@ pub trait Rpc: Sync + Clone + Debug {
         "block's miner_transaction didn't have an input of kind Input::Gen".to_string(),
       )),
     }
-  }
-
-  /// Get the transactions within a block.
-  ///
-  /// This function returns all transactions in the block, including the miner's transaction.
-  ///
-  /// This function does not verify the returned transactions are the ones committed to by the
-  /// block's header.
-  async fn get_block_transactions(&self, hash: [u8; 32]) -> Result<Vec<Transaction>, RpcError> {
-    let block = self.get_block(hash).await?;
-    let mut res = vec![block.miner_transaction];
-    res.extend(self.get_transactions(&block.transactions).await?);
-    Ok(res)
-  }
-
-  /// Get the transactions within a block.
-  ///
-  /// This function returns all transactions in the block, including the miner's transaction.
-  ///
-  /// This function does not verify the returned transactions are the ones committed to by the
-  /// block's header.
-  async fn get_block_transactions_by_number(
-    &self,
-    number: usize,
-  ) -> Result<Vec<Transaction>, RpcError> {
-    let block = self.get_block_by_number(number).await?;
-    let mut res = vec![block.miner_transaction];
-    res.extend(self.get_transactions(&block.transactions).await?);
-    Ok(res)
   }
 
   /// Get the currently estimated fee rate from the node.

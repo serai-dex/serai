@@ -66,7 +66,7 @@ test!(
       assert_eq!(tx.prefix().extra, eventuality.extra());
 
       // The TX should match
-      assert!(eventuality.matches(&tx));
+      assert!(eventuality.matches(&tx.clone().into()));
 
       // Mutate the TX
       let Transaction::V2 { proofs: Some(ref mut proofs), .. } = tx else {
@@ -74,7 +74,7 @@ test!(
       };
       proofs.base.commitments[0] += ED25519_BASEPOINT_POINT;
       // Verify it no longer matches
-      assert!(!eventuality.matches(&tx));
+      assert!(!eventuality.matches(&tx.clone().into()));
     },
   ),
 );

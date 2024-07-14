@@ -3,8 +3,8 @@ use std_shims::{vec::Vec, io};
 use zeroize::Zeroize;
 
 use crate::{
-  ringct::RctProofs,
-  transaction::{Input, Timelock, Transaction},
+  ringct::PrunedRctProofs,
+  transaction::{Input, Timelock, Pruned, Transaction},
   send::SignableTransaction,
 };
 
@@ -55,7 +55,7 @@ impl Eventuality {
   /// intended payments don't match for each other's `Eventuality`s (as they'll have distinct
   /// inputs intended).
   #[must_use]
-  pub fn matches(&self, tx: &Transaction) -> bool {
+  pub fn matches(&self, tx: &Transaction<Pruned>) -> bool {
     // Verify extra
     if self.0.extra() != tx.prefix().extra {
       return false;
@@ -91,7 +91,7 @@ impl Eventuality {
 
     // Check the encrypted amounts and commitments
     let commitments_and_encrypted_amounts = self.0.commitments_and_encrypted_amounts(&key_images);
-    let Transaction::V2 { proofs: Some(RctProofs { ref base, .. }), .. } = tx else {
+    let Transaction::V2 { proofs: Some(PrunedRctProofs { ref base, .. }), .. } = tx else {
       return false;
     };
     if base.commitments !=

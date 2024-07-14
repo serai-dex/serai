@@ -9,7 +9,7 @@ use monero_rpc::{RpcError, Rpc};
 use monero_serai::{
   io::*,
   primitives::Commitment,
-  transaction::{Timelock, Transaction},
+  transaction::{Timelock, Pruned, Transaction},
   block::Block,
 };
 use crate::{
@@ -108,7 +108,8 @@ impl InternalScanner {
   fn scan_transaction(
     &self,
     tx_start_index_on_blockchain: u64,
-    tx: &Transaction,
+    tx_hash: [u8; 32],
+    tx: &Transaction<Pruned>,
   ) -> Result<Timelocked, RpcError> {
     // Only scan TXs creating RingCT outputs
     // For the full details on why this check is equivalent, please see the documentation in `scan`
@@ -218,7 +219,7 @@ impl InternalScanner {
 
         res.push(WalletOutput {
           absolute_id: AbsoluteId {
-            transaction: tx.hash(),
+            transaction: tx_hash,
             index_in_transaction: o.try_into().unwrap(),
           },
           relative_id: RelativeId {
@@ -251,8 +252,14 @@ impl InternalScanner {
     }
 
     // We obtain all TXs in full
-    let mut txs = vec![block.miner_transaction.clone()];
-    txs.extend(rpc.get_transactions(&block.transactions).await?);
+    let mut txs_with_hashes = vec![(
+      block.miner_transaction.hash(),
+      Transaction::<Pruned>::from(block.miner_transaction.clone()),
+    )];
+    let txs = rpc.get_pruned_transactions(&block.transactions).await?;
+    for (hash, tx) in block.transactions.iter().zip(txs) {
+      txs_with_hashes.push((*hash, tx));
+    }
 
     /*
       Requesting the output index for each output we sucessfully scan would cause a loss of privacy
@@ -295,13 +302,13 @@ impl InternalScanner {
     // Get the starting index
     let mut tx_start_index_on_blockchain = {
       let mut tx_start_index_on_blockchain = None;
-      for tx in &txs {
+      for (hash, tx) in &txs_with_hashes {
         // If this isn't a RingCT output, or there are no outputs, move to the next TX
         if (!matches!(tx, Transaction::V2 { .. })) || tx.prefix().outputs.is_empty() {
           continue;
         }
 
-        let index = *rpc.get_o_indexes(tx.hash()).await?.first().ok_or_else(|| {
+        let index = *rpc.get_o_indexes(*hash).await?.first().ok_or_else(|| {
           RpcError::InvalidNode(
             "requested output indexes for a TX with outputs and got none".to_string(),
           )
@@ -317,12 +324,12 @@ impl InternalScanner {
     };
 
     let mut res = Timelocked(vec![]);
-    for tx in txs {
+    for (hash, tx) in txs_with_hashes {
       // Push all outputs into our result
       {
         let mut this_txs_outputs = vec![];
         core::mem::swap(
-          &mut self.scan_transaction(tx_start_index_on_blockchain, &tx)?.0,
+          &mut self.scan_transaction(tx_start_index_on_blockchain, hash, &tx)?.0,
           &mut this_txs_outputs,
         );
         res.0.extend(this_txs_outputs);
