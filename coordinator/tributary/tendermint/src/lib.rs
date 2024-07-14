@@ -158,7 +158,7 @@ fn decode_and_verify_signed_message<N: Network>(
   Ok(msg)
 }
 
-pub fn verify_tendermint_evience<N: Network>(
+pub fn verify_tendermint_evidence<N: Network>(
   evidence: &Evidence,
   schema: &N::SignatureScheme,
   commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,

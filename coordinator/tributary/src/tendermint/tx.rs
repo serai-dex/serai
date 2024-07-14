@@ -12,7 +12,7 @@ use crate::{
 };
 
 use tendermint::{
-  verify_tendermint_evience,
+  verify_tendermint_evidence,
   ext::{Network, Commit},
 };
 
@@ -68,7 +68,7 @@ pub(crate) fn verify_tendermint_tx<N: Network>(
   tx.verify()?;
 
   match tx {
-    TendermintTx::SlashEvidence(ev) => verify_tendermint_evience::<N>(ev, schema, commit)
+    TendermintTx::SlashEvidence(ev) => verify_tendermint_evidence::<N>(ev, schema, commit)
       .map_err(|_| TransactionError::InvalidContent)?,
   }
 
