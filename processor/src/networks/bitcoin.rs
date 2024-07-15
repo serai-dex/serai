@@ -405,7 +405,7 @@ impl Bitcoin {
           .to_sat();
         }
         let out = tx.output.iter().map(|output| output.value.to_sat()).sum::<u64>();
-        fees.push((in_value - out) / tx.weight().to_wu());
+        fees.push((in_value - out) / u64::try_from(tx.vsize()).unwrap());
       }
     }
     fees.sort();
@@ -413,11 +413,6 @@ impl Bitcoin {
 
     // The DUST constant documentation notes a relay rule practically enforcing a
     // 1000 sat/kilo-vbyte minimum fee.
-    //
-    // 1000 sat/kilo-vbyte is 1000 sat/4-kilo-weight (250 sat/kilo-weight).
-    // Since bitcoin-serai takes fee per weight, we'd need to pass 0.25 to achieve this fee rate.
-    // Accordingly, setting 1 is 4x the current relay rule minimum (and should be more than safe).
-    // TODO: Rewrite to fee_per_vbyte, not fee_per_weight?
     Ok(Fee(fee.max(1)))
   }
 
