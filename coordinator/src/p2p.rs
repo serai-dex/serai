@@ -29,7 +29,7 @@ use libp2p::{
   noise, yamux,
   request_response::{
     Codec as RrCodecTrait, Message as RrMessage, Event as RrEvent, Config as RrConfig,
-    Behaviour as RrBehavior,
+    Behaviour as RrBehavior, ProtocolSupport,
   },
   gossipsub::{
     IdentTopic, FastMessageId, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder,
@@ -297,7 +297,7 @@ impl LibP2p {
     let throwaway_key_pair = Keypair::generate_ed25519();
 
     let behavior = Behavior {
-      reqres: { RrBehavior::new([], RrConfig::default()) },
+      reqres: { RrBehavior::new([("/coordinator", ProtocolSupport::Full)], RrConfig::default()) },
       gossipsub: {
         let heartbeat_interval = tributary::tendermint::LATENCY_TIME / 2;
         let heartbeats_per_block =
