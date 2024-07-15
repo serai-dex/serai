@@ -33,9 +33,14 @@ use monero_serai::{
 use monero_address::Address;
 
 // Number of blocks the fee estimate will be valid for
-// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
-//   src/wallet/wallet2.cpp#L121
+// https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c
+//   /src/wallet/wallet2.cpp#L121
 const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
+
+// Monero errors if more than 100 is requested unless using a non-restricted RPC
+// https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+//   /src/rpc/core_rpc_server.cpp#L75
+const TXS_PER_REQUEST: usize = 100;
 
 /// An error from the RPC.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -335,8 +340,6 @@ pub trait Rpc: Sync + Clone + Debug {
     let mut hashes_hex = hashes.iter().map(hex::encode).collect::<Vec<_>>();
     let mut all_txs = Vec::with_capacity(hashes.len());
     while !hashes_hex.is_empty() {
-      // Monero errors if more than 100 is requested unless using a non-restricted RPC
-      const TXS_PER_REQUEST: usize = 100;
       let this_count = TXS_PER_REQUEST.min(hashes_hex.len());
 
       let txs: TransactionsResponse = self
@@ -404,10 +407,6 @@ pub trait Rpc: Sync + Clone + Debug {
     let mut hashes_hex = hashes.iter().map(hex::encode).collect::<Vec<_>>();
     let mut all_txs = Vec::with_capacity(hashes.len());
     while !hashes_hex.is_empty() {
-      // Monero errors if more than 100 is requested unless using a non-restricted RPC
-      // TODO: Cite
-      // TODO: Deduplicate with above
-      const TXS_PER_REQUEST: usize = 100;
       let this_count = TXS_PER_REQUEST.min(hashes_hex.len());
 
       let txs: TransactionsResponse = self
@@ -993,42 +992,51 @@ impl<R: Rpc> DecoyRpc for R {
       outs: Vec<OutputResponse>,
     }
 
-    let res: OutsResponse = self
-      .rpc_call(
-        "get_outs",
-        Some(json!({
-          "get_txid": true,
-          "outputs": indexes.iter().map(|o| json!({
-            "amount": 0,
-            "index": o
-          })).collect::<Vec<_>>()
-        })),
-      )
-      .await?;
+    // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
+    //   /src/rpc/core_rpc_server.cpp#L67
+    const MAX_OUTS: usize = 5000;
 
-    if res.status != "OK" {
-      Err(RpcError::InvalidNode("bad response to get_outs".to_string()))?;
+    let mut res = Vec::with_capacity(indexes.len());
+    for indexes in indexes.chunks(MAX_OUTS) {
+      let rpc_res: OutsResponse = self
+        .rpc_call(
+          "get_outs",
+          Some(json!({
+            "get_txid": true,
+            "outputs": indexes.iter().map(|o| json!({
+              "amount": 0,
+              "index": o
+            })).collect::<Vec<_>>()
+          })),
+        )
+        .await?;
+
+      if rpc_res.status != "OK" {
+        Err(RpcError::InvalidNode("bad response to get_outs".to_string()))?;
+      }
+
+      res.extend(
+        rpc_res
+          .outs
+          .into_iter()
+          .map(|output| {
+            Ok(OutputInformation {
+              height: output.height,
+              unlocked: output.unlocked,
+              key: CompressedEdwardsY(
+                rpc_hex(&output.key)?
+                  .try_into()
+                  .map_err(|_| RpcError::InvalidNode("output key wasn't 32 bytes".to_string()))?,
+              ),
+              commitment: rpc_point(&output.mask)?,
+              transaction: hash_hex(&output.txid)?,
+            })
+          })
+          .collect::<Result<Vec<_>, RpcError>>()?,
+      );
     }
 
-    Ok(
-      res
-        .outs
-        .into_iter()
-        .map(|output| {
-          Ok(OutputInformation {
-            height: output.height,
-            unlocked: output.unlocked,
-            key: CompressedEdwardsY(
-              rpc_hex(&output.key)?
-                .try_into()
-                .map_err(|_| RpcError::InvalidNode("output key wasn't 32 bytes".to_string()))?,
-            ),
-            commitment: rpc_point(&output.mask)?,
-            transaction: hash_hex(&output.txid)?,
-          })
-        })
-        .collect::<Result<Vec<_>, RpcError>>()?,
-    )
+    Ok(res)
   }
 
   async fn get_unlocked_outputs(
