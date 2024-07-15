@@ -303,7 +303,7 @@ async_sequential! {
     }
 
     // Make sure the change is correct
-    assert_eq!(needed_fee, u64::from(tx.weight()) * FEE);
+    assert_eq!(needed_fee, u64::try_from(tx.vsize()).unwrap() * FEE);
     let input_value = output.value() + offset_output.value();
     let output_value = tx.output.iter().map(|output| output.value.to_sat()).sum::<u64>();
     assert_eq!(input_value - output_value, needed_fee);

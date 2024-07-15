@@ -61,11 +61,11 @@ pub struct SignableTransaction {
 }
 
 impl SignableTransaction {
-  fn calculate_weight(
+  fn calculate_weight_vbytes(
     inputs: usize,
     payments: &[(ScriptBuf, u64)],
     change: Option<&ScriptBuf>,
-  ) -> u64 {
+  ) -> (u64, u64) {
     // Expand this a full transaction in order to use the bitcoin library's weight function
     let mut tx = Transaction {
       version: Version(2),
@@ -99,7 +99,33 @@ impl SignableTransaction {
       // the value is fixed size (so any value could be used here)
       tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
     }
-    u64::from(tx.weight())
+
+    let weight = tx.weight();
+
+    // Now calculate the size in vbytes
+
+    /*
+      "Virtual transaction size" is weight ceildiv 4 per
+      https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+
+      https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04
+        /src/policy/policy.cpp#L295-L298
+      implements this almost as expected, with an additional consideration to signature operations
+
+      Signature operations (the second argument of the following call) do not count Taproot
+      signatures per https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki#cite_ref-11-0
+
+      We don't risk running afoul of the Taproot signature limit as it allows at least one per
+      input, which is all we use
+    */
+    (
+      weight.to_wu(),
+      u64::try_from(bitcoin::policy::get_virtual_tx_size(
+        i64::try_from(weight.to_wu()).unwrap(),
+        0i64,
+      ))
+      .unwrap(),
+    )
   }
 
   /// Returns the fee necessary for this transaction to achieve the fee rate specified at
@@ -128,7 +154,7 @@ impl SignableTransaction {
     payments: &[(ScriptBuf, u64)],
     change: Option<ScriptBuf>,
     data: Option<Vec<u8>>,
-    fee_per_weight: u64,
+    fee_per_vbyte: u64,
   ) -> Result<SignableTransaction, TransactionError> {
     if inputs.is_empty() {
       Err(TransactionError::NoInputs)?;
@@ -177,34 +203,14 @@ impl SignableTransaction {
       })
     }
 
-    let mut weight = Self::calculate_weight(tx_ins.len(), payments, None);
-    let mut needed_fee = fee_per_weight * weight;
+    let (mut weight, vbytes) = Self::calculate_weight_vbytes(tx_ins.len(), payments, None);
 
-    // "Virtual transaction size" is weight ceildiv 4 per
-    // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
-
-    // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/
-    //  src/policy/policy.cpp#L295-L298
-    // implements this as expected
-
-    // Technically, it takes whatever's greater, the weight or the amount of signature operations
-    // multiplied by DEFAULT_BYTES_PER_SIGOP (20)
-    // We only use 1 signature per input, and our inputs have a weight exceeding 20
-    // Accordingly, our inputs' weight will always be greater than the cost of the signature ops
-    let vsize = weight.div_ceil(4);
-    debug_assert_eq!(
-      u64::try_from(bitcoin::policy::get_virtual_tx_size(
-        weight.try_into().unwrap(),
-        tx_ins.len().try_into().unwrap()
-      ))
-      .unwrap(),
-      vsize
-    );
+    let mut needed_fee = fee_per_vbyte * vbytes;
     // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
     // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
     // specified fee rate is too low to be valid
     // bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE is in sats/kilo-vbyte
-    if needed_fee < ((u64::from(bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE) * vsize) / 1000) {
+    if needed_fee < ((u64::from(bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE) * vbytes) / 1000) {
       Err(TransactionError::TooLowFee)?;
     }
 
@@ -214,8 +220,9 @@ impl SignableTransaction {
 
     // If there's a change address, check if there's change to give it
     if let Some(change) = change {
-      let weight_with_change = Self::calculate_weight(tx_ins.len(), payments, Some(&change));
-      let fee_with_change = fee_per_weight * weight_with_change;
+      let (weight_with_change, vbytes_with_change) =
+        Self::calculate_weight_vbytes(tx_ins.len(), payments, Some(&change));
+      let fee_with_change = fee_per_vbyte * vbytes_with_change;
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         if value >= DUST {
           tx_outs.push(TxOut { value: Amount::from_sat(value), script_pubkey: change });
