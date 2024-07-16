@@ -29,7 +29,7 @@ digest = { version = "0.10", default-features = false }
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 
-crypto-bigint = { version = "0.5", default-features = false }
+crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
 
 curve25519-dalek = { version = ">= 4.0, < 4.2", default-features = false, features = ["alloc", "zeroize", "digest", "group", "precomputed-tables"] }
 
