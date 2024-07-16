@@ -45,11 +45,19 @@ pub(crate) use tributary::{ReadWrite, P2p as TributaryP2p};
 use crate::{Transaction, Block, Tributary, ActiveTributary, TributaryEvent};
 
 // Block size limit + 1 KB of space for signatures/metadata
-const MAX_LIBP2P_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
+const MAX_LIBP2P_GOSSIP_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024;
+
+const MAX_LIBP2P_REQRES_MESSAGE_SIZE: usize =
+  (tributary::BLOCK_SIZE_LIMIT * BLOCKS_PER_BATCH) + 1024;
+
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
-// amount of blocks in a minute
-const BLOCKS_PER_MINUTE: u32 = 60 / (tributary::tendermint::TARGET_BLOCK_TIME / 1000);
+// Amount of blocks in a minute
+// We can't use tendermint::TARGET_BLOCK_TIME here to calculate this since that is a u32.
+const BLOCKS_PER_MINUTE: usize = 10;
+
+// Maximum amount of blocks to send in a batch
+const BLOCKS_PER_BATCH: usize = BLOCKS_PER_MINUTE + 1;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub struct CosignedBlock {
@@ -243,8 +251,8 @@ impl RrCodecTrait for RrCodec {
     let mut len = [0; 4];
     io.read_exact(&mut len).await?;
     let len = usize::try_from(u32::from_le_bytes(len)).expect("not a 32-bit platform?");
-    if len > MAX_LIBP2P_MESSAGE_SIZE {
-      Err(io::Error::other("request length exceeded MAX_LIBP2P_MESSAGE_SIZE"))?;
+    if len > MAX_LIBP2P_REQRES_MESSAGE_SIZE {
+      Err(io::Error::other("request length exceeded MAX_LIBP2P_REQRES_MESSAGE_SIZE"))?;
     }
     // This may be a non-trivial allocation easily causable
     // While we could chunk the read, meaning we only perform the allocation as bandwidth is used,
@@ -323,7 +331,7 @@ impl LibP2p {
           .heartbeat_interval(Duration::from_millis(heartbeat_interval.into()))
           .history_length(heartbeats_per_block * 2)
           .history_gossip(heartbeats_per_block)
-          .max_transmit_size(MAX_LIBP2P_MESSAGE_SIZE)
+          .max_transmit_size(MAX_LIBP2P_GOSSIP_MESSAGE_SIZE)
           // We send KeepAlive after 80s
           .idle_timeout(Duration::from_secs(85))
           .validation_mode(ValidationMode::Strict)
@@ -363,10 +371,11 @@ impl LibP2p {
       .with_tcp(TcpConfig::default().nodelay(true), noise::Config::new, || {
         let mut config = yamux::Config::default();
         // 1 MiB default + max message size
-        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_MESSAGE_SIZE);
+        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_REQRES_MESSAGE_SIZE);
         // 256 KiB default + max message size
-        config
-          .set_receive_window_size(((256 * 1024) + MAX_LIBP2P_MESSAGE_SIZE).try_into().unwrap());
+        config.set_receive_window_size(
+          ((256 * 1024) + MAX_LIBP2P_REQRES_MESSAGE_SIZE).try_into().unwrap(),
+        );
         config
       })
       .unwrap()
@@ -931,14 +940,13 @@ pub async fn handle_p2p_task<D: Db, P: P2p>(
                           // prepare the batch to sends
                           let mut blocks = vec![];
                           for (i, next) in to_send.iter().enumerate() {
-                            // each batch contains BLOCKS_PER_MINUTE + 1 blocks
-                            if i >= usize::try_from(BLOCKS_PER_MINUTE).unwrap() + 1 {
+                            if i >= BLOCKS_PER_BATCH {
                               break;
                             }
 
                             blocks.push(BlockCommit {
-                              block: reader.block(&next).unwrap().serialize(),
-                              commit: reader.commit(&next).unwrap(),
+                              block: reader.block(next).unwrap().serialize(),
+                              commit: reader.commit(next).unwrap(),
                             });
                           }
                           let batch = HeartbeatBatch { blocks, timestamp: msg_time };
