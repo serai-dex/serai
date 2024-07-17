@@ -29,8 +29,8 @@ use ciphersuite::{
 mod mimalloc;
 use mimalloc::mimalloc;
 
-mod coins;
-use coins::*;
+mod networks;
+use networks::*;
 
 mod ethereum_relayer;
 use ethereum_relayer::ethereum_relayer;
@@ -168,7 +168,7 @@ RUN rustup target add wasm32-unknown-unknown
 ADD patches /serai/patches
 ADD common /serai/common
 ADD crypto /serai/crypto
-ADD coins /serai/coins
+ADD networks /serai/networks
 ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator

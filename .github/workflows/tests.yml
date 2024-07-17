@@ -7,7 +7,7 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "message-queue/**"
       - "processor/**"
       - "coordinator/**"
@@ -17,7 +17,7 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "message-queue/**"
       - "processor/**"
       - "coordinator/**"

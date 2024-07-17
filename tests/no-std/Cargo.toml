@@ -33,6 +33,6 @@ dkg = { path = "../../crypto/dkg", default-features = false }
 # modular-frost = { path = "../../crypto/frost", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
-bitcoin-serai = { path = "../../coins/bitcoin", default-features = false, features = ["hazmat"] }
+bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"] }
 
-monero-wallet-util = { path = "../../coins/monero/wallet/util", default-features = false, features = ["compile-time-generators"] }
+monero-wallet-util = { path = "../../networks/monero/wallet/util", default-features = false, features = ["compile-time-generators"] }

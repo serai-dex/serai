@@ -1,0 +1,68 @@
+[package]
+name = "bitcoin-serai"
+version = "0.3.0"
+description = "A Bitcoin library for FROST-signing transactions"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/networks/bitcoin"
+authors = ["Luke Parker <lukeparker5132@gmail.com>", "Vrx <vrx00@proton.me>"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+std-shims = { version = "0.1.1", path = "../../common/std-shims", default-features = false }
+
+thiserror = { version = "1", default-features = false, optional = true }
+
+zeroize = { version = "^1.5", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+bitcoin = { version = "0.32", default-features = false }
+
+k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
+
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["recommended"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", default-features = false, features = ["secp256k1"], optional = true }
+
+hex = { version = "0.4", default-features = false, optional = true }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+serde_json = { version = "1", default-features = false, optional = true }
+simple-request = { path = "../../common/request", version = "0.1", default-features = false, features = ["tls", "basic-auth"], optional = true }
+
+[dev-dependencies]
+secp256k1 = { version = "0.29", default-features = false, features = ["std"] }
+
+frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
+
+tokio = { version = "1", features = ["macros"] }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "thiserror",
+
+  "zeroize/std",
+  "rand_core/std",
+
+  "bitcoin/std",
+  "bitcoin/serde",
+
+  "k256/std",
+
+  "transcript/std",
+  "frost",
+
+  "hex/std",
+  "serde/std",
+  "serde_json/std",
+  "simple-request",
+]
+hazmat = []
+default = ["std"]

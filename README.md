@@ -24,7 +24,7 @@ wallet.
   infrastructure, to our IETF-compliant FROST implementation, to a DLEq proof as
   needed for Bitcoin-Monero atomic swaps.
 
-- `coins`: Various coin libraries intended for usage in Serai yet also by the
+- `networks`: Various libraries intended for usage in Serai yet also by the
   wider community. This means they will always support the functionality Serai
   needs, yet won't disadvantage other use cases when possible.
 

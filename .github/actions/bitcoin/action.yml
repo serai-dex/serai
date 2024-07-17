@@ -37,4 +37,4 @@ runs:
 
     - name: Bitcoin Regtest Daemon
       shell: bash
-      run: PATH=$PATH:/usr/bin ./orchestration/dev/coins/bitcoin/run.sh -daemon
+      run: PATH=$PATH:/usr/bin ./orchestration/dev/networks/bitcoin/run.sh -daemon

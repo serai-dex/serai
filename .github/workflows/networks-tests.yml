@@ -1,0 +1,51 @@
+name: networks/ Tests
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "networks/**"
+
+  pull_request:
+    paths:
+      - "common/**"
+      - "crypto/**"
+      - "networks/**"
+
+  workflow_dispatch:
+
+jobs:
+  test-coins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+
+      - name: Run Tests
+        run: |
+          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
+            -p bitcoin-serai \
+            -p alloy-simple-request-transport \
+            -p ethereum-serai \
+            -p serai-ethereum-relayer \
+            -p monero-io \
+            -p monero-generators \
+            -p monero-primitives \
+            -p monero-mlsag \
+            -p monero-clsag \
+            -p monero-borromean \
+            -p monero-bulletproofs \
+            -p monero-serai \
+            -p monero-rpc \
+            -p monero-simple-request-rpc \
+            -p monero-address \
+            -p monero-wallet \
+            -p monero-seed \
+            -p polyseed \
+            -p monero-wallet-util \
+            -p monero-serai-verify-chain

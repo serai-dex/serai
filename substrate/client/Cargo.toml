@@ -39,7 +39,7 @@ simple-request = { path = "../../common/request", version = "0.1", optional = tr
 bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
-monero-wallet = { path = "../../coins/monero/wallet", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-wallet = { path = "../../networks/monero/wallet", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
