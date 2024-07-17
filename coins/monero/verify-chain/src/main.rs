@@ -225,9 +225,8 @@ async fn main() {
 
   // Read further args as RPC URLs
   let default_nodes = vec![
-    // "http://xmr-node.cakewallet.com:18081".to_string(),
-    "http://node.tools.rino.io:18081".to_string(),
-    // "https://node.sethforprivacy.com".to_string(),
+    "http://xmr-node-uk.cakewallet.com:18081".to_string(),
+    "http://xmr-node-eu.cakewallet.com:18081".to_string(),
   ];
   let mut specified_nodes = vec![];
   {

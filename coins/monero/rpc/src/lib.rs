@@ -364,6 +364,7 @@ pub trait Rpc: Sync + Clone + Debug {
       .iter()
       .enumerate()
       .map(|(i, res)| {
+        // https://github.com/monero-project/monero/issues/8311
         let buf = rpc_hex(if !res.as_hex.is_empty() { &res.as_hex } else { &res.pruned_as_hex })?;
         let mut buf = buf.as_slice();
         let tx = Transaction::read(&mut buf).map_err(|_| match hash_hex(&res.tx_hash) {
@@ -374,7 +375,10 @@ pub trait Rpc: Sync + Clone + Debug {
           Err(RpcError::InvalidNode("transaction had extra bytes after it".to_string()))?;
         }
 
-        // https://github.com/monero-project/monero/issues/8311
+        // We check this to ensure we didn't read a pruned transaction when we meant to read an
+        // actual transaction. That shouldn't be possible, as they have different serializations,
+        // yet it helps to ensure that if we applied the above exception (using the pruned data),
+        // it was for the right reason
         if res.as_hex.is_empty() {
           match tx.prefix().inputs.first() {
             Some(Input::Gen { .. }) => (),
