@@ -50,11 +50,19 @@ const MAX_LIBP2P_GOSSIP_MESSAGE_SIZE: usize = tributary::BLOCK_SIZE_LIMIT + 1024
 const MAX_LIBP2P_REQRES_MESSAGE_SIZE: usize =
   (tributary::BLOCK_SIZE_LIMIT * BLOCKS_PER_BATCH) + 1024;
 
+const MAX_LIBP2P_MESSAGE_SIZE: usize = {
+  // Manual `max` since `max` isn't a const fn
+  if MAX_LIBP2P_GOSSIP_MESSAGE_SIZE > MAX_LIBP2P_REQRES_MESSAGE_SIZE {
+    MAX_LIBP2P_GOSSIP_MESSAGE_SIZE
+  } else {
+    MAX_LIBP2P_REQRES_MESSAGE_SIZE
+  }
+};
+
 const LIBP2P_TOPIC: &str = "serai-coordinator";
 
 // Amount of blocks in a minute
-// We can't use tendermint::TARGET_BLOCK_TIME here to calculate this since that is a u32.
-const BLOCKS_PER_MINUTE: usize = 10;
+const BLOCKS_PER_MINUTE: usize = (60 / (tributary::tendermint::TARGET_BLOCK_TIME / 1000)) as usize;
 
 // Maximum amount of blocks to send in a batch
 const BLOCKS_PER_BATCH: usize = BLOCKS_PER_MINUTE + 1;
@@ -250,7 +258,7 @@ impl RrCodecTrait for RrCodec {
   ) -> io::Result<Vec<u8>> {
     let mut len = [0; 4];
     io.read_exact(&mut len).await?;
-    let len = usize::try_from(u32::from_le_bytes(len)).expect("not a 32-bit platform?");
+    let len = usize::try_from(u32::from_le_bytes(len)).expect("not at least a 32-bit platform?");
     if len > MAX_LIBP2P_REQRES_MESSAGE_SIZE {
       Err(io::Error::other("request length exceeded MAX_LIBP2P_REQRES_MESSAGE_SIZE"))?;
     }
@@ -371,11 +379,10 @@ impl LibP2p {
       .with_tcp(TcpConfig::default().nodelay(true), noise::Config::new, || {
         let mut config = yamux::Config::default();
         // 1 MiB default + max message size
-        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_REQRES_MESSAGE_SIZE);
+        config.set_max_buffer_size((1024 * 1024) + MAX_LIBP2P_MESSAGE_SIZE);
         // 256 KiB default + max message size
-        config.set_receive_window_size(
-          ((256 * 1024) + MAX_LIBP2P_REQRES_MESSAGE_SIZE).try_into().unwrap(),
-        );
+        config
+          .set_receive_window_size(((256 * 1024) + MAX_LIBP2P_MESSAGE_SIZE).try_into().unwrap());
         config
       })
       .unwrap()
