@@ -93,9 +93,9 @@ impl From<Call> for RuntimeCall {
         serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance } => {
           RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::remove_coin_liquidity { balance })
         }
-        serai_abi::genesis_liquidity::Call::oraclize_values { prices, signature } => {
+        serai_abi::genesis_liquidity::Call::oraclize_values { values, signature } => {
           RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::oraclize_values {
-            prices,
+            values,
             signature,
           })
         }
@@ -276,8 +276,8 @@ impl TryInto<Call> for RuntimeCall {
         genesis_liquidity::Call::remove_coin_liquidity { balance } => {
           serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance }
         }
-        genesis_liquidity::Call::oraclize_values { prices, signature } => {
-          serai_abi::genesis_liquidity::Call::oraclize_values { prices, signature }
+        genesis_liquidity::Call::oraclize_values { values, signature } => {
+          serai_abi::genesis_liquidity::Call::oraclize_values { values, signature }
         }
         _ => Err(())?,
       }),

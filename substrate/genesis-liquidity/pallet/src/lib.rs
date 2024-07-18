@@ -16,10 +16,11 @@ pub mod pallet {
   use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
 
   use serai_primitives::{Coin, COINS, *};
-  use validator_sets_primitives::{ValidatorSet, Session, musig_key};
+  use validator_sets_primitives::{ValidatorSet, musig_key};
   pub use genesis_liquidity_primitives as primitives;
   use primitives::*;
 
+  // TODO: Have a more robust way of accessing LiquidityTokens pallet.
   /// LiquidityTokens Pallet as an instance of coins pallet.
   pub type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
 
@@ -71,7 +72,7 @@ pub mod pallet {
   pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
-  pub(crate) type GenesisComplete<T: Config> = StorageValue<_, bool, OptionQuery>;
+  pub(crate) type GenesisComplete<T: Config> = StorageValue<_, (), OptionQuery>;
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -137,14 +138,9 @@ pub mod pallet {
           };
           total_sri_distributed = total_sri_distributed.checked_add(sri_amount).unwrap();
 
-          // we can't add 0 liquidity
-          if !(pool_amount > 0 && sri_amount > 0) {
-            continue;
-          }
-
           // actually add the liquidity to dex
           let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
-          Dex::<T>::add_liquidity(
+          let Ok(()) = Dex::<T>::add_liquidity(
             origin.into(),
             coin,
             u64::try_from(pool_amount).unwrap(),
@@ -152,8 +148,9 @@ pub mod pallet {
             u64::try_from(pool_amount).unwrap(),
             sri_amount,
             GENESIS_LIQUIDITY_ACCOUNT.into(),
-          )
-          .unwrap();
+          ) else {
+            continue;
+          };
 
           // let everyone know about the event
           Self::deposit_event(Event::GenesisLiquidityAddedToPool {
@@ -169,7 +166,7 @@ pub mod pallet {
           assert_eq!(Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin), Amount(0));
         }
 
-        GenesisComplete::<T>::set(Some(true));
+        GenesisComplete::<T>::set(Some(()));
       }
 
       // we accept we reached economic security once we can mint smallest amount of a network's coin
@@ -222,7 +219,8 @@ pub mod pallet {
           },
         )
       } else {
-        let first_amount = LiquidityAmount { shares: GENESIS_LP_SHARES, coins: balance.amount.0 };
+        let first_amount =
+          LiquidityAmount { shares: INITIAL_GENESIS_LP_SHARES, coins: balance.amount.0 };
         (first_amount, first_amount)
       };
 
@@ -301,7 +299,8 @@ pub mod pallet {
           Liquidity::<T>::get(balance.coin, account).unwrap_or(LiquidityAmount::zero());
         let total_shares = Supply::<T>::get(balance.coin).unwrap_or(LiquidityAmount::zero()).shares;
         let user_liq_tokens = Self::mul_div(total_liq_tokens, shares, total_shares)?;
-        let amount_to_remove = Self::mul_div(user_liq_tokens, balance.amount.0, GENESIS_LP_SHARES)?;
+        let amount_to_remove =
+          Self::mul_div(user_liq_tokens, balance.amount.0, INITIAL_GENESIS_LP_SHARES)?;
 
         // remove liquidity from pool
         let prev_sri = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
@@ -364,7 +363,7 @@ pub mod pallet {
           },
         )
       } else {
-        if balance.amount.0 != GENESIS_LP_SHARES {
+        if balance.amount.0 != INITIAL_GENESIS_LP_SHARES {
           Err(Error::<T>::CanOnlyRemoveFullAmount)?;
         }
         let existing =
@@ -406,16 +405,16 @@ pub mod pallet {
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn oraclize_values(
       origin: OriginFor<T>,
-      prices: Prices,
+      values: Values,
       _signature: Signature,
     ) -> DispatchResult {
       ensure_none(origin)?;
 
       // set the prices
       Oracle::<T>::set(Coin::Bitcoin, Some(10u64.pow(8)));
-      Oracle::<T>::set(Coin::Monero, Some(prices.monero));
-      Oracle::<T>::set(Coin::Ether, Some(prices.ethereum));
-      Oracle::<T>::set(Coin::Dai, Some(prices.dai));
+      Oracle::<T>::set(Coin::Monero, Some(values.monero));
+      Oracle::<T>::set(Coin::Ether, Some(values.ether));
+      Oracle::<T>::set(Coin::Dai, Some(values.dai));
       Ok(())
     }
   }
@@ -426,7 +425,7 @@ pub mod pallet {
 
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       match call {
-        Call::oraclize_values { ref prices, ref signature } => {
+        Call::oraclize_values { ref values, ref signature } => {
           let network = NetworkId::Serai;
           let Some(session) = ValidatorSets::<T>::session(network) else {
             return Err(TransactionValidityError::from(InvalidTransaction::Custom(0)));
@@ -444,14 +443,14 @@ pub mod pallet {
             Err(InvalidTransaction::Custom(1))?;
           }
 
-          // make sure signers settings the price at the end of the genesis period.
+          // make sure signers settings the value at the end of the genesis period.
           // we don't need this check for tests.
           #[cfg(not(feature = "fast-epoch"))]
           if <frame_system::Pallet<T>>::block_number().saturated_into::<u64>() < MONTHS {
             Err(InvalidTransaction::Custom(2))?;
           }
 
-          if !musig_key(set, &signers).verify(&oraclize_values_message(&set, prices), signature) {
+          if !musig_key(set, &signers).verify(&oraclize_values_message(&set, values), signature) {
             Err(InvalidTransaction::BadProof)?;
           }
 

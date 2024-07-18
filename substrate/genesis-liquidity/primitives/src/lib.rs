@@ -18,7 +18,7 @@ use scale_info::TypeInfo;
 use serai_primitives::*;
 use validator_sets_primitives::ValidatorSet;
 
-pub const GENESIS_LP_SHARES: u64 = 10_000;
+pub const INITIAL_GENESIS_LP_SHARES: u64 = 10_000;
 
 // This is the account to hold and manage the genesis liquidity.
 pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");
@@ -27,9 +27,9 @@ pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liq
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Prices {
+pub struct Values {
   pub monero: u64,
-  pub ethereum: u64,
+  pub ether: u64,
   pub dai: u64,
 }
 
@@ -49,6 +49,6 @@ impl LiquidityAmount {
 }
 
 /// The message for the oraclize_values signature.
-pub fn oraclize_values_message(set: &ValidatorSet, prices: &Prices) -> Vec<u8> {
-  (b"GenesisLiquidity-oraclize_values", set, prices).encode()
+pub fn oraclize_values_message(set: &ValidatorSet, values: &Values) -> Vec<u8> {
+  (b"GenesisLiquidity-oraclize_values", set, values).encode()
 }
