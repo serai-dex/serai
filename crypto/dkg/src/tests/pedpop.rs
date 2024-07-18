@@ -6,13 +6,13 @@ use ciphersuite::Ciphersuite;
 
 use crate::{
   Participant, ThresholdParams, ThresholdCore,
-  frost::{Commitments, KeyGenMachine, SecretShare, KeyMachine},
+  pedpop::{Commitments, KeyGenMachine, SecretShare, KeyMachine},
   encryption::{EncryptionKeyMessage, EncryptedMessage},
   tests::{THRESHOLD, PARTICIPANTS, clone_without},
 };
 
-type FrostEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
-type FrostSecretShares<C> = HashMap<Participant, FrostEncryptedMessage<C>>;
+type PedPoPEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
+type PedPoPSecretShares<C> = HashMap<Participant, PedPoPEncryptedMessage<C>>;
 
 const CONTEXT: &str = "DKG Test Key Generation";
 
@@ -24,7 +24,7 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   HashMap<Participant, KeyMachine<C>>,
   HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
   HashMap<Participant, C::G>,
-  HashMap<Participant, FrostSecretShares<C>>,
+  HashMap<Participant, PedPoPSecretShares<C>>,
 ) {
   let mut machines = HashMap::new();
   let mut commitments = HashMap::new();
@@ -72,9 +72,9 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
 }
 
 fn generate_secret_shares<C: Ciphersuite>(
-  shares: &HashMap<Participant, FrostSecretShares<C>>,
+  shares: &HashMap<Participant, PedPoPSecretShares<C>>,
   recipient: Participant,
-) -> FrostSecretShares<C> {
+) -> PedPoPSecretShares<C> {
   let mut our_secret_shares = HashMap::new();
   for (i, shares) in shares {
     if recipient == *i {
@@ -85,8 +85,8 @@ fn generate_secret_shares<C: Ciphersuite>(
   our_secret_shares
 }
 
-/// Fully perform the FROST key generation algorithm.
-pub fn frost_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+/// Fully perform the PedPoP key generation algorithm.
+pub fn pedpop_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdCore<C>> {
   let (mut machines, _, _, secret_shares) = commit_enc_keys_and_shares::<_, C>(rng);
@@ -125,7 +125,7 @@ mod literal {
   use crate::{
     DkgError,
     encryption::EncryptionKeyProof,
-    frost::{BlameMachine, AdditionalBlameMachine},
+    pedpop::{BlameMachine, AdditionalBlameMachine},
   };
 
   use super::*;
@@ -136,7 +136,7 @@ mod literal {
   fn test_blame(
     commitment_msgs: &HashMap<Participant, EncryptionKeyMessage<Ristretto, Commitments<Ristretto>>>,
     machines: Vec<BlameMachine<Ristretto>>,
-    msg: &FrostEncryptedMessage<Ristretto>,
+    msg: &PedPoPEncryptedMessage<Ristretto>,
     blame: &Option<EncryptionKeyProof<Ristretto>>,
   ) {
     for machine in machines {

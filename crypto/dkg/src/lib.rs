@@ -16,10 +16,10 @@ pub mod musig;
 #[cfg(feature = "std")]
 pub mod encryption;
 
-/// The distributed key generation protocol described in the
-/// [FROST paper](https://eprint.iacr.org/2020/852).
+/// The PedPoP distributed key generation protocol described in the
+/// [FROST paper](https://eprint.iacr.org/2020/852), augmented to be verifiable.
 #[cfg(feature = "std")]
-pub mod frost;
+pub mod pedpop;
 
 /// Promote keys between ciphersuites.
 #[cfg(feature = "std")]

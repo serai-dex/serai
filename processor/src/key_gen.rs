@@ -10,7 +10,7 @@ use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::{Ciphersuite, Ristretto},
   dkg::{
-    DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, frost::*,
+    DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, pedpop::*,
   },
 };
 

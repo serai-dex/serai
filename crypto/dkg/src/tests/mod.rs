@@ -12,8 +12,8 @@ mod musig;
 pub use musig::test_musig;
 
 /// FROST key generation testing utility.
-pub mod frost;
-use frost::frost_gen;
+pub mod pedpop;
+use pedpop::pedpop_gen;
 
 // Promotion test.
 mod promote;
@@ -53,7 +53,7 @@ pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>
 pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdKeys<C>> {
-  let res = frost_gen(rng)
+  let res = pedpop_gen(rng)
     .drain()
     .map(|(i, core)| {
       assert_eq!(
