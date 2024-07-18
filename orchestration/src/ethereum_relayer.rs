@@ -31,7 +31,7 @@ CMD {env_vars_str} serai-ethereum-relayer
   let res = setup + &run;
 
   let mut ethereum_relayer_path = orchestration_path.to_path_buf();
-  ethereum_relayer_path.push("coins");
+  ethereum_relayer_path.push("networks");
   ethereum_relayer_path.push("ethereum-relayer");
   ethereum_relayer_path.push("Dockerfile");
 

@@ -26,9 +26,9 @@ rand_core = { version = "0.6", default-features = false }
 
 curve25519-dalek = { version = "4", features = ["rand_core"] }
 
-bitcoin-serai = { path = "../../coins/bitcoin" }
-monero-simple-request-rpc = { path = "../../coins/monero/rpc/simple-request" }
-monero-wallet = { path = "../../coins/monero/wallet" }
+bitcoin-serai = { path = "../../networks/bitcoin" }
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }
+monero-wallet = { path = "../../networks/monero/wallet" }
 
 scale = { package = "parity-scale-codec", version = "3" }
 serde = "1"

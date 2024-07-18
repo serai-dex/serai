@@ -5,12 +5,12 @@ on:
     branches:
       - develop
     paths:
-      - "coins/monero/**"
+      - "networks/monero/**"
       - "processor/**"
 
   pull_request:
     paths:
-      - "coins/monero/**"
+      - "networks/monero/**"
       - "processor/**"
 
   workflow_dispatch:

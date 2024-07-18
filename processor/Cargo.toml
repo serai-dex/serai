@@ -45,15 +45,15 @@ k256 = { version = "^0.13.1", default-features = false, features = ["std"], opti
 
 # Bitcoin
 secp256k1 = { version = "0.29", default-features = false, features = ["std", "global-context", "rand-std"], optional = true }
-bitcoin-serai = { path = "../coins/bitcoin", default-features = false, features = ["std"], optional = true }
+bitcoin-serai = { path = "../networks/bitcoin", default-features = false, features = ["std"], optional = true }
 
 # Ethereum
-ethereum-serai = { path = "../coins/ethereum", default-features = false, optional = true }
+ethereum-serai = { path = "../networks/ethereum", default-features = false, optional = true }
 
 # Monero
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
-monero-simple-request-rpc = { path = "../coins/monero/rpc/simple-request", default-features = false, optional = true }
-monero-wallet = { path = "../coins/monero/wallet", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
+monero-simple-request-rpc = { path = "../networks/monero/rpc/simple-request", default-features = false, optional = true }
+monero-wallet = { path = "../networks/monero/wallet", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -75,7 +75,7 @@ frost = { package = "modular-frost", path = "../crypto/frost", features = ["test
 
 sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false, features = ["std"] }
 
-ethereum-serai = { path = "../coins/ethereum", default-features = false, features = ["tests"] }
+ethereum-serai = { path = "../networks/ethereum", default-features = false, features = ["tests"] }
 
 dockertest = "0.4"
 serai-docker-tests = { path = "../tests/docker" }
