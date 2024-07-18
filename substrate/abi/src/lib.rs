@@ -12,11 +12,14 @@ pub mod system;
 pub mod timestamp;
 
 pub mod coins;
+pub mod liquidity_tokens;
 pub mod dex;
 
 pub mod validator_sets;
 pub mod in_instructions;
 pub mod signals;
+
+pub mod genesis_liquidity;
 
 pub mod babe;
 pub mod grandpa;
@@ -27,8 +30,9 @@ pub mod tx;
 pub enum Call {
   Timestamp(timestamp::Call),
   Coins(coins::Call),
-  LiquidityTokens(coins::LiquidityTokensCall),
+  LiquidityTokens(liquidity_tokens::Call),
   Dex(dex::Call),
+  GenesisLiquidity(genesis_liquidity::Call),
   ValidatorSets(validator_sets::Call),
   InInstructions(in_instructions::Call),
   Signals(signals::Call),
@@ -48,8 +52,9 @@ pub enum Event {
   Timestamp,
   TransactionPayment(TransactionPaymentEvent),
   Coins(coins::Event),
-  LiquidityTokens(coins::Event),
+  LiquidityTokens(liquidity_tokens::Event),
   Dex(dex::Event),
+  GenesisLiquidity(genesis_liquidity::Event),
   ValidatorSets(validator_sets::Event),
   InInstructions(in_instructions::Event),
   Signals(signals::Event),

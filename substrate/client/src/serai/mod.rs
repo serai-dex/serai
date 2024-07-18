@@ -26,6 +26,10 @@ pub mod in_instructions;
 pub use in_instructions::SeraiInInstructions;
 pub mod validator_sets;
 pub use validator_sets::SeraiValidatorSets;
+pub mod genesis_liquidity;
+pub use genesis_liquidity::SeraiGenesisLiquidity;
+pub mod liquidity_tokens;
+pub use liquidity_tokens::SeraiLiquidityTokens;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode)]
 pub struct Block {
@@ -194,6 +198,7 @@ impl Serai {
     Ok(())
   }
 
+  // TODO: move this into substrate/client/src/validator_sets.rs
   async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
     let validators: String = self
       .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
@@ -387,5 +392,13 @@ impl<'a> TemporalSerai<'a> {
 
   pub fn validator_sets(&'a self) -> SeraiValidatorSets<'a> {
     SeraiValidatorSets(self)
+  }
+
+  pub fn genesis_liquidity(&'a self) -> SeraiGenesisLiquidity {
+    SeraiGenesisLiquidity(self)
+  }
+
+  pub fn liquidity_tokens(&'a self) -> SeraiLiquidityTokens {
+    SeraiLiquidityTokens(self)
   }
 }

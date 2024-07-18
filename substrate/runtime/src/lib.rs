@@ -11,7 +11,6 @@ use core::marker::PhantomData;
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
-use primitives::{NetworkId, NETWORKS};
 
 pub use frame_system as system;
 pub use frame_support as support;
@@ -32,6 +31,8 @@ pub use signals_pallet as signals;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
 
+pub use genesis_liquidity_pallet as genesis_liquidity;
+
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
 use sp_std::prelude::*;
@@ -47,7 +48,11 @@ use sp_runtime::{
   BoundedVec, Perbill, ApplyExtrinsicResult,
 };
 
-use primitives::{PublicKey, AccountLookup, SubstrateAmount};
+#[allow(unused_imports)]
+use primitives::{
+  NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS, MEDIAN_PRICE_WINDOW_LENGTH,
+  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
+};
 
 use support::{
   traits::{ConstU8, ConstU16, ConstU32, ConstU64, Contains},
@@ -114,28 +119,7 @@ pub fn native_version() -> NativeVersion {
   NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
 }
 
-// 1 MB
-pub const BLOCK_SIZE: u32 = 1024 * 1024;
-// 6 seconds
-pub const TARGET_BLOCK_TIME: u64 = 6;
-
-/// Measured in blocks.
-pub const MINUTES: BlockNumber = 60 / TARGET_BLOCK_TIME;
-pub const HOURS: BlockNumber = MINUTES * 60;
-pub const DAYS: BlockNumber = HOURS * 24;
-
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
-
-/// This needs to be long enough for arbitrage to occur and make holding any fake price up
-/// sufficiently unrealistic.
-#[allow(clippy::cast_possible_truncation)]
-pub const ARBITRAGE_TIME: u16 = (2 * HOURS) as u16;
-
-/// Since we use the median price, double the window length.
-///
-/// We additionally +1 so there is a true median.
-pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = (2 * ARBITRAGE_TIME) + 1;
-
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
     c: PRIMARY_PROBABILITY,
@@ -264,6 +248,10 @@ impl in_instructions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl genesis_liquidity::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
 // for publishing equivocation evidences.
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
@@ -338,6 +326,7 @@ construct_runtime!(
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
+    GenesisLiquidity: genesis_liquidity,
 
     ValidatorSets: validator_sets,
 
@@ -602,6 +591,30 @@ sp_api::impl_runtime_apis! {
             |vec| vec.into_inner().into_iter().map(|(validator, _)| validator).collect()
           )
       }
+    }
+  }
+
+  impl dex::DexApi<Block> for Runtime {
+    fn quote_price_exact_tokens_for_tokens(
+      asset1: Coin,
+      asset2: Coin,
+      amount: SubstrateAmount,
+      include_fee: bool
+    ) -> Option<SubstrateAmount> {
+      Dex::quote_price_exact_tokens_for_tokens(asset1, asset2, amount, include_fee)
+    }
+
+    fn quote_price_tokens_for_exact_tokens(
+      asset1: Coin,
+      asset2: Coin,
+      amount: SubstrateAmount,
+      include_fee: bool
+    ) -> Option<SubstrateAmount> {
+      Dex::quote_price_tokens_for_exact_tokens(asset1, asset2, amount, include_fee)
+    }
+
+    fn get_reserves(asset1: Coin, asset2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
+      Dex::get_reserves(&asset1, &asset2).ok()
     }
   }
 }

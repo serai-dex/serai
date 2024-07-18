@@ -19,6 +19,7 @@ pub mod pallet {
   use sp_core::sr25519::Public;
 
   use serai_primitives::{Coin, Amount, Balance};
+  use genesis_liquidity_primitives::GENESIS_LIQUIDITY_ACCOUNT;
 
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
@@ -33,10 +34,14 @@ pub mod pallet {
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
 
+  use genesis_liquidity_pallet::{Pallet as GenesisLiq, Config as GenesisLiqConfig};
+
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig {
+  pub trait Config:
+    frame_system::Config + CoinsConfig + DexConfig + ValidatorSetsConfig + GenesisLiqConfig
+  {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
@@ -199,6 +204,10 @@ pub mod pallet {
               }
             }
           }
+        }
+        InInstruction::GenesisLiquidity(address) => {
+          Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance)?;
+          GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
         }
       }
       Ok(())

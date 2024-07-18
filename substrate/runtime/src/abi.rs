@@ -7,7 +7,7 @@ use serai_abi::Call;
 use crate::{
   Vec,
   primitives::{PublicKey, SeraiAddress},
-  timestamp, coins, dex,
+  timestamp, coins, dex, genesis_liquidity,
   validator_sets::{self, MembershipProof},
   in_instructions, signals, babe, grandpa, RuntimeCall,
 };
@@ -30,10 +30,10 @@ impl From<Call> for RuntimeCall {
         }
       },
       Call::LiquidityTokens(lt) => match lt {
-        serai_abi::coins::LiquidityTokensCall::transfer { to, balance } => {
+        serai_abi::liquidity_tokens::Call::transfer { to, balance } => {
           RuntimeCall::LiquidityTokens(coins::Call::transfer { to: to.into(), balance })
         }
-        serai_abi::coins::LiquidityTokensCall::burn { balance } => {
+        serai_abi::liquidity_tokens::Call::burn { balance } => {
           RuntimeCall::LiquidityTokens(coins::Call::burn { balance })
         }
       },
@@ -88,6 +88,17 @@ impl From<Call> for RuntimeCall {
           amount_in_max,
           send_to: send_to.into(),
         }),
+      },
+      Call::GenesisLiquidity(gl) => match gl {
+        serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::remove_coin_liquidity { balance })
+        }
+        serai_abi::genesis_liquidity::Call::oraclize_values { values, signature } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::oraclize_values {
+            values,
+            signature,
+          })
+        }
       },
       Call::ValidatorSets(vs) => match vs {
         serai_abi::validator_sets::Call::set_keys {
@@ -209,9 +220,9 @@ impl TryInto<Call> for RuntimeCall {
       }),
       RuntimeCall::LiquidityTokens(call) => Call::LiquidityTokens(match call {
         coins::Call::transfer { to, balance } => {
-          serai_abi::coins::LiquidityTokensCall::transfer { to: to.into(), balance }
+          serai_abi::liquidity_tokens::Call::transfer { to: to.into(), balance }
         }
-        coins::Call::burn { balance } => serai_abi::coins::LiquidityTokensCall::burn { balance },
+        coins::Call::burn { balance } => serai_abi::liquidity_tokens::Call::burn { balance },
         _ => Err(())?,
       }),
       RuntimeCall::Dex(call) => Call::Dex(match call {
@@ -258,6 +269,15 @@ impl TryInto<Call> for RuntimeCall {
             amount_in_max,
             send_to: send_to.into(),
           }
+        }
+        _ => Err(())?,
+      }),
+      RuntimeCall::GenesisLiquidity(call) => Call::GenesisLiquidity(match call {
+        genesis_liquidity::Call::remove_coin_liquidity { balance } => {
+          serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance }
+        }
+        genesis_liquidity::Call::oraclize_values { values, signature } => {
+          serai_abi::genesis_liquidity::Call::oraclize_values { values, signature }
         }
         _ => Err(())?,
       }),

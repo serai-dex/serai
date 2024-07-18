@@ -78,6 +78,7 @@ pub enum DexCall {
 pub enum InInstruction {
   Transfer(SeraiAddress),
   Dex(DexCall),
+  GenesisLiquidity(SeraiAddress),
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebug)]

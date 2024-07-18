@@ -25,7 +25,7 @@ pub use coins_pallet as coins;
 
 use coins::Pallet as CoinsPallet;
 
-use serai_primitives::*;
+use serai_primitives::{Balance, COINS, PublicKey, system_address, Amount};
 
 type LiquidityTokens<T> = coins_pallet::Pallet<T, coins::Instance1>;
 type LiquidityTokensError<T> = coins_pallet::Error<T, coins::Instance1>;
