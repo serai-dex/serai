@@ -125,7 +125,9 @@ pub fn build(name: String) {
       let meta = |path: PathBuf| (path.clone(), fs::metadata(path));
       let mut metadatas = match name.as_str() {
         "bitcoin" | "ethereum" | "monero" => vec![],
-        "ethereum-relayer" => vec![meta(repo_path.join("common")), meta(repo_path.join("networks"))],
+        "ethereum-relayer" => {
+          vec![meta(repo_path.join("common")), meta(repo_path.join("networks"))]
+        }
         "message-queue" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
