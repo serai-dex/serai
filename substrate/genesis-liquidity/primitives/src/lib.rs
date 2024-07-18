@@ -21,7 +21,7 @@ use validator_sets_primitives::ValidatorSet;
 pub const INITIAL_GENESIS_LP_SHARES: u64 = 10_000;
 
 // This is the account to hold and manage the genesis liquidity.
-pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");
+pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"GenesisLiquidity-account");
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]

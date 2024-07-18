@@ -84,7 +84,7 @@ pub mod pallet {
       let final_block = MONTHS;
 
       // Distribute the genesis sri to pools after a month
-      if n.saturated_into::<u64>() >= final_block &&
+      if (n.saturated_into::<u64>() >= final_block) &&
         Self::oraclization_is_done() &&
         GenesisComplete::<T>::get().is_none()
       {
@@ -410,8 +410,8 @@ pub mod pallet {
     ) -> DispatchResult {
       ensure_none(origin)?;
 
-      // set the prices
-      Oracle::<T>::set(Coin::Bitcoin, Some(10u64.pow(8)));
+      // set their relative values
+      Oracle::<T>::set(Coin::Bitcoin, Some(10u64.pow(Coin::Bitcoin.decimals())));
       Oracle::<T>::set(Coin::Monero, Some(values.monero));
       Oracle::<T>::set(Coin::Ether, Some(values.ether));
       Oracle::<T>::set(Coin::Dai, Some(values.dai));

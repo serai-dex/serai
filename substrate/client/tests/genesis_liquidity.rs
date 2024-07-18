@@ -85,16 +85,22 @@ async fn test_genesis_liquidity(serai: Serai) {
     provide_batch(&serai, batch).await;
   }
 
-  // wait until genesis ends..
-  tokio::time::timeout(tokio::time::Duration::from_secs(3 * 10 * 6), async {
-    while serai.latest_finalized_block().await.unwrap().number() < 10 {
-      tokio::time::sleep(Duration::from_secs(6)).await;
-    }
-  })
+  // wait until genesis ends
+  let genesis_blocks = 10; // TODO
+  let block_time = 6; // TODO
+  tokio::time::timeout(
+    tokio::time::Duration::from_secs(3 * (genesis_blocks * block_time)),
+    async {
+      while serai.latest_finalized_block().await.unwrap().number() < 10 {
+        tokio::time::sleep(Duration::from_secs(6)).await;
+      }
+    },
+  )
   .await
   .unwrap();
 
-  // set prices
+  // set values relative to each other
+  // TODO: Random values here
   let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
   set_values(&serai, &values).await;
   let values_map = HashMap::from([
@@ -177,7 +183,7 @@ async fn test_genesis_liquidity(serai: Serai) {
 }
 
 async fn set_values(serai: &Serai, values: &Values) {
-  // prepare a Musig tx to set the initial prices
+  // prepare a Musig tx to oraclize the relative values
   let pair = insecure_pair_from_name("Alice");
   let public = pair.public();
   // we publish the tx in set 4
