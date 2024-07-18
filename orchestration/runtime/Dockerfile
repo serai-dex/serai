@@ -19,7 +19,7 @@ FROM deterministic
 ADD patches /serai/patches
 ADD common /serai/common
 ADD crypto /serai/crypto
-ADD coins /serai/coins
+ADD networks /serai/networks
 ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
