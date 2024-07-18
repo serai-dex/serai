@@ -691,6 +691,15 @@ pub mod pallet {
       }
     }
 
+    fn set_total_allocated_stake(network: NetworkId) {
+      let participants = Participants::<T>::get(network)
+        .expect("setting TotalAllocatedStake for a network without participants");
+      let total_stake = participants.iter().fold(0, |acc, (addr, _)| {
+        acc + Allocations::<T>::get((network, addr)).unwrap_or(Amount(0)).0
+      });
+      TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
+    }
+
     // TODO: This is called retire_set, yet just starts retiring the set
     // Update the nomenclature within this function
     pub fn retire_set(set: ValidatorSet) {
@@ -715,12 +724,7 @@ pub mod pallet {
       });
 
       // Update the total allocated stake to be for the current set
-      let participants =
-        Participants::<T>::get(set.network).expect("set retired without a new set");
-      let total_stake = participants.iter().fold(0, |acc, (addr, _)| {
-        acc + Allocations::<T>::get((set.network, addr)).unwrap_or(Amount(0)).0
-      });
-      TotalAllocatedStake::<T>::set(set.network, Some(Amount(total_stake)));
+      Self::set_total_allocated_stake(set.network);
     }
 
     /// Take the amount deallocatable.
@@ -906,6 +910,13 @@ pub mod pallet {
       let set = ValidatorSet { network, session };
 
       Keys::<T>::set(set, Some(key_pair.clone()));
+
+      // If this is the first ever set for this network, set TotalAllocatedStake now
+      // We generally set TotalAllocatedStake when the prior set retires, and the new set is fully
+      // active and liable. Since this is the first set, there is no prior set to wait to retire
+      if session == Session(0) {
+        Self::set_total_allocated_stake(network);
+      }
 
       // This does not remove from TotalAllocatedStake or InSet in order to:
       // 1) Not decrease the stake present in this set. This means removed participants are

@@ -1,7 +1,6 @@
 use std::{
   sync::{OnceLock, Arc, Mutex},
   time::{Duration, Instant},
-  collections::HashSet,
 };
 
 use zeroize::Zeroizing;
@@ -88,14 +87,11 @@ async fn mint_and_burn_test() {
       // Mine a Monero block
       let monero_blocks = {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-        use monero_serai::wallet::{
-          ViewPair,
-          address::{Network, AddressSpec},
-        };
+        use monero_wallet::{rpc::Rpc, ViewPair, address::Network};
 
         let addr = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
-          .address(Network::Mainnet, AddressSpec::Standard)
-          .to_string();
+          .unwrap()
+          .legacy_address(Network::Mainnet);
 
         let rpc = producer_handles.monero(ops).await;
         let mut res = Vec::with_capacity(count);
@@ -103,8 +99,8 @@ async fn mint_and_burn_test() {
           let block =
             rpc.get_block(rpc.generate_blocks(&addr, 1).await.unwrap().0[0]).await.unwrap();
 
-          let mut txs = Vec::with_capacity(block.txs.len());
-          for tx in &block.txs {
+          let mut txs = Vec::with_capacity(block.transactions.len());
+          for tx in &block.transactions {
             txs.push(rpc.get_transaction(*tx).await.unwrap());
           }
           res.push((serde_json::json!([hex::encode(block.serialize())]), txs));
@@ -128,6 +124,8 @@ async fn mint_and_burn_test() {
         }
 
         {
+          use monero_wallet::rpc::Rpc;
+
           let rpc = handles.monero(ops).await;
 
           for (block, txs) in &monero_blocks {
@@ -345,59 +343,55 @@ async fn mint_and_burn_test() {
     // Send in XMR
     {
       use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-      use monero_serai::{
-        Protocol,
-        transaction::Timelock,
-        wallet::{
-          ViewPair, Scanner, Decoys, Change, FeePriority, SignableTransaction,
-          address::{Network, AddressType, AddressMeta, MoneroAddress},
-        },
-        decompress_point,
+      use monero_wallet::{
+        io::decompress_point,
+        ringct::RctType,
+        rpc::{FeePriority, Rpc},
+        address::{Network, AddressType, MoneroAddress},
+        ViewPair, Scanner, OutputWithDecoys,
+        send::{Change, SignableTransaction},
       };
 
       // Grab the first output on the chain
       let rpc = handles[0].monero(&ops).await;
-      let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE));
-      let mut scanner = Scanner::from_view(view_pair.clone(), Some(HashSet::new()));
+      let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE)).unwrap();
+      let mut scanner = Scanner::new(view_pair.clone());
       let output = scanner
         .scan(&rpc, &rpc.get_block_by_number(1).await.unwrap())
         .await
         .unwrap()
-        .swap_remove(0)
-        .unlocked(Timelock::Block(rpc.get_height().await.unwrap()))
-        .unwrap()
+        .additional_timelock_satisfied_by(rpc.get_height().await.unwrap(), 0)
         .swap_remove(0);
 
-      let decoys = Decoys::fingerprintable_canonical_select(
+      let input = OutputWithDecoys::fingerprintable_deterministic_new(
         &mut OsRng,
         &rpc,
-        Protocol::v16.ring_len(),
+        16,
         rpc.get_height().await.unwrap(),
-        &[output.clone()],
+        output.clone(),
       )
       .await
-      .unwrap()
-      .swap_remove(0);
+      .unwrap();
 
+      let mut outgoing_view_key = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(outgoing_view_key.as_mut());
       let tx = SignableTransaction::new(
-        Protocol::v16,
-        None,
-        vec![(output, decoys)],
+        RctType::ClsagBulletproofPlus,
+        outgoing_view_key,
+        vec![input],
         vec![(
           MoneroAddress::new(
-            AddressMeta::new(
-              Network::Mainnet,
-              AddressType::Featured { guaranteed: true, subaddress: false, payment_id: None },
-            ),
+            Network::Mainnet,
+            AddressType::Featured { guaranteed: true, subaddress: false, payment_id: None },
             decompress_point(monero_key_pair.1.to_vec().try_into().unwrap()).unwrap(),
             ED25519_BASEPOINT_POINT *
               processor::additional_key::<processor::networks::monero::Monero>(0).0,
           ),
           1_100_000_000_000,
         )],
-        &Change::new(&view_pair, false),
+        Change::new(view_pair.clone(), None),
         vec![Shorthand::transfer(None, serai_addr).encode()],
-        rpc.get_fee(Protocol::v16, FeePriority::Unimportant).await.unwrap(),
+        rpc.get_fee_rate(FeePriority::Unimportant).await.unwrap(),
       )
       .unwrap()
       .sign(&mut OsRng, &Zeroizing::new(Scalar::ONE))
@@ -473,9 +467,10 @@ async fn mint_and_burn_test() {
       let spend = ED25519_BASEPOINT_TABLE * &Scalar::random(&mut OsRng);
       let view = Scalar::random(&mut OsRng);
 
-      use monero_serai::wallet::address::{Network, AddressType, AddressMeta, MoneroAddress};
+      use monero_wallet::address::{Network, AddressType, MoneroAddress};
       let addr = MoneroAddress::new(
-        AddressMeta::new(Network::Mainnet, AddressType::Standard),
+        Network::Mainnet,
+        AddressType::Legacy,
         spend,
         ED25519_BASEPOINT_TABLE * &view,
       );
@@ -486,7 +481,10 @@ async fn mint_and_burn_test() {
     // Get the current blocks
     let mut start_bitcoin_block =
       handles[0].bitcoin(&ops).await.get_latest_block_number().await.unwrap();
-    let mut start_monero_block = handles[0].monero(&ops).await.get_height().await.unwrap();
+    let mut start_monero_block = {
+      use monero_wallet::rpc::Rpc;
+      handles[0].monero(&ops).await.get_height().await.unwrap()
+    };
 
     // Burn the sriBTC/sriXMR
     {
@@ -578,12 +576,10 @@ async fn mint_and_burn_test() {
 
     // Verify the received Monero TX
     {
-      use monero_serai::wallet::{ViewPair, Scanner};
+      use monero_wallet::{transaction::Transaction, rpc::Rpc, ViewPair, Scanner};
       let rpc = handles[0].monero(&ops).await;
-      let mut scanner = Scanner::from_view(
-        ViewPair::new(monero_spend, Zeroizing::new(monero_view)),
-        Some(HashSet::new()),
-      );
+      let mut scanner =
+        Scanner::new(ViewPair::new(monero_spend, Zeroizing::new(monero_view)).unwrap());
 
       // Check for up to 5 minutes
       let mut found = false;
@@ -591,15 +587,16 @@ async fn mint_and_burn_test() {
       while i < (5 * 6) {
         if let Ok(block) = rpc.get_block_by_number(start_monero_block).await {
           start_monero_block += 1;
-          let outputs = scanner.scan(&rpc, &block).await.unwrap();
+          let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
           if !outputs.is_empty() {
             assert_eq!(outputs.len(), 1);
-            let outputs = outputs[0].not_locked();
-            assert_eq!(outputs.len(), 1);
 
-            assert_eq!(block.txs.len(), 1);
-            let tx = rpc.get_transaction(block.txs[0]).await.unwrap();
-            let tx_fee = tx.rct_signatures.base.fee;
+            assert_eq!(block.transactions.len(), 1);
+            let tx = rpc.get_transaction(block.transactions[0]).await.unwrap();
+            let tx_fee = match &tx {
+              Transaction::V2 { proofs: Some(proofs), .. } => proofs.base.fee,
+              _ => panic!("fetched TX wasn't a signed V2 TX"),
+            };
 
             assert_eq!(outputs[0].commitment().amount, 1_000_000_000_000 - tx_fee);
             found = true;

@@ -7,7 +7,7 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "message-queue/**"
       - "coordinator/**"
       - "orchestration/**"
@@ -18,7 +18,7 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "message-queue/**"
       - "coordinator/**"
       - "orchestration/**"
@@ -37,4 +37,4 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run coordinator Docker tests
-        run: cd tests/coordinator && GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-coordinator-tests

@@ -58,6 +58,8 @@ impl Client {
     res.set_nodelay(true);
     res.set_reuse_address(true);
     #[cfg(feature = "tls")]
+    res.enforce_http(false);
+    #[cfg(feature = "tls")]
     let res = HttpsConnectorBuilder::new()
       .with_native_roots()
       .expect("couldn't fetch system's SSL roots")

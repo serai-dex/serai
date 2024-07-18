@@ -274,11 +274,12 @@ impl Coordinator {
               }
             }
             NetworkId::Monero => {
-              use monero_serai::rpc::HttpRpc;
+              use monero_simple_request_rpc::SimpleRequestRpc;
+              use monero_wallet::rpc::Rpc;
 
               // Monero's won't, so call get_height
               if handle
-                .block_on(HttpRpc::new(rpc_url.clone()))
+                .block_on(SimpleRequestRpc::new(rpc_url.clone()))
                 .ok()
                 .and_then(|rpc| handle.block_on(rpc.get_height()).ok())
                 .is_some()
@@ -403,25 +404,16 @@ impl Coordinator {
       }
       NetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
-        use monero_serai::{
-          wallet::{
-            ViewPair,
-            address::{Network, AddressSpec},
-          },
-          rpc::HttpRpc,
-        };
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
 
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
-        let _: EmptyResponse = rpc
-          .json_rpc_call(
-            "generateblocks",
-            Some(serde_json::json!({
-              "wallet_address": ViewPair::new(
-                ED25519_BASEPOINT_POINT,
-                Zeroizing::new(Scalar::ONE),
-              ).address(Network::Mainnet, AddressSpec::Standard).to_string(),
-              "amount_of_blocks": 1,
-            })),
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        rpc
+          .generate_blocks(
+            &ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE))
+              .unwrap()
+              .legacy_address(Network::Mainnet),
+            1,
           )
           .await
           .unwrap();
@@ -517,15 +509,19 @@ impl Coordinator {
         }
       }
       NetworkId::Monero => {
-        use monero_serai::rpc::HttpRpc;
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::rpc::Rpc;
 
-        let rpc = HttpRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
         let to = rpc.get_height().await.unwrap();
         for coordinator in others {
-          let other_rpc =
-            HttpRpc::new(network_rpc(coordinator.network, ops, &coordinator.network_handle))
-              .await
-              .expect("couldn't connect to the Monero RPC");
+          let other_rpc = SimpleRequestRpc::new(network_rpc(
+            coordinator.network,
+            ops,
+            &coordinator.network_handle,
+          ))
+          .await
+          .expect("couldn't connect to the Monero RPC");
 
           let from = other_rpc.get_height().await.unwrap();
           for b in from .. to {
@@ -574,10 +570,12 @@ impl Coordinator {
         let _ = provider.send_raw_transaction(tx).await.unwrap();
       }
       NetworkId::Monero => {
-        use monero_serai::{transaction::Transaction, rpc::HttpRpc};
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::{transaction::Transaction, rpc::Rpc};
 
-        let rpc =
-          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url)
+          .await
+          .expect("couldn't connect to the coordinator's Monero RPC");
         rpc.publish_transaction(&Transaction::read(&mut &*tx).unwrap()).await.unwrap();
       }
       NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
@@ -672,10 +670,12 @@ impl Coordinator {
         None
       }
       NetworkId::Monero => {
-        use monero_serai::rpc::HttpRpc;
+        use monero_simple_request_rpc::SimpleRequestRpc;
+        use monero_wallet::rpc::Rpc;
 
-        let rpc =
-          HttpRpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Monero RPC");
+        let rpc = SimpleRequestRpc::new(rpc_url)
+          .await
+          .expect("couldn't connect to the coordinator's Monero RPC");
         let mut hash = [0; 32];
         hash.copy_from_slice(tx);
         if let Ok(tx) = rpc.get_transaction(hash).await {

@@ -7,14 +7,14 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "tests/no-std/**"
 
   pull_request:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coins/**"
+      - "networks/**"
       - "tests/no-std/**"
 
   workflow_dispatch:
@@ -32,4 +32,4 @@ jobs:
         run: sudo apt update && sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib && rustup target add riscv32imac-unknown-none-elf
 
       - name: Verify no-std builds
-        run: cd tests/no-std && CFLAGS=-I/usr/include cargo build --target riscv32imac-unknown-none-elf
+        run: CFLAGS=-I/usr/include cargo build --target riscv32imac-unknown-none-elf -p serai-no-std-tests

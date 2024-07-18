@@ -26,12 +26,13 @@ curve25519-dalek = "4"
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["secp256k1", "ristretto"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
-bitcoin-serai = { path = "../../coins/bitcoin" }
+bitcoin-serai = { path = "../../networks/bitcoin" }
 
 k256 = "0.13"
-ethereum-serai = { path = "../../coins/ethereum" }
+ethereum-serai = { path = "../../networks/ethereum" }
 
-monero-serai = { path = "../../coins/monero" }
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }
+monero-wallet = { path = "../../networks/monero/wallet" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
