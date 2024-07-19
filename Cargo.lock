@@ -8100,7 +8100,7 @@ dependencies = [
  "serai-coins-pallet",
  "serai-dex-pallet",
  "serai-emissions-primitives",
- "serai-genesis-liquidity-primitives",
+ "serai-genesis-liquidity-pallet",
  "serai-primitives",
  "serai-validator-sets-pallet",
  "serai-validator-sets-primitives",

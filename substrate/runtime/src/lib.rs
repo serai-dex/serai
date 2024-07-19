@@ -283,7 +283,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ HOURS / 2 }>; // 30 minutes
+  type EpochDuration = ConstU64<{ MINUTES / 2 }>; // 30 seconds
 
   #[cfg(not(feature = "fast-epoch"))]
   type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;
@@ -331,7 +331,6 @@ construct_runtime!(
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
-    GenesisLiquidity: genesis_liquidity,
 
     ValidatorSets: validator_sets,
     GenesisLiquidity: genesis_liquidity,

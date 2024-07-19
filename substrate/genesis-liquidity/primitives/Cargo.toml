@@ -42,5 +42,4 @@ std = [
 
   "sp-std/std"
 ]
-fast-epoch = []
 default = ["std"]

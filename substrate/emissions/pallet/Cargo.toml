@@ -32,10 +32,10 @@ sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
+genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
-genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../../genesis-liquidity/primitives", default-features = false }
 emissions-primitives = { package = "serai-emissions-primitives", path = "../primitives", default-features = false }
 
 [features]
@@ -52,11 +52,10 @@ std = [
   "coins-pallet/std",
   "validator-sets-pallet/std",
   "dex-pallet/std",
+  "genesis-liquidity-pallet/std",
 
   "serai-primitives/std",
   "emissions-primitives/std",
-  "genesis-liquidity-primitives/std",
 ]
-fast-epoch = ["genesis-liquidity-primitives/fast-epoch"]
 
 default = ["std"]

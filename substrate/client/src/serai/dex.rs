@@ -77,4 +77,8 @@ impl<'a> SeraiDex<'a> {
       .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
     Ok(result.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
   }
+
+  pub async fn oracle_value(&self, coin: Coin) -> Result<Option<Amount>, SeraiError> {
+    self.0.storage(PALLET, "SecurityOracleValue", coin).await
+  }
 }

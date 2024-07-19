@@ -8,7 +8,6 @@ use sc_service::ChainType;
 use serai_runtime::{
   primitives::*, WASM_BINARY, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig,
   CoinsConfig, ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
-  GenesisLiquidityConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -59,7 +58,6 @@ fn devnet_genesis(
         .collect(),
       participants: validators.clone(),
     },
-    genesis_liquidity: GenesisLiquidityConfig { participants: validators.clone() },
     emissions: EmissionsConfig {
       networks: serai_runtime::primitives::NETWORKS
         .iter()
@@ -118,7 +116,6 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
         .collect(),
       participants: validators.clone(),
     },
-    genesis_liquidity: GenesisLiquidityConfig { participants: validators.clone() },
     emissions: EmissionsConfig {
       networks: serai_runtime::primitives::NETWORKS
         .iter()

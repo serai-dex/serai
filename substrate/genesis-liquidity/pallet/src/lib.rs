@@ -72,6 +72,7 @@ pub mod pallet {
   pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
+  #[pallet::getter(fn genesis_complete)]
   pub(crate) type GenesisComplete<T: Config> = StorageValue<_, (), OptionQuery>;
 
   #[pallet::hooks]

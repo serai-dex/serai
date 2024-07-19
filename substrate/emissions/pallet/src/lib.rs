@@ -14,15 +14,19 @@ pub mod pallet {
   use dex_pallet::{Config as DexConfig, Pallet as Dex};
 
   use validator_sets_pallet::{Pallet as ValidatorSets, Config as ValidatorSetsConfig};
+  use genesis_liquidity_pallet::{Pallet as GenesisLiquidity, Config as GenesisLiquidityConfig};
 
-  use serai_primitives::{NetworkId, NETWORKS, *};
+  use serai_primitives::*;
   use validator_sets_primitives::{MAX_KEY_SHARES_PER_SET, Session};
-  use genesis_liquidity_primitives::GENESIS_PERIOD_BLOCKS;
   use emissions_primitives::*;
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = PublicKey> + ValidatorSetsConfig + CoinsConfig + DexConfig
+    frame_system::Config<AccountId = PublicKey>
+    + ValidatorSetsConfig
+    + CoinsConfig
+    + DexConfig
+    + GenesisLiquidityConfig
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -81,6 +85,9 @@ pub mod pallet {
   #[pallet::getter(fn last_swap_volume)]
   pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, NetworkId, u64, OptionQuery>;
 
+  #[pallet::storage]
+  pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
+
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
@@ -101,8 +108,10 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_finalize(n: BlockNumberFor<T>) {
-      // wait 1 extra block to actually see genesis changes
-      let genesis_ended = n >= (GENESIS_PERIOD_BLOCKS + 1).into();
+      let genesis_ended = GenesisLiquidity::<T>::genesis_complete().is_some();
+      if GenesisCompleteBlock::<T>::get().is_none() && genesis_ended {
+        GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
+      }
 
       // we accept we reached economic security once we can mint smallest amount of a network's coin
       for coin in COINS {
@@ -299,7 +308,9 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
-      n >= GENESIS_PERIOD_BLOCKS.into() && n < (3 * GENESIS_PERIOD_BLOCKS).into()
+      let genesis_complete_block = GenesisCompleteBlock::<T>::get();
+      genesis_complete_block.is_some() &&
+        (n.saturated_into::<u64>() < (3 * genesis_complete_block.unwrap()))
     }
 
     /// Returns true if any of the external networks haven't reached economic security yet.
