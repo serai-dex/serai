@@ -23,12 +23,16 @@ zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
 curve25519-dalek = "4"
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["secp256k1", "ristretto"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 
-bitcoin-serai = { path = "../../coins/bitcoin" }
-ethereum-serai = { path = "../../coins/ethereum" }
-monero-serai = { path = "../../coins/monero" }
+bitcoin-serai = { path = "../../networks/bitcoin" }
+
+k256 = "0.13"
+ethereum-serai = { path = "../../networks/ethereum" }
+
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }
+monero-wallet = { path = "../../networks/monero/wallet" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
@@ -43,7 +47,7 @@ serde_json = { version = "1", default-features = false }
 
 tokio = { version = "1", features = ["time"] }
 
-processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
+processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "ethereum", "monero"] }
 
 dockertest = "0.4"
 serai-docker-tests = { path = "../docker" }

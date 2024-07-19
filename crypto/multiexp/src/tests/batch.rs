@@ -9,10 +9,7 @@ use group::Group;
 
 use crate::BatchVerifier;
 
-pub(crate) fn test_batch<G: Group + Zeroize>()
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+pub(crate) fn test_batch<G: Group<Scalar: PrimeFieldBits + Zeroize> + Zeroize>() {
   let valid = |batch: BatchVerifier<_, G>| {
     assert!(batch.verify());
     assert!(batch.verify_vartime());

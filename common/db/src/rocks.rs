@@ -7,6 +7,7 @@ use rocksdb::{
 
 use crate::*;
 
+#[must_use]
 pub struct Transaction<'a, T: ThreadMode>(
   RocksTransaction<'a, OptimisticTransactionDB<T>>,
   &'a OptimisticTransactionDB<T>,

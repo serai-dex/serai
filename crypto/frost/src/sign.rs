@@ -362,9 +362,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
       rho_transcript.append_message(b"message", C::hash_msg(msg));
       rho_transcript.append_message(
         b"preprocesses",
-        &C::hash_commitments(
-          self.params.algorithm.transcript().challenge(b"preprocesses").as_ref(),
-        ),
+        C::hash_commitments(self.params.algorithm.transcript().challenge(b"preprocesses").as_ref()),
       );
 
       // Generate the per-signer binding factors

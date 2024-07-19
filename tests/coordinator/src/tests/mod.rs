@@ -22,6 +22,8 @@ mod sign;
 #[allow(unused_imports)]
 pub use sign::sign;
 
+mod rotation;
+
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
@@ -39,13 +41,15 @@ impl<F: Send + Future, TB: 'static + Send + Sync + Fn(Vec<Processor>) -> F> Test
   }
 }
 
-pub(crate) async fn new_test(test_body: impl TestBody) {
+pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
   let mut unique_id_lock = UNIQUE_ID.get_or_init(|| Mutex::new(0)).lock().await;
 
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let mut coordinator_compositions = vec![];
-  for i in 0 .. COORDINATORS {
+  // Spawn one extra coordinator which isn't in-set
+  #[allow(clippy::range_plus_one)]
+  for i in 0 .. (COORDINATORS + 1) {
     let name = match i {
       0 => "Alice",
       1 => "Bob",
@@ -55,7 +59,7 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
       5 => "Ferdie",
       _ => panic!("needed a 7th name for a serai node"),
     };
-    let serai_composition = serai_composition(name);
+    let serai_composition = serai_composition(name, fast_epoch);
 
     let (processor_key, message_queue_keys, message_queue_composition) =
       serai_message_queue_tests::instance();

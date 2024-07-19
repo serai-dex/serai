@@ -19,4 +19,4 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Full Stack Docker tests
-        run: cd tests/full-stack && GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features
+        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-full-stack-tests

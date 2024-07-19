@@ -53,11 +53,11 @@ pub(crate) struct Aos<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const 
   s: [(G0::Scalar, G1::Scalar); RING_LEN],
 }
 
-impl<G0: PrimeGroup + Zeroize, G1: PrimeGroup + Zeroize, const RING_LEN: usize>
-  Aos<G0, G1, RING_LEN>
-where
-  G0::Scalar: PrimeFieldBits + Zeroize,
-  G1::Scalar: PrimeFieldBits + Zeroize,
+impl<
+    G0: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
+    G1: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize,
+    const RING_LEN: usize,
+  > Aos<G0, G1, RING_LEN>
 {
   #[allow(non_snake_case)]
   fn nonces<T: Transcript>(mut transcript: T, nonces: (G0, G1)) -> (G0::Scalar, G1::Scalar) {

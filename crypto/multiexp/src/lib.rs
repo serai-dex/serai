@@ -49,10 +49,10 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
 
 // Convert scalars to `window`-sized bit groups, as needed to index a table
 // This algorithm works for `window <= 8`
-pub(crate) fn prep_bits<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<u8>>
-where
-  G::Scalar: PrimeFieldBits,
-{
+pub(crate) fn prep_bits<G: Group<Scalar: PrimeFieldBits>>(
+  pairs: &[(G::Scalar, G)],
+  window: u8,
+) -> Vec<Vec<u8>> {
   let w_usize = usize::from(window);
 
   let mut groupings = vec![];
@@ -175,10 +175,7 @@ fn algorithm(len: usize) -> Algorithm {
 
 /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
 /// amount of pairs.
-pub fn multiexp<G: Group>(pairs: &[(G::Scalar, G)]) -> G
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+pub fn multiexp<G: Group<Scalar: PrimeFieldBits + Zeroize>>(pairs: &[(G::Scalar, G)]) -> G {
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,
@@ -190,10 +187,7 @@ where
 
 /// Performs a multiexponentiation in variable time, automatically selecting the optimal algorithm
 /// based on the amount of pairs.
-pub fn multiexp_vartime<G: Group>(pairs: &[(G::Scalar, G)]) -> G
-where
-  G::Scalar: PrimeFieldBits,
-{
+pub fn multiexp_vartime<G: Group<Scalar: PrimeFieldBits>>(pairs: &[(G::Scalar, G)]) -> G {
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,

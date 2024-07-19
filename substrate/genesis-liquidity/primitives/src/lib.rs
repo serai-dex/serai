@@ -18,34 +18,37 @@ use scale_info::TypeInfo;
 use serai_primitives::*;
 use validator_sets_primitives::ValidatorSet;
 
-// amount of blocks in 30 days for 6s per block.
-#[cfg(not(feature = "fast-epoch"))]
-pub const GENESIS_PERIOD_BLOCKS: u32 = 10 * 60 * 24 * 30;
-
-#[cfg(feature = "fast-epoch")]
-pub const GENESIS_PERIOD_BLOCKS: u32 = 25;
-
-/// 180 days of blocks
-pub const GENESIS_SRI_TRICKLE_FEED: u64 = 10 * 60 * 24 * 180;
-
-// 100 Million SRI
-pub const GENESIS_SRI: u64 = 100_000_000 * 10_u64.pow(8);
+pub const INITIAL_GENESIS_LP_SHARES: u64 = 10_000;
 
 // This is the account to hold and manage the genesis liquidity.
-pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"Genesis-liquidity-account");
+pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"GenesisLiquidity-account");
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Prices {
-  pub bitcoin: u64,
+pub struct Values {
   pub monero: u64,
-  pub ethereum: u64,
+  pub ether: u64,
   pub dai: u64,
 }
 
-/// The message for the set_initial_price signature.
-pub fn set_initial_price_message(set: &ValidatorSet, prices: &Prices) -> Vec<u8> {
-  (b"GenesisLiquidity-set_initial_price", set, prices).encode()
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct LiquidityAmount {
+  pub shares: u64,
+  pub coins: u64,
+}
+
+impl LiquidityAmount {
+  pub fn zero() -> Self {
+    LiquidityAmount { shares: 0, coins: 0 }
+  }
+}
+
+/// The message for the oraclize_values signature.
+pub fn oraclize_values_message(set: &ValidatorSet, values: &Values) -> Vec<u8> {
+  (b"GenesisLiquidity-oraclize_values", set, values).encode()
 }

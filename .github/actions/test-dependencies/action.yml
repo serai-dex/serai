@@ -10,7 +10,7 @@ inputs:
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
     required: false
-    default: "27.0"
+    default: "27.1"
 
 runs:
   using: "composite"

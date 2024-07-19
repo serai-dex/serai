@@ -279,14 +279,14 @@ impl<N: Network, D: Db> ScannerHandle<N, D> {
     activation_number: usize,
     key: <N::Curve as Ciphersuite>::G,
   ) {
+    info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
+
     let mut scanner_lock = self.scanner.write().await;
     let scanner = scanner_lock.as_mut().unwrap();
     assert!(
       activation_number > scanner.ram_scanned.unwrap_or(0),
       "activation block of new keys was already scanned",
     );
-
-    info!("Registering key {} in scanner at {activation_number}", hex::encode(key.to_bytes()));
 
     if scanner.keys.is_empty() {
       assert!(scanner.ram_scanned.is_none());

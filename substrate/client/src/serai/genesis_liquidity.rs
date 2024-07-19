@@ -1,5 +1,5 @@
 pub use serai_abi::genesis_liquidity::primitives;
-use primitives::Prices;
+use primitives::{Values, LiquidityAmount};
 
 use serai_abi::primitives::*;
 
@@ -29,27 +29,9 @@ impl<'a> SeraiGenesisLiquidity<'a> {
       .await
   }
 
-  pub async fn liquidity_tokens(
-    &self,
-    address: &SeraiAddress,
-    coin: Coin,
-  ) -> Result<Amount, SeraiError> {
-    Ok(
-      self
-        .0
-        .storage(
-          PALLET,
-          "LiquidityTokensPerAddress",
-          (coin, sp_core::hashing::blake2_128(&address.encode()), &address.0),
-        )
-        .await?
-        .unwrap_or(Amount(0)),
-    )
-  }
-
-  pub fn set_initial_price(prices: Prices, signature: Signature) -> Transaction {
+  pub fn oraclize_values(values: Values, signature: Signature) -> Transaction {
     Serai::unsigned(serai_abi::Call::GenesisLiquidity(
-      serai_abi::genesis_liquidity::Call::set_initial_price { prices, signature },
+      serai_abi::genesis_liquidity::Call::oraclize_values { values, signature },
     ))
   }
 
@@ -59,15 +41,25 @@ impl<'a> SeraiGenesisLiquidity<'a> {
     })
   }
 
-  pub async fn liquidity(&self, address: &SeraiAddress, coin: Coin) -> Option<Amount> {
-    self
-      .0
-      .storage(
-        PALLET,
-        "Liquidity",
-        (coin, sp_core::hashing::blake2_128(&address.encode()), &address.0),
-      )
-      .await
-      .unwrap()
+  pub async fn liquidity(
+    &self,
+    address: &SeraiAddress,
+    coin: Coin,
+  ) -> Result<LiquidityAmount, SeraiError> {
+    Ok(
+      self
+        .0
+        .storage(
+          PALLET,
+          "Liquidity",
+          (coin, sp_core::hashing::blake2_128(&address.encode()), &address.0),
+        )
+        .await?
+        .unwrap_or(LiquidityAmount::zero()),
+    )
+  }
+
+  pub async fn supply(&self, coin: Coin) -> Result<LiquidityAmount, SeraiError> {
+    Ok(self.0.storage(PALLET, "Supply", coin).await?.unwrap_or(LiquidityAmount::zero()))
   }
 }

@@ -49,7 +49,11 @@ use sp_runtime::{
   BoundedVec, Perbill, ApplyExtrinsicResult,
 };
 
-use primitives::{NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS};
+#[allow(unused_imports)]
+use primitives::{
+  NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS, MEDIAN_PRICE_WINDOW_LENGTH,
+  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
+};
 
 use support::{
   traits::{ConstU8, ConstU16, ConstU32, ConstU64, Contains},
@@ -65,6 +69,8 @@ use validator_sets::MembershipProof;
 use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
+
+mod abi;
 
 /// Nonce of a transaction in the chain, for a given account.
 pub type Nonce = u32;
@@ -83,7 +89,7 @@ pub type SignedExtra = (
   transaction_payment::ChargeTransactionPayment<Runtime>,
 );
 
-pub type Transaction = serai_primitives::Transaction<RuntimeCall, SignedExtra>;
+pub type Transaction = serai_abi::tx::Transaction<RuntimeCall, SignedExtra>;
 pub type Block = generic::Block<Header, Transaction>;
 pub type BlockId = generic::BlockId<Block>;
 
@@ -114,28 +120,7 @@ pub fn native_version() -> NativeVersion {
   NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
 }
 
-// 1 MB
-pub const BLOCK_SIZE: u32 = 1024 * 1024;
-// 6 seconds
-pub const TARGET_BLOCK_TIME: u64 = 6;
-
-/// Measured in blocks.
-pub const MINUTES: BlockNumber = 60 / TARGET_BLOCK_TIME;
-pub const HOURS: BlockNumber = MINUTES * 60;
-pub const DAYS: BlockNumber = HOURS * 24;
-
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
-
-/// This needs to be long enough for arbitrage to occur and make holding any fake price up
-/// sufficiently unrealistic.
-#[allow(clippy::cast_possible_truncation)]
-pub const ARBITRAGE_TIME: u16 = (2 * HOURS) as u16;
-
-/// Since we use the median price, double the window length.
-///
-/// We additionally +1 so there is a true median.
-pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = (2 * ARBITRAGE_TIME) + 1;
-
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
     c: PRIMARY_PROBABILITY,
@@ -163,38 +148,9 @@ parameter_types! {
 pub struct CallFilter;
 impl Contains<RuntimeCall> for CallFilter {
   fn contains(call: &RuntimeCall) -> bool {
-    match call {
-      RuntimeCall::Timestamp(call) => match call {
-        timestamp::Call::set { .. } => true,
-        timestamp::Call::__Ignore(_, _) => false,
-      },
-
-      // All of these pallets are our own, and all of their written calls are intended to be called
-      RuntimeCall::Coins(call) => !matches!(call, coins::Call::__Ignore(_, _)),
-      RuntimeCall::LiquidityTokens(call) => match call {
-        coins::Call::transfer { .. } | coins::Call::burn { .. } => true,
-        coins::Call::burn_with_instruction { .. } | coins::Call::__Ignore(_, _) => false,
-      },
-      RuntimeCall::Dex(call) => !matches!(call, dex::Call::__Ignore(_, _)),
-      RuntimeCall::ValidatorSets(call) => !matches!(call, validator_sets::Call::__Ignore(_, _)),
-      RuntimeCall::GenesisLiquidity(call) => {
-        !matches!(call, genesis_liquidity::Call::__Ignore(_, _))
-      }
-      RuntimeCall::InInstructions(call) => !matches!(call, in_instructions::Call::__Ignore(_, _)),
-      RuntimeCall::Signals(call) => !matches!(call, signals::Call::__Ignore(_, _)),
-
-      RuntimeCall::Babe(call) => match call {
-        babe::Call::report_equivocation { .. } |
-        babe::Call::report_equivocation_unsigned { .. } => true,
-        babe::Call::plan_config_change { .. } | babe::Call::__Ignore(_, _) => false,
-      },
-
-      RuntimeCall::Grandpa(call) => match call {
-        grandpa::Call::report_equivocation { .. } |
-        grandpa::Call::report_equivocation_unsigned { .. } => true,
-        grandpa::Call::note_stalled { .. } | grandpa::Call::__Ignore(_, _) => false,
-      },
-    }
+    // If the call is defined in our ABI, it's allowed
+    let call: Result<serai_abi::Call, ()> = call.clone().try_into();
+    call.is_ok()
   }
 }
 
@@ -375,6 +331,7 @@ construct_runtime!(
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
+    GenesisLiquidity: genesis_liquidity,
 
     ValidatorSets: validator_sets,
     GenesisLiquidity: genesis_liquidity,

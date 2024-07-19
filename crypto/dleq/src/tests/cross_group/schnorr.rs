@@ -14,10 +14,7 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use crate::cross_group::schnorr::SchnorrPoK;
 
-fn test_schnorr<G: PrimeGroup + Zeroize>()
-where
-  G::Scalar: PrimeFieldBits + Zeroize,
-{
+fn test_schnorr<G: PrimeGroup<Scalar: PrimeFieldBits + Zeroize> + Zeroize>() {
   let transcript = RecommendedTranscript::new(b"Schnorr Test");
 
   let mut batch = BatchVerifier::new(10);

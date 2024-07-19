@@ -10,7 +10,7 @@ integrating with existing systems.
 
 This library offers ciphersuites compatible with the
 [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
-11 is supported.
+15 is supported.
 
 This library was
 [audited by Cypher Stack in March 2023](https://github.com/serai-dex/serai/raw/e1bb2c191b7123fd260d008e31656d090d559d21/audits/Cypher%20Stack%20crypto%20March%202023/Audit.pdf),

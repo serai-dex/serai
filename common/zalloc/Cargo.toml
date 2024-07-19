@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.77.0"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -19,8 +19,10 @@ workspace = true
 [dependencies]
 zeroize = { version = "^1.5", default-features = false }
 
+[build-dependencies]
+rustversion = { version = "1", default-features = false }
+
 [features]
 std = ["zeroize/std"]
 default = ["std"]
-# Commented for now as it requires nightly and we don't use nightly
-# allocator = []
+allocator = []

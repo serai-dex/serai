@@ -31,7 +31,7 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
     keys
   } else {
     let keys = KeyPair(pair.public(), vec![].try_into().unwrap());
-    set_keys(serai, set, keys.clone()).await;
+    set_keys(serai, set, keys.clone(), &[insecure_pair_from_name("Alice")]).await;
     keys
   };
   assert_eq!(keys.0, pair.public());

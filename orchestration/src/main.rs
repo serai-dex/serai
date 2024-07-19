@@ -29,8 +29,11 @@ use ciphersuite::{
 mod mimalloc;
 use mimalloc::mimalloc;
 
-mod coins;
-use coins::*;
+mod networks;
+use networks::*;
+
+mod ethereum_relayer;
+use ethereum_relayer::ethereum_relayer;
 
 mod message_queue;
 use message_queue::message_queue;
@@ -137,13 +140,13 @@ WORKDIR /home/{user}
   }
 }
 
-fn build_serai_service(release: bool, features: &str, package: &str) -> String {
+fn build_serai_service(prelude: &str, release: bool, features: &str, package: &str) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
   format!(
     r#"
-FROM rust:1.77-slim-bookworm as builder
+FROM rust:1.79-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -159,11 +162,13 @@ RUN apt install -y make protobuf-compiler
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
 
+{prelude}
+
 # Add files for build
 ADD patches /serai/patches
 ADD common /serai/common
 ADD crypto /serai/crypto
-ADD coins /serai/coins
+ADD networks /serai/networks
 ADD message-queue /serai/message-queue
 ADD processor /serai/processor
 ADD coordinator /serai/coordinator
@@ -278,6 +283,8 @@ fn dockerfiles(network: Network) {
   let ethereum_key = infrastructure_keys.remove("ethereum").unwrap();
   let monero_key = infrastructure_keys.remove("monero").unwrap();
 
+  ethereum_relayer(&orchestration_path, network);
+
   message_queue(
     &orchestration_path,
     network,
@@ -361,6 +368,7 @@ fn start(network: Network, services: HashSet<String>) {
     let name = match service.as_ref() {
       "serai" => "serai",
       "coordinator" => "coordinator",
+      "ethereum-relayer" => "ethereum-relayer",
       "message-queue" => "message-queue",
       "bitcoin-daemon" => "bitcoin",
       "bitcoin-processor" => "bitcoin-processor",
@@ -374,23 +382,17 @@ fn start(network: Network, services: HashSet<String>) {
     let serai_runtime_volume = format!("serai-{}-runtime-volume", network.label());
     if name == "serai" {
       // Check if it's built by checking if the volume has the expected runtime file
+      let wasm_build_container_name = format!("serai-{}-runtime", network.label());
       let built = || {
-        if let Ok(path) = Command::new("docker")
-          .arg("volume")
+        if let Ok(state_and_status) = Command::new("docker")
           .arg("inspect")
           .arg("-f")
-          .arg("{{ .Mountpoint }}")
-          .arg(&serai_runtime_volume)
+          .arg("{{.State.Status}}:{{.State.ExitCode}}")
+          .arg(&wasm_build_container_name)
           .output()
         {
-          if let Ok(path) = String::from_utf8(path.stdout) {
-            if let Ok(iter) = std::fs::read_dir(PathBuf::from(path.trim())) {
-              for item in iter.flatten() {
-                if item.file_name() == "serai.wasm" {
-                  return true;
-                }
-              }
-            }
+          if let Ok(state_and_status) = String::from_utf8(state_and_status.stdout) {
+            return state_and_status.trim() == "exited:0";
           }
         }
         false
@@ -493,6 +495,10 @@ fn start(network: Network, services: HashSet<String>) {
             command
           }
         }
+        "ethereum-relayer" => {
+          // Expose the router command fetch server
+          command.arg("-p").arg("20831:20831")
+        }
         "monero" => {
           // Expose the RPC for tests
           if network == Network::Dev {
@@ -559,6 +565,9 @@ Commands:
     - `message-queue`
     - `bitcoin-daemon`
     - `bitcoin-processor`
+    - `ethereum-daemon`
+    - `ethereum-processor`
+    - `ethereum-relayer`
     - `monero-daemon`
     - `monero-processor`
     - `monero-wallet-rpc` (if "dev")
@@ -591,6 +600,9 @@ Commands:
     Some("start") => {
       let mut services = HashSet::new();
       for arg in args {
+        if arg == "ethereum-processor" {
+          services.insert("ethereum-relayer".to_string());
+        }
         if let Some(ext_network) = arg.strip_suffix("-processor") {
           services.insert(ext_network.to_string() + "-daemon");
         }
