@@ -1,0 +1,23 @@
+[package]
+name = "generalized-bulletproofs-ec-gadgets"
+version = "0.1.0"
+description = "Gadgets for working with an embedded Elliptic Curve in a Generalized Bulletproofs circuit"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/ec-gadgets"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["bulletproofs", "circuit", "divisors"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+
+generic-array = { version = "1", default-features = false, features = ["alloc"] }
+
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
+
+generalized-bulletproofs = { path = "../generalized-bulletproofs" }
+generalized-bulletproofs-circuit-abstraction = { path = "../circuit-abstraction" }

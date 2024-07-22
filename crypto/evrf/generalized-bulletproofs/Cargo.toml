@@ -1,0 +1,33 @@
+[package]
+name = "generalized-bulletproofs"
+version = "0.1.0"
+description = "Generalized Bulletproofs"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/generalized-bulletproofs"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ciphersuite", "ff", "group"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
+
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+
+multiexp = { path = "../../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+transcript = { package = "flexible-transcript", path = "../../transcript", features = ["recommended"] }
+
+ciphersuite = { path = "../../ciphersuite", features = ["ristretto"] }
+
+[features]
+tests = []

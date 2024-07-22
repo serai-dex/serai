@@ -30,9 +30,14 @@ members = [
   "crypto/ciphersuite",
 
   "crypto/multiexp",
-
   "crypto/schnorr",
   "crypto/dleq",
+
+  "crypto/evrf/generalized-bulletproofs",
+  "crypto/evrf/circuit-abstraction",
+  "crypto/evrf/divisors",
+  "crypto/evrf/ec-gadgets",
+
   "crypto/dkg",
   "crypto/frost",
   "crypto/schnorrkel",
