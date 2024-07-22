@@ -7902,6 +7902,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "secq256k1"
+version = "0.1.0"
+dependencies = [
+ "crypto-bigint",
+ "ec-divisors",
+ "ff",
+ "ff-group-tests",
+ "generic-array 0.14.7",
+ "group",
+ "hex",
+ "hex-literal",
+ "k256",
+ "rand_core",
+ "rustversion",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "secrecy"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

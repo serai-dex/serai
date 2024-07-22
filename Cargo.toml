@@ -33,6 +33,7 @@ members = [
   "crypto/schnorr",
   "crypto/dleq",
 
+  "crypto/evrf/secq256k1",
   "crypto/evrf/generalized-bulletproofs",
   "crypto/evrf/circuit-abstraction",
   "crypto/evrf/divisors",
