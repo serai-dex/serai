@@ -180,6 +180,48 @@ pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement
   Some(divs.remove(0).1)
 }
 
+#[cfg(any(test, feature = "pasta"))]
+mod pasta {
+  use group::{ff::Field, Curve};
+  use pasta_curves::{
+    arithmetic::{Coordinates, CurveAffine},
+    Ep, Fp, Eq, Fq,
+  };
+  use crate::DivisorCurve;
+
+  impl DivisorCurve for Ep {
+    type FieldElement = Fp;
+
+    fn a() -> Self::FieldElement {
+      Self::FieldElement::ZERO
+    }
+    fn b() -> Self::FieldElement {
+      Self::FieldElement::from(5u64)
+    }
+
+    fn to_xy(point: Self) -> Option<(Self::FieldElement, Self::FieldElement)> {
+      Option::<Coordinates<_>>::from(point.to_affine().coordinates())
+        .map(|coords| (*coords.x(), *coords.y()))
+    }
+  }
+
+  impl DivisorCurve for Eq {
+    type FieldElement = Fq;
+
+    fn a() -> Self::FieldElement {
+      Self::FieldElement::ZERO
+    }
+    fn b() -> Self::FieldElement {
+      Self::FieldElement::from(5u64)
+    }
+
+    fn to_xy(point: Self) -> Option<(Self::FieldElement, Self::FieldElement)> {
+      Option::<Coordinates<_>>::from(point.to_affine().coordinates())
+        .map(|coords| (*coords.x(), *coords.y()))
+    }
+  }
+}
+
 #[cfg(any(test, feature = "ed25519"))]
 mod ed25519 {
   use group::{

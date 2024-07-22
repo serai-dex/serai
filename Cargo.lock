@@ -2437,7 +2437,7 @@ dependencies = [
  "generalized-bulletproofs-circuit-abstraction",
  "generalized-bulletproofs-ec-gadgets",
  "generic-array 1.1.0",
- "multiexp",
+ "pasta_curves",
  "rand_chacha",
  "rand_core",
  "subtle",
@@ -5762,8 +5762,7 @@ dependencies = [
 [[package]]
 name = "pasta_curves"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
+source = "git+https://github.com/kayabaNerve/pasta_curves?rev=a46b5be95cacbff54d06aad8d3bbcba42e05d616#a46b5be95cacbff54d06aad8d3bbcba42e05d616"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -5772,6 +5771,7 @@ dependencies = [
  "rand",
  "static_assertions",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]

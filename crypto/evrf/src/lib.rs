@@ -6,6 +6,7 @@ use rand_chacha::ChaCha20Rng;
 
 use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
 
+use blake2::{Digest, Blake2s256};
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField, PrimeFieldBits},
@@ -24,6 +25,9 @@ use generalized_bulletproofs_circuit_abstraction::*;
 use ec_divisors::{DivisorCurve, new_divisor};
 use generalized_bulletproofs_ec_gadgets::*;
 
+#[cfg(test)]
+mod tests;
+
 /// A curve to perform the eVRF with.
 pub trait EvrfCurve: Ciphersuite {
   type EmbeddedCurve: Ciphersuite;
@@ -39,7 +43,7 @@ pub struct EvrfProveResult<C: Ciphersuite> {
 /// A struct to prove/verify eVRFs with.
 pub struct Evrf;
 impl Evrf {
-  fn seed_to_points<C: Ciphersuite>(seed: [u8; 32], quantity: usize) -> Vec<C::G> {
+  fn transcript_to_points<C: Ciphersuite>(seed: [u8; 32], quantity: usize) -> Vec<C::G> {
     // We need to do two Diffie-Hellman's per point in order to achieve an unbiased result
     let quantity = 2 * quantity;
 
@@ -58,7 +62,7 @@ impl Evrf {
   fn point_with_dlogs<Parameters: DiscreteLogParameters>(
     quantity: usize,
     generators_to_use: usize,
-) -> Vec<PointWithDlog<Parameters>> {
+  ) -> Vec<PointWithDlog<Parameters>> {
     let quantity = 2 * quantity;
 
     fn read_one_from_tape(generators_to_use: usize, start: &mut usize) -> Variable {
@@ -91,8 +95,8 @@ impl Evrf {
 
     let dlog = read_from_tape(generators_to_use, &mut start);
 
-    let mut res = Vec::with_capacity(quantity);
-    for _ in 0 .. quantity {
+    let mut res = Vec::with_capacity(quantity + 1);
+    let mut read_point_with_dlog = || {
       let zero = read_one_from_tape(generators_to_use, &mut start);
       let x_from_power_of_2 = read_from_tape(generators_to_use, &mut start);
       let yx = read_from_tape(generators_to_use, &mut start);
@@ -105,7 +109,14 @@ impl Evrf {
       );
 
       res.push(PointWithDlog { dlog: dlog.clone(), divisor, point });
+    };
+
+    for _ in 0 .. quantity {
+      // One for each DH proven
+      read_point_with_dlog();
     }
+    // And one more for the proof this is the discrete log of the public key
+    read_point_with_dlog();
     res
   }
 
@@ -175,7 +186,7 @@ impl Evrf {
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
     evrf_private_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
-    seed: [u8; 32],
+    invocation: [u8; 32],
     quantity: usize,
   ) -> Result<EvrfProveResult<C>, AcError>
   where
@@ -187,7 +198,19 @@ impl Evrf {
       b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
     };
 
-    let points = Self::seed_to_points::<C::EmbeddedCurve>(seed, quantity);
+    // Combine the invocation and the public key into a transcript
+    let transcript = Blake2s256::digest(
+      [
+        invocation.as_slice(),
+        (<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key)
+          .to_bytes()
+          .as_ref(),
+      ]
+      .concat(),
+    )
+    .into();
+
+    let points = Self::transcript_to_points::<C::EmbeddedCurve>(transcript, quantity);
 
     let num_bits: u32 = <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS;
 
@@ -217,6 +240,8 @@ impl Evrf {
       // The value of this highest coefficient, and the coefficient prior to it
       let mut h_value = dlog[h as usize];
       let mut h_prior_value = dlog[(h as usize) - 1];
+
+      // TODO: Squash the following two loops by iterating from the top bit to the bottom bit
 
       let mut prior_scalar = dlog[(h as usize) - 1];
       for (i, scalar) in dlog.iter().enumerate().skip(h as usize) {
@@ -367,7 +392,7 @@ impl Evrf {
       commitments.push(PedersenCommitment { value: **scalar, mask: C::F::random(&mut *rng) });
     }
 
-    let mut transcript = ProverTranscript::new(seed);
+    let mut transcript = ProverTranscript::new(transcript);
     let commited_commitments = transcript.write_commitments(
       vector_commitments
         .iter()
@@ -383,7 +408,7 @@ impl Evrf {
         .collect(),
     );
 
-    let mut circuit = Circuit::prove(vector_commitments, commitments);
+    let mut circuit = Circuit::prove(vector_commitments, commitments.clone());
     Self::circuit::<C>(
       &curve_spec,
       evrf_public_key,
@@ -402,7 +427,32 @@ impl Evrf {
     else {
       panic!("proving yet wasn't yielded the witness");
     };
-    statement.prove(rng, &mut transcript, witness).unwrap();
+    statement.prove(&mut *rng, &mut transcript, witness).unwrap();
+
+    // Push the reveal onto the transcript
+    for scalar in &scalars {
+      transcript.push_point(generators.g() * **scalar);
+    }
+
+    // Define a weight to aggregate the commitments with
+    let mut agg_weights = Vec::with_capacity(quantity);
+    agg_weights.push(C::F::ONE);
+    while agg_weights.len() < quantity {
+      agg_weights.push(transcript.challenge::<C::F>());
+    }
+    let mut x = commitments
+      .iter()
+      .zip(&agg_weights)
+      .map(|(commitment, weight)| commitment.mask * *weight)
+      .sum::<C::F>();
+
+    // Do a Schnorr PoK for the randomness of the aggregated Pedersen commitment
+    let mut r = C::F::random(&mut *rng);
+    transcript.push_point(generators.h() * r);
+    let c = transcript.challenge::<C::F>();
+    transcript.push_scalar(r + (c * x));
+    r.zeroize();
+    x.zeroize();
 
     Ok(EvrfProveResult { scalars, proof: transcript.complete() })
   }
@@ -414,7 +464,7 @@ impl Evrf {
     generators: &Generators<C>,
     verifier: &mut BatchVerifier<C>,
     evrf_public_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
-    seed: [u8; 32],
+    invocation: [u8; 32],
     quantity: usize,
     proof: &[u8],
   ) -> Result<Vec<C::G>, ()>
@@ -427,7 +477,11 @@ impl Evrf {
       b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
     };
 
-    let points = Self::seed_to_points::<C::EmbeddedCurve>(seed, quantity);
+    let transcript =
+      Blake2s256::digest([invocation.as_slice(), evrf_public_key.to_bytes().as_ref()].concat())
+        .into();
+
+    let points = Self::transcript_to_points::<C::EmbeddedCurve>(transcript, quantity);
     let mut generator_tables = Vec::with_capacity(1 + (2 * quantity));
 
     for generator in points {
@@ -443,14 +497,19 @@ impl Evrf {
 
     let (_, generators_to_use) = Self::muls_and_generators_to_use(quantity);
 
-    let mut transcript = VerifierTranscript::new(seed, proof);
+    let mut transcript = VerifierTranscript::new(transcript, proof);
 
-    let divisor_len = 1 + <C::EmbeddedCurveParameters as DiscreteLogParameters>::XCoefficientsMinusOne::USIZE + <C::EmbeddedCurveParameters as DiscreteLogParameters>::YxCoefficients::USIZE + 1;
-    let dlog_len = divisor_len + 2;
-    let vcs =
-      (<C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits::USIZE + ((1 + (2 * quantity)) * dlog_len)) / (2 * generators_to_use);
+    let divisor_len = 1 +
+      <C::EmbeddedCurveParameters as DiscreteLogParameters>::XCoefficientsMinusOne::USIZE +
+      <C::EmbeddedCurveParameters as DiscreteLogParameters>::YxCoefficients::USIZE +
+      1;
+    let dlog_proof_len = divisor_len + 2;
+    let vcs = (<C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits::USIZE +
+      ((1 + (2 * quantity)) * dlog_proof_len))
+      .div_ceil(2 * generators_to_use);
 
-    let commitments = transcript.read_commitments(vcs, quantity).map_err(|_| ())?;
+    let all_commitments = transcript.read_commitments(vcs, quantity).map_err(|_| ())?;
+    let commitments = all_commitments.V().to_vec();
 
     let mut circuit = Circuit::verify();
     Self::circuit::<C>(
@@ -464,14 +523,46 @@ impl Evrf {
     );
 
     let (statement, None) =
-      circuit.statement(generators.reduce(generators_to_use).ok_or(())?, commitments).unwrap()
+      circuit.statement(generators.reduce(generators_to_use).ok_or(())?, all_commitments).unwrap()
     else {
       panic!("verifying yet was yielded a witness");
     };
 
     statement.verify(rng, verifier, &mut transcript).map_err(|_| ())?;
 
-    // TODO: Unblinded PCs
-    Ok(vec![])
+    // Read the unblinded public keys
+    let mut res = Vec::with_capacity(quantity);
+    for _ in 0 .. quantity {
+      res.push(transcript.read_point::<C>().map_err(|_| ())?);
+    }
+
+    let mut agg_weights = Vec::with_capacity(quantity);
+    agg_weights.push(C::F::ONE);
+    while agg_weights.len() < quantity {
+      agg_weights.push(transcript.challenge::<C::F>());
+    }
+
+    let sum_points =
+      res.iter().zip(&agg_weights).map(|(point, weight)| *point * *weight).sum::<C::G>();
+    let sum_commitments =
+      commitments.into_iter().zip(agg_weights).map(|(point, weight)| point * weight).sum::<C::G>();
+    #[allow(non_snake_case)]
+    let A = sum_commitments - sum_points;
+
+    #[allow(non_snake_case)]
+    let R = transcript.read_point::<C>().map_err(|_| ())?;
+    let c = transcript.challenge::<C::F>();
+    let s = transcript.read_scalar::<C>().map_err(|_| ())?;
+
+    // Doesn't batch verify this as we can't access the internals of the GBP batch verifier
+    if (R + (A * c)) != (generators.h() * s) {
+      Err(())?;
+    }
+
+    if !transcript.complete().is_empty() {
+      Err(())?
+    };
+
+    Ok(res)
   }
 }

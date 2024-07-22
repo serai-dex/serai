@@ -20,6 +20,7 @@ group = "0.13"
 
 hex = { version = "0.4", optional = true }
 dalek-ff-group = { path = "../../dalek-ff-group", features = ["std"], optional = true }
+pasta_curves = { version = "0.5", default-features = false, features = ["bits", "alloc"], optional = true }
 
 [dev-dependencies]
 rand_core = { version = "0.6", features = ["getrandom"] }
@@ -30,3 +31,4 @@ pasta_curves = { version = "0.5", default-features = false, features = ["bits", 
 
 [features]
 ed25519 = ["hex", "dalek-ff-group"]
+pasta = ["pasta_curves"]

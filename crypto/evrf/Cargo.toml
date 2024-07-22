@@ -22,11 +22,14 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 generic-array = { version = "1", default-features = false, features = ["alloc"] }
 
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
-
-multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
 
 ec-divisors = { path = "./divisors" }
 generalized-bulletproofs = { path = "./generalized-bulletproofs" }
 generalized-bulletproofs-circuit-abstraction = { path = "./circuit-abstraction" }
 generalized-bulletproofs-ec-gadgets = { path = "./ec-gadgets" }
+
+[dev-dependencies]
+generalized-bulletproofs = { path = "./generalized-bulletproofs", features = ["tests"] }
+ec-divisors = { path = "./divisors", features = ["pasta"] }
+pasta_curves = "0.5"

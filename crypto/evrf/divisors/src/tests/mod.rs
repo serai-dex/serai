@@ -1,29 +1,10 @@
 use rand_core::OsRng;
 
-use group::{ff::Field, Group, Curve};
+use group::{ff::Field, Group};
 use dalek_ff_group::EdwardsPoint;
-use pasta_curves::{
-  arithmetic::{Coordinates, CurveAffine},
-  Ep, Fp,
-};
+use pasta_curves::{Ep, Eq};
 
 use crate::{DivisorCurve, Poly, new_divisor};
-
-impl DivisorCurve for Ep {
-  type FieldElement = Fp;
-
-  fn a() -> Self::FieldElement {
-    Self::FieldElement::ZERO
-  }
-  fn b() -> Self::FieldElement {
-    Self::FieldElement::from(5u64)
-  }
-
-  fn to_xy(point: Self) -> Option<(Self::FieldElement, Self::FieldElement)> {
-    Option::<Coordinates<_>>::from(point.to_affine().coordinates())
-      .map(|coords| (*coords.x(), *coords.y()))
-  }
-}
 
 // Equation 4 in the security proofs
 fn check_divisor<C: DivisorCurve>(points: Vec<C>) {
@@ -206,6 +187,13 @@ fn test_divisor_pallas() {
   test_divisor::<Ep>();
   test_same_point::<Ep>();
   test_subset_sum_to_infinity::<Ep>();
+}
+
+#[test]
+fn test_divisor_vesta() {
+  test_divisor::<Eq>();
+  test_same_point::<Eq>();
+  test_subset_sum_to_infinity::<Eq>();
 }
 
 #[test]

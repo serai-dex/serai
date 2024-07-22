@@ -14,6 +14,10 @@ const POINT: u8 = 1;
 const CHALLENGE: u8 = 2;
 
 fn challenge<F: PrimeField>(digest: &mut Blake2b512) -> F {
+  // Panic if this is such a wide field, we won't successfully perform a reduction into an unbiased
+  // scalar
+  debug_assert!((F::NUM_BITS + 128) < 512);
+
   digest.update([CHALLENGE]);
   let chl = digest.clone().finalize();
 
@@ -78,14 +82,16 @@ impl Transcript {
     Self { digest, transcript: Vec::with_capacity(1024) }
   }
 
-  pub(crate) fn push_scalar(&mut self, scalar: impl PrimeField) {
+  /// Push a scalar onto the transcript.
+  pub fn push_scalar(&mut self, scalar: impl PrimeField) {
     self.digest.update([SCALAR]);
     let bytes = scalar.to_repr();
     self.digest.update(bytes);
     self.transcript.extend(bytes.as_ref());
   }
 
-  pub(crate) fn push_point(&mut self, point: impl GroupEncoding) {
+  /// Push a point onto the transcript.
+  pub fn push_point(&mut self, point: impl GroupEncoding) {
     self.digest.update([POINT]);
     let bytes = point.to_bytes();
     self.digest.update(bytes);
@@ -132,7 +138,8 @@ impl<'a> VerifierTranscript<'a> {
     Self { digest, transcript: proof }
   }
 
-  pub(crate) fn read_scalar<C: Ciphersuite>(&mut self) -> io::Result<C::F> {
+  /// Read a scalar from the transcript.
+  pub fn read_scalar<C: Ciphersuite>(&mut self) -> io::Result<C::F> {
     let scalar = C::read_F(&mut self.transcript)?;
     self.digest.update([SCALAR]);
     let bytes = scalar.to_repr();
@@ -140,7 +147,8 @@ impl<'a> VerifierTranscript<'a> {
     Ok(scalar)
   }
 
-  pub(crate) fn read_point<C: Ciphersuite>(&mut self) -> io::Result<C::G> {
+  /// Read a point from the transcript.
+  pub fn read_point<C: Ciphersuite>(&mut self) -> io::Result<C::G> {
     let point = C::read_G(&mut self.transcript)?;
     self.digest.update([POINT]);
     let bytes = point.to_bytes();
@@ -171,5 +179,10 @@ impl<'a> VerifierTranscript<'a> {
   /// Sample a challenge.
   pub fn challenge<F: PrimeField>(&mut self) -> F {
     challenge(&mut self.digest)
+  }
+
+  /// Complete the transcript, returning the advanced slice.
+  pub fn complete(self) -> &'a [u8] {
+    self.transcript
   }
 }
