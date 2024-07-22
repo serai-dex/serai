@@ -319,7 +319,7 @@ pub trait EcDlogGadgets<C: Ciphersuite> {
     &self,
     transcript: &mut T,
     curve: &CurveSpec<C::F>,
-    generators: &[&GeneratorTable<C::F, Parameters>],
+    generators: &[GeneratorTable<C::F, Parameters>],
   ) -> (DiscreteLogChallenge<C::F, Parameters>, Vec<ChallengedGenerator<C::F, Parameters>>);
 
   /// Prove this point has the specified discrete logarithm over the specified generator.
@@ -350,7 +350,7 @@ impl<C: Ciphersuite> EcDlogGadgets<C> for Circuit<C> {
     &self,
     transcript: &mut T,
     curve: &CurveSpec<C::F>,
-    generators: &[&GeneratorTable<C::F, Parameters>],
+    generators: &[GeneratorTable<C::F, Parameters>],
   ) -> (DiscreteLogChallenge<C::F, Parameters>, Vec<ChallengedGenerator<C::F, Parameters>>) {
     // Get the challenge points
     // TODO: Implement a proper hash to curve

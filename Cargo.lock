@@ -2427,6 +2427,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "evrf"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "ciphersuite",
+ "ec-divisors",
+ "generalized-bulletproofs",
+ "generalized-bulletproofs-circuit-abstraction",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 1.1.0",
+ "multiexp",
+ "rand_chacha",
+ "rand_core",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "exit-future"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3015,10 +3033,8 @@ name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
 dependencies = [
  "ciphersuite",
- "generalized-bulletproofs",
  "generalized-bulletproofs-circuit-abstraction",
  "generic-array 1.1.0",
- "zeroize",
 ]
 
 [[package]]
@@ -3381,7 +3397,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.7",
  "tokio",
  "tower-service",
  "tracing",
@@ -3911,7 +3927,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
