@@ -185,7 +185,7 @@ impl Evrf {
   pub fn prove<C: EvrfCurve>(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
-    evrf_private_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
+    evrf_private_key: Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
     invocation: [u8; 32],
     quantity: usize,
   ) -> Result<EvrfProveResult<C>, AcError>
@@ -202,7 +202,7 @@ impl Evrf {
     let transcript = Blake2s256::digest(
       [
         invocation.as_slice(),
-        (<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key)
+        (<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *evrf_private_key)
           .to_bytes()
           .as_ref(),
       ]
@@ -303,7 +303,7 @@ impl Evrf {
         generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
       }
 
-      let dh = generator * evrf_private_key;
+      let dh = generator * *evrf_private_key;
       {
         for coefficient in &dlog {
           let mut coefficient = *coefficient;

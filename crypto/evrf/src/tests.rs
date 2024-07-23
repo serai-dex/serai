@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use rand_core::OsRng;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 use generic_array::typenum::{Sum, Diff, Quot, U, U1, U2};
 use blake2::{Digest, Blake2b512};
 
@@ -66,9 +66,10 @@ impl EvrfCurve for Pallas {
 #[test]
 fn pasta_test() {
   let generators = generators(1024);
-  let vesta_private_key = <Vesta as Ciphersuite>::F::random(&mut OsRng);
+  let vesta_private_key = Zeroizing::new(<Vesta as Ciphersuite>::F::random(&mut OsRng));
   let time = Instant::now();
-  let res = Evrf::prove::<Pallas>(&mut OsRng, &generators, vesta_private_key, [0; 32], 1).unwrap();
+  let res =
+    Evrf::prove::<Pallas>(&mut OsRng, &generators, vesta_private_key.clone(), [0; 32], 1).unwrap();
   println!("Proving time: {:?}", Instant::now() - time);
 
   let time = Instant::now();
@@ -77,7 +78,7 @@ fn pasta_test() {
     &mut OsRng,
     &generators,
     &mut verifier,
-    Vesta::generator() * vesta_private_key,
+    Vesta::generator() * *vesta_private_key,
     [0; 32],
     1,
     &res.proof,
