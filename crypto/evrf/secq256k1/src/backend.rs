@@ -74,6 +74,7 @@ macro_rules! field {
     $MODULUS: ident,
     $WIDE_MODULUS: ident,
 
+    $NUM_BITS: literal,
     $MULTIPLICATIVE_GENERATOR: literal,
     $S: literal,
     $ROOT_OF_UNITY: literal,
@@ -212,8 +213,8 @@ macro_rules! field {
 
       const MODULUS: &'static str = $MODULUS_STR;
 
-      const NUM_BITS: u32 = 256;
-      const CAPACITY: u32 = 255;
+      const NUM_BITS: u32 = $NUM_BITS;
+      const CAPACITY: u32 = $NUM_BITS - 1;
 
       const TWO_INV: Self = $FieldName($ResidueType::new(&U256::from_u8(2)).invert().0);
 

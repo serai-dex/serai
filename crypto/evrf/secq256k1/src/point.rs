@@ -229,7 +229,7 @@ impl Group for Point {
     let RR = R * R;
     let B = X1 + R;
     let B = (B * B) - XX - RR;
-    let h = (w * w) -  B.double();
+    let h = (w * w) - B.double();
     let X3 = h * s;
     let Y3 = w * (B - h) - RR.double();
     let Z3 = sss;

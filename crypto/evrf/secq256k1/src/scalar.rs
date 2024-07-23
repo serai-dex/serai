@@ -32,6 +32,7 @@ field!(
   MODULUS_STR,
   MODULUS,
   WIDE_MODULUS,
+  256,
   3,
   1,
   "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e",
