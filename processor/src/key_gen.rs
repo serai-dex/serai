@@ -184,13 +184,12 @@ impl<N: Network, D: Db> KeyGen<N, D> {
     const NETWORK_KEY_CONTEXT: &str = "network";
     let context = |id: &KeyGenId, key| {
       // TODO2: Also embed the chain ID/genesis block
-      format!(
-        "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}, Key: {}",
-        id.session,
-        N::NETWORK,
-        id.attempt,
-        key,
-      )
+      let mut transcript = RecommendedTranscript::new(b"Serai Key Gen");
+      transcript.append_message(b"session", id.session.0.to_le_bytes());
+      transcript.append_message(b"network", N::ID);
+      transcript.append_message(b"attempt", id.attempt.to_le_bytes());
+      transcript.append_message(b"key", key);
+      <[u8; 32]>::try_from(&(&transcript.challenge(b"context"))[.. 32]).unwrap()
     };
 
     let rng = |label, id: KeyGenId| {
@@ -557,7 +556,6 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           blame.clone().and_then(|blame| EncryptionKeyProof::read(&mut blame.as_slice()).ok());
 
         let substrate_blame = AdditionalBlameMachine::new(
-          &mut rand_core::OsRng,
           context(&id, SUBSTRATE_KEY_CONTEXT),
           params.n(),
           substrate_commitment_msgs,
@@ -565,7 +563,6 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         .unwrap()
         .blame(accuser, accused, substrate_share, substrate_blame);
         let network_blame = AdditionalBlameMachine::new(
-          &mut rand_core::OsRng,
           context(&id, NETWORK_KEY_CONTEXT),
           params.n(),
           network_commitment_msgs,
