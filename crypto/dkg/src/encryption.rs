@@ -345,53 +345,51 @@ pub(crate) struct Decryption<C: Ciphersuite> {
 }
 
 impl<C: Ciphersuite> Decryption<C> {
-pub(crate) fn new(context: [u8; 32]) -> Self { Self { context, enc_keys: HashMap::new()} }
-pub(crate) fn register(
-  &mut self,
-  participant: Participant,
-  key: C::G,
-) {
-  assert!(
-    !self.enc_keys.contains_key(&participant),
-    "Re-registering encryption key for a participant"
-  );
-  self.enc_keys.insert(participant, key);
-}
-
-// Given a message, and the intended decryptor, and a proof for its key, decrypt the message.
-// Returns None if the key was wrong.
-pub(crate) fn decrypt_with_proof<E: Encryptable>(
-  &self,
-  from: Participant,
-  decryptor: Participant,
-  mut msg: EncryptedMessage<C, E>,
-  // There's no encryption key proof if the accusation is of an invalid signature
-  proof: Option<EncryptionKeyProof<C>>,
-) -> Result<Zeroizing<E>, DecryptionError> {
-  if !msg.pop.verify(
-    msg.key,
-    pop_challenge::<C>(self.context, msg.pop.R, msg.key, from, msg.msg.deref().as_ref()),
-  ) {
-    Err(DecryptionError::InvalidSignature)?;
+  pub(crate) fn new(context: [u8; 32]) -> Self {
+    Self { context, enc_keys: HashMap::new() }
+  }
+  pub(crate) fn register(&mut self, participant: Participant, key: C::G) {
+    assert!(
+      !self.enc_keys.contains_key(&participant),
+      "Re-registering encryption key for a participant"
+    );
+    self.enc_keys.insert(participant, key);
   }
 
-  if let Some(proof) = proof {
-    // Verify this is the decryption key for this message
-    proof
-      .dleq
-      .verify(
-        &mut encryption_key_transcript(self.context),
-        &[C::generator(), msg.key],
-        &[self.enc_keys[&decryptor], *proof.key],
-      )
-      .map_err(|_| DecryptionError::InvalidProof)?;
+  // Given a message, and the intended decryptor, and a proof for its key, decrypt the message.
+  // Returns None if the key was wrong.
+  pub(crate) fn decrypt_with_proof<E: Encryptable>(
+    &self,
+    from: Participant,
+    decryptor: Participant,
+    mut msg: EncryptedMessage<C, E>,
+    // There's no encryption key proof if the accusation is of an invalid signature
+    proof: Option<EncryptionKeyProof<C>>,
+  ) -> Result<Zeroizing<E>, DecryptionError> {
+    if !msg.pop.verify(
+      msg.key,
+      pop_challenge::<C>(self.context, msg.pop.R, msg.key, from, msg.msg.deref().as_ref()),
+    ) {
+      Err(DecryptionError::InvalidSignature)?;
+    }
 
-    cipher::<C>(self.context, &proof.key).apply_keystream(msg.msg.as_mut().as_mut());
-    Ok(msg.msg)
-  } else {
-    Err(DecryptionError::InvalidProof)
+    if let Some(proof) = proof {
+      // Verify this is the decryption key for this message
+      proof
+        .dleq
+        .verify(
+          &mut encryption_key_transcript(self.context),
+          &[C::generator(), msg.key],
+          &[self.enc_keys[&decryptor], *proof.key],
+        )
+        .map_err(|_| DecryptionError::InvalidProof)?;
+
+      cipher::<C>(self.context, &proof.key).apply_keystream(msg.msg.as_mut().as_mut());
+      Ok(msg.msg)
+    } else {
+      Err(DecryptionError::InvalidProof)
+    }
   }
-}
 }
 
 // A simple box for managing encryption.
@@ -427,11 +425,7 @@ impl<C: Ciphersuite> Zeroize for Encryption<C> {
 }
 
 impl<C: Ciphersuite> Encryption<C> {
-  pub(crate) fn new(
-    context: [u8; 32],
-    i: Participant,
-    enc_key: Zeroizing<C::F>,
-  ) -> Self {
+  pub(crate) fn new(context: [u8; 32], i: Participant, enc_key: Zeroizing<C::F>) -> Self {
     Self {
       context,
       i,
@@ -445,11 +439,7 @@ impl<C: Ciphersuite> Encryption<C> {
     EncryptionKeyMessage { msg, enc_key: self.enc_pub_key }
   }
 
-  pub(crate) fn register(
-    &mut self,
-    participant: Participant,
-    key: C::G,
-  ) {
+  pub(crate) fn register(&mut self, participant: Participant, key: C::G) {
     self.decryption.register(participant, key)
   }
 
@@ -496,5 +486,7 @@ impl<C: Ciphersuite> Encryption<C> {
     )
   }
 
-  pub(crate) fn into_decryption(self) -> Decryption<C> { self.decryption }
+  pub(crate) fn into_decryption(self) -> Decryption<C> {
+    self.decryption
+  }
 }

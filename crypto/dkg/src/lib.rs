@@ -21,6 +21,10 @@ pub mod encryption;
 #[cfg(feature = "std")]
 pub mod pedpop;
 
+/// The one-round DKG described in the [eVRF paper](https://eprint.iacr.org/2024/397).
+#[cfg(all(feature = "std", feature = "evrf"))]
+pub mod evrf;
+
 /// Promote keys between ciphersuites.
 #[cfg(feature = "std")]
 pub mod promote;

@@ -36,6 +36,10 @@ multiexp = { path = "../multiexp", version = "0.4", default-features = false }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false }
 dleq = { path = "../dleq", version = "^0.4.1", default-features = false }
 
+generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", default-features = false, optional = true }
+ec-divisors = { path = "../evrf/divisors", default-features = false, optional = true }
+evrf = { path = "../evrf", default-features = false, optional = true }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
@@ -62,5 +66,6 @@ std = [
   "dleq/serialize"
 ]
 borsh = ["dep:borsh"]
+evrf = ["std", "dep:ec-divisors", "dep:generalized-bulletproofs", "dep:evrf"]
 tests = ["rand_core/getrandom"]
 default = ["std"]
