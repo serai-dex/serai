@@ -2322,6 +2322,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedwards25519"
+version = "0.1.0"
+dependencies = [
+ "crypto-bigint",
+ "dalek-ff-group",
+ "ec-divisors",
+ "ff",
+ "ff-group-tests",
+ "group",
+ "hex",
+ "hex-literal",
+ "rand_core",
+ "rustversion",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "enum-as-inner"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

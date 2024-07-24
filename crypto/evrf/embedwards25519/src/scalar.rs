@@ -5,12 +5,12 @@ use crypto_bigint::{
   modular::constant_mod::{ResidueParams, Residue},
 };
 
-const MODULUS_STR: &str = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
+const MODULUS_STR: &str = "0fffffffffffffffffffffffffffffffe53f4debb78ff96877063f0306eef96b";
 
-impl_modulus!(SecQ, U256, MODULUS_STR);
-type ResidueType = Residue<SecQ, { SecQ::LIMBS }>;
+impl_modulus!(EmbedwardsQ, U256, MODULUS_STR);
+type ResidueType = Residue<EmbedwardsQ, { EmbedwardsQ::LIMBS }>;
 
-/// The Scalar field of secq256k1.
+/// The Scalar field of Embedwards25519.
 ///
 /// This is equivalent to the field secp256k1 is defined over.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
@@ -23,7 +23,7 @@ pub(crate) const MODULUS: U256 = U256::from_be_hex(MODULUS_STR);
 
 const WIDE_MODULUS: U512 = U512::from_be_hex(concat!(
   "0000000000000000000000000000000000000000000000000000000000000000",
-  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+  "0fffffffffffffffffffffffffffffffe53f4debb78ff96877063f0306eef96b",
 ));
 
 field!(
@@ -32,11 +32,11 @@ field!(
   MODULUS_STR,
   MODULUS,
   WIDE_MODULUS,
-  256,
-  3,
+  252,
+  10,
   1,
-  "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e",
-  "0000000000000000000000000000000000000000000000000000000000000009",
+  "0fffffffffffffffffffffffffffffffe53f4debb78ff96877063f0306eef96a",
+  "0000000000000000000000000000000000000000000000000000000000000064",
 );
 
 impl Scalar {
