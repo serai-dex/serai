@@ -18,7 +18,10 @@ use crate::{backend::u8_from_bool, Scalar, FieldElement};
 
 #[allow(non_snake_case)]
 fn B() -> FieldElement {
-  FieldElement::from_repr(hex_literal::hex!("5f07603a853f20370b682036210d463e64903a23ea669d07ca26cfc13f594209")).unwrap()
+  FieldElement::from_repr(hex_literal::hex!(
+    "5f07603a853f20370b682036210d463e64903a23ea669d07ca26cfc13f594209"
+  ))
+  .unwrap()
 }
 
 fn recover_y(x: FieldElement) -> CtOption<FieldElement> {
@@ -196,13 +199,13 @@ impl Group for Point {
   }
   fn generator() -> Self {
     Point {
-      x: FieldElement::from_repr(
-        hex_literal::hex!("0100000000000000000000000000000000000000000000000000000000000000")
-      )
+      x: FieldElement::from_repr(hex_literal::hex!(
+        "0100000000000000000000000000000000000000000000000000000000000000"
+      ))
       .unwrap(),
-      y: FieldElement::from_repr(
-        hex_literal::hex!("2e4118080a484a3dfbafe2199a0e36b7193581d676c0dadfa376b0265616020c")
-      )
+      y: FieldElement::from_repr(hex_literal::hex!(
+        "2e4118080a484a3dfbafe2199a0e36b7193581d676c0dadfa376b0265616020c"
+      ))
       .unwrap(),
       z: FieldElement::ONE,
     }
@@ -336,11 +339,11 @@ impl GroupEncoding for Point {
       let point = y.map(|y| Point { x, y, z: FieldElement::ONE });
 
       let not_negative_zero = !(is_identity & sign);
-      // Only return the point if it isn't -0 and the sign byte wasn't malleated
+      // Only return the point if it isn't -0
       CtOption::conditional_select(
         &CtOption::new(Point::identity(), 0.into()),
         &point,
-        not_negative_zero & ((bytes[0] & 1).ct_eq(&bytes[0])),
+        not_negative_zero,
       )
     })
   }
