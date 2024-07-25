@@ -68,6 +68,7 @@ pub struct Generators<C: Ciphersuite> {
 
 /// A batch verifier of proofs.
 #[must_use]
+#[derive(Clone)]
 pub struct BatchVerifier<C: Ciphersuite> {
   g: C::F,
   h: C::F,

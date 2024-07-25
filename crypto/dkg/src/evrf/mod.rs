@@ -65,13 +65,10 @@
   robust to threshold `t`.
 */
 
-pub(crate) mod proof;
-
-/*
 use core::ops::Deref;
 use std::{
   io::{self, Read, Write},
-  collections::HashMap,
+  collections::{HashSet, HashMap},
 };
 
 use rand_core::{RngCore, CryptoRng};
@@ -79,35 +76,33 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
-  group::ff::{Field, PrimeField},
+  group::{
+    ff::{Field, PrimeField},
+    Group,
+  },
   Ciphersuite,
 };
 use multiexp::multiexp_vartime;
 
-use generalized_bulletproofs::{Generators, BatchVerifier, arithmetic_circuit_proof::*};
+use generalized_bulletproofs::{Generators, arithmetic_circuit_proof::*};
 use ec_divisors::DivisorCurve;
-use evrf::*;
 
-use crate::{
-  Participant, DkgError, ThresholdParams, ThresholdCore,
-  encryption::{ReadWrite, EncryptedMessage, Encryption, EncryptionKeyProof},
-  pedpop::SecretShare,
-};
+use crate::{Participant, DkgError, ThresholdParams, ThresholdCore};
 
-type EvrfError<C> = DkgError<EncryptionKeyProof<C>>;
+pub(crate) mod proof;
+pub use proof::*;
 
-/// The commitments message, intended to be broadcast to all other parties.
+/// Participation in the DKG.
 ///
-/// Every participant should only provide one set of commitments to all parties. If any
-/// participant sends multiple sets of commitments, they are faulty and should be presumed
-/// malicious. As this library does not handle networking, it is unable to detect if any
-/// participant is so faulty. That responsibility lies with the caller.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct Commitments {
+/// `Participation` is meant to be broadcast to all other participants over an authenticated,
+/// reliable broadcast channel.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Participation<C: Ciphersuite> {
   proof: Vec<u8>,
+  encrypted_secret_shares: HashMap<Participant, C::F>,
 }
 
-impl ReadWrite for Commitments {
+impl<C: Ciphersuite> Participation<C> {
   fn read<R: Read>(reader: &mut R, _params: ThresholdParams) -> io::Result<Self> {
     // TODO: Replace `len` with some calculcation deterministic to the params
     let mut len = [0; 4];
@@ -126,12 +121,13 @@ impl ReadWrite for Commitments {
       reader.read_exact(&mut proof[old_proof_len ..])?;
     }
 
-    Ok(Commitments { proof })
+    Ok(Self { proof, encrypted_secret_shares: todo!("TODO") })
   }
 
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.proof.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.proof)?;
+    // TODO: secret shares
     Ok(())
   }
 }
@@ -153,303 +149,288 @@ fn polynomial<F: PrimeField + Zeroize>(
   share
 }
 
+fn share_verification_statements<C: Ciphersuite>(
+  rng: &mut (impl RngCore + CryptoRng),
+  commitments: &[C::G],
+  n: u16,
+  encryption_commitments: &[C::G],
+  encrypted_secret_shares: &HashMap<Participant, C::F>,
+) -> (C::F, Vec<(C::F, C::G)>) {
+  debug_assert_eq!(usize::from(n), encryption_commitments.len());
+  debug_assert_eq!(usize::from(n), encrypted_secret_shares.len());
+
+  let mut g_scalar = C::F::ZERO;
+  let mut pairs = Vec::with_capacity(commitments.len() + encryption_commitments.len());
+  for commitment in commitments {
+    pairs.push((C::F::ZERO, *commitment));
+  }
+
+  let mut weight;
+  for (i, enc_share) in encrypted_secret_shares {
+    let enc_commitment = encryption_commitments[usize::from(u16::from(*i)) - 1];
+
+    weight = C::F::random(&mut *rng);
+
+    // s_i F
+    g_scalar += weight * enc_share;
+    // - Z_i
+    let weight = -weight;
+    pairs.push((weight, enc_commitment));
+    // - V_i
+    {
+      let i = C::F::from(u64::from(u16::from(*i)));
+      // The first `commitments.len()` pairs are for the commitments
+      (0 .. commitments.len()).fold(weight, |exp, j| {
+        pairs[j].0 += exp;
+        exp * i
+      });
+    }
+  }
+
+  (g_scalar, pairs)
+}
+
 /// Struct to perform/verify the DKG with.
-#[derive(Debug, Zeroize)]
-pub struct EvrfDkg;
-
-enum AccumulationStrategy<C: EvrfCurve> {
-  #[rustfmt::skip]
-  WaitingForThreshold {
-    pending_verification: HashMap<Participant, (Commitments, Zeroizing<C::F>)>,
-  },
-  Incremental {
-    accumulated: HashMap<Participant, (Vec<C::G>, Zeroizing<C::F>)>,
-  },
-}
-
-struct EvrfAccumulatorCore<'a, C: EvrfCurve> {
-  generators: &'a Generators<C>,
+#[derive(Debug)]
+pub struct EvrfDkg<C: EvrfCurve> {
+  t: u16,
+  n: u16,
   evrf_public_keys: Vec<<C::EmbeddedCurve as Ciphersuite>::G>,
-  context: [u8; 32],
-  params: ThresholdParams,
+  participations: HashMap<Participant, (HashMap<Participant, C::F>, EvrfVerifyResult<C>)>,
 }
 
-pub struct EvrfAccumulator<'a, C: EvrfCurve> {
-  core: EvrfAccumulatorCore<'a, C>,
-
-  encryption: Encryption<C::EmbeddedCurve>,
-
-  our_commitments: Vec<C::G>,
-  accumulation: AccumulationStrategy<C>,
-  resulting_share: Zeroizing<C::F>,
-}
-
-pub struct EvrfShare<C: EvrfCurve> {
-  commitments: Commitments,
-  shares: HashMap<Participant, EncryptedMessage<C::EmbeddedCurve, SecretShare<C::F>>>,
-}
-
-impl EvrfDkg {
+impl<C: EvrfCurve> EvrfDkg<C>
+where
+  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
+    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
+{
   /// Participate in performing the DKG for the specified parameters.
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
   /// prior-shared secrets.
-  // TODO: Have this return an accumulator
-  pub fn share<'a, C: EvrfCurve>(
+  pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
-    generators: &'a Generators<C>,
-    evrf_public_keys: Vec<<C::EmbeddedCurve as Ciphersuite>::G>,
+    generators: &Generators<C>,
     context: [u8; 32],
-    params: ThresholdParams,
-    evrf_private_key: Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Result<(EvrfAccumulator<'a, C>, EvrfShare<C>), AcError>
-  where
-    <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-      DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-  {
-    // TODO: Confirm `n` == the amount of evrf_public_keys
-    // TODO: Confirm evrf_public_keys[i] == evrf_private_key * G
-    // TODO: Hash context to include the list of public keys
-
-    let EvrfProveResult { scalars, proof } =
-      Evrf::prove(rng, generators, evrf_private_key.clone(), context, usize::from(params.t()))?;
-
-    /*
-      We reuse the eVRF key for receiving encrypted messages.
-
-      For encrypting to other parties, we use a randomly generated ephemeral key, so there's no
-      risk there.
-
-      When decrypting, we calculcate the ECDH of our private key with the ephemeral public key. If
-      the decryption fails, we publish the ECDH with a proof. If the ephemeral public key is one
-      of the eVRF points, this would leak a secret. Since ephemeral public keys must be associated
-      with PoKs for their discrete logarithms, and the eVRF points have unknown discrete
-      logarithms, this is still secure.
-    */
-    let mut encryption = Encryption::new(context, params.i(), evrf_private_key);
-    for (i, evrf_public_key) in evrf_public_keys.iter().enumerate() {
-      encryption
-        .register(Participant::new(u16::try_from(i + 1).unwrap()).unwrap(), *evrf_public_key);
+    t: u16,
+    evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+  ) -> Result<Participation<C>, AcError> {
+    if generators.g() != C::generator() {
+      todo!("TODO");
     }
 
-    let mut resulting_share = None;
-    let mut shares = HashMap::new();
-    for l in (1 ..= params.n()).map(Participant) {
-      let share = polynomial::<C::F>(&scalars, l);
+    let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
+    let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
+      todo!("TODO");
+    };
+    if (t == 0) || (t > n) {
+      todo!("TODO");
+    }
+    if !evrf_public_keys.iter().any(|key| *key == evrf_public_key) {
+      todo!("TODO");
+    };
 
-      // Don't insert our own share as we don't need to send out our own share
-      if l == params.i() {
-        resulting_share = Some(share);
+    let EvrfProveResult { coefficients, encryption_masks, proof } =
+      Evrf::prove(rng, generators, evrf_private_key, context, usize::from(t), evrf_public_keys)?;
+
+    let mut encrypted_secret_shares = HashMap::new();
+    for (l, encryption_mask) in (1 ..= n).map(Participant).zip(encryption_masks) {
+      let share = polynomial::<C::F>(&coefficients, l);
+      encrypted_secret_shares.insert(l, *share + *encryption_mask);
+    }
+
+    Ok(Participation { proof, encrypted_secret_shares })
+  }
+
+  /// Check if a batch of `Participation`s are valid.
+  ///
+  /// if any `Participation` is invalid, it will be returned in the `Err` of the result. If all
+  /// `Participation`s are valid and there's at least `t`, an instance of this struct (usable to
+  /// obtain a threshold share of generated key) is returned. If all are valid and there's not at
+  /// least `t`, an error of an empty list is returned after validation.
+  pub fn verify(
+    rng: &mut (impl RngCore + CryptoRng),
+    generators: &Generators<C>,
+    context: [u8; 32],
+    t: u16,
+    evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+    participations: &HashMap<Participant, Participation<C>>,
+  ) -> Result<Self, Vec<Participant>> {
+    let Ok(n) = u16::try_from(evrf_public_keys.len()) else { todo!("TODO") };
+    if (t == 0) || (t > n) {
+      todo!("TODO");
+    }
+    for i in participations.keys() {
+      if u16::from(*i) > n {
+        todo!("TODO");
+      }
+    }
+
+    let mut res = HashMap::new();
+    let mut faulty = HashSet::new();
+
+    let mut evrf_verifier = generators.batch_verifier();
+    for (i, participation) in participations {
+      // Clone the verifier so if this proof is faulty, it doesn't corrupt the verifier
+      let mut verifier_clone = evrf_verifier.clone();
+      let Ok(data) = Evrf::<C>::verify(
+        rng,
+        generators,
+        &mut verifier_clone,
+        evrf_public_keys[usize::from(u16::from(*i)) - 1],
+        context,
+        usize::from(t),
+        evrf_public_keys,
+        &participation.proof,
+      ) else {
+        faulty.insert(*i);
         continue;
-      }
+      };
+      evrf_verifier = verifier_clone;
 
-      let share_bytes = Zeroizing::new(SecretShare::<C::F>(share.to_repr()));
-      shares.insert(l, encryption.encrypt(rng, l, share_bytes));
+      res.insert(*i, (participation.encrypted_secret_shares.clone(), data));
     }
+    debug_assert_eq!(res.len() + faulty.len(), participations.len());
 
-    let accumulator = EvrfAccumulator {
-      core: EvrfAccumulatorCore { generators, evrf_public_keys, context, params },
+    // Perform the batch verification of the eVRFs
+    if !generators.verify(evrf_verifier) {
+      // If the batch failed, verify them each individually
+      for (i, participation) in participations {
+        if faulty.contains(i) {
+          continue;
+        }
+        let mut evrf_verifier = generators.batch_verifier();
+        Evrf::<C>::verify(
+          rng,
+          generators,
+          &mut evrf_verifier,
+          evrf_public_keys[usize::from(u16::from(*i)) - 1],
+          context,
+          usize::from(t),
+          evrf_public_keys,
+          &participation.proof,
+        )
+        .expect("evrf failed basic checks yet prover wasn't prior marked faulty");
+        if !generators.verify(evrf_verifier) {
+          res.remove(i);
+          faulty.insert(*i);
+        }
+      }
+    }
+    debug_assert_eq!(res.len() + faulty.len(), participations.len());
 
-      encryption,
-
-      our_commitments: scalars.iter().map(|scalar| C::generator() * **scalar).collect(),
-      accumulation: AccumulationStrategy::WaitingForThreshold {
-        pending_verification: HashMap::new(),
-      },
-      resulting_share: resulting_share.unwrap(),
-    };
-    Ok((accumulator, EvrfShare { commitments: Commitments { proof }, shares }))
-  }
-}
-
-fn exponential<C: Ciphersuite>(i: Participant, values: &[C::G]) -> C::G {
-  let i = C::F::from(u16::from(i).into());
-  let mut res = Vec::with_capacity(values.len());
-  (0 .. values.len()).fold(C::F::ONE, |exp, l| {
-    res.push((exp, values[l]));
-    exp * i
-  });
-  multiexp_vartime(&res)
-}
-
-struct Blame;
-
-impl<'a, C: EvrfCurve> EvrfAccumulatorCore<'a, C>
-where
-  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-{
-  fn verify_evrf(
-    &mut self,
-    rng: &mut (impl RngCore + CryptoRng),
-    verifier: &mut BatchVerifier<C>,
-    from: Participant,
-    commitments: &Commitments,
-  ) -> Result<Vec<C::G>, ()> {
-    // TODO: Verify from is in-range and distinct from params.i()
-    let from_public_key = self.evrf_public_keys[usize::from(u16::from(from) - 1)];
-    Evrf::verify(
-      rng,
-      self.generators,
-      verifier,
-      from_public_key,
-      self.context,
-      usize::from(self.params.t()),
-      &commitments.proof,
-    )
-  }
-}
-
-impl<'a, C: EvrfCurve> EvrfAccumulator<'a, C>
-where
-  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-{
-  /// Verify a secret sharing.
-  pub fn accumulate(
-    &mut self,
-    rng: &mut (impl RngCore + CryptoRng),
-    from: Participant,
-    commitments: Commitments,
-    share: EncryptedMessage<C::EmbeddedCurve, SecretShare<C::F>>,
-  ) -> Vec<Blame> {
-    // TODO: Confirm `n` == the amount of evrf_public_keys
-    // TODO: Confirm evrf_public_keys[i] == evrf_private_key * G
-    // TODO: Hash context to include the list of public keys
-    // TODO: Check not prior accumulated
-
-    // This uses an ephemeral BatchVerifier as if we verify an invalid proof, it'll corrupt the
-    // BatchVerifier. If we tried to form a BatchVerifier, it'd need reconstruction on such error,
-    // increasing complexity and opening potential DoS vectors
-    let mut ephemeral_verifier = self.core.generators.batch_verifier();
-    let Ok(actual_commitments) =
-      self.core.verify_evrf(rng, &mut ephemeral_verifier, from, &commitments)
-    else {
-      return vec![Blame];
-    };
-
-    // Decrypt the share
-    let mut batch = multiexp::BatchVerifier::new(1);
-    let (mut share_bytes, blame) = self.encryption.decrypt(rng, &mut batch, (), from, share);
-    let Some(share) = Option::<C::F>::from(C::F::from_repr(share_bytes.0)) else {
-      return vec![Blame];
-    };
-    let share = Zeroizing::new(share);
-    share_bytes.zeroize();
-
-    if exponential::<C>(self.core.params.i(), &actual_commitments) !=
-      (self.core.generators.g() * *share)
+    // Perform the batch verification of the shares
     {
-      return vec![Blame];
-    }
+      let mut share_verification_statements_actual = HashMap::with_capacity(res.len());
+      if !{
+        let mut g_scalar = C::F::ZERO;
+        let mut pairs = Vec::with_capacity(res.len() * (usize::from(t) + evrf_public_keys.len()));
+        for (i, (encrypted_secret_shares, data)) in &res {
+          let (this_g_scalar, mut these_pairs) = share_verification_statements::<C>(
+            &mut *rng,
+            &data.coefficients,
+            evrf_public_keys
+              .len()
+              .try_into()
+              .expect("n prior checked to be <= u16::MAX couldn't be converted to a u16"),
+            &data.encryption_commitments,
+            encrypted_secret_shares,
+          );
+          g_scalar += this_g_scalar;
+          pairs.extend(&these_pairs);
 
-    match &mut self.accumulation {
-      AccumulationStrategy::WaitingForThreshold { ref mut pending_verification } => {
-        pending_verification.insert(from, (commitments, share));
-
-        // If we now have the necessary threshold to consider this DKG as having succeeded, verify
-        // the proofs with a batch verification
-        if pending_verification.len() == usize::from(self.core.params.t()) {
-          let mut batch_verifier = self.core.generators.batch_verifier();
-          let mut all_pending_verification = HashMap::new();
-          for (participant, (commitments, share)) in &mut *pending_verification {
-            let actual_commitments = self
-              .core
-              .verify_evrf(rng, &mut batch_verifier, *participant, commitments)
-              .expect("prior verified evrf proof now errors upon verification");
-            all_pending_verification.insert(*participant, (actual_commitments, share.clone()));
-          }
-
-          if self.core.generators.verify(batch_verifier) {
-            // If the verification succeeded, marked the proofs pending verification as accumulated
-            self.accumulation =
-              AccumulationStrategy::Incremental { accumulated: all_pending_verification };
-          } else {
-            // Find the faulty proof(s)
-            let mut accumulated = HashMap::new();
-            let mut blames = vec![];
-            for (participant, (commitments, share)) in &mut *pending_verification {
-              let mut verifier = self.core.generators.batch_verifier();
-              let actual_commitments = self
-                .core
-                .verify_evrf(rng, &mut verifier, *participant, commitments)
-                .expect("prior verified evrf proof now errors upon verification");
-              if self.core.generators.verify(verifier) {
-                accumulated.insert(*participant, (actual_commitments, share.clone()));
-              } else {
-                blames.push(Blame);
-              }
-            }
-            self.accumulation = AccumulationStrategy::Incremental { accumulated };
-
-            // Now that we've marked all proofs as accumulated/faulty, return the blame
-            return blames;
+          these_pairs.push((this_g_scalar, generators.g()));
+          share_verification_statements_actual.insert(*i, these_pairs);
+        }
+        pairs.push((g_scalar, generators.g()));
+        bool::from(multiexp_vartime(&pairs).is_identity())
+      } {
+        // If the batch failed, verify them each individually
+        for (i, pairs) in share_verification_statements_actual {
+          if !bool::from(multiexp_vartime(&pairs).is_identity()) {
+            res.remove(&i);
+            faulty.insert(i);
           }
         }
       }
-      AccumulationStrategy::Incremental { ref mut accumulated } => {
-        if self.core.generators.verify(ephemeral_verifier) {
-          accumulated.insert(from, (actual_commitments, share));
-        } else {
-          return vec![Blame];
-        }
+    }
+    debug_assert_eq!(res.len() + faulty.len(), participations.len());
+
+    let mut faulty = faulty.into_iter().collect::<Vec<_>>();
+    if !faulty.is_empty() {
+      faulty.sort_unstable();
+      Err(faulty)?;
+    }
+
+    if res.len() < usize::from(t) {
+      Err(vec![])?;
+    }
+
+    Ok(EvrfDkg { t, n, evrf_public_keys: evrf_public_keys.to_vec(), participations: res })
+  }
+
+  pub fn keys(
+    self,
+    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+  ) -> Option<ThresholdCore<C>> {
+    let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
+    let Some(i) = self.evrf_public_keys.iter().position(|key| *key == evrf_public_key) else {
+      None?
+    };
+    let i = u16::try_from(i).expect("n <= u16::MAX yet i > u16::MAX?");
+    let i = Participant(1 + i);
+
+    let mut secret_share = Zeroizing::new(C::F::ZERO);
+    for (shares, evrf_data) in self.participations.values() {
+      let mut ecdh = Zeroizing::new(C::F::ZERO);
+      for point in evrf_data.ecdh_keys[usize::from(u16::from(i)) - 1] {
+        // TODO: Explicitly ban 0-ECDH commitments, 0-eVRF public keys, and gen non-zero keys
+        let (mut x, mut y) =
+          <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
+        *ecdh += x;
+        x.zeroize();
+        y.zeroize();
       }
+      *secret_share += shares[&i] - ecdh.deref();
     }
 
-    vec![]
-  }
-
-  #[allow(clippy::needless_pass_by_value)]
-  pub fn process_blame(&mut self, blame: Blame) {
-    todo!("TODO");
-  }
-
-  pub fn introspect_group_key(&self) -> Result<C::G, ()> {
-    let AccumulationStrategy::Incremental { accumulated } = &self.accumulation else { Err(())? };
-    if (1 + accumulated.len()) < usize::from(self.core.params.t()) {
-      Err(())?
-    }
-    Ok(
-      accumulated.values().map(|(commitments, _)| commitments[0]).sum::<C::G>() +
-        self.our_commitments[0],
-    )
-  }
-
-  /// Finish accumulation.
-  pub fn complete(mut self) -> Result<ThresholdCore<C>, ()> {
-    let AccumulationStrategy::Incremental { accumulated } = self.accumulation else { Err(())? };
-
-    if (1 + accumulated.len()) < usize::from(self.core.params.t()) {
-      Err(())?
-    }
-
-    let commitments = accumulated
-      .values()
-      .map(|(commitments, _)| commitments)
-      .chain(core::iter::once(&self.our_commitments));
-    // Stripe commitments per t and sum them in advance
-    // Calculating verification shares relies on these sums so preprocessing them is a massive
-    // speedup
-    let mut stripes = Vec::with_capacity(usize::from(self.core.params.t()));
-    for t in 0 .. usize::from(self.core.params.t()) {
-      stripes.push(commitments.clone().map(|commitments| commitments[t]).sum());
+    // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
+    // these sums so preprocessing them is a massive speedup
+    let mut stripes = Vec::with_capacity(usize::from(self.t));
+    for t in 0 .. usize::from(self.t) {
+      stripes.push(
+        self.participations.values().map(|(_, evrf_data)| evrf_data.coefficients[t]).sum::<C::G>(),
+      );
     }
 
     // Calculate each user's verification share
     let mut verification_shares = HashMap::new();
-    for i in (1 ..= self.core.params.n()).map(Participant) {
-      verification_shares.insert(i, exponential::<C>(i, &stripes));
+    for j in (1 ..= self.n).map(Participant) {
+      verification_shares.insert(
+        j,
+        if j == i {
+          C::generator() * secret_share.deref()
+        } else {
+          fn exponential<C: Ciphersuite>(i: Participant, values: &[C::G]) -> Vec<(C::F, C::G)> {
+            let i = C::F::from(u16::from(i).into());
+            let mut res = Vec::with_capacity(values.len());
+            (0 .. values.len()).fold(C::F::ONE, |exp, l| {
+              res.push((exp, values[l]));
+              exp * i
+            });
+            res
+          }
+          multiexp_vartime(&exponential::<C>(j, &stripes))
+        },
+      );
     }
 
-    for (_, share) in accumulated.values() {
-      *self.resulting_share += **share;
-    }
-    Ok(ThresholdCore {
-      params: self.core.params,
-      secret_share: self.resulting_share,
+    Some(ThresholdCore {
+      params: ThresholdParams::new(self.t, self.n, i).unwrap(),
+      secret_share,
       group_key: stripes[0],
       verification_shares,
     })
   }
 }
-*/

@@ -77,7 +77,7 @@ fn evrf_proof_pasta_test() {
   let res = Evrf::<Pallas>::prove(
     &mut OsRng,
     &generators,
-    vesta_private_key.clone(),
+    &vesta_private_key,
     [0; 32],
     1,
     &ecdh_public_keys,
