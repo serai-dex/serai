@@ -28,6 +28,13 @@ use generalized_bulletproofs_ec_gadgets::*;
 #[cfg(test)]
 mod tests;
 
+/*
+  The following circuit has two roles.
+
+  1) Generating every coefficient used in the DKG, per the eVRF paper, using the fixed eVRF key.
+
+*/
+
 /// A curve to perform the eVRF with.
 pub trait EvrfCurve: Ciphersuite {
   type EmbeddedCurve: Ciphersuite;
@@ -35,13 +42,13 @@ pub trait EvrfCurve: Ciphersuite {
 }
 
 /// The result of proving for an eVRF.
-pub struct EvrfProveResult<C: Ciphersuite> {
-  pub scalars: Vec<Zeroizing<C::F>>,
-  pub proof: Vec<u8>,
+pub(crate) struct EvrfProveResult<C: Ciphersuite> {
+  pub(crate) encrypted_scalars: Vec<C::F>,
+  pub(crate) proof: Vec<u8>,
 }
 
 /// A struct to prove/verify eVRFs with.
-pub struct Evrf;
+pub(crate) struct Evrf;
 impl Evrf {
   fn transcript_to_points<C: Ciphersuite>(seed: [u8; 32], quantity: usize) -> Vec<C::G> {
     // We need to do two Diffie-Hellman's per point in order to achieve an unbiased result
@@ -182,7 +189,7 @@ impl Evrf {
   }
 
   /// Prove a point on an elliptic curve had its discrete logarithm generated via an eVRF.
-  pub fn prove<C: EvrfCurve>(
+  pub(crate) fn prove<C: EvrfCurve>(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
     evrf_private_key: Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
@@ -459,7 +466,7 @@ impl Evrf {
 
   // TODO: Dedicated error
   /// Verify an eVRF proof, returning the commitments output.
-  pub fn verify<C: EvrfCurve>(
+  pub(crate) fn verify<C: EvrfCurve>(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
     verifier: &mut BatchVerifier<C>,

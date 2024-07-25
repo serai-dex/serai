@@ -1,3 +1,57 @@
+/*
+  We implement a DKG using an eVRF, as detailed in the eVRF paper. For the eVRF itself, we do not
+  use a Paillier-based construction, nor the detailed construction premised on a Bulletproof.
+
+  For reference, the detailed construction premised on a Bulletproof involves two curves, notated
+  here as `C` and `E`, where the scalar field of `C` is the field of `E`. Accordingly, Bulletproofs
+  over `C` can efficiently perform group operations of points of curve `E`. Each participant has a
+  private point (`P_i`) on curve `E` committed to over curve `C`. The eVRF selects a pair of
+  scalars `a, b`, where the participant proves in-Bulletproof the points `A_i, B_i` are
+  `a * P_i, b * P_i`. The eVRF proceeds to commit to `A_i.x + B_i.x` in a Pedersen Commitment.
+
+  Our eVRF uses
+  [Generalized Bulletproofs](https://repo.getmonero.org/monero-project/ccs-proposals/uploads/a9baa50c38c6312efc0fea5c6a188bb9/gbp.pdf).
+  This allows us much larger witnesses without growing the reference string, and enables us to
+  efficiently sample challenges off in-circuit variables (via placing the variables in a vector
+  commitment, then challenging from a transcript of the commitments). We proceed to use
+  [elliptic curve divisors](https://repo.getmonero.org/-/project/54/uploads/eb1bf5b4d4855a3480c38abf895bd8e8/Veridise_Divisor_Proofs.pdf)
+  (which require the ability to sample a challenge off in-circuit variables) to prove discrete
+  logarithms efficiently.
+
+  This is done via having a private scalar (`p_i`) on curve `E`, not a private point, and
+  publishing the public key for it (`P_i = p_i * G`, where `G` is a generator of `E`). The eVRF
+  samples two points with unknown discrete logarithms `A, B`, and the circuit proves a Pedersen
+  Commitment commits to `(p_i * A).x + (p_i * B).x`.
+
+  With the eVRF established, we now detail our other novel aspect. The eVRF paper expects secret
+  shares to be sent to the other parties yet does not detail a precise way to do so. If we
+  encrypted the secret shares with some stream cipher, each recipient would have to attest validity
+  or accuse the sender of impropriety. We want an encryption scheme where anyone can verify the
+  secret shares were encrypted properly, without additional info, efficiently.
+
+  Please note from the published commitments, it's possible to calculcate a commitment to the
+  secret share each party should receive (`V_i`).
+
+  We have the sender sample two scalars per recipient, denoted `x_i, y_i` (where `i` is the
+  recipient index). They perform the eVRF to prove a Pedersen Commitment commits to
+  `z_i = (x_i * P_i).x + (y_i * P_i).x`. They then publish the encrypted share `s_i + z_i` and
+  `X_i = x_i * G, Y_i = y_i * G`.
+
+  The recipient is able to decrypt the share via calculating
+  `s_i - ((p_i * X_i).x + (p_i * Y_i).x)`.
+
+  To verify the secret share, we have the `F` terms of the Pedersen Commitments revealed (where
+  `F, H` are generators of `C`, `F` is used for binding and `H` for blinding). This already needs
+  to be done for the eVRF outputs used within the DKG, in order to obtain thecommitments to the
+  coefficients. When we have the commitment `Z_i = ((p_i * A).x + (p_i * B).x) * F`, we simply
+  check `s_i * F = Z_i + V_i`.
+
+  In order to open the Pedersen Commitments to their `F` terms, we transcript the commitments and
+  the claimed openings, then assign random weights to each pair of `(commitment, opening). The
+  prover proves knowledge of the discrete logarithm of the sum weighted commitments, minus the sum
+  sum weighted openings, over `H`.
+*/
+
 use core::ops::Deref;
 use std::{
   io::{self, Read, Write},
