@@ -19,6 +19,9 @@ use pedpop::pedpop_gen;
 mod promote;
 use promote::test_generator_promotion;
 
+#[cfg(all(test, feature = "evrf"))]
+mod evrf;
+
 /// Constant amount of participants to use when testing.
 pub const PARTICIPANTS: u16 = 5;
 /// Constant threshold of participants to use when testing.

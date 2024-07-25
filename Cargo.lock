@@ -2128,18 +2128,24 @@ dependencies = [
 name = "dkg"
 version = "0.5.1"
 dependencies = [
+ "blake2",
  "borsh",
  "chacha20",
  "ciphersuite",
  "dleq",
  "ec-divisors",
- "evrf",
  "flexible-transcript",
  "generalized-bulletproofs",
+ "generalized-bulletproofs-circuit-abstraction",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 1.1.0",
  "multiexp",
+ "pasta_curves",
+ "rand_chacha",
  "rand_core",
  "schnorr-signatures",
  "std-shims",
+ "subtle",
  "thiserror",
  "zeroize",
 ]
@@ -2445,24 +2451,6 @@ checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
 dependencies = [
  "event-listener 5.3.1",
  "pin-project-lite",
-]
-
-[[package]]
-name = "evrf"
-version = "0.1.0"
-dependencies = [
- "blake2",
- "ciphersuite",
- "ec-divisors",
- "generalized-bulletproofs",
- "generalized-bulletproofs-circuit-abstraction",
- "generalized-bulletproofs-ec-gadgets",
- "generic-array 1.1.0",
- "pasta_curves",
- "rand_chacha",
- "rand_core",
- "subtle",
- "zeroize",
 ]
 
 [[package]]

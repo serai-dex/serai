@@ -1,3 +1,5 @@
+use core::{marker::PhantomData, fmt};
+
 use subtle::*;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -25,17 +27,7 @@ use generalized_bulletproofs_circuit_abstraction::*;
 use ec_divisors::{DivisorCurve, new_divisor};
 use generalized_bulletproofs_ec_gadgets::*;
 
-#[cfg(test)]
-mod tests;
-
-/*
-  The following circuit has two roles.
-
-  1) Generating every coefficient used in the DKG, per the eVRF paper, using the fixed eVRF key.
-
-*/
-
-/// A curve to perform the eVRF with.
+/// A pair of curves to perform the eVRF with.
 pub trait EvrfCurve: Ciphersuite {
   type EmbeddedCurve: Ciphersuite;
   type EmbeddedCurveParameters: DiscreteLogParameters;
@@ -43,92 +35,125 @@ pub trait EvrfCurve: Ciphersuite {
 
 /// The result of proving for an eVRF.
 pub(crate) struct EvrfProveResult<C: Ciphersuite> {
-  pub(crate) encrypted_scalars: Vec<C::F>,
+  /// The coefficients for use in the DKG.
+  pub(crate) coefficients: Vec<Zeroizing<C::F>>,
+  /// The ECDHs to encrypt secret shares with.
+  pub(crate) ecdhs: Vec<Zeroizing<C::F>>,
+  /// The proof itself.
   pub(crate) proof: Vec<u8>,
 }
 
+/// The result of verifying an eVRF.
+pub(crate) struct EvrfVerifyResult<C: Ciphersuite> {
+  /// The commitments to the coefficients for use in the DKG.
+  pub(crate) coefficients: Vec<C::G>,
+  /// The commitments to the ECDHs used to encrypt secret shares with.
+  pub(crate) ecdhs: Vec<C::G>,
+}
+
+impl<C: Ciphersuite> fmt::Debug for EvrfVerifyResult<C> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fmt.debug_struct("EvrfVerifyResult").finish_non_exhaustive()
+  }
+}
+
 /// A struct to prove/verify eVRFs with.
-pub(crate) struct Evrf;
-impl Evrf {
-  fn transcript_to_points<C: Ciphersuite>(seed: [u8; 32], quantity: usize) -> Vec<C::G> {
-    // We need to do two Diffie-Hellman's per point in order to achieve an unbiased result
-    let quantity = 2 * quantity;
+pub(crate) struct Evrf<C: EvrfCurve>(PhantomData<C>);
+impl<C: EvrfCurve> Evrf<C>
+where
+  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
+    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
+{
+  // Sample uniform points (via rejection-sampling) on the embedded elliptic curve
+  fn transcript_to_points(
+    seed: [u8; 32],
+    coefficients: usize,
+  ) -> Vec<<C::EmbeddedCurve as Ciphersuite>::G> {
+    // We need to do two Diffie-Hellman's per coefficient in order to achieve an unbiased result
+    let quantity = 2 * coefficients;
 
     let mut rng = ChaCha20Rng::from_seed(seed);
     let mut res = Vec::with_capacity(quantity);
     while res.len() < quantity {
-      let mut repr = <C::G as GroupEncoding>::Repr::default();
+      let mut repr = <<C::EmbeddedCurve as Ciphersuite>::G as GroupEncoding>::Repr::default();
       rng.fill_bytes(repr.as_mut());
-      if let Ok(point) = C::read_G(&mut repr.as_ref()) {
+      if let Ok(point) = C::EmbeddedCurve::read_G(&mut repr.as_ref()) {
         res.push(point);
       }
     }
     res
   }
 
-  fn point_with_dlogs<Parameters: DiscreteLogParameters>(
+  /// Read a Variable from a theoretical vector commitment tape
+  fn read_one_from_tape(generators_to_use: usize, start: &mut usize) -> Variable {
+    // Each commitment has twice as many variables as generators in use
+    let commitment = *start / (2 * generators_to_use);
+    // The index will be less than the amount of generators in use, as half are left and half are
+    // right
+    let index = *start % generators_to_use;
+    let res = if (*start / generators_to_use) % 2 == 0 {
+      Variable::CG { commitment, index }
+    } else {
+      Variable::CH { commitment, index }
+    };
+    *start += 1;
+    res
+  }
+
+  /// Read a set of variables from a theoretical vector commitment tape
+  fn read_from_tape<N: ArrayLength>(
+    generators_to_use: usize,
+    start: &mut usize,
+  ) -> GenericArray<Variable, N> {
+    let mut buf = Vec::with_capacity(N::USIZE);
+    for _ in 0 .. N::USIZE {
+      buf.push(Self::read_one_from_tape(generators_to_use, start));
+    }
+    GenericArray::from_slice(&buf).clone()
+  }
+
+  /// Read `PointWithDlog`s, which share a discrete logarithm, from the theoretical vector
+  /// commitment tape.
+  fn point_with_dlogs(
+    start: &mut usize,
     quantity: usize,
     generators_to_use: usize,
-  ) -> Vec<PointWithDlog<Parameters>> {
-    let quantity = 2 * quantity;
-
-    fn read_one_from_tape(generators_to_use: usize, start: &mut usize) -> Variable {
-      let commitment = *start / (2 * generators_to_use);
-      let index = *start % generators_to_use;
-      let res = if (*start / generators_to_use) % 2 == 0 {
-        Variable::CG { commitment, index }
-      } else {
-        Variable::CH { commitment, index }
-      };
-      *start += 1;
-      res
-    }
-    fn read_from_tape<N: ArrayLength>(
-      generators_to_use: usize,
-      start: &mut usize,
-    ) -> GenericArray<Variable, N> {
-      let mut buf = Vec::with_capacity(N::USIZE);
-      for _ in 0 .. N::USIZE {
-        buf.push(read_one_from_tape(generators_to_use, start));
-      }
-      GenericArray::from_slice(&buf).clone()
-    }
-
-    // We define a serialized tape of the discrete logarithm, then for each divisor/point:
+  ) -> Vec<PointWithDlog<C::EmbeddedCurveParameters>> {
+    // We define a serialized tape of the discrete logarithm, then for each divisor/point, we push:
     //   zero, x**i, y x**i, y, x_coord, y_coord
     // We then chunk that into vector commitments
     // Here, we take the assumed layout and generate the expected `Variable`s for this layout
-    let mut start = 0;
 
-    let dlog = read_from_tape(generators_to_use, &mut start);
+    let dlog = Self::read_from_tape(generators_to_use, start);
 
-    let mut res = Vec::with_capacity(quantity + 1);
+    let mut res = Vec::with_capacity(quantity);
     let mut read_point_with_dlog = || {
-      let zero = read_one_from_tape(generators_to_use, &mut start);
-      let x_from_power_of_2 = read_from_tape(generators_to_use, &mut start);
-      let yx = read_from_tape(generators_to_use, &mut start);
-      let y = read_one_from_tape(generators_to_use, &mut start);
+      let zero = Self::read_one_from_tape(generators_to_use, start);
+      let x_from_power_of_2 = Self::read_from_tape(generators_to_use, start);
+      let yx = Self::read_from_tape(generators_to_use, start);
+      let y = Self::read_one_from_tape(generators_to_use, start);
       let divisor = Divisor { zero, x_from_power_of_2, yx, y };
 
       let point = (
-        read_one_from_tape(generators_to_use, &mut start),
-        read_one_from_tape(generators_to_use, &mut start),
+        Self::read_one_from_tape(generators_to_use, start),
+        Self::read_one_from_tape(generators_to_use, start),
       );
 
       res.push(PointWithDlog { dlog: dlog.clone(), divisor, point });
     };
 
     for _ in 0 .. quantity {
-      // One for each DH proven
       read_point_with_dlog();
     }
-    // And one more for the proof this is the discrete log of the public key
-    read_point_with_dlog();
     res
   }
 
-  fn muls_and_generators_to_use(quantity: usize) -> (usize, usize) {
-    let expected_muls = 7 * (1 + (2 * quantity));
+  fn muls_and_generators_to_use(coefficients: usize, ecdhs: usize) -> (usize, usize) {
+    const MULS_PER_DH: usize = 7;
+    // 1 DH to prove the discrete logarithm corresponds to the eVRF public key
+    // 2 DHs per generated coefficient
+    // 2 DHs per generated ECDG
+    let expected_muls = MULS_PER_DH * (1 + (2 * coefficients) + (2 * 2 * ecdhs));
     let generators_to_use = {
       let mut padded_pow_of_2 = 1;
       while padded_pow_of_2 < expected_muls {
@@ -141,26 +166,84 @@ impl Evrf {
     (expected_muls, generators_to_use)
   }
 
-  fn circuit<C: EvrfCurve>(
+  fn circuit(
     curve_spec: &CurveSpec<C::F>,
     evrf_public_key: (C::F, C::F),
-    quantity: usize,
+    coefficients: usize,
+    ecdh_commitments: &[[(C::F, C::F); 2]],
     generator_tables: &[GeneratorTable<C::F, C::EmbeddedCurveParameters>],
     circuit: &mut Circuit<C>,
     transcript: &mut impl Transcript,
   ) {
-    let (expected_muls, generators_to_use) = Self::muls_and_generators_to_use(quantity);
+    let (expected_muls, generators_to_use) =
+      Self::muls_and_generators_to_use(coefficients, ecdh_commitments.len());
     let (challenge, challenged_generators) =
       circuit.discrete_log_challenge(transcript, curve_spec, generator_tables);
+    debug_assert_eq!(challenged_generators.len(), 1 + (2 * coefficients) + ecdh_commitments.len());
 
-    let mut point_with_dlogs =
-      Self::point_with_dlogs::<C::EmbeddedCurveParameters>(quantity, generators_to_use).into_iter();
+    // The generators tables/challenged generators are expected to have the following layouts
+    // G, coefficients * [A, B], ecdhs * [P]
+    #[allow(non_snake_case)]
+    let challenged_G = &challenged_generators[0];
 
-    // Verify the DLog claims for the sampled points
-    for (i, pair) in challenged_generators.chunks(2).take(quantity).enumerate() {
+    // Execute the circuit for the coefficients
+    let mut tape_pos = 0;
+    {
+      let mut point_with_dlogs =
+        Self::point_with_dlogs(&mut tape_pos, 1 + (2 * coefficients), generators_to_use)
+          .into_iter();
+
+      // Verify the discrete logarithm is in the fact the discrete logarithm of the eVRF public key
+      let point = circuit.discrete_log(
+        curve_spec,
+        point_with_dlogs.next().unwrap(),
+        &challenge,
+        challenged_G,
+      );
+      circuit.equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.0));
+      circuit.equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1));
+
+      // Verify the DLog claims against the sampled points
+      for (i, pair) in challenged_generators[1 ..].chunks(2).take(coefficients).enumerate() {
+        let mut lincomb = LinComb::empty();
+        debug_assert_eq!(pair.len(), 2);
+        for challenged_generator in pair {
+          let point = circuit.discrete_log(
+            curve_spec,
+            point_with_dlogs.next().unwrap(),
+            &challenge,
+            challenged_generator,
+          );
+          // For each point in this pair, add its x coordinate to a lincomb
+          lincomb = lincomb.term(C::F::ONE, point.x());
+        }
+        // Constrain the sum of the two x coordinates to be equal to the value in the Pedersen
+        // commitment
+        circuit.equality(lincomb, &LinComb::from(Variable::V(i)));
+      }
+      debug_assert!(point_with_dlogs.next().is_none());
+    }
+
+    // Now execute the circuit for the ECDHs
+    let mut challenged_generators = challenged_generators.iter().skip(1 + (2 * coefficients));
+    for (i, ecdh) in ecdh_commitments.iter().enumerate() {
+      let challenged_generator = challenged_generators.next().unwrap();
       let mut lincomb = LinComb::empty();
-      debug_assert_eq!(pair.len(), 2);
-      for challenged_generator in pair {
+      for ecdh in ecdh {
+        let mut point_with_dlogs =
+          Self::point_with_dlogs(&mut tape_pos, 2, generators_to_use).into_iter();
+
+        // One proof of the ECDH secret * G for the commitment published
+        let point = circuit.discrete_log(
+          curve_spec,
+          point_with_dlogs.next().unwrap(),
+          &challenge,
+          challenged_G,
+        );
+        circuit.equality(LinComb::from(point.x()), &LinComb::empty().constant(ecdh.0));
+        circuit.equality(LinComb::from(point.y()), &LinComb::empty().constant(ecdh.1));
+
+        // One proof of the ECDH secret * P for the ECDH
         let point = circuit.discrete_log(
           curve_spec,
           point_with_dlogs.next().unwrap(),
@@ -170,77 +253,40 @@ impl Evrf {
         // For each point in this pair, add its x coordinate to a lincomb
         lincomb = lincomb.term(C::F::ONE, point.x());
       }
+
       // Constrain the sum of the two x coordinates to be equal to the value in the Pedersen
       // commitment
-      circuit.equality(lincomb, &LinComb::from(Variable::V(i)));
+      circuit.equality(lincomb, &LinComb::from(Variable::V(coefficients + i)));
     }
-
-    let point = circuit.discrete_log(
-      curve_spec,
-      point_with_dlogs.next().unwrap(),
-      &challenge,
-      challenged_generators.last().unwrap(),
-    );
-    circuit.equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.0));
-    circuit.equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1));
 
     debug_assert_eq!(expected_muls, circuit.muls());
-    debug_assert!(point_with_dlogs.next().is_none());
+    debug_assert!(challenged_generators.next().is_none());
   }
 
-  /// Prove a point on an elliptic curve had its discrete logarithm generated via an eVRF.
-  pub(crate) fn prove<C: EvrfCurve>(
-    rng: &mut (impl RngCore + CryptoRng),
-    generators: &Generators<C>,
-    evrf_private_key: Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
-    invocation: [u8; 32],
-    quantity: usize,
-  ) -> Result<EvrfProveResult<C>, AcError>
-  where
-    <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-      DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-  {
-    let curve_spec = CurveSpec {
-      a: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::a(),
-      b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
-    };
-
-    // Combine the invocation and the public key into a transcript
-    let transcript = Blake2s256::digest(
-      [
-        invocation.as_slice(),
-        (<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *evrf_private_key)
-          .to_bytes()
-          .as_ref(),
-      ]
-      .concat(),
-    )
-    .into();
-
-    let points = Self::transcript_to_points::<C::EmbeddedCurve>(transcript, quantity);
-
-    let num_bits: u32 = <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS;
+  /// Convert a scalar to a sequence of coefficients for the polynomial 2**i, where the sum of the
+  /// coefficients is F::NUM_BITS.
+  ///
+  /// We'll presumably use this scalar in a discrete log proof. That requires calculating a divisor
+  /// which is variable time to the sum of the coefficients in the polynomial. This causes all
+  /// scalars to have a constant sum of their coefficients (instead one variable to the bits set).
+  ///
+  /// We achieve this by finding the highest non-0 coefficient, decrementing it, and increasing the
+  /// immediately less significant coefficient by 2. This increases the sum of the coefficients by
+  /// 1 (-1+2=1).
+  // TODO: Support scalars which have a value < F::NUM_BITS
+  #[allow(clippy::cast_possible_truncation)]
+  fn scalar_to_bits(scalar: &<C::EmbeddedCurve as Ciphersuite>::F) -> Vec<u64> {
+    let num_bits = <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS;
 
     // Obtain the bits of the private key
-    let mut sum_of_coefficients: u32 = 0;
-    let mut dlog = vec![<C as Ciphersuite>::F::ZERO; num_bits as usize];
-    for (i, bit) in evrf_private_key.to_le_bits().into_iter().take(num_bits as usize).enumerate() {
-      let bit = Choice::from(u8::from(bit));
-      dlog[i] =
-        <_>::conditional_select(&<C as Ciphersuite>::F::ZERO, &<C as Ciphersuite>::F::ONE, bit);
-      sum_of_coefficients += u32::conditional_select(&0, &1, bit);
+    let mut sum_of_coefficients: u64 = 0;
+    let mut dlog = vec![0; num_bits as usize];
+    for (i, bit) in scalar.to_le_bits().into_iter().take(num_bits as usize).enumerate() {
+      let bit = u64::from(u8::from(bit));
+      dlog[i] = bit;
+      sum_of_coefficients += bit;
     }
 
-    /*
-      Now that we have the discrete logarithm as the coefficients 0/1 for a polynomial of 2**i, we
-      want to malleate it such that the sum of its coefficients is NUM_BITS. The divisor
-      calculcation is a non-trivial amount of work and would be extremely vulnerable to timing
-      attacks without such efforts.
-
-      We find the highest non-0 coefficient, decrement it, and increase the prior coefficient by 2.
-      This increase the sum of the coefficients by 1.
-    */
-    let two = <C as Ciphersuite>::F::ONE.double();
     for _ in 0 .. num_bits {
       // Find the highest coefficient currently non-zero
       let mut h = 1u32;
@@ -250,140 +296,233 @@ impl Evrf {
 
       // TODO: Squash the following two loops by iterating from the top bit to the bottom bit
 
-      let mut prior_scalar = dlog[(h as usize) - 1];
-      for (i, scalar) in dlog.iter().enumerate().skip(h as usize) {
-        let is_zero = <C as Ciphersuite>::F::ZERO.ct_eq(scalar);
+      let mut prior_coefficient = dlog[(h as usize) - 1];
+      for (i, coefficient) in dlog.iter().enumerate().skip(h as usize) {
+        let is_zero = 0.ct_eq(coefficient);
 
         // Set `h_*` if this value is non-0
         h = u32::conditional_select(&h, &(i as u32), !is_zero);
-        h_value = <C as Ciphersuite>::F::conditional_select(&h_value, scalar, !is_zero);
-        h_prior_value =
-          <C as Ciphersuite>::F::conditional_select(&h_prior_value, &prior_scalar, !is_zero);
+        h_value = <_>::conditional_select(&h_value, coefficient, !is_zero);
+        h_prior_value = <_>::conditional_select(&h_prior_value, &prior_coefficient, !is_zero);
 
-        // Update prior_scalar
-        prior_scalar = *scalar;
+        // Update prior_coefficient
+        prior_coefficient = *coefficient;
       }
 
       // We should not have selected a value equivalent to 0
       // TODO: Ban evrf keys < NUM_BITS and accordingly unable to be so coerced
-      // TODO: Preprocess this decomposition of the eVRF key?
-      assert!(!bool::from(h_value.ct_eq(&<C as Ciphersuite>::F::ZERO)));
+      assert!(!bool::from(h_value.ct_eq(&0)));
 
       // Update h_value, h_prior_value as necessary
-      h_value -= <C as Ciphersuite>::F::ONE;
-      h_prior_value += two;
+      h_value -= 1;
+      h_prior_value += 2;
 
       // Now, set these values if we should
-      let should_set = !sum_of_coefficients.ct_eq(&num_bits);
-      sum_of_coefficients += u32::conditional_select(&0, &1, should_set);
-      for (i, scalar) in dlog.iter_mut().enumerate() {
+      let should_set = !sum_of_coefficients.ct_eq(&u64::from(num_bits));
+      sum_of_coefficients += u64::conditional_select(&0, &1, should_set);
+      for (i, coefficient) in dlog.iter_mut().enumerate() {
         let this_is_prior = (i as u32).ct_eq(&(h - 1));
         let this_is_high = (i as u32).ct_eq(&h);
 
-        *scalar = <_>::conditional_select(scalar, &h_prior_value, should_set & this_is_prior);
-        *scalar = <_>::conditional_select(scalar, &h_value, should_set & this_is_high);
+        *coefficient =
+          <_>::conditional_select(coefficient, &h_prior_value, should_set & this_is_prior);
+        *coefficient = <_>::conditional_select(coefficient, &h_value, should_set & this_is_high);
       }
     }
-    debug_assert!(bool::from(
-      dlog
-        .iter()
-        .sum::<<C as Ciphersuite>::F>()
-        .ct_eq(&<C as Ciphersuite>::F::from(u64::from(num_bits)))
-    ));
+    debug_assert!(bool::from(dlog.iter().sum::<u64>().ct_eq(&u64::from(num_bits))));
+
+    dlog
+  }
+
+  fn transcript(
+    invocation: [u8; 32],
+    evrf_public_key: <C::EmbeddedCurve as Ciphersuite>::G,
+    ecdh_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+  ) -> [u8; 32] {
+    let mut transcript = Blake2s256::new();
+    transcript.update(invocation);
+    transcript.update(evrf_public_key.to_bytes().as_ref());
+    for ecdh in ecdh_public_keys {
+      transcript.update(ecdh.to_bytes().as_ref());
+    }
+    transcript.finalize().into()
+  }
+
+  /// Prove a point on an elliptic curve had its discrete logarithm generated via an eVRF.
+  pub(crate) fn prove(
+    rng: &mut (impl RngCore + CryptoRng),
+    generators: &Generators<C>,
+    evrf_private_key: Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
+    invocation: [u8; 32],
+    coefficients: usize,
+    ecdh_public_keys: &[<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G],
+  ) -> Result<EvrfProveResult<C>, AcError> {
+    let curve_spec = CurveSpec {
+      a: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::a(),
+      b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
+    };
+
+    // Combine the invocation and the public key into a transcript
+    let transcript = Self::transcript(
+      invocation,
+      <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *evrf_private_key,
+      ecdh_public_keys,
+    );
 
     // A tape of the discrete logarithm, then [zero, x**i, y x**i, y, x_coord, y_coord]
     let mut vector_commitment_tape = vec![];
 
-    // Start by pushing the discrete logarithm onto the tape
-    for coefficient in &dlog {
-      vector_commitment_tape.push(*coefficient);
-    }
-
-    let mut generator_tables = Vec::with_capacity(1 + (2 * quantity));
+    let mut generator_tables =
+      Vec::with_capacity(1 + (2 * coefficients) + ecdh_public_keys.len());
 
     // A function to calculate a divisor and push it onto the tape
     // This defines a vec, divisor_points, outside of the fn to reuse its allocation
-    let mut divisor_points = Vec::with_capacity((num_bits as usize) + 1);
-    let mut divisor = |mut generator: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G| {
-      {
-        let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(generator).unwrap();
-        generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
-      }
-
-      let dh = generator * *evrf_private_key;
-      {
-        for coefficient in &dlog {
-          let mut coefficient = *coefficient;
-          while coefficient != <C as Ciphersuite>::F::ZERO {
-            coefficient -= <C as Ciphersuite>::F::ONE;
-            divisor_points.push(generator);
-          }
-          generator = generator.double();
+    let mut divisor_points =
+      Vec::with_capacity((<C::EmbeddedCurve as Ciphersuite>::F::NUM_BITS as usize) + 1);
+    let mut divisor =
+      |vector_commitment_tape: &mut Vec<_>,
+       dlog: &[u64],
+       push_generator: bool,
+       generator: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
+       dh: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G| {
+        if push_generator {
+          let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(generator).unwrap();
+          generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
         }
+
+        {
+          let mut generator = generator;
+          for coefficient in dlog {
+            let mut coefficient = *coefficient;
+            while coefficient != 0 {
+              coefficient -= 1;
+              divisor_points.push(generator);
+            }
+            generator = generator.double();
+          }
+          debug_assert_eq!(dlog.iter().sum::<u64>(), u64::from(<C::EmbeddedCurve as Ciphersuite>::F::NUM_BITS));
+        }
+        divisor_points.push(-dh);
+        let mut divisor = new_divisor(&divisor_points).unwrap().normalize_x_coefficient();
+        divisor_points.zeroize();
+
+        vector_commitment_tape.push(divisor.zero_coefficient);
+
+        for coefficient in divisor.x_coefficients.iter().skip(1) {
+          vector_commitment_tape.push(*coefficient);
+        }
+        for _ in divisor.x_coefficients.len() ..
+          <C::EmbeddedCurveParameters as DiscreteLogParameters>::XCoefficientsMinusOne::USIZE
+        {
+          vector_commitment_tape.push(<C as Ciphersuite>::F::ZERO);
+        }
+
+        for coefficient in divisor.yx_coefficients.first().unwrap_or(&vec![]) {
+          vector_commitment_tape.push(*coefficient);
+        }
+        for _ in divisor.yx_coefficients.first().unwrap_or(&vec![]).len() ..
+          <C::EmbeddedCurveParameters as DiscreteLogParameters>::YxCoefficients::USIZE
+        {
+          vector_commitment_tape.push(<C as Ciphersuite>::F::ZERO);
+        }
+
+        vector_commitment_tape
+          .push(divisor.y_coefficients.first().copied().unwrap_or(<C as Ciphersuite>::F::ZERO));
+
+        divisor.zeroize();
+        drop(divisor);
+
+        let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(dh).unwrap();
+        vector_commitment_tape.push(x);
+        vector_commitment_tape.push(y);
+
+        (x, y)
+      };
+
+    // Start with the coefficients
+    let evrf_public_key;
+    let mut actual_coefficients = Vec::with_capacity(coefficients);
+    {
+      let mut dlog = Self::scalar_to_bits(&evrf_private_key);
+      let points = Self::transcript_to_points(transcript, coefficients);
+
+      // Start by pushing the discrete logarithm onto the tape
+      for coefficient in &dlog {
+        vector_commitment_tape.push(<_>::from(*coefficient));
       }
-      divisor_points.push(-dh);
-      let mut divisor = new_divisor(&divisor_points).unwrap().normalize_x_coefficient();
-      divisor_points.zeroize();
 
-      vector_commitment_tape.push(divisor.zero_coefficient);
+      // Push a divisor for proving that we're using the correct scalar
+      evrf_public_key = divisor(
+        &mut vector_commitment_tape,
+        &dlog,
+        true,
+        <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator(),
+        <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *evrf_private_key,
+      );
 
-      for coefficient in divisor.x_coefficients.iter().skip(1) {
-        vector_commitment_tape.push(*coefficient);
+      // Push a divisor for each point we use in the eVRF
+      for pair in points.chunks(2) {
+        let mut res = Zeroizing::new(C::F::ZERO);
+        for point in pair {
+          let (dh_x, _) = divisor(&mut vector_commitment_tape, &dlog, true, *point, *point * *evrf_private_key);
+          *res += dh_x;
+        }
+        actual_coefficients.push(res);
       }
-      for _ in divisor.x_coefficients.len() ..
-        <C::EmbeddedCurveParameters as DiscreteLogParameters>::XCoefficientsMinusOne::USIZE
-      {
-        vector_commitment_tape.push(<C as Ciphersuite>::F::ZERO);
-      }
+      debug_assert_eq!(actual_coefficients.len(), coefficients);
 
-      for coefficient in divisor.yx_coefficients.first().unwrap_or(&vec![]) {
-        vector_commitment_tape.push(*coefficient);
-      }
-      for _ in divisor.yx_coefficients.first().unwrap_or(&vec![]).len() ..
-        <C::EmbeddedCurveParameters as DiscreteLogParameters>::YxCoefficients::USIZE
-      {
-        vector_commitment_tape.push(<C as Ciphersuite>::F::ZERO);
-      }
-
-      vector_commitment_tape
-        .push(divisor.y_coefficients.first().cloned().unwrap_or(<C as Ciphersuite>::F::ZERO));
-
-      divisor.zeroize();
-      drop(divisor);
-
-      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(dh).unwrap();
-      vector_commitment_tape.push(x);
-      vector_commitment_tape.push(y);
-
-      (x, y)
-    };
-
-    // Push a divisor for each point we use in the eVRF
-    let mut scalars = Vec::with_capacity(quantity);
-    for pair in points.chunks(2) {
-      let mut res = Zeroizing::new(C::F::ZERO);
-      for point in pair {
-        let (dh_x, _) = divisor(*point);
-        *res += dh_x;
-      }
-      scalars.push(res);
+      dlog.zeroize();
     }
-    debug_assert_eq!(scalars.len(), quantity);
 
-    // Also push a divisor for proving that we're using the correct scalar
-    let evrf_public_key = divisor(<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator());
+    // Now do the ECDHs
+    let mut ecdhs = Vec::with_capacity(ecdh_public_keys.len());
+    let mut ecdh_commitments = Vec::with_capacity(2 * ecdh_public_keys.len());
+    let mut ecdh_commitments_xy = Vec::with_capacity(ecdh_public_keys.len());
+    for ecdh_public_key in ecdh_public_keys {
+      ecdh_commitments_xy.push([(C::F::ZERO, C::F::ZERO); 2]);
 
-    dlog.zeroize();
-    drop(dlog);
+      let mut res = Zeroizing::new(C::F::ZERO);
+      for j in 0 .. 2 {
+        let mut ecdh_private_key = <C::EmbeddedCurve as Ciphersuite>::F::random(&mut *rng);
+        let mut dlog = Self::scalar_to_bits(&ecdh_private_key);
+        let ecdh_commitment = <C::EmbeddedCurve as Ciphersuite>::generator() * ecdh_private_key;
+        ecdh_commitments.push(ecdh_commitment);
+        ecdh_commitments_xy.last_mut().unwrap()[j] =
+          <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_commitment).unwrap();
+
+        // Start by pushing the discrete logarithm onto the tape
+        for coefficient in &dlog {
+          vector_commitment_tape.push(<_>::from(*coefficient));
+        }
+
+        // Push a divisor for proving that we're using the correct scalar for the commitment
+        divisor(
+          &mut vector_commitment_tape,
+          &dlog,
+          false,
+          <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator(),
+          <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * ecdh_private_key,
+        );
+        // Push a divisor for the key we're performing the ECDH with
+        let (dh_x, _) = divisor(&mut vector_commitment_tape, &dlog, j == 0, *ecdh_public_key, *ecdh_public_key * ecdh_private_key);
+        *res += dh_x;
+
+        ecdh_private_key.zeroize();
+        dlog.zeroize();
+      }
+      ecdhs.push(res);
+    }
+    debug_assert_eq!(ecdhs.len(), ecdh_public_keys.len());
 
     // Now that we have the vector commitment tape, chunk it
-    let (_, generators_to_use) = Self::muls_and_generators_to_use(quantity);
+    let (_, generators_to_use) =
+      Self::muls_and_generators_to_use(coefficients, ecdh_public_keys.len());
 
     let mut vector_commitments =
-      Vec::with_capacity(vector_commitment_tape.len().div_ceil(generators_to_use));
-    for chunk in vector_commitment_tape.chunks(generators_to_use * 2) {
-      let g_values = chunk[.. generators_to_use].to_vec().into();
-      let h_values = chunk[generators_to_use ..].to_vec().into();
+      Vec::with_capacity(vector_commitment_tape.len().div_ceil(2 * generators_to_use));
+    for chunk in vector_commitment_tape.chunks(2 * generators_to_use) {
+      let g_values = chunk[.. generators_to_use.min(chunk.len())].to_vec().into();
+      let h_values = chunk[generators_to_use.min(chunk.len()) ..].to_vec().into();
       vector_commitments.push(PedersenVectorCommitment {
         g_values,
         h_values,
@@ -394,9 +533,12 @@ impl Evrf {
     vector_commitment_tape.zeroize();
     drop(vector_commitment_tape);
 
-    let mut commitments = Vec::with_capacity(quantity);
-    for scalar in &scalars {
-      commitments.push(PedersenCommitment { value: **scalar, mask: C::F::random(&mut *rng) });
+    let mut commitments = Vec::with_capacity(coefficients + ecdh_public_keys.len());
+    for coefficient in &actual_coefficients {
+      commitments.push(PedersenCommitment { value: **coefficient, mask: C::F::random(&mut *rng) });
+    }
+    for ecdh in &ecdhs {
+      commitments.push(PedersenCommitment { value: **ecdh, mask: C::F::random(&mut *rng) });
     }
 
     let mut transcript = ProverTranscript::new(transcript);
@@ -414,12 +556,16 @@ impl Evrf {
         .map(|commitment| commitment.commit(generators.g(), generators.h()))
         .collect(),
     );
+    for ecdh_commitment in ecdh_commitments {
+      transcript.push_point(ecdh_commitment);
+    }
 
     let mut circuit = Circuit::prove(vector_commitments, commitments.clone());
-    Self::circuit::<C>(
+    Self::circuit(
       &curve_spec,
       evrf_public_key,
-      quantity,
+      coefficients,
+      &ecdh_commitments_xy,
       &generator_tables,
       &mut circuit,
       &mut transcript,
@@ -437,14 +583,14 @@ impl Evrf {
     statement.prove(&mut *rng, &mut transcript, witness).unwrap();
 
     // Push the reveal onto the transcript
-    for scalar in &scalars {
-      transcript.push_point(generators.g() * **scalar);
+    for commitment in &commitments {
+      transcript.push_point(generators.g() * commitment.value);
     }
 
     // Define a weight to aggregate the commitments with
-    let mut agg_weights = Vec::with_capacity(quantity);
+    let mut agg_weights = Vec::with_capacity(commitments.len());
     agg_weights.push(C::F::ONE);
-    while agg_weights.len() < quantity {
+    while agg_weights.len() < commitments.len() {
       agg_weights.push(transcript.challenge::<C::F>());
     }
     let mut x = commitments
@@ -461,69 +607,87 @@ impl Evrf {
     r.zeroize();
     x.zeroize();
 
-    Ok(EvrfProveResult { scalars, proof: transcript.complete() })
+    Ok(EvrfProveResult { coefficients: actual_coefficients, ecdhs, proof: transcript.complete() })
   }
 
   // TODO: Dedicated error
   /// Verify an eVRF proof, returning the commitments output.
-  pub(crate) fn verify<C: EvrfCurve>(
+  pub(crate) fn verify(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
     verifier: &mut BatchVerifier<C>,
     evrf_public_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
     invocation: [u8; 32],
-    quantity: usize,
+    coefficients: usize,
+    ecdh_public_keys: &[<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G],
     proof: &[u8],
-  ) -> Result<Vec<C::G>, ()>
-  where
-    <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-      DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-  {
+  ) -> Result<EvrfVerifyResult<C>, ()> {
     let curve_spec = CurveSpec {
       a: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::a(),
       b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
     };
 
-    let transcript =
-      Blake2s256::digest([invocation.as_slice(), evrf_public_key.to_bytes().as_ref()].concat())
-        .into();
+    let transcript = Self::transcript(invocation, evrf_public_key, ecdh_public_keys);
 
-    let points = Self::transcript_to_points::<C::EmbeddedCurve>(transcript, quantity);
-    let mut generator_tables = Vec::with_capacity(1 + (2 * quantity));
-
-    for generator in points {
-      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(generator).unwrap();
-      generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
-    }
+    let mut generator_tables =
+      Vec::with_capacity(1 + (2 * coefficients) + ecdh_public_keys.len());
     {
       let (x, y) =
         <C::EmbeddedCurve as Ciphersuite>::G::to_xy(<C::EmbeddedCurve as Ciphersuite>::generator())
           .unwrap();
       generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
     }
+    let points = Self::transcript_to_points(transcript, coefficients);
+    for generator in points {
+      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(generator).unwrap();
+      generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
+    }
+    for generator in ecdh_public_keys {
+      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(*generator).unwrap();
+      generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
+    }
 
-    let (_, generators_to_use) = Self::muls_and_generators_to_use(quantity);
+    let (_, generators_to_use) =
+      Self::muls_and_generators_to_use(coefficients, ecdh_public_keys.len());
 
     let mut transcript = VerifierTranscript::new(transcript, proof);
 
+    let dlog_len = <C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits::USIZE;
     let divisor_len = 1 +
       <C::EmbeddedCurveParameters as DiscreteLogParameters>::XCoefficientsMinusOne::USIZE +
       <C::EmbeddedCurveParameters as DiscreteLogParameters>::YxCoefficients::USIZE +
       1;
     let dlog_proof_len = divisor_len + 2;
-    let vcs = (<C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits::USIZE +
-      ((1 + (2 * quantity)) * dlog_proof_len))
-      .div_ceil(2 * generators_to_use);
 
-    let all_commitments = transcript.read_commitments(vcs, quantity).map_err(|_| ())?;
+    let coeffs_vc_variables = dlog_len + ((1 + (2 * coefficients)) * dlog_proof_len);
+    let ecdhs_vc_variables = ((2 * ecdh_public_keys.len()) * dlog_len) + ((2 * 2 * ecdh_public_keys.len()) * dlog_proof_len);
+    let vcs = (coeffs_vc_variables + ecdhs_vc_variables).div_ceil(2 * generators_to_use);
+
+    let all_commitments =
+      transcript.read_commitments(vcs, coefficients + ecdh_public_keys.len()).map_err(|_| ())?;
     let commitments = all_commitments.V().to_vec();
 
+    let mut ecdh_commitments_xy = Vec::with_capacity(ecdh_public_keys.len());
+    for _ in 0 .. ecdh_public_keys.len() {
+      ecdh_commitments_xy.push([
+        <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(
+          transcript.read_point::<C::EmbeddedCurve>().map_err(|_| ())?,
+        )
+        .ok_or(())?,
+        <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(
+          transcript.read_point::<C::EmbeddedCurve>().map_err(|_| ())?,
+        )
+        .ok_or(())?,
+      ]);
+    }
+
     let mut circuit = Circuit::verify();
-    Self::circuit::<C>(
+    Self::circuit(
       &curve_spec,
       // TODO: Use a better error here
       <C::EmbeddedCurve as Ciphersuite>::G::to_xy(evrf_public_key).ok_or(())?,
-      quantity,
+      coefficients,
+      &ecdh_commitments_xy,
       &generator_tables,
       &mut circuit,
       &mut transcript,
@@ -537,20 +701,21 @@ impl Evrf {
 
     statement.verify(rng, verifier, &mut transcript).map_err(|_| ())?;
 
-    // Read the unblinded public keys
-    let mut res = Vec::with_capacity(quantity);
-    for _ in 0 .. quantity {
-      res.push(transcript.read_point::<C>().map_err(|_| ())?);
+    // Read the openings for the commitments
+    let mut openings = Vec::with_capacity(commitments.len());
+    for _ in 0 .. commitments.len() {
+      openings.push(transcript.read_point::<C>().map_err(|_| ())?);
     }
 
-    let mut agg_weights = Vec::with_capacity(quantity);
+    // Verify the openings of the commitments
+    let mut agg_weights = Vec::with_capacity(commitments.len());
     agg_weights.push(C::F::ONE);
-    while agg_weights.len() < quantity {
+    while agg_weights.len() < commitments.len() {
       agg_weights.push(transcript.challenge::<C::F>());
     }
 
     let sum_points =
-      res.iter().zip(&agg_weights).map(|(point, weight)| *point * *weight).sum::<C::G>();
+      openings.iter().zip(&agg_weights).map(|(point, weight)| *point * *weight).sum::<C::G>();
     let sum_commitments =
       commitments.into_iter().zip(agg_weights).map(|(point, weight)| point * weight).sum::<C::G>();
     #[allow(non_snake_case)]
@@ -570,6 +735,8 @@ impl Evrf {
       Err(())?
     };
 
-    Ok(res)
+    let ecdhs = openings[coefficients ..].to_vec();
+    let coefficients = openings[.. coefficients].to_vec();
+    Ok(EvrfVerifyResult { coefficients, ecdhs })
   }
 }

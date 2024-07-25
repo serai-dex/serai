@@ -10,11 +10,17 @@
   `a * P_i, b * P_i`. The eVRF proceeds to commit to `A_i.x + B_i.x` in a Pedersen Commitment.
 
   Our eVRF uses
-  [Generalized Bulletproofs](https://repo.getmonero.org/monero-project/ccs-proposals/uploads/a9baa50c38c6312efc0fea5c6a188bb9/gbp.pdf).
+  [Generalized Bulletproofs](
+    https://repo.getmonero.org/monero-project/ccs-proposals
+      /uploads/a9baa50c38c6312efc0fea5c6a188bb9/gbp.pdf
+  ).
   This allows us much larger witnesses without growing the reference string, and enables us to
   efficiently sample challenges off in-circuit variables (via placing the variables in a vector
   commitment, then challenging from a transcript of the commitments). We proceed to use
-  [elliptic curve divisors](https://repo.getmonero.org/-/project/54/uploads/eb1bf5b4d4855a3480c38abf895bd8e8/Veridise_Divisor_Proofs.pdf)
+  [elliptic curve divisors](
+    https://repo.getmonero.org/-/project/54/
+      uploads/eb1bf5b4d4855a3480c38abf895bd8e8/Veridise_Divisor_Proofs.pdf
+  )
   (which require the ability to sample a challenge off in-circuit variables) to prove discrete
   logarithms efficiently.
 
@@ -34,8 +40,8 @@
 
   We have the sender sample two scalars per recipient, denoted `x_i, y_i` (where `i` is the
   recipient index). They perform the eVRF to prove a Pedersen Commitment commits to
-  `z_i = (x_i * P_i).x + (y_i * P_i).x`. They then publish the encrypted share `s_i + z_i` and
-  `X_i = x_i * G, Y_i = y_i * G`.
+  `z_i = (x_i * P_i).x + (y_i * P_i).x` and `x_i, y_i` are the discrete logarithms of `X_i, Y_i`
+  over `G`. They then publish the encrypted share `s_i + z_i` and `X_i, Y_i`.
 
   The recipient is able to decrypt the share via calculating
   `s_i - ((p_i * X_i).x + (p_i * Y_i).x)`.
@@ -59,6 +65,9 @@
   robust to threshold `t`.
 */
 
+pub(crate) mod proof;
+
+/*
 use core::ops::Deref;
 use std::{
   io::{self, Read, Write},
@@ -443,3 +452,4 @@ where
     })
   }
 }
+*/

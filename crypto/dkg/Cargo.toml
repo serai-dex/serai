@@ -43,14 +43,14 @@ blake2 = { version = "0.10", default-features = false, features = ["std"], optio
 rand_chacha = { version = "0.3", default-features = false, features = ["std"], optional = true }
 generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", default-features = false, optional = true }
 ec-divisors = { path = "../evrf/divisors", default-features = false, optional = true }
-generalized-bulletproofs-circuit-abstraction = { path = "./circuit-abstraction", optional = true }
-generalized-bulletproofs-ec-gadgets = { path = "./ec-gadgets", optional = true }
+generalized-bulletproofs-circuit-abstraction = { path = "../evrf/circuit-abstraction", optional = true }
+generalized-bulletproofs-ec-gadgets = { path = "../evrf/ec-gadgets", optional = true }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
-generalized-bulletproofs = { path = "./generalized-bulletproofs", features = ["tests"] }
-ec-divisors = { path = "./divisors", features = ["pasta"] }
+generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", features = ["tests"] }
+ec-divisors = { path = "../evrf/divisors", features = ["pasta"] }
 pasta_curves = "0.5"
 
 [features]

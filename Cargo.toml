@@ -39,7 +39,6 @@ members = [
   "crypto/evrf/circuit-abstraction",
   "crypto/evrf/divisors",
   "crypto/evrf/ec-gadgets",
-  "crypto/evrf",
 
   "crypto/dkg",
   "crypto/frost",
