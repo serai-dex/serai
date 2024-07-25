@@ -50,6 +50,13 @@
   the claimed openings, then assign random weights to each pair of `(commitment, opening). The
   prover proves knowledge of the discrete logarithm of the sum weighted commitments, minus the sum
   sum weighted openings, over `H`.
+
+  The benefit to this construction is that given an broadcast channel which is reliable and
+  ordered, only `t` messages must be broadcast from honest parties in order to create a `t`-of-`n`
+  multisig. If the encrypted secret shares were not verifiable, one would need at least `t + n`
+  messages to ensure every participant has a correct dealing and can participate in future
+  reconstructions of the secret. This would also require all `n` parties be online, whereas this is
+  robust to threshold `t`.
 */
 
 use core::ops::Deref;
