@@ -1,4 +1,4 @@
-use std_shims::{sync::OnceLock, vec::Vec};
+use std_shims::{sync::LazyLock, vec::Vec};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -6,7 +6,7 @@ use zeroize::Zeroize;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, Scalar, EdwardsPoint};
 
-use monero_generators::{H, Generators, MAX_COMMITMENTS, COMMITMENT_BITS};
+use monero_generators::{H as MONERO_H, Generators, MAX_COMMITMENTS, COMMITMENT_BITS};
 use monero_primitives::{Commitment, INV_EIGHT, keccak256_to_scalar};
 use crate::{core::multiexp, scalar_vector::ScalarVector, BulletproofsBatchVerifier};
 
@@ -107,7 +107,7 @@ impl<'a> AggregateRangeStatement<'a> {
       None?
     };
 
-    let generators = GENERATORS();
+    let generators = &GENERATORS;
 
     let (mut transcript, _) = self.initial_transcript();
 
@@ -186,7 +186,7 @@ impl<'a> AggregateRangeStatement<'a> {
 
     let tau_1 = Scalar::random(&mut *rng);
     let T1 = {
-      let mut T1_terms = [(t1, H()), (tau_1, ED25519_BASEPOINT_POINT)];
+      let mut T1_terms = [(t1, *MONERO_H), (tau_1, ED25519_BASEPOINT_POINT)];
       for term in &mut T1_terms {
         term.0 *= INV_EIGHT();
       }
@@ -196,7 +196,7 @@ impl<'a> AggregateRangeStatement<'a> {
     };
     let tau_2 = Scalar::random(&mut *rng);
     let T2 = {
-      let mut T2_terms = [(t2, H()), (tau_2, ED25519_BASEPOINT_POINT)];
+      let mut T2_terms = [(t2, *MONERO_H), (tau_2, ED25519_BASEPOINT_POINT)];
       for term in &mut T2_terms {
         term.0 *= INV_EIGHT();
       }

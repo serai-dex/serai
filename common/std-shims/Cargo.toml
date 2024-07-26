@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-spin = { version = "0.9", default-features = false, features = ["use_ticket_mutex", "once"] }
+spin = { version = "0.9", default-features = false, features = ["use_ticket_mutex", "lazy"] }
 hashbrown = { version = "0.14", default-features = false, features = ["ahash", "inline-more"] }
 
 [features]

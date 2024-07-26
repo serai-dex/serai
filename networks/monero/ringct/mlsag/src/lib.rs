@@ -203,7 +203,7 @@ impl AggregateRingMatrixBuilder {
     AggregateRingMatrixBuilder {
       key_ring: vec![],
       amounts_ring: vec![],
-      sum_out: commitments.iter().sum::<EdwardsPoint>() + (H() * Scalar::from(fee)),
+      sum_out: commitments.iter().sum::<EdwardsPoint>() + (*H * Scalar::from(fee)),
     }
   }
 

@@ -5,7 +5,7 @@
 
 use std_shims::{io, vec::Vec};
 #[cfg(feature = "std")]
-use std_shims::sync::OnceLock;
+use std_shims::sync::LazyLock;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -28,15 +28,15 @@ mod tests;
 
 // On std, we cache some variables in statics.
 #[cfg(feature = "std")]
-static INV_EIGHT_CELL: OnceLock<Scalar> = OnceLock::new();
-/// The inverse of 8 over l.
+static INV_EIGHT_CELL: LazyLock<Scalar> = LazyLock::new(|| Scalar::from(8u8).invert());
+/// The inverse of 8 over l, the prime factor of the order of Ed25519.
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
 pub fn INV_EIGHT() -> Scalar {
-  *INV_EIGHT_CELL.get_or_init(|| Scalar::from(8u8).invert())
+  *INV_EIGHT_CELL
 }
 // In no-std environments, we prefer the reduced memory use and calculate it ad-hoc.
-/// The inverse of 8 over l.
+/// The inverse of 8 over l, the prime factor of the order of Ed25519.
 #[cfg(not(feature = "std"))]
 #[allow(non_snake_case)]
 pub fn INV_EIGHT() -> Scalar {
@@ -44,12 +44,13 @@ pub fn INV_EIGHT() -> Scalar {
 }
 
 #[cfg(feature = "std")]
-static G_PRECOMP_CELL: OnceLock<VartimeEdwardsPrecomputation> = OnceLock::new();
+static G_PRECOMP_CELL: LazyLock<VartimeEdwardsPrecomputation> =
+  LazyLock::new(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]));
 /// A cached (if std) pre-computation of the Ed25519 generator, G.
 #[cfg(feature = "std")]
 #[allow(non_snake_case)]
 pub fn G_PRECOMP() -> &'static VartimeEdwardsPrecomputation {
-  G_PRECOMP_CELL.get_or_init(|| VartimeEdwardsPrecomputation::new([ED25519_BASEPOINT_POINT]))
+  &G_PRECOMP_CELL
 }
 /// A cached (if std) pre-computation of the Ed25519 generator, G.
 #[cfg(not(feature = "std"))]
@@ -105,7 +106,7 @@ impl Commitment {
 
   /// Calculate the Pedersen commitment, as a point, from this transparent structure.
   pub fn calculate(&self) -> EdwardsPoint {
-    EdwardsPoint::vartime_double_scalar_mul_basepoint(&Scalar::from(self.amount), &H(), &self.mask)
+    EdwardsPoint::vartime_double_scalar_mul_basepoint(&Scalar::from(self.amount), &H, &self.mask)
   }
 
   /// Write the Commitment.

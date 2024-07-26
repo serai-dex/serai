@@ -7,7 +7,7 @@ use curve25519_dalek::{
   edwards::EdwardsPoint,
 };
 
-use monero_generators::{H, Generators};
+use monero_generators::{H as MONERO_H, Generators};
 
 use crate::{original, plus};
 
@@ -57,7 +57,7 @@ pub(crate) struct BulletproofsBatchVerifier(pub(crate) InternalBatchVerifier);
 impl BulletproofsBatchVerifier {
   #[must_use]
   pub(crate) fn verify(self) -> bool {
-    self.0.verify(ED25519_BASEPOINT_POINT, H(), original::GENERATORS())
+    self.0.verify(ED25519_BASEPOINT_POINT, *MONERO_H, &original::GENERATORS)
   }
 }
 
@@ -68,7 +68,7 @@ impl BulletproofsPlusBatchVerifier {
   pub(crate) fn verify(self) -> bool {
     // Bulletproofs+ is written as per the paper, with G for the value and H for the mask
     // Monero uses H for the value and G for the mask
-    self.0.verify(H(), ED25519_BASEPOINT_POINT, plus::GENERATORS())
+    self.0.verify(*MONERO_H, ED25519_BASEPOINT_POINT, &plus::GENERATORS)
   }
 }
 

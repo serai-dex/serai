@@ -183,7 +183,7 @@ fn test_original_seed() {
   for vector in vectors {
     fn trim_by_lang(word: &str, lang: Language) -> String {
       if lang != Language::DeprecatedEnglish {
-        word.chars().take(LANGUAGES()[&lang].unique_prefix_length).collect()
+        word.chars().take(LANGUAGES[&lang].unique_prefix_length).collect()
       } else {
         word.to_string()
       }
