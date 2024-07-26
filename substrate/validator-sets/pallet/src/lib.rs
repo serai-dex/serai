@@ -15,6 +15,7 @@ use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 use frame_system::{pallet_prelude::*, RawOrigin};
 use frame_support::{
   pallet_prelude::*,
+  sp_runtime::SaturatedConversion,
   traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
   BoundedVec, WeakBoundedVec, StoragePrefixedMap,
 };
@@ -309,6 +310,12 @@ pub mod pallet {
   #[pallet::storage]
   pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
 
+  /// Mapping from session to block number
+  #[pallet::storage]
+  #[pallet::getter(fn session_begin_block)]
+  pub type SessionBeginBlock<T: Config> =
+    StorageDoubleMap<_, Identity, NetworkId, Identity, Session, u64, ValueQuery>;
+
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
@@ -391,6 +398,11 @@ pub mod pallet {
       Pallet::<T>::deposit_event(Event::NewSet { set });
 
       Participants::<T>::set(network, Some(participants.try_into().unwrap()));
+      SessionBeginBlock::<T>::set(
+        network,
+        session,
+        <frame_system::Pallet<T>>::block_number().saturated_into::<u64>(),
+      );
     }
   }
 

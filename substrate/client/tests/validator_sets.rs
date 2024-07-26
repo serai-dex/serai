@@ -326,8 +326,8 @@ async fn verify_session_and_active_validators(
   session: u32,
   participants: &[Public],
 ) {
-  // wait until the active session. This wait should be max 30 secs since the epoch time.
-  let block = tokio::time::timeout(core::time::Duration::from_secs(2 * 60), async move {
+  // wait until the active session. This wait should be max 2 mins since the epoch time.
+  let block = tokio::time::timeout(core::time::Duration::from_secs(5 * 60), async move {
     loop {
       let mut block = serai.latest_finalized_block_hash().await.unwrap();
       if session_for_block(serai, block, network).await < session {

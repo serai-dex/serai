@@ -1,10 +1,13 @@
 use std::{time::Duration, collections::HashMap};
+use rand_core::{RngCore, OsRng};
 
 use serai_client::TemporalSerai;
 
 use serai_abi::{
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
-  primitives::{Coin, COINS, NETWORKS},
+  in_instructions::primitives::Batch,
+  primitives::{NETWORKS, BlockHash},
+  validator_sets::primitives::Session,
 };
 
 use serai_client::{
@@ -13,7 +16,7 @@ use serai_client::{
 };
 
 mod common;
-use common::genesis_liquidity::test_genesis_liquidity;
+use common::{genesis_liquidity::test_genesis_liquidity, in_instructions::provide_batch};
 
 serai_test_fast_epoch!(
   emissions: (|serai: Serai| async move {
@@ -21,14 +24,35 @@ serai_test_fast_epoch!(
   })
 );
 
+async fn send_batches(serai: &Serai, ids: &mut HashMap<NetworkId, u32>) {
+  for network in NETWORKS {
+    if network != NetworkId::Serai {
+      // set up batch id
+      ids
+        .entry(network)
+        .and_modify(|v| {
+          *v += 1;
+        })
+        .or_insert(0);
+
+      // set up block hash
+      let mut block = BlockHash([0; 32]);
+      OsRng.fill_bytes(&mut block.0);
+
+      provide_batch(serai, Batch { network, id: ids[&network], block, instructions: vec![] }).await;
+    }
+  }
+}
+
 async fn test_emissions(serai: Serai) {
   // provide some genesis liquidity
-  test_genesis_liquidity(serai.clone()).await;
+  let mut batch_ids = test_genesis_liquidity(serai.clone()).await;
 
-  let mut last_epoch_start = 0;
-  for i in 1 .. 3 {
+  for _ in 0 .. 3 {
+    // get current stakes
     let mut current_stake = HashMap::new();
     for n in NETWORKS {
+      // TODO: investigate why serai network TAS isn't visible at session 0.
       let stake = serai
         .as_of_latest_finalized_block()
         .await
@@ -42,21 +66,25 @@ async fn test_emissions(serai: Serai) {
       current_stake.insert(n, stake);
     }
 
-    // wait until we have at least 1 session
-    wait_for_session(&serai, i).await;
+    // wait for a session change
+    let current_session = wait_for_session_change(&serai).await;
 
-    // get distances to ec security
+    // get last block
     let last_block = serai.latest_finalized_block().await.unwrap();
     let serai_latest = serai.as_of(last_block.hash());
+    let change_block_number = last_block.number();
+
+    // get distances to ec security & block count of the previous session
     let (distances, total_distance) = get_distances(&serai_latest, &current_stake).await;
+    let block_count = get_session_blocks(&serai_latest, current_session - 1).await;
 
     // calculate how much reward in this session
-    let block_count = last_block.number() - last_epoch_start;
-    let reward_this_epoch = if i == 1 {
-      // last block number should be the block count since we are in the first block of session 1.
+    // TODO: genesis is complete at block 24 in current tests. Initial period is just double that.
+    // See the emissions pallet to further read on this. We also assume we are in pre-ec era.
+    let reward_this_epoch = if change_block_number < 24 * 3 {
       block_count * INITIAL_REWARD_PER_BLOCK
     } else {
-      let blocks_until = SECURE_BY - last_block.number();
+      let blocks_until = SECURE_BY - change_block_number;
       let block_reward = total_distance / blocks_until;
       block_count * block_reward
     };
@@ -73,8 +101,14 @@ async fn test_emissions(serai: Serai) {
       })
       .collect::<HashMap<NetworkId, u64>>();
 
+    // retire the prev-set so that TotalAllocatedStake updated.
+    send_batches(&serai, &mut batch_ids).await;
+
     for (n, reward) in reward_per_network {
-      let stake = serai_latest
+      let stake = serai
+        .as_of_latest_finalized_block()
+        .await
+        .unwrap()
         .validator_sets()
         .total_allocated_stake(n)
         .await
@@ -85,10 +119,9 @@ async fn test_emissions(serai: Serai) {
       // all reward should automatically staked for the network since we are in initial period.
       assert_eq!(stake, *current_stake.get(&n).unwrap() + reward);
     }
+
     // TODO: check stake per address?
     // TODO: check post ec security era
-
-    last_epoch_start = last_block.number();
   }
 }
 
@@ -99,7 +132,7 @@ async fn required_stake(serai: &TemporalSerai<'_>, balance: Balance) -> u64 {
 
   // See dex-pallet for the reasoning on these
   let coin_decimals = balance.coin.decimals().max(5);
-  let accuracy_increase = u128::from(u64::pow(10, coin_decimals));
+  let accuracy_increase = u128::from(10u64.pow(coin_decimals));
 
   let total_coin_value =
     u64::try_from(u128::from(balance.amount.0) * u128::from(sri_per_coin.0) / accuracy_increase)
@@ -110,9 +143,21 @@ async fn required_stake(serai: &TemporalSerai<'_>, balance: Balance) -> u64 {
   required_stake.saturating_add(total_coin_value.saturating_div(5))
 }
 
-async fn wait_for_session(serai: &Serai, session: u32) {
-  // Epoch time is half an hour with the fast epoch feature, so lets wait double that.
-  tokio::time::timeout(tokio::time::Duration::from_secs(60 * 6), async {
+async fn wait_for_session_change(serai: &Serai) -> u32 {
+  let current_session = serai
+    .as_of_latest_finalized_block()
+    .await
+    .unwrap()
+    .validator_sets()
+    .session(NetworkId::Serai)
+    .await
+    .unwrap()
+    .unwrap()
+    .0;
+  let next_session = current_session + 1;
+
+  // Epoch time is 2 mins with the fast epoch feature, so lets wait double that.
+  tokio::time::timeout(tokio::time::Duration::from_secs(60 * 4), async {
     while serai
       .as_of_latest_finalized_block()
       .await
@@ -123,13 +168,15 @@ async fn wait_for_session(serai: &Serai, session: u32) {
       .unwrap()
       .unwrap()
       .0 <
-      session
+      next_session
     {
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
   })
   .await
   .unwrap();
+
+  next_session
 }
 
 async fn get_distances(
@@ -140,14 +187,18 @@ async fn get_distances(
   // we can check the supply to see how much coin hence liability we have.
   let mut distances: HashMap<NetworkId, u64> = HashMap::new();
   let mut total_distance = 0;
-  for coin in COINS {
-    if coin == Coin::Serai {
+  for n in NETWORKS {
+    if n == NetworkId::Serai {
       continue;
     }
 
-    let amount = serai.coins().coin_supply(coin).await.unwrap();
-    let required = required_stake(serai, Balance { coin, amount }).await;
-    let mut current = *current_stake.get(&coin.network()).unwrap();
+    let mut required = 0;
+    for c in n.coins() {
+      let amount = serai.coins().coin_supply(*c).await.unwrap();
+      required += required_stake(serai, Balance { coin: *c, amount }).await;
+    }
+
+    let mut current = *current_stake.get(&n).unwrap();
     if current > required {
       current = required;
     }
@@ -155,10 +206,7 @@ async fn get_distances(
     let distance = required - current;
     total_distance += distance;
 
-    distances.insert(
-      coin.network(),
-      distances.get(&coin.network()).unwrap_or(&0).saturating_add(distance),
-    );
+    distances.insert(n, distance);
   }
 
   // add serai network portion(20%)
@@ -167,4 +215,22 @@ async fn get_distances(
   total_distance = new_total_distance;
 
   (distances, total_distance)
+}
+
+async fn get_session_blocks(serai: &TemporalSerai<'_>, session: u32) -> u64 {
+  let begin_block = serai
+    .validator_sets()
+    .session_begin_block(NetworkId::Serai, Session(session))
+    .await
+    .unwrap()
+    .unwrap();
+
+  let next_begin_block = serai
+    .validator_sets()
+    .session_begin_block(NetworkId::Serai, Session(session + 1))
+    .await
+    .unwrap()
+    .unwrap();
+
+  next_begin_block.saturating_sub(begin_block)
 }

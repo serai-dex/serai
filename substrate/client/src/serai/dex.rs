@@ -1,9 +1,7 @@
 use sp_core::bounded_vec::BoundedVec;
 use serai_abi::primitives::{SeraiAddress, Amount, Coin};
 
-use scale::{decode_from_bytes, Encode};
-
-use crate::{Serai, SeraiError, TemporalSerai};
+use crate::{SeraiError, TemporalSerai};
 
 pub type DexEvent = serai_abi::dex::Event;
 
@@ -63,19 +61,8 @@ impl<'a> SeraiDex<'a> {
   }
 
   /// Returns the reserves of `coin:SRI` pool.
-  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(Amount, Amount)>, SeraiError> {
-    let reserves = self
-      .0
-      .serai
-      .call(
-        "state_call",
-        ["DexApi_get_reserves".to_string(), hex::encode((coin, Coin::Serai).encode())],
-      )
-      .await?;
-    let bytes = Serai::hex_decode(reserves)?;
-    let result = decode_from_bytes::<Option<(u64, u64)>>(bytes.into())
-      .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
-    Ok(result.map(|amounts| (Amount(amounts.0), Amount(amounts.1))))
+  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(u64, u64)>, SeraiError> {
+    self.0.runtime_api("DexApi_get_reserves", (coin, Coin::Serai)).await
   }
 
   pub async fn oracle_value(&self, coin: Coin) -> Result<Option<Amount>, SeraiError> {

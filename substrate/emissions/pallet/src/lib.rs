@@ -69,10 +69,6 @@ pub mod pallet {
   >;
 
   #[pallet::storage]
-  #[pallet::getter(fn session_begin_block)]
-  pub(crate) type SessionBeginBlock<T: Config> = StorageMap<_, Identity, u32, u64, ValueQuery>;
-
-  #[pallet::storage]
   #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, u32, ValueQuery>;
 
@@ -100,46 +96,61 @@ pub mod pallet {
         CurrentSession::<T>::set(id, 0);
         EconomicSecurityReached::<T>::set(id, false);
       }
-
-      SessionBeginBlock::<T>::set(0, 0);
     }
   }
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn on_finalize(n: BlockNumberFor<T>) {
-      let genesis_ended = GenesisLiquidity::<T>::genesis_complete().is_some();
-      if GenesisCompleteBlock::<T>::get().is_none() && genesis_ended {
+    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+      if GenesisCompleteBlock::<T>::get().is_none() &&
+        GenesisLiquidity::<T>::genesis_complete().is_some()
+      {
         GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
       }
 
+      // we wait 1 extra block after genesis ended to see the changes. We only need this extra
+      // block in dev&test networks where we start the chain with accounts that already has some
+      // staked SRI. So when we check for ec-security pre-genesis we look like we are economically
+      // secure. The reason for this although we only check for it once the genesis is complete(so
+      // if the genesis complete we shouldn't be economically secure because the funds are not
+      // enough) is because ValidatorSets pallet runs before the genesis pallet in runtime.
+      //  So ValidatorSets pallet sees the old state until next block.
+      let gcb = GenesisCompleteBlock::<T>::get();
+      let genesis_ended = gcb.is_some() && (n.saturated_into::<u64>() > gcb.unwrap());
+
       // we accept we reached economic security once we can mint smallest amount of a network's coin
       for coin in COINS {
-        let check = !Self::economic_security_reached(coin.network()) && genesis_ended;
+        let check = genesis_ended && !Self::economic_security_reached(coin.network());
         if check && <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
         {
           EconomicSecurityReached::<T>::set(coin.network(), true);
         }
       }
 
-      // check wif we got a new session
+      // check if we got a new session
       let mut session_changed = false;
-      let session = ValidatorSets::<T>::session(NetworkId::Serai).unwrap_or(Session(0)).0;
-      if session > Self::session(NetworkId::Serai) {
+      let session = ValidatorSets::<T>::session(NetworkId::Serai).unwrap_or(Session(0));
+      if session.0 > Self::session(NetworkId::Serai) {
         session_changed = true;
-        CurrentSession::<T>::set(NetworkId::Serai, session);
+        CurrentSession::<T>::set(NetworkId::Serai, session.0);
+      }
+
+      // update participants per session before the genesis and after the genesis
+      // we update them after reward distribution.
+      if !genesis_ended && session_changed {
+        Self::update_participants();
       }
 
       // emissions start only after genesis period and happens once per session.
       // so we don't do anything before that time.
       if !(genesis_ended && session_changed) {
-        return;
+        return Weight::zero(); // TODO
       }
 
       // figure out the amount of blocks in the last session. Session is at least 1
       // if we come here.
-      let current_block = n.saturated_into::<u64>();
-      let block_count = current_block - Self::session_begin_block(session - 1);
+      let block_count = ValidatorSets::<T>::session_begin_block(NetworkId::Serai, session) -
+        ValidatorSets::<T>::session_begin_block(NetworkId::Serai, Session(session.0 - 1));
 
       // get total reward for this epoch
       let pre_ec_security = Self::pre_ec_security();
@@ -208,34 +219,43 @@ pub mod pallet {
       }
 
       // map epoch ec-security-distance/volume to rewards
-      let rewards_per_network = distances
-        .into_iter()
-        .map(|(n, distance)| {
-          let reward = if pre_ec_security {
+      let rewards_per_network = if pre_ec_security {
+        distances
+          .into_iter()
+          .map(|(n, distance)| {
             // calculate how much each network gets based on distance to ec-security
-            u64::try_from(
+            let reward = u64::try_from(
               u128::from(reward_this_epoch).saturating_mul(u128::from(distance)) /
                 u128::from(total_distance),
             )
-            .unwrap()
-          } else {
+            .unwrap();
+            (n, reward)
+          })
+          .collect::<BTreeMap<NetworkId, u64>>()
+      } else {
+        volume_per_network
+          .into_iter()
+          .map(|(n, vol)| {
             // 20% of the reward goes to the Serai network and rest is distributed among others
             // based on swap-volume.
-            if n == NetworkId::Serai {
+            let reward = if n == NetworkId::Serai {
               reward_this_epoch / 5
             } else {
               let reward = reward_this_epoch - (reward_this_epoch / 5);
-              u64::try_from(
-                u128::from(reward)
-                  .saturating_mul(u128::from(*volume_per_network.get(&n).unwrap_or(&0))) /
-                  u128::from(total_volume),
-              )
-              .unwrap()
-            }
-          };
-          (n, reward)
-        })
-        .collect::<BTreeMap<NetworkId, u64>>();
+              // TODO: It is highly unlikely but what to do in case of 0 total volume?
+              if total_volume != 0 {
+                u64::try_from(
+                  u128::from(reward).saturating_mul(u128::from(vol)) / u128::from(total_volume),
+                )
+                .unwrap()
+              } else {
+                0
+              }
+            };
+            (n, reward)
+          })
+          .collect::<BTreeMap<NetworkId, u64>>()
+      };
 
       // distribute the rewards within the network
       for (n, reward) in rewards_per_network {
@@ -251,7 +271,7 @@ pub mod pallet {
           let total = DESIRED_DISTRIBUTION.saturating_add(distribution);
 
           let validators_reward = DESIRED_DISTRIBUTION.saturating_mul(reward) / total;
-          let pool_reward = total - validators_reward;
+          let pool_reward = reward.saturating_sub(validators_reward);
           (validators_reward, pool_reward)
         };
 
@@ -277,27 +297,8 @@ pub mod pallet {
         }
       }
 
-      // set the begin block and participants
-      SessionBeginBlock::<T>::set(session, current_block);
-      for n in NETWORKS {
-        // TODO: `participants_for_latest_decided_set` returns keys with key shares but we
-        // store keys with actual stake amounts. Pr https://github.com/serai-dex/serai/pull/518
-        // supposed to change that and so this pr relies and that pr.
-        let participants = ValidatorSets::<T>::participants_for_latest_decided_set(n)
-          .unwrap()
-          .into_iter()
-          .map(|(key, shares)| {
-            let amount = match n {
-              NetworkId::Serai => shares * 50_000 * 10_u64.pow(8),
-              NetworkId::Bitcoin | NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
-              NetworkId::Monero => shares * 100_000 * 10_u64.pow(8),
-            };
-            (key, amount)
-          })
-          .collect::<Vec<_>>();
-
-        Participants::<T>::set(n, Some(participants.try_into().unwrap()));
-      }
+      Self::update_participants();
+      Weight::zero() // TODO
     }
   }
 
@@ -308,6 +309,12 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
+      // TODO: we should wait for exactly 2 months according to paper. This waits double the time
+      // it took until genesis complete since we assume it will be done in a month. We know genesis
+      // period blocks is a month but there will be delay until oracilization is done and genesis
+      // completed and emissions start happening. If we wait exactly 2 months and the delay is big
+      // enough we might not be able to distribute all funds we want to in this period.
+      // In the current case we will distribute more than we want to. What to do?
       let genesis_complete_block = GenesisCompleteBlock::<T>::get();
       genesis_complete_block.is_some() &&
         (n.saturated_into::<u64>() < (3 * genesis_complete_block.unwrap()))
@@ -377,6 +384,28 @@ pub mod pallet {
       // TODO: deposit_stake lets staking less than per key share. Should we allow that here?
       ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
       Ok(())
+    }
+
+    fn update_participants() {
+      for n in NETWORKS {
+        // TODO: `participants_for_latest_decided_set` returns keys with key shares but we
+        // store keys with actual stake amounts. Pr https://github.com/serai-dex/serai/pull/518
+        // supposed to change that and so this pr relies and that pr.
+        let participants = ValidatorSets::<T>::participants_for_latest_decided_set(n)
+          .unwrap()
+          .into_iter()
+          .map(|(key, shares)| {
+            let amount = match n {
+              NetworkId::Serai => shares * 50_000 * 10_u64.pow(8),
+              NetworkId::Bitcoin | NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
+              NetworkId::Monero => shares * 100_000 * 10_u64.pow(8),
+            };
+            (key, amount)
+          })
+          .collect::<Vec<_>>();
+
+        Participants::<T>::set(n, Some(participants.try_into().unwrap()));
+      }
     }
   }
 }

@@ -283,7 +283,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ MINUTES / 2 }>; // 30 seconds
+  type EpochDuration = ConstU64<{ 2 * MINUTES }>;
 
   #[cfg(not(feature = "fast-epoch"))]
   type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;

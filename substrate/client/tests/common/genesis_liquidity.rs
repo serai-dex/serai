@@ -33,7 +33,7 @@ use serai_client::{
 use crate::common::{in_instructions::provide_batch, tx::publish_tx};
 
 #[allow(dead_code)]
-pub async fn test_genesis_liquidity(serai: Serai) {
+pub async fn test_genesis_liquidity(serai: Serai) -> HashMap<NetworkId, u32> {
   // all coins except the native
   let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
 
@@ -79,21 +79,8 @@ pub async fn test_genesis_liquidity(serai: Serai) {
     provide_batch(&serai, batch).await;
   }
 
-  // wait until genesis ends
-  let genesis_blocks = 10; // TODO
-  let block_time = 6; // TODO
-  tokio::time::timeout(
-    tokio::time::Duration::from_secs(3 * (genesis_blocks * block_time)),
-    async {
-      while serai.latest_finalized_block().await.unwrap().number() < 10 {
-        tokio::time::sleep(Duration::from_secs(6)).await;
-      }
-    },
-  )
-  .await
-  .unwrap();
-
-  // set values relative to each other
+  // set values relative to each other. We can do that without checking for genesis period blocks
+  // since we are running in test(fast-epoch) mode.
   // TODO: Random values here
   let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
   set_values(&serai, &values).await;
@@ -103,8 +90,19 @@ pub async fn test_genesis_liquidity(serai: Serai) {
     (Coin::Dai, values.dai),
   ]);
 
-  // wait a little bit..
-  tokio::time::sleep(Duration::from_secs(12)).await;
+  // wait until genesis is complete
+  while serai
+    .as_of_latest_finalized_block()
+    .await
+    .unwrap()
+    .genesis_liquidity()
+    .genesis_complete()
+    .await
+    .unwrap()
+    .is_none()
+  {
+    tokio::time::sleep(Duration::from_secs(1)).await;
+  }
 
   // check total SRI supply is +100M
   // there are 6 endowed accounts in dev-net. Take this into consideration when checking
@@ -147,8 +145,8 @@ pub async fn test_genesis_liquidity(serai: Serai) {
     total_sri_distributed += sri;
 
     let reserves = serai.dex().get_reserves(coin).await.unwrap().unwrap();
-    assert_eq!(u128::from(reserves.0 .0), pool_amounts[&coin].0); // coin side
-    assert_eq!(u128::from(reserves.1 .0), sri); // SRI side
+    assert_eq!(u128::from(reserves.0), pool_amounts[&coin].0); // coin side
+    assert_eq!(u128::from(reserves.1), sri); // SRI side
   }
 
   // check each liquidity provider got liquidity tokens proportional to their value
@@ -172,8 +170,9 @@ pub async fn test_genesis_liquidity(serai: Serai) {
       assert_eq!(shares_ratio, amounts_ratio);
     }
   }
-
   // TODO: test remove the liq before/after genesis ended.
+
+  batch_ids
 }
 
 #[allow(dead_code)]
@@ -181,8 +180,8 @@ async fn set_values(serai: &Serai, values: &Values) {
   // prepare a Musig tx to oraclize the relative values
   let pair = insecure_pair_from_name("Alice");
   let public = pair.public();
-  // we publish the tx in set 4
-  let set = ValidatorSet { session: Session(4), network: NetworkId::Serai };
+  // we publish the tx in set 1
+  let set = ValidatorSet { session: Session(1), network: NetworkId::Serai };
 
   let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
   let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
