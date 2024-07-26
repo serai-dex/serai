@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 use std_shims::{
-  sync::OnceLock,
+  sync::LazyLock,
   io::{self, *},
 };
 
@@ -10,18 +10,14 @@ use curve25519_dalek::scalar::Scalar;
 
 use monero_io::*;
 
-static PRECOMPUTED_SCALARS_CELL: OnceLock<[Scalar; 8]> = OnceLock::new();
 // Precomputed scalars used to recover an incorrectly reduced scalar.
-#[allow(non_snake_case)]
-fn PRECOMPUTED_SCALARS() -> [Scalar; 8] {
-  *PRECOMPUTED_SCALARS_CELL.get_or_init(|| {
-    let mut precomputed_scalars = [Scalar::ONE; 8];
-    for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
-      *scalar = Scalar::from(u8::try_from((i * 2) + 1).unwrap());
-    }
-    precomputed_scalars
-  })
-}
+static PRECOMPUTED_SCALARS: LazyLock<[Scalar; 8]> = LazyLock::new(|| {
+  let mut precomputed_scalars = [Scalar::ONE; 8];
+  for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
+    *scalar = Scalar::from(u8::try_from((i * 2) + 1).unwrap());
+  }
+  precomputed_scalars
+});
 
 /// An unreduced scalar.
 ///
@@ -127,14 +123,12 @@ impl UnreducedScalar {
       return Scalar::from_bytes_mod_order(self.0);
     }
 
-    let precomputed_scalars = PRECOMPUTED_SCALARS();
-
     let mut recovered = Scalar::ZERO;
     for &numb in self.non_adjacent_form().iter().rev() {
       recovered += recovered;
       match numb.cmp(&0) {
-        Ordering::Greater => recovered += precomputed_scalars[usize::try_from(numb).unwrap() / 2],
-        Ordering::Less => recovered -= precomputed_scalars[usize::try_from(-numb).unwrap() / 2],
+        Ordering::Greater => recovered += PRECOMPUTED_SCALARS[usize::try_from(numb).unwrap() / 2],
+        Ordering::Less => recovered -= PRECOMPUTED_SCALARS[usize::try_from(-numb).unwrap() / 2],
         Ordering::Equal => (),
       }
     }

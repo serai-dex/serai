@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/monero/rpc/simple-request"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true

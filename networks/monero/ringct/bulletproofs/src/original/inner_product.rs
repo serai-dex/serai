@@ -96,13 +96,13 @@ impl IpStatement {
     mut transcript: Scalar,
     witness: IpWitness,
   ) -> Result<IpProof, IpError> {
-    let generators = crate::original::GENERATORS();
+    let generators = &crate::original::GENERATORS;
     let g_bold_slice = &generators.G[.. witness.a.len()];
     let h_bold_slice = &generators.H[.. witness.a.len()];
 
     let (mut g_bold, mut h_bold, u, mut a, mut b) = {
       let IpStatement { h_bold_weights, u } = self;
-      let u = H() * u;
+      let u = *H * u;
 
       // Ensure we have the exact amount of weights
       if h_bold_weights.len() != g_bold_slice.len() {
@@ -218,7 +218,7 @@ impl IpStatement {
     verifier_weight: Scalar,
     proof: IpProof,
   ) -> Result<(), IpError> {
-    let generators = crate::original::GENERATORS();
+    let generators = &crate::original::GENERATORS;
     let g_bold_slice = &generators.G[.. ip_rows];
     let h_bold_slice = &generators.H[.. ip_rows];
 

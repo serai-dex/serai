@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use std_shims::sync::OnceLock;
+use std_shims::sync::LazyLock;
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar, edwards::EdwardsPoint};
 
@@ -39,7 +39,7 @@ include!(concat!(env!("OUT_DIR"), "/generators_plus.rs"));
 impl BpPlusGenerators {
   #[allow(clippy::new_without_default)]
   pub(crate) fn new() -> Self {
-    let gens = GENERATORS();
+    let gens = &GENERATORS;
     BpPlusGenerators { g_bold: &gens.G, h_bold: &gens.H }
   }
 
@@ -48,7 +48,7 @@ impl BpPlusGenerators {
   }
 
   pub(crate) fn g() -> EdwardsPoint {
-    H()
+    *H
   }
 
   pub(crate) fn h() -> EdwardsPoint {

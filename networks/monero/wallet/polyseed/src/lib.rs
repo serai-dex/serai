@@ -4,7 +4,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt;
-use std_shims::{sync::OnceLock, string::String, collections::HashMap};
+use std_shims::{sync::LazyLock, string::String, collections::HashMap};
 #[cfg(feature = "std")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -163,30 +163,26 @@ impl WordList {
   }
 }
 
-static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
-#[allow(non_snake_case)]
-fn LANGUAGES() -> &'static HashMap<Language, WordList> {
-  LANGUAGES_CELL.get_or_init(|| {
-    HashMap::from([
-      (Language::Czech, WordList::new(include!("./words/cs.rs"), true, false)),
-      (Language::French, WordList::new(include!("./words/fr.rs"), true, true)),
-      (Language::Korean, WordList::new(include!("./words/ko.rs"), false, false)),
-      (Language::English, WordList::new(include!("./words/en.rs"), true, false)),
-      (Language::Italian, WordList::new(include!("./words/it.rs"), true, false)),
-      (Language::Spanish, WordList::new(include!("./words/es.rs"), true, true)),
-      (Language::Japanese, WordList::new(include!("./words/ja.rs"), false, false)),
-      (Language::Portuguese, WordList::new(include!("./words/pt.rs"), true, false)),
-      (
-        Language::ChineseSimplified,
-        WordList::new(include!("./words/zh_simplified.rs"), false, false),
-      ),
-      (
-        Language::ChineseTraditional,
-        WordList::new(include!("./words/zh_traditional.rs"), false, false),
-      ),
-    ])
-  })
-}
+static LANGUAGES: LazyLock<HashMap<Language, WordList>> = LazyLock::new(|| {
+  HashMap::from([
+    (Language::Czech, WordList::new(include!("./words/cs.rs"), true, false)),
+    (Language::French, WordList::new(include!("./words/fr.rs"), true, true)),
+    (Language::Korean, WordList::new(include!("./words/ko.rs"), false, false)),
+    (Language::English, WordList::new(include!("./words/en.rs"), true, false)),
+    (Language::Italian, WordList::new(include!("./words/it.rs"), true, false)),
+    (Language::Spanish, WordList::new(include!("./words/es.rs"), true, true)),
+    (Language::Japanese, WordList::new(include!("./words/ja.rs"), false, false)),
+    (Language::Portuguese, WordList::new(include!("./words/pt.rs"), true, false)),
+    (
+      Language::ChineseSimplified,
+      WordList::new(include!("./words/zh_simplified.rs"), false, false),
+    ),
+    (
+      Language::ChineseTraditional,
+      WordList::new(include!("./words/zh_traditional.rs"), false, false),
+    ),
+  ])
+});
 
 /// A Polyseed.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
@@ -317,7 +313,7 @@ impl Polyseed {
     let mut poly = [0; POLYSEED_LENGTH];
 
     // Validate words are in the lang word list
-    let lang_word_list: &WordList = &LANGUAGES()[&lang];
+    let lang_word_list: &WordList = &LANGUAGES[&lang];
     for (i, word) in seed.split_whitespace().enumerate() {
       // Find the word's index
       fn check_if_matches<S: AsRef<str>, I: Iterator<Item = S>>(
@@ -464,7 +460,7 @@ impl Polyseed {
 
     // Output words
     let mut seed = Zeroizing::new(String::new());
-    let words = &LANGUAGES()[&self.language].words;
+    let words = &LANGUAGES[&self.language].words;
     for i in 0 .. poly.len() {
       seed.push_str(words[usize::from(poly[i])]);
       if i < poly.len() - 1 {

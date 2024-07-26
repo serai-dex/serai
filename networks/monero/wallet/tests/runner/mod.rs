@@ -1,5 +1,5 @@
 use core::ops::Deref;
-use std_shims::sync::OnceLock;
+use std_shims::sync::LazyLock;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
@@ -145,7 +145,7 @@ pub async fn rpc() -> SimpleRequestRpc {
   rpc
 }
 
-pub static SEQUENTIAL: OnceLock<Mutex<()>> = OnceLock::new();
+pub(crate) static SEQUENTIAL: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[macro_export]
 macro_rules! async_sequential {
@@ -153,7 +153,7 @@ macro_rules! async_sequential {
     $(
       #[tokio::test]
       async fn $name() {
-        let guard = runner::SEQUENTIAL.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;
+        let guard = runner::SEQUENTIAL.lock().await;
         let local = tokio::task::LocalSet::new();
         local.run_until(async move {
           if let Err(err) = tokio::task::spawn_local(async move { $body }).await {

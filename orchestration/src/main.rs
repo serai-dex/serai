@@ -146,7 +146,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.79-slim-bookworm as builder
+FROM rust:1.80-slim-bookworm as builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
