@@ -33,6 +33,16 @@ pub trait EvrfCurve: Ciphersuite {
   type EmbeddedCurveParameters: DiscreteLogParameters;
 }
 
+fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
+  let mut repr = <C::G as GroupEncoding>::Repr::default();
+  loop {
+    rng.fill_bytes(repr.as_mut());
+    if let Ok(point) = C::read_G(&mut repr.as_ref()) {
+      return point;
+    }
+  }
+}
+
 /// The result of proving for an eVRF.
 pub(crate) struct EvrfProveResult<C: Ciphersuite> {
   /// The coefficients for use in the DKG.
@@ -44,6 +54,7 @@ pub(crate) struct EvrfProveResult<C: Ciphersuite> {
 }
 
 /// The result of verifying an eVRF.
+#[derive(Clone)]
 pub(crate) struct EvrfVerifyResult<C: EvrfCurve> {
   /// The commitments to the coefficients for use in the DKG.
   pub(crate) coefficients: Vec<C::G>,
@@ -66,6 +77,22 @@ where
   <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
     DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
 {
+  // TODO: Wrap these Generators so we can enforce g == C::generator() with type safety
+  pub(crate) fn generators(max_threshold: u16, max_participants: u16) -> Generators<C> {
+    let g = C::generator();
+    let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(g.to_bytes()).into());
+    let h = sample_point::<C>(&mut rng);
+    let (_, generators) =
+      Evrf::<C>::muls_and_generators_to_use(max_threshold.into(), max_participants.into());
+    let mut g_bold = vec![];
+    let mut h_bold = vec![];
+    for _ in 0 .. generators {
+      g_bold.push(sample_point::<C>(&mut rng));
+      h_bold.push(sample_point::<C>(&mut rng));
+    }
+    Generators::new(g, h, g_bold, h_bold).unwrap()
+  }
+
   // Sample uniform points (via rejection-sampling) on the embedded elliptic curve
   fn transcript_to_points(
     seed: [u8; 32],
@@ -76,12 +103,8 @@ where
 
     let mut rng = ChaCha20Rng::from_seed(seed);
     let mut res = Vec::with_capacity(quantity);
-    while res.len() < quantity {
-      let mut repr = <<C::EmbeddedCurve as Ciphersuite>::G as GroupEncoding>::Repr::default();
-      rng.fill_bytes(repr.as_mut());
-      if let Ok(point) = C::EmbeddedCurve::read_G(&mut repr.as_ref()) {
-        res.push(point);
-      }
+    for _ in 0 .. quantity {
+      res.push(sample_point::<C::EmbeddedCurve>(&mut rng));
     }
     res
   }
@@ -154,7 +177,7 @@ where
     const MULS_PER_DH: usize = 7;
     // 1 DH to prove the discrete logarithm corresponds to the eVRF public key
     // 2 DHs per generated coefficient
-    // 2 DHs per generated ECDG
+    // 2 DHs per generated ECDH
     let expected_muls = MULS_PER_DH * (1 + (2 * coefficients) + (2 * 2 * ecdhs));
     let generators_to_use = {
       let mut padded_pow_of_2 = 1;

@@ -21,7 +21,7 @@ use generalized_bulletproofs_ec_gadgets::DiscreteLogParameters;
 use crate::evrf::proof::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-struct Pallas;
+pub(crate) struct Pallas;
 impl Ciphersuite for Pallas {
   type F = Fq;
   type G = Ep;
@@ -38,7 +38,7 @@ impl Ciphersuite for Pallas {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-struct Vesta;
+pub(crate) struct Vesta;
 impl Ciphersuite for Vesta {
   type F = Fp;
   type G = Eq;
@@ -54,7 +54,7 @@ impl Ciphersuite for Vesta {
   }
 }
 
-struct VestaParams;
+pub struct VestaParams;
 impl DiscreteLogParameters for VestaParams {
   type ScalarBits = U<{ <<Vesta as Ciphersuite>::F as PrimeField>::NUM_BITS as usize }>;
   type XCoefficients = Quot<Sum<Self::ScalarBits, U1>, U2>;

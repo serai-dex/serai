@@ -90,7 +90,8 @@ use ec_divisors::DivisorCurve;
 use crate::{Participant, DkgError, ThresholdParams, ThresholdCore};
 
 pub(crate) mod proof;
-pub use proof::*;
+use proof::*;
+pub use proof::EvrfCurve;
 
 /// Participation in the DKG.
 ///
@@ -191,7 +192,7 @@ fn share_verification_statements<C: Ciphersuite>(
 }
 
 /// Struct to perform/verify the DKG with.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EvrfDkg<C: EvrfCurve> {
   t: u16,
   n: u16,
@@ -204,6 +205,11 @@ where
   <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
     DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
 {
+  /// Sample generators for this ciphersuite.
+  pub fn generators(max_threshold: u16, max_participants: u16) -> Generators<C> {
+    Evrf::<C>::generators(max_threshold, max_participants)
+  }
+
   /// Participate in performing the DKG for the specified parameters.
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
@@ -257,6 +263,10 @@ where
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     participations: &HashMap<Participant, Participation<C>>,
   ) -> Result<Self, Vec<Participant>> {
+    if generators.g() != C::generator() {
+      todo!("TODO");
+    }
+
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else { todo!("TODO") };
     if (t == 0) || (t > n) {
       todo!("TODO");
@@ -371,7 +381,7 @@ where
   }
 
   pub fn keys(
-    self,
+    &self,
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
   ) -> Option<ThresholdCore<C>> {
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();

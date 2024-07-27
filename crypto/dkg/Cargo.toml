@@ -48,6 +48,7 @@ generalized-bulletproofs-ec-gadgets = { path = "../evrf/ec-gadgets", optional = 
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
 generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", features = ["tests"] }
 ec-divisors = { path = "../evrf/divisors", features = ["pasta"] }
