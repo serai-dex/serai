@@ -46,7 +46,7 @@ fn evrf_dkg() {
     );
   }
 
-  let dkg = EvrfDkg::<Pallas>::verify(
+  let VerifyResult::Valid(dkg) = EvrfDkg::<Pallas>::verify(
     &mut OsRng,
     &generators,
     context,
@@ -54,7 +54,9 @@ fn evrf_dkg() {
     &pub_keys,
     &participations,
   )
-  .unwrap();
+  .unwrap() else {
+    panic!("verify didn't return VerifyResult::Valid")
+  };
 
   let mut group_key = None;
   let mut verification_shares = None;

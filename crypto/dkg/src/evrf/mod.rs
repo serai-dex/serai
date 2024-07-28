@@ -104,7 +104,7 @@ pub struct Participation<C: Ciphersuite> {
 }
 
 impl<C: Ciphersuite> Participation<C> {
-  fn read<R: Read>(reader: &mut R, _params: ThresholdParams) -> io::Result<Self> {
+  pub fn read<R: Read>(reader: &mut R, n: u16) -> io::Result<Self> {
     // TODO: Replace `len` with some calculcation deterministic to the params
     let mut len = [0; 4];
     reader.read_exact(&mut len)?;
@@ -122,13 +122,23 @@ impl<C: Ciphersuite> Participation<C> {
       reader.read_exact(&mut proof[old_proof_len ..])?;
     }
 
-    Ok(Self { proof, encrypted_secret_shares: todo!("TODO") })
+    let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
+    for i in (1 ..= n).map(Participant) {
+      encrypted_secret_shares.insert(i, C::read_F(reader)?);
+    }
+
+    Ok(Self { proof, encrypted_secret_shares })
   }
 
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.proof.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.proof)?;
-    // TODO: secret shares
+    for i in (1 ..= u16::try_from(self.encrypted_secret_shares.len())
+      .expect("writing a Participation which has a n > u16::MAX"))
+      .map(Participant)
+    {
+      writer.write_all(self.encrypted_secret_shares[&i].to_repr().as_ref())?;
+    }
     Ok(())
   }
 }
@@ -191,6 +201,28 @@ fn share_verification_statements<C: Ciphersuite>(
   (g_scalar, pairs)
 }
 
+/// Errors from the eVRF DKG.
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
+pub enum EvrfError {
+  #[error("n, the amount of participants, exceeded a u16")]
+  TooManyParticipants,
+  #[error("the threshold t wasn't in range 1 <= t <= n")]
+  InvalidThreshold,
+  #[error("participating in a DKG we aren't a participant in")]
+  NotAParticipant,
+  #[error("a participant with an unrecognized ID participated")]
+  NonExistentParticipant,
+  #[error("the passed in generators did not have enough generators for this DKG")]
+  NotEnoughGenerators,
+}
+
+/// The result of calling EvrfDkg::verify.
+pub enum VerifyResult<C: EvrfCurve> {
+  Valid(EvrfDkg<C>),
+  Invalid(Vec<Participant>),
+  NotEnoughParticipants,
+}
+
 /// Struct to perform/verify the DKG with.
 #[derive(Debug)]
 pub struct EvrfDkg<C: EvrfCurve> {
@@ -224,26 +256,44 @@ where
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Result<Participation<C>, AcError> {
+  ) -> Result<Participation<C>, EvrfError> {
     if generators.g() != C::generator() {
       todo!("TODO");
     }
 
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
-    let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
-      todo!("TODO");
-    };
+    let Ok(n) = u16::try_from(evrf_public_keys.len()) else { Err(EvrfError::TooManyParticipants)? };
     if (t == 0) || (t > n) {
-      todo!("TODO");
+      Err(EvrfError::InvalidThreshold)?;
     }
     if !evrf_public_keys.iter().any(|key| *key == evrf_public_key) {
-      todo!("TODO");
+      Err(EvrfError::NotAParticipant)?;
     };
 
-    let EvrfProveResult { coefficients, encryption_masks, proof } =
-      Evrf::prove(rng, generators, evrf_private_key, context, usize::from(t), evrf_public_keys)?;
+    let EvrfProveResult { coefficients, encryption_masks, proof } = match Evrf::prove(
+      rng,
+      generators,
+      evrf_private_key,
+      context,
+      usize::from(t),
+      evrf_public_keys,
+    ) {
+      Ok(res) => res,
+      Err(AcError::NotEnoughGenerators) => Err(EvrfError::NotEnoughGenerators)?,
+      Err(
+        AcError::DifferingLrLengths |
+        AcError::InconsistentAmountOfConstraints |
+        AcError::ConstrainedNonExistentTerm |
+        AcError::ConstrainedNonExistentCommitment |
+        AcError::InconsistentWitness |
+        AcError::Ip(_) |
+        AcError::IncompleteProof,
+      ) => {
+        panic!("failed to prove for the eVRF proof")
+      }
+    };
 
-    let mut encrypted_secret_shares = HashMap::new();
+    let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for (l, encryption_mask) in (1 ..= n).map(Participant).zip(encryption_masks) {
       let share = polynomial::<C::F>(&coefficients, l);
       encrypted_secret_shares.insert(l, *share + *encryption_mask);
@@ -254,10 +304,10 @@ where
 
   /// Check if a batch of `Participation`s are valid.
   ///
-  /// if any `Participation` is invalid, it will be returned in the `Err` of the result. If all
-  /// `Participation`s are valid and there's at least `t`, an instance of this struct (usable to
-  /// obtain a threshold share of generated key) is returned. If all are valid and there's not at
-  /// least `t`, an error of an empty list is returned after validation.
+  /// If any `Participation` is invalid, the list of all invalid participants will be returned.
+  /// If all `Participation`s are valid and there's at least `t`, an instance of this struct
+  /// (usable to obtain a threshold share of generated key) is returned. If all are valid and
+  /// there's not at least `t`, `VerifyResult::NotEnoughParticipants` is returned.
   ///
   /// This DKG is unbiased if all `n` people participate. This DKG is biased if only a threshold
   /// participate.
@@ -268,22 +318,22 @@ where
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     participations: &HashMap<Participant, Participation<C>>,
-  ) -> Result<Self, Vec<Participant>> {
+  ) -> Result<VerifyResult<C>, EvrfError> {
     if generators.g() != C::generator() {
       todo!("TODO");
     }
 
-    let Ok(n) = u16::try_from(evrf_public_keys.len()) else { todo!("TODO") };
+    let Ok(n) = u16::try_from(evrf_public_keys.len()) else { Err(EvrfError::TooManyParticipants)? };
     if (t == 0) || (t > n) {
-      todo!("TODO");
+      Err(EvrfError::InvalidThreshold)?;
     }
     for i in participations.keys() {
       if u16::from(*i) > n {
-        todo!("TODO");
+        Err(EvrfError::NonExistentParticipant)?;
       }
     }
 
-    let mut valid = HashMap::new();
+    let mut valid = HashMap::with_capacity(participations.len());
     let mut faulty = HashSet::new();
 
     let mut evrf_verifier = generators.batch_verifier();
@@ -337,9 +387,9 @@ where
     debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     // Perform the batch verification of the shares
-    let mut sum_encrypted_secret_shares = HashMap::new();
-    let mut sum_masks = HashMap::new();
-    let mut all_encrypted_secret_shares = HashMap::new();
+    let mut sum_encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
+    let mut sum_masks = HashMap::with_capacity(usize::from(n));
+    let mut all_encrypted_secret_shares = HashMap::with_capacity(usize::from(t));
     {
       let mut share_verification_statements_actual = HashMap::with_capacity(valid.len());
       if !{
@@ -366,7 +416,7 @@ where
           share_verification_statements_actual.insert(*i, these_pairs);
 
           // Also format this data as we'd need it upon success
-          let mut formatted_encrypted_secret_shares = HashMap::new();
+          let mut formatted_encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
           for (j, enc_share) in encrypted_secret_shares {
             /*
               We calculcate verification shares as the sum of the encrypted scalars, minus their
@@ -404,11 +454,11 @@ where
     let mut faulty = faulty.into_iter().collect::<Vec<_>>();
     if !faulty.is_empty() {
       faulty.sort_unstable();
-      Err(faulty)?;
+      return Ok(VerifyResult::Invalid(faulty));
     }
 
     if valid.len() < usize::from(t) {
-      Err(vec![])?;
+      return Ok(VerifyResult::NotEnoughParticipants);
     }
 
     // If we now have >= t participations, calculate the group key and verification shares
@@ -417,20 +467,20 @@ where
     let group_key = valid.values().map(|(_, evrf_data)| evrf_data.coefficients[0]).sum::<C::G>();
 
     // Calculate each user's verification share
-    let mut verification_shares = HashMap::new();
+    let mut verification_shares = HashMap::with_capacity(usize::from(n));
     for i in (1 ..= n).map(Participant) {
       verification_shares
         .insert(i, (C::generator() * sum_encrypted_secret_shares[&i]) - sum_masks[&i]);
     }
 
-    Ok(EvrfDkg {
+    Ok(VerifyResult::Valid(EvrfDkg {
       t,
       n,
       evrf_public_keys: evrf_public_keys.to_vec(),
       group_key,
       verification_shares,
       encrypted_secret_shares: all_encrypted_secret_shares,
-    })
+    }))
   }
 
   // TODO: Return all keys for this participant, not just the first
