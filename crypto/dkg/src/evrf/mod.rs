@@ -208,6 +208,8 @@ pub enum EvrfError {
   TooManyParticipants,
   #[error("the threshold t wasn't in range 1 <= t <= n")]
   InvalidThreshold,
+  #[error("a public key was the identity point")]
+  PublicKeyWasIdentity,
   #[error("participating in a DKG we aren't a participant in")]
   NotAParticipant,
   #[error("a participant with an unrecognized ID participated")]
@@ -244,6 +246,8 @@ where
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
   /// prior-shared secrets.
+  ///
+  /// Public keys are not allowed to be the identity point. This will error if any are.
   pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &EvrfGenerators<C>,
@@ -257,6 +261,9 @@ where
     if (t == 0) || (t > n) {
       Err(EvrfError::InvalidThreshold)?;
     }
+    if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
+      Err(EvrfError::PublicKeyWasIdentity)?;
+    };
     if !evrf_public_keys.iter().any(|key| *key == evrf_public_key) {
       Err(EvrfError::NotAParticipant)?;
     };
@@ -314,6 +321,9 @@ where
     if (t == 0) || (t > n) {
       Err(EvrfError::InvalidThreshold)?;
     }
+    if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
+      Err(EvrfError::PublicKeyWasIdentity)?;
+    };
     for i in participations.keys() {
       if u16::from(*i) > n {
         Err(EvrfError::NonExistentParticipant)?;
@@ -492,7 +502,6 @@ where
 
         let mut ecdh = Zeroizing::new(C::F::ZERO);
         for point in ecdh_keys {
-          // TODO: Explicitly ban 0-ECDH commitments, 0-eVRF public keys, and gen non-zero keys
           let (mut x, mut y) =
             <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
           *ecdh += x;

@@ -38,7 +38,9 @@ fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
   loop {
     rng.fill_bytes(repr.as_mut());
     if let Ok(point) = C::read_G(&mut repr.as_ref()) {
-      return point;
+      if bool::from(!point.is_identity()) {
+        return point;
+      }
     }
   }
 }
@@ -595,7 +597,15 @@ where
 
       let mut res = Zeroizing::new(C::F::ZERO);
       for j in 0 .. 2 {
-        let mut ecdh_private_key = <C::EmbeddedCurve as Ciphersuite>::F::random(&mut *rng);
+        let mut ecdh_private_key;
+        loop {
+          ecdh_private_key = <C::EmbeddedCurve as Ciphersuite>::F::random(&mut *rng);
+          // Generate a non-0 ECDH private key, as necessary to not produce an identity output
+          // Identity isn't representable with the divisors, hence the explicit effort
+          if bool::from(!ecdh_private_key.is_zero()) {
+            break;
+          }
+        }
         let mut dlog = Self::scalar_to_bits(&ecdh_private_key);
         let ecdh_commitment = <C::EmbeddedCurve as Ciphersuite>::generator() * ecdh_private_key;
         ecdh_commitments.push(ecdh_commitment);
@@ -798,6 +808,7 @@ where
         transcript.read_point::<C::EmbeddedCurve>().map_err(|_| ())?,
       ];
       ecdh_keys.push(ecdh_keys_i);
+      // This bans zero ECDH keys
       ecdh_keys_xy.push([
         <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_keys_i[0]).ok_or(())?,
         <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_keys_i[1]).ok_or(())?,
