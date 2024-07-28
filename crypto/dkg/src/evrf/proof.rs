@@ -54,7 +54,6 @@ pub(crate) struct EvrfProveResult<C: Ciphersuite> {
 }
 
 /// The result of verifying an eVRF.
-#[derive(Clone)]
 pub(crate) struct EvrfVerifyResult<C: EvrfCurve> {
   /// The commitments to the coefficients for use in the DKG.
   pub(crate) coefficients: Vec<C::G>,

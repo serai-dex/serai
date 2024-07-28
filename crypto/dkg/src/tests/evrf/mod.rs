@@ -9,7 +9,7 @@ use ciphersuite::{group::ff::Field, Ciphersuite};
 use crate::{
   Participant, ThresholdKeys,
   evrf::*,
-  tests::{THRESHOLD, PARTICIPANTS},
+  tests::{THRESHOLD, PARTICIPANTS, recover_key},
 };
 
 mod proof;
@@ -18,6 +18,7 @@ use proof::{Pallas, Vesta};
 #[test]
 fn evrf_dkg() {
   let generators = EvrfDkg::<Pallas>::generators(THRESHOLD, PARTICIPANTS);
+  let context = [0; 32];
 
   let mut priv_keys = vec![];
   let mut pub_keys = vec![];
@@ -36,7 +37,7 @@ fn evrf_dkg() {
       EvrfDkg::<Pallas>::participate(
         &mut OsRng,
         &generators,
-        [0; 32],
+        context,
         THRESHOLD,
         &pub_keys,
         priv_key,
@@ -48,17 +49,29 @@ fn evrf_dkg() {
   let dkg = EvrfDkg::<Pallas>::verify(
     &mut OsRng,
     &generators,
-    [0; 32],
+    context,
     THRESHOLD,
     &pub_keys,
     &participations,
   )
   .unwrap();
 
+  let mut group_key = None;
+  let mut verification_shares = None;
+  let mut all_keys = HashMap::new();
   for (i, priv_key) in priv_keys {
     let keys = ThresholdKeys::from(dkg.keys(&priv_key).unwrap());
     assert_eq!(keys.params().i(), i);
     assert_eq!(keys.params().t(), THRESHOLD);
     assert_eq!(keys.params().n(), PARTICIPANTS);
+    group_key = group_key.or(Some(keys.group_key()));
+    verification_shares = verification_shares.or(Some(keys.verification_shares()));
+    assert_eq!(Some(keys.group_key()), group_key);
+    assert_eq!(Some(keys.verification_shares()), verification_shares);
+
+    all_keys.insert(i, keys);
   }
+
+  // TODO: Test fo all possible combinations of keys
+  assert_eq!(Pallas::generator() * recover_key(&all_keys), group_key.unwrap());
 }

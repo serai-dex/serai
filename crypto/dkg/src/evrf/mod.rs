@@ -192,12 +192,15 @@ fn share_verification_statements<C: Ciphersuite>(
 }
 
 /// Struct to perform/verify the DKG with.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct EvrfDkg<C: EvrfCurve> {
   t: u16,
   n: u16,
   evrf_public_keys: Vec<<C::EmbeddedCurve as Ciphersuite>::G>,
-  participations: HashMap<Participant, (HashMap<Participant, C::F>, EvrfVerifyResult<C>)>,
+  group_key: C::G,
+  verification_shares: HashMap<Participant, C::G>,
+  encrypted_secret_shares:
+    HashMap<Participant, HashMap<Participant, ([<C::EmbeddedCurve as Ciphersuite>::G; 2], C::F)>>,
 }
 
 impl<C: EvrfCurve> EvrfDkg<C>
@@ -255,6 +258,9 @@ where
   /// `Participation`s are valid and there's at least `t`, an instance of this struct (usable to
   /// obtain a threshold share of generated key) is returned. If all are valid and there's not at
   /// least `t`, an error of an empty list is returned after validation.
+  ///
+  /// This DKG is unbiased if all `n` people participate. This DKG is biased if only a threshold
+  /// participate.
   pub fn verify(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
@@ -277,7 +283,7 @@ where
       }
     }
 
-    let mut res = HashMap::new();
+    let mut valid = HashMap::new();
     let mut faulty = HashSet::new();
 
     let mut evrf_verifier = generators.batch_verifier();
@@ -299,9 +305,9 @@ where
       };
       evrf_verifier = verifier_clone;
 
-      res.insert(*i, (participation.encrypted_secret_shares.clone(), data));
+      valid.insert(*i, (participation.encrypted_secret_shares.clone(), data));
     }
-    debug_assert_eq!(res.len() + faulty.len(), participations.len());
+    debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     // Perform the batch verification of the eVRFs
     if !generators.verify(evrf_verifier) {
@@ -323,20 +329,23 @@ where
         )
         .expect("evrf failed basic checks yet prover wasn't prior marked faulty");
         if !generators.verify(evrf_verifier) {
-          res.remove(i);
+          valid.remove(i);
           faulty.insert(*i);
         }
       }
     }
-    debug_assert_eq!(res.len() + faulty.len(), participations.len());
+    debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     // Perform the batch verification of the shares
+    let mut sum_encrypted_secret_shares = HashMap::new();
+    let mut sum_masks = HashMap::new();
+    let mut all_encrypted_secret_shares = HashMap::new();
     {
-      let mut share_verification_statements_actual = HashMap::with_capacity(res.len());
+      let mut share_verification_statements_actual = HashMap::with_capacity(valid.len());
       if !{
         let mut g_scalar = C::F::ZERO;
-        let mut pairs = Vec::with_capacity(res.len() * (usize::from(t) + evrf_public_keys.len()));
-        for (i, (encrypted_secret_shares, data)) in &res {
+        let mut pairs = Vec::with_capacity(valid.len() * (usize::from(t) + evrf_public_keys.len()));
+        for (i, (encrypted_secret_shares, data)) in &valid {
           let (this_g_scalar, mut these_pairs) = share_verification_statements::<C>(
             &mut *rng,
             &data.coefficients,
@@ -347,11 +356,36 @@ where
             &data.encryption_commitments,
             encrypted_secret_shares,
           );
+          // Queue this into our batch
           g_scalar += this_g_scalar;
           pairs.extend(&these_pairs);
 
+          // Also push this g_scalar onto these_pairs so these_pairs can be verified individually
+          // upon error
           these_pairs.push((this_g_scalar, generators.g()));
           share_verification_statements_actual.insert(*i, these_pairs);
+
+          // Also format this data as we'd need it upon success
+          let mut formatted_encrypted_secret_shares = HashMap::new();
+          for (j, enc_share) in encrypted_secret_shares {
+            /*
+              We calculcate verification shares as the sum of the encrypted scalars, minus their
+              masks. This only does one scalar multiplication, and `1+t` point additions (with
+              one negation), and is accordingly much cheaper than interpolating the commitments.
+              This is only possible because already interpolated the commitments to verify the
+              encrypted secret share.
+            */
+            let sum_encrypted_secret_share =
+              sum_encrypted_secret_shares.get(j).copied().unwrap_or(C::F::ZERO);
+            let sum_mask = sum_masks.get(j).copied().unwrap_or(C::G::identity());
+            sum_encrypted_secret_shares.insert(*j, sum_encrypted_secret_share + enc_share);
+
+            let j_index = usize::from(u16::from(*j)) - 1;
+            sum_masks.insert(*j, sum_mask + data.encryption_commitments[j_index]);
+
+            formatted_encrypted_secret_shares.insert(*j, (data.ecdh_keys[j_index], *enc_share));
+          }
+          all_encrypted_secret_shares.insert(*i, formatted_encrypted_secret_shares);
         }
         pairs.push((g_scalar, generators.g()));
         bool::from(multiexp_vartime(&pairs).is_identity())
@@ -359,13 +393,13 @@ where
         // If the batch failed, verify them each individually
         for (i, pairs) in share_verification_statements_actual {
           if !bool::from(multiexp_vartime(&pairs).is_identity()) {
-            res.remove(&i);
+            valid.remove(&i);
             faulty.insert(i);
           }
         }
       }
     }
-    debug_assert_eq!(res.len() + faulty.len(), participations.len());
+    debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     let mut faulty = faulty.into_iter().collect::<Vec<_>>();
     if !faulty.is_empty() {
@@ -373,13 +407,33 @@ where
       Err(faulty)?;
     }
 
-    if res.len() < usize::from(t) {
+    if valid.len() < usize::from(t) {
       Err(vec![])?;
     }
 
-    Ok(EvrfDkg { t, n, evrf_public_keys: evrf_public_keys.to_vec(), participations: res })
+    // If we now have >= t participations, calculate the group key and verification shares
+
+    // The group key is the sum of the zero coefficients
+    let group_key = valid.values().map(|(_, evrf_data)| evrf_data.coefficients[0]).sum::<C::G>();
+
+    // Calculate each user's verification share
+    let mut verification_shares = HashMap::new();
+    for i in (1 ..= n).map(Participant) {
+      verification_shares
+        .insert(i, (C::generator() * sum_encrypted_secret_shares[&i]) - sum_masks[&i]);
+    }
+
+    Ok(EvrfDkg {
+      t,
+      n,
+      evrf_public_keys: evrf_public_keys.to_vec(),
+      group_key,
+      verification_shares,
+      encrypted_secret_shares: all_encrypted_secret_shares,
+    })
   }
 
+  // TODO: Return all keys for this participant, not just the first
   pub fn keys(
     &self,
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
@@ -392,9 +446,11 @@ where
     let i = Participant(1 + i);
 
     let mut secret_share = Zeroizing::new(C::F::ZERO);
-    for (shares, evrf_data) in self.participations.values() {
+    for shares in self.encrypted_secret_shares.values() {
+      let (ecdh_keys, enc_share) = shares[&i];
+
       let mut ecdh = Zeroizing::new(C::F::ZERO);
-      for point in evrf_data.ecdh_keys[usize::from(u16::from(i)) - 1] {
+      for point in ecdh_keys {
         // TODO: Explicitly ban 0-ECDH commitments, 0-eVRF public keys, and gen non-zero keys
         let (mut x, mut y) =
           <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
@@ -402,45 +458,16 @@ where
         x.zeroize();
         y.zeroize();
       }
-      *secret_share += shares[&i] - ecdh.deref();
+      *secret_share += enc_share - ecdh.deref();
     }
 
-    // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
-    // these sums so preprocessing them is a massive speedup
-    let mut stripes = Vec::with_capacity(usize::from(self.t));
-    for t in 0 .. usize::from(self.t) {
-      stripes.push(
-        self.participations.values().map(|(_, evrf_data)| evrf_data.coefficients[t]).sum::<C::G>(),
-      );
-    }
-
-    // Calculate each user's verification share
-    let mut verification_shares = HashMap::new();
-    for j in (1 ..= self.n).map(Participant) {
-      verification_shares.insert(
-        j,
-        if j == i {
-          C::generator() * secret_share.deref()
-        } else {
-          fn exponential<C: Ciphersuite>(i: Participant, values: &[C::G]) -> Vec<(C::F, C::G)> {
-            let i = C::F::from(u16::from(i).into());
-            let mut res = Vec::with_capacity(values.len());
-            (0 .. values.len()).fold(C::F::ONE, |exp, l| {
-              res.push((exp, values[l]));
-              exp * i
-            });
-            res
-          }
-          multiexp_vartime(&exponential::<C>(j, &stripes))
-        },
-      );
-    }
+    debug_assert_eq!(self.verification_shares[&i], C::generator() * secret_share.deref());
 
     Some(ThresholdCore {
       params: ThresholdParams::new(self.t, self.n, i).unwrap(),
       secret_share,
-      group_key: stripes[0],
-      verification_shares,
+      group_key: self.group_key,
+      verification_shares: self.verification_shares.clone(),
     })
   }
 }
