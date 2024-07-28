@@ -2134,6 +2134,7 @@ dependencies = [
  "ciphersuite",
  "dleq",
  "ec-divisors",
+ "embedwards25519",
  "flexible-transcript",
  "generalized-bulletproofs",
  "generalized-bulletproofs-circuit-abstraction",
@@ -2145,6 +2146,7 @@ dependencies = [
  "rand_chacha",
  "rand_core",
  "schnorr-signatures",
+ "secq256k1",
  "std-shims",
  "subtle",
  "thiserror",
@@ -2332,12 +2334,14 @@ dependencies = [
 name = "embedwards25519"
 version = "0.1.0"
 dependencies = [
+ "blake2",
+ "ciphersuite",
  "crypto-bigint",
  "dalek-ff-group",
  "ec-divisors",
- "ff",
  "ff-group-tests",
- "group",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 0.14.7",
  "hex",
  "hex-literal",
  "rand_core",
@@ -7915,12 +7919,13 @@ dependencies = [
 name = "secq256k1"
 version = "0.1.0"
 dependencies = [
+ "blake2",
+ "ciphersuite",
  "crypto-bigint",
  "ec-divisors",
- "ff",
  "ff-group-tests",
+ "generalized-bulletproofs-ec-gadgets",
  "generic-array 0.14.7",
- "group",
  "hex",
  "hex-literal",
  "k256",
@@ -8428,6 +8433,7 @@ dependencies = [
  "ciphersuite",
  "const-hex",
  "dalek-ff-group",
+ "dkg",
  "dockertest",
  "env_logger",
  "ethereum-serai",

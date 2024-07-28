@@ -8,7 +8,7 @@ use rand_core::RngCore;
 use zeroize::Zeroize;
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
 
-use group::{
+use ciphersuite::group::{
   ff::{Field, PrimeField, PrimeFieldBits},
   Group, GroupEncoding,
   prime::PrimeGroup,

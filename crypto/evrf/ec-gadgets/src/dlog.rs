@@ -10,6 +10,11 @@ use generalized_bulletproofs_circuit_abstraction::*;
 use crate::*;
 
 /// Parameters for a discrete logarithm proof.
+///
+/// This isn't required to be implemented by the Field/Group/Ciphersuite, solely a struct, to
+/// enable parameterization of discrete log proofs to the bitlength of the discrete logarithm.
+/// While that may be F::NUM_BITS, a discrete log proof a for a full scalar, it could also be 64,
+/// a discrete log proof for a u64 (such as if opening a Pedersen commitment in-circuit).
 pub trait DiscreteLogParameters {
   /// The amount of bits used to represent a scalar.
   type ScalarBits: ArrayLength;

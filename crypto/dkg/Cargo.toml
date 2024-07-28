@@ -46,6 +46,9 @@ ec-divisors = { path = "../evrf/divisors", default-features = false, optional = 
 generalized-bulletproofs-circuit-abstraction = { path = "../evrf/circuit-abstraction", optional = true }
 generalized-bulletproofs-ec-gadgets = { path = "../evrf/ec-gadgets", optional = true }
 
+secq256k1 = { path = "../evrf/secq256k1", optional = true }
+embedwards25519 = { path = "../evrf/embedwards25519", optional = true }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 rand = { version = "0.8", default-features = false, features = ["std"] }
@@ -90,5 +93,7 @@ evrf = [
   "dep:generalized-bulletproofs-circuit-abstraction",
   "dep:generalized-bulletproofs-ec-gadgets",
 ]
+evrf-secp256k1 = ["evrf", "ciphersuite/secp256k1", "secq256k1"]
+evrf-ed25519 = ["evrf", "ciphersuite/ed25519", "embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

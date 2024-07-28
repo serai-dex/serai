@@ -33,6 +33,18 @@ pub trait EvrfCurve: Ciphersuite {
   type EmbeddedCurveParameters: DiscreteLogParameters;
 }
 
+#[cfg(feature = "evrf-secp256k1")]
+impl EvrfCurve for ciphersuite::Secp256k1 {
+  type EmbeddedCurve = secq256k1::Secq256k1;
+  type EmbeddedCurveParameters = secq256k1::Secq256k1;
+}
+
+#[cfg(feature = "evrf-ed25519")]
+impl EvrfCurve for ciphersuite::Ed25519 {
+  type EmbeddedCurve = embedwards25519::Embedwards25519;
+  type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
+}
+
 fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
   let mut repr = <C::G as GroupEncoding>::Repr::default();
   loop {
@@ -742,7 +754,6 @@ where
     })
   }
 
-  // TODO: Dedicated error
   /// Verify an eVRF proof, returning the commitments output.
   #[allow(clippy::too_many_arguments)]
   pub(crate) fn verify(

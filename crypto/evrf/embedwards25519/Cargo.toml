@@ -21,14 +21,15 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
 subtle = { version = "^2.4", default-features = false, features = ["std"] }
 
-ff = { version = "0.13", default-features = false, features = ["std", "bits"] }
-group = { version = "0.13", default-features = false }
-
+generic-array = { version = "0.14", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
 
 dalek-ff-group = { path = "../../dalek-ff-group", version = "0.4", default-features = false }
 
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
 ec-divisors = { path = "../divisors" }
+generalized-bulletproofs-ec-gadgets = { path = "../ec-gadgets" }
 
 [dev-dependencies]
 hex = "0.4"

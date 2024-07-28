@@ -90,7 +90,9 @@ macro_rules! field {
 
     use crypto_bigint::{Integer, NonZero, Encoding, impl_modulus};
 
-    use ff::{Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic};
+    use ciphersuite::group::ff::{
+      Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic,
+    };
 
     use $crate::backend::u8_from_bool;
 

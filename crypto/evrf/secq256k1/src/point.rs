@@ -10,7 +10,7 @@ use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, Conditio
 
 use generic_array::{typenum::U33, GenericArray};
 
-use group::{
+use ciphersuite::group::{
   ff::{Field, PrimeField, PrimeFieldBits},
   Group, GroupEncoding,
   prime::PrimeGroup,

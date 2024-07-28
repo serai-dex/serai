@@ -37,6 +37,7 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }
+dkg = { package = "dkg", path = "../crypto/dkg", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../crypto/schnorrkel", default-features = false }
 
@@ -81,12 +82,12 @@ dockertest = "0.4"
 serai-docker-tests = { path = "../tests/docker" }
 
 [features]
-secp256k1 = ["k256", "frost/secp256k1"]
+secp256k1 = ["k256", "dkg/evrf-secp256k1", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
 
 ethereum = ["secp256k1", "ethereum-serai/tests"]
 
-ed25519 = ["dalek-ff-group", "frost/ed25519"]
+ed25519 = ["dalek-ff-group", "dkg/evrf-ed25519", "frost/ed25519"]
 monero = ["ed25519", "monero-simple-request-rpc", "monero-wallet", "serai-client/monero"]
 
 binaries = ["env_logger", "serai-env", "message-queue"]
