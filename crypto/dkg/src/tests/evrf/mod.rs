@@ -7,7 +7,7 @@ use rand::seq::SliceRandom;
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use crate::{
-  Participant, ThresholdKeys,
+  Participant,
   evrf::*,
   tests::{THRESHOLD, PARTICIPANTS, recover_key},
 };
@@ -17,7 +17,7 @@ use proof::{Pallas, Vesta};
 
 #[test]
 fn evrf_dkg() {
-  let generators = EvrfDkg::<Pallas>::generators(THRESHOLD, PARTICIPANTS);
+  let generators = EvrfGenerators::<Pallas>::new(THRESHOLD, PARTICIPANTS);
   let context = [0; 32];
 
   let mut priv_keys = vec![];
@@ -62,7 +62,7 @@ fn evrf_dkg() {
   let mut verification_shares = None;
   let mut all_keys = HashMap::new();
   for (i, priv_key) in priv_keys {
-    let keys = ThresholdKeys::from(dkg.keys(&priv_key).unwrap());
+    let keys = dkg.keys(&priv_key).into_iter().next().unwrap();
     assert_eq!(keys.params().i(), i);
     assert_eq!(keys.params().t(), THRESHOLD);
     assert_eq!(keys.params().n(), PARTICIPANTS);
@@ -74,6 +74,6 @@ fn evrf_dkg() {
     all_keys.insert(i, keys);
   }
 
-  // TODO: Test fo all possible combinations of keys
+  // TODO: Test for all possible combinations of keys
   assert_eq!(Pallas::generator() * recover_key(&all_keys), group_key.unwrap());
 }

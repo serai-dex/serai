@@ -84,14 +84,14 @@ use ciphersuite::{
 };
 use multiexp::multiexp_vartime;
 
-use generalized_bulletproofs::{Generators, arithmetic_circuit_proof::*};
+use generalized_bulletproofs::arithmetic_circuit_proof::*;
 use ec_divisors::DivisorCurve;
 
-use crate::{Participant, DkgError, ThresholdParams, ThresholdCore};
+use crate::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys};
 
 pub(crate) mod proof;
 use proof::*;
-pub use proof::EvrfCurve;
+pub use proof::{EvrfCurve, EvrfGenerators};
 
 /// Participation in the DKG.
 ///
@@ -240,27 +240,18 @@ where
   <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
     DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
 {
-  /// Sample generators for this ciphersuite.
-  pub fn generators(max_threshold: u16, max_participants: u16) -> Generators<C> {
-    Evrf::<C>::generators(max_threshold, max_participants)
-  }
-
   /// Participate in performing the DKG for the specified parameters.
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
   /// prior-shared secrets.
   pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
-    generators: &Generators<C>,
+    generators: &EvrfGenerators<C>,
     context: [u8; 32],
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
   ) -> Result<Participation<C>, EvrfError> {
-    if generators.g() != C::generator() {
-      todo!("TODO");
-    }
-
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else { Err(EvrfError::TooManyParticipants)? };
     if (t == 0) || (t > n) {
@@ -272,7 +263,7 @@ where
 
     let EvrfProveResult { coefficients, encryption_masks, proof } = match Evrf::prove(
       rng,
-      generators,
+      &generators.0,
       evrf_private_key,
       context,
       usize::from(t),
@@ -313,16 +304,12 @@ where
   /// participate.
   pub fn verify(
     rng: &mut (impl RngCore + CryptoRng),
-    generators: &Generators<C>,
+    generators: &EvrfGenerators<C>,
     context: [u8; 32],
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     participations: &HashMap<Participant, Participation<C>>,
   ) -> Result<VerifyResult<C>, EvrfError> {
-    if generators.g() != C::generator() {
-      todo!("TODO");
-    }
-
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else { Err(EvrfError::TooManyParticipants)? };
     if (t == 0) || (t > n) {
       Err(EvrfError::InvalidThreshold)?;
@@ -336,13 +323,13 @@ where
     let mut valid = HashMap::with_capacity(participations.len());
     let mut faulty = HashSet::new();
 
-    let mut evrf_verifier = generators.batch_verifier();
+    let mut evrf_verifier = generators.0.batch_verifier();
     for (i, participation) in participations {
       // Clone the verifier so if this proof is faulty, it doesn't corrupt the verifier
       let mut verifier_clone = evrf_verifier.clone();
       let Ok(data) = Evrf::<C>::verify(
         rng,
-        generators,
+        &generators.0,
         &mut verifier_clone,
         evrf_public_keys[usize::from(u16::from(*i)) - 1],
         context,
@@ -360,16 +347,16 @@ where
     debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     // Perform the batch verification of the eVRFs
-    if !generators.verify(evrf_verifier) {
+    if !generators.0.verify(evrf_verifier) {
       // If the batch failed, verify them each individually
       for (i, participation) in participations {
         if faulty.contains(i) {
           continue;
         }
-        let mut evrf_verifier = generators.batch_verifier();
+        let mut evrf_verifier = generators.0.batch_verifier();
         Evrf::<C>::verify(
           rng,
-          generators,
+          &generators.0,
           &mut evrf_verifier,
           evrf_public_keys[usize::from(u16::from(*i)) - 1],
           context,
@@ -378,7 +365,7 @@ where
           &participation.proof,
         )
         .expect("evrf failed basic checks yet prover wasn't prior marked faulty");
-        if !generators.verify(evrf_verifier) {
+        if !generators.0.verify(evrf_verifier) {
           valid.remove(i);
           faulty.insert(*i);
         }
@@ -412,7 +399,7 @@ where
 
           // Also push this g_scalar onto these_pairs so these_pairs can be verified individually
           // upon error
-          these_pairs.push((this_g_scalar, generators.g()));
+          these_pairs.push((this_g_scalar, generators.0.g()));
           share_verification_statements_actual.insert(*i, these_pairs);
 
           // Also format this data as we'd need it upon success
@@ -437,7 +424,7 @@ where
           }
           all_encrypted_secret_shares.insert(*i, formatted_encrypted_secret_shares);
         }
-        pairs.push((g_scalar, generators.g()));
+        pairs.push((g_scalar, generators.0.g()));
         bool::from(multiexp_vartime(&pairs).is_identity())
       } {
         // If the batch failed, verify them each individually
@@ -483,41 +470,47 @@ where
     }))
   }
 
-  // TODO: Return all keys for this participant, not just the first
   pub fn keys(
     &self,
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Option<ThresholdCore<C>> {
+  ) -> Vec<ThresholdKeys<C>> {
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
-    let Some(i) = self.evrf_public_keys.iter().position(|key| *key == evrf_public_key) else {
-      None?
-    };
-    let i = u16::try_from(i).expect("n <= u16::MAX yet i > u16::MAX?");
-    let i = Participant(1 + i);
-
-    let mut secret_share = Zeroizing::new(C::F::ZERO);
-    for shares in self.encrypted_secret_shares.values() {
-      let (ecdh_keys, enc_share) = shares[&i];
-
-      let mut ecdh = Zeroizing::new(C::F::ZERO);
-      for point in ecdh_keys {
-        // TODO: Explicitly ban 0-ECDH commitments, 0-eVRF public keys, and gen non-zero keys
-        let (mut x, mut y) =
-          <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
-        *ecdh += x;
-        x.zeroize();
-        y.zeroize();
+    let mut is = Vec::with_capacity(1);
+    for (i, evrf_key) in self.evrf_public_keys.iter().enumerate() {
+      if *evrf_key == evrf_public_key {
+        let i = u16::try_from(i).expect("n <= u16::MAX yet i > u16::MAX?");
+        let i = Participant(1 + i);
+        is.push(i);
       }
-      *secret_share += enc_share - ecdh.deref();
     }
 
-    debug_assert_eq!(self.verification_shares[&i], C::generator() * secret_share.deref());
+    let mut res = Vec::with_capacity(is.len());
+    for i in is {
+      let mut secret_share = Zeroizing::new(C::F::ZERO);
+      for shares in self.encrypted_secret_shares.values() {
+        let (ecdh_keys, enc_share) = shares[&i];
 
-    Some(ThresholdCore {
-      params: ThresholdParams::new(self.t, self.n, i).unwrap(),
-      secret_share,
-      group_key: self.group_key,
-      verification_shares: self.verification_shares.clone(),
-    })
+        let mut ecdh = Zeroizing::new(C::F::ZERO);
+        for point in ecdh_keys {
+          // TODO: Explicitly ban 0-ECDH commitments, 0-eVRF public keys, and gen non-zero keys
+          let (mut x, mut y) =
+            <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
+          *ecdh += x;
+          x.zeroize();
+          y.zeroize();
+        }
+        *secret_share += enc_share - ecdh.deref();
+      }
+
+      debug_assert_eq!(self.verification_shares[&i], C::generator() * secret_share.deref());
+
+      res.push(ThresholdKeys::from(ThresholdCore {
+        params: ThresholdParams::new(self.t, self.n, i).unwrap(),
+        secret_share,
+        group_key: self.group_key,
+        verification_shares: self.verification_shares.clone(),
+      }));
+    }
+    res
   }
 }

@@ -43,6 +43,32 @@ fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
   }
 }
 
+/// Generators for eVRF proof.
+#[derive(Clone, Debug)]
+pub struct EvrfGenerators<C: EvrfCurve>(pub(crate) Generators<C>);
+
+impl<C: EvrfCurve> EvrfGenerators<C>
+where
+  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
+    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
+{
+  /// Create a new set of generators.
+  pub fn new(max_threshold: u16, max_participants: u16) -> EvrfGenerators<C> {
+    let g = C::generator();
+    let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(g.to_bytes()).into());
+    let h = sample_point::<C>(&mut rng);
+    let (_, generators) =
+      Evrf::<C>::muls_and_generators_to_use(max_threshold.into(), max_participants.into());
+    let mut g_bold = vec![];
+    let mut h_bold = vec![];
+    for _ in 0 .. generators {
+      g_bold.push(sample_point::<C>(&mut rng));
+      h_bold.push(sample_point::<C>(&mut rng));
+    }
+    Self(Generators::new(g, h, g_bold, h_bold).unwrap())
+  }
+}
+
 /// The result of proving for an eVRF.
 pub(crate) struct EvrfProveResult<C: Ciphersuite> {
   /// The coefficients for use in the DKG.
@@ -76,22 +102,6 @@ where
   <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
     DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
 {
-  // TODO: Wrap these Generators so we can enforce g == C::generator() with type safety
-  pub(crate) fn generators(max_threshold: u16, max_participants: u16) -> Generators<C> {
-    let g = C::generator();
-    let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(g.to_bytes()).into());
-    let h = sample_point::<C>(&mut rng);
-    let (_, generators) =
-      Evrf::<C>::muls_and_generators_to_use(max_threshold.into(), max_participants.into());
-    let mut g_bold = vec![];
-    let mut h_bold = vec![];
-    for _ in 0 .. generators {
-      g_bold.push(sample_point::<C>(&mut rng));
-      h_bold.push(sample_point::<C>(&mut rng));
-    }
-    Generators::new(g, h, g_bold, h_bold).unwrap()
-  }
-
   // Sample uniform points (via rejection-sampling) on the embedded elliptic curve
   fn transcript_to_points(
     seed: [u8; 32],
@@ -290,72 +300,142 @@ where
   /// Convert a scalar to a sequence of coefficients for the polynomial 2**i, where the sum of the
   /// coefficients is F::NUM_BITS.
   ///
-  /// We'll presumably use this scalar in a discrete log proof. That requires calculating a divisor
-  /// which is variable time to the sum of the coefficients in the polynomial. This causes all
-  /// scalars to have a constant sum of their coefficients (instead one variable to the bits set).
+  /// Despite the name, the returned coefficients are not guaranteed to be bits (0 or 1).
+  ///
+  /// This scalar will presumably be used in a discrete log proof. That requires calculating a
+  /// divisor which is variable time to the amount of points interpolated. Since the amount of
+  /// points interpolated is equal to the sum of the coefficients in the polynomial, we need all
+  /// scalars to have a constant sum of their coefficients (instead of one variable to its bits).
   ///
   /// We achieve this by finding the highest non-0 coefficient, decrementing it, and increasing the
   /// immediately less significant coefficient by 2. This increases the sum of the coefficients by
   /// 1 (-1+2=1).
-  // TODO: Support scalars which have a value < F::NUM_BITS
-  #[allow(clippy::cast_possible_truncation)]
   fn scalar_to_bits(scalar: &<C::EmbeddedCurve as Ciphersuite>::F) -> Vec<u64> {
-    let num_bits = <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS;
+    let num_bits = u64::from(<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS);
 
     // Obtain the bits of the private key
-    let mut sum_of_coefficients: u64 = 0;
-    let mut dlog = vec![0; num_bits as usize];
-    for (i, bit) in scalar.to_le_bits().into_iter().take(num_bits as usize).enumerate() {
+    let num_bits_usize = usize::try_from(num_bits).unwrap();
+    let mut decomposition = vec![0; num_bits_usize];
+    for (i, bit) in scalar.to_le_bits().into_iter().take(num_bits_usize).enumerate() {
       let bit = u64::from(u8::from(bit));
-      dlog[i] = bit;
-      sum_of_coefficients += bit;
+      decomposition[i] = bit;
+    }
+
+    // The following algorithm only works if the value of the scalar exceeds num_bits
+    // If it isn't, we increase it by the modulus such that it does exceed num_bits
+    {
+      let mut less_than_num_bits = Choice::from(0);
+      for i in 0 .. num_bits {
+        less_than_num_bits |= scalar.ct_eq(&<C::EmbeddedCurve as Ciphersuite>::F::from(i));
+      }
+      let mut decomposition_of_modulus = vec![0; num_bits_usize];
+      // Decompose negative one
+      for (i, bit) in (-<C::EmbeddedCurve as Ciphersuite>::F::ONE)
+        .to_le_bits()
+        .into_iter()
+        .take(num_bits_usize)
+        .enumerate()
+      {
+        let bit = u64::from(u8::from(bit));
+        decomposition_of_modulus[i] = bit;
+      }
+      // Increment it by one
+      decomposition_of_modulus[0] += 1;
+
+      // Add the decomposition onto the decomposition of the modulus
+      for i in 0 .. num_bits_usize {
+        let new_decomposition = <_>::conditional_select(
+          &decomposition[i],
+          &(decomposition[i] + decomposition_of_modulus[i]),
+          less_than_num_bits,
+        );
+        decomposition[i] = new_decomposition;
+      }
+    }
+
+    // Calculcate the sum of the coefficients
+    let mut sum_of_coefficients: u64 = 0;
+    for decomposition in &decomposition {
+      sum_of_coefficients += *decomposition;
+    }
+
+    /*
+      Now, because we added a log2(k)-bit number to a k-bit number, we may have our sum of
+      coefficients be *too high*. We attempt to reduce the sum of the coefficients accordingly.
+
+      This algorithm is guaranteed to complete as expected. Take the sequence `222`. `222` becomes
+      `032` becomes `013`. Even if the next coefficient in the sequence is `2`, the third
+      coefficient will be reduced once and the next coefficient (`2`, increased to `3`) will only
+      be eligible for reduction once. This demonstrates, even for a worst case of log2(k) `2`s
+      followed by `1`s (as possible if the modulus is a Mersenne prime), the log2(k) `2`s can be
+      reduced as necessary so long as there is a single coefficient after (requiring the entire
+      sequence be at least of length log2(k) + 1). For a 2-bit number, log2(k) + 1 == 2, so this
+      holds for any odd prime field.
+
+      To fully type out the demonstration for the Mersenne prime 3, with scalar to encode 1 (the
+      highest value less than the number of bits):
+
+      10 - Little-endian bits of 1
+      21 - Little-endian bits of 1, plus the modulus
+      02 - After one reduction, where the sum of the coefficients does in fact equal 2 (the target)
+    */
+    {
+      let mut log2_num_bits = 0;
+      while (1 << log2_num_bits) < num_bits {
+        log2_num_bits += 1;
+      }
+
+      for _ in 0 .. log2_num_bits {
+        // If the sum of coefficients is the amount of bits, we're done
+        let mut done = sum_of_coefficients.ct_eq(&num_bits);
+
+        for i in 0 .. (num_bits_usize - 1) {
+          let should_act = (!done) & decomposition[i].ct_gt(&1);
+          // Subtract 2 from this coefficient
+          let amount_to_sub = <_>::conditional_select(&0, &2, should_act);
+          decomposition[i] -= amount_to_sub;
+          // Add 1 to the next coefficient
+          let amount_to_add = <_>::conditional_select(&0, &1, should_act);
+          decomposition[i + 1] += amount_to_add;
+
+          // Also update the sum of coefficients
+          sum_of_coefficients -= <_>::conditional_select(&0, &1, should_act);
+
+          // If we updated the coefficients this loop iter, we're done for this loop iter
+          done |= should_act;
+        }
+      }
     }
 
     for _ in 0 .. num_bits {
+      // If the sum of coefficients is the amount of bits, we're done
+      let mut done = sum_of_coefficients.ct_eq(&num_bits);
+
       // Find the highest coefficient currently non-zero
-      let mut h = 1u32;
-      // The value of this highest coefficient, and the coefficient prior to it
-      let mut h_value = dlog[h as usize];
-      let mut h_prior_value = dlog[(h as usize) - 1];
+      for i in (1 .. decomposition.len()).rev() {
+        // If this is non-zero, we should decrement this coefficient if we haven't already
+        // decremented a coefficient this round
+        let is_non_zero = !(0.ct_eq(&decomposition[i]));
+        let should_act = (!done) & is_non_zero;
 
-      // TODO: Squash the following two loops by iterating from the top bit to the bottom bit
+        // Update this coefficient and the prior coefficient
+        let amount_to_sub = <_>::conditional_select(&0, &1, should_act);
+        decomposition[i] -= amount_to_sub;
 
-      let mut prior_coefficient = dlog[(h as usize) - 1];
-      for (i, coefficient) in dlog.iter().enumerate().skip(h as usize) {
-        let is_zero = 0.ct_eq(coefficient);
+        let amount_to_add = <_>::conditional_select(&0, &2, should_act);
+        // i must be at least 1, so i - 1 will be at least 0 (meaning it's safe to index with)
+        decomposition[i - 1] += amount_to_add;
 
-        // Set `h_*` if this value is non-0
-        h = u32::conditional_select(&h, &(i as u32), !is_zero);
-        h_value = <_>::conditional_select(&h_value, coefficient, !is_zero);
-        h_prior_value = <_>::conditional_select(&h_prior_value, &prior_coefficient, !is_zero);
+        // Also update the sum of coefficients
+        sum_of_coefficients += <_>::conditional_select(&0, &1, should_act);
 
-        // Update prior_coefficient
-        prior_coefficient = *coefficient;
-      }
-
-      // We should not have selected a value equivalent to 0
-      // TODO: Ban evrf keys < NUM_BITS and accordingly unable to be so coerced
-      assert!(!bool::from(h_value.ct_eq(&0)));
-
-      // Update h_value, h_prior_value as necessary
-      h_value -= 1;
-      h_prior_value += 2;
-
-      // Now, set these values if we should
-      let should_set = !sum_of_coefficients.ct_eq(&u64::from(num_bits));
-      sum_of_coefficients += u64::conditional_select(&0, &1, should_set);
-      for (i, coefficient) in dlog.iter_mut().enumerate() {
-        let this_is_prior = (i as u32).ct_eq(&(h - 1));
-        let this_is_high = (i as u32).ct_eq(&h);
-
-        *coefficient =
-          <_>::conditional_select(coefficient, &h_prior_value, should_set & this_is_prior);
-        *coefficient = <_>::conditional_select(coefficient, &h_value, should_set & this_is_high);
+        // If we updated the coefficients this loop iter, we're done for this loop iter
+        done |= should_act;
       }
     }
-    debug_assert!(bool::from(dlog.iter().sum::<u64>().ct_eq(&u64::from(num_bits))));
+    debug_assert!(bool::from(decomposition.iter().sum::<u64>().ct_eq(&num_bits)));
 
-    dlog
+    decomposition
   }
 
   fn transcript(
@@ -654,6 +734,7 @@ where
 
   // TODO: Dedicated error
   /// Verify an eVRF proof, returning the commitments output.
+  #[allow(clippy::too_many_arguments)]
   pub(crate) fn verify(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
