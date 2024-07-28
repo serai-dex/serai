@@ -45,6 +45,12 @@ impl EvrfCurve for ciphersuite::Ed25519 {
   type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
 }
 
+#[cfg(feature = "evrf-ristretto")]
+impl EvrfCurve for ciphersuite::Ristretto {
+  type EmbeddedCurve = embedwards25519::Embedwards25519;
+  type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
+}
+
 fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
   let mut repr = <C::G as GroupEncoding>::Repr::default();
   loop {

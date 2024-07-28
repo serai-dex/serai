@@ -37,7 +37,7 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }
-dkg = { package = "dkg", path = "../crypto/dkg", default-features = false, features = ["std"] }
+dkg = { package = "dkg", path = "../crypto/dkg", default-features = false, features = ["std", "evrf-ristretto"] }
 frost = { package = "modular-frost", path = "../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../crypto/schnorrkel", default-features = false }
 

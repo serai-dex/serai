@@ -95,5 +95,6 @@ evrf = [
 ]
 evrf-secp256k1 = ["evrf", "ciphersuite/secp256k1", "secq256k1"]
 evrf-ed25519 = ["evrf", "ciphersuite/ed25519", "embedwards25519"]
+evrf-ristretto = ["evrf", "ciphersuite/ristretto", "embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]
