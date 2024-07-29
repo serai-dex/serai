@@ -40,17 +40,14 @@ fn generators(prefix: &'static str, path: &str) {
     .write_all(
       format!(
         "
-          static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
-          pub(crate) fn GENERATORS() -> &'static Generators {{
-            GENERATORS_CELL.get_or_init(|| Generators {{
-              G: std_shims::vec![
-                {G_str}
-              ],
-              H: std_shims::vec![
-                {H_str}
-              ],
-            }})
-          }}
+          pub(crate) static GENERATORS: LazyLock<Generators> = LazyLock::new(|| Generators {{
+            G: std_shims::vec![
+              {G_str}
+            ],
+            H: std_shims::vec![
+              {H_str}
+            ],
+          }});
         ",
       )
       .as_bytes(),
@@ -67,12 +64,9 @@ fn generators(prefix: &'static str, path: &str) {
     .write_all(
       format!(
         r#"
-        static GENERATORS_CELL: OnceLock<Generators> = OnceLock::new();
-        pub(crate) fn GENERATORS() -> &'static Generators {{
-          GENERATORS_CELL.get_or_init(|| {{
-            monero_generators::bulletproofs_generators(b"{prefix}")
-          }})
-        }}
+        pub(crate) static GENERATORS: LazyLock<Generators> = LazyLock::new(|| {{
+          monero_generators::bulletproofs_generators(b"{prefix}")
+        }});
       "#,
       )
       .as_bytes(),

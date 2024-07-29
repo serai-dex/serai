@@ -35,12 +35,12 @@ fn test_zero_inner_product() {
 #[test]
 fn test_inner_product() {
   // P = sum(g_bold * a, h_bold * b, g * u * <a, b>)
-  let generators = GENERATORS();
+  let generators = &GENERATORS;
   let mut verifier = BulletproofsBatchVerifier::default();
   verifier.0.g_bold = vec![Scalar::ZERO; 32];
   verifier.0.h_bold = vec![Scalar::ZERO; 32];
   for i in [1, 2, 4, 8, 16, 32] {
-    let g = H();
+    let g = *H;
     let mut g_bold = vec![];
     let mut h_bold = vec![];
     for i in 0 .. i {

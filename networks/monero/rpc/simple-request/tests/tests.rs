@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 use monero_address::{Network, MoneroAddress};
@@ -8,7 +8,7 @@ use monero_address::{Network, MoneroAddress};
 // Accordingly, we test monero-rpc here (implicitly testing the simple-request transport)
 use monero_simple_request_rpc::*;
 
-static SEQUENTIAL: OnceLock<Mutex<()>> = OnceLock::new();
+static SEQUENTIAL: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 const ADDRESS: &str =
   "4B33mFPMq6mKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KQH4pNey";
@@ -17,7 +17,7 @@ const ADDRESS: &str =
 async fn test_rpc() {
   use monero_rpc::Rpc;
 
-  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
+  let guard = SEQUENTIAL.lock().await;
 
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
@@ -68,7 +68,7 @@ async fn test_rpc() {
 async fn test_decoy_rpc() {
   use monero_rpc::{Rpc, DecoyRpc};
 
-  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
+  let guard = SEQUENTIAL.lock().await;
 
   let rpc =
     SimpleRequestRpc::new("http://serai:seraidex@127.0.0.1:18081".to_string()).await.unwrap();
@@ -122,7 +122,7 @@ async fn test_decoy_rpc() {
 async fn test_zero_out_tx_o_indexes() {
   use monero_rpc::Rpc;
 
-  let guard = SEQUENTIAL.get_or_init(|| Mutex::new(())).lock().await;
+  let guard = SEQUENTIAL.lock().await;
 
   let rpc = SimpleRequestRpc::new("https://node.sethforprivacy.com".to_string()).await.unwrap();
 

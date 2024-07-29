@@ -5,7 +5,7 @@
 
 use core::{ops::Deref, fmt};
 use std_shims::{
-  sync::OnceLock,
+  sync::LazyLock,
   vec,
   vec::Vec,
   string::{String, ToString},
@@ -102,27 +102,23 @@ impl WordList {
   }
 }
 
-static LANGUAGES_CELL: OnceLock<HashMap<Language, WordList>> = OnceLock::new();
-#[allow(non_snake_case)]
-fn LANGUAGES() -> &'static HashMap<Language, WordList> {
-  LANGUAGES_CELL.get_or_init(|| {
-    HashMap::from([
-      (Language::Chinese, WordList::new(include!("./words/zh.rs"), 1)),
-      (Language::English, WordList::new(include!("./words/en.rs"), 3)),
-      (Language::Dutch, WordList::new(include!("./words/nl.rs"), 4)),
-      (Language::French, WordList::new(include!("./words/fr.rs"), 4)),
-      (Language::Spanish, WordList::new(include!("./words/es.rs"), 4)),
-      (Language::German, WordList::new(include!("./words/de.rs"), 4)),
-      (Language::Italian, WordList::new(include!("./words/it.rs"), 4)),
-      (Language::Portuguese, WordList::new(include!("./words/pt.rs"), 4)),
-      (Language::Japanese, WordList::new(include!("./words/ja.rs"), 3)),
-      (Language::Russian, WordList::new(include!("./words/ru.rs"), 4)),
-      (Language::Esperanto, WordList::new(include!("./words/eo.rs"), 4)),
-      (Language::Lojban, WordList::new(include!("./words/jbo.rs"), 4)),
-      (Language::DeprecatedEnglish, WordList::new(include!("./words/ang.rs"), 4)),
-    ])
-  })
-}
+static LANGUAGES: LazyLock<HashMap<Language, WordList>> = LazyLock::new(|| {
+  HashMap::from([
+    (Language::Chinese, WordList::new(include!("./words/zh.rs"), 1)),
+    (Language::English, WordList::new(include!("./words/en.rs"), 3)),
+    (Language::Dutch, WordList::new(include!("./words/nl.rs"), 4)),
+    (Language::French, WordList::new(include!("./words/fr.rs"), 4)),
+    (Language::Spanish, WordList::new(include!("./words/es.rs"), 4)),
+    (Language::German, WordList::new(include!("./words/de.rs"), 4)),
+    (Language::Italian, WordList::new(include!("./words/it.rs"), 4)),
+    (Language::Portuguese, WordList::new(include!("./words/pt.rs"), 4)),
+    (Language::Japanese, WordList::new(include!("./words/ja.rs"), 3)),
+    (Language::Russian, WordList::new(include!("./words/ru.rs"), 4)),
+    (Language::Esperanto, WordList::new(include!("./words/eo.rs"), 4)),
+    (Language::Lojban, WordList::new(include!("./words/jbo.rs"), 4)),
+    (Language::DeprecatedEnglish, WordList::new(include!("./words/ang.rs"), 4)),
+  ])
+});
 
 fn checksum_index(words: &[Zeroizing<String>], lang: &WordList) -> usize {
   let mut trimmed_words = Zeroizing::new(String::new());
@@ -170,7 +166,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> Seed {
   let bytes = Zeroizing::new(key.to_bytes());
 
   // get the language words
-  let words = &LANGUAGES()[&lang].word_list;
+  let words = &LANGUAGES[&lang].word_list;
   let list_len = u64::try_from(words.len()).unwrap();
 
   // To store the found words & add the checksum word later.
@@ -204,7 +200,7 @@ fn key_to_seed(lang: Language, key: Zeroizing<Scalar>) -> Seed {
 
   // create a checksum word for all languages except old english
   if lang != Language::DeprecatedEnglish {
-    let checksum = seed[checksum_index(&seed, &LANGUAGES()[&lang])].clone();
+    let checksum = seed[checksum_index(&seed, &LANGUAGES[&lang])].clone();
     seed.push(checksum);
   }
 
@@ -232,7 +228,7 @@ fn seed_to_bytes(lang: Language, words: &str) -> Result<Zeroizing<[u8; 32]>, See
   }
 
   // Validate words are in the language word list
-  let lang_word_list: &WordList = &LANGUAGES()[&lang];
+  let lang_word_list: &WordList = &LANGUAGES[&lang];
   let matched_indices = (|| {
     let has_checksum = words.len() == SEED_LENGTH_WITH_CHECKSUM;
     let mut matched_indices = Zeroizing::new(vec![]);
