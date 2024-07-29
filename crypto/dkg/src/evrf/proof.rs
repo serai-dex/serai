@@ -458,40 +458,19 @@ where
     decomposition
   }
 
-  fn transcript(
-    invocation: [u8; 32],
-    evrf_public_key: <C::EmbeddedCurve as Ciphersuite>::G,
-    ecdh_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
-  ) -> [u8; 32] {
-    let mut transcript = Blake2s256::new();
-    transcript.update(invocation);
-    transcript.update(evrf_public_key.to_bytes().as_ref());
-    for ecdh in ecdh_public_keys {
-      transcript.update(ecdh.to_bytes().as_ref());
-    }
-    transcript.finalize().into()
-  }
-
   /// Prove a point on an elliptic curve had its discrete logarithm generated via an eVRF.
   pub(crate) fn prove(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
-    evrf_private_key: &Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
-    invocation: [u8; 32],
+    transcript: [u8; 32],
     coefficients: usize,
     ecdh_public_keys: &[<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G],
+    evrf_private_key: &Zeroizing<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
   ) -> Result<EvrfProveResult<C>, AcError> {
     let curve_spec = CurveSpec {
       a: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::a(),
       b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
     };
-
-    // Combine the invocation and the public key into a transcript
-    let transcript = Self::transcript(
-      invocation,
-      <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref(),
-      ecdh_public_keys,
-    );
 
     // A tape of the discrete logarithm, then [zero, x**i, y x**i, y, x_coord, y_coord]
     let mut vector_commitment_tape = vec![];
@@ -766,18 +745,16 @@ where
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
     verifier: &mut BatchVerifier<C>,
-    evrf_public_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
-    invocation: [u8; 32],
+    transcript: [u8; 32],
     coefficients: usize,
     ecdh_public_keys: &[<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G],
+    evrf_public_key: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
     proof: &[u8],
   ) -> Result<EvrfVerifyResult<C>, ()> {
     let curve_spec = CurveSpec {
       a: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::a(),
       b: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G::b(),
     };
-
-    let transcript = Self::transcript(invocation, evrf_public_key, ecdh_public_keys);
 
     let mut generator_tables = Vec::with_capacity(1 + (2 * coefficients) + ecdh_public_keys.len());
     {

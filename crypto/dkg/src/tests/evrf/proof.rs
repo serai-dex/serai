@@ -77,10 +77,10 @@ fn evrf_proof_pasta_test() {
   let res = Evrf::<Pallas>::prove(
     &mut OsRng,
     &generators,
-    &vesta_private_key,
     [0; 32],
     1,
     &ecdh_public_keys,
+    &vesta_private_key,
   )
   .unwrap();
   println!("Proving time: {:?}", time.elapsed());
@@ -91,10 +91,10 @@ fn evrf_proof_pasta_test() {
     &mut OsRng,
     &generators,
     &mut verifier,
-    Vesta::generator() * *vesta_private_key,
     [0; 32],
     1,
     &ecdh_public_keys,
+    Vesta::generator() * *vesta_private_key,
     &res.proof,
   )
   .unwrap());
