@@ -8111,6 +8111,9 @@ dependencies = [
 [[package]]
 name = "serai-emissions-primitives"
 version = "0.1.0"
+dependencies = [
+ "serai-primitives",
+]
 
 [[package]]
 name = "serai-env"
@@ -8197,7 +8200,6 @@ dependencies = [
  "serai-dex-pallet",
  "serai-emissions-pallet",
  "serai-genesis-liquidity-pallet",
- "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-pallet",

@@ -383,7 +383,7 @@ impl<'a> TemporalSerai<'a> {
     let bytes = Serai::hex_decode(result.clone())?;
     R::decode(&mut bytes.as_slice()).map_err(|_| {
       SeraiError::InvalidRuntime(format!(
-        "different type than what is expected returned, raw value: {}",
+        "different type than what is expected to be returned, raw value: {}",
         hex::encode(result)
       ))
     })

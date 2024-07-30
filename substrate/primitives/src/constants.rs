@@ -27,3 +27,6 @@ pub const ARBITRAGE_TIME: u16 = (2 * HOURS) as u16;
 ///
 /// We additionally +1 so there is a true median.
 pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = (2 * ARBITRAGE_TIME) + 1;
+
+/// Amount of blocks per epoch in the fast-epoch feature that is used in tests.
+pub const FAST_EPOCH_DURATION: u64 = 2 * MINUTES;

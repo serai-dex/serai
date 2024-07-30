@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
+#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;

@@ -16,7 +16,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+serai-primitives = { path = "../../primitives", default-features = false }
 
 [features]
-std = []
+std = ["serai-primitives/std"]
 default = ["std"]

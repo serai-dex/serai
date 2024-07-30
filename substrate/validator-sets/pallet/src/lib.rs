@@ -832,7 +832,6 @@ pub mod pallet {
       total_required
     }
 
-    // TODO: make the increase_allocation public instead?
     pub fn deposit_stake(
       network: NetworkId,
       account: T::AccountId,

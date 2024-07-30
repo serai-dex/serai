@@ -138,7 +138,7 @@ impl From<Call> for RuntimeCall {
           })
         }
       },
-      Call::Emissions(_) => todo!(), // TODO
+      Call::Emissions => todo!(), // TODO
       Call::InInstructions(ii) => match ii {
         serai_abi::in_instructions::Call::execute_batch { batch } => {
           RuntimeCall::InInstructions(in_instructions::Call::execute_batch { batch })

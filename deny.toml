@@ -56,8 +56,6 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-genesis-liquidity-pallet" },
   { allow = ["AGPL-3.0"], name = "serai-emissions-pallet" },
 
-  { allow = ["AGPL-3.0"], name = "serai-genesis-liquidity-pallet" },
-
   { allow = ["AGPL-3.0"], name = "serai-in-instructions-pallet" },
 
   { allow = ["AGPL-3.0"], name = "serai-validator-sets-pallet" },

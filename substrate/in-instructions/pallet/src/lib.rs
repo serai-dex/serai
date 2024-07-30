@@ -19,7 +19,6 @@ pub mod pallet {
   use sp_core::sr25519::Public;
 
   use serai_primitives::{Coin, Amount, Balance};
-  use genesis_liquidity_primitives::GENESIS_LIQUIDITY_ACCOUNT;
 
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
@@ -34,8 +33,10 @@ pub mod pallet {
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
 
-  use genesis_liquidity_pallet::{Pallet as GenesisLiq, Config as GenesisLiqConfig};
-  use emissions_pallet::{Pallet as Emissions, Config as EmissionsConfig};
+  use genesis_liquidity_pallet::{
+    Pallet as GenesisLiq, Config as GenesisLiqConfig, primitives::GENESIS_LIQUIDITY_ACCOUNT,
+  };
+  use emissions_pallet::{Pallet as Emissions, Config as EmissionsConfig, primitives::POL_ACCOUNT};
 
   use super::*;
 
@@ -216,6 +217,7 @@ pub mod pallet {
           GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
         }
         InInstruction::SwapToStakedSRI(address, network) => {
+          Coins::<T>::mint(POL_ACCOUNT.into(), instruction.balance)?;
           Emissions::<T>::swap_to_staked_sri(address.into(), network, instruction.balance)?;
         }
       }

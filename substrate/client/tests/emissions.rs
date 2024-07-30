@@ -6,7 +6,7 @@ use serai_client::TemporalSerai;
 use serai_abi::{
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
   in_instructions::primitives::Batch,
-  primitives::{NETWORKS, BlockHash},
+  primitives::{NETWORKS, Coin, BlockHash, COINS, FAST_EPOCH_DURATION, TARGET_BLOCK_TIME},
   validator_sets::primitives::Session,
 };
 
@@ -16,7 +16,7 @@ use serai_client::{
 };
 
 mod common;
-use common::{genesis_liquidity::test_genesis_liquidity, in_instructions::provide_batch};
+use common::{genesis_liquidity::set_up_genesis, in_instructions::provide_batch};
 
 serai_test_fast_epoch!(
   emissions: (|serai: Serai| async move {
@@ -45,8 +45,23 @@ async fn send_batches(serai: &Serai, ids: &mut HashMap<NetworkId, u32>) {
 }
 
 async fn test_emissions(serai: Serai) {
-  // provide some genesis liquidity
-  let mut batch_ids = test_genesis_liquidity(serai.clone()).await;
+  // set up the genesis
+  let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
+  let values = HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
+  let (_, mut batch_ids) = set_up_genesis(&serai, &coins, &values).await;
+
+  // wait until genesis is complete
+  while !serai
+    .as_of_latest_finalized_block()
+    .await
+    .unwrap()
+    .genesis_liquidity()
+    .genesis_complete()
+    .await
+    .unwrap()
+  {
+    tokio::time::sleep(Duration::from_secs(1)).await;
+  }
 
   for _ in 0 .. 3 {
     // get current stakes
@@ -156,23 +171,26 @@ async fn wait_for_session_change(serai: &Serai) -> u32 {
     .0;
   let next_session = current_session + 1;
 
-  // Epoch time is 2 mins with the fast epoch feature, so lets wait double that.
-  tokio::time::timeout(tokio::time::Duration::from_secs(60 * 4), async {
-    while serai
-      .as_of_latest_finalized_block()
-      .await
-      .unwrap()
-      .validator_sets()
-      .session(NetworkId::Serai)
-      .await
-      .unwrap()
-      .unwrap()
-      .0 <
-      next_session
-    {
-      tokio::time::sleep(Duration::from_secs(6)).await;
-    }
-  })
+  // lets wait double the epoch time.
+  tokio::time::timeout(
+    tokio::time::Duration::from_secs(FAST_EPOCH_DURATION * TARGET_BLOCK_TIME * 2),
+    async {
+      while serai
+        .as_of_latest_finalized_block()
+        .await
+        .unwrap()
+        .validator_sets()
+        .session(NetworkId::Serai)
+        .await
+        .unwrap()
+        .unwrap()
+        .0 <
+        next_session
+      {
+        tokio::time::sleep(Duration::from_secs(6)).await;
+      }
+    },
+  )
   .await
   .unwrap();
 

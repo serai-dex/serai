@@ -61,7 +61,7 @@ impl<'a> SeraiDex<'a> {
   }
 
   /// Returns the reserves of `coin:SRI` pool.
-  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(u64, u64)>, SeraiError> {
+  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(Amount, Amount)>, SeraiError> {
     self.0.runtime_api("DexApi_get_reserves", (coin, Coin::Serai)).await
   }
 

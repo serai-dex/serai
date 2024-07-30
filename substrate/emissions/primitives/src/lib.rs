@@ -2,6 +2,11 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use serai_primitives::{SeraiAddress, system_address};
+
+// Protocol owned liquidity account.
+pub const POL_ACCOUNT: SeraiAddress = system_address(b"PoL-account");
+
 /// Amount of blocks in 30 days for 6s per block.
 const BLOCKS_PER_MONTH: u64 = 10 * 60 * 24 * 30;
 

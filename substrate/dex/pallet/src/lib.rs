@@ -194,10 +194,10 @@ pub mod pallet {
   #[pallet::getter(fn security_oracle_value)]
   pub type SecurityOracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
 
-  /// Current length of the `SpotPrices` map.
+  /// Total swap volume of a given pool in terms of SRI.
   #[pallet::storage]
   #[pallet::getter(fn swap_volume)]
-  pub type SwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
+  pub type SwapVolume<T: Config> = StorageMap<_, Identity, PoolId, u64, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
     fn restore_median(
@@ -866,23 +866,20 @@ pub mod pallet {
               &to,
               Balance { coin: *coin2, amount: Amount(*amount_out) },
             )?;
+
+            // update the volume
+            let swap_volume = if *coin1 == Coin::Serai {
+              amounts.get(i as usize).ok_or(Error::<T>::CorrespondenceError)?
+            } else {
+              amount_out
+            };
+            let existing = SwapVolume::<T>::get(pool_id).unwrap_or(0);
+            let new_volume = existing.saturating_add(*swap_volume);
+            SwapVolume::<T>::set(pool_id, Some(new_volume));
           }
           i += 1;
         }
 
-        // update the volume, SRI amount is always at index 1 if the path len is 2 or 3.
-        // path len 1 is not allowed and 3 is already the maximum.
-        let swap_volume = amounts.get(1).ok_or(Error::<T>::CorrespondenceError)?;
-        let existing = SwapVolume::<T>::get(coin1).unwrap_or(0);
-        let new_volume = existing.saturating_add(*swap_volume);
-        SwapVolume::<T>::set(coin1, Some(new_volume));
-
-        // if we did 2 pools, update the volume for second coin as well.
-        if u32::try_from(path.len()).unwrap() == T::MaxSwapPathLength::get() {
-          let existing = SwapVolume::<T>::get(path.last().unwrap()).unwrap_or(0);
-          let new_volume = existing.saturating_add(*swap_volume);
-          SwapVolume::<T>::set(path.last().unwrap(), Some(new_volume));
-        }
         Self::deposit_event(Event::SwapExecuted {
           who: sender,
           send_to,

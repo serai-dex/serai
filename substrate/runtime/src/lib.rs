@@ -52,7 +52,7 @@ use sp_runtime::{
 #[allow(unused_imports)]
 use primitives::{
   NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS, MEDIAN_PRICE_WINDOW_LENGTH,
-  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
+  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE, FAST_EPOCH_DURATION,
 };
 
 use support::{
@@ -283,7 +283,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ 2 * MINUTES }>;
+  type EpochDuration = ConstU64<{ FAST_EPOCH_DURATION }>;
 
   #[cfg(not(feature = "fast-epoch"))]
   type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;

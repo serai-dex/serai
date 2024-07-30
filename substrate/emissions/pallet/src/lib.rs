@@ -4,7 +4,7 @@
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
-  use frame_system::pallet_prelude::*;
+  use frame_system::{pallet_prelude::*, RawOrigin};
   use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
   use sp_std::{vec, vec::Vec, ops::Mul, collections::btree_map::BTreeMap};
@@ -18,7 +18,8 @@ pub mod pallet {
 
   use serai_primitives::*;
   use validator_sets_primitives::{MAX_KEY_SHARES_PER_SET, Session};
-  use emissions_primitives::*;
+  pub use emissions_primitives as primitives;
+  use primitives::*;
 
   #[pallet::config]
   pub trait Config:
@@ -79,7 +80,7 @@ pub mod pallet {
 
   #[pallet::storage]
   #[pallet::getter(fn last_swap_volume)]
-  pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, NetworkId, u64, OptionQuery>;
+  pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
   pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
@@ -194,72 +195,80 @@ pub mod pallet {
         block_count * REWARD_PER_BLOCK
       };
 
-      // get swap volumes
-      let mut volume_per_network: BTreeMap<NetworkId, u64> = BTreeMap::new();
-      for c in COINS {
-        // this should return 0 for SRI and so it shouldn't affect the total volume.
-        let current_volume = Dex::<T>::swap_volume(c).unwrap_or(0);
-        volume_per_network.insert(
-          c.network(),
-          (*volume_per_network.get(&c.network()).unwrap_or(&0)).saturating_add(current_volume),
-        );
-      }
-
-      // map current volumes to epoch volumes
-      let mut total_volume = 0u64;
-      for (n, vol) in &mut volume_per_network {
-        let last_volume = Self::last_swap_volume(n).unwrap_or(0);
-        let vol_this_epoch = vol.saturating_sub(last_volume);
-
-        // update the current volume
-        LastSwapVolume::<T>::set(n, Some(*vol));
-
-        total_volume = total_volume.saturating_add(vol_this_epoch);
-        *vol = vol_this_epoch;
-      }
-
       // map epoch ec-security-distance/volume to rewards
-      let rewards_per_network = if pre_ec_security {
-        distances
-          .into_iter()
-          .map(|(n, distance)| {
-            // calculate how much each network gets based on distance to ec-security
-            let reward = u64::try_from(
-              u128::from(reward_this_epoch).saturating_mul(u128::from(distance)) /
-                u128::from(total_distance),
-            )
-            .unwrap();
-            (n, reward)
-          })
-          .collect::<BTreeMap<NetworkId, u64>>()
+      let (rewards_per_network, volume_per_network, volume_per_coin) = if pre_ec_security {
+        (
+          distances
+            .into_iter()
+            .map(|(n, distance)| {
+              // calculate how much each network gets based on distance to ec-security
+              let reward = u64::try_from(
+                u128::from(reward_this_epoch).saturating_mul(u128::from(distance)) /
+                  u128::from(total_distance),
+              )
+              .unwrap();
+              (n, reward)
+            })
+            .collect::<BTreeMap<NetworkId, u64>>(),
+          None,
+          None,
+        )
       } else {
-        volume_per_network
-          .into_iter()
-          .map(|(n, vol)| {
-            // 20% of the reward goes to the Serai network and rest is distributed among others
-            // based on swap-volume.
-            let reward = if n == NetworkId::Serai {
-              reward_this_epoch / 5
-            } else {
-              let reward = reward_this_epoch - (reward_this_epoch / 5);
-              // TODO: It is highly unlikely but what to do in case of 0 total volume?
-              if total_volume != 0 {
-                u64::try_from(
-                  u128::from(reward).saturating_mul(u128::from(vol)) / u128::from(total_volume),
-                )
-                .unwrap()
+        // get swap volumes
+        let mut volume_per_coin: BTreeMap<Coin, u64> = BTreeMap::new();
+        for c in COINS {
+          // this should return 0 for SRI and so it shouldn't affect the total volume.
+          let current_volume = Dex::<T>::swap_volume(c).unwrap_or(0);
+          let last_volume = Self::last_swap_volume(c).unwrap_or(0);
+          let vol_this_epoch = current_volume.saturating_sub(last_volume);
+
+          // update the current volume
+          LastSwapVolume::<T>::set(c, Some(current_volume));
+          volume_per_coin.insert(c, vol_this_epoch);
+        }
+
+        // aggregate per network
+        let mut total_volume = 0u64;
+        let mut volume_per_network: BTreeMap<NetworkId, u64> = BTreeMap::new();
+        for (c, vol) in &volume_per_coin {
+          volume_per_network.insert(
+            c.network(),
+            (*volume_per_network.get(&c.network()).unwrap_or(&0)).saturating_add(*vol),
+          );
+          total_volume = total_volume.saturating_add(*vol);
+        }
+
+        (
+          volume_per_network
+            .iter()
+            .map(|(n, vol)| {
+              // 20% of the reward goes to the Serai network and rest is distributed among others
+              // based on swap-volume.
+              let reward = if *n == NetworkId::Serai {
+                reward_this_epoch / 5
               } else {
-                0
-              }
-            };
-            (n, reward)
-          })
-          .collect::<BTreeMap<NetworkId, u64>>()
+                let reward = reward_this_epoch - (reward_this_epoch / 5);
+                // TODO: It is highly unlikely but what to do in case of 0 total volume?
+                if total_volume != 0 {
+                  u64::try_from(
+                    u128::from(reward).saturating_mul(u128::from(*vol)) / u128::from(total_volume),
+                  )
+                  .unwrap()
+                } else {
+                  0
+                }
+              };
+              (*n, reward)
+            })
+            .collect::<BTreeMap<NetworkId, u64>>(),
+          Some(volume_per_network),
+          Some(volume_per_coin),
+        )
       };
 
       // distribute the rewards within the network
       for (n, reward) in rewards_per_network {
-        let (validators_reward, pool_reward) = if n == NetworkId::Serai {
+        let (validators_reward, network_pool_reward) = if n == NetworkId::Serai {
           (reward, 0)
         } else {
           // calculate pool vs validator share
@@ -271,28 +280,35 @@ pub mod pallet {
           let total = DESIRED_DISTRIBUTION.saturating_add(distribution);
 
           let validators_reward = DESIRED_DISTRIBUTION.saturating_mul(reward) / total;
-          let pool_reward = reward.saturating_sub(validators_reward);
-          (validators_reward, pool_reward)
+          let network_pool_reward = reward.saturating_sub(validators_reward);
+          (validators_reward, network_pool_reward)
         };
 
         // distribute validators rewards
-        if Self::distribute_to_validators(n, validators_reward).is_err() {
-          // TODO: log the failure
-          continue;
-        }
+        Self::distribute_to_validators(n, validators_reward);
 
         // send the rest to the pool
-        let coin_count = u64::try_from(n.coins().len()).unwrap();
-        for c in n.coins() {
-          // assumes reward is equally distributed between network coins.
-          if Coins::<T>::mint(
-            Dex::<T>::get_pool_account(*c),
-            Balance { coin: Coin::Serai, amount: Amount(pool_reward / coin_count) },
-          )
-          .is_err()
-          {
-            // TODO: log the failure
-            continue;
+        if network_pool_reward != 0 {
+          // these should be available to unwrap if we have a network_pool_reward. Because that
+          // means we had an unused capacity hence in a post-ec era.
+          let vpn = volume_per_network.as_ref().unwrap();
+          let vpc = volume_per_coin.as_ref().unwrap();
+          for c in n.coins() {
+            let pool_reward = u64::try_from(
+              u128::from(network_pool_reward).saturating_mul(u128::from(vpc[c])) /
+                u128::from(vpn[&n]),
+            )
+            .unwrap();
+
+            if Coins::<T>::mint(
+              Dex::<T>::get_pool_account(*c),
+              Balance { coin: Coin::Serai, amount: Amount(pool_reward) },
+            )
+            .is_err()
+            {
+              // TODO: log the failure
+              continue;
+            }
           }
         }
       }
@@ -334,15 +350,15 @@ pub mod pallet {
       false
     }
 
-    fn distribute_to_validators(n: NetworkId, reward: u64) -> DispatchResult {
-      // distribute among network's set based on
-      // -> (key shares * stake per share) + ((stake % stake per share) / 2)
+    // Distribute the reward among network's set based on
+    // -> (key shares * stake per share) + ((stake % stake per share) / 2)
+    fn distribute_to_validators(n: NetworkId, reward: u64) {
       let stake_per_share = ValidatorSets::<T>::allocation_per_key_share(n).unwrap().0;
       let mut scores = vec![];
       let mut total_score = 0u64;
       for (p, amount) in Self::participants(n).unwrap() {
         let remainder = amount % stake_per_share;
-        let score = (amount - remainder) + (remainder / 2);
+        let score = amount - (remainder / 2);
 
         total_score = total_score.saturating_add(score);
         scores.push((p, score));
@@ -355,11 +371,16 @@ pub mod pallet {
         )
         .unwrap();
 
-        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) })?;
-        ValidatorSets::<T>::deposit_stake(n, p, Amount(p_reward))?;
-      }
+        if Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).is_err() {
+          // TODO: log the failure
+          continue;
+        }
 
-      Ok(())
+        if ValidatorSets::<T>::deposit_stake(n, p, Amount(p_reward)).is_err() {
+          // TODO: log the failure
+          continue;
+        }
+      }
     }
 
     pub fn swap_to_staked_sri(
@@ -372,9 +393,36 @@ pub mod pallet {
         Err(Error::<T>::NetworkHasEconomicSecurity)?;
       }
 
-      // calculate how much SRI the balance makes
-      let value =
-        Dex::<T>::security_oracle_value(balance.coin).ok_or(Error::<T>::NoValueForCoin)?;
+      // swap half of the liquidity for SRI to form PoL.
+      let half = balance.amount.0 / 2;
+      let path = BoundedVec::try_from(vec![balance.coin, Coin::Serai]).unwrap();
+      let origin = RawOrigin::Signed(POL_ACCOUNT.into());
+      Dex::<T>::swap_exact_tokens_for_tokens(
+        origin.clone().into(),
+        path,
+        half,
+        1, // minimum out, so we accept whatever we get.
+        POL_ACCOUNT.into(),
+      )?;
+
+      // get how much we got for our swap
+      let sri_amount = Coins::<T>::balance(POL_ACCOUNT.into(), Coin::Serai).0;
+
+      // add liquidity
+      Dex::<T>::add_liquidity(
+        origin.clone().into(),
+        balance.coin,
+        half,
+        sri_amount,
+        1,
+        1,
+        POL_ACCOUNT.into(),
+      )?;
+
+      // use last block spot price to calculate how much SRI the balance makes.
+      let last_block = <frame_system::Pallet<T>>::block_number() - 1u32.into();
+      let value = Dex::<T>::spot_price_for_block(last_block, balance.coin)
+        .ok_or(Error::<T>::NoValueForCoin)?;
       // TODO: may panic? It might be best for this math ops to return the result as is instead of
       // doing an unwrap so that it can be properly dealt with.
       let sri_amount = balance.amount.mul(value);
@@ -383,6 +431,7 @@ pub mod pallet {
       Coins::<T>::mint(to, Balance { coin: Coin::Serai, amount: sri_amount })?;
       // TODO: deposit_stake lets staking less than per key share. Should we allow that here?
       ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
+
       Ok(())
     }
 
