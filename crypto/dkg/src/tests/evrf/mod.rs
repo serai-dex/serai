@@ -42,9 +42,6 @@ fn evrf_dkg() {
         &pub_keys,
         priv_key,
       )
-      .unwrap()
-      .into_iter()
-      .next()
       .unwrap(),
     );
   }

@@ -271,7 +271,7 @@ where
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Result<Vec<Participation<C>>, EvrfError> {
+  ) -> Result<Participation<C>, EvrfError> {
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else { Err(EvrfError::TooManyParticipants)? };
     if (t == 0) || (t > n) {
       Err(EvrfError::InvalidThreshold)?;
@@ -279,63 +279,51 @@ where
     if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
       Err(EvrfError::PublicKeyWasIdentity)?;
     };
-
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
-    let mut res = vec![];
-    for (i, this_evrf_public_key) in evrf_public_keys.iter().enumerate() {
-      let i = u16::try_from(i + 1).expect("n <= u16::MAX yet not i?");
-
-      if *this_evrf_public_key != evrf_public_key {
-        continue;
-      }
-
-      let transcript = Self::initial_transcript(context, evrf_public_keys, t);
-      // Further bind to the participant index so each index gets unique generators
-      // This allows reusing eVRF public keys as the prover
-      let mut per_proof_transcript = Blake2s256::new();
-      per_proof_transcript.update(transcript);
-      per_proof_transcript.update(i.to_le_bytes());
-
-      // The above transcript is expected to be binding to all arguments here
-      // The generators are constant to this ciphersuite's generator, and the parameters are
-      // transcripted
-      let EvrfProveResult { coefficients, encryption_masks, proof } = match Evrf::prove(
-        rng,
-        &generators.0,
-        per_proof_transcript.finalize().into(),
-        usize::from(t),
-        evrf_public_keys,
-        evrf_private_key,
-      ) {
-        Ok(res) => res,
-        Err(AcError::NotEnoughGenerators) => Err(EvrfError::NotEnoughGenerators)?,
-        Err(
-          AcError::DifferingLrLengths |
-          AcError::InconsistentAmountOfConstraints |
-          AcError::ConstrainedNonExistentTerm |
-          AcError::ConstrainedNonExistentCommitment |
-          AcError::InconsistentWitness |
-          AcError::Ip(_) |
-          AcError::IncompleteProof,
-        ) => {
-          panic!("failed to prove for the eVRF proof")
-        }
-      };
-
-      let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
-      for (l, encryption_mask) in (1 ..= n).map(Participant).zip(encryption_masks) {
-        let share = polynomial::<C::F>(&coefficients, l);
-        encrypted_secret_shares.insert(l, *share + *encryption_mask);
-      }
-
-      res.push(Participation { proof, encrypted_secret_shares });
-    }
-
-    if res.is_empty() {
+    if !evrf_public_keys.iter().any(|key| *key == evrf_public_key) {
       Err(EvrfError::NotAParticipant)?;
+    };
+
+    let transcript = Self::initial_transcript(context, evrf_public_keys, t);
+    // Further bind to the participant index so each index gets unique generators
+    // This allows reusing eVRF public keys as the prover
+    let mut per_proof_transcript = Blake2s256::new();
+    per_proof_transcript.update(transcript);
+    per_proof_transcript.update(evrf_public_key.to_bytes());
+
+    // The above transcript is expected to be binding to all arguments here
+    // The generators are constant to this ciphersuite's generator, and the parameters are
+    // transcripted
+    let EvrfProveResult { coefficients, encryption_masks, proof } = match Evrf::prove(
+      rng,
+      &generators.0,
+      per_proof_transcript.finalize().into(),
+      usize::from(t),
+      evrf_public_keys,
+      evrf_private_key,
+    ) {
+      Ok(res) => res,
+      Err(AcError::NotEnoughGenerators) => Err(EvrfError::NotEnoughGenerators)?,
+      Err(
+        AcError::DifferingLrLengths |
+        AcError::InconsistentAmountOfConstraints |
+        AcError::ConstrainedNonExistentTerm |
+        AcError::ConstrainedNonExistentCommitment |
+        AcError::InconsistentWitness |
+        AcError::Ip(_) |
+        AcError::IncompleteProof,
+      ) => {
+        panic!("failed to prove for the eVRF proof")
+      }
+    };
+
+    let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
+    for (l, encryption_mask) in (1 ..= n).map(Participant).zip(encryption_masks) {
+      let share = polynomial::<C::F>(&coefficients, l);
+      encrypted_secret_shares.insert(l, *share + *encryption_mask);
     }
 
-    Ok(res)
+    Ok(Participation { proof, encrypted_secret_shares })
   }
 
   /// Check if a batch of `Participation`s are valid.
@@ -375,9 +363,11 @@ where
 
     let mut evrf_verifier = generators.0.batch_verifier();
     for (i, participation) in participations {
+      let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
+
       let mut per_proof_transcript = Blake2s256::new();
       per_proof_transcript.update(transcript);
-      per_proof_transcript.update(u16::from(*i).to_le_bytes());
+      per_proof_transcript.update(evrf_public_key.to_bytes());
 
       // Clone the verifier so if this proof is faulty, it doesn't corrupt the verifier
       let mut verifier_clone = evrf_verifier.clone();
@@ -388,7 +378,7 @@ where
         per_proof_transcript.finalize().into(),
         usize::from(t),
         evrf_public_keys,
-        evrf_public_keys[usize::from(u16::from(*i)) - 1],
+        evrf_public_key,
         &participation.proof,
       ) else {
         faulty.insert(*i);
@@ -498,7 +488,16 @@ where
       return Ok(VerifyResult::Invalid(faulty));
     }
 
-    if valid.len() < usize::from(t) {
+    // We check at least t key shares of people have participated in contributing entropy
+    // Since the key shares of the participants exceed t, meaning if they're malicious they can
+    // reconstruct the key regardless, this is safe to the threshold
+    let mut participating_weight = 0;
+    for i in valid.keys() {
+      let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
+      participating_weight +=
+        evrf_public_keys.iter().filter(|key| **key == evrf_public_key).count();
+    }
+    if participating_weight < usize::from(t) {
       return Ok(VerifyResult::NotEnoughParticipants);
     }
 
