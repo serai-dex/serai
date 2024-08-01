@@ -2,8 +2,11 @@ use std::{time::Duration, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
-use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{
+  group::{ff::PrimeField, GroupEncoding},
+  Ciphersuite, Ristretto,
+};
+use dkg::evrf::EvrfCurve;
 
 use log::{info, warn};
 use tokio::time::sleep;
@@ -224,7 +227,9 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
 
   match msg.msg.clone() {
     CoordinatorMessage::KeyGen(msg) => {
-      coordinator.send(tributary_mutable.key_gen.handle(txn, msg)).await;
+      for msg in tributary_mutable.key_gen.handle(txn, msg) {
+        coordinator.send(msg).await;
+      }
     }
 
     CoordinatorMessage::Sign(msg) => {
@@ -485,41 +490,31 @@ async fn boot<N: Network, D: Db, Co: Coordinator>(
   network: &N,
   coordinator: &mut Co,
 ) -> (D, TributaryMutable<N, D>, SubstrateMutable<N, D>) {
-  let mut entropy_transcript = {
-    let entropy = Zeroizing::new(env::var("ENTROPY").expect("entropy wasn't specified"));
-    if entropy.len() != 64 {
-      panic!("entropy isn't the right length");
+  fn read_key_from_env<C: Ciphersuite>(label: &'static str) -> Zeroizing<C::F> {
+    let key_hex =
+      Zeroizing::new(env::var(label).unwrap_or_else(|| panic!("{label} wasn't provided")));
+    let bytes = Zeroizing::new(
+      hex::decode(key_hex).unwrap_or_else(|_| panic!("{label} wasn't a valid hex string")),
+    );
+
+    let mut repr = <C::F as PrimeField>::Repr::default();
+    if repr.as_ref().len() != bytes.len() {
+      panic!("{label} wasn't the correct length");
     }
-    let mut bytes =
-      Zeroizing::new(hex::decode(entropy).map_err(|_| ()).expect("entropy wasn't hex-formatted"));
-    if bytes.len() != 32 {
-      bytes.zeroize();
-      panic!("entropy wasn't 32 bytes");
-    }
-    let mut entropy = Zeroizing::new([0; 32]);
-    let entropy_mut: &mut [u8] = entropy.as_mut();
-    entropy_mut.copy_from_slice(bytes.as_ref());
-
-    let mut transcript = RecommendedTranscript::new(b"Serai Processor Entropy");
-    transcript.append_message(b"entropy", entropy);
-    transcript
-  };
-
-  // TODO: Save a hash of the entropy to the DB and make sure the entropy didn't change
-
-  let mut entropy = |label| {
-    let mut challenge = entropy_transcript.challenge(label);
-    let mut res = Zeroizing::new([0; 32]);
-    let res_mut: &mut [u8] = res.as_mut();
-    res_mut.copy_from_slice(&challenge[.. 32]);
-    challenge.zeroize();
+    repr.as_mut().copy_from_slice(bytes.as_slice());
+    let res = Zeroizing::new(
+      Option::from(<C::F as PrimeField>::from_repr(repr))
+        .unwrap_or_else(|| panic!("{label} wasn't a valid scalar")),
+    );
+    repr.as_mut().zeroize();
     res
-  };
+  }
 
-  // We don't need to re-issue GenerateKey orders because the coordinator is expected to
-  // schedule/notify us of new attempts
-  // TODO: Is this above comment still true? Not at all due to the planned lack of DKG timeouts?
-  let key_gen = KeyGen::<N, _>::new(raw_db.clone(), entropy(b"key-gen_entropy"));
+  let key_gen = KeyGen::<N, _>::new(
+    raw_db.clone(),
+    read_key_from_env::<<Ristretto as EvrfCurve>::EmbeddedCurve>("SUBSTRATE_EVRF_KEY"),
+    read_key_from_env::<<N::Curve as EvrfCurve>::EmbeddedCurve>("NETWORK_EVRF_KEY"),
+  );
 
   let (multisig_manager, current_keys, actively_signing) =
     MultisigManager::new(raw_db, network).await;

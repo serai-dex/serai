@@ -29,7 +29,7 @@ use generalized_bulletproofs_ec_gadgets::*;
 
 /// A pair of curves to perform the eVRF with.
 pub trait EvrfCurve: Ciphersuite {
-  type EmbeddedCurve: Ciphersuite;
+  type EmbeddedCurve: Ciphersuite<G: DivisorCurve<FieldElement = <Self as Ciphersuite>::F>>;
   type EmbeddedCurveParameters: DiscreteLogParameters;
 }
 
@@ -67,11 +67,7 @@ fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
 #[derive(Clone, Debug)]
 pub struct EvrfGenerators<C: EvrfCurve>(pub(crate) Generators<C>);
 
-impl<C: EvrfCurve> EvrfGenerators<C>
-where
-  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-{
+impl<C: EvrfCurve> EvrfGenerators<C> {
   /// Create a new set of generators.
   pub fn new(max_threshold: u16, max_participants: u16) -> EvrfGenerators<C> {
     let g = C::generator();
@@ -117,11 +113,7 @@ impl<C: EvrfCurve> fmt::Debug for EvrfVerifyResult<C> {
 
 /// A struct to prove/verify eVRFs with.
 pub(crate) struct Evrf<C: EvrfCurve>(PhantomData<C>);
-impl<C: EvrfCurve> Evrf<C>
-where
-  <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-    DivisorCurve<FieldElement = <C as Ciphersuite>::F>,
-{
+impl<C: EvrfCurve> Evrf<C> {
   // Sample uniform points (via rejection-sampling) on the embedded elliptic curve
   fn transcript_to_points(
     seed: [u8; 32],

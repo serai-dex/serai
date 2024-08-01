@@ -15,10 +15,7 @@ pub use poly::*;
 mod tests;
 
 /// A curve usable with this library.
-pub trait DivisorCurve: Group
-where
-  Self::Scalar: PrimeField,
-{
+pub trait DivisorCurve: Group {
   /// An element of the field this curve is defined over.
   type FieldElement: PrimeField;
 

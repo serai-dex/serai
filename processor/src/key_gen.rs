@@ -11,7 +11,7 @@ use ciphersuite::{
   group::{Group, GroupEncoding},
   Ciphersuite, Ristretto,
 };
-use frost::dkg::{Participant, ThresholdCore, ThresholdKeys, evrf::*};
+use dkg::{Participant, ThresholdCore, ThresholdKeys, evrf::*};
 
 use log::info;
 
@@ -19,6 +19,48 @@ use serai_client::validator_sets::primitives::{Session, KeyPair};
 use messages::key_gen::*;
 
 use crate::{Get, DbTxn, Db, create_db, networks::Network};
+
+mod generators {
+  use core::any::{TypeId, Any};
+  use std::{
+    sync::{LazyLock, Mutex},
+    collections::HashMap,
+  };
+
+  use frost::dkg::evrf::*;
+
+  use serai_client::validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
+
+  /// A cache of the generators used by the eVRF DKG.
+  ///
+  /// This performs a lookup of the Ciphersuite to its generators. Since the Ciphersuite is a
+  /// generic, this takes advantage of `Any`. This static is isolated in a module to ensure
+  /// correctness can be evaluated solely by reviewing these few lines of code.
+  ///
+  /// This is arguably over-engineered as of right now, as we only need generators for Ristretto
+  /// and N::Curve. By having this HashMap, we enable de-duplication of the Ristretto == N::Curve
+  /// case, and we automatically support the n-curve case (rather than hard-coding to the 2-curve
+  /// case).
+  static GENERATORS: LazyLock<Mutex<HashMap<TypeId, &'static (dyn Send + Sync + Any)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+  pub(crate) fn generators<C: EvrfCurve>() -> &'static EvrfGenerators<C> {
+    GENERATORS
+      .lock()
+      .unwrap()
+      .entry(TypeId::of::<C>())
+      .or_insert_with(|| {
+        // If we haven't prior needed generators for this Ciphersuite, generate new ones
+        Box::leak(Box::new(EvrfGenerators::<C>::new(
+          ((MAX_KEY_SHARES_PER_SET * 2 / 3) + 1).try_into().unwrap(),
+          MAX_KEY_SHARES_PER_SET.try_into().unwrap(),
+        )))
+      })
+      .downcast_ref()
+      .unwrap()
+  }
+}
+use generators::generators;
 
 #[derive(Debug)]
 pub struct KeyConfirmed<C: Ciphersuite> {
@@ -66,7 +108,7 @@ impl GeneratedKeysDb {
   fn save_keys<N: Network>(
     txn: &mut impl DbTxn,
     session: &Session,
-    substrate_keys: &[ThresholdCore<Ristretto>],
+    substrate_keys: &[ThresholdKeys<Ristretto>],
     network_keys: &[ThresholdKeys<N::Curve>],
   ) {
     let mut keys = Zeroizing::new(vec![]);
@@ -74,7 +116,7 @@ impl GeneratedKeysDb {
       keys.extend(substrate_keys.serialize().as_slice());
       keys.extend(network_keys.serialize().as_slice());
     }
-    txn.put(Self::key(&session), keys);
+    txn.put(Self::key(session), keys);
   }
 }
 
@@ -176,7 +218,7 @@ fn coerce_keys<C: EvrfCurve>(
         faulty.push(i);
 
         // Generate a random key
-        let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(&key).into());
+        let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(key).into());
         loop {
           let mut repr = <<C::EmbeddedCurve as Ciphersuite>::G as GroupEncoding>::Repr::default();
           rng.fill_bytes(repr.as_mut());
@@ -201,11 +243,7 @@ pub struct KeyGen<N: Network, D: Db> {
   network_evrf_private_key: Zeroizing<<<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
 }
 
-impl<N: Network, D: Db> KeyGen<N, D>
-where
-  <<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G:
-    ec_divisors::DivisorCurve<FieldElement = <N::Curve as Ciphersuite>::F>,
-{
+impl<N: Network, D: Db> KeyGen<N, D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new(
     db: D,
@@ -264,13 +302,6 @@ where
         let network_evrf_public_keys =
           evrf_public_keys.into_iter().map(|(_, key)| key).collect::<Vec<_>>();
 
-        // Save the params
-        ParamsDb::set(
-          txn,
-          &session,
-          &(threshold, substrate_evrf_public_keys, network_evrf_public_keys),
-        );
-
         let mut participation = Vec::with_capacity(2048);
         let mut faulty = HashSet::new();
         {
@@ -278,9 +309,9 @@ where
           for faulty_i in faulty_is {
             faulty.insert(faulty_i);
           }
-          let participation = EvrfDkg::<Ristretto>::participate(
+          EvrfDkg::<Ristretto>::participate(
             &mut OsRng,
-            todo!("TODO"),
+            generators(),
             context(session, SUBSTRATE_KEY_CONTEXT),
             threshold,
             &coerced_keys,
@@ -297,7 +328,7 @@ where
           }
           EvrfDkg::<N::Curve>::participate(
             &mut OsRng,
-            todo!("TODO"),
+            generators(),
             context(session, NETWORK_KEY_CONTEXT),
             threshold,
             &coerced_keys,
@@ -307,6 +338,13 @@ where
           .write(&mut participation)
           .unwrap();
         }
+
+        // Save the params
+        ParamsDb::set(
+          txn,
+          &session,
+          &(threshold, substrate_evrf_public_keys, network_evrf_public_keys),
+        );
 
         // Send back our Participation and all faulty parties
         let mut faulty = faulty.into_iter().collect::<Vec<_>>();
@@ -324,21 +362,51 @@ where
       CoordinatorMessage::Participation { session, participant, participation } => {
         info!("Received participation from {:?}", participant);
 
-        // TODO: Read Pariticpations, declare faulty if necessary, then re-serialize
-        let substrate_participation: Vec<u8> = todo!("TODO");
-        let network_participation: Vec<u8> = todo!("TODO");
-
         let (threshold, substrate_evrf_public_keys, network_evrf_public_keys) =
           ParamsDb::get(txn, &session).unwrap();
+
+        let n = substrate_evrf_public_keys
+          .len()
+          .try_into()
+          .expect("performing a key gen with more than u16::MAX participants");
+
+        // Read these `Participation`s
+        // If they fail basic sanity checks, fail fast
+        let (substrate_participation, network_participation) = {
+          let mid_point = {
+            let mut participation = participation.as_slice();
+            let start_len = participation.len();
+
+            let blame = vec![ProcessorMessage::Blame { session, participant }];
+            if Participation::<Ristretto>::read(&mut participation, n).is_err() {
+              return blame;
+            }
+            let len_at_mid_point = participation.len();
+            if Participation::<N::Curve>::read(&mut participation, n).is_err() {
+              return blame;
+            };
+
+            // If they added random noise after their participations, they're faulty
+            // This prevents DoS by causing a slash upon such spam
+            if !participation.is_empty() {
+              return blame;
+            }
+
+            start_len - len_at_mid_point
+          };
+
+          // Instead of re-serializing the `Participation`s we read, we just use the relevant
+          // sections of the existing byte buffer
+          (participation[.. mid_point].to_vec(), participation[mid_point ..].to_vec())
+        };
+
+        // Since these are valid `Participation`s, save them
         let (mut substrate_participations, mut network_participations) =
           ParticipationDb::get(txn, &session)
             .unwrap_or((HashMap::with_capacity(1), HashMap::with_capacity(1)));
         assert!(
-          substrate_participations.insert(participant, substrate_participation).is_none(),
-          "received participation for someone multiple times"
-        );
-        assert!(
-          network_participations.insert(participant, network_participation).is_none(),
+          substrate_participations.insert(participant, substrate_participation).is_none() &&
+            network_participations.insert(participant, network_participation).is_none(),
           "received participation for someone multiple times"
         );
         ParticipationDb::set(
@@ -355,7 +423,15 @@ where
           for i in substrate_participations.keys() {
             let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
 
-            // Removes from Vec to prevent double-counting
+            // Remove this key from the Vec to prevent double-counting
+            /*
+              Double-counting would be a risk if multiple participants shared an eVRF public key
+              and participated. This code does still allow such participants (in order to let
+              participants be weighted), and any one of them participating will count as all
+              participating. This is fine as any one such participant will be able to decrypt
+              the shares for themselves and all other participants, so this is still a key
+              generated by an amount of participants who could simply reconstruct the key.
+            */
             let start_len = evrf_public_keys.len();
             evrf_public_keys.retain(|key| *key != evrf_public_key);
             let end_len = evrf_public_keys.len();
@@ -371,7 +447,7 @@ where
         let mut res = Vec::with_capacity(1);
         let substrate_dkg = match EvrfDkg::<Ristretto>::verify(
           &mut OsRng,
-          &todo!("TODO"),
+          generators(),
           context(session, SUBSTRATE_KEY_CONTEXT),
           threshold,
           // Ignores the list of participants who couldn't have their keys coerced due to prior
@@ -382,14 +458,8 @@ where
             .map(|(key, participation)| {
               (
                 *key,
-                Participation::read(
-                  &mut participation.as_slice(),
-                  substrate_evrf_public_keys
-                    .len()
-                    .try_into()
-                    .expect("performing a key gen with more than u16::MAX participants"),
-                )
-                .expect("prior read participation was invalid"),
+                Participation::read(&mut participation.as_slice(), n)
+                  .expect("prior read participation was invalid"),
               )
             })
             .collect(),
@@ -418,7 +488,7 @@ where
         };
         let network_dkg = match EvrfDkg::<N::Curve>::verify(
           &mut OsRng,
-          &todo!("TODO"),
+          generators(),
           context(session, NETWORK_KEY_CONTEXT),
           threshold,
           // Ignores the list of participants who couldn't have their keys coerced due to prior
@@ -429,14 +499,8 @@ where
             .map(|(key, participation)| {
               (
                 *key,
-                Participation::read(
-                  &mut participation.as_slice(),
-                  network_evrf_public_keys
-                    .len()
-                    .try_into()
-                    .expect("performing a key gen with more than u16::MAX participants"),
-                )
-                .expect("prior read participation was invalid"),
+                Participation::read(&mut participation.as_slice(), n)
+                  .expect("prior read participation was invalid"),
               )
             })
             .collect(),
@@ -463,36 +527,23 @@ where
           }
         };
 
-        /*
-          let mut these_network_keys = ThresholdKeys::new(these_network_keys);
-          N::tweak_keys(&mut these_network_keys);
+        let substrate_keys = substrate_dkg.keys(&self.substrate_evrf_private_key);
+        let mut network_keys = network_dkg.keys(&self.network_evrf_private_key);
+        // TODO: Some of these keys may be decrypted by us, yet not actually meant for us, if
+        // another validator set our eVRF public key as their eVRF public key. We either need to
+        // ensure the coordinator tracks amount of shares we're supposed to have by the eVRF public
+        // keys OR explicitly reduce to the keys we're supposed to have based on our `i` index.
+        for network_keys in &mut network_keys {
+          N::tweak_keys(network_keys);
+        }
+        GeneratedKeysDb::save_keys::<N>(txn, &session, &substrate_keys, &network_keys);
 
-          substrate_keys.push(these_substrate_keys);
-          network_keys.push(these_network_keys);
-
-          let mut generated_substrate_key = None;
-          let mut generated_network_key = None;
-          for keys in substrate_keys.iter().zip(&network_keys) {
-            if generated_substrate_key.is_none() {
-              generated_substrate_key = Some(keys.0.group_key());
-              generated_network_key = Some(keys.1.group_key());
-            } else {
-              assert_eq!(generated_substrate_key, Some(keys.0.group_key()));
-              assert_eq!(generated_network_key, Some(keys.1.group_key()));
-            }
-          }
-
-          GeneratedKeysDb::save_keys::<N>(txn, &id, &substrate_keys, &network_keys);
-
-          ProcessorMessage::GeneratedKeyPair {
-            id,
-            substrate_key: generated_substrate_key.unwrap().to_bytes(),
-            // TODO: This can be made more efficient since tweaked keys may be a subset of keys
-            network_key: generated_network_key.unwrap().to_bytes().as_ref().to_vec(),
-          }
-        */
-
-        todo!("TODO")
+        vec![ProcessorMessage::GeneratedKeyPair {
+          session,
+          substrate_key: substrate_keys[0].group_key().to_bytes(),
+          // TODO: This can be made more efficient since tweaked keys may be a subset of keys
+          network_key: network_keys[0].group_key().to_bytes().as_ref().to_vec(),
+        }]
       }
     }
   }
