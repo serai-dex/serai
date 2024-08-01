@@ -14,6 +14,8 @@ pub mod pallet {
   use sp_io::hashing::blake2_256;
 
   use frame_system::pallet_prelude::*;
+  // False positive
+  #[allow(unused)]
   use frame_support::{pallet_prelude::*, sp_runtime};
 
   use serai_primitives::*;

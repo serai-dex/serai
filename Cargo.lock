@@ -8404,7 +8404,6 @@ dependencies = [
  "serai-message-queue-tests",
  "serai-processor",
  "serai-processor-messages",
- "serde",
  "serde_json",
  "tokio",
  "zeroize",

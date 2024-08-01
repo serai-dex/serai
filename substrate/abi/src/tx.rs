@@ -83,7 +83,7 @@ impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + Tra
 #[cfg(feature = "serde")]
 mod _serde {
   use scale::Encode;
-  use serde::{ser::*, de::*};
+  use serde::ser::*;
   use super::*;
   impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + TransactionMember>
     Serialize for Transaction<Call, Extra>
@@ -93,6 +93,9 @@ mod _serde {
       serializer.serialize_bytes(&encoded)
     }
   }
+
+  #[cfg(feature = "std")]
+  use serde::de::*;
   #[cfg(feature = "std")]
   impl<
       'a,

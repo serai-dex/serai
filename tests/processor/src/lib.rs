@@ -160,9 +160,6 @@ pub fn processor_stack(
   )
 }
 
-#[derive(serde::Deserialize, Debug)]
-struct EmptyResponse {}
-
 pub struct Coordinator {
   network: NetworkId,
 

@@ -175,8 +175,6 @@ impl FeePriority {
 }
 
 #[derive(Debug, Deserialize)]
-struct EmptyResponse {}
-#[derive(Debug, Deserialize)]
 struct JsonRpcResponse<T> {
   result: T,
 }

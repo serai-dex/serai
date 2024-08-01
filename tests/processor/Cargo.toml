@@ -42,7 +42,6 @@ serai-db = { path = "../../common/db", default-features = false }
 serai-message-queue = { path = "../../message-queue" }
 
 borsh = { version = "1", features = ["de_strict_order"] }
-serde = { version = "1", default-features = false }
 serde_json = { version = "1", default-features = false }
 
 tokio = { version = "1", features = ["time"] }
