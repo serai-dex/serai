@@ -1,4 +1,7 @@
-use std::collections::{HashSet, HashMap};
+use std::{
+  io,
+  collections::{HashSet, HashMap},
+};
 
 use zeroize::Zeroizing;
 
@@ -187,6 +190,8 @@ impl KeysDb {
   ensure at least `t` people participated and the DKG result can be reconstructed.
 
   We do lose fault tolerance, yet only by losing those faulty. Accordingly, this is accepted.
+
+  Returns the coerced keys and faulty participants.
 */
 fn coerce_keys<C: EvrfCurve>(
   key_bytes: &[impl AsRef<[u8]>],
@@ -257,6 +262,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
   pub fn in_set(&self, session: &Session) -> bool {
     // We determine if we're in set using if we have the parameters for a session's key generation
+    // We only have these if we were told to generate a key for this session
     ParamsDb::get(&self.db, session).is_some()
   }
 
@@ -284,19 +290,20 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   ) -> Vec<ProcessorMessage> {
     const SUBSTRATE_KEY_CONTEXT: &[u8] = b"substrate";
     const NETWORK_KEY_CONTEXT: &[u8] = b"network";
-    let context = |session: Session, key| {
+    fn context<N: Network>(session: Session, key_context: &[u8]) -> [u8; 32] {
       // TODO2: Also embed the chain ID/genesis block
       let mut transcript = RecommendedTranscript::new(b"Serai eVRF Key Gen");
       transcript.append_message(b"network", N::ID);
       transcript.append_message(b"session", session.0.to_le_bytes());
-      transcript.append_message(b"key", key);
-      <[u8; 32]>::try_from(&(&transcript.challenge(b"context"))[.. 32]).unwrap()
-    };
+      transcript.append_message(b"key", key_context);
+      (&(&transcript.challenge(b"context"))[.. 32]).try_into().unwrap()
+    }
 
     match msg {
       CoordinatorMessage::GenerateKey { session, threshold, evrf_public_keys } => {
         info!("Generating new key. Session: {session:?}");
 
+        // Unzip the vector of eVRF keys
         let substrate_evrf_public_keys =
           evrf_public_keys.iter().map(|(key, _)| *key).collect::<Vec<_>>();
         let network_evrf_public_keys =
@@ -304,40 +311,46 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
         let mut participation = Vec::with_capacity(2048);
         let mut faulty = HashSet::new();
-        {
-          let (coerced_keys, faulty_is) = coerce_keys::<Ristretto>(&substrate_evrf_public_keys);
+
+        // Participate for both Substrate and the network
+        fn participate<C: EvrfCurve>(
+          context: [u8; 32],
+          threshold: u16,
+          evrf_public_keys: &[impl AsRef<[u8]>],
+          evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+          faulty: &mut HashSet<Participant>,
+          output: &mut impl io::Write,
+        ) {
+          let (coerced_keys, faulty_is) = coerce_keys::<C>(evrf_public_keys);
           for faulty_i in faulty_is {
             faulty.insert(faulty_i);
           }
-          EvrfDkg::<Ristretto>::participate(
+          let participation = EvrfDkg::<C>::participate(
             &mut OsRng,
             generators(),
-            context(session, SUBSTRATE_KEY_CONTEXT),
+            context,
             threshold,
             &coerced_keys,
-            &self.substrate_evrf_private_key,
-          )
-          .unwrap()
-          .write(&mut participation)
-          .unwrap();
+            evrf_private_key,
+          );
+          participation.unwrap().write(output).unwrap();
         }
-        {
-          let (coerced_keys, faulty_is) = coerce_keys::<N::Curve>(&network_evrf_public_keys);
-          for faulty_i in faulty_is {
-            faulty.insert(faulty_i);
-          }
-          EvrfDkg::<N::Curve>::participate(
-            &mut OsRng,
-            generators(),
-            context(session, NETWORK_KEY_CONTEXT),
-            threshold,
-            &coerced_keys,
-            &self.network_evrf_private_key,
-          )
-          .unwrap()
-          .write(&mut participation)
-          .unwrap();
-        }
+        participate::<Ristretto>(
+          context::<N>(session, SUBSTRATE_KEY_CONTEXT),
+          threshold,
+          &substrate_evrf_public_keys,
+          &self.substrate_evrf_private_key,
+          &mut faulty,
+          &mut participation,
+        );
+        participate::<N::Curve>(
+          context::<N>(session, NETWORK_KEY_CONTEXT),
+          threshold,
+          &network_evrf_public_keys,
+          &self.network_evrf_private_key,
+          &mut faulty,
+          &mut participation,
+        );
 
         // Save the params
         ParamsDb::set(
@@ -350,11 +363,11 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let mut faulty = faulty.into_iter().collect::<Vec<_>>();
         faulty.sort();
 
-        let mut res = Vec::with_capacity(1 + faulty.len());
-        res.push(ProcessorMessage::Participation { session, participation });
+        let mut res = Vec::with_capacity(faulty.len() + 1);
         for faulty in faulty {
           res.push(ProcessorMessage::Blame { session, participant: faulty });
         }
+        res.push(ProcessorMessage::Participation { session, participation });
 
         res
       }
@@ -444,100 +457,125 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           }
         }
 
-        let mut res = Vec::with_capacity(1);
-        let substrate_dkg = match EvrfDkg::<Ristretto>::verify(
-          &mut OsRng,
-          generators(),
-          context(session, SUBSTRATE_KEY_CONTEXT),
-          threshold,
-          // Ignores the list of participants who couldn't have their keys coerced due to prior
-          // handling those
-          &coerce_keys::<Ristretto>(&substrate_evrf_public_keys).0,
-          &substrate_participations
-            .iter()
-            .map(|(key, participation)| {
-              (
-                *key,
-                Participation::read(&mut participation.as_slice(), n)
-                  .expect("prior read participation was invalid"),
+        // If we now have the threshold participating, verify their `Participation`s
+        fn verify_dkg<N: Network, C: EvrfCurve>(
+          txn: &mut impl DbTxn,
+          session: Session,
+          true_if_substrate_false_if_network: bool,
+          threshold: u16,
+          evrf_public_keys: &[impl AsRef<[u8]>],
+          substrate_participations: &mut HashMap<Participant, Vec<u8>>,
+          network_participations: &mut HashMap<Participant, Vec<u8>>,
+        ) -> Result<EvrfDkg<C>, Vec<ProcessorMessage>> {
+          // Parse the `Participation`s
+          let participations = (if true_if_substrate_false_if_network {
+            &*substrate_participations
+          } else {
+            &*network_participations
+          })
+          .iter()
+          .map(|(key, participation)| {
+            (
+              *key,
+              Participation::read(
+                &mut participation.as_slice(),
+                evrf_public_keys.len().try_into().unwrap(),
               )
-            })
-            .collect(),
-        )
-        .unwrap()
-        {
-          VerifyResult::Valid(dkg) => dkg,
-          VerifyResult::Invalid(faulty) => {
-            for participant in faulty {
-              // Remove from both maps for simplicity's sake
-              // There's no point in having one DKG complete yet not the other
-              assert!(substrate_participations.remove(&participant).is_some());
-              assert!(network_participations.remove(&participant).is_some());
-              res.push(ProcessorMessage::Blame { session, participant });
+              .expect("prior read participation was invalid"),
+            )
+          })
+          .collect();
+
+          // Actually call verify on the DKG
+          match EvrfDkg::<C>::verify(
+            &mut OsRng,
+            generators(),
+            context::<N>(
+              session,
+              if true_if_substrate_false_if_network {
+                SUBSTRATE_KEY_CONTEXT
+              } else {
+                NETWORK_KEY_CONTEXT
+              },
+            ),
+            threshold,
+            // Ignores the list of participants who were faulty, as they were prior blamed
+            &coerce_keys::<C>(evrf_public_keys).0,
+            &participations,
+          )
+          .unwrap()
+          {
+            // If the DKG was valid, return it
+            VerifyResult::Valid(dkg) => Ok(dkg),
+            // This DKG had faulty participants, so create blame messages for them
+            VerifyResult::Invalid(faulty) => {
+              let mut blames = vec![];
+              for participant in faulty {
+                // Remove from both maps for simplicity's sake
+                // There's no point in having one DKG complete yet not the other
+                assert!(substrate_participations.remove(&participant).is_some());
+                assert!(network_participations.remove(&participant).is_some());
+                blames.push(ProcessorMessage::Blame { session, participant });
+              }
+              // Since we removed `Participation`s, write the updated versions to the database
+              ParticipationDb::set(
+                txn,
+                &session,
+                &(substrate_participations.clone(), network_participations.clone()),
+              );
+              Err(blames)?
             }
-            ParticipationDb::set(
-              txn,
-              &session,
-              &(substrate_participations.clone(), network_participations.clone()),
-            );
-            return res;
+            VerifyResult::NotEnoughParticipants => {
+              // This is the first DKG, and we checked we were at the threshold OR
+              // This is the second DKG, as the first had no invalid participants, so we're still
+              // at the threshold
+              panic!("not enough participants despite checking we were at the threshold")
+            }
           }
-          VerifyResult::NotEnoughParticipants => {
-            panic!("not enough participants despite checking we were at the threshold")
-          }
-        };
-        let network_dkg = match EvrfDkg::<N::Curve>::verify(
-          &mut OsRng,
-          generators(),
-          context(session, NETWORK_KEY_CONTEXT),
+        }
+
+        let substrate_dkg = match verify_dkg::<N, Ristretto>(
+          txn,
+          session,
+          true,
           threshold,
-          // Ignores the list of participants who couldn't have their keys coerced due to prior
-          // handling those
-          &coerce_keys::<N::Curve>(&network_evrf_public_keys).0,
-          &network_participations
-            .iter()
-            .map(|(key, participation)| {
-              (
-                *key,
-                Participation::read(&mut participation.as_slice(), n)
-                  .expect("prior read participation was invalid"),
-              )
-            })
-            .collect(),
-        )
-        .unwrap()
-        {
-          VerifyResult::Valid(dkg) => dkg,
-          VerifyResult::Invalid(faulty) => {
-            for participant in faulty {
-              assert!(substrate_participations.remove(&participant).is_some());
-              assert!(network_participations.remove(&participant).is_some());
-              res.push(ProcessorMessage::Blame { session, participant });
-            }
-            ParticipationDb::set(
-              txn,
-              &session,
-              &(substrate_participations.clone(), network_participations.clone()),
-            );
-            return res;
-          }
-          VerifyResult::NotEnoughParticipants => {
-            // We may have lost the required amount of participants when doing the Substrate DKG
-            return res;
-          }
+          &substrate_evrf_public_keys,
+          &mut substrate_participations,
+          &mut network_participations,
+        ) {
+          Ok(dkg) => dkg,
+          // If we had any blames, immediately return them as necessary for the safety of
+          // `verify_dkg` (it assumes we don't call it again upon prior errors)
+          Err(blames) => return blames,
         };
 
-        let substrate_keys = substrate_dkg.keys(&self.substrate_evrf_private_key);
-        let mut network_keys = network_dkg.keys(&self.network_evrf_private_key);
+        let network_dkg = match verify_dkg::<N, N::Curve>(
+          txn,
+          session,
+          false,
+          threshold,
+          &network_evrf_public_keys,
+          &mut substrate_participations,
+          &mut network_participations,
+        ) {
+          Ok(dkg) => dkg,
+          Err(blames) => return blames,
+        };
+
+        // Get our keys from each DKG
         // TODO: Some of these keys may be decrypted by us, yet not actually meant for us, if
         // another validator set our eVRF public key as their eVRF public key. We either need to
         // ensure the coordinator tracks amount of shares we're supposed to have by the eVRF public
         // keys OR explicitly reduce to the keys we're supposed to have based on our `i` index.
+        let substrate_keys = substrate_dkg.keys(&self.substrate_evrf_private_key);
+        let mut network_keys = network_dkg.keys(&self.network_evrf_private_key);
+        // Tweak the keys for the network
         for network_keys in &mut network_keys {
           N::tweak_keys(network_keys);
         }
         GeneratedKeysDb::save_keys::<N>(txn, &session, &substrate_keys, &network_keys);
 
+        // Since no one we verified was invalid, and we had the threshold, yield the new keys
         vec![ProcessorMessage::GeneratedKeyPair {
           session,
           substrate_key: substrate_keys[0].group_key().to_bytes(),

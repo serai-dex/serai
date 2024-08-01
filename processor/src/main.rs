@@ -131,7 +131,7 @@ struct TributaryMutable<N: Network, D: Db> {
   `Burn`s.
 
   Substrate also decides when to move to a new multisig, hence why this entire object is
-  Substate-mutable.
+  Substrate-mutable.
 
   Since MultisigManager should always be verifiable, and the Tributary is temporal, MultisigManager
   being entirely SubstrateMutable shows proper data pipe-lining.
