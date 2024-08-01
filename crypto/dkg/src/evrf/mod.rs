@@ -491,14 +491,26 @@ where
     // We check at least t key shares of people have participated in contributing entropy
     // Since the key shares of the participants exceed t, meaning if they're malicious they can
     // reconstruct the key regardless, this is safe to the threshold
-    let mut participating_weight = 0;
-    for i in valid.keys() {
-      let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
-      participating_weight +=
-        evrf_public_keys.iter().filter(|key| **key == evrf_public_key).count();
-    }
-    if participating_weight < usize::from(t) {
-      return Ok(VerifyResult::NotEnoughParticipants);
+    {
+      let mut participating_weight = 0;
+      let mut evrf_public_keys = evrf_public_keys.to_vec();
+      for i in valid.keys() {
+        let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
+
+        // We remove all keys considered participating from the Vec in order to ensure they aren't
+        // counted multiple times. That could happen if a participant shares a key with another
+        // participant. While that's presumably some degree of invalid, we're robust against it
+        // regardless.
+        let start_len = evrf_public_keys.len();
+        evrf_public_keys.retain(|key| *key != evrf_public_key);
+        let end_len = evrf_public_keys.len();
+        let count = start_len - end_len;
+
+        participating_weight += count;
+      }
+      if participating_weight < usize::from(t) {
+        return Ok(VerifyResult::NotEnoughParticipants);
+      }
     }
 
     // If we now have >= t participations, calculate the group key and verification shares

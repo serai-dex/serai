@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use dkg::{Participant, ThresholdParams};
+use dkg::Participant;
 
 use serai_primitives::BlockHash;
 use in_instructions_primitives::{Batch, SignedBatch};
@@ -19,41 +19,13 @@ pub struct SubstrateContext {
 pub mod key_gen {
   use super::*;
 
-  #[derive(
-    Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-  )]
-  pub struct KeyGenId {
-    pub session: Session,
-    pub attempt: u32,
-  }
-
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
-    GenerateKey {
-      id: KeyGenId,
-      params: ThresholdParams,
-      shares: u16,
-    },
-    // Received commitments for the specified key generation protocol.
-    Commitments {
-      id: KeyGenId,
-      commitments: HashMap<Participant, Vec<u8>>,
-    },
-    // Received shares for the specified key generation protocol.
-    Shares {
-      id: KeyGenId,
-      shares: Vec<HashMap<Participant, Vec<u8>>>,
-    },
-    /// Instruction to verify a blame accusation.
-    VerifyBlame {
-      id: KeyGenId,
-      accuser: Participant,
-      accused: Participant,
-      share: Vec<u8>,
-      blame: Option<Vec<u8>>,
-    },
+    GenerateKey { session: Session, threshold: u16, evrf_public_keys: Vec<([u8; 32], Vec<u8>)> },
+    // Received participations for the specified key generation protocol.
+    Participation { session: Session, participant: Participant, participation: Vec<u8> },
   }
 
   impl CoordinatorMessage {
@@ -64,40 +36,12 @@ pub mod key_gen {
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
-    // Created commitments for the specified key generation protocol.
-    Commitments {
-      id: KeyGenId,
-      commitments: Vec<Vec<u8>>,
-    },
-    // Participant published invalid commitments.
-    InvalidCommitments {
-      id: KeyGenId,
-      faulty: Participant,
-    },
-    // Created shares for the specified key generation protocol.
-    Shares {
-      id: KeyGenId,
-      shares: Vec<HashMap<Participant, Vec<u8>>>,
-    },
-    // Participant published an invalid share.
-    #[rustfmt::skip]
-    InvalidShare {
-      id: KeyGenId,
-      accuser: Participant,
-      faulty: Participant,
-      blame: Option<Vec<u8>>,
-    },
+    // Participated in the specified key generation protocol.
+    Participation { session: Session, participation: Vec<u8> },
     // Resulting keys from the specified key generation protocol.
-    GeneratedKeyPair {
-      id: KeyGenId,
-      substrate_key: [u8; 32],
-      network_key: Vec<u8>,
-    },
+    GeneratedKeyPair { session: Session, substrate_key: [u8; 32], network_key: Vec<u8> },
     // Blame this participant.
-    Blame {
-      id: KeyGenId,
-      participant: Participant,
-    },
+    Blame { session: Session, participant: Participant },
   }
 }
 
@@ -328,16 +272,19 @@ impl CoordinatorMessage {
   pub fn intent(&self) -> Vec<u8> {
     match self {
       CoordinatorMessage::KeyGen(msg) => {
-        // Unique since key gen ID embeds the session and attempt
         let (sub, id) = match msg {
-          key_gen::CoordinatorMessage::GenerateKey { id, .. } => (0, id),
-          key_gen::CoordinatorMessage::Commitments { id, .. } => (1, id),
-          key_gen::CoordinatorMessage::Shares { id, .. } => (2, id),
-          key_gen::CoordinatorMessage::VerifyBlame { id, .. } => (3, id),
+          // Unique since we only have one attempt per session
+          key_gen::CoordinatorMessage::GenerateKey { session, .. } => {
+            (0, borsh::to_vec(session).unwrap())
+          }
+          // Unique since one participation per participant per session
+          key_gen::CoordinatorMessage::Participation { session, participant, .. } => {
+            (1, borsh::to_vec(&(session, participant)).unwrap())
+          }
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_KEY_GEN_UID, sub];
-        res.extend(&id.encode());
+        res.extend(&id);
         res
       }
       CoordinatorMessage::Sign(msg) => {
@@ -400,17 +347,21 @@ impl ProcessorMessage {
     match self {
       ProcessorMessage::KeyGen(msg) => {
         let (sub, id) = match msg {
-          // Unique since KeyGenId
-          key_gen::ProcessorMessage::Commitments { id, .. } => (0, id),
-          key_gen::ProcessorMessage::InvalidCommitments { id, .. } => (1, id),
-          key_gen::ProcessorMessage::Shares { id, .. } => (2, id),
-          key_gen::ProcessorMessage::InvalidShare { id, .. } => (3, id),
-          key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } => (4, id),
-          key_gen::ProcessorMessage::Blame { id, .. } => (5, id),
+          // Unique since we only have one participation per session (due to no re-attempts)
+          key_gen::ProcessorMessage::Participation { session, .. } => {
+            (0, borsh::to_vec(session).unwrap())
+          }
+          key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } => {
+            (1, borsh::to_vec(session).unwrap())
+          }
+          // Unique since we only blame a participant once (as this is fatal)
+          key_gen::ProcessorMessage::Blame { session, participant } => {
+            (2, borsh::to_vec(&(session, participant)).unwrap())
+          }
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_KEY_GEN_UID, sub];
-        res.extend(&id.encode());
+        res.extend(&id);
         res
       }
       ProcessorMessage::Sign(msg) => {

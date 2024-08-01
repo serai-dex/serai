@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use frost::{
+  dkg::evrf::EvrfCurve,
   curve::{Ciphersuite, Curve},
   ThresholdKeys,
   sign::PreprocessMachine,
@@ -242,7 +243,7 @@ pub struct PreparedSend<N: Network> {
 #[async_trait]
 pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// The elliptic curve used for this network.
-  type Curve: Curve;
+  type Curve: Curve + EvrfCurve;
 
   /// The type representing the transaction for this network.
   type Transaction: Transaction<Self>; // TODO: Review use of
