@@ -56,5 +56,6 @@ std = [
   "serai-primitives/std",
   "emissions-primitives/std",
 ]
+fast-epoch = []
 try-runtime = [] # TODO
 default = ["std"]

@@ -51,6 +51,7 @@ pub mod pallet {
   pub enum Error<T> {
     NetworkHasEconomicSecurity,
     NoValueForCoin,
+    InsufficientAllocation,
   }
 
   #[pallet::event]
@@ -116,6 +117,7 @@ pub mod pallet {
       // if the genesis complete we shouldn't be economically secure because the funds are not
       // enough) is because ValidatorSets pallet runs before the genesis pallet in runtime.
       //  So ValidatorSets pallet sees the old state until next block.
+      // TODO: revisit this when mainnet genesis validator stake code is done.
       let gcb = GenesisCompleteBlock::<T>::get();
       let genesis_ended = gcb.is_some() && (n.saturated_into::<u64>() > gcb.unwrap());
 
@@ -313,6 +315,9 @@ pub mod pallet {
         }
       }
 
+      // TODO: we have the past session participants here in the emissions pallet so that we can
+      // distribute rewards to them in the next session. Ideally we should be able to fetch this
+      // information from valiadtor sets pallet.
       Self::update_participants();
       Weight::zero() // TODO
     }
@@ -325,15 +330,15 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
-      // TODO: we should wait for exactly 2 months according to paper. This waits double the time
-      // it took until genesis complete since we assume it will be done in a month. We know genesis
-      // period blocks is a month but there will be delay until oracilization is done and genesis
-      // completed and emissions start happening. If we wait exactly 2 months and the delay is big
-      // enough we might not be able to distribute all funds we want to in this period.
-      // In the current case we will distribute more than we want to. What to do?
+      #[cfg(feature = "fast-epoch")]
+      let initial_period_duration = FAST_EPOCH_INITIAL_PERIOD;
+
+      #[cfg(not(feature = "fast-epoch"))]
+      let initial_period_duration = 2 * MONTHS;
+
       let genesis_complete_block = GenesisCompleteBlock::<T>::get();
       genesis_complete_block.is_some() &&
-        (n.saturated_into::<u64>() < (3 * genesis_complete_block.unwrap()))
+        (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + initial_period_duration))
     }
 
     /// Returns true if any of the external networks haven't reached economic security yet.
@@ -371,11 +376,7 @@ pub mod pallet {
         )
         .unwrap();
 
-        if Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).is_err() {
-          // TODO: log the failure
-          continue;
-        }
-
+        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
         if ValidatorSets::<T>::deposit_stake(n, p, Amount(p_reward)).is_err() {
           // TODO: log the failure
           continue;
@@ -427,30 +428,27 @@ pub mod pallet {
       // doing an unwrap so that it can be properly dealt with.
       let sri_amount = balance.amount.mul(value);
 
-      // Mint & stake the SRI for the network.
+      // Mint
       Coins::<T>::mint(to, Balance { coin: Coin::Serai, amount: sri_amount })?;
-      // TODO: deposit_stake lets staking less than per key share. Should we allow that here?
-      ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
 
+      // Stake the SRI for the network.
+      let allocation_per_key_share =
+        ValidatorSets::<T>::allocation_per_key_share(network).unwrap().0;
+      let allocation = ValidatorSets::<T>::allocation((network, to)).unwrap_or(Amount(0)).0;
+      if allocation.saturating_add(sri_amount.0) < allocation_per_key_share {
+        Err(Error::<T>::InsufficientAllocation)?;
+      }
+
+      ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
       Ok(())
     }
 
     fn update_participants() {
       for n in NETWORKS {
-        // TODO: `participants_for_latest_decided_set` returns keys with key shares but we
-        // store keys with actual stake amounts. Pr https://github.com/serai-dex/serai/pull/518
-        // supposed to change that and so this pr relies and that pr.
         let participants = ValidatorSets::<T>::participants_for_latest_decided_set(n)
           .unwrap()
           .into_iter()
-          .map(|(key, shares)| {
-            let amount = match n {
-              NetworkId::Serai => shares * 50_000 * 10_u64.pow(8),
-              NetworkId::Bitcoin | NetworkId::Ethereum => shares * 1_000_000 * 10_u64.pow(8),
-              NetworkId::Monero => shares * 100_000 * 10_u64.pow(8),
-            };
-            (key, amount)
-          })
+          .map(|(key, _)| (key, ValidatorSets::<T>::allocation((n, key)).unwrap_or(Amount(0)).0))
           .collect::<Vec<_>>();
 
         Participants::<T>::set(n, Some(participants.try_into().unwrap()));

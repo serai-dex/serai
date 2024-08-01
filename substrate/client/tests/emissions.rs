@@ -6,7 +6,10 @@ use serai_client::TemporalSerai;
 use serai_abi::{
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
   in_instructions::primitives::Batch,
-  primitives::{NETWORKS, Coin, BlockHash, COINS, FAST_EPOCH_DURATION, TARGET_BLOCK_TIME},
+  primitives::{
+    BlockHash, Coin, COINS, FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD, NETWORKS,
+    TARGET_BLOCK_TIME,
+  },
   validator_sets::primitives::Session,
 };
 
@@ -62,6 +65,7 @@ async fn test_emissions(serai: Serai) {
   {
     tokio::time::sleep(Duration::from_secs(1)).await;
   }
+  let genesis_complete_block = serai.latest_finalized_block().await.unwrap().number();
 
   for _ in 0 .. 3 {
     // get current stakes
@@ -94,15 +98,14 @@ async fn test_emissions(serai: Serai) {
     let block_count = get_session_blocks(&serai_latest, current_session - 1).await;
 
     // calculate how much reward in this session
-    // TODO: genesis is complete at block 24 in current tests. Initial period is just double that.
-    // See the emissions pallet to further read on this. We also assume we are in pre-ec era.
-    let reward_this_epoch = if change_block_number < 24 * 3 {
-      block_count * INITIAL_REWARD_PER_BLOCK
-    } else {
-      let blocks_until = SECURE_BY - change_block_number;
-      let block_reward = total_distance / blocks_until;
-      block_count * block_reward
-    };
+    let reward_this_epoch =
+      if change_block_number < (genesis_complete_block + FAST_EPOCH_INITIAL_PERIOD) {
+        block_count * INITIAL_REWARD_PER_BLOCK
+      } else {
+        let blocks_until = SECURE_BY - change_block_number;
+        let block_reward = total_distance / blocks_until;
+        block_count * block_reward
+      };
 
     let reward_per_network = distances
       .into_iter()

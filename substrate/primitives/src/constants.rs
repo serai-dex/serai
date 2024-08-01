@@ -30,3 +30,6 @@ pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = (2 * ARBITRAGE_TIME) + 1;
 
 /// Amount of blocks per epoch in the fast-epoch feature that is used in tests.
 pub const FAST_EPOCH_DURATION: u64 = 2 * MINUTES;
+
+/// Amount of blocks for the initial period era for the emissions for fast epoc feature.
+pub const FAST_EPOCH_INITIAL_PERIOD: u64 = FAST_EPOCH_DURATION * 2;

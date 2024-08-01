@@ -35,7 +35,6 @@ pub enum Call {
   Dex(dex::Call),
   ValidatorSets(validator_sets::Call),
   GenesisLiquidity(genesis_liquidity::Call),
-  Emissions,
   InInstructions(in_instructions::Call),
   Signals(signals::Call),
   Babe(babe::Call),
