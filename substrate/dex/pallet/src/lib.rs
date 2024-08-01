@@ -155,6 +155,7 @@ pub mod pallet {
   /// Map from `PoolId` to `()`. This establishes whether a pool has been officially
   /// created rather than people sending tokens directly to a pool's public account.
   #[pallet::storage]
+  #[pallet::getter(fn pools)]
   pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, (), OptionQuery>;
 
   #[pallet::storage]

@@ -33,6 +33,7 @@ pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", d
 
 serai-primitives = { path = "../../primitives", default-features = false, features = ["serde"] }
 coins-primitives = { package = "serai-coins-primitives", path = "../primitives", default-features = false }
+in-ins-primitives = { package = "serai-in-instructions-primitives", path = "../../in-instructions/primitives", default-features = false }
 
 [features]
 std = [
@@ -47,6 +48,7 @@ std = [
 
   "serai-primitives/std",
   "coins-primitives/std",
+  "in-ins-primitives/std",
 ]
 
 # TODO

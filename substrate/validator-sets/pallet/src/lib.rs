@@ -1128,14 +1128,20 @@ pub mod pallet {
   }
 
   impl<T: Config> AllowMint for Pallet<T> {
-    fn is_allowed(balance: &Balance) -> bool {
+    fn is_allowed(balance: &Balance, for_swap: bool) -> bool {
       // get the required stake
       let current_required = Self::required_stake_for_network(balance.coin.network());
       let new_required = current_required + Self::required_stake(balance);
 
       // get the total stake for the network & compare.
-      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
-      staked.0 >= new_required
+      let mut staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0)).0;
+
+      // we leave 5% buffer on our stake for swap mints.
+      if !for_swap {
+        staked -= staked / 20; // TODO: this should be a const but where?
+      }
+
+      staked >= new_required
     }
   }
 
