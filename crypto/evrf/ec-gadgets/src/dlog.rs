@@ -30,8 +30,8 @@ pub trait DiscreteLogParameters {
 
   /// The amount of y x**i coefficients in a divisor.
   ///
-  /// This is the amount of points in a divisor (the amount of bits in a scalar, plus one) divided
-  /// by two, minus two.
+  /// This is the amount of points in a divisor (the amount of bits in a scalar, plus one) plus
+  /// one, divided by two, minus two.
   type YxCoefficients: ArrayLength;
 }
 

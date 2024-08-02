@@ -29,6 +29,7 @@ pub trait DivisorCurve: Group {
   /// Section 2 of the security proofs define this modulus.
   ///
   /// This MUST NOT be overriden.
+  // TODO: Move to an extension trait
   fn divisor_modulus() -> Poly<Self::FieldElement> {
     Poly {
       // 0 y**1, 1 y*2

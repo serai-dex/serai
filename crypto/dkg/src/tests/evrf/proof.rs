@@ -11,7 +11,7 @@ use ciphersuite::{
     ff::{FromUniformBytes, Field, PrimeField},
     Group,
   },
-  Ciphersuite,
+  Ciphersuite, Secp256k1, Ed25519, Ristretto,
 };
 use pasta_curves::{Ep, Eq, Fp, Fq};
 
@@ -59,7 +59,7 @@ impl DiscreteLogParameters for VestaParams {
   type ScalarBits = U<{ <<Vesta as Ciphersuite>::F as PrimeField>::NUM_BITS as usize }>;
   type XCoefficients = Quot<Sum<Self::ScalarBits, U1>, U2>;
   type XCoefficientsMinusOne = Diff<Self::XCoefficients, U1>;
-  type YxCoefficients = Diff<Quot<Sum<Self::ScalarBits, U1>, U2>, U2>;
+  type YxCoefficients = Diff<Quot<Sum<Sum<Self::ScalarBits, U1>, U1>, U2>, U2>;
 }
 
 impl EvrfCurve for Pallas {
@@ -67,37 +67,52 @@ impl EvrfCurve for Pallas {
   type EmbeddedCurveParameters = VestaParams;
 }
 
-#[test]
-fn evrf_proof_pasta_test() {
+fn evrf_proof_test<C: EvrfCurve>() {
   let generators = generators(1024);
-  let vesta_private_key = Zeroizing::new(<Vesta as Ciphersuite>::F::random(&mut OsRng));
-  let ecdh_public_keys =
-    [<Vesta as Ciphersuite>::G::random(&mut OsRng), <Vesta as Ciphersuite>::G::random(&mut OsRng)];
+  let vesta_private_key = Zeroizing::new(<C::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng));
+  let ecdh_public_keys = [
+    <C::EmbeddedCurve as Ciphersuite>::G::random(&mut OsRng),
+    <C::EmbeddedCurve as Ciphersuite>::G::random(&mut OsRng),
+  ];
   let time = Instant::now();
-  let res = Evrf::<Pallas>::prove(
-    &mut OsRng,
-    &generators,
-    [0; 32],
-    1,
-    &ecdh_public_keys,
-    &vesta_private_key,
-  )
-  .unwrap();
+  let res =
+    Evrf::<C>::prove(&mut OsRng, &generators, [0; 32], 1, &ecdh_public_keys, &vesta_private_key)
+      .unwrap();
   println!("Proving time: {:?}", time.elapsed());
 
   let time = Instant::now();
   let mut verifier = generators.batch_verifier();
-  dbg!(Evrf::<Pallas>::verify(
+  Evrf::<C>::verify(
     &mut OsRng,
     &generators,
     &mut verifier,
     [0; 32],
     1,
     &ecdh_public_keys,
-    Vesta::generator() * *vesta_private_key,
+    C::EmbeddedCurve::generator() * *vesta_private_key,
     &res.proof,
   )
-  .unwrap());
+  .unwrap();
   assert!(generators.verify(verifier));
   println!("Verifying time: {:?}", time.elapsed());
+}
+
+#[test]
+fn pallas_evrf_proof_test() {
+  evrf_proof_test::<Pallas>();
+}
+
+#[test]
+fn secp256k1_evrf_proof_test() {
+  evrf_proof_test::<Secp256k1>();
+}
+
+#[test]
+fn ed25519_evrf_proof_test() {
+  evrf_proof_test::<Ed25519>();
+}
+
+#[test]
+fn ristretto_evrf_proof_test() {
+  evrf_proof_test::<Ristretto>();
 }

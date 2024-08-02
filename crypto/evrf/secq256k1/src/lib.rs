@@ -43,5 +43,5 @@ impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameters for Secq256k1 {
   type ScalarBits = U<{ Scalar::NUM_BITS as usize }>;
   type XCoefficients = Quot<Sum<Self::ScalarBits, U1>, U2>;
   type XCoefficientsMinusOne = Diff<Self::XCoefficients, U1>;
-  type YxCoefficients = Diff<Quot<Sum<Self::ScalarBits, U1>, U2>, U2>;
+  type YxCoefficients = Diff<Quot<Sum<Sum<Self::ScalarBits, U1>, U1>, U2>, U2>;
 }
