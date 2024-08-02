@@ -2,10 +2,13 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::OsRng;
 
-use ciphersuite::group::GroupEncoding;
-use frost::{Participant, ThresholdParams, tests::clone_without};
+use ciphersuite::{
+  group::{ff::Field, GroupEncoding},
+  Ciphersuite, Ristretto,
+};
+use dkg::{Participant, ThresholdParams, evrf::*};
 
 use serai_db::{DbTxn, Db, MemDb};
 
@@ -18,113 +21,102 @@ use crate::{
   key_gen::{KeyConfirmed, KeyGen},
 };
 
-const ID: KeyGenId = KeyGenId { session: Session(1), attempt: 3 };
+const SESSION: Session = Session(1);
 
 pub fn test_key_gen<N: Network>() {
-  let mut entropies = HashMap::new();
   let mut dbs = HashMap::new();
+  let mut substrate_evrf_keys = HashMap::new();
+  let mut network_evrf_keys = HashMap::new();
+  let mut evrf_public_keys = vec![];
   let mut key_gens = HashMap::new();
   for i in 1 ..= 5 {
-    let mut entropy = Zeroizing::new([0; 32]);
-    OsRng.fill_bytes(entropy.as_mut());
-    entropies.insert(i, entropy);
     let db = MemDb::new();
     dbs.insert(i, db.clone());
-    key_gens.insert(i, KeyGen::<N, MemDb>::new(db, entropies[&i].clone()));
+
+    let substrate_evrf_key = Zeroizing::new(
+      <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng),
+    );
+    substrate_evrf_keys.insert(i, substrate_evrf_key.clone());
+    let network_evrf_key = Zeroizing::new(
+      <<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng),
+    );
+    network_evrf_keys.insert(i, network_evrf_key.clone());
+
+    evrf_public_keys.push((
+      (<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *substrate_evrf_key)
+        .to_bytes(),
+      (<<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::generator() * *network_evrf_key)
+        .to_bytes()
+        .as_ref()
+        .to_vec(),
+    ));
+    key_gens
+      .insert(i, KeyGen::<N, MemDb>::new(db, substrate_evrf_key.clone(), network_evrf_key.clone()));
   }
 
-  let mut all_commitments = HashMap::new();
+  let mut participations = HashMap::new();
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    if let ProcessorMessage::Commitments { id, mut commitments } = key_gen.handle(
+    let mut msgs = key_gen.handle(
       &mut txn,
       CoordinatorMessage::GenerateKey {
-        id: ID,
-        params: ThresholdParams::new(3, 5, Participant::new(u16::try_from(i).unwrap()).unwrap())
-          .unwrap(),
-        shares: 1,
+        session: SESSION,
+        threshold: 3,
+        evrf_public_keys: evrf_public_keys.clone(),
       },
-    ) {
-      assert_eq!(id, ID);
-      assert_eq!(commitments.len(), 1);
-      all_commitments
-        .insert(Participant::new(u16::try_from(i).unwrap()).unwrap(), commitments.swap_remove(0));
-    } else {
-      panic!("didn't get commitments back");
-    }
+    );
+    assert_eq!(msgs.len(), 1);
+    let ProcessorMessage::Participation { session, participation } = msgs.swap_remove(0) else {
+      panic!("didn't get a participation")
+    };
+    assert_eq!(session, SESSION);
+    participations.insert(i, participation);
     txn.commit();
   }
-
-  // 1 is rebuilt on every step
-  // 2 is rebuilt here
-  // 3 ... are rebuilt once, one at each of the following steps
-  let rebuild = |key_gens: &mut HashMap<_, _>, dbs: &HashMap<_, MemDb>, i| {
-    key_gens.remove(&i);
-    key_gens.insert(i, KeyGen::<N, _>::new(dbs[&i].clone(), entropies[&i].clone()));
-  };
-  rebuild(&mut key_gens, &dbs, 1);
-  rebuild(&mut key_gens, &dbs, 2);
-
-  let mut all_shares = HashMap::new();
-  for i in 1 ..= 5 {
-    let key_gen = key_gens.get_mut(&i).unwrap();
-    let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::Shares { id, mut shares } = key_gen.handle(
-      &mut txn,
-      CoordinatorMessage::Commitments { id: ID, commitments: clone_without(&all_commitments, &i) },
-    ) {
-      assert_eq!(id, ID);
-      assert_eq!(shares.len(), 1);
-      all_shares.insert(i, shares.swap_remove(0));
-    } else {
-      panic!("didn't get shares back");
-    }
-    txn.commit();
-  }
-
-  // Rebuild 1 and 3
-  rebuild(&mut key_gens, &dbs, 1);
-  rebuild(&mut key_gens, &dbs, 3);
 
   let mut res = None;
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
-    let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
-    if let ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } = key_gen.handle(
-      &mut txn,
-      CoordinatorMessage::Shares {
-        id: ID,
-        shares: vec![all_shares
-          .iter()
-          .filter_map(|(l, shares)| if i == *l { None } else { Some((*l, shares[&i].clone())) })
-          .collect()],
-      },
-    ) {
-      assert_eq!(id, ID);
-      if res.is_none() {
-        res = Some((substrate_key, network_key.clone()));
+    for j in 1 ..= 5 {
+      let mut msgs = key_gen.handle(
+        &mut txn,
+        CoordinatorMessage::Participation {
+          session: SESSION,
+          participant: Participant::new(u16::try_from(j).unwrap()).unwrap(),
+          participation: participations[&j].clone(),
+        },
+      );
+      if j != 3 {
+        assert!(msgs.is_empty());
       }
-      assert_eq!(res.as_ref().unwrap(), &(substrate_key, network_key));
-    } else {
-      panic!("didn't get key back");
+      if j == 3 {
+        assert_eq!(msgs.len(), 1);
+        let ProcessorMessage::GeneratedKeyPair { session, substrate_key, network_key } =
+          msgs.swap_remove(0)
+        else {
+          panic!("didn't get a generated key pair")
+        };
+        assert_eq!(session, SESSION);
+
+        if res.is_none() {
+          res = Some((substrate_key, network_key.clone()));
+        }
+        assert_eq!(res.as_ref().unwrap(), &(substrate_key, network_key));
+      }
     }
+
     txn.commit();
   }
   let res = res.unwrap();
-
-  // Rebuild 1 and 4
-  rebuild(&mut key_gens, &dbs, 1);
-  rebuild(&mut key_gens, &dbs, 4);
 
   for i in 1 ..= 5 {
     let key_gen = key_gens.get_mut(&i).unwrap();
     let mut txn = dbs.get_mut(&i).unwrap().txn();
     let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen.confirm(
       &mut txn,
-      ID.session,
+      SESSION,
       &KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
     );
     txn.commit();

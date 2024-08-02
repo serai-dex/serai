@@ -373,7 +373,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       }
 
       CoordinatorMessage::Participation { session, participant, participation } => {
-        info!("Received participation from {:?}", participant);
+        info!("received participation from {:?} for {:?}", participant, session);
 
         let (threshold, substrate_evrf_public_keys, network_evrf_public_keys) =
           ParamsDb::get(txn, &session).unwrap();
@@ -386,16 +386,19 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         // Read these `Participation`s
         // If they fail basic sanity checks, fail fast
         let (substrate_participation, network_participation) = {
-          let mid_point = {
+          let network_participation_start_pos = {
             let mut participation = participation.as_slice();
             let start_len = participation.len();
 
             let blame = vec![ProcessorMessage::Blame { session, participant }];
-            if Participation::<Ristretto>::read(&mut participation, n).is_err() {
+            let Ok(substrate_participation) =
+              Participation::<Ristretto>::read(&mut participation, n)
+            else {
               return blame;
-            }
-            let len_at_mid_point = participation.len();
-            if Participation::<N::Curve>::read(&mut participation, n).is_err() {
+            };
+            let len_at_network_participation_start_pos = participation.len();
+            let Ok(network_participation) = Participation::<N::Curve>::read(&mut participation, n)
+            else {
               return blame;
             };
 
@@ -405,12 +408,59 @@ impl<N: Network, D: Db> KeyGen<N, D> {
               return blame;
             }
 
-            start_len - len_at_mid_point
+            // If we've already generated these keys, we don't actually need to save these
+            // participations and continue. We solely have to verify them, as to identify malicious
+            // participants and prevent DoSs, before returning
+            if GeneratedKeysDb::get(txn, &session).is_some() {
+              info!("already finished generating a key for {:?}", session);
+
+              match EvrfDkg::<Ristretto>::verify(
+                &mut OsRng,
+                generators(),
+                context::<N>(session, SUBSTRATE_KEY_CONTEXT),
+                threshold,
+                // Ignores the list of participants who were faulty, as they were prior blamed
+                &coerce_keys::<Ristretto>(&substrate_evrf_public_keys).0,
+                &HashMap::from([(participant, substrate_participation)]),
+              )
+              .unwrap()
+              {
+                VerifyResult::Valid(_) | VerifyResult::NotEnoughParticipants => {}
+                VerifyResult::Invalid(faulty) => {
+                  assert_eq!(faulty, vec![participant]);
+                  return vec![ProcessorMessage::Blame { session, participant }];
+                }
+              }
+
+              match EvrfDkg::<N::Curve>::verify(
+                &mut OsRng,
+                generators(),
+                context::<N>(session, NETWORK_KEY_CONTEXT),
+                threshold,
+                // Ignores the list of participants who were faulty, as they were prior blamed
+                &coerce_keys::<N::Curve>(&network_evrf_public_keys).0,
+                &HashMap::from([(participant, network_participation)]),
+              )
+              .unwrap()
+              {
+                VerifyResult::Valid(_) | VerifyResult::NotEnoughParticipants => return vec![],
+                VerifyResult::Invalid(faulty) => {
+                  assert_eq!(faulty, vec![participant]);
+                  return vec![ProcessorMessage::Blame { session, participant }];
+                }
+              }
+            }
+
+            // Return the position the network participation starts at
+            start_len - len_at_network_participation_start_pos
           };
 
           // Instead of re-serializing the `Participation`s we read, we just use the relevant
           // sections of the existing byte buffer
-          (participation[.. mid_point].to_vec(), participation[mid_point ..].to_vec())
+          (
+            participation[.. network_participation_start_pos].to_vec(),
+            participation[network_participation_start_pos ..].to_vec(),
+          )
         };
 
         // Since these are valid `Participation`s, save them
