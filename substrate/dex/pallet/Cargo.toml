@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "DEX pallet for Serai"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex/pallet"
-authors = ["Parity Technologies <admin@parity.io>, Akil Demir <aeg_asd@hotmail.com>"]
+authors = ["Parity Technologies <admin@parity.io>, Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
 rust-version = "1.74"
 

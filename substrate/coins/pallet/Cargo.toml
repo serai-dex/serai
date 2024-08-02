@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Coins pallet for Serai"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/coins/pallet"
-authors = ["Akil Demir <aeg_asd@hotmail.com>"]
+authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
 rust-version = "1.74"
 
