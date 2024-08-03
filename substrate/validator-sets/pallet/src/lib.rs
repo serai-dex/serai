@@ -81,6 +81,12 @@ pub mod pallet {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, serde::Serialize, serde::Deserialize)]
+  pub struct AllEmbeddedEllipticCurveKeysAtGenesis {
+    pub embedwards25519: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    pub secq256k1: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+  }
+
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
@@ -90,7 +96,7 @@ pub mod pallet {
     /// This stake cannot be withdrawn however as there's no actual stake behind it.
     pub networks: Vec<(NetworkId, Amount)>,
     /// List of participants to place in the initial validator sets.
-    pub participants: Vec<T::AccountId>,
+    pub participants: Vec<(T::AccountId, AllEmbeddedEllipticCurveKeysAtGenesis)>,
   }
 
   impl<T: Config> Default for GenesisConfig<T> {
@@ -188,6 +194,18 @@ pub mod pallet {
       InSet::<T>::contains_key(network, account)
     }
   }
+
+  /// A key on an embedded elliptic curve.
+  #[pallet::storage]
+  pub type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
+    _,
+    Blake2_128Concat,
+    Public,
+    Identity,
+    EmbeddedEllipticCurve,
+    BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    OptionQuery,
+  >;
 
   /// The total stake allocated to this network by the active set of validators.
   #[pallet::storage]
@@ -398,6 +416,9 @@ pub mod pallet {
   pub enum Error<T> {
     /// Validator Set doesn't exist.
     NonExistentValidatorSet,
+    /// Trying to perform an operation requiring an embedded elliptic curve key, without an
+    /// embedded elliptic curve key.
+    MissingEmbeddedEllipticCurveKey,
     /// Not enough allocation to obtain a key share in the set.
     InsufficientAllocation,
     /// Trying to deallocate more than allocated.
@@ -441,10 +462,20 @@ pub mod pallet {
     fn build(&self) {
       for (id, stake) in self.networks.clone() {
         AllocationPerKeyShare::<T>::set(id, Some(stake));
-        for participant in self.participants.clone() {
-          if Pallet::<T>::set_allocation(id, participant, stake) {
+        for participant in &self.participants {
+          if Pallet::<T>::set_allocation(id, participant.0, stake) {
             panic!("participants contained duplicates");
           }
+          EmbeddedEllipticCurveKeys::<T>::set(
+            participant.0,
+            EmbeddedEllipticCurve::Embedwards25519,
+            Some(participant.1.embedwards25519.clone()),
+          );
+          EmbeddedEllipticCurveKeys::<T>::set(
+            participant.0,
+            EmbeddedEllipticCurve::Secq256k1,
+            Some(participant.1.secq256k1.clone()),
+          );
         }
         Pallet::<T>::new_set(id);
       }
@@ -959,8 +990,33 @@ pub mod pallet {
 
     #[pallet::call_index(2)]
     #[pallet::weight(0)] // TODO
+    pub fn set_embedded_elliptic_curve_key(
+      origin: OriginFor<T>,
+      embedded_elliptic_curve: EmbeddedEllipticCurve,
+      key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    ) -> DispatchResult {
+      let validator = ensure_signed(origin)?;
+      // This does allow overwriting an existing key which... is unlikely to be done?
+      // Yet it isn't an issue as we'll fix to the key as of any set's declaration (uncaring to if
+      // it's distinct at the latest block)
+      EmbeddedEllipticCurveKeys::<T>::set(validator, embedded_elliptic_curve, Some(key));
+      Ok(())
+    }
+
+    #[pallet::call_index(3)]
+    #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
+      // If this network utilizes an embedded elliptic curve, require the validator to have set the
+      // appropriate key
+      for embedded_elliptic_curve in network.embedded_elliptic_curves() {
+        // Require an Embedwards25519 embedded curve key and a key for the curve for this network
+        // The Embedwards25519 embedded curve key is required for the DKG for the Substrate key
+        // used to oraclize events with
+        if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, *embedded_elliptic_curve) {
+          Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
+        }
+      }
       Coins::<T>::transfer_internal(
         validator,
         Self::account(),
@@ -969,7 +1025,7 @@ pub mod pallet {
       Self::increase_allocation(network, validator, amount)
     }
 
-    #[pallet::call_index(3)]
+    #[pallet::call_index(4)]
     #[pallet::weight(0)] // TODO
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
@@ -986,7 +1042,7 @@ pub mod pallet {
       Ok(())
     }
 
-    #[pallet::call_index(4)]
+    #[pallet::call_index(5)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn claim_deallocation(
       origin: OriginFor<T>,
@@ -1114,9 +1170,10 @@ pub mod pallet {
             .propagate(true)
             .build()
         }
-        Call::allocate { .. } | Call::deallocate { .. } | Call::claim_deallocation { .. } => {
-          Err(InvalidTransaction::Call)?
-        }
+        Call::set_embedded_elliptic_curve_key { .. } |
+        Call::allocate { .. } |
+        Call::deallocate { .. } |
+        Call::claim_deallocation { .. } => Err(InvalidTransaction::Call)?,
         Call::__Ignore(_, _) => unreachable!(),
       }
     }

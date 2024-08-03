@@ -1,13 +1,14 @@
 use scale::Encode;
 
 use sp_core::sr25519::{Public, Signature};
+use sp_runtime::BoundedVec;
 
 use serai_abi::primitives::Amount;
 pub use serai_abi::validator_sets::primitives;
-use primitives::{Session, ValidatorSet, KeyPair};
+use primitives::{MAX_KEY_LEN, Session, ValidatorSet, KeyPair};
 
 use crate::{
-  primitives::{NetworkId, SeraiAddress},
+  primitives::{EmbeddedEllipticCurve, NetworkId, SeraiAddress},
   Transaction, Serai, TemporalSerai, SeraiError,
 };
 
@@ -193,6 +194,18 @@ impl<'a> SeraiValidatorSets<'a> {
       key_pair,
       signature,
     }))
+  }
+
+  pub fn set_embedded_elliptic_curve_key(
+    embedded_elliptic_curve: EmbeddedEllipticCurve,
+    key: BoundedVec<u8, sp_core::ConstU32<{ MAX_KEY_LEN }>>,
+  ) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(
+      serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+        embedded_elliptic_curve,
+        key,
+      },
+    )
   }
 
   pub fn allocate(network: NetworkId, amount: Amount) -> serai_abi::Call {

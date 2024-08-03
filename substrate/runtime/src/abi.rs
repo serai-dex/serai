@@ -115,6 +115,13 @@ impl From<Call> for RuntimeCall {
           key_pair,
           signature,
         }),
+        serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+          embedded_elliptic_curve,
+          key,
+        } => RuntimeCall::ValidatorSets(validator_sets::Call::set_embedded_elliptic_curve_key {
+          embedded_elliptic_curve,
+          key,
+        }),
         serai_abi::validator_sets::Call::report_slashes { network, slashes, signature } => {
           RuntimeCall::ValidatorSets(validator_sets::Call::report_slashes {
             network,
@@ -291,6 +298,12 @@ impl TryInto<Call> for RuntimeCall {
             .unwrap(),
             key_pair,
             signature,
+          }
+        }
+        validator_sets::Call::set_embedded_elliptic_curve_key { embedded_elliptic_curve, key } => {
+          serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+            embedded_elliptic_curve,
+            key,
           }
         }
         validator_sets::Call::report_slashes { network, slashes, signature } => {

@@ -27,6 +27,10 @@ log = "0.4"
 
 schnorrkel = "0.11"
 
+ciphersuite = { path = "../../crypto/ciphersuite" }
+embedwards25519 = { path = "../../crypto/evrf/embedwards25519" }
+secq256k1 = { path = "../../crypto/evrf/secq256k1" }
+
 libp2p = "0.52"
 
 sp-core = { git = "https://github.com/serai-dex/substrate" }

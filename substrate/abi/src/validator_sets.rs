@@ -15,6 +15,10 @@ pub enum Call {
     key_pair: KeyPair,
     signature: Signature,
   },
+  set_embedded_elliptic_curve_key {
+    embedded_elliptic_curve: EmbeddedEllipticCurve,
+    key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+  },
   report_slashes {
     network: NetworkId,
     slashes: BoundedVec<(SeraiAddress, u32), ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,

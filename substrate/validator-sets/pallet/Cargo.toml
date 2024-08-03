@@ -24,6 +24,8 @@ hashbrown = { version = "0.14", default-features = false, features = ["ahash", "
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+
 sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }

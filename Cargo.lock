@@ -8350,7 +8350,9 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+ "ciphersuite",
  "clap",
+ "embedwards25519",
  "frame-benchmarking",
  "futures-util",
  "hex",
@@ -8376,6 +8378,7 @@ dependencies = [
  "sc-transaction-pool",
  "sc-transaction-pool-api",
  "schnorrkel",
+ "secq256k1",
  "serai-env",
  "serai-runtime",
  "sp-api",
@@ -8603,6 +8606,7 @@ dependencies = [
  "serai-dex-pallet",
  "serai-primitives",
  "serai-validator-sets-primitives",
+ "serde",
  "sp-application-crypto",
  "sp-core",
  "sp-io",

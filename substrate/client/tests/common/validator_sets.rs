@@ -83,6 +83,24 @@ pub async fn set_keys(
 }
 
 #[allow(dead_code)]
+pub async fn set_embedded_elliptic_curve_key(
+  serai: &Serai,
+  pair: &Pair,
+  embedded_elliptic_curve: EmbeddedEllipticCurve,
+  key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+  nonce: u32,
+) -> [u8; 32] {
+  // get the call
+  let tx = serai.sign(
+    pair,
+    SeraiValidatorSets::set_embedded_elliptic_curve_key(embedded_elliptic_curve, key),
+    nonce,
+    0,
+  );
+  publish_tx(serai, &tx).await
+}
+
+#[allow(dead_code)]
 pub async fn allocate_stake(
   serai: &Serai,
   network: NetworkId,

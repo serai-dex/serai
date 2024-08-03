@@ -14,6 +14,16 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 #[cfg(feature = "borsh")]
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
+/// Identifier for an embedded elliptic curve.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum EmbeddedEllipticCurve {
+  Embedwards25519,
+  Secq256k1,
+}
+
 /// The type used to identify networks.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
@@ -26,6 +36,20 @@ pub enum NetworkId {
   Monero,
 }
 impl NetworkId {
+  /// The embedded elliptic curve actively used for this network.
+  pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
+    match self {
+      // We don't use any embedded elliptic curves for Serai as we don't perform a DKG for Serai
+      Self::Serai => &[],
+      // We need to generate a Ristretto key for oraclizing and a Secp256k1 key for the network
+      Self::Bitcoin | Self::Ethereum => {
+        &[EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+      }
+      // Since the oraclizing key curve is the same as the network's curve, we only need it
+      Self::Monero => &[EmbeddedEllipticCurve::Embedwards25519],
+    }
+  }
+
   pub fn coins(&self) -> &'static [Coin] {
     match self {
       Self::Serai => &[Coin::Serai],

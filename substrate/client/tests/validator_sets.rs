@@ -221,12 +221,31 @@ async fn validator_set_rotation() {
 
         // add 1 participant
         let last_participant = accounts[4].clone();
+
+        // If this is the first iteration, set embedded elliptic curve keys
+        if i == 0 {
+          for (i, embedded_elliptic_curve) in
+            [EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+              .into_iter()
+              .enumerate()
+          {
+            set_embedded_elliptic_curve_key(
+              &serai,
+              embedded_elliptic_curve,
+              vec![0; 32].try_into().unwrap(),
+              &last_participant,
+              i.try_into().unwrap(),
+            )
+            .await;
+          }
+        }
+
         let hash = allocate_stake(
           &serai,
           network,
           key_shares[&network],
           &last_participant,
-          i.try_into().unwrap(),
+          (2 + i).try_into().unwrap(),
         )
         .await;
         participants.push(last_participant.public());
