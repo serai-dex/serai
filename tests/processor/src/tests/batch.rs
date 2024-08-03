@@ -3,6 +3,8 @@ use std::{
   time::{SystemTime, Duration},
 };
 
+use rand_core::RngCore;
+
 use dkg::{Participant, tests::clone_without};
 
 use messages::{coordinator::*, SubstrateContext};
