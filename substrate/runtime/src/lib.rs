@@ -261,15 +261,6 @@ where
   type OverarchingCall = RuntimeCall;
 }
 
-// for validating equivocation evidences.
-// The following runtime construction doesn't actually implement the pallet as doing so is
-// unnecessary
-// TODO: Replace the requirement on Config for a requirement on FindAuthor directly
-impl pallet_authorship::Config for Runtime {
-  type FindAuthor = ValidatorSets;
-  type EventHandler = ();
-}
-
 // Maximum number of authorities per session.
 pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET }>;
 
@@ -305,6 +296,8 @@ impl grandpa::Config for Runtime {
   type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
     grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
+
+  type FindAuthor = Babe;
 }
 
 pub type Executive = frame_executive::Executive<

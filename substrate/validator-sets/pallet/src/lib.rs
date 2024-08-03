@@ -9,13 +9,13 @@ use sp_std::{vec, vec::Vec};
 use sp_core::sr25519::{Public, Signature};
 use sp_application_crypto::RuntimePublic;
 use sp_session::{ShouldEndSession, GetSessionNumber, GetValidatorCount};
-use sp_runtime::{KeyTypeId, ConsensusEngineId, traits::IsMember};
+use sp_runtime::{KeyTypeId, traits::IsMember};
 use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 
 use frame_system::{pallet_prelude::*, RawOrigin};
 use frame_support::{
   pallet_prelude::*,
-  traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
+  traits::{DisabledValidators, KeyOwnerProofSystem},
   BoundedVec, WeakBoundedVec, StoragePrefixedMap,
 };
 
@@ -1221,16 +1221,6 @@ pub mod pallet {
         }
       }
       true
-    }
-  }
-
-  impl<T: Config> FindAuthor<Public> for Pallet<T> {
-    fn find_author<'a, I>(digests: I) -> Option<Public>
-    where
-      I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
-    {
-      let i = Babe::<T>::find_author(digests)?;
-      Some(Babe::<T>::authorities()[i as usize].0.clone().into())
     }
   }
 
