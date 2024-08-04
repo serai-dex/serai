@@ -11,8 +11,8 @@ use serai_validator_sets_primitives::*;
 pub enum Call {
   set_keys {
     network: NetworkId,
-    removed_participants: BoundedVec<SeraiAddress, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
     key_pair: KeyPair,
+    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
   },
   set_embedded_elliptic_curve_key {

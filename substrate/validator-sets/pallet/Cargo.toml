@@ -19,10 +19,11 @@ ignored = ["scale", "scale-info"]
 workspace = true
 
 [dependencies]
+bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
 hashbrown = { version = "0.14", default-features = false, features = ["ahash", "inline-more"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
+scale-info = { version = "2", default-features = false, features = ["derive", "bit-vec"] }
 
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 
@@ -48,6 +49,8 @@ dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-
 
 [features]
 std = [
+  "bitvec/std",
+
   "scale/std",
   "scale-info/std",
 

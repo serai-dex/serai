@@ -181,17 +181,14 @@ impl<'a> SeraiValidatorSets<'a> {
 
   pub fn set_keys(
     network: NetworkId,
-    removed_participants: sp_runtime::BoundedVec<
-      SeraiAddress,
-      sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
-    >,
     key_pair: KeyPair,
+    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
   ) -> Transaction {
     Serai::unsigned(serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::set_keys {
       network,
-      removed_participants,
       key_pair,
+      signature_participants,
       signature,
     }))
   }

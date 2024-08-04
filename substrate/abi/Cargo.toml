@@ -16,8 +16,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
+bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
+scale-info = { version = "2", default-features = false, features = ["derive", "bit-vec"] }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
@@ -39,6 +41,8 @@ serai-signals-primitives = { path = "../signals/primitives", version = "0.1", de
 
 [features]
 std = [
+  "bitvec/std",
+
   "scale/std",
   "scale-info/std",
 

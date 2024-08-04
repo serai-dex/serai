@@ -927,14 +927,15 @@ pub mod pallet {
     pub fn set_keys(
       origin: OriginFor<T>,
       network: NetworkId,
-      removed_participants: BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
       key_pair: KeyPair,
+      signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
       signature: Signature,
     ) -> DispatchResult {
       ensure_none(origin)?;
 
       // signature isn't checked as this is an unsigned transaction, and validate_unsigned
       // (called by pre_dispatch) checks it
+      let _ = signature_participants;
       let _ = signature;
 
       let session = Self::session(network).unwrap();
@@ -949,15 +950,6 @@ pub mod pallet {
         Self::set_total_allocated_stake(network);
       }
 
-      // This does not remove from TotalAllocatedStake or InSet in order to:
-      // 1) Not decrease the stake present in this set. This means removed participants are
-      //    still liable for the economic security of the external network. This prevents
-      //    a decided set, which is economically secure, from falling below the threshold.
-      // 2) Not allow parties removed to immediately deallocate, per commentary on deallocation
-      //    scheduling (https://github.com/serai-dex/serai/issues/394).
-      for removed in removed_participants {
-        Self::deposit_event(Event::ParticipantRemoved { set, removed });
-      }
       Self::deposit_event(Event::KeyGen { set, key_pair });
 
       Ok(())
@@ -1070,7 +1062,7 @@ pub mod pallet {
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       // Match to be exhaustive
       match call {
-        Call::set_keys { network, ref removed_participants, ref key_pair, ref signature } => {
+        Call::set_keys { network, ref key_pair, ref signature_participants, ref signature } => {
           let network = *network;
 
           // Don't allow the Serai set to set_keys, as they have no reason to do so
@@ -1094,30 +1086,24 @@ pub mod pallet {
           // session on this assumption
           assert_eq!(Pallet::<T>::latest_decided_session(network), Some(current_session));
 
-          // This does not slash the removed participants as that'll be done at the end of the
-          // set's lifetime
-          let mut removed = hashbrown::HashSet::new();
-          for participant in removed_participants {
-            // Confirm this wasn't duplicated
-            if removed.contains(&participant.0) {
-              Err(InvalidTransaction::Custom(2))?;
-            }
-            removed.insert(participant.0);
-          }
-
           let participants =
             Participants::<T>::get(network).expect("session existed without participants");
+
+          // Check the bitvec is of the proper length
+          if participants.len() != signature_participants.len() {
+            Err(InvalidTransaction::Custom(2))?;
+          }
 
           let mut all_key_shares = 0;
           let mut signers = vec![];
           let mut signing_key_shares = 0;
-          for participant in participants {
+          for (participant, in_use) in participants.into_iter().zip(signature_participants) {
             let participant = participant.0;
             let shares = InSet::<T>::get(network, participant)
               .expect("participant from Participants wasn't InSet");
             all_key_shares += shares;
 
-            if removed.contains(&participant.0) {
+            if !in_use {
               continue;
             }
 
@@ -1135,9 +1121,7 @@ pub mod pallet {
           // Verify the signature with the MuSig key of the signers
           // We theoretically don't need set_keys_message to bind to removed_participants, as the
           // key we're signing with effectively already does so, yet there's no reason not to
-          if !musig_key(set, &signers)
-            .verify(&set_keys_message(&set, removed_participants, key_pair), signature)
-          {
+          if !musig_key(set, &signers).verify(&set_keys_message(&set, key_pair), signature) {
             Err(InvalidTransaction::BadProof)?;
           }
 
