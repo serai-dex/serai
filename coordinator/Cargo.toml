@@ -20,6 +20,7 @@ workspace = true
 async-trait = { version = "0.1", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["std"] }
+bitvec = { version = "1", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 blake2 = { version = "0.10", default-features = false, features = ["std"] }

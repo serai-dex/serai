@@ -416,6 +416,11 @@ pub mod pallet {
   pub enum Error<T> {
     /// Validator Set doesn't exist.
     NonExistentValidatorSet,
+    /// An invalid embedded elliptic curve key was specified.
+    ///
+    /// This error not being raised does not mean the key was valid. Solely that it wasn't detected
+    /// by this pallet as invalid.
+    InvalidEmbeddedEllipticCurveKey,
     /// Trying to perform an operation requiring an embedded elliptic curve key, without an
     /// embedded elliptic curve key.
     MissingEmbeddedEllipticCurveKey,
@@ -988,6 +993,18 @@ pub mod pallet {
       key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
     ) -> DispatchResult {
       let validator = ensure_signed(origin)?;
+
+      // We don't have the curve formulas, nor the BigInt arithmetic, necessary here to validate
+      // these keys. Instead, we solely check the key lengths. Validators are responsible to not
+      // provide invalid keys.
+      let expected_len = match embedded_elliptic_curve {
+        EmbeddedEllipticCurve::Embedwards25519 => 32,
+        EmbeddedEllipticCurve::Secq256k1 => 33,
+      };
+      if key.len() != expected_len {
+        Err(Error::InvalidEmbeddedEllipticCurveKey)?;
+      }
+
       // This does allow overwriting an existing key which... is unlikely to be done?
       // Yet it isn't an issue as we'll fix to the key as of any set's declaration (uncaring to if
       // it's distinct at the latest block)

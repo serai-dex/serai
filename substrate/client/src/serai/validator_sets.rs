@@ -108,6 +108,21 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "CurrentSession", network).await
   }
 
+  pub async fn embedded_elliptic_curve_key(
+    &self,
+    validator: Public,
+    embedded_elliptic_curve: EmbeddedEllipticCurve,
+  ) -> Result<Option<Vec<u8>>, SeraiError> {
+    self
+      .0
+      .storage(
+        PALLET,
+        "EmbeddedEllipticCurveKeys",
+        (sp_core::hashing::blake2_128(&validator.encode()), validator, embedded_elliptic_curve),
+      )
+      .await
+  }
+
   pub async fn participants(
     &self,
     network: NetworkId,

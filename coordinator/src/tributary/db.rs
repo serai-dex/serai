@@ -18,7 +18,6 @@ use crate::tributary::{Label, Transaction};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, BorshSerialize, BorshDeserialize)]
 pub enum Topic {
-  Dkg,
   DkgConfirmation,
   SubstrateSign(SubstrateSignableId),
   Sign([u8; 32]),
@@ -46,15 +45,13 @@ pub enum Accumulation {
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
-    SeraiDkgCompleted: (spec: ValidatorSet) -> [u8; 32],
+    SeraiDkgCompleted: (set: ValidatorSet) -> [u8; 32],
 
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
 
     // TODO: Revisit the point of this
     FatalSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
-    RemovedAsOfDkgAttempt: (genesis: [u8; 32], attempt: u32) -> Vec<[u8; 32]>,
-    OfflineDuringDkg: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
     // TODO: Combine these two
     FatallySlashed: (genesis: [u8; 32], account: [u8; 32]) -> (),
     SlashPoints: (genesis: [u8; 32], account: [u8; 32]) -> u32,
@@ -67,11 +64,9 @@ create_db!(
     DataReceived: (genesis: [u8; 32], data_spec: &DataSpecification) -> u16,
     DataDb: (genesis: [u8; 32], data_spec: &DataSpecification, signer_bytes: &[u8; 32]) -> Vec<u8>,
 
-    DkgShare: (genesis: [u8; 32], from: u16, to: u16) -> Vec<u8>,
+    DkgParticipation: (genesis: [u8; 32], from: u16) -> Vec<u8>,
     ConfirmationNonces: (genesis: [u8; 32], attempt: u32) -> HashMap<Participant, Vec<u8>>,
-    DkgKeyPair: (genesis: [u8; 32], attempt: u32) -> KeyPair,
-    KeyToDkgAttempt: (key: [u8; 32]) -> u32,
-    DkgLocallyCompleted: (genesis: [u8; 32]) -> (),
+    DkgKeyPair: (genesis: [u8; 32]) -> KeyPair,
 
     PlanIds: (genesis: &[u8], block: u64) -> Vec<[u8; 32]>,
 
@@ -123,12 +118,12 @@ impl AttemptDb {
 
   pub fn attempt(getter: &impl Get, genesis: [u8; 32], topic: Topic) -> Option<u32> {
     let attempt = Self::get(getter, genesis, &topic);
-    // Don't require explicit recognition of the Dkg topic as it starts when the chain does
+    // Don't require explicit recognition of the DkgConfirmation topic as it starts when the chain
+    // does
     // Don't require explicit recognition of the SlashReport topic as it isn't a DoS risk and it
     // should always happen (eventually)
     if attempt.is_none() &&
-      ((topic == Topic::Dkg) ||
-        (topic == Topic::DkgConfirmation) ||
+      ((topic == Topic::DkgConfirmation) ||
         (topic == Topic::SubstrateSign(SubstrateSignableId::SlashReport)))
     {
       return Some(0);
@@ -155,16 +150,12 @@ impl ReattemptDb {
     // 5 minutes for attempts 0 ..= 2, 10 minutes for attempts 3 ..= 5, 15 minutes for attempts > 5
     // Assumes no event will take longer than 15 minutes, yet grows the time in case there are
     // network bandwidth issues
-    let mut reattempt_delay = BASE_REATTEMPT_DELAY *
+    let reattempt_delay = BASE_REATTEMPT_DELAY *
       ((AttemptDb::attempt(txn, genesis, topic)
         .expect("scheduling re-attempt for unknown topic") /
         3) +
         1)
       .min(3);
-    // Allow more time for DKGs since they have an extra round and much more data
-    if matches!(topic, Topic::Dkg) {
-      reattempt_delay *= 4;
-    }
     let upon_block = current_block_number + reattempt_delay;
 
     let mut reattempts = Self::get(txn, genesis, upon_block).unwrap_or(vec![]);

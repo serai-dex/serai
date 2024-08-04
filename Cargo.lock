@@ -1069,6 +1069,7 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
+ "serde",
  "tap",
  "wyz",
 ]
@@ -8019,6 +8020,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 name = "serai-abi"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "borsh",
  "frame-support",
  "parity-scale-codec",
@@ -8042,6 +8044,7 @@ version = "0.1.0"
 dependencies = [
  "async-lock",
  "bitcoin",
+ "bitvec",
  "blake2",
  "ciphersuite",
  "dockertest",
@@ -8099,6 +8102,7 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitvec",
  "blake2",
  "borsh",
  "ciphersuite",
@@ -8595,6 +8599,7 @@ dependencies = [
 name = "serai-validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "frame-support",
  "frame-system",
  "hashbrown 0.14.5",

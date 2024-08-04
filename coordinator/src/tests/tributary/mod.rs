@@ -143,7 +143,7 @@ fn serialize_sign_data() {
 
 #[test]
 fn serialize_transaction() {
-  test_read_write(&Transaction::RemoveParticipantDueToDkg {
+  test_read_write(&Transaction::RemoveParticipant {
     participant: <Ristretto as Ciphersuite>::G::random(&mut OsRng),
     signed: random_signed_with_nonce(&mut OsRng, 0),
   });
@@ -213,7 +213,7 @@ fn serialize_transaction() {
     });
   }
 
-  test_read_write(&Transaction::DkgConfirmed {
+  test_read_write(&Transaction::DkgConfirmationShare {
     attempt: random_u32(&mut OsRng),
     confirmation_share: {
       let mut share = [0; 32];

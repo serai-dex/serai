@@ -310,7 +310,7 @@ async fn dkg_test() {
     assert!(msgs.is_empty());
   }
 
-  // Send DkgConfirmed
+  // Send DkgConfirmationShare
   let mut substrate_key = [0; 32];
   OsRng.fill_bytes(&mut substrate_key);
   let mut network_key = vec![0; usize::try_from((OsRng.next_u64() % 32) + 32).unwrap()];
@@ -325,7 +325,7 @@ async fn dkg_test() {
       crate::tributary::generated_key_pair::<MemDb>(&mut txn, key, &spec, &key_pair, 0).unwrap();
     txn.commit();
 
-    let mut tx = Transaction::DkgConfirmed {
+    let mut tx = Transaction::DkgConfirmationShare {
       attempt,
       confirmation_share: share,
       signed: Transaction::empty_signed(),
@@ -359,7 +359,7 @@ async fn dkg_test() {
       assert!(removed.is_empty());
       assert_eq!(self.key_pair, key_pair);
       assert!(signature.verify(
-        &*serai_client::validator_sets::primitives::set_keys_message(&set, &[], &key_pair),
+        &*serai_client::validator_sets::primitives::set_keys_message(&set, &key_pair),
         &serai_client::Public(
           frost::dkg::musig::musig_key::<Ristretto>(
             &serai_client::validator_sets::primitives::musig_context(set),

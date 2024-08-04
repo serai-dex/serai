@@ -16,7 +16,6 @@ use ciphersuite::{
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
-use frost::Participant;
 
 use serai_db::{DbTxn, Db};
 
@@ -114,16 +113,17 @@ async fn add_tributary<D: Db, Pro: Processors, P: P2p>(
   // If we're rebooting, we'll re-fire this message
   // This is safe due to the message-queue deduplicating based off the intent system
   let set = spec.set();
-  let our_i = spec
-    .i(&[], Ristretto::generator() * key.deref())
-    .expect("adding a tributary for a set we aren't in set for");
+
   processors
     .send(
       set.network,
       processor_messages::key_gen::CoordinatorMessage::GenerateKey {
-        id: processor_messages::key_gen::KeyGenId { session: set.session, attempt: 0 },
-        params: frost::ThresholdParams::new(spec.t(), spec.n(&[]), our_i.start).unwrap(),
-        shares: u16::from(our_i.end) - u16::from(our_i.start),
+        session: set.session,
+        threshold: spec.t(),
+        evrf_public_keys: spec.evrf_public_keys(),
+        // TODO
+        // params: frost::ThresholdParams::new(spec.t(), spec.n(&[]), our_i.start).unwrap(),
+        // shares: u16::from(our_i.end) - u16::from(our_i.start),
       },
     )
     .await;
@@ -166,12 +166,9 @@ async fn handle_processor_message<D: Db, P: P2p>(
     // We'll only receive these if we fired GenerateKey, which we'll only do if if we're
     // in-set, making the Tributary relevant
     ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-      key_gen::ProcessorMessage::Commitments { id, .. } |
-      key_gen::ProcessorMessage::InvalidCommitments { id, .. } |
-      key_gen::ProcessorMessage::Shares { id, .. } |
-      key_gen::ProcessorMessage::InvalidShare { id, .. } |
-      key_gen::ProcessorMessage::GeneratedKeyPair { id, .. } |
-      key_gen::ProcessorMessage::Blame { id, .. } => Some(id.session),
+      key_gen::ProcessorMessage::Participation { session, .. } |
+      key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } |
+      key_gen::ProcessorMessage::Blame { session, .. } => Some(*session),
     },
     ProcessorMessage::Sign(inner_msg) => match inner_msg {
       // We'll only receive InvalidParticipant/Preprocess/Share if we're actively signing
@@ -421,124 +418,32 @@ async fn handle_processor_message<D: Db, P: P2p>(
 
     let txs = match msg.msg.clone() {
       ProcessorMessage::KeyGen(inner_msg) => match inner_msg {
-        key_gen::ProcessorMessage::Commitments { id, commitments } => {
-          vec![Transaction::DkgCommitments {
-            attempt: id.attempt,
-            commitments,
-            signed: Transaction::empty_signed(),
-          }]
+        key_gen::ProcessorMessage::Participation { session, participation } => {
+          assert_eq!(session, spec.set().session);
+          vec![Transaction::DkgParticipation { participation, signed: Transaction::empty_signed() }]
         }
-        key_gen::ProcessorMessage::InvalidCommitments { id, faulty } => {
-          // This doesn't have guaranteed timing
-          //
-          // While the party *should* be fatally slashed and not included in future attempts,
-          // they'll actually be fatally slashed (assuming liveness before the Tributary retires)
-          // and not included in future attempts *which begin after the latency window completes*
-          let participant = spec
-            .reverse_lookup_i(
-              &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
-                .expect("participating in DKG attempt yet we didn't save who was removed"),
-              faulty,
-            )
-            .unwrap();
-          vec![Transaction::RemoveParticipantDueToDkg {
-            participant,
-            signed: Transaction::empty_signed(),
-          }]
-        }
-        key_gen::ProcessorMessage::Shares { id, mut shares } => {
-          // Create a MuSig-based machine to inform Substrate of this key generation
-          let nonces = crate::tributary::dkg_confirmation_nonces(key, spec, &mut txn, id.attempt);
-
-          let removed = crate::tributary::removed_as_of_dkg_attempt(&txn, genesis, id.attempt)
-            .expect("participating in a DKG attempt yet we didn't track who was removed yet?");
-          let our_i = spec
-            .i(&removed, pub_key)
-            .expect("processor message to DKG for an attempt we aren't a validator in");
-
-          // `tx_shares` needs to be done here as while it can be serialized from the HashMap
-          // without further context, it can't be deserialized without context
-          let mut tx_shares = Vec::with_capacity(shares.len());
-          for shares in &mut shares {
-            tx_shares.push(vec![]);
-            for i in 1 ..= spec.n(&removed) {
-              let i = Participant::new(i).unwrap();
-              if our_i.contains(&i) {
-                if shares.contains_key(&i) {
-                  panic!("processor sent us our own shares");
-                }
-                continue;
-              }
-              tx_shares.last_mut().unwrap().push(
-                shares.remove(&i).expect("processor didn't send share for another validator"),
-              );
-            }
-          }
-
-          vec![Transaction::DkgShares {
-            attempt: id.attempt,
-            shares: tx_shares,
-            confirmation_nonces: nonces,
-            signed: Transaction::empty_signed(),
-          }]
-        }
-        key_gen::ProcessorMessage::InvalidShare { id, accuser, faulty, blame } => {
-          vec![Transaction::InvalidDkgShare {
-            attempt: id.attempt,
-            accuser,
-            faulty,
-            blame,
-            signed: Transaction::empty_signed(),
-          }]
-        }
-        key_gen::ProcessorMessage::GeneratedKeyPair { id, substrate_key, network_key } => {
-          // TODO2: Check the KeyGenId fields
-
-          // Tell the Tributary the key pair, get back the share for the MuSig signature
-          let share = crate::tributary::generated_key_pair::<D>(
+        key_gen::ProcessorMessage::GeneratedKeyPair { session, substrate_key, network_key } => {
+          assert_eq!(session, spec.set().session);
+          crate::tributary::generated_key_pair::<D>(
             &mut txn,
-            key,
-            spec,
+            genesis,
             &KeyPair(Public(substrate_key), network_key.try_into().unwrap()),
-            id.attempt,
           );
 
-          // TODO: Move this into generated_key_pair?
-          match share {
-            Ok(share) => {
-              vec![Transaction::DkgConfirmed {
-                attempt: id.attempt,
-                confirmation_share: share,
-                signed: Transaction::empty_signed(),
-              }]
-            }
-            Err(p) => {
-              let participant = spec
-                .reverse_lookup_i(
-                  &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
-                    .expect("participating in DKG attempt yet we didn't save who was removed"),
-                  p,
-                )
-                .unwrap();
-              vec![Transaction::RemoveParticipantDueToDkg {
-                participant,
-                signed: Transaction::empty_signed(),
-              }]
-            }
-          }
-        }
-        key_gen::ProcessorMessage::Blame { id, participant } => {
-          let participant = spec
-            .reverse_lookup_i(
-              &crate::tributary::removed_as_of_dkg_attempt(&txn, spec.genesis(), id.attempt)
-                .expect("participating in DKG attempt yet we didn't save who was removed"),
-              participant,
-            )
-            .unwrap();
-          vec![Transaction::RemoveParticipantDueToDkg {
-            participant,
+          // Create a MuSig-based machine to inform Substrate of this key generation
+          let confirmation_nonces =
+            crate::tributary::dkg_confirmation_nonces(key, spec, &mut txn, 0);
+
+          vec![Transaction::DkgConfirmationNonces {
+            attempt: 0,
+            confirmation_nonces,
             signed: Transaction::empty_signed(),
           }]
+        }
+        key_gen::ProcessorMessage::Blame { session, participant } => {
+          assert_eq!(session, spec.set().session);
+          let participant = spec.reverse_lookup_i(participant).unwrap();
+          vec![Transaction::RemoveParticipant { participant, signed: Transaction::empty_signed() }]
         }
       },
       ProcessorMessage::Sign(msg) => match msg {

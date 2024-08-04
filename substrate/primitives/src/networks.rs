@@ -37,6 +37,9 @@ pub enum NetworkId {
 }
 impl NetworkId {
   /// The embedded elliptic curve actively used for this network.
+  ///
+  /// This is guaranteed to return `[]`, `[Embedwards25519]`, or
+  /// `[Embedwards25519, *network specific curve*]`.
   pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
     match self {
       // We don't use any embedded elliptic curves for Serai as we don't perform a DKG for Serai

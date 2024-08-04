@@ -29,7 +29,7 @@ async fn sync_test() {
   let mut keys = new_keys(&mut OsRng);
   let spec = new_spec(&mut OsRng, &keys);
   // Ensure this can have a node fail
-  assert!(spec.n(&[]) > spec.t());
+  assert!(spec.n() > spec.t());
 
   let mut tributaries = new_tributaries(&keys, &spec)
     .await
@@ -142,7 +142,7 @@ async fn sync_test() {
   // Because only `t` validators are used in a commit, take n - t nodes offline
   // leaving only `t` nodes. Which should force it to participate in the consensus
   // of next blocks.
-  let spares = usize::from(spec.n(&[]) - spec.t());
+  let spares = usize::from(spec.n() - spec.t());
   for thread in p2p_threads.iter().take(spares) {
     thread.abort();
   }
