@@ -19,7 +19,7 @@ pub struct SubstrateContext {
 pub mod key_gen {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+  #[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
     // TODO: Should this be moved under Substrate?
@@ -28,13 +28,31 @@ pub mod key_gen {
     Participation { session: Session, participant: Participant, participation: Vec<u8> },
   }
 
+  impl core::fmt::Debug for CoordinatorMessage {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+      match self {
+        CoordinatorMessage::GenerateKey { session, threshold, evrf_public_keys } => fmt
+          .debug_struct("CoordinatorMessage::GenerateKey")
+          .field("session", &session)
+          .field("threshold", &threshold)
+          .field("evrf_public_keys.len()", &evrf_public_keys.len())
+          .finish_non_exhaustive(),
+        CoordinatorMessage::Participation { session, participant, .. } => fmt
+          .debug_struct("CoordinatorMessage::Participation")
+          .field("session", &session)
+          .field("participant", &participant)
+          .finish_non_exhaustive(),
+      }
+    }
+  }
+
   impl CoordinatorMessage {
     pub fn required_block(&self) -> Option<BlockHash> {
       None
     }
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+  #[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     // Participated in the specified key generation protocol.
     Participation { session: Session, participation: Vec<u8> },
@@ -42,6 +60,26 @@ pub mod key_gen {
     GeneratedKeyPair { session: Session, substrate_key: [u8; 32], network_key: Vec<u8> },
     // Blame this participant.
     Blame { session: Session, participant: Participant },
+  }
+
+  impl core::fmt::Debug for ProcessorMessage {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+      match self {
+        ProcessorMessage::Participation { session, .. } => fmt
+          .debug_struct("ProcessorMessage::Participation")
+          .field("session", &session)
+          .finish_non_exhaustive(),
+        ProcessorMessage::GeneratedKeyPair { session, .. } => fmt
+          .debug_struct("ProcessorMessage::GeneratedKeyPair")
+          .field("session", &session)
+          .finish_non_exhaustive(),
+        ProcessorMessage::Blame { session, participant } => fmt
+          .debug_struct("ProcessorMessage::Blame")
+          .field("session", &session)
+          .field("participant", &participant)
+          .finish_non_exhaustive(),
+      }
+    }
   }
 }
 
