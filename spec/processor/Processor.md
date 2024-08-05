@@ -9,29 +9,22 @@ This document primarily discusses its flow with regards to the coordinator.
 ### Generate Key
 
 On `key_gen::CoordinatorMessage::GenerateKey`, the processor begins a pair of
-instances of the distributed key generation protocol specified in the FROST
-paper.
+instances of the distributed key generation protocol.
 
-The first instance is for a key to use on the external network. The second
-instance is for a Ristretto public key used to publish data to the Serai
-blockchain. This pair of FROST DKG instances is considered a single instance of
-Serai's overall key generation protocol.
+The first instance is for a Ristretto public key used to publish data to the
+Serai blockchain. The second instance is for a key to use on the external
+network. This pair of DKG instances is considered a single instance of Serai's
+overall DKG protocol.
 
-The commitments for both protocols are sent to the coordinator in a single
-`key_gen::ProcessorMessage::Commitments`.
+The participations in both protocols are sent to the coordinator in a single
+`key_gen::ProcessorMessage::Participation`.
 
-### Key Gen Commitments
+### Key Gen Participations
 
-On `key_gen::CoordinatorMessage::Commitments`, the processor continues the
-specified key generation instance. The secret shares for each fellow
-participant are sent to the coordinator in a
-`key_gen::ProcessorMessage::Shares`.
-
-#### Key Gen Shares
-
-On `key_gen::CoordinatorMessage::Shares`, the processor completes the specified
-key generation instance. The generated key pair is sent to the coordinator in a
-`key_gen::ProcessorMessage::GeneratedKeyPair`.
+On `key_gen::CoordinatorMessage::Participation`, the processor stores the
+contained participation, verifying participations as sane. Once it receives `t`
+honest participations, the processor completes the DKG and sends the generated
+key pair to the coordinator in a `key_gen::ProcessorMessage::GeneratedKeyPair`.
 
 ### Confirm Key Pair
 
