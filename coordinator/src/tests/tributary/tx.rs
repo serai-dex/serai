@@ -37,15 +37,14 @@ async fn tx_test() {
     usize::try_from(OsRng.next_u64() % u64::try_from(tributaries.len()).unwrap()).unwrap();
   let key = keys[sender].clone();
 
-  let attempt = 0;
-  let mut commitments = vec![0; 256];
-  OsRng.fill_bytes(&mut commitments);
-
-  // Create the TX with a null signature so we can get its sig hash
   let block_before_tx = tributaries[sender].1.tip().await;
-  let mut tx = Transaction::DkgCommitments {
-    attempt,
-    commitments: vec![commitments.clone()],
+  // Create the TX with a null signature so we can get its sig hash
+  let mut tx = Transaction::DkgParticipation {
+    participation: {
+      let mut participation = vec![0; 4096];
+      OsRng.fill_bytes(&mut participation);
+      participation
+    },
     signed: Transaction::empty_signed(),
   };
   tx.sign(&mut OsRng, spec.genesis(), &key);

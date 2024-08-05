@@ -6,7 +6,7 @@ use ciphersuite::{group::Group, Ciphersuite, Ristretto};
 
 use scale::{Encode, Decode};
 use serai_client::{
-  primitives::{SeraiAddress, Signature},
+  primitives::Signature,
   validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ValidatorSet, KeyPair},
 };
 use processor_messages::coordinator::SubstrateSignableId;
@@ -32,8 +32,8 @@ impl PublishSeraiTransaction for () {
     &self,
     _db: &(impl Sync + serai_db::Get),
     _set: ValidatorSet,
-    _removed: Vec<SeraiAddress>,
     _key_pair: KeyPair,
+    _signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     _signature: Signature,
   ) {
     panic!("publish_set_keys was called in test")
@@ -148,70 +148,20 @@ fn serialize_transaction() {
     signed: random_signed_with_nonce(&mut OsRng, 0),
   });
 
-  {
-    let mut commitments = vec![random_vec(&mut OsRng, 512)];
-    for _ in 0 .. (OsRng.next_u64() % 100) {
-      let mut temp = commitments[0].clone();
-      OsRng.fill_bytes(&mut temp);
-      commitments.push(temp);
-    }
-    test_read_write(&Transaction::DkgCommitments {
-      attempt: random_u32(&mut OsRng),
-      commitments,
-      signed: random_signed_with_nonce(&mut OsRng, 0),
-    });
-  }
+  test_read_write(&Transaction::DkgParticipation {
+    participation: random_vec(&mut OsRng, 4096),
+    signed: random_signed_with_nonce(&mut OsRng, 0),
+  });
 
-  {
-    // This supports a variable share length, and variable amount of sent shares, yet share length
-    // and sent shares is expected to be constant among recipients
-    let share_len = usize::try_from((OsRng.next_u64() % 512) + 1).unwrap();
-    let amount_of_shares = usize::try_from((OsRng.next_u64() % 3) + 1).unwrap();
-    // Create a valid vec of shares
-    let mut shares = vec![];
-    // Create up to 150 participants
-    for _ in 0 ..= (OsRng.next_u64() % 150) {
-      // Give each sender multiple shares
-      let mut sender_shares = vec![];
-      for _ in 0 .. amount_of_shares {
-        let mut share = vec![0; share_len];
-        OsRng.fill_bytes(&mut share);
-        sender_shares.push(share);
-      }
-      shares.push(sender_shares);
-    }
-
-    test_read_write(&Transaction::DkgShares {
-      attempt: random_u32(&mut OsRng),
-      shares,
-      confirmation_nonces: {
-        let mut nonces = [0; 64];
-        OsRng.fill_bytes(&mut nonces);
-        nonces
-      },
-      signed: random_signed_with_nonce(&mut OsRng, 1),
-    });
-  }
-
-  for i in 0 .. 2 {
-    test_read_write(&Transaction::InvalidDkgShare {
-      attempt: random_u32(&mut OsRng),
-      accuser: frost::Participant::new(
-        u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
-      )
-      .unwrap(),
-      faulty: frost::Participant::new(
-        u16::try_from(OsRng.next_u64() >> 48).unwrap().saturating_add(1),
-      )
-      .unwrap(),
-      blame: if i == 0 {
-        None
-      } else {
-        Some(random_vec(&mut OsRng, 500)).filter(|blame| !blame.is_empty())
-      },
-      signed: random_signed_with_nonce(&mut OsRng, 2),
-    });
-  }
+  test_read_write(&Transaction::DkgConfirmationNonces {
+    attempt: random_u32(&mut OsRng),
+    confirmation_nonces: {
+      let mut nonces = [0; 64];
+      OsRng.fill_bytes(&mut nonces);
+      nonces
+    },
+    signed: random_signed_with_nonce(&mut OsRng, 0),
+  });
 
   test_read_write(&Transaction::DkgConfirmationShare {
     attempt: random_u32(&mut OsRng),
@@ -220,7 +170,7 @@ fn serialize_transaction() {
       OsRng.fill_bytes(&mut share);
       share
     },
-    signed: random_signed_with_nonce(&mut OsRng, 2),
+    signed: random_signed_with_nonce(&mut OsRng, 1),
   });
 
   {

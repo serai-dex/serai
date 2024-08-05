@@ -55,7 +55,7 @@
 */
 
 use core::ops::Deref;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
@@ -243,6 +243,7 @@ fn threshold_i_map_to_keys_and_musig_i_map(
     .i(<Ristretto as Ciphersuite>::generator() * our_key.deref())
     .expect("not in a set we're signing for")
     .start;
+  // Asserts we weren't unexpectedly already present
   assert!(map.insert(our_threshold_i, vec![]).is_none());
 
   let spec_validators = spec.validators();
@@ -259,19 +260,27 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   let mut threshold_is = map.keys().copied().collect::<Vec<_>>();
   threshold_is.sort();
   for threshold_i in threshold_is {
-    sorted.push((key_from_threshold_i(threshold_i), map.remove(&threshold_i).unwrap()));
+    sorted.push((
+      threshold_i,
+      key_from_threshold_i(threshold_i),
+      map.remove(&threshold_i).unwrap(),
+    ));
   }
 
   // Now that signers are sorted, with their shares, create a map with the is needed for MuSig
   let mut participants = vec![];
   let mut map = HashMap::new();
-  for (raw_i, (key, share)) in sorted.into_iter().enumerate() {
-    let musig_i = u16::try_from(raw_i).unwrap() + 1;
+  let mut our_musig_i = None;
+  for (raw_i, (threshold_i, key, share)) in sorted.into_iter().enumerate() {
+    let musig_i = Participant::new(u16::try_from(raw_i).unwrap() + 1).unwrap();
+    if threshold_i == our_threshold_i {
+      our_musig_i = Some(musig_i);
+    }
     participants.push(key);
-    map.insert(Participant::new(musig_i).unwrap(), share);
+    map.insert(musig_i, share);
   }
 
-  map.remove(&our_threshold_i).unwrap();
+  map.remove(&our_musig_i.unwrap()).unwrap();
 
   (participants, map)
 }
@@ -301,7 +310,9 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
   }
 
   fn preprocess_internal(&mut self) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
+    // This preprocesses with just us as we only decide the participants after obtaining
+    // preprocesses
+    let participants = vec![<Ristretto as Ciphersuite>::generator() * self.key.deref()];
     self.signing_protocol().preprocess_internal(&participants)
   }
   // Get the preprocess for this confirmation.
@@ -314,8 +325,8 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     preprocesses: HashMap<Participant, Vec<u8>>,
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-    let preprocesses = threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses).1;
+    let (participants, preprocesses) =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses);
     let msg = set_keys_message(&self.spec.set(), key_pair);
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
@@ -334,6 +345,8 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
+    assert_eq!(preprocesses.keys().collect::<HashSet<_>>(), shares.keys().collect::<HashSet<_>>());
+
     let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares).1;
 
     let machine = self

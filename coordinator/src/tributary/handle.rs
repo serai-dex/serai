@@ -324,13 +324,13 @@ impl<
             );
 
             // Determine the bitstring representing who participated before we move `shares`
-            // This reserves too much capacity if the participating validators have multiple key
-            // shares, yet that's fine
             let validators = self.spec.validators();
             let mut signature_participants = bitvec::vec::BitVec::with_capacity(validators.len());
-            for (participant, _) in self.spec.validators() {
-              signature_participants
-                .push(shares.contains_key(&self.spec.i(participant).unwrap().start));
+            for (participant, _) in validators {
+              signature_participants.push(
+                (participant == (<Ristretto as Ciphersuite>::generator() * self.our_key.deref())) ||
+                  shares.contains_key(&self.spec.i(participant).unwrap().start),
+              );
             }
 
             // Produce the final signature

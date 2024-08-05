@@ -296,7 +296,7 @@ impl ReadWrite for Transaction {
         let mut confirmation_share = [0; 32];
         reader.read_exact(&mut confirmation_share)?;
 
-        let signed = Signed::read_without_nonce(reader, 0)?;
+        let signed = Signed::read_without_nonce(reader, 1)?;
 
         Ok(Transaction::DkgConfirmationShare { attempt, confirmation_share, signed })
       }
@@ -446,11 +446,9 @@ impl TransactionTrait for Transaction {
       Transaction::DkgParticipation { signed, .. } => {
         TransactionKind::Signed(b"dkg".to_vec(), signed)
       }
-      Transaction::DkgConfirmationNonces { attempt, signed, .. } => {
-        TransactionKind::Signed((b"dkg_confirmation_nonces", attempt).encode(), signed)
-      }
+      Transaction::DkgConfirmationNonces { attempt, signed, .. } |
       Transaction::DkgConfirmationShare { attempt, signed, .. } => {
-        TransactionKind::Signed((b"dkg_confirmation_share", attempt).encode(), signed)
+        TransactionKind::Signed((b"dkg_confirmation", attempt).encode(), signed)
       }
 
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
@@ -521,7 +519,10 @@ impl Transaction {
 
         Transaction::DkgParticipation { .. } => 0,
         // Uses a nonce of 0 as it has an internal attempt counter we distinguish by
-        Transaction::DkgConfirmationNonces { .. } | Transaction::DkgConfirmationShare { .. } => 0,
+        Transaction::DkgConfirmationNonces { .. } => 0,
+        // Uses a nonce of 1 due to internal attempt counter and due to following
+        // DkgConfirmationNonces
+        Transaction::DkgConfirmationShare { .. } => 1,
 
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
