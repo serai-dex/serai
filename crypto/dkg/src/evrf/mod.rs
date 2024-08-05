@@ -88,7 +88,7 @@ use multiexp::multiexp_vartime;
 use generalized_bulletproofs::arithmetic_circuit_proof::*;
 use ec_divisors::DivisorCurve;
 
-use crate::{Participant, ThresholdParams, ThresholdCore, ThresholdKeys};
+use crate::{Participant, ThresholdParams, Interpolation, ThresholdCore, ThresholdKeys};
 
 pub(crate) mod proof;
 use proof::*;
@@ -571,6 +571,7 @@ impl<C: EvrfCurve> EvrfDkg<C> {
 
       res.push(ThresholdKeys::from(ThresholdCore {
         params: ThresholdParams::new(self.t, self.n, i).unwrap(),
+        interpolation: Interpolation::Lagrange,
         secret_share,
         group_key: self.group_key,
         verification_shares: self.verification_shares.clone(),

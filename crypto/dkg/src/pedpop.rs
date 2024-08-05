@@ -22,7 +22,7 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 use schnorr::SchnorrSignature;
 
 use crate::{
-  Participant, DkgError, ThresholdParams, ThresholdCore, validate_map,
+  Participant, DkgError, ThresholdParams, Interpolation, ThresholdCore, validate_map,
   encryption::{
     ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, Decryption, EncryptionKeyProof,
     DecryptionError,
@@ -477,6 +477,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
       encryption: encryption.into_decryption(),
       result: Some(ThresholdCore {
         params,
+        interpolation: Interpolation::Lagrange,
         secret_share: secret,
         group_key: stripes[0],
         verification_shares,

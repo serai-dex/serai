@@ -657,7 +657,7 @@ impl Network for Monero {
     keys: ThresholdKeys<Self::Curve>,
     transaction: SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    match transaction.0.clone().multisig(&keys) {
+    match transaction.0.clone().multisig(keys) {
       Ok(machine) => Ok(machine),
       Err(e) => panic!("failed to create a multisig machine for TX: {e}"),
     }
