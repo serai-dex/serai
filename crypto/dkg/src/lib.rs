@@ -209,21 +209,16 @@ mod lib {
     }
   }
 
-  #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-  #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
-  pub(crate) enum Interpolation {
-    None,
+  #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+  pub(crate) enum Interpolation<F: Zeroize + PrimeField> {
+    Constant(Vec<F>),
     Lagrange,
   }
 
-  impl Interpolation {
-    pub(crate) fn interpolation_factor<F: PrimeField>(
-      self,
-      i: Participant,
-      included: &[Participant],
-    ) -> F {
+  impl<F: Zeroize + PrimeField> Interpolation<F> {
+    pub(crate) fn interpolation_factor(&self, i: Participant, included: &[Participant]) -> F {
       match self {
-        Interpolation::None => F::ONE,
+        Interpolation::Constant(c) => c[usize::from(u16::from(i) - 1)],
         Interpolation::Lagrange => {
           let i_f = F::from(u64::from(u16::from(i)));
 
@@ -254,7 +249,7 @@ mod lib {
     /// Threshold Parameters.
     pub(crate) params: ThresholdParams,
     /// The interpolation method used.
-    pub(crate) interpolation: Interpolation,
+    pub(crate) interpolation: Interpolation<C::F>,
 
     /// Secret share key.
     pub(crate) secret_share: Zeroizing<C::F>,
@@ -291,21 +286,14 @@ mod lib {
   impl<C: Ciphersuite> ThresholdCore<C> {
     pub(crate) fn new(
       params: ThresholdParams,
-      interpolation: Interpolation,
+      interpolation: Interpolation<C::F>,
       secret_share: Zeroizing<C::F>,
       verification_shares: HashMap<Participant, C::G>,
     ) -> ThresholdCore<C> {
       let t = (1 ..= params.t()).map(Participant).collect::<Vec<_>>();
-      ThresholdCore {
-        params,
-        interpolation,
-        secret_share,
-        group_key: t
-          .iter()
-          .map(|i| verification_shares[i] * interpolation.interpolation_factor::<C::F>(*i, &t))
-          .sum(),
-        verification_shares,
-      }
+      let group_key =
+        t.iter().map(|i| verification_shares[i] * interpolation.interpolation_factor(*i, &t)).sum();
+      ThresholdCore { params, interpolation, secret_share, group_key, verification_shares }
     }
 
     /// Parameters for these keys.
@@ -334,10 +322,15 @@ mod lib {
       writer.write_all(&self.params.t.to_le_bytes())?;
       writer.write_all(&self.params.n.to_le_bytes())?;
       writer.write_all(&self.params.i.to_bytes())?;
-      writer.write_all(match self.interpolation {
-        Interpolation::None => &[0],
-        Interpolation::Lagrange => &[1],
-      })?;
+      match &self.interpolation {
+        Interpolation::Constant(c) => {
+          writer.write_all(&[0])?;
+          for c in c {
+            writer.write_all(c.to_repr().as_ref())?;
+          }
+        }
+        Interpolation::Lagrange => writer.write_all(&[1])?,
+      };
       let mut share_bytes = self.secret_share.to_repr();
       writer.write_all(share_bytes.as_ref())?;
       share_bytes.as_mut().zeroize();
@@ -389,7 +382,13 @@ mod lib {
       let mut interpolation = [0];
       reader.read_exact(&mut interpolation)?;
       let interpolation = match interpolation[0] {
-        0 => Interpolation::None,
+        0 => Interpolation::Constant({
+          let mut res = Vec::with_capacity(usize::from(n));
+          for _ in 0 .. n {
+            res.push(C::read_F(reader)?);
+          }
+          res
+        }),
         1 => Interpolation::Lagrange,
         _ => Err(io::Error::other("invalid interpolation method"))?,
       };
@@ -426,7 +425,7 @@ mod lib {
   /// View of keys, interpolated and offset for usage.
   #[derive(Clone)]
   pub struct ThresholdView<C: Ciphersuite> {
-    interpolation: Interpolation,
+    interpolation: Interpolation<C::F>,
     offset: C::F,
     group_key: C::G,
     included: Vec<Participant>,
@@ -525,13 +524,13 @@ mod lib {
       included.sort();
 
       let mut secret_share = Zeroizing::new(
-        self.core.interpolation.interpolation_factor::<C::F>(self.params().i(), &included) *
+        self.core.interpolation.interpolation_factor(self.params().i(), &included) *
           self.secret_share().deref(),
       );
 
       let mut verification_shares = self.verification_shares();
       for (i, share) in &mut verification_shares {
-        *share *= self.core.interpolation.interpolation_factor::<C::F>(*i, &included);
+        *share *= self.core.interpolation.interpolation_factor(*i, &included);
       }
 
       // The offset is included by adding it to the participant with the lowest ID
@@ -542,7 +541,7 @@ mod lib {
       *verification_shares.get_mut(&included[0]).unwrap() += C::generator() * offset;
 
       Ok(ThresholdView {
-        interpolation: self.core.interpolation,
+        interpolation: self.core.interpolation.clone(),
         offset,
         group_key: self.group_key(),
         secret_share,

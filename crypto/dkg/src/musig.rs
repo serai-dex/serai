@@ -102,26 +102,26 @@ pub fn musig<C: Ciphersuite>(
     binding.push(binding_factor::<C>(transcript.clone(), i));
   }
 
-  // Multiply our private key by our binding factor
-  let mut secret_share = private_key.clone();
-  *secret_share *= binding[pos];
+  // Our secret share is our private key
+  let secret_share = private_key.clone();
 
   // Calculate verification shares
   let mut verification_shares = HashMap::new();
   let mut group_key = C::G::identity();
-  for (l, (key, binding)) in keys.iter().zip(binding).enumerate() {
-    let bound = *key * binding;
-    group_key += bound;
+  for l in 1 ..= keys_len {
+    let key = keys[usize::from(l) - 1];
+    group_key += key * binding[usize::from(l - 1)];
 
     // These errors also shouldn't be possible, for the same reasons as documented above
-    verification_shares.insert(
-      Participant::new(1 + u16::try_from(l).map_err(|_| DkgError::InvalidSigningSet)?)
-        .ok_or(DkgError::InvalidSigningSet)?,
-      bound,
-    );
+    verification_shares.insert(Participant::new(l).ok_or(DkgError::InvalidSigningSet)?, key);
   }
   debug_assert_eq!(C::generator() * secret_share.deref(), verification_shares[&params.i()]);
   debug_assert_eq!(musig_key::<C>(context, keys).unwrap(), group_key);
 
-  Ok(ThresholdCore::new(params, Interpolation::None, secret_share, verification_shares))
+  Ok(ThresholdCore::new(
+    params,
+    Interpolation::Constant(binding),
+    secret_share,
+    verification_shares,
+  ))
 }

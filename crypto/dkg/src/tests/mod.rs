@@ -47,8 +47,7 @@ pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>
 
   let group_private = keys.iter().fold(C::F::ZERO, |accum, (i, keys)| {
     accum +
-      (first.core.interpolation.interpolation_factor::<C::F>(*i, &included) *
-        keys.secret_share().deref())
+      (first.core.interpolation.interpolation_factor(*i, &included) * keys.secret_share().deref())
   });
   assert_eq!(C::generator() * group_private, first.group_key(), "failed to recover keys");
   group_private
