@@ -8605,7 +8605,6 @@ dependencies = [
  "bitvec",
  "frame-support",
  "frame-system",
- "hashbrown 0.14.5",
  "pallet-babe",
  "pallet-grandpa",
  "parity-scale-codec",
