@@ -122,6 +122,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
     serialized.extend(vectors.threshold.to_le_bytes());
     serialized.extend(u16::try_from(shares.len()).unwrap().to_le_bytes());
     serialized.extend(i.to_le_bytes());
+    serialized.push(1);
     serialized.extend(shares[usize::from(i) - 1].to_repr().as_ref());
     for share in &verification_shares {
       serialized.extend(share.to_bytes().as_ref());
