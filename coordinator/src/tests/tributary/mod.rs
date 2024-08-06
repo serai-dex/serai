@@ -84,23 +84,25 @@ fn tx_size_limit() {
   use tributary::TRANSACTION_SIZE_LIMIT;
 
   let max_dkg_coefficients = (MAX_KEY_SHARES_PER_SET * 2).div_ceil(3) + 1;
-  let max_key_shares_per_individual = MAX_KEY_SHARES_PER_SET - max_dkg_coefficients;
-  // Handwave the DKG Commitments size as the size of the commitments to the coefficients and
-  // 1024 bytes for all overhead
-  let handwaved_dkg_commitments_size = (max_dkg_coefficients * MAX_KEY_LEN) + 1024;
-  assert!(
-    u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() >=
-      (handwaved_dkg_commitments_size * max_key_shares_per_individual)
-  );
+  // n coefficients
+  // 2 ECDH values per recipient, and the encrypted share
+  let elements_outside_of_proof = max_dkg_coefficients + ((2 + 1) * MAX_KEY_SHARES_PER_SET);
+  // Then Pedersen Vector Commitments for each DH done, and the associated overhead in the proof
+  // It's handwaved as one commitment per DH, where we do 2 per coefficient and 1 for the explicit
+  //  ECDHs
+  let vector_commitments = (2 * max_dkg_coefficients) + (2 * MAX_KEY_SHARES_PER_SET);
+  // Then we have commitments to the `t` polynomial of length 2 + 2 nc, where nc is the amount of
+  // commitments
+  let t_commitments = 2 + (2 * vector_commitments);
+  // The remainder of the proof should be ~30 elements
+  let proof_elements = 30;
 
-  // Encryption key, PoP (2 elements), message
-  let elements_per_share = 4;
-  let handwaved_dkg_shares_size =
-    (elements_per_share * MAX_KEY_LEN * MAX_KEY_SHARES_PER_SET) + 1024;
-  assert!(
-    u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() >=
-      (handwaved_dkg_shares_size * max_key_shares_per_individual)
-  );
+  let handwaved_dkg_size =
+    ((elements_outside_of_proof + vector_commitments + t_commitments + proof_elements) *
+      MAX_KEY_LEN) +
+      1024;
+  // Further scale by two in case of any errors in the above
+  assert!(u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() >= (2 * handwaved_dkg_size));
 }
 
 #[test]
