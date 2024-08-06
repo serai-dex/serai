@@ -16,8 +16,9 @@ Serai blockchain. The second instance is for a key to use on the external
 network. This pair of DKG instances is considered a single instance of Serai's
 overall DKG protocol.
 
-The participations in both protocols are sent to the coordinator in a single
-`key_gen::ProcessorMessage::Participation`.
+The participations in both protocols are sent to the coordinator in
+`key_gen::ProcessorMessage::Participation` messages, individually, as they come
+in.
 
 ### Key Gen Participations
 
