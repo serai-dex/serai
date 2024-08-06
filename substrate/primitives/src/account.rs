@@ -90,16 +90,17 @@ impl std::fmt::Display for SeraiAddress {
   }
 }
 
+/// Create a Substraate key pair by a name.
+///
+/// This should never be considered to have a secure private key. It has effectively no entropy.
 #[cfg(feature = "std")]
 pub fn insecure_pair_from_name(name: &str) -> Pair {
   Pair::from_string(&format!("//{name}"), None).unwrap()
 }
 
-/// Create a private key for an arbitrary curve by a name.
+/// Create a private key for an arbitrary ciphersuite by a name.
 ///
-/// This key is not in any regards to be treated as an actual private key, as it is not private,
-/// nor is it even collision-resistant (crafted names may collide). It's solely for testing
-/// purposes.
+/// This key should never be considered a secure private key. It has effectively no entropy.
 #[cfg(feature = "std")]
 pub fn insecure_arbitrary_key_from_name<C: ciphersuite::Ciphersuite>(name: &str) -> C::F {
   C::hash_to_F(b"insecure arbitrary key", name.as_bytes())
