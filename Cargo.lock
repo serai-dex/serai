@@ -8406,11 +8406,13 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite",
+ "embedwards25519",
  "flexible-transcript",
  "hex",
  "home",
  "rand_chacha",
  "rand_core",
+ "secq256k1",
  "zalloc",
  "zeroize",
 ]

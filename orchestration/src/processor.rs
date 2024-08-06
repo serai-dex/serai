@@ -12,8 +12,9 @@ pub fn processor(
   network: Network,
   coin: &'static str,
   _coordinator_key: <Ristretto as Ciphersuite>::G,
-  coin_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  entropy: Zeroizing<[u8; 32]>,
+  processor_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  substrate_evrf_key: Zeroizing<Vec<u8>>,
+  network_evrf_key: Zeroizing<Vec<u8>>,
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
@@ -53,8 +54,9 @@ RUN apt install -y ca-certificates
 
   let mut env_vars = vec![
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
-    ("MESSAGE_QUEUE_KEY", hex::encode(coin_key.to_repr())),
-    ("ENTROPY", hex::encode(entropy.as_ref())),
+    ("MESSAGE_QUEUE_KEY", hex::encode(processor_key.to_repr())),
+    ("SUBSTRATE_EVRF_KEY", hex::encode(substrate_evrf_key)),
+    ("NETWORK_EVRF_KEY", hex::encode(network_evrf_key)),
     ("NETWORK", coin.to_string()),
     ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
     ("NETWORK_RPC_HOSTNAME", hostname),
