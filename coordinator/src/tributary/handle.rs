@@ -359,10 +359,7 @@ impl<
               )
               .await;
           }
-          Accumulation::Ready(DataSet::NotParticipating) => {
-            panic!("wasn't a participant in DKG confirmination shares")
-          }
-          Accumulation::NotReady => {}
+          Accumulation::Ready(DataSet::NotParticipating) | Accumulation::NotReady => {}
         }
       }
 
