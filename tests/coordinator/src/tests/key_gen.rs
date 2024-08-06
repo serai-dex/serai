@@ -30,7 +30,8 @@ pub async fn key_gen<C: Ciphersuite>(
   // This is distinct from the result of evrf_public_keys for each processor, as there'll have some
   // ordering algorithm on-chain which won't match our ordering
   let mut evrf_public_keys_as_on_chain = None;
-  for (i, processor) in processors.iter_mut().enumerate() {
+  for processor in processors.iter_mut() {
+    // Receive GenerateKey
     let msg = processor.recv_message().await;
     match &msg {
       CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::GenerateKey {
@@ -59,30 +60,33 @@ pub async fn key_gen<C: Ciphersuite>(
         evrf_public_keys: evrf_public_keys_as_on_chain.clone().unwrap(),
       })
     );
+  }
 
-    processor
+  for i in 0 .. coordinators {
+    // Send Participation
+    processors[i]
       .send_message(messages::key_gen::ProcessorMessage::Participation {
         session,
         participation: vec![u8::try_from(u16::from(participant_is[i])).unwrap()],
       })
       .await;
 
-    // Sleep so this participation gets included, before moving to the next participation
-    wait_for_tributary().await;
-    wait_for_tributary().await;
-  }
+    // Sleep so this participation gets included
+    for _ in 0 .. 2 {
+      wait_for_tributary().await;
+    }
 
-  wait_for_tributary().await;
-  for processor in processors.iter_mut() {
-    #[allow(clippy::needless_range_loop)] // This wouldn't improve readability/clarity
-    for i in 0 .. coordinators {
+    // Have every other processor recv this message too
+    for processor in processors.iter_mut() {
       assert_eq!(
         processor.recv_message().await,
-        CoordinatorMessage::KeyGen(messages::key_gen::CoordinatorMessage::Participation {
-          session,
-          participant: participant_is[i],
-          participation: vec![u8::try_from(u16::from(participant_is[i])).unwrap()],
-        })
+        messages::CoordinatorMessage::KeyGen(
+          messages::key_gen::CoordinatorMessage::Participation {
+            session,
+            participant: participant_is[i],
+            participation: vec![u8::try_from(u16::from(participant_is[i])).unwrap()],
+          }
+        )
       );
     }
   }
