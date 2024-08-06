@@ -19,8 +19,11 @@ fn new_test(network: NetworkId) -> (Vec<(Handles, ProcessorKeys)>, DockerTest) {
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let mut eth_handle = None;
-  for _ in 0 .. COORDINATORS {
-    let (handles, keys, compositions) = processor_stack(network, eth_handle.clone());
+  for i in 0 .. COORDINATORS {
+    // Uses the counter `i` as this has no relation to any other system, and while Substrate has
+    // hard-coded names for itself, these tests down't spawn any Substrate node
+    let (handles, keys, compositions) =
+      processor_stack(&i.to_string(), network, eth_handle.clone());
     // TODO: Remove this once https://github.com/foundry-rs/foundry/issues/7955
     // This has all processors share an Ethereum node until we can sync controlled nodes
     if network == NetworkId::Ethereum {

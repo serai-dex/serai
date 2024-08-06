@@ -161,6 +161,7 @@ fn polynomial<F: PrimeField + Zeroize>(
   share
 }
 
+#[allow(clippy::type_complexity)]
 fn share_verification_statements<C: Ciphersuite>(
   rng: &mut (impl RngCore + CryptoRng),
   commitments: &[C::G],
@@ -234,6 +235,7 @@ pub struct EvrfDkg<C: EvrfCurve> {
   evrf_public_keys: Vec<<C::EmbeddedCurve as Ciphersuite>::G>,
   group_key: C::G,
   verification_shares: HashMap<Participant, C::G>,
+  #[allow(clippy::type_complexity)]
   encrypted_secret_shares:
     HashMap<Participant, HashMap<Participant, ([<C::EmbeddedCurve as Ciphersuite>::G; 2], C::F)>>,
 }

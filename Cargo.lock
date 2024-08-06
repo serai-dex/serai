@@ -8140,10 +8140,12 @@ dependencies = [
  "ciphersuite",
  "dkg",
  "dockertest",
+ "embedwards25519",
  "hex",
  "parity-scale-codec",
  "rand_core",
  "schnorrkel",
+ "secq256k1",
  "serai-client",
  "serai-docker-tests",
  "serai-message-queue",
@@ -8418,6 +8420,7 @@ name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ciphersuite",
  "frame-support",
  "parity-scale-codec",
  "rand_core",

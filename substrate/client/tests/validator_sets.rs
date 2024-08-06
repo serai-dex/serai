@@ -6,7 +6,7 @@ use sp_core::{
 };
 
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, BlockHash, insecure_pair_from_name},
+  primitives::{NETWORKS, EmbeddedEllipticCurve, NetworkId, BlockHash, insecure_pair_from_name},
   validator_sets::{
     primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
@@ -21,7 +21,7 @@ use serai_client::{
 mod common;
 use common::{
   tx::publish_tx,
-  validator_sets::{allocate_stake, deallocate_stake, set_keys},
+  validator_sets::{set_embedded_elliptic_curve_key, allocate_stake, deallocate_stake, set_keys},
 };
 
 fn get_random_key_pair() -> KeyPair {
@@ -231,9 +231,9 @@ async fn validator_set_rotation() {
           {
             set_embedded_elliptic_curve_key(
               &serai,
+              &last_participant,
               embedded_elliptic_curve,
               vec![0; 32].try_into().unwrap(),
-              &last_participant,
               i.try_into().unwrap(),
             )
             .await;

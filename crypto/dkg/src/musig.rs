@@ -65,6 +65,7 @@ pub fn musig_key<C: Ciphersuite>(context: &[u8], keys: &[C::G]) -> Result<C::G, 
   let transcript = binding_factor_transcript::<C>(context, keys)?;
   let mut res = C::G::identity();
   for i in 1 ..= keys_len {
+    // TODO: Calculate this with a multiexp
     res += keys[usize::from(i - 1)] * binding_factor::<C>(transcript.clone(), i);
   }
   Ok(res)

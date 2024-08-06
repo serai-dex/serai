@@ -4,10 +4,7 @@ use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
-use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
-};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -23,13 +20,9 @@ fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
 }
 
-// Panics on names which are too long, or ciphersuites with weirdly encoded scalars
-fn insecure_ciphersuite_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
-  let mut repr = <C::F as PrimeField>::Repr::default();
-  let repr_len = repr.as_ref().len();
-  let start = (repr_len / 2) - (name.len() / 2);
-  repr.as_mut()[start .. (start + name.len())].copy_from_slice(name.as_bytes());
-  (C::generator() * C::F::from_repr(repr).unwrap()).to_bytes().as_ref().to_vec()
+fn insecure_arbitrary_public_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
+  let key = insecure_arbitrary_key_from_name::<C>(name);
+  (C::generator() * key).to_bytes().as_ref().to_vec()
 }
 
 fn wasm_binary() -> Vec<u8> {
@@ -54,10 +47,10 @@ fn devnet_genesis(
       (
         account_from_name(name),
         AllEmbeddedEllipticCurveKeysAtGenesis {
-          embedwards25519: insecure_ciphersuite_key_from_name::<Embedwards25519>(name)
+          embedwards25519: insecure_arbitrary_public_key_from_name::<Embedwards25519>(name)
             .try_into()
             .unwrap(),
-          secq256k1: insecure_ciphersuite_key_from_name::<Secq256k1>(name).try_into().unwrap(),
+          secq256k1: insecure_arbitrary_public_key_from_name::<Secq256k1>(name).try_into().unwrap(),
         },
       )
     })

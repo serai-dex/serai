@@ -1002,7 +1002,7 @@ pub mod pallet {
         EmbeddedEllipticCurve::Secq256k1 => 33,
       };
       if key.len() != expected_len {
-        Err(Error::InvalidEmbeddedEllipticCurveKey)?;
+        Err(Error::<T>::InvalidEmbeddedEllipticCurveKey)?;
       }
 
       // This does allow overwriting an existing key which... is unlikely to be done?

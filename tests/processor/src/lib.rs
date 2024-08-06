@@ -3,18 +3,14 @@
 use std::sync::{OnceLock, Mutex};
 
 use zeroize::Zeroizing;
-use rand_core::OsRng;
 
 use ciphersuite::{
-  group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
-  },
+  group::{ff::PrimeField, GroupEncoding},
   Ciphersuite, Secp256k1, Ed25519, Ristretto,
 };
 use dkg::evrf::*;
 
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::{NetworkId, insecure_arbitrary_key_from_name};
 use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
@@ -39,12 +35,13 @@ pub struct EvrfPublicKeys {
 }
 
 pub fn processor_instance(
+  name: &str,
   network: NetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
 ) -> (Vec<TestBodySpecification>, EvrfPublicKeys) {
   let substrate_evrf_key =
-    <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng);
+    insecure_arbitrary_key_from_name::<<Ristretto as EvrfCurve>::EmbeddedCurve>(name);
   let substrate_evrf_pub_key =
     (<Ristretto as EvrfCurve>::EmbeddedCurve::generator() * substrate_evrf_key).to_bytes();
   let substrate_evrf_key = substrate_evrf_key.to_repr();
@@ -53,13 +50,14 @@ pub fn processor_instance(
     NetworkId::Serai => panic!("starting a processor for Serai"),
     NetworkId::Bitcoin | NetworkId::Ethereum => {
       let evrf_key =
-        <<Secp256k1 as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng);
+        insecure_arbitrary_key_from_name::<<Secp256k1 as EvrfCurve>::EmbeddedCurve>(name);
       let pub_key =
         (<Secp256k1 as EvrfCurve>::EmbeddedCurve::generator() * evrf_key).to_bytes().to_vec();
       (evrf_key.to_repr(), pub_key)
     }
     NetworkId::Monero => {
-      let evrf_key = <<Ed25519 as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng);
+      let evrf_key =
+        insecure_arbitrary_key_from_name::<<Ed25519 as EvrfCurve>::EmbeddedCurve>(name);
       let pub_key =
         (<Ed25519 as EvrfCurve>::EmbeddedCurve::generator() * evrf_key).to_bytes().to_vec();
       (evrf_key.to_repr(), pub_key)
@@ -120,6 +118,7 @@ pub struct ProcessorKeys {
 
 pub type Handles = (String, String, String, String);
 pub fn processor_stack(
+  name: &str,
   network: NetworkId,
   network_hostname_override: Option<String>,
 ) -> (Handles, ProcessorKeys, Vec<TestBodySpecification>) {
@@ -129,7 +128,7 @@ pub fn processor_stack(
     serai_message_queue_tests::instance();
 
   let (mut processor_compositions, evrf_keys) =
-    processor_instance(network, network_rpc_port, message_queue_keys[&network]);
+    processor_instance(name, network, network_rpc_port, message_queue_keys[&network]);
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits

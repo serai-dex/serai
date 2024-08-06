@@ -5,6 +5,8 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use sp_core::{
+  ConstU32,
+  bounded_vec::BoundedVec,
   sr25519::{Pair, Signature},
   Pair as PairTrait,
 };
@@ -14,8 +16,9 @@ use frost::dkg::musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
+  primitives::EmbeddedEllipticCurve,
   validator_sets::{
-    primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
+    primitives::{MAX_KEY_LEN, ValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
   },
   Amount, Serai, SeraiValidatorSets,
@@ -58,7 +61,7 @@ pub async fn set_keys(
   let sig = frost::tests::sign_without_caching(
     &mut OsRng,
     frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
-    &set_keys_message(&set, &[], &key_pair),
+    &set_keys_message(&set, &key_pair),
   );
 
   // Set the key pair
@@ -66,8 +69,8 @@ pub async fn set_keys(
     serai,
     &SeraiValidatorSets::set_keys(
       set.network,
-      vec![].try_into().unwrap(),
       key_pair.clone(),
+      vec![1; musig_keys.len()].try_into().unwrap(),
       Signature(sig.to_bytes()),
     ),
   )
