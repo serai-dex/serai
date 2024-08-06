@@ -1016,12 +1016,9 @@ pub mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      // If this network utilizes an embedded elliptic curve, require the validator to have set the
-      // appropriate key
+      // If this network utilizes embedded elliptic curve(s), require the validator to have set the
+      // appropriate key(s)
       for embedded_elliptic_curve in network.embedded_elliptic_curves() {
-        // Require an Embedwards25519 embedded curve key and a key for the curve for this network
-        // The Embedwards25519 embedded curve key is required for the DKG for the Substrate key
-        // used to oraclize events with
         if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, *embedded_elliptic_curve) {
           Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
         }
