@@ -69,6 +69,7 @@ pub async fn key_gen<C: Ciphersuite>(
 
     // Sleep so this participation gets included, before moving to the next participation
     wait_for_tributary().await;
+    wait_for_tributary().await;
   }
 
   wait_for_tributary().await;
