@@ -708,9 +708,15 @@ impl<N: Network + 'static> TendermintMachine<N> {
     if let Data::Proposal(_, block) = &msg.data {
       match self.network.validate(block).await {
         Ok(()) => {}
-        Err(BlockError::Temporal) => return Err(TendermintError::Temporal),
+        Err(BlockError::Temporal) => {
+          // TODO: should we do these after we add the msg to the block log?
+          // Since this will change the step to prevote without having a proposal at hand.
+          self.broadcast(Data::Prevote(None));
+          Err(TendermintError::Temporal)?;
+        }
         Err(BlockError::Fatal) => {
           log::warn!(target: "tendermint", "validator proposed a fatally invalid block");
+          self.broadcast(Data::Prevote(None));
           self
             .slash(
               msg.sender,
@@ -729,6 +735,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           target: "tendermint",
           "proposed proposed with a syntactically invalid valid round",
         );
+        self.broadcast(Data::Prevote(None));
         self
           .slash(msg.sender, SlashEvent::WithEvidence(Evidence::InvalidValidRound(msg.encode())))
           .await;
