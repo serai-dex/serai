@@ -709,8 +709,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
       match self.network.validate(block).await {
         Ok(()) => {}
         Err(BlockError::Temporal) => {
-          // TODO: should we do these after we add the msg to the block log?
-          // Since this will change the step to prevote without having a proposal at hand.
           self.broadcast(Data::Prevote(None));
           Err(TendermintError::Temporal)?;
         }
