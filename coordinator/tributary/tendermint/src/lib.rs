@@ -709,12 +709,16 @@ impl<N: Network + 'static> TendermintMachine<N> {
       match self.network.validate(block).await {
         Ok(()) => {}
         Err(BlockError::Temporal) => {
-          self.broadcast(Data::Prevote(None));
+          if self.block.round().step == Step::Propose {
+            self.broadcast(Data::Prevote(None));
+          }
           Err(TendermintError::Temporal)?;
         }
         Err(BlockError::Fatal) => {
           log::warn!(target: "tendermint", "validator proposed a fatally invalid block");
-          self.broadcast(Data::Prevote(None));
+          if self.block.round().step == Step::Propose {
+            self.broadcast(Data::Prevote(None));
+          }
           self
             .slash(
               msg.sender,
@@ -733,7 +737,9 @@ impl<N: Network + 'static> TendermintMachine<N> {
           target: "tendermint",
           "proposed proposed with a syntactically invalid valid round",
         );
-        self.broadcast(Data::Prevote(None));
+        if self.block.round().step == Step::Propose {
+          self.broadcast(Data::Prevote(None));
+        }
         self
           .slash(msg.sender, SlashEvent::WithEvidence(Evidence::InvalidValidRound(msg.encode())))
           .await;
