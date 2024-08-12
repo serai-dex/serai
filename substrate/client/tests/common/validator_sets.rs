@@ -70,7 +70,7 @@ pub async fn set_keys(
     &SeraiValidatorSets::set_keys(
       set.network,
       key_pair.clone(),
-      vec![1; musig_keys.len()].try_into().unwrap(),
+      bitvec::bitvec!(u8, bitvec::prelude::Lsb0; 1; musig_keys.len()),
       Signature(sig.to_bytes()),
     ),
   )
