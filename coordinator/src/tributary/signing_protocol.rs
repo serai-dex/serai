@@ -74,7 +74,8 @@ use frost_schnorrkel::Schnorrkel;
 
 use scale::Encode;
 
-use serai_client::validator_sets::primitives::{KeyPair, musig_context, set_keys_message};
+#[rustfmt::skip]
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message};
 
 use serai_db::*;
 
@@ -285,7 +286,8 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   (participants, map)
 }
 
-type DkgConfirmerSigningProtocol<'a, T> = SigningProtocol<'a, T, (&'static [u8; 12], u32)>;
+type DkgConfirmerSigningProtocol<'a, T> =
+  SigningProtocol<'a, T, (&'static [u8; 12], ValidatorSet, u32)>;
 
 pub(crate) struct DkgConfirmer<'a, T: DbTxn> {
   key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -305,7 +307,7 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
   }
 
   fn signing_protocol(&mut self) -> DkgConfirmerSigningProtocol<'_, T> {
-    let context = (b"DkgConfirmer", self.attempt);
+    let context = (b"DkgConfirmer", self.spec.set(), self.attempt);
     SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
   }
 
