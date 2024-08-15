@@ -1,0 +1,23 @@
+[package]
+name = "serai-emissions-primitives"
+version = "0.1.0"
+description = "Serai emissions primitives"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/emissions/primitives"
+authors = ["Akil Demir <aeg_asd@hotmail.com>"]
+edition = "2021"
+rust-version = "1.77"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serai-primitives = { path = "../../primitives", default-features = false }
+
+[features]
+std = ["serai-primitives/std"]
+default = ["std"]

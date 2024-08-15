@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
+#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
@@ -15,7 +15,7 @@ pub mod pallet {
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
   use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
 
-  use serai_primitives::{Coin, COINS, *};
+  use serai_primitives::*;
   use validator_sets_primitives::{ValidatorSet, musig_key};
   pub use genesis_liquidity_primitives as primitives;
   use primitives::*;
@@ -72,6 +72,7 @@ pub mod pallet {
   pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
+  #[pallet::getter(fn genesis_complete)]
   pub(crate) type GenesisComplete<T: Config> = StorageValue<_, (), OptionQuery>;
 
   #[pallet::hooks]

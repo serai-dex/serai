@@ -198,17 +198,6 @@ impl Serai {
     Ok(())
   }
 
-  // TODO: move this into substrate/client/src/validator_sets.rs
-  async fn active_network_validators(&self, network: NetworkId) -> Result<Vec<Public>, SeraiError> {
-    let validators: String = self
-      .call("state_call", ["SeraiRuntimeApi_validators".to_string(), hex::encode(network.encode())])
-      .await?;
-    let bytes = Self::hex_decode(validators)?;
-    let r = Vec::<Public>::decode(&mut bytes.as_slice())
-      .map_err(|e| SeraiError::ErrorInResponse(e.to_string()))?;
-    Ok(r)
-  }
-
   pub async fn latest_finalized_block_hash(&self) -> Result<[u8; 32], SeraiError> {
     let hash: String = self.call("chain_getFinalizedHead", ()).await?;
     Self::hex_decode(hash)?.try_into().map_err(|_| {
@@ -376,6 +365,28 @@ impl<'a> TemporalSerai<'a> {
         hex::encode(res)
       ))
     })?))
+  }
+
+  async fn runtime_api<P: Encode, R: Decode>(
+    &self,
+    method: &'static str,
+    params: P,
+  ) -> Result<R, SeraiError> {
+    let result: String = self
+      .serai
+      .call(
+        "state_call",
+        [method.to_string(), hex::encode(params.encode()), hex::encode(self.block)],
+      )
+      .await?;
+
+    let bytes = Serai::hex_decode(result.clone())?;
+    R::decode(&mut bytes.as_slice()).map_err(|_| {
+      SeraiError::InvalidRuntime(format!(
+        "different type than what is expected to be returned, raw value: {}",
+        hex::encode(result)
+      ))
+    })
   }
 
   pub fn coins(&'a self) -> SeraiCoins<'a> {

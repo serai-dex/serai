@@ -6,7 +6,9 @@ use sp_core::{
 };
 
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, BlockHash, insecure_pair_from_name},
+  primitives::{
+    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION, TARGET_BLOCK_TIME,
+  },
   validator_sets::{
     primitives::{Session, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
@@ -326,22 +328,25 @@ async fn verify_session_and_active_validators(
   session: u32,
   participants: &[Public],
 ) {
-  // wait until the active session. This wait should be max 30 secs since the epoch time.
-  let block = tokio::time::timeout(core::time::Duration::from_secs(2 * 60), async move {
-    loop {
-      let mut block = serai.latest_finalized_block_hash().await.unwrap();
-      if session_for_block(serai, block, network).await < session {
-        // Sleep a block
-        tokio::time::sleep(core::time::Duration::from_secs(6)).await;
-        continue;
+  // wait until the active session.
+  let block = tokio::time::timeout(
+    core::time::Duration::from_secs(FAST_EPOCH_DURATION * TARGET_BLOCK_TIME * 2),
+    async move {
+      loop {
+        let mut block = serai.latest_finalized_block_hash().await.unwrap();
+        if session_for_block(serai, block, network).await < session {
+          // Sleep a block
+          tokio::time::sleep(core::time::Duration::from_secs(TARGET_BLOCK_TIME)).await;
+          continue;
+        }
+        while session_for_block(serai, block, network).await > session {
+          block = serai.block(block).await.unwrap().unwrap().header.parent_hash.0;
+        }
+        assert_eq!(session_for_block(serai, block, network).await, session);
+        break block;
       }
-      while session_for_block(serai, block, network).await > session {
-        block = serai.block(block).await.unwrap().unwrap().header.parent_hash.0;
-      }
-      assert_eq!(session_for_block(serai, block, network).await, session);
-      break block;
-    }
-  })
+    },
+  )
   .await
   .unwrap();
   let serai_for_block = serai.as_of(block);
@@ -358,10 +363,10 @@ async fn verify_session_and_active_validators(
 
   // make sure finalization continues as usual after the changes
   let current_finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
-  tokio::time::timeout(core::time::Duration::from_secs(60), async move {
+  tokio::time::timeout(core::time::Duration::from_secs(TARGET_BLOCK_TIME * 10), async move {
     let mut finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     while finalized_block <= current_finalized_block + 2 {
-      tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+      tokio::time::sleep(core::time::Duration::from_secs(TARGET_BLOCK_TIME)).await;
       finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     }
   })

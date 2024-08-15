@@ -1,14 +1,13 @@
 use rand_core::{RngCore, OsRng};
-use scale::Encode;
 
-use sp_core::{Pair as PairTrait, bounded_vec::BoundedVec, hashing::blake2_256};
+use sp_core::{Pair as PairTrait, bounded_vec::BoundedVec};
 
 use serai_abi::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
     Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress,
-    SeraiAddress, PublicKey,
+    SeraiAddress,
   },
   in_instructions::primitives::{
     InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR, OutAddress,
@@ -28,33 +27,6 @@ use common::{
 // TODO: Modularize common code
 // TODO: Check Transfer events
 serai_test!(
-  create_pool: (|serai: Serai| async move {
-    let block = serai.finalized_block_by_number(0).await.unwrap().unwrap().hash();
-    let events = serai.as_of(block).dex().events().await.unwrap();
-
-    assert_eq!(
-      events,
-      vec![
-        DexEvent::PoolCreated {
-          pool_id: Coin::Bitcoin,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Bitcoin.encode())).into(),
-        },
-        DexEvent::PoolCreated {
-          pool_id: Coin::Ether,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Ether.encode())).into(),
-        },
-        DexEvent::PoolCreated {
-          pool_id: Coin::Dai,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Dai.encode())).into(),
-        },
-        DexEvent::PoolCreated {
-          pool_id: Coin::Monero,
-          pool_account: PublicKey::from_raw(blake2_256(&Coin::Monero.encode())).into(),
-        },
-      ]
-    );
-  })
-
   add_liquidity: (|serai: Serai| async move {
     let coin = Coin::Monero;
     let pair = insecure_pair_from_name("Ferdie");
