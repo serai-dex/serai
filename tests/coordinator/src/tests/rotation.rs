@@ -153,7 +153,7 @@ async fn set_rotation_test() {
 
       // excluded participant
       let pair5 = insecure_pair_from_name("Eve");
-      let network = NetworkId::Bitcoin;
+      let network = excluded.network();
       let amount = Amount(1_000_000 * 10_u64.pow(8));
       let serai = processors[0].serai().await;
 
@@ -162,15 +162,15 @@ async fn set_rotation_test() {
       set_embedded_elliptic_curve_key(
         &serai,
         EmbeddedEllipticCurve::Embedwards25519,
-        vec![0; 32],
+        excluded.evrf_public_keys().0.to_vec(),
         &pair5,
         0,
       )
       .await;
       set_embedded_elliptic_curve_key(
         &serai,
-        EmbeddedEllipticCurve::Secq256k1,
-        vec![0; 33],
+        *excluded.network().embedded_elliptic_curves().last().unwrap(),
+        excluded.evrf_public_keys().1.clone(),
         &pair5,
         1,
       )

@@ -174,6 +174,9 @@ impl Processor {
 
     use serai_client::primitives::insecure_arbitrary_key_from_name;
     let substrate_key = Arc::new(AsyncMutex::new(None));
+    let embedwards25519_evrf_key = (Embedwards25519::generator() *
+      insecure_arbitrary_key_from_name::<Embedwards25519>(name))
+    .to_bytes();
     let mut res = Processor {
       network,
 
@@ -189,8 +192,7 @@ impl Processor {
       abort_handle: None,
 
       evrf_public_keys: (
-        (Embedwards25519::generator() * insecure_arbitrary_key_from_name::<Embedwards25519>(name))
-          .to_bytes(),
+        embedwards25519_evrf_key,
         match network {
           NetworkId::Serai => panic!("mock processor for the serai network"),
           NetworkId::Bitcoin | NetworkId::Ethereum => {
@@ -200,13 +202,7 @@ impl Processor {
             let key: &[u8] = key.as_ref();
             key.to_vec()
           }
-          NetworkId::Monero => {
-            let key = (Embedwards25519::generator() *
-              insecure_arbitrary_key_from_name::<Embedwards25519>(name))
-            .to_bytes();
-            let key: &[u8] = key.as_ref();
-            key.to_vec()
-          }
+          NetworkId::Monero => embedwards25519_evrf_key.to_vec(),
         },
       ),
 
@@ -353,6 +349,10 @@ impl Processor {
     res.abort_handle = Some(Arc::new(abort_handle));
 
     res
+  }
+
+  pub fn network(&self) -> NetworkId {
+    self.network
   }
 
   pub fn evrf_public_keys(&self) -> ([u8; 32], Vec<u8>) {
