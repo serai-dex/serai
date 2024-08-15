@@ -54,18 +54,18 @@ async fn test_emissions(serai: Serai) {
   let (_, mut batch_ids) = set_up_genesis(&serai, &coins, &values).await;
 
   // wait until genesis is complete
-  while !serai
-    .as_of_latest_finalized_block()
-    .await
-    .unwrap()
-    .genesis_liquidity()
-    .genesis_complete()
-    .await
-    .unwrap()
-  {
+  let mut genesis_complete_block = None;
+  while genesis_complete_block.is_none() {
     tokio::time::sleep(Duration::from_secs(1)).await;
+    genesis_complete_block = serai
+      .as_of_latest_finalized_block()
+      .await
+      .unwrap()
+      .genesis_liquidity()
+      .genesis_complete_block()
+      .await
+      .unwrap();
   }
-  let genesis_complete_block = serai.latest_finalized_block().await.unwrap().number();
 
   for _ in 0 .. 3 {
     // get current stakes
@@ -99,7 +99,7 @@ async fn test_emissions(serai: Serai) {
 
     // calculate how much reward in this session
     let reward_this_epoch =
-      if change_block_number < (genesis_complete_block + FAST_EPOCH_INITIAL_PERIOD) {
+      if change_block_number < (genesis_complete_block.unwrap() + FAST_EPOCH_INITIAL_PERIOD) {
         block_count * INITIAL_REWARD_PER_BLOCK
       } else {
         let blocks_until = SECURE_BY - change_block_number;
