@@ -1,0 +1,61 @@
+[package]
+name = "serai-emissions-pallet"
+version = "0.1.0"
+description = "Emissions pallet for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/emissions/pallet"
+authors = ["Akil Demir <aeg_asd@hotmail.com>"]
+edition = "2021"
+rust-version = "1.77"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale", "scale-info"]
+
+[lints]
+workspace = true
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+
+frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
+genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
+
+serai-primitives = { path = "../../primitives", default-features = false }
+validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
+emissions-primitives = { package = "serai-emissions-primitives", path = "../primitives", default-features = false }
+
+[features]
+std = [
+  "scale/std",
+  "scale-info/std",
+
+  "frame-system/std",
+  "frame-support/std",
+
+  "sp-std/std",
+  "sp-runtime/std",
+
+  "coins-pallet/std",
+  "validator-sets-pallet/std",
+  "dex-pallet/std",
+  "genesis-liquidity-pallet/std",
+
+  "serai-primitives/std",
+  "emissions-primitives/std",
+]
+fast-epoch = []
+try-runtime = [] # TODO
+default = ["std"]

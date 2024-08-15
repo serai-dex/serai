@@ -61,6 +61,7 @@ dex-pallet = { package = "serai-dex-pallet", path = "../dex/pallet", default-fea
 
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets/pallet", default-features = false }
 genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../genesis-liquidity/pallet", default-features = false }
+emissions-pallet = { package = "serai-emissions-pallet", path = "../emissions/pallet", default-features = false }
 
 in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../in-instructions/pallet", default-features = false }
 
@@ -117,6 +118,7 @@ std = [
 
   "validator-sets-pallet/std",
   "genesis-liquidity-pallet/std",
+  "emissions-pallet/std",
 
   "in-instructions-pallet/std",
 
@@ -129,7 +131,10 @@ std = [
   "pallet-transaction-payment-rpc-runtime-api/std",
 ]
 
-fast-epoch = ["genesis-liquidity-pallet/fast-epoch"]
+fast-epoch = [
+  "genesis-liquidity-pallet/fast-epoch",
+  "emissions-pallet/fast-epoch",
+]
 
 runtime-benchmarks = [
   "sp-runtime/runtime-benchmarks",

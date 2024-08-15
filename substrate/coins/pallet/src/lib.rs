@@ -159,7 +159,9 @@ pub mod pallet {
     ///
     /// Errors if any amount overflows.
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
-      if !T::AllowMint::is_allowed(&balance) {
+      // If the coin isn't Serai, which we're always allowed to mint, and the mint isn't explicitly
+      // allowed, error
+      if (balance.coin != Coin::Serai) && (!T::AllowMint::is_allowed(&balance)) {
         Err(Error::<T, I>::MintNotAllowed)?;
       }
 

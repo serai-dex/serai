@@ -7930,6 +7930,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serai-coins-primitives",
+ "serai-emissions-primitives",
  "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
@@ -8090,6 +8091,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-emissions-pallet"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serai-coins-pallet",
+ "serai-dex-pallet",
+ "serai-emissions-primitives",
+ "serai-genesis-liquidity-pallet",
+ "serai-primitives",
+ "serai-validator-sets-pallet",
+ "serai-validator-sets-primitives",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "serai-emissions-primitives"
+version = "0.1.0"
+dependencies = [
+ "serai-primitives",
+]
+
+[[package]]
 name = "serai-env"
 version = "0.1.0"
 
@@ -8172,8 +8199,8 @@ dependencies = [
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
+ "serai-emissions-pallet",
  "serai-genesis-liquidity-pallet",
- "serai-genesis-liquidity-primitives",
  "serai-in-instructions-primitives",
  "serai-primitives",
  "serai-validator-sets-pallet",
@@ -8442,6 +8469,7 @@ dependencies = [
  "serai-abi",
  "serai-coins-pallet",
  "serai-dex-pallet",
+ "serai-emissions-pallet",
  "serai-genesis-liquidity-pallet",
  "serai-in-instructions-pallet",
  "serai-primitives",

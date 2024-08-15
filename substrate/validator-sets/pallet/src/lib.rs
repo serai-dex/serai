@@ -15,6 +15,7 @@ use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 use frame_system::{pallet_prelude::*, RawOrigin};
 use frame_support::{
   pallet_prelude::*,
+  sp_runtime::SaturatedConversion,
   traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
   BoundedVec, WeakBoundedVec, StoragePrefixedMap,
 };
@@ -262,12 +263,20 @@ pub mod pallet {
     _t: PhantomData<T>,
     prefix: Vec<u8>,
     last: Vec<u8>,
+    allocation_per_key_share: Amount,
   }
   impl<T: Config> SortedAllocationsIter<T> {
     fn new(network: NetworkId) -> Self {
       let mut prefix = SortedAllocations::<T>::final_prefix().to_vec();
       prefix.extend(&network.encode());
-      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
+      Self {
+        _t: PhantomData,
+        prefix: prefix.clone(),
+        last: prefix,
+        allocation_per_key_share: Pallet::<T>::allocation_per_key_share(network).expect(
+          "SortedAllocationsIter iterating over a network without a set allocation per key share",
+        ),
+      }
     }
   }
   impl<T: Config> Iterator for SortedAllocationsIter<T> {
@@ -275,10 +284,17 @@ pub mod pallet {
     fn next(&mut self) -> Option<Self::Item> {
       let next = sp_io::storage::next_key(&self.last)?;
       if !next.starts_with(&self.prefix) {
-        return None;
+        None?;
       }
       let key = Pallet::<T>::recover_key_from_sorted_allocation_key(&next);
       let amount = Pallet::<T>::recover_amount_from_sorted_allocation_key(&next);
+
+      // We may have validators present, with less than the minimum allocation, due to block
+      // rewards
+      if amount.0 < self.allocation_per_key_share.0 {
+        None?;
+      }
+
       self.last = next;
       Some((key, amount))
     }
@@ -308,6 +324,12 @@ pub mod pallet {
   /// Disabled validators.
   #[pallet::storage]
   pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
+
+  /// Mapping from session to its starting block number.
+  #[pallet::storage]
+  #[pallet::getter(fn session_begin_block)]
+  pub type SessionBeginBlock<T: Config> =
+    StorageDoubleMap<_, Identity, NetworkId, Identity, Session, u64, ValueQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -391,6 +413,11 @@ pub mod pallet {
       Pallet::<T>::deposit_event(Event::NewSet { set });
 
       Participants::<T>::set(network, Some(participants.try_into().unwrap()));
+      SessionBeginBlock::<T>::set(
+        network,
+        session,
+        <frame_system::Pallet<T>>::block_number().saturated_into::<u64>(),
+      );
     }
   }
 
@@ -490,11 +517,13 @@ pub mod pallet {
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,
+      block_reward: bool,
     ) -> DispatchResult {
       let old_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0;
       let new_allocation = old_allocation + amount.0;
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      if new_allocation < allocation_per_key_share {
+      // If this is a block reward, we always allow it to be allocated
+      if (new_allocation < allocation_per_key_share) && (!block_reward) {
         Err(Error::<T>::InsufficientAllocation)?;
       }
 
@@ -819,6 +848,21 @@ pub mod pallet {
       total_required
     }
 
+    pub fn distribute_block_rewards(
+      network: NetworkId,
+      account: T::AccountId,
+      amount: Amount,
+    ) -> DispatchResult {
+      // TODO: Should this call be part of the `increase_allocation` since we have to have it
+      // before each call to it?
+      Coins::<T>::transfer_internal(
+        account,
+        Self::account(),
+        Balance { coin: Coin::Serai, amount },
+      )?;
+      Self::increase_allocation(network, account, amount, true)
+    }
+
     fn can_slash_serai_validator(validator: Public) -> bool {
       // Checks if they're active or actively deallocating (letting us still slash them)
       // We could check if they're upcoming/still allocating, yet that'd mean the equivocation is
@@ -966,7 +1010,7 @@ pub mod pallet {
         Self::account(),
         Balance { coin: Coin::Serai, amount },
       )?;
-      Self::increase_allocation(network, validator, amount)
+      Self::increase_allocation(network, validator, amount, false)
     }
 
     #[pallet::call_index(3)]

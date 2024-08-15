@@ -32,6 +32,7 @@ pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
 
 pub use genesis_liquidity_pallet as genesis_liquidity;
+pub use emissions_pallet as emissions;
 
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
@@ -51,7 +52,7 @@ use sp_runtime::{
 #[allow(unused_imports)]
 use primitives::{
   NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS, MEDIAN_PRICE_WINDOW_LENGTH,
-  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
+  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE, FAST_EPOCH_DURATION,
 };
 
 use support::{
@@ -252,6 +253,10 @@ impl genesis_liquidity::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl emissions::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
 // for publishing equivocation evidences.
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
@@ -278,7 +283,7 @@ pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
 impl babe::Config for Runtime {
   #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ MINUTES / 2 }>; // 30 seconds
+  type EpochDuration = ConstU64<{ FAST_EPOCH_DURATION }>;
 
   #[cfg(not(feature = "fast-epoch"))]
   type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;
@@ -326,9 +331,10 @@ construct_runtime!(
     Coins: coins,
     LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
     Dex: dex,
-    GenesisLiquidity: genesis_liquidity,
 
     ValidatorSets: validator_sets,
+    GenesisLiquidity: genesis_liquidity,
+    Emissions: emissions,
 
     InInstructions: in_instructions,
 
