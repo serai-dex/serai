@@ -79,10 +79,6 @@ pub mod pallet {
   #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, u32, ValueQuery>;
 
-  // TODO: Find a better place for this
-  #[pallet::storage]
-  pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
-
   #[pallet::storage]
   pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
@@ -103,12 +99,7 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-      if GenesisCompleteBlock::<T>::get().is_none() &&
-        GenesisLiquidity::<T>::genesis_complete().is_some()
-      {
-        GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
-      }
-      let genesis_ended = GenesisLiquidity::<T>::genesis_complete().is_some();
+      let genesis_ended = GenesisLiquidity::<T>::genesis_complete_block().is_some();
 
       // check if we got a new session
       let mut session_changed = false;
@@ -297,7 +288,7 @@ pub mod pallet {
 
       // TODO: we have the past session participants here in the emissions pallet so that we can
       // distribute rewards to them in the next session. Ideally we should be able to fetch this
-      // information from valiadtor sets pallet.
+      // information from validator sets pallet.
       Self::update_participants();
       Weight::zero() // TODO
     }
@@ -316,7 +307,7 @@ pub mod pallet {
       #[cfg(not(feature = "fast-epoch"))]
       let initial_period_duration = 2 * MONTHS;
 
-      let genesis_complete_block = GenesisCompleteBlock::<T>::get();
+      let genesis_complete_block = GenesisLiquidity::<T>::genesis_complete_block();
       genesis_complete_block.is_some() &&
         (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + initial_period_duration))
     }

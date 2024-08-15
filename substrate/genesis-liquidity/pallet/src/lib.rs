@@ -70,8 +70,8 @@ pub mod pallet {
   pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::storage]
-  #[pallet::getter(fn genesis_complete)]
-  pub(crate) type GenesisComplete<T: Config> = StorageValue<_, (), OptionQuery>;
+  #[pallet::getter(fn genesis_complete_block)]
+  pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -85,7 +85,7 @@ pub mod pallet {
       // Distribute the genesis sri to pools after a month
       if (n.saturated_into::<u64>() >= final_block) &&
         Self::oraclization_is_done() &&
-        GenesisComplete::<T>::get().is_none()
+        GenesisCompleteBlock::<T>::get().is_none()
       {
         // mint the SRI
         Coins::<T>::mint(
@@ -165,7 +165,7 @@ pub mod pallet {
           assert_eq!(Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin), Amount(0));
         }
 
-        GenesisComplete::<T>::set(Some(()));
+        GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
       }
 
       Weight::zero() // TODO
