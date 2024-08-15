@@ -179,7 +179,7 @@ impl<'a> SeraiValidatorSets<'a> {
     &self,
     network: NetworkId,
   ) -> Result<Vec<Public>, SeraiError> {
-    self.0.serai.active_network_validators(network).await
+    self.0.runtime_api("SeraiRuntimeApi_validators", network).await
   }
 
   // TODO: Store these separately since we almost never need both at once?
@@ -192,6 +192,14 @@ impl<'a> SeraiValidatorSets<'a> {
     network: NetworkId,
   ) -> Result<Option<Public>, SeraiError> {
     self.0.storage(PALLET, "PendingSlashReport", network).await
+  }
+
+  pub async fn session_begin_block(
+    &self,
+    network: NetworkId,
+    session: Session,
+  ) -> Result<Option<u64>, SeraiError> {
+    self.0.storage(PALLET, "SessionBeginBlock", (network, session)).await
   }
 
   pub fn set_keys(

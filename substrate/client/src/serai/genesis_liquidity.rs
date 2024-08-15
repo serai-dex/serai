@@ -62,4 +62,8 @@ impl<'a> SeraiGenesisLiquidity<'a> {
   pub async fn supply(&self, coin: Coin) -> Result<LiquidityAmount, SeraiError> {
     Ok(self.0.storage(PALLET, "Supply", coin).await?.unwrap_or(LiquidityAmount::zero()))
   }
+
+  pub async fn genesis_complete_block(&self) -> Result<Option<u64>, SeraiError> {
+    self.0.storage(PALLET, "GenesisCompleteBlock", ()).await
+  }
 }

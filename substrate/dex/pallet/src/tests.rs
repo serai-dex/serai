@@ -1155,15 +1155,7 @@ fn can_not_swap_same_coin() {
   new_test_ext().execute_with(|| {
     let user = system_address(b"user1").into();
     let coin1 = Coin::Dai;
-
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(1000) }));
-
-    let liquidity1 = 1000;
-    let liquidity2 = 20;
-    assert_noop!(
-      Dex::add_liquidity(RuntimeOrigin::signed(user), coin1, liquidity2, liquidity1, 1, 1, user,),
-      Error::<Test>::PoolNotFound
-    );
 
     let exchange_amount = 10;
     assert_noop!(

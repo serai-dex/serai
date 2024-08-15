@@ -1,9 +1,9 @@
 [package]
-name = "serai-genesis-liquidity-pallet"
+name = "serai-emissions-pallet"
 version = "0.1.0"
-description = "Genesis liquidity pallet for Serai"
+description = "Emissions pallet for Serai"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/genesis-liquidity/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/emissions/pallet"
 authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"
@@ -26,16 +26,16 @@ frame-system = { git = "https://github.com/serai-dex/substrate", default-feature
 frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
 sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
+genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
+emissions-primitives = { package = "serai-emissions-primitives", path = "../primitives", default-features = false }
 
 [features]
 std = [
@@ -46,18 +46,16 @@ std = [
   "frame-support/std",
 
   "sp-std/std",
-  "sp-core/std",
-  "sp-application-crypto/std",
+  "sp-runtime/std",
 
   "coins-pallet/std",
-  "dex-pallet/std",
   "validator-sets-pallet/std",
+  "dex-pallet/std",
+  "genesis-liquidity-pallet/std",
 
   "serai-primitives/std",
-  "genesis-liquidity-primitives/std",
-  "validator-sets-primitives/std",
+  "emissions-primitives/std",
 ]
-try-runtime = [] # TODO
 fast-epoch = []
-
+try-runtime = [] # TODO
 default = ["std"]

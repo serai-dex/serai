@@ -36,6 +36,7 @@ serai-primitives = { path = "../primitives", version = "0.1", default-features =
 serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
 serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1", default-features = false }
 serai-genesis-liquidity-primitives = { path = "../genesis-liquidity/primitives", version = "0.1", default-features = false }
+serai-emissions-primitives = { path = "../emissions/primitives", version = "0.1", default-features = false }
 serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1", default-features = false }
 serai-signals-primitives = { path = "../signals/primitives", version = "0.1", default-features = false }
 
@@ -61,6 +62,7 @@ std = [
   "serai-coins-primitives/std",
   "serai-validator-sets-primitives/std",
   "serai-genesis-liquidity-primitives/std",
+  "serai-emissions-primitives/std",
   "serai-in-instructions-primitives/std",
   "serai-signals-primitives/std",
 ]

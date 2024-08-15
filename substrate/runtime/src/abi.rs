@@ -89,17 +89,6 @@ impl From<Call> for RuntimeCall {
           send_to: send_to.into(),
         }),
       },
-      Call::GenesisLiquidity(gl) => match gl {
-        serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance } => {
-          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::remove_coin_liquidity { balance })
-        }
-        serai_abi::genesis_liquidity::Call::oraclize_values { values, signature } => {
-          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::oraclize_values {
-            values,
-            signature,
-          })
-        }
-      },
       Call::ValidatorSets(vs) => match vs {
         serai_abi::validator_sets::Call::set_keys {
           network,
@@ -140,6 +129,17 @@ impl From<Call> for RuntimeCall {
         }
         serai_abi::validator_sets::Call::claim_deallocation { network, session } => {
           RuntimeCall::ValidatorSets(validator_sets::Call::claim_deallocation { network, session })
+        }
+      },
+      Call::GenesisLiquidity(gl) => match gl {
+        serai_abi::genesis_liquidity::Call::remove_coin_liquidity { balance } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::remove_coin_liquidity { balance })
+        }
+        serai_abi::genesis_liquidity::Call::oraclize_values { values, signature } => {
+          RuntimeCall::GenesisLiquidity(genesis_liquidity::Call::oraclize_values {
+            values,
+            signature,
+          })
         }
       },
       Call::InInstructions(ii) => match ii {

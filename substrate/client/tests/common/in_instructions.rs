@@ -10,7 +10,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
+  validator_sets::primitives::{ValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
     InInstructionsEvent,
@@ -22,12 +22,12 @@ use crate::common::{tx::publish_tx, validator_sets::set_keys};
 
 #[allow(dead_code)]
 pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
-  // TODO: Get the latest session
-  let set = ValidatorSet { session: Session(0), network: batch.network };
+  let serai_latest = serai.as_of_latest_finalized_block().await.unwrap();
+  let session = serai_latest.validator_sets().session(batch.network).await.unwrap().unwrap();
+  let set = ValidatorSet { session, network: batch.network };
+
   let pair = insecure_pair_from_name(&format!("ValidatorSet {set:?}"));
-  let keys = if let Some(keys) =
-    serai.as_of_latest_finalized_block().await.unwrap().validator_sets().keys(set).await.unwrap()
-  {
+  let keys = if let Some(keys) = serai_latest.validator_sets().keys(set).await.unwrap() {
     keys
   } else {
     let keys = KeyPair(pair.public(), vec![].try_into().unwrap());
