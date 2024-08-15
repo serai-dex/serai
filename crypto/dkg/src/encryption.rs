@@ -48,8 +48,8 @@ pub(crate) use sealed::*;
 /// Wraps a message with a key to use for encryption in the future.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct EncryptionKeyMessage<C: Ciphersuite, M: Message> {
-  pub(crate) msg: M,
-  pub(crate) enc_key: C::G,
+  msg: M,
+  enc_key: C::G,
 }
 
 // Doesn't impl ReadWrite so that doesn't need to be imported
@@ -348,12 +348,17 @@ impl<C: Ciphersuite> Decryption<C> {
   pub(crate) fn new(context: [u8; 32]) -> Self {
     Self { context, enc_keys: HashMap::new() }
   }
-  pub(crate) fn register(&mut self, participant: Participant, key: C::G) {
+  pub(crate) fn register<M: Message>(
+    &mut self,
+    participant: Participant,
+    msg: EncryptionKeyMessage<C, M>,
+  ) -> M {
     assert!(
       !self.enc_keys.contains_key(&participant),
       "Re-registering encryption key for a participant"
     );
-    self.enc_keys.insert(participant, key);
+    self.enc_keys.insert(participant, msg.enc_key);
+    msg.msg
   }
 
   // Given a message, and the intended decryptor, and a proof for its key, decrypt the message.
@@ -425,7 +430,12 @@ impl<C: Ciphersuite> Zeroize for Encryption<C> {
 }
 
 impl<C: Ciphersuite> Encryption<C> {
-  pub(crate) fn new(context: [u8; 32], i: Participant, enc_key: Zeroizing<C::F>) -> Self {
+  pub(crate) fn new<R: RngCore + CryptoRng>(
+    context: [u8; 32],
+    i: Participant,
+    rng: &mut R,
+  ) -> Self {
+    let enc_key = Zeroizing::new(C::random_nonzero_F(rng));
     Self {
       context,
       i,
@@ -439,8 +449,12 @@ impl<C: Ciphersuite> Encryption<C> {
     EncryptionKeyMessage { msg, enc_key: self.enc_pub_key }
   }
 
-  pub(crate) fn register(&mut self, participant: Participant, key: C::G) {
-    self.decryption.register(participant, key)
+  pub(crate) fn register<M: Message>(
+    &mut self,
+    participant: Participant,
+    msg: EncryptionKeyMessage<C, M>,
+  ) -> M {
+    self.decryption.register(participant, msg)
   }
 
   pub(crate) fn encrypt<R: RngCore + CryptoRng, E: Encryptable>(

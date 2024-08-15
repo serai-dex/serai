@@ -133,8 +133,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption =
-      Encryption::new(self.context, self.params.i, Zeroizing::new(C::random_nonzero_F(rng)));
+    let encryption = Encryption::new(self.context, self.params.i, rng);
 
     // Step 4: Broadcast
     let msg =
@@ -178,7 +177,7 @@ fn polynomial<F: PrimeField + Zeroize>(
 // The encryption system also explicitly uses Zeroizing<M> so it can ensure anything being
 // encrypted is within Zeroizing. Accordingly, internally having Zeroizing would be redundant.
 #[derive(Clone, PartialEq, Eq)]
-pub struct SecretShare<F: PrimeField>(pub(crate) F::Repr);
+pub struct SecretShare<F: PrimeField>(F::Repr);
 impl<F: PrimeField> AsRef<[u8]> for SecretShare<F> {
   fn as_ref(&self) -> &[u8] {
     self.0.as_ref()
@@ -262,8 +261,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     let mut commitments = HashMap::new();
     for l in (1 ..= self.params.n()).map(Participant) {
       let Some(msg) = commitment_msgs.remove(&l) else { continue };
-      self.encryption.register(l, msg.enc_key);
-      let mut msg = msg.msg;
+      let mut msg = self.encryption.register(l, msg);
 
       if msg.commitments.len() != self.params.t().into() {
         Err(FrostError::InvalidCommitments(l))?;
@@ -610,8 +608,7 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
     for i in 1 ..= n {
       let i = Participant::new(i).unwrap();
       let Some(msg) = commitment_msgs.remove(&i) else { Err(DkgError::MissingParticipant(i))? };
-      encryption.register(i, msg.enc_key);
-      commitments.insert(i, msg.msg.commitments);
+      commitments.insert(i, encryption.register(i, msg).commitments);
     }
     Ok(AdditionalBlameMachine(BlameMachine { commitments, encryption, result: None }))
   }

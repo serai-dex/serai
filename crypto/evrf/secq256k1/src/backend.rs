@@ -183,7 +183,7 @@ macro_rules! field {
       fn random(mut rng: impl RngCore) -> Self {
         let mut bytes = [0; 64];
         rng.fill_bytes(&mut bytes);
-        $FieldName(Residue::new(&reduce(U512::from_le_slice(bytes.as_ref()))))
+        $FieldName(Residue::new(&reduce(U512::from_be_slice(bytes.as_ref()))))
       }
 
       fn square(&self) -> Self {
@@ -230,12 +230,12 @@ macro_rules! field {
       const DELTA: Self = $FieldName(Residue::new(&U256::from_be_hex($DELTA)));
 
       fn from_repr(bytes: Self::Repr) -> CtOption<Self> {
-        let res = U256::from_le_slice(&bytes);
+        let res = U256::from_be_slice(&bytes);
         CtOption::new($FieldName(Residue::new(&res)), res.ct_lt(&$MODULUS))
       }
       fn to_repr(&self) -> Self::Repr {
         let mut repr = [0; 32];
-        repr.copy_from_slice(&self.0.retrieve().to_le_bytes());
+        repr.copy_from_slice(&self.0.retrieve().to_be_bytes());
         repr
       }
 
@@ -248,7 +248,9 @@ macro_rules! field {
       type ReprBits = [u8; 32];
 
       fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
-        self.to_repr().into()
+        let mut repr = [0; 32];
+        repr.copy_from_slice(&self.0.retrieve().to_le_bytes());
+        repr.into()
       }
 
       fn char_le_bits() -> FieldBits<Self::ReprBits> {
