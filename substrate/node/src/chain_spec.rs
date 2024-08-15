@@ -10,8 +10,8 @@ use secq256k1::Secq256k1;
 
 use serai_runtime::{
   primitives::*, validator_sets::AllEmbeddedEllipticCurveKeysAtGenesis, WASM_BINARY,
-  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, CoinsConfig,
-  ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
+  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, CoinsConfig, ValidatorSetsConfig,
+  SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
@@ -91,7 +91,7 @@ fn devnet_genesis(
           NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
         })
         .collect(),
-      participants: validators.clone(),
+      participants: validators.iter().map(|(validator, _)| *validator).collect(),
     },
     signals: SignalsConfig::default(),
     babe: BabeConfig {

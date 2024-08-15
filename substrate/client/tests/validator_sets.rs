@@ -7,8 +7,7 @@ use sp_core::{
 
 use serai_client::{
   primitives::{
-    FAST_EPOCH_DURATION, TARGET_BLOCK_TIME, NETWORKS,
-    EmbeddedEllipticCurve, NetworkId, BlockHash,
+    FAST_EPOCH_DURATION, TARGET_BLOCK_TIME, NETWORKS, EmbeddedEllipticCurve, NetworkId, BlockHash,
     insecure_pair_from_name,
   },
   validator_sets::{
