@@ -10,11 +10,13 @@ pub mod pallet {
   use sp_std::{vec, vec::Vec, ops::Mul, collections::btree_map::BTreeMap};
   use sp_runtime;
 
-  use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use dex_pallet::{Config as DexConfig, Pallet as Dex};
 
   use validator_sets_pallet::{Pallet as ValidatorSets, Config as ValidatorSetsConfig};
   use genesis_liquidity_pallet::{Pallet as GenesisLiquidity, Config as GenesisLiquidityConfig};
+
+  use economic_security_pallet::{Config as EconomicSecurityConfig, Pallet as EconomicSecurity};
 
   use serai_primitives::*;
   use validator_sets_primitives::{MAX_KEY_SHARES_PER_SET, Session};
@@ -28,6 +30,7 @@ pub mod pallet {
     + CoinsConfig
     + DexConfig
     + GenesisLiquidityConfig
+    + EconomicSecurityConfig
   {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
@@ -78,12 +81,6 @@ pub mod pallet {
 
   // TODO: Find a better place for this
   #[pallet::storage]
-  #[pallet::getter(fn economic_security_reached)]
-  pub(crate) type EconomicSecurityReached<T: Config> =
-    StorageMap<_, Identity, NetworkId, bool, ValueQuery>;
-
-  // TODO: Find a better place for this
-  #[pallet::storage]
   pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
 
   #[pallet::storage]
@@ -99,7 +96,6 @@ pub mod pallet {
         }
         Participants::<T>::set(id, Some(participants.try_into().unwrap()));
         CurrentSession::<T>::set(id, 0);
-        EconomicSecurityReached::<T>::set(id, false);
       }
     }
   }
@@ -112,26 +108,7 @@ pub mod pallet {
       {
         GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
       }
-
-      // we wait 1 extra block after genesis ended to see the changes. We only need this extra
-      // block in dev&test networks where we start the chain with accounts that already has some
-      // staked SRI. So when we check for ec-security pre-genesis we look like we are economically
-      // secure. The reason for this although we only check for it once the genesis is complete(so
-      // if the genesis complete we shouldn't be economically secure because the funds are not
-      // enough) is because ValidatorSets pallet runs before the genesis pallet in runtime.
-      //  So ValidatorSets pallet sees the old state until next block.
-      // TODO: revisit this when mainnet genesis validator stake code is done.
-      let gcb = GenesisCompleteBlock::<T>::get();
-      let genesis_ended = gcb.is_some() && (n.saturated_into::<u64>() > gcb.unwrap());
-
-      // we accept we reached economic security once we can mint smallest amount of a network's coin
-      for coin in COINS {
-        let check = genesis_ended && !Self::economic_security_reached(coin.network());
-        if check && <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
-        {
-          EconomicSecurityReached::<T>::set(coin.network(), true);
-        }
-      }
+      let genesis_ended = GenesisLiquidity::<T>::genesis_complete().is_some();
 
       // check if we got a new session
       let mut session_changed = false;
@@ -351,7 +328,7 @@ pub mod pallet {
           continue;
         }
 
-        if !Self::economic_security_reached(n) {
+        if EconomicSecurity::<T>::economic_security_block(n).is_none() {
           return true;
         }
       }
@@ -393,7 +370,7 @@ pub mod pallet {
       balance: Balance,
     ) -> DispatchResult {
       // check the network didn't reach the economic security yet
-      if Self::economic_security_reached(network) {
+      if EconomicSecurity::<T>::economic_security_block(network).is_some() {
         Err(Error::<T>::NetworkHasEconomicSecurity)?;
       }
 

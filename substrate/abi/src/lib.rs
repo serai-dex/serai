@@ -20,6 +20,8 @@ pub mod validator_sets;
 pub mod genesis_liquidity;
 pub mod emissions;
 
+pub mod economic_security;
+
 pub mod in_instructions;
 
 pub mod signals;
@@ -60,6 +62,7 @@ pub enum Event {
   ValidatorSets(validator_sets::Event),
   GenesisLiquidity(genesis_liquidity::Event),
   Emissions,
+  EconomicSecurity(economic_security::Event),
   InInstructions(in_instructions::Event),
   Signals(signals::Event),
   Babe,
