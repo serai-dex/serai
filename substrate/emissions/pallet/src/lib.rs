@@ -60,6 +60,7 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
+  // TODO: Remove this. This should be the sole domain of validator-sets
   #[pallet::storage]
   #[pallet::getter(fn participants)]
   pub(crate) type Participants<T: Config> = StorageMap<
@@ -70,21 +71,23 @@ pub mod pallet {
     OptionQuery,
   >;
 
+  // TODO: Remove this too
   #[pallet::storage]
   #[pallet::getter(fn session)]
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, u32, ValueQuery>;
 
+  // TODO: Find a better place for this
   #[pallet::storage]
   #[pallet::getter(fn economic_security_reached)]
   pub(crate) type EconomicSecurityReached<T: Config> =
     StorageMap<_, Identity, NetworkId, bool, ValueQuery>;
 
-  #[pallet::storage]
-  #[pallet::getter(fn last_swap_volume)]
-  pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
-
+  // TODO: Find a better place for this
   #[pallet::storage]
   pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
+
+  #[pallet::storage]
+  pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
@@ -138,20 +141,20 @@ pub mod pallet {
         CurrentSession::<T>::set(NetworkId::Serai, session.0);
       }
 
-      // update participants per session before the genesis and after the genesis
-      // we update them after reward distribution.
-      if !genesis_ended && session_changed {
+      // update participants per session before the genesis
+      // after the genesis, we update them after reward distribution.
+      if (!genesis_ended) && session_changed {
         Self::update_participants();
       }
 
-      // emissions start only after genesis period and happens once per session.
-      // so we don't do anything before that time.
+      // We only want to distribute emissions if the genesis period is over AND the session has
+      // ended
       if !(genesis_ended && session_changed) {
         return Weight::zero(); // TODO
       }
 
-      // figure out the amount of blocks in the last session. Session is at least 1
-      // if we come here.
+      // figure out the amount of blocks in the last session
+      // Since the session has changed, we're now at least at session 1
       let block_count = ValidatorSets::<T>::session_begin_block(NetworkId::Serai, session) -
         ValidatorSets::<T>::session_begin_block(NetworkId::Serai, Session(session.0 - 1));
 
@@ -177,9 +180,9 @@ pub mod pallet {
           total_distance = total_distance.saturating_add(distance);
         }
 
-        // add serai network portion(20%)
+        // add serai network portion (20%)
         let new_total_distance =
-          total_distance.saturating_mul(10) / (10 - SERAI_VALIDATORS_DESIRED_PERCENTAGE);
+          total_distance.saturating_mul(100) / (100 - SERAI_VALIDATORS_DESIRED_PERCENTAGE);
         distances.insert(NetworkId::Serai, new_total_distance - total_distance);
         total_distance = new_total_distance;
 
@@ -221,7 +224,7 @@ pub mod pallet {
         for c in COINS {
           // this should return 0 for SRI and so it shouldn't affect the total volume.
           let current_volume = Dex::<T>::swap_volume(c).unwrap_or(0);
-          let last_volume = Self::last_swap_volume(c).unwrap_or(0);
+          let last_volume = LastSwapVolume::<T>::get(c).unwrap_or(0);
           let vol_this_epoch = current_volume.saturating_sub(last_volume);
 
           // update the current volume
@@ -377,7 +380,7 @@ pub mod pallet {
         .unwrap();
 
         Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
-        if ValidatorSets::<T>::deposit_stake(n, p, Amount(p_reward)).is_err() {
+        if ValidatorSets::<T>::distribute_block_rewards(n, p, Amount(p_reward)).is_err() {
           // TODO: log the failure
           continue;
         }
@@ -432,14 +435,11 @@ pub mod pallet {
       Coins::<T>::mint(to, Balance { coin: Coin::Serai, amount: sri_amount })?;
 
       // Stake the SRI for the network.
-      let allocation_per_key_share =
-        ValidatorSets::<T>::allocation_per_key_share(network).unwrap().0;
-      let allocation = ValidatorSets::<T>::allocation((network, to)).unwrap_or(Amount(0)).0;
-      if allocation.saturating_add(sri_amount.0) < allocation_per_key_share {
-        Err(Error::<T>::InsufficientAllocation)?;
-      }
-
-      ValidatorSets::<T>::deposit_stake(network, to, sri_amount)?;
+      ValidatorSets::<T>::allocate(
+        frame_system::RawOrigin::Signed(to).into(),
+        network,
+        sri_amount,
+      )?;
       Ok(())
     }
 

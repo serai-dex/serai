@@ -336,7 +336,7 @@ async fn verify_session_and_active_validators(
         let mut block = serai.latest_finalized_block_hash().await.unwrap();
         if session_for_block(serai, block, network).await < session {
           // Sleep a block
-          tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+          tokio::time::sleep(core::time::Duration::from_secs(TARGET_BLOCK_TIME)).await;
           continue;
         }
         while session_for_block(serai, block, network).await > session {
@@ -366,7 +366,7 @@ async fn verify_session_and_active_validators(
   tokio::time::timeout(core::time::Duration::from_secs(TARGET_BLOCK_TIME * 10), async move {
     let mut finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     while finalized_block <= current_finalized_block + 2 {
-      tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+      tokio::time::sleep(core::time::Duration::from_secs(TARGET_BLOCK_TIME)).await;
       finalized_block = serai.latest_finalized_block().await.unwrap().header.number;
     }
   })

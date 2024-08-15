@@ -263,12 +263,20 @@ pub mod pallet {
     _t: PhantomData<T>,
     prefix: Vec<u8>,
     last: Vec<u8>,
+    allocation_per_key_share: Amount,
   }
   impl<T: Config> SortedAllocationsIter<T> {
     fn new(network: NetworkId) -> Self {
       let mut prefix = SortedAllocations::<T>::final_prefix().to_vec();
       prefix.extend(&network.encode());
-      Self { _t: PhantomData, prefix: prefix.clone(), last: prefix }
+      Self {
+        _t: PhantomData,
+        prefix: prefix.clone(),
+        last: prefix,
+        allocation_per_key_share: Pallet::<T>::allocation_per_key_share(network).expect(
+          "SortedAllocationsIter iterating over a network without a set allocation per key share",
+        ),
+      }
     }
   }
   impl<T: Config> Iterator for SortedAllocationsIter<T> {
@@ -276,10 +284,17 @@ pub mod pallet {
     fn next(&mut self) -> Option<Self::Item> {
       let next = sp_io::storage::next_key(&self.last)?;
       if !next.starts_with(&self.prefix) {
-        return None;
+        None?;
       }
       let key = Pallet::<T>::recover_key_from_sorted_allocation_key(&next);
       let amount = Pallet::<T>::recover_amount_from_sorted_allocation_key(&next);
+
+      // We may have validators present, with less than the minimum allocation, due to block
+      // rewards
+      if amount.0 < self.allocation_per_key_share.0 {
+        None?;
+      }
+
       self.last = next;
       Some((key, amount))
     }
@@ -310,7 +325,7 @@ pub mod pallet {
   #[pallet::storage]
   pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
 
-  /// Mapping from session to block number
+  /// Mapping from session to its starting block number.
   #[pallet::storage]
   #[pallet::getter(fn session_begin_block)]
   pub type SessionBeginBlock<T: Config> =
@@ -507,7 +522,8 @@ pub mod pallet {
       let old_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0;
       let new_allocation = old_allocation + amount.0;
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      if new_allocation < allocation_per_key_share && !block_reward {
+      // If this is a block reward, we always allow it to be allocated
+      if (new_allocation < allocation_per_key_share) && (!block_reward) {
         Err(Error::<T>::InsufficientAllocation)?;
       }
 
@@ -832,7 +848,7 @@ pub mod pallet {
       total_required
     }
 
-    pub fn deposit_stake(
+    pub fn distribute_block_rewards(
       network: NetworkId,
       account: T::AccountId,
       amount: Amount,

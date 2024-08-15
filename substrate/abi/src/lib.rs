@@ -16,11 +16,13 @@ pub mod liquidity_tokens;
 pub mod dex;
 
 pub mod validator_sets;
-pub mod in_instructions;
-pub mod signals;
 
 pub mod genesis_liquidity;
 pub mod emissions;
+
+pub mod in_instructions;
+
+pub mod signals;
 
 pub mod babe;
 pub mod grandpa;
