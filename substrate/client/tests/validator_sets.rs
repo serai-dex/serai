@@ -233,7 +233,15 @@ async fn validator_set_rotation() {
               &serai,
               &last_participant,
               embedded_elliptic_curve,
-              vec![0; 32].try_into().unwrap(),
+              vec![
+                0;
+                match embedded_elliptic_curve {
+                  EmbeddedEllipticCurve::Embedwards25519 => 32,
+                  EmbeddedEllipticCurve::Secq256k1 => 33,
+                }
+              ]
+              .try_into()
+              .unwrap(),
               i.try_into().unwrap(),
             )
             .await;
