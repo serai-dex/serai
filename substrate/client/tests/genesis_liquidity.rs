@@ -24,14 +24,15 @@ pub async fn test_genesis_liquidity(serai: Serai) {
   let (accounts, _) = set_up_genesis(&serai, &coins, &values).await;
 
   // wait until genesis is complete
-  while !serai
+  while serai
     .as_of_latest_finalized_block()
     .await
     .unwrap()
     .genesis_liquidity()
-    .genesis_complete()
+    .genesis_complete_block()
     .await
     .unwrap()
+    .is_none()
   {
     tokio::time::sleep(Duration::from_secs(1)).await;
   }

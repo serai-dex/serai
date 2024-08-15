@@ -82,10 +82,6 @@ pub mod pallet {
   pub(crate) type EconomicSecurityReached<T: Config> =
     StorageMap<_, Identity, NetworkId, bool, ValueQuery>;
 
-  // TODO: Find a better place for this
-  #[pallet::storage]
-  pub(crate) type GenesisCompleteBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
-
   #[pallet::storage]
   pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
 
@@ -107,12 +103,6 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-      if GenesisCompleteBlock::<T>::get().is_none() &&
-        GenesisLiquidity::<T>::genesis_complete().is_some()
-      {
-        GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
-      }
-
       // we wait 1 extra block after genesis ended to see the changes. We only need this extra
       // block in dev&test networks where we start the chain with accounts that already has some
       // staked SRI. So when we check for ec-security pre-genesis we look like we are economically
@@ -121,7 +111,7 @@ pub mod pallet {
       // enough) is because ValidatorSets pallet runs before the genesis pallet in runtime.
       //  So ValidatorSets pallet sees the old state until next block.
       // TODO: revisit this when mainnet genesis validator stake code is done.
-      let gcb = GenesisCompleteBlock::<T>::get();
+      let gcb = GenesisLiquidity::<T>::genesis_complete_block();
       let genesis_ended = gcb.is_some() && (n.saturated_into::<u64>() > gcb.unwrap());
 
       // we accept we reached economic security once we can mint smallest amount of a network's coin
@@ -339,7 +329,7 @@ pub mod pallet {
       #[cfg(not(feature = "fast-epoch"))]
       let initial_period_duration = 2 * MONTHS;
 
-      let genesis_complete_block = GenesisCompleteBlock::<T>::get();
+      let genesis_complete_block = GenesisLiquidity::<T>::genesis_complete_block();
       genesis_complete_block.is_some() &&
         (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + initial_period_duration))
     }
