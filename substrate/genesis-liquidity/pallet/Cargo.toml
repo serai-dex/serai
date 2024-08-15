@@ -33,6 +33,8 @@ dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 
+economic-security-pallet = { package = "serai-economic-security-pallet", path = "../../economic-security/pallet", default-features = false }
+
 serai-primitives = { path = "../../primitives", default-features = false }
 genesis-liquidity-primitives = { package = "serai-genesis-liquidity-primitives", path = "../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
@@ -52,6 +54,8 @@ std = [
   "coins-pallet/std",
   "dex-pallet/std",
   "validator-sets-pallet/std",
+
+  "economic-security-pallet/std",
 
   "serai-primitives/std",
   "genesis-liquidity-primitives/std",
