@@ -1,7 +1,8 @@
-use std::{
-  io,
-  collections::{HashSet, HashMap},
-};
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
+use std::{io, collections::HashMap};
 
 use zeroize::Zeroizing;
 
@@ -14,156 +15,41 @@ use ciphersuite::{
   group::{Group, GroupEncoding},
   Ciphersuite, Ristretto,
 };
-use dkg::{Participant, ThresholdCore, ThresholdKeys, evrf::*};
+use dkg::{Participant, ThresholdKeys, evrf::*};
 
 use log::info;
 
-use serai_client::validator_sets::primitives::{Session, KeyPair};
+use serai_validator_sets_primitives::Session;
 use messages::key_gen::*;
 
-use crate::{Get, DbTxn, Db, create_db, networks::Network};
+use serai_db::{DbTxn, Db};
 
-mod generators {
-  use core::any::{TypeId, Any};
-  use std::{
-    sync::{LazyLock, Mutex},
-    collections::HashMap,
-  };
-
-  use frost::dkg::evrf::*;
-
-  use serai_client::validator_sets::primitives::MAX_KEY_SHARES_PER_SET;
-
-  /// A cache of the generators used by the eVRF DKG.
-  ///
-  /// This performs a lookup of the Ciphersuite to its generators. Since the Ciphersuite is a
-  /// generic, this takes advantage of `Any`. This static is isolated in a module to ensure
-  /// correctness can be evaluated solely by reviewing these few lines of code.
-  ///
-  /// This is arguably over-engineered as of right now, as we only need generators for Ristretto
-  /// and N::Curve. By having this HashMap, we enable de-duplication of the Ristretto == N::Curve
-  /// case, and we automatically support the n-curve case (rather than hard-coding to the 2-curve
-  /// case).
-  static GENERATORS: LazyLock<Mutex<HashMap<TypeId, &'static (dyn Send + Sync + Any)>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-  pub(crate) fn generators<C: EvrfCurve>() -> &'static EvrfGenerators<C> {
-    GENERATORS
-      .lock()
-      .unwrap()
-      .entry(TypeId::of::<C>())
-      .or_insert_with(|| {
-        // If we haven't prior needed generators for this Ciphersuite, generate new ones
-        Box::leak(Box::new(EvrfGenerators::<C>::new(
-          ((MAX_KEY_SHARES_PER_SET * 2 / 3) + 1).try_into().unwrap(),
-          MAX_KEY_SHARES_PER_SET.try_into().unwrap(),
-        )))
-      })
-      .downcast_ref()
-      .unwrap()
-  }
-}
+mod generators;
 use generators::generators;
 
-#[derive(Debug)]
-pub struct KeyConfirmed<C: Ciphersuite> {
-  pub substrate_keys: Vec<ThresholdKeys<Ristretto>>,
-  pub network_keys: Vec<ThresholdKeys<C>>,
-}
+mod db;
+use db::{Params, Participations, KeyGenDb};
 
-create_db!(
-  KeyGenDb {
-    ParamsDb: (session: &Session) -> (u16, Vec<[u8; 32]>, Vec<Vec<u8>>),
-    ParticipationDb: (session: &Session) -> (
-      HashMap<Participant, Vec<u8>>,
-      HashMap<Participant, Vec<u8>>,
-    ),
-    // GeneratedKeysDb, KeysDb use `()` for their value as we manually serialize their values
-    // TODO: Don't do that
-    GeneratedKeysDb: (session: &Session) -> (),
-    // These do assume a key is only used once across sets, which holds true if the threshold is
-    // honest
-    // TODO: Remove this assumption
-    KeysDb: (network_key: &[u8]) -> (),
-    SessionDb: (network_key: &[u8]) -> Session,
-    NetworkKeyDb: (session: Session) -> Vec<u8>,
-  }
-);
+/// Parameters for a key generation.
+pub trait KeyGenParams {
+  /// The ID for this instantiation.
+  const ID: &'static str;
 
-impl GeneratedKeysDb {
-  #[allow(clippy::type_complexity)]
-  fn read_keys<N: Network>(
-    getter: &impl Get,
-    key: &[u8],
-  ) -> Option<(Vec<u8>, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
-    let keys_vec = getter.get(key)?;
-    let mut keys_ref: &[u8] = keys_vec.as_ref();
+  /// The curve used for the external network.
+  type ExternalNetworkCurve: EvrfCurve<
+    EmbeddedCurve: Ciphersuite<
+      G: ec_divisors::DivisorCurve<FieldElement = <Self::ExternalNetworkCurve as Ciphersuite>::F>,
+    >,
+  >;
 
-    let mut substrate_keys = vec![];
-    let mut network_keys = vec![];
-    while !keys_ref.is_empty() {
-      substrate_keys.push(ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap()));
-      let mut these_network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
-      N::tweak_keys(&mut these_network_keys);
-      network_keys.push(these_network_keys);
-    }
-    Some((keys_vec, (substrate_keys, network_keys)))
-  }
+  /// Tweaks keys as necessary/beneficial.
+  fn tweak_keys(keys: &mut ThresholdKeys<Self::ExternalNetworkCurve>);
 
-  fn save_keys<N: Network>(
-    txn: &mut impl DbTxn,
-    session: &Session,
-    substrate_keys: &[ThresholdKeys<Ristretto>],
-    network_keys: &[ThresholdKeys<N::Curve>],
-  ) {
-    let mut keys = Zeroizing::new(vec![]);
-    for (substrate_keys, network_keys) in substrate_keys.iter().zip(network_keys) {
-      keys.extend(substrate_keys.serialize().as_slice());
-      keys.extend(network_keys.serialize().as_slice());
-    }
-    txn.put(Self::key(session), keys);
-  }
-}
-
-impl KeysDb {
-  fn confirm_keys<N: Network>(
-    txn: &mut impl DbTxn,
-    session: Session,
-    key_pair: &KeyPair,
-  ) -> (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>) {
-    let (keys_vec, keys) =
-      GeneratedKeysDb::read_keys::<N>(txn, &GeneratedKeysDb::key(&session)).unwrap();
-    assert_eq!(key_pair.0 .0, keys.0[0].group_key().to_bytes());
-    assert_eq!(
-      {
-        let network_key: &[u8] = key_pair.1.as_ref();
-        network_key
-      },
-      keys.1[0].group_key().to_bytes().as_ref(),
-    );
-    txn.put(Self::key(key_pair.1.as_ref()), keys_vec);
-    NetworkKeyDb::set(txn, session, &key_pair.1.clone().into_inner());
-    SessionDb::set(txn, key_pair.1.as_ref(), &session);
-    keys
-  }
-
-  #[allow(clippy::type_complexity)]
-  fn keys<N: Network>(
-    getter: &impl Get,
-    network_key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
-    let res =
-      GeneratedKeysDb::read_keys::<N>(getter, &Self::key(network_key.to_bytes().as_ref()))?.1;
-    assert_eq!(&res.1[0].group_key(), network_key);
-    Some((SessionDb::get(getter, network_key.to_bytes().as_ref()).unwrap(), res))
-  }
-
-  pub fn substrate_keys_by_session<N: Network>(
-    getter: &impl Get,
-    session: Session,
-  ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    let network_key = NetworkKeyDb::get(getter, session)?;
-    Some(GeneratedKeysDb::read_keys::<N>(getter, &Self::key(&network_key))?.1 .0)
+  /// Encode keys as optimal.
+  ///
+  /// A default implementation is provided which calls the traditional `to_bytes`.
+  fn encode_key(key: <Self::ExternalNetworkCurve as Ciphersuite>::G) -> Vec<u8> {
+    key.to_bytes().as_ref().to_vec()
   }
 }
 
@@ -242,49 +128,44 @@ fn coerce_keys<C: EvrfCurve>(
   (keys, faulty)
 }
 
+/// An instance of the Serai key generation protocol.
 #[derive(Debug)]
-pub struct KeyGen<N: Network, D: Db> {
+pub struct KeyGen<P: KeyGenParams, D: Db> {
   db: D,
   substrate_evrf_private_key:
     Zeroizing<<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
-  network_evrf_private_key: Zeroizing<<<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
+  network_evrf_private_key:
+    Zeroizing<<<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
 }
 
-impl<N: Network, D: Db> KeyGen<N, D> {
+impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
+  /// Create a new key generation instance.
   #[allow(clippy::new_ret_no_self)]
   pub fn new(
     db: D,
     substrate_evrf_private_key: Zeroizing<
       <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
     >,
-    network_evrf_private_key: Zeroizing<<<N::Curve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> KeyGen<N, D> {
+    network_evrf_private_key: Zeroizing<
+      <<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
+    >,
+  ) -> KeyGen<P, D> {
     KeyGen { db, substrate_evrf_private_key, network_evrf_private_key }
   }
 
-  pub fn in_set(&self, session: &Session) -> bool {
-    // We determine if we're in set using if we have the parameters for a session's key generation
-    // We only have these if we were told to generate a key for this session
-    ParamsDb::get(&self.db, session).is_some()
-  }
-
+  /// Fetch the key shares for a specific session.
   #[allow(clippy::type_complexity)]
-  pub fn keys(
-    &self,
-    key: &<N::Curve as Ciphersuite>::G,
-  ) -> Option<(Session, (Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<N::Curve>>))> {
-    // This is safe, despite not having a txn, since it's a static value
-    // It doesn't change over time/in relation to other operations
-    KeysDb::keys::<N>(&self.db, key)
-  }
-
-  pub fn substrate_keys_by_session(
+  pub fn key_shares(
     &self,
     session: Session,
-  ) -> Option<Vec<ThresholdKeys<Ristretto>>> {
-    KeysDb::substrate_keys_by_session::<N>(&self.db, session)
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
+    // This is safe, despite not having a txn, since it's a static value
+    // It doesn't change over time/in relation to other operations
+    // It is solely set or unset
+    KeyGenDb::<P>::key_shares(&self.db, session)
   }
 
+  /// Handle a message from the coordinator.
   pub fn handle(
     &mut self,
     txn: &mut D::Transaction<'_>,
@@ -292,10 +173,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   ) -> Vec<ProcessorMessage> {
     const SUBSTRATE_KEY_CONTEXT: &[u8] = b"substrate";
     const NETWORK_KEY_CONTEXT: &[u8] = b"network";
-    fn context<N: Network>(session: Session, key_context: &[u8]) -> [u8; 32] {
+    fn context<P: KeyGenParams>(session: Session, key_context: &[u8]) -> [u8; 32] {
       // TODO2: Also embed the chain ID/genesis block
       let mut transcript = RecommendedTranscript::new(b"Serai eVRF Key Gen");
-      transcript.append_message(b"network", N::ID);
+      transcript.append_message(b"network", P::ID.as_bytes());
       transcript.append_message(b"session", session.0.to_le_bytes());
       transcript.append_message(b"key", key_context);
       (&(&transcript.challenge(b"context"))[.. 32]).try_into().unwrap()
@@ -308,64 +189,68 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         // Unzip the vector of eVRF keys
         let substrate_evrf_public_keys =
           evrf_public_keys.iter().map(|(key, _)| *key).collect::<Vec<_>>();
+        let (substrate_evrf_public_keys, mut faulty) =
+          coerce_keys::<Ristretto>(&substrate_evrf_public_keys);
+
         let network_evrf_public_keys =
           evrf_public_keys.into_iter().map(|(_, key)| key).collect::<Vec<_>>();
-
-        let mut participation = Vec::with_capacity(2048);
-        let mut faulty = HashSet::new();
+        let (network_evrf_public_keys, additional_faulty) =
+          coerce_keys::<P::ExternalNetworkCurve>(&network_evrf_public_keys);
+        faulty.extend(additional_faulty);
 
         // Participate for both Substrate and the network
         fn participate<C: EvrfCurve>(
           context: [u8; 32],
           threshold: u16,
-          evrf_public_keys: &[impl AsRef<[u8]>],
+          evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
           evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-          faulty: &mut HashSet<Participant>,
           output: &mut impl io::Write,
         ) {
-          let (coerced_keys, faulty_is) = coerce_keys::<C>(evrf_public_keys);
-          for faulty_i in faulty_is {
-            faulty.insert(faulty_i);
-          }
           let participation = EvrfDkg::<C>::participate(
             &mut OsRng,
             generators(),
             context,
             threshold,
-            &coerced_keys,
+            evrf_public_keys,
             evrf_private_key,
           );
           participation.unwrap().write(output).unwrap();
         }
+
+        let mut participation = Vec::with_capacity(2048);
         participate::<Ristretto>(
-          context::<N>(session, SUBSTRATE_KEY_CONTEXT),
+          context::<P>(session, SUBSTRATE_KEY_CONTEXT),
           threshold,
           &substrate_evrf_public_keys,
           &self.substrate_evrf_private_key,
-          &mut faulty,
           &mut participation,
         );
-        participate::<N::Curve>(
-          context::<N>(session, NETWORK_KEY_CONTEXT),
+        participate::<P::ExternalNetworkCurve>(
+          context::<P>(session, NETWORK_KEY_CONTEXT),
           threshold,
           &network_evrf_public_keys,
           &self.network_evrf_private_key,
-          &mut faulty,
           &mut participation,
         );
 
         // Save the params
-        ParamsDb::set(
+        KeyGenDb::<P>::set_params(
           txn,
-          &session,
-          &(threshold, substrate_evrf_public_keys, network_evrf_public_keys),
+          session,
+          Params {
+            t: threshold,
+            n: substrate_evrf_public_keys
+              .len()
+              .try_into()
+              .expect("amount of keys exceeded the amount allowed during a DKG"),
+            substrate_evrf_public_keys,
+            network_evrf_public_keys,
+          },
         );
 
         // Send back our Participation and all faulty parties
-        let mut faulty = faulty.into_iter().collect::<Vec<_>>();
-        faulty.sort();
-
         let mut res = Vec::with_capacity(faulty.len() + 1);
+        faulty.sort_unstable();
         for faulty in faulty {
           res.push(ProcessorMessage::Blame { session, participant: faulty });
         }
@@ -377,13 +262,8 @@ impl<N: Network, D: Db> KeyGen<N, D> {
       CoordinatorMessage::Participation { session, participant, participation } => {
         info!("received participation from {:?} for {:?}", participant, session);
 
-        let (threshold, substrate_evrf_public_keys, network_evrf_public_keys) =
-          ParamsDb::get(txn, &session).unwrap();
-
-        let n = substrate_evrf_public_keys
-          .len()
-          .try_into()
-          .expect("performing a key gen with more than u16::MAX participants");
+        let Params { t: threshold, n, substrate_evrf_public_keys, network_evrf_public_keys } =
+          KeyGenDb::<P>::params(txn, session).unwrap();
 
         // Read these `Participation`s
         // If they fail basic sanity checks, fail fast
@@ -399,7 +279,8 @@ impl<N: Network, D: Db> KeyGen<N, D> {
               return blame;
             };
             let len_at_network_participation_start_pos = participation.len();
-            let Ok(network_participation) = Participation::<N::Curve>::read(&mut participation, n)
+            let Ok(network_participation) =
+              Participation::<P::ExternalNetworkCurve>::read(&mut participation, n)
             else {
               return blame;
             };
@@ -413,16 +294,15 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             // If we've already generated these keys, we don't actually need to save these
             // participations and continue. We solely have to verify them, as to identify malicious
             // participants and prevent DoSs, before returning
-            if txn.get(GeneratedKeysDb::key(&session)).is_some() {
+            if self.key_shares(session).is_some() {
               info!("already finished generating a key for {:?}", session);
 
               match EvrfDkg::<Ristretto>::verify(
                 &mut OsRng,
                 generators(),
-                context::<N>(session, SUBSTRATE_KEY_CONTEXT),
+                context::<P>(session, SUBSTRATE_KEY_CONTEXT),
                 threshold,
-                // Ignores the list of participants who were faulty, as they were prior blamed
-                &coerce_keys::<Ristretto>(&substrate_evrf_public_keys).0,
+                &substrate_evrf_public_keys,
                 &HashMap::from([(participant, substrate_participation)]),
               )
               .unwrap()
@@ -434,13 +314,12 @@ impl<N: Network, D: Db> KeyGen<N, D> {
                 }
               }
 
-              match EvrfDkg::<N::Curve>::verify(
+              match EvrfDkg::<P::ExternalNetworkCurve>::verify(
                 &mut OsRng,
                 generators(),
-                context::<N>(session, NETWORK_KEY_CONTEXT),
+                context::<P>(session, NETWORK_KEY_CONTEXT),
                 threshold,
-                // Ignores the list of participants who were faulty, as they were prior blamed
-                &coerce_keys::<N::Curve>(&network_evrf_public_keys).0,
+                &network_evrf_public_keys,
                 &HashMap::from([(participant, network_participation)]),
               )
               .unwrap()
@@ -467,17 +346,22 @@ impl<N: Network, D: Db> KeyGen<N, D> {
 
         // Since these are valid `Participation`s, save them
         let (mut substrate_participations, mut network_participations) =
-          ParticipationDb::get(txn, &session)
-            .unwrap_or((HashMap::with_capacity(1), HashMap::with_capacity(1)));
+          KeyGenDb::<P>::participations(txn, session).map_or_else(
+            || (HashMap::with_capacity(1), HashMap::with_capacity(1)),
+            |p| (p.substrate_participations, p.network_participations),
+          );
         assert!(
           substrate_participations.insert(participant, substrate_participation).is_none() &&
             network_participations.insert(participant, network_participation).is_none(),
           "received participation for someone multiple times"
         );
-        ParticipationDb::set(
+        KeyGenDb::<P>::set_participations(
           txn,
-          &session,
-          &(substrate_participations.clone(), network_participations.clone()),
+          session,
+          &Participations {
+            substrate_participations: substrate_participations.clone(),
+            network_participations: network_participations.clone(),
+          },
         );
 
         // This block is taken from the eVRF DKG itself to evaluate the amount participating
@@ -510,12 +394,12 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         }
 
         // If we now have the threshold participating, verify their `Participation`s
-        fn verify_dkg<N: Network, C: EvrfCurve>(
+        fn verify_dkg<P: KeyGenParams, C: EvrfCurve>(
           txn: &mut impl DbTxn,
           session: Session,
           true_if_substrate_false_if_network: bool,
           threshold: u16,
-          evrf_public_keys: &[impl AsRef<[u8]>],
+          evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
           substrate_participations: &mut HashMap<Participant, Vec<u8>>,
           network_participations: &mut HashMap<Participant, Vec<u8>>,
         ) -> Result<EvrfDkg<C>, Vec<ProcessorMessage>> {
@@ -542,7 +426,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           match EvrfDkg::<C>::verify(
             &mut OsRng,
             generators(),
-            context::<N>(
+            context::<P>(
               session,
               if true_if_substrate_false_if_network {
                 SUBSTRATE_KEY_CONTEXT
@@ -551,8 +435,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
               },
             ),
             threshold,
-            // Ignores the list of participants who were faulty, as they were prior blamed
-            &coerce_keys::<C>(evrf_public_keys).0,
+            evrf_public_keys,
             &participations,
           )
           .unwrap()
@@ -570,10 +453,13 @@ impl<N: Network, D: Db> KeyGen<N, D> {
                 blames.push(ProcessorMessage::Blame { session, participant });
               }
               // Since we removed `Participation`s, write the updated versions to the database
-              ParticipationDb::set(
+              KeyGenDb::<P>::set_participations(
                 txn,
-                &session,
-                &(substrate_participations.clone(), network_participations.clone()),
+                session,
+                &Participations {
+                  substrate_participations: substrate_participations.clone(),
+                  network_participations: network_participations.clone(),
+                },
               );
               Err(blames)?
             }
@@ -586,7 +472,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           }
         }
 
-        let substrate_dkg = match verify_dkg::<N, Ristretto>(
+        let substrate_dkg = match verify_dkg::<P, Ristretto>(
           txn,
           session,
           true,
@@ -601,7 +487,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           Err(blames) => return blames,
         };
 
-        let network_dkg = match verify_dkg::<N, N::Curve>(
+        let network_dkg = match verify_dkg::<P, P::ExternalNetworkCurve>(
           txn,
           session,
           false,
@@ -623,38 +509,17 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         let mut network_keys = network_dkg.keys(&self.network_evrf_private_key);
         // Tweak the keys for the network
         for network_keys in &mut network_keys {
-          N::tweak_keys(network_keys);
+          P::tweak_keys(network_keys);
         }
-        GeneratedKeysDb::save_keys::<N>(txn, &session, &substrate_keys, &network_keys);
+        KeyGenDb::<P>::set_key_shares(txn, session, &substrate_keys, &network_keys);
 
         // Since no one we verified was invalid, and we had the threshold, yield the new keys
         vec![ProcessorMessage::GeneratedKeyPair {
           session,
           substrate_key: substrate_keys[0].group_key().to_bytes(),
-          // TODO: This can be made more efficient since tweaked keys may be a subset of keys
-          network_key: network_keys[0].group_key().to_bytes().as_ref().to_vec(),
+          network_key: P::encode_key(network_keys[0].group_key()),
         }]
       }
     }
-  }
-
-  // This should only be called if we're participating, hence taking our instance
-  #[allow(clippy::unused_self)]
-  pub fn confirm(
-    &mut self,
-    txn: &mut D::Transaction<'_>,
-    session: Session,
-    key_pair: &KeyPair,
-  ) -> KeyConfirmed<N::Curve> {
-    info!(
-      "Confirmed key pair {} {} for {:?}",
-      hex::encode(key_pair.0),
-      hex::encode(&key_pair.1),
-      session,
-    );
-
-    let (substrate_keys, network_keys) = KeysDb::confirm_keys::<N>(txn, session, key_pair);
-
-    KeyConfirmed { substrate_keys, network_keys }
   }
 }

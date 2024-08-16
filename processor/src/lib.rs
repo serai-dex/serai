@@ -6,7 +6,7 @@ pub use plan::*;
 mod db;
 pub(crate) use db::*;
 
-mod key_gen;
+use serai_processor_key_gen as key_gen;
 
 pub mod networks;
 pub(crate) mod multisigs;
