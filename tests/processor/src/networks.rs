@@ -451,7 +451,7 @@ impl Wallet {
           );
         }
 
-        let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_ref()).unwrap()).unwrap();
+        let to_spend_key = decompress_point(<[u8; 32]>::try_from(to.as_slice()).unwrap()).unwrap();
         let to_view_key = additional_key::<Monero>(0);
         let to_addr = Address::new(
           Network::Mainnet,

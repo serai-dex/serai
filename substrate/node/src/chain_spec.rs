@@ -1,19 +1,28 @@
 use core::marker::PhantomData;
-use std::collections::HashSet;
 
-use sp_core::{Decode, Pair as PairTrait, sr25519::Public};
+use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use embedwards25519::Embedwards25519;
+use secq256k1::Secq256k1;
+
 use serai_runtime::{
-  primitives::*, WASM_BINARY, BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig,
-  CoinsConfig, ValidatorSetsConfig, SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
+  primitives::*, validator_sets::AllEmbeddedEllipticCurveKeysAtGenesis, WASM_BINARY,
+  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, CoinsConfig, ValidatorSetsConfig,
+  SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
 };
 
 pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
 
 fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
+}
+
+fn insecure_arbitrary_public_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
+  let key = insecure_arbitrary_key_from_name::<C>(name);
+  (C::generator() * key).to_bytes().as_ref().to_vec()
 }
 
 fn wasm_binary() -> Vec<u8> {
@@ -32,7 +41,21 @@ fn devnet_genesis(
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
 ) -> RuntimeGenesisConfig {
-  let validators = validators.iter().map(|name| account_from_name(name)).collect::<Vec<_>>();
+  let validators = validators
+    .iter()
+    .map(|name| {
+      (
+        account_from_name(name),
+        AllEmbeddedEllipticCurveKeysAtGenesis {
+          embedwards25519: insecure_arbitrary_public_key_from_name::<Embedwards25519>(name)
+            .try_into()
+            .unwrap(),
+          secq256k1: insecure_arbitrary_public_key_from_name::<Secq256k1>(name).try_into().unwrap(),
+        },
+      )
+    })
+    .collect::<Vec<_>>();
+
   RuntimeGenesisConfig {
     system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
 
@@ -68,21 +91,22 @@ fn devnet_genesis(
           NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
         })
         .collect(),
-      participants: validators.clone(),
+      participants: validators.iter().map(|(validator, _)| *validator).collect(),
     },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
-      authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
+      authorities: validators.iter().map(|validator| (validator.0.into(), 1)).collect(),
       epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
       _config: PhantomData,
     },
     grandpa: GrandpaConfig {
-      authorities: validators.into_iter().map(|validator| (validator.into(), 1)).collect(),
+      authorities: validators.into_iter().map(|validator| (validator.0.into(), 1)).collect(),
       _config: PhantomData,
     },
   }
 }
 
+/*
 fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> RuntimeGenesisConfig {
   let validators = validators
     .into_iter()
@@ -140,6 +164,7 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
     },
   }
 }
+*/
 
 pub fn development_config() -> ChainSpec {
   let wasm_binary = wasm_binary();
@@ -218,7 +243,7 @@ pub fn local_config() -> ChainSpec {
 }
 
 pub fn testnet_config() -> ChainSpec {
-  let wasm_binary = wasm_binary();
+  // let wasm_binary = wasm_binary();
 
   ChainSpec::from_genesis(
     // Name
@@ -227,7 +252,7 @@ pub fn testnet_config() -> ChainSpec {
     "testnet-2",
     ChainType::Live,
     move || {
-      let _ = testnet_genesis(&wasm_binary, vec![]);
+      // let _ = testnet_genesis(&wasm_binary, vec![])
       todo!()
     },
     // Bootnodes

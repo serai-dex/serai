@@ -285,7 +285,7 @@ macro_rules! test {
               {
                 let mut machines = HashMap::new();
                 for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-                  machines.insert(i, tx.clone().multisig(&keys[&i]).unwrap());
+                  machines.insert(i, tx.clone().multisig(keys[&i].clone()).unwrap());
                 }
 
                 frost::tests::sign_without_caching(&mut OsRng, machines, &[])

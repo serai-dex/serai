@@ -5,6 +5,8 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use sp_core::{
+  ConstU32,
+  bounded_vec::BoundedVec,
   sr25519::{Pair, Signature},
   Pair as PairTrait,
 };
@@ -14,8 +16,9 @@ use frost::dkg::musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
+  primitives::EmbeddedEllipticCurve,
   validator_sets::{
-    primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message},
+    primitives::{MAX_KEY_LEN, ValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
   },
   Amount, Serai, SeraiValidatorSets,
@@ -58,7 +61,7 @@ pub async fn set_keys(
   let sig = frost::tests::sign_without_caching(
     &mut OsRng,
     frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
-    &set_keys_message(&set, &[], &key_pair),
+    &set_keys_message(&set, &key_pair),
   );
 
   // Set the key pair
@@ -66,8 +69,8 @@ pub async fn set_keys(
     serai,
     &SeraiValidatorSets::set_keys(
       set.network,
-      vec![].try_into().unwrap(),
       key_pair.clone(),
+      bitvec::bitvec!(u8, bitvec::prelude::Lsb0; 1; musig_keys.len()),
       Signature(sig.to_bytes()),
     ),
   )
@@ -80,6 +83,24 @@ pub async fn set_keys(
   assert_eq!(serai.as_of(block).validator_sets().keys(set).await.unwrap(), Some(key_pair));
 
   block
+}
+
+#[allow(dead_code)]
+pub async fn set_embedded_elliptic_curve_key(
+  serai: &Serai,
+  pair: &Pair,
+  embedded_elliptic_curve: EmbeddedEllipticCurve,
+  key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+  nonce: u32,
+) -> [u8; 32] {
+  // get the call
+  let tx = serai.sign(
+    pair,
+    SeraiValidatorSets::set_embedded_elliptic_curve_key(embedded_elliptic_curve, key),
+    nonce,
+    0,
+  );
+  publish_tx(serai, &tx).await
 }
 
 #[allow(dead_code)]

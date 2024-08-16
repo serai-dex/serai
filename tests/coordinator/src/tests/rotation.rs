@@ -3,7 +3,7 @@ use tokio::time::{sleep, Duration};
 use ciphersuite::Secp256k1;
 
 use serai_client::{
-  primitives::{insecure_pair_from_name, NetworkId},
+  primitives::{EmbeddedEllipticCurve, NetworkId, insecure_pair_from_name},
   validator_sets::{
     self,
     primitives::{Session, ValidatorSet},
@@ -53,6 +53,27 @@ async fn publish_tx(serai: &Serai, tx: &Transaction) -> [u8; 32] {
       }
     }
   }
+}
+
+#[allow(dead_code)]
+async fn set_embedded_elliptic_curve_key(
+  serai: &Serai,
+  curve: EmbeddedEllipticCurve,
+  key: Vec<u8>,
+  pair: &Pair,
+  nonce: u32,
+) -> [u8; 32] {
+  // get the call
+  let tx = serai.sign(
+    pair,
+    validator_sets::SeraiValidatorSets::set_embedded_elliptic_curve_key(
+      curve,
+      key.try_into().unwrap(),
+    ),
+    nonce,
+    0,
+  );
+  publish_tx(serai, &tx).await
 }
 
 #[allow(dead_code)]
@@ -132,13 +153,29 @@ async fn set_rotation_test() {
 
       // excluded participant
       let pair5 = insecure_pair_from_name("Eve");
-      let network = NetworkId::Bitcoin;
+      let network = excluded.network();
       let amount = Amount(1_000_000 * 10_u64.pow(8));
       let serai = processors[0].serai().await;
 
       // allocate now for the last participant so that it is guaranteed to be included into session
       // 1 set. This doesn't affect the genesis set at all since that is a predetermined set.
-      allocate_stake(&serai, network, amount, &pair5, 0).await;
+      set_embedded_elliptic_curve_key(
+        &serai,
+        EmbeddedEllipticCurve::Embedwards25519,
+        excluded.evrf_public_keys().0.to_vec(),
+        &pair5,
+        0,
+      )
+      .await;
+      set_embedded_elliptic_curve_key(
+        &serai,
+        *excluded.network().embedded_elliptic_curves().last().unwrap(),
+        excluded.evrf_public_keys().1.clone(),
+        &pair5,
+        1,
+      )
+      .await;
+      allocate_stake(&serai, network, amount, &pair5, 2).await;
 
       // genesis keygen
       let _ = key_gen::<Secp256k1>(&mut processors, Session(0)).await;

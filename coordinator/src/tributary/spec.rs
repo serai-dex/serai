@@ -9,7 +9,7 @@ use frost::Participant;
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::PublicKey, validator_sets::primitives::ValidatorSet};
+use serai_client::validator_sets::primitives::ValidatorSet;
 
 fn borsh_serialize_validators<W: io::Write>(
   validators: &Vec<(<Ristretto as Ciphersuite>::G, u16)>,
@@ -49,6 +49,7 @@ pub struct TributarySpec {
     deserialize_with = "borsh_deserialize_validators"
   )]
   validators: Vec<(<Ristretto as Ciphersuite>::G, u16)>,
+  evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
 }
 
 impl TributarySpec {
@@ -56,16 +57,10 @@ impl TributarySpec {
     serai_block: [u8; 32],
     start_time: u64,
     set: ValidatorSet,
-    set_participants: Vec<(PublicKey, u16)>,
+    validators: Vec<(<Ristretto as Ciphersuite>::G, u16)>,
+    evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
   ) -> TributarySpec {
-    let mut validators = vec![];
-    for (participant, shares) in set_participants {
-      let participant = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut participant.0.as_ref())
-        .expect("invalid key registered as participant");
-      validators.push((participant, shares));
-    }
-
-    Self { serai_block, start_time, set, validators }
+    Self { serai_block, start_time, set, validators, evrf_public_keys }
   }
 
   pub fn set(&self) -> ValidatorSet {
@@ -88,24 +83,15 @@ impl TributarySpec {
     self.start_time
   }
 
-  pub fn n(&self, removed_validators: &[<Ristretto as Ciphersuite>::G]) -> u16 {
-    self
-      .validators
-      .iter()
-      .map(|(validator, weight)| if removed_validators.contains(validator) { 0 } else { *weight })
-      .sum()
+  pub fn n(&self) -> u16 {
+    self.validators.iter().map(|(_, weight)| *weight).sum()
   }
 
   pub fn t(&self) -> u16 {
-    // t doesn't change with regards to the amount of removed validators
-    ((2 * self.n(&[])) / 3) + 1
+    ((2 * self.n()) / 3) + 1
   }
 
-  pub fn i(
-    &self,
-    removed_validators: &[<Ristretto as Ciphersuite>::G],
-    key: <Ristretto as Ciphersuite>::G,
-  ) -> Option<Range<Participant>> {
+  pub fn i(&self, key: <Ristretto as Ciphersuite>::G) -> Option<Range<Participant>> {
     let mut all_is = HashMap::new();
     let mut i = 1;
     for (validator, weight) in &self.validators {
@@ -116,34 +102,12 @@ impl TributarySpec {
       i += weight;
     }
 
-    let original_i = all_is.get(&key)?.clone();
-    let mut result_i = original_i.clone();
-    for removed_validator in removed_validators {
-      let removed_i = all_is
-        .get(removed_validator)
-        .expect("removed validator wasn't present in set to begin with");
-      // If the queried key was removed, return None
-      if &original_i == removed_i {
-        return None;
-      }
-
-      // If the removed was before the queried, shift the queried down accordingly
-      if removed_i.start < original_i.start {
-        let removed_shares = u16::from(removed_i.end) - u16::from(removed_i.start);
-        result_i.start = Participant::new(u16::from(original_i.start) - removed_shares).unwrap();
-        result_i.end = Participant::new(u16::from(original_i.end) - removed_shares).unwrap();
-      }
-    }
-    Some(result_i)
+    Some(all_is.get(&key)?.clone())
   }
 
-  pub fn reverse_lookup_i(
-    &self,
-    removed_validators: &[<Ristretto as Ciphersuite>::G],
-    i: Participant,
-  ) -> Option<<Ristretto as Ciphersuite>::G> {
+  pub fn reverse_lookup_i(&self, i: Participant) -> Option<<Ristretto as Ciphersuite>::G> {
     for (validator, _) in &self.validators {
-      if self.i(removed_validators, *validator).map_or(false, |range| range.contains(&i)) {
+      if self.i(*validator).map_or(false, |range| range.contains(&i)) {
         return Some(*validator);
       }
     }
@@ -152,5 +116,9 @@ impl TributarySpec {
 
   pub fn validators(&self) -> Vec<(<Ristretto as Ciphersuite>::G, u64)> {
     self.validators.iter().map(|(validator, weight)| (*validator, u64::from(*weight))).collect()
+  }
+
+  pub fn evrf_public_keys(&self) -> Vec<([u8; 32], Vec<u8>)> {
+    self.evrf_public_keys.clone()
   }
 }

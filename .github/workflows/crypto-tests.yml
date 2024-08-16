@@ -35,6 +35,10 @@ jobs:
             -p multiexp \
             -p schnorr-signatures \
             -p dleq \
+            -p generalized-bulletproofs \
+            -p generalized-bulletproofs-circuit-abstraction \
+            -p ec-divisors \
+            -p generalized-bulletproofs-ec-gadgets \
             -p dkg \
             -p modular-frost \
             -p frost-schnorrkel

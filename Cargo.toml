@@ -30,9 +30,16 @@ members = [
   "crypto/ciphersuite",
 
   "crypto/multiexp",
-
   "crypto/schnorr",
   "crypto/dleq",
+
+  "crypto/evrf/secq256k1",
+  "crypto/evrf/embedwards25519",
+  "crypto/evrf/generalized-bulletproofs",
+  "crypto/evrf/circuit-abstraction",
+  "crypto/evrf/divisors",
+  "crypto/evrf/ec-gadgets",
+
   "crypto/dkg",
   "crypto/frost",
   "crypto/schnorrkel",
@@ -118,18 +125,32 @@ members = [
 # to the extensive operations required for Bulletproofs
 [profile.dev.package]
 subtle = { opt-level = 3 }
-curve25519-dalek = { opt-level = 3 }
 
 ff = { opt-level = 3 }
 group = { opt-level = 3 }
 
 crypto-bigint = { opt-level = 3 }
+secp256k1 = { opt-level = 3 }
+curve25519-dalek = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
 minimal-ed448 = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
 
-monero-serai = { opt-level = 3 }
+secq256k1 = { opt-level = 3 }
+embedwards25519 = { opt-level = 3 }
+generalized-bulletproofs = { opt-level = 3 }
+generalized-bulletproofs-circuit-abstraction = { opt-level = 3 }
+ec-divisors = { opt-level = 3 }
+generalized-bulletproofs-ec-gadgets = { opt-level = 3 }
+
+dkg = { opt-level = 3 }
+
+monero-generators = { opt-level = 3 }
+monero-borromean = { opt-level = 3 }
+monero-bulletproofs = { opt-level = 3 }
+monero-mlsag = { opt-level = 3 }
+monero-clsag = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
@@ -157,6 +178,9 @@ matches = { path = "patches/matches" }
 # The following two patches resolve everything
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
+
+# The official pasta_curves repo doesn't support Zeroize
+pasta_curves = { git = "https://github.com/kayabaNerve/pasta_curves", rev = "a46b5be95cacbff54d06aad8d3bbcba42e05d616" }
 
 # https://github.com/alloy-rs/core/issues/717
 alloy-sol-type-parser = { git = "https://github.com/alloy-rs/core", rev = "446b9d2fbce12b88456152170709a3eaac929af0" }

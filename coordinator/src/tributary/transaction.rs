@@ -12,7 +12,6 @@ use ciphersuite::{
   Ciphersuite, Ristretto,
 };
 use schnorr::SchnorrSignature;
-use frost::Participant;
 
 use scale::{Encode, Decode};
 use processor_messages::coordinator::SubstrateSignableId;
@@ -130,32 +129,26 @@ impl<Id: Clone + PartialEq + Eq + Debug + Encode + Decode> SignData<Id> {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Transaction {
-  RemoveParticipantDueToDkg {
+  RemoveParticipant {
     participant: <Ristretto as Ciphersuite>::G,
     signed: Signed,
   },
 
-  DkgCommitments {
-    attempt: u32,
-    commitments: Vec<Vec<u8>>,
+  DkgParticipation {
+    participation: Vec<u8>,
     signed: Signed,
   },
-  DkgShares {
+  DkgConfirmationNonces {
+    // The confirmation attempt
     attempt: u32,
-    // Sending Participant, Receiving Participant, Share
-    shares: Vec<Vec<Vec<u8>>>,
+    // The nonces for DKG confirmation attempt #attempt
     confirmation_nonces: [u8; 64],
     signed: Signed,
   },
-  InvalidDkgShare {
+  DkgConfirmationShare {
+    // The confirmation attempt
     attempt: u32,
-    accuser: Participant,
-    faulty: Participant,
-    blame: Option<Vec<u8>>,
-    signed: Signed,
-  },
-  DkgConfirmed {
-    attempt: u32,
+    // The share for DKG confirmation attempt #attempt
     confirmation_share: [u8; 32],
     signed: Signed,
   },
@@ -197,29 +190,22 @@ pub enum Transaction {
 impl Debug for Transaction {
   fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { participant, signed } => fmt
-        .debug_struct("Transaction::RemoveParticipantDueToDkg")
+      Transaction::RemoveParticipant { participant, signed } => fmt
+        .debug_struct("Transaction::RemoveParticipant")
         .field("participant", &hex::encode(participant.to_bytes()))
         .field("signer", &hex::encode(signed.signer.to_bytes()))
         .finish_non_exhaustive(),
-      Transaction::DkgCommitments { attempt, commitments: _, signed } => fmt
-        .debug_struct("Transaction::DkgCommitments")
+      Transaction::DkgParticipation { signed, .. } => fmt
+        .debug_struct("Transaction::DkgParticipation")
+        .field("signer", &hex::encode(signed.signer.to_bytes()))
+        .finish_non_exhaustive(),
+      Transaction::DkgConfirmationNonces { attempt, signed, .. } => fmt
+        .debug_struct("Transaction::DkgConfirmationNonces")
         .field("attempt", attempt)
         .field("signer", &hex::encode(signed.signer.to_bytes()))
         .finish_non_exhaustive(),
-      Transaction::DkgShares { attempt, signed, .. } => fmt
-        .debug_struct("Transaction::DkgShares")
-        .field("attempt", attempt)
-        .field("signer", &hex::encode(signed.signer.to_bytes()))
-        .finish_non_exhaustive(),
-      Transaction::InvalidDkgShare { attempt, accuser, faulty, .. } => fmt
-        .debug_struct("Transaction::InvalidDkgShare")
-        .field("attempt", attempt)
-        .field("accuser", accuser)
-        .field("faulty", faulty)
-        .finish_non_exhaustive(),
-      Transaction::DkgConfirmed { attempt, confirmation_share: _, signed } => fmt
-        .debug_struct("Transaction::DkgConfirmed")
+      Transaction::DkgConfirmationShare { attempt, signed, .. } => fmt
+        .debug_struct("Transaction::DkgConfirmationShare")
         .field("attempt", attempt)
         .field("signer", &hex::encode(signed.signer.to_bytes()))
         .finish_non_exhaustive(),
@@ -261,43 +247,32 @@ impl ReadWrite for Transaction {
     reader.read_exact(&mut kind)?;
 
     match kind[0] {
-      0 => Ok(Transaction::RemoveParticipantDueToDkg {
+      0 => Ok(Transaction::RemoveParticipant {
         participant: Ristretto::read_G(reader)?,
         signed: Signed::read_without_nonce(reader, 0)?,
       }),
 
       1 => {
-        let mut attempt = [0; 4];
-        reader.read_exact(&mut attempt)?;
-        let attempt = u32::from_le_bytes(attempt);
+        let participation = {
+          let mut participation_len = [0; 4];
+          reader.read_exact(&mut participation_len)?;
+          let participation_len = u32::from_le_bytes(participation_len);
 
-        let commitments = {
-          let mut commitments_len = [0; 1];
-          reader.read_exact(&mut commitments_len)?;
-          let commitments_len = usize::from(commitments_len[0]);
-          if commitments_len == 0 {
-            Err(io::Error::other("zero commitments in DkgCommitments"))?;
-          }
-
-          let mut each_commitments_len = [0; 2];
-          reader.read_exact(&mut each_commitments_len)?;
-          let each_commitments_len = usize::from(u16::from_le_bytes(each_commitments_len));
-          if (commitments_len * each_commitments_len) > TRANSACTION_SIZE_LIMIT {
+          if participation_len > u32::try_from(TRANSACTION_SIZE_LIMIT).unwrap() {
             Err(io::Error::other(
-              "commitments present in transaction exceeded transaction size limit",
+              "participation present in transaction exceeded transaction size limit",
             ))?;
           }
-          let mut commitments = vec![vec![]; commitments_len];
-          for commitments in &mut commitments {
-            *commitments = vec![0; each_commitments_len];
-            reader.read_exact(commitments)?;
-          }
-          commitments
+          let participation_len = usize::try_from(participation_len).unwrap();
+
+          let mut participation = vec![0; participation_len];
+          reader.read_exact(&mut participation)?;
+          participation
         };
 
         let signed = Signed::read_without_nonce(reader, 0)?;
 
-        Ok(Transaction::DkgCommitments { attempt, commitments, signed })
+        Ok(Transaction::DkgParticipation { participation, signed })
       }
 
       2 => {
@@ -305,36 +280,12 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
-        let shares = {
-          let mut share_quantity = [0; 1];
-          reader.read_exact(&mut share_quantity)?;
-
-          let mut key_share_quantity = [0; 1];
-          reader.read_exact(&mut key_share_quantity)?;
-
-          let mut share_len = [0; 2];
-          reader.read_exact(&mut share_len)?;
-          let share_len = usize::from(u16::from_le_bytes(share_len));
-
-          let mut all_shares = vec![];
-          for _ in 0 .. share_quantity[0] {
-            let mut shares = vec![];
-            for _ in 0 .. key_share_quantity[0] {
-              let mut share = vec![0; share_len];
-              reader.read_exact(&mut share)?;
-              shares.push(share);
-            }
-            all_shares.push(shares);
-          }
-          all_shares
-        };
-
         let mut confirmation_nonces = [0; 64];
         reader.read_exact(&mut confirmation_nonces)?;
 
-        let signed = Signed::read_without_nonce(reader, 1)?;
+        let signed = Signed::read_without_nonce(reader, 0)?;
 
-        Ok(Transaction::DkgShares { attempt, shares, confirmation_nonces, signed })
+        Ok(Transaction::DkgConfirmationNonces { attempt, confirmation_nonces, signed })
       }
 
       3 => {
@@ -342,53 +293,21 @@ impl ReadWrite for Transaction {
         reader.read_exact(&mut attempt)?;
         let attempt = u32::from_le_bytes(attempt);
 
-        let mut accuser = [0; 2];
-        reader.read_exact(&mut accuser)?;
-        let accuser = Participant::new(u16::from_le_bytes(accuser))
-          .ok_or_else(|| io::Error::other("invalid participant in InvalidDkgShare"))?;
-
-        let mut faulty = [0; 2];
-        reader.read_exact(&mut faulty)?;
-        let faulty = Participant::new(u16::from_le_bytes(faulty))
-          .ok_or_else(|| io::Error::other("invalid participant in InvalidDkgShare"))?;
-
-        let mut blame_len = [0; 2];
-        reader.read_exact(&mut blame_len)?;
-        let mut blame = vec![0; u16::from_le_bytes(blame_len).into()];
-        reader.read_exact(&mut blame)?;
-
-        // This shares a nonce with DkgConfirmed as only one is expected
-        let signed = Signed::read_without_nonce(reader, 2)?;
-
-        Ok(Transaction::InvalidDkgShare {
-          attempt,
-          accuser,
-          faulty,
-          blame: Some(blame).filter(|blame| !blame.is_empty()),
-          signed,
-        })
-      }
-
-      4 => {
-        let mut attempt = [0; 4];
-        reader.read_exact(&mut attempt)?;
-        let attempt = u32::from_le_bytes(attempt);
-
         let mut confirmation_share = [0; 32];
         reader.read_exact(&mut confirmation_share)?;
 
-        let signed = Signed::read_without_nonce(reader, 2)?;
+        let signed = Signed::read_without_nonce(reader, 1)?;
 
-        Ok(Transaction::DkgConfirmed { attempt, confirmation_share, signed })
+        Ok(Transaction::DkgConfirmationShare { attempt, confirmation_share, signed })
       }
 
-      5 => {
+      4 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         Ok(Transaction::CosignSubstrateBlock(block))
       }
 
-      6 => {
+      5 => {
         let mut block = [0; 32];
         reader.read_exact(&mut block)?;
         let mut batch = [0; 4];
@@ -396,16 +315,16 @@ impl ReadWrite for Transaction {
         Ok(Transaction::Batch { block, batch: u32::from_le_bytes(batch) })
       }
 
-      7 => {
+      6 => {
         let mut block = [0; 8];
         reader.read_exact(&mut block)?;
         Ok(Transaction::SubstrateBlock(u64::from_le_bytes(block)))
       }
 
-      8 => SignData::read(reader).map(Transaction::SubstrateSign),
-      9 => SignData::read(reader).map(Transaction::Sign),
+      7 => SignData::read(reader).map(Transaction::SubstrateSign),
+      8 => SignData::read(reader).map(Transaction::Sign),
 
-      10 => {
+      9 => {
         let mut plan = [0; 32];
         reader.read_exact(&mut plan)?;
 
@@ -420,7 +339,7 @@ impl ReadWrite for Transaction {
         Ok(Transaction::SignCompleted { plan, tx_hash, first_signer, signature })
       }
 
-      11 => {
+      10 => {
         let mut len = [0];
         reader.read_exact(&mut len)?;
         let len = len[0];
@@ -445,109 +364,59 @@ impl ReadWrite for Transaction {
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { participant, signed } => {
+      Transaction::RemoveParticipant { participant, signed } => {
         writer.write_all(&[0])?;
         writer.write_all(&participant.to_bytes())?;
         signed.write_without_nonce(writer)
       }
 
-      Transaction::DkgCommitments { attempt, commitments, signed } => {
+      Transaction::DkgParticipation { participation, signed } => {
         writer.write_all(&[1])?;
-        writer.write_all(&attempt.to_le_bytes())?;
-        if commitments.is_empty() {
-          Err(io::Error::other("zero commitments in DkgCommitments"))?
-        }
-        writer.write_all(&[u8::try_from(commitments.len()).unwrap()])?;
-        for commitments_i in commitments {
-          if commitments_i.len() != commitments[0].len() {
-            Err(io::Error::other("commitments of differing sizes in DkgCommitments"))?
-          }
-        }
-        writer.write_all(&u16::try_from(commitments[0].len()).unwrap().to_le_bytes())?;
-        for commitments in commitments {
-          writer.write_all(commitments)?;
-        }
+        writer.write_all(&u32::try_from(participation.len()).unwrap().to_le_bytes())?;
+        writer.write_all(participation)?;
         signed.write_without_nonce(writer)
       }
 
-      Transaction::DkgShares { attempt, shares, confirmation_nonces, signed } => {
+      Transaction::DkgConfirmationNonces { attempt, confirmation_nonces, signed } => {
         writer.write_all(&[2])?;
         writer.write_all(&attempt.to_le_bytes())?;
-
-        // `shares` is a Vec which is supposed to map to a HashMap<Participant, Vec<u8>>. Since we
-        // bound participants to 150, this conversion is safe if a valid in-memory transaction.
-        writer.write_all(&[u8::try_from(shares.len()).unwrap()])?;
-        // This assumes at least one share is being sent to another party
-        writer.write_all(&[u8::try_from(shares[0].len()).unwrap()])?;
-        let share_len = shares[0][0].len();
-        // For BLS12-381 G2, this would be:
-        // - A 32-byte share
-        // - A 96-byte ephemeral key
-        // - A 128-byte signature
-        // Hence why this has to be u16
-        writer.write_all(&u16::try_from(share_len).unwrap().to_le_bytes())?;
-
-        for these_shares in shares {
-          assert_eq!(these_shares.len(), shares[0].len(), "amount of sent shares was variable");
-          for share in these_shares {
-            assert_eq!(share.len(), share_len, "sent shares were of variable length");
-            writer.write_all(share)?;
-          }
-        }
-
         writer.write_all(confirmation_nonces)?;
         signed.write_without_nonce(writer)
       }
 
-      Transaction::InvalidDkgShare { attempt, accuser, faulty, blame, signed } => {
+      Transaction::DkgConfirmationShare { attempt, confirmation_share, signed } => {
         writer.write_all(&[3])?;
-        writer.write_all(&attempt.to_le_bytes())?;
-        writer.write_all(&u16::from(*accuser).to_le_bytes())?;
-        writer.write_all(&u16::from(*faulty).to_le_bytes())?;
-
-        // Flattens Some(vec![]) to None on the expectation no actual blame will be 0-length
-        assert!(blame.as_ref().map_or(1, Vec::len) != 0);
-        let blame_len =
-          u16::try_from(blame.as_ref().unwrap_or(&vec![]).len()).expect("blame exceeded 64 KB");
-        writer.write_all(&blame_len.to_le_bytes())?;
-        writer.write_all(blame.as_ref().unwrap_or(&vec![]))?;
-
-        signed.write_without_nonce(writer)
-      }
-
-      Transaction::DkgConfirmed { attempt, confirmation_share, signed } => {
-        writer.write_all(&[4])?;
         writer.write_all(&attempt.to_le_bytes())?;
         writer.write_all(confirmation_share)?;
         signed.write_without_nonce(writer)
       }
 
       Transaction::CosignSubstrateBlock(block) => {
-        writer.write_all(&[5])?;
+        writer.write_all(&[4])?;
         writer.write_all(block)
       }
 
       Transaction::Batch { block, batch } => {
-        writer.write_all(&[6])?;
+        writer.write_all(&[5])?;
         writer.write_all(block)?;
         writer.write_all(&batch.to_le_bytes())
       }
 
       Transaction::SubstrateBlock(block) => {
-        writer.write_all(&[7])?;
+        writer.write_all(&[6])?;
         writer.write_all(&block.to_le_bytes())
       }
 
       Transaction::SubstrateSign(data) => {
-        writer.write_all(&[8])?;
+        writer.write_all(&[7])?;
         data.write(writer)
       }
       Transaction::Sign(data) => {
-        writer.write_all(&[9])?;
+        writer.write_all(&[8])?;
         data.write(writer)
       }
       Transaction::SignCompleted { plan, tx_hash, first_signer, signature } => {
-        writer.write_all(&[10])?;
+        writer.write_all(&[9])?;
         writer.write_all(plan)?;
         writer
           .write_all(&[u8::try_from(tx_hash.len()).expect("tx hash length exceed 255 bytes")])?;
@@ -556,7 +425,7 @@ impl ReadWrite for Transaction {
         signature.write(writer)
       }
       Transaction::SlashReport(points, signed) => {
-        writer.write_all(&[11])?;
+        writer.write_all(&[10])?;
         writer.write_all(&[u8::try_from(points.len()).unwrap()])?;
         for points in points {
           writer.write_all(&points.to_le_bytes())?;
@@ -570,15 +439,16 @@ impl ReadWrite for Transaction {
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind<'_> {
     match self {
-      Transaction::RemoveParticipantDueToDkg { participant, signed } => {
+      Transaction::RemoveParticipant { participant, signed } => {
         TransactionKind::Signed((b"remove", participant.to_bytes()).encode(), signed)
       }
 
-      Transaction::DkgCommitments { attempt, commitments: _, signed } |
-      Transaction::DkgShares { attempt, signed, .. } |
-      Transaction::InvalidDkgShare { attempt, signed, .. } |
-      Transaction::DkgConfirmed { attempt, signed, .. } => {
-        TransactionKind::Signed((b"dkg", attempt).encode(), signed)
+      Transaction::DkgParticipation { signed, .. } => {
+        TransactionKind::Signed(b"dkg".to_vec(), signed)
+      }
+      Transaction::DkgConfirmationNonces { attempt, signed, .. } |
+      Transaction::DkgConfirmationShare { attempt, signed, .. } => {
+        TransactionKind::Signed((b"dkg_confirmation", attempt).encode(), signed)
       }
 
       Transaction::CosignSubstrateBlock(_) => TransactionKind::Provided("cosign"),
@@ -645,11 +515,14 @@ impl Transaction {
     fn signed(tx: &mut Transaction) -> (u32, &mut Signed) {
       #[allow(clippy::match_same_arms)] // Doesn't make semantic sense here
       let nonce = match tx {
-        Transaction::RemoveParticipantDueToDkg { .. } => 0,
+        Transaction::RemoveParticipant { .. } => 0,
 
-        Transaction::DkgCommitments { .. } => 0,
-        Transaction::DkgShares { .. } => 1,
-        Transaction::InvalidDkgShare { .. } | Transaction::DkgConfirmed { .. } => 2,
+        Transaction::DkgParticipation { .. } => 0,
+        // Uses a nonce of 0 as it has an internal attempt counter we distinguish by
+        Transaction::DkgConfirmationNonces { .. } => 0,
+        // Uses a nonce of 1 due to internal attempt counter and due to following
+        // DkgConfirmationNonces
+        Transaction::DkgConfirmationShare { .. } => 1,
 
         Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 
@@ -668,11 +541,10 @@ impl Transaction {
         nonce,
         #[allow(clippy::match_same_arms)]
         match tx {
-          Transaction::RemoveParticipantDueToDkg { ref mut signed, .. } |
-          Transaction::DkgCommitments { ref mut signed, .. } |
-          Transaction::DkgShares { ref mut signed, .. } |
-          Transaction::InvalidDkgShare { ref mut signed, .. } |
-          Transaction::DkgConfirmed { ref mut signed, .. } => signed,
+          Transaction::RemoveParticipant { ref mut signed, .. } |
+          Transaction::DkgParticipation { ref mut signed, .. } |
+          Transaction::DkgConfirmationNonces { ref mut signed, .. } => signed,
+          Transaction::DkgConfirmationShare { ref mut signed, .. } => signed,
 
           Transaction::CosignSubstrateBlock(_) => panic!("signing CosignSubstrateBlock"),
 

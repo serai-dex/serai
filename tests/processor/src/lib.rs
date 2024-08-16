@@ -3,11 +3,14 @@
 use std::sync::{OnceLock, Mutex};
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use ciphersuite::{
+  group::{ff::PrimeField, GroupEncoding},
+  Ciphersuite, Secp256k1, Ed25519, Ristretto,
+};
+use dkg::evrf::*;
 
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::{NetworkId, insecure_arbitrary_key_from_name};
 use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
@@ -24,13 +27,42 @@ mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct EvrfPublicKeys {
+  substrate: [u8; 32],
+  network: Vec<u8>,
+}
+
 pub fn processor_instance(
+  name: &str,
   network: NetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
-) -> Vec<TestBodySpecification> {
-  let mut entropy = [0; 32];
-  OsRng.fill_bytes(&mut entropy);
+) -> (Vec<TestBodySpecification>, EvrfPublicKeys) {
+  let substrate_evrf_key =
+    insecure_arbitrary_key_from_name::<<Ristretto as EvrfCurve>::EmbeddedCurve>(name);
+  let substrate_evrf_pub_key =
+    (<Ristretto as EvrfCurve>::EmbeddedCurve::generator() * substrate_evrf_key).to_bytes();
+  let substrate_evrf_key = substrate_evrf_key.to_repr();
+
+  let (network_evrf_key, network_evrf_pub_key) = match network {
+    NetworkId::Serai => panic!("starting a processor for Serai"),
+    NetworkId::Bitcoin | NetworkId::Ethereum => {
+      let evrf_key =
+        insecure_arbitrary_key_from_name::<<Secp256k1 as EvrfCurve>::EmbeddedCurve>(name);
+      let pub_key =
+        (<Secp256k1 as EvrfCurve>::EmbeddedCurve::generator() * evrf_key).to_bytes().to_vec();
+      (evrf_key.to_repr(), pub_key)
+    }
+    NetworkId::Monero => {
+      let evrf_key =
+        insecure_arbitrary_key_from_name::<<Ed25519 as EvrfCurve>::EmbeddedCurve>(name);
+      let pub_key =
+        (<Ed25519 as EvrfCurve>::EmbeddedCurve::generator() * evrf_key).to_bytes().to_vec();
+      (evrf_key.to_repr(), pub_key)
+    }
+  };
 
   let network_str = match network {
     NetworkId::Serai => panic!("starting a processor for Serai"),
@@ -47,7 +79,8 @@ pub fn processor_instance(
   .replace_env(
     [
       ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
-      ("ENTROPY".to_string(), hex::encode(entropy)),
+      ("SUBSTRATE_EVRF_KEY".to_string(), hex::encode(substrate_evrf_key)),
+      ("NETWORK_EVRF_KEY".to_string(), hex::encode(network_evrf_key)),
       ("NETWORK".to_string(), network_str.to_string()),
       ("NETWORK_RPC_LOGIN".to_string(), format!("{RPC_USER}:{RPC_PASS}")),
       ("NETWORK_RPC_PORT".to_string(), port.to_string()),
@@ -75,21 +108,27 @@ pub fn processor_instance(
     );
   }
 
-  res
+  (res, EvrfPublicKeys { substrate: substrate_evrf_pub_key, network: network_evrf_pub_key })
+}
+
+pub struct ProcessorKeys {
+  coordinator: <Ristretto as Ciphersuite>::F,
+  evrf: EvrfPublicKeys,
 }
 
 pub type Handles = (String, String, String, String);
 pub fn processor_stack(
+  name: &str,
   network: NetworkId,
   network_hostname_override: Option<String>,
-) -> (Handles, <Ristretto as Ciphersuite>::F, Vec<TestBodySpecification>) {
+) -> (Handles, ProcessorKeys, Vec<TestBodySpecification>) {
   let (network_composition, network_rpc_port) = network_instance(network);
 
   let (coord_key, message_queue_keys, message_queue_composition) =
     serai_message_queue_tests::instance();
 
-  let mut processor_compositions =
-    processor_instance(network, network_rpc_port, message_queue_keys[&network]);
+  let (mut processor_compositions, evrf_keys) =
+    processor_instance(name, network, network_rpc_port, message_queue_keys[&network]);
 
   // Give every item in this stack a unique ID
   // Uses a Mutex as we can't generate a 8-byte random ID without hitting hostname length limits
@@ -155,7 +194,7 @@ pub fn processor_stack(
       handles[2].clone(),
       handles.get(3).cloned().unwrap_or(String::new()),
     ),
-    coord_key,
+    ProcessorKeys { coordinator: coord_key, evrf: evrf_keys },
     compositions,
   )
 }
@@ -170,6 +209,8 @@ pub struct Coordinator {
   processor_handle: String,
   relayer_handle: String,
 
+  evrf_keys: EvrfPublicKeys,
+
   next_send_id: u64,
   next_recv_id: u64,
   queue: MessageQueue,
@@ -180,7 +221,7 @@ impl Coordinator {
     network: NetworkId,
     ops: &DockerOperations,
     handles: Handles,
-    coord_key: <Ristretto as Ciphersuite>::F,
+    keys: ProcessorKeys,
   ) -> Coordinator {
     let rpc = ops.handle(&handles.1).host_port(2287).unwrap();
     let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
@@ -193,9 +234,11 @@ impl Coordinator {
       processor_handle: handles.2,
       relayer_handle: handles.3,
 
+      evrf_keys: keys.evrf,
+
       next_send_id: 0,
       next_recv_id: 0,
-      queue: MessageQueue::new(Service::Coordinator, rpc, Zeroizing::new(coord_key)),
+      queue: MessageQueue::new(Service::Coordinator, rpc, Zeroizing::new(keys.coordinator)),
     };
 
     // Sleep for up to a minute in case the external network's RPC has yet to start
@@ -300,6 +343,11 @@ impl Coordinator {
     }
 
     res
+  }
+
+  /// Get the eVRF keys for the associated processor.
+  pub fn evrf_keys(&self) -> EvrfPublicKeys {
+    self.evrf_keys.clone()
   }
 
   /// Send a message to a processor as its coordinator.

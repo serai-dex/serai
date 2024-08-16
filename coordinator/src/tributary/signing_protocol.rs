@@ -55,7 +55,7 @@
 */
 
 use core::ops::Deref;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 
@@ -63,10 +63,7 @@ use rand_core::OsRng;
 
 use blake2::{Digest, Blake2s256};
 
-use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
-};
+use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
 use frost::{
   FrostError,
   dkg::{Participant, musig::musig},
@@ -77,10 +74,8 @@ use frost_schnorrkel::Schnorrkel;
 
 use scale::Encode;
 
-use serai_client::{
-  Public,
-  validator_sets::primitives::{KeyPair, musig_context, set_keys_message},
-};
+#[rustfmt::skip]
+use serai_client::validator_sets::primitives::{ValidatorSet, KeyPair, musig_context, set_keys_message};
 
 use serai_db::*;
 
@@ -89,6 +84,7 @@ use crate::tributary::TributarySpec;
 create_db!(
   SigningProtocolDb {
     CachedPreprocesses: (context: &impl Encode) -> [u8; 32]
+    DataSignedWith: (context: &impl Encode) -> (Vec<u8>, HashMap<Participant, Vec<u8>>),
   }
 );
 
@@ -117,16 +113,22 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
     };
     let encryption_key_slice: &mut [u8] = encryption_key.as_mut();
 
-    let algorithm = Schnorrkel::new(b"substrate");
+    // Create the MuSig keys
     let keys: ThresholdKeys<Ristretto> =
       musig(&musig_context(self.spec.set()), self.key, participants)
         .expect("signing for a set we aren't in/validator present multiple times")
         .into();
 
+    // Define the algorithm
+    let algorithm = Schnorrkel::new(b"substrate");
+
+    // Check if we've prior preprocessed
     if CachedPreprocesses::get(self.txn, &self.context).is_none() {
+      // If we haven't, we create a machine solely to obtain the preprocess with
       let (machine, _) =
         AlgorithmMachine::new(algorithm.clone(), keys.clone()).preprocess(&mut OsRng);
 
+      // Cache and save the preprocess to disk
       let mut cache = machine.cache();
       assert_eq!(cache.0.len(), 32);
       #[allow(clippy::needless_range_loop)]
@@ -137,13 +139,15 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
       CachedPreprocesses::set(self.txn, &self.context, &cache.0);
     }
 
+    // We're now guaranteed to have the preprocess, hence why this `unwrap` is safe
     let cached = CachedPreprocesses::get(self.txn, &self.context).unwrap();
-    let mut cached: Zeroizing<[u8; 32]> = Zeroizing::new(cached);
+    let mut cached = Zeroizing::new(cached);
     #[allow(clippy::needless_range_loop)]
     for b in 0 .. 32 {
       cached[b] ^= encryption_key_slice[b];
     }
     encryption_key_slice.zeroize();
+    // Create the machine from the cached preprocess
     let (machine, preprocess) =
       AlgorithmSignMachine::from_cache(algorithm, keys, CachedPreprocess(cached));
 
@@ -156,8 +160,29 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
     mut serialized_preprocesses: HashMap<Participant, Vec<u8>>,
     msg: &[u8],
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let machine = self.preprocess_internal(participants).0;
+    // We can't clear the preprocess as we sitll need it to accumulate all of the shares
+    // We do save the message we signed so any future calls with distinct messages panic
+    // This assumes the txn deciding this data is committed before the share is broaadcast
+    if let Some((existing_msg, existing_preprocesses)) =
+      DataSignedWith::get(self.txn, &self.context)
+    {
+      assert_eq!(msg, &existing_msg, "obtaining a signature share for a distinct message");
+      assert_eq!(
+        &serialized_preprocesses, &existing_preprocesses,
+        "obtaining a signature share with a distinct set of preprocesses"
+      );
+    } else {
+      DataSignedWith::set(
+        self.txn,
+        &self.context,
+        &(msg.to_vec(), serialized_preprocesses.clone()),
+      );
+    }
 
+    // Get the preprocessed machine
+    let (machine, _) = self.preprocess_internal(participants);
+
+    // Deserialize all the preprocesses
     let mut participants = serialized_preprocesses.keys().copied().collect::<Vec<_>>();
     participants.sort();
     let mut preprocesses = HashMap::new();
@@ -170,13 +195,14 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
       );
     }
 
+    // Sign the share
     let (machine, share) = machine.sign(preprocesses, msg).map_err(|e| match e {
       FrostError::InternalError(e) => unreachable!("FrostError::InternalError {e}"),
       FrostError::InvalidParticipant(_, _) |
       FrostError::InvalidSigningSet(_) |
       FrostError::InvalidParticipantQuantity(_, _) |
       FrostError::DuplicatedParticipant(_) |
-      FrostError::MissingParticipant(_) => unreachable!("{e:?}"),
+      FrostError::MissingParticipant(_) => panic!("unexpected error during sign: {e:?}"),
       FrostError::InvalidPreprocess(p) | FrostError::InvalidShare(p) => p,
     })?;
 
@@ -207,24 +233,24 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
 }
 
 // Get the keys of the participants, noted by their threshold is, and return a new map indexed by
-// the MuSig is.
+// their MuSig is.
 fn threshold_i_map_to_keys_and_musig_i_map(
   spec: &TributarySpec,
-  removed: &[<Ristretto as Ciphersuite>::G],
   our_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   mut map: HashMap<Participant, Vec<u8>>,
 ) -> (Vec<<Ristretto as Ciphersuite>::G>, HashMap<Participant, Vec<u8>>) {
   // Insert our own index so calculations aren't offset
   let our_threshold_i = spec
-    .i(removed, <Ristretto as Ciphersuite>::generator() * our_key.deref())
-    .expect("MuSig t-of-n signing a for a protocol we were removed from")
+    .i(<Ristretto as Ciphersuite>::generator() * our_key.deref())
+    .expect("not in a set we're signing for")
     .start;
+  // Asserts we weren't unexpectedly already present
   assert!(map.insert(our_threshold_i, vec![]).is_none());
 
   let spec_validators = spec.validators();
   let key_from_threshold_i = |threshold_i| {
     for (key, _) in &spec_validators {
-      if threshold_i == spec.i(removed, *key).expect("MuSig t-of-n participant was removed").start {
+      if threshold_i == spec.i(*key).expect("validator wasn't in a set they're in").start {
         return *key;
       }
     }
@@ -235,29 +261,37 @@ fn threshold_i_map_to_keys_and_musig_i_map(
   let mut threshold_is = map.keys().copied().collect::<Vec<_>>();
   threshold_is.sort();
   for threshold_i in threshold_is {
-    sorted.push((key_from_threshold_i(threshold_i), map.remove(&threshold_i).unwrap()));
+    sorted.push((
+      threshold_i,
+      key_from_threshold_i(threshold_i),
+      map.remove(&threshold_i).unwrap(),
+    ));
   }
 
   // Now that signers are sorted, with their shares, create a map with the is needed for MuSig
   let mut participants = vec![];
   let mut map = HashMap::new();
-  for (raw_i, (key, share)) in sorted.into_iter().enumerate() {
-    let musig_i = u16::try_from(raw_i).unwrap() + 1;
+  let mut our_musig_i = None;
+  for (raw_i, (threshold_i, key, share)) in sorted.into_iter().enumerate() {
+    let musig_i = Participant::new(u16::try_from(raw_i).unwrap() + 1).unwrap();
+    if threshold_i == our_threshold_i {
+      our_musig_i = Some(musig_i);
+    }
     participants.push(key);
-    map.insert(Participant::new(musig_i).unwrap(), share);
+    map.insert(musig_i, share);
   }
 
-  map.remove(&our_threshold_i).unwrap();
+  map.remove(&our_musig_i.unwrap()).unwrap();
 
   (participants, map)
 }
 
-type DkgConfirmerSigningProtocol<'a, T> = SigningProtocol<'a, T, (&'static [u8; 12], u32)>;
+type DkgConfirmerSigningProtocol<'a, T> =
+  SigningProtocol<'a, T, (&'static [u8; 12], ValidatorSet, u32)>;
 
 pub(crate) struct DkgConfirmer<'a, T: DbTxn> {
   key: &'a Zeroizing<<Ristretto as Ciphersuite>::F>,
   spec: &'a TributarySpec,
-  removed: Vec<<Ristretto as Ciphersuite>::G>,
   txn: &'a mut T,
   attempt: u32,
 }
@@ -268,19 +302,19 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     spec: &'a TributarySpec,
     txn: &'a mut T,
     attempt: u32,
-  ) -> Option<DkgConfirmer<'a, T>> {
-    // This relies on how confirmations are inlined into the DKG protocol and they accordingly
-    // share attempts
-    let removed = crate::tributary::removed_as_of_dkg_attempt(txn, spec.genesis(), attempt)?;
-    Some(DkgConfirmer { key, spec, removed, txn, attempt })
+  ) -> DkgConfirmer<'a, T> {
+    DkgConfirmer { key, spec, txn, attempt }
   }
+
   fn signing_protocol(&mut self) -> DkgConfirmerSigningProtocol<'_, T> {
-    let context = (b"DkgConfirmer", self.attempt);
+    let context = (b"DkgConfirmer", self.spec.set(), self.attempt);
     SigningProtocol { key: self.key, spec: self.spec, txn: self.txn, context }
   }
 
   fn preprocess_internal(&mut self) -> (AlgorithmSignMachine<Ristretto, Schnorrkel>, [u8; 64]) {
-    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
+    // This preprocesses with just us as we only decide the participants after obtaining
+    // preprocesses
+    let participants = vec![<Ristretto as Ciphersuite>::generator() * self.key.deref()];
     self.signing_protocol().preprocess_internal(&participants)
   }
   // Get the preprocess for this confirmation.
@@ -293,14 +327,9 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     preprocesses: HashMap<Participant, Vec<u8>>,
     key_pair: &KeyPair,
   ) -> Result<(AlgorithmSignatureMachine<Ristretto, Schnorrkel>, [u8; 32]), Participant> {
-    let participants = self.spec.validators().iter().map(|val| val.0).collect::<Vec<_>>();
-    let preprocesses =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, &self.removed, self.key, preprocesses).1;
-    let msg = set_keys_message(
-      &self.spec.set(),
-      &self.removed.iter().map(|key| Public(key.to_bytes())).collect::<Vec<_>>(),
-      key_pair,
-    );
+    let (participants, preprocesses) =
+      threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, preprocesses);
+    let msg = set_keys_message(&self.spec.set(), key_pair);
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)
   }
   // Get the share for this confirmation, if the preprocesses are valid.
@@ -318,8 +347,9 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
     key_pair: &KeyPair,
     shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<[u8; 64], Participant> {
-    let shares =
-      threshold_i_map_to_keys_and_musig_i_map(self.spec, &self.removed, self.key, shares).1;
+    assert_eq!(preprocesses.keys().collect::<HashSet<_>>(), shares.keys().collect::<HashSet<_>>());
+
+    let shares = threshold_i_map_to_keys_and_musig_i_map(self.spec, self.key, shares).1;
 
     let machine = self
       .share_internal(preprocesses, key_pair)

@@ -18,6 +18,8 @@ use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
   Ciphersuite, Ristretto,
 };
+use embedwards25519::Embedwards25519;
+use secq256k1::Secq256k1;
 
 use serai_client::primitives::NetworkId;
 
@@ -118,6 +120,8 @@ pub struct Processor {
   queue_for_sending: MessageQueue,
   abort_handle: Option<Arc<AbortHandle>>,
 
+  evrf_public_keys: ([u8; 32], Vec<u8>),
+
   substrate_key: Arc<AsyncMutex<Option<Zeroizing<<Ristretto as Ciphersuite>::F>>>>,
 }
 
@@ -131,7 +135,7 @@ impl Drop for Processor {
 
 impl Processor {
   pub async fn new(
-    raw_i: u8,
+    name: &'static str,
     network: NetworkId,
     ops: &DockerOperations,
     handles: Handles,
@@ -168,7 +172,11 @@ impl Processor {
 
     let (msg_send, msg_recv) = mpsc::unbounded_channel();
 
+    use serai_client::primitives::insecure_arbitrary_key_from_name;
     let substrate_key = Arc::new(AsyncMutex::new(None));
+    let embedwards25519_evrf_key = (Embedwards25519::generator() *
+      insecure_arbitrary_key_from_name::<Embedwards25519>(name))
+    .to_bytes();
     let mut res = Processor {
       network,
 
@@ -182,6 +190,21 @@ impl Processor {
       ),
       msgs: msg_recv,
       abort_handle: None,
+
+      evrf_public_keys: (
+        embedwards25519_evrf_key,
+        match network {
+          NetworkId::Serai => panic!("mock processor for the serai network"),
+          NetworkId::Bitcoin | NetworkId::Ethereum => {
+            let key = (Secq256k1::generator() *
+              insecure_arbitrary_key_from_name::<Secq256k1>(name))
+            .to_bytes();
+            let key: &[u8] = key.as_ref();
+            key.to_vec()
+          }
+          NetworkId::Monero => embedwards25519_evrf_key.to_vec(),
+        },
+      ),
 
       substrate_key: substrate_key.clone(),
     };
@@ -256,10 +279,12 @@ impl Processor {
               if current_cosign.is_none() || (current_cosign.as_ref().unwrap().block != block) {
                 *current_cosign = Some(new_cosign);
               }
+              let mut preprocess = [0; 64];
+              preprocess[.. name.len()].copy_from_slice(name.as_ref());
               send_message(
                 messages::coordinator::ProcessorMessage::CosignPreprocess {
                   id: id.clone(),
-                  preprocesses: vec![[raw_i; 64]],
+                  preprocesses: vec![preprocess],
                 }
                 .into(),
               )
@@ -270,12 +295,11 @@ impl Processor {
             ) => {
               // TODO: Assert the ID matches CURRENT_COSIGN
               // TODO: Verify the received preprocesses
+              let mut share = [0; 32];
+              share[.. name.len()].copy_from_slice(name.as_bytes());
               send_message(
-                messages::coordinator::ProcessorMessage::SubstrateShare {
-                  id,
-                  shares: vec![[raw_i; 32]],
-                }
-                .into(),
+                messages::coordinator::ProcessorMessage::SubstrateShare { id, shares: vec![share] }
+                  .into(),
               )
               .await;
             }
@@ -325,6 +349,14 @@ impl Processor {
     res.abort_handle = Some(Arc::new(abort_handle));
 
     res
+  }
+
+  pub fn network(&self) -> NetworkId {
+    self.network
+  }
+
+  pub fn evrf_public_keys(&self) -> ([u8; 32], Vec<u8>) {
+    self.evrf_public_keys.clone()
   }
 
   pub async fn serai(&self) -> Serai {

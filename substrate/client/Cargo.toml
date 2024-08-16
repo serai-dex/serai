@@ -20,6 +20,8 @@ workspace = true
 zeroize = "^1.5"
 thiserror = { version = "1", optional = true }
 
+bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
+
 hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
 serde = { version = "1", features = ["derive"], optional = true }

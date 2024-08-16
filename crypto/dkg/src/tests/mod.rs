@@ -6,7 +6,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
-use crate::{Participant, ThresholdCore, ThresholdKeys, lagrange, musig::musig as musig_fn};
+use crate::{Participant, ThresholdCore, ThresholdKeys, musig::musig as musig_fn};
 
 mod musig;
 pub use musig::test_musig;
@@ -18,6 +18,9 @@ use pedpop::pedpop_gen;
 // Promotion test.
 mod promote;
 use promote::test_generator_promotion;
+
+#[cfg(all(test, feature = "evrf"))]
+mod evrf;
 
 /// Constant amount of participants to use when testing.
 pub const PARTICIPANTS: u16 = 5;
@@ -43,7 +46,8 @@ pub fn recover_key<C: Ciphersuite>(keys: &HashMap<Participant, ThresholdKeys<C>>
   let included = keys.keys().copied().collect::<Vec<_>>();
 
   let group_private = keys.iter().fold(C::F::ZERO, |accum, (i, keys)| {
-    accum + (lagrange::<C::F>(*i, &included) * keys.secret_share().deref())
+    accum +
+      (first.core.interpolation.interpolation_factor(*i, &included) * keys.secret_share().deref())
   });
   assert_eq!(C::generator() * group_private, first.group_key(), "failed to recover keys");
   group_private

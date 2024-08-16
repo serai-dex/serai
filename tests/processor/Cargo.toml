@@ -23,8 +23,8 @@ zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
 curve25519-dalek = "4"
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["secp256k1", "ristretto"] }
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["secp256k1", "ed25519", "ristretto"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 
 bitcoin-serai = { path = "../../networks/bitcoin" }
 

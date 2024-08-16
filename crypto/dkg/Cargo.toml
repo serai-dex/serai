@@ -36,9 +36,26 @@ multiexp = { path = "../multiexp", version = "0.4", default-features = false }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false }
 dleq = { path = "../dleq", version = "^0.4.1", default-features = false }
 
+# eVRF DKG dependencies
+subtle = { version = "2", default-features = false, features = ["std"], optional = true }
+generic-array = { version = "1", default-features = false, features = ["alloc"], optional = true }
+blake2 = { version = "0.10", default-features = false, features = ["std"], optional = true }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"], optional = true }
+generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", default-features = false, optional = true }
+ec-divisors = { path = "../evrf/divisors", default-features = false, optional = true }
+generalized-bulletproofs-circuit-abstraction = { path = "../evrf/circuit-abstraction", optional = true }
+generalized-bulletproofs-ec-gadgets = { path = "../evrf/ec-gadgets", optional = true }
+
+secq256k1 = { path = "../evrf/secq256k1", optional = true }
+embedwards25519 = { path = "../evrf/embedwards25519", optional = true }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
+generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", features = ["tests"] }
+ec-divisors = { path = "../evrf/divisors", features = ["pasta"] }
+pasta_curves = "0.5"
 
 [features]
 std = [
@@ -62,5 +79,22 @@ std = [
   "dleq/serialize"
 ]
 borsh = ["dep:borsh"]
+evrf = [
+  "std",
+
+  "dep:subtle",
+  "dep:generic-array",
+
+  "dep:blake2",
+  "dep:rand_chacha",
+
+  "dep:generalized-bulletproofs",
+  "dep:ec-divisors",
+  "dep:generalized-bulletproofs-circuit-abstraction",
+  "dep:generalized-bulletproofs-ec-gadgets",
+]
+evrf-secp256k1 = ["evrf", "ciphersuite/secp256k1", "secq256k1"]
+evrf-ed25519 = ["evrf", "ciphersuite/ed25519", "embedwards25519"]
+evrf-ristretto = ["evrf", "ciphersuite/ristretto", "embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

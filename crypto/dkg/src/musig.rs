@@ -7,8 +7,6 @@ use std_shims::collections::HashMap;
 #[cfg(feature = "std")]
 use zeroize::Zeroizing;
 
-#[cfg(feature = "std")]
-use ciphersuite::group::ff::Field;
 use ciphersuite::{
   group::{Group, GroupEncoding},
   Ciphersuite,
@@ -16,7 +14,7 @@ use ciphersuite::{
 
 use crate::DkgError;
 #[cfg(feature = "std")]
-use crate::{Participant, ThresholdParams, ThresholdCore, lagrange};
+use crate::{Participant, ThresholdParams, Interpolation, ThresholdCore};
 
 fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, DkgError<()>> {
   if keys.is_empty() {
@@ -67,6 +65,7 @@ pub fn musig_key<C: Ciphersuite>(context: &[u8], keys: &[C::G]) -> Result<C::G, 
   let transcript = binding_factor_transcript::<C>(context, keys)?;
   let mut res = C::G::identity();
   for i in 1 ..= keys_len {
+    // TODO: Calculate this with a multiexp
     res += keys[usize::from(i - 1)] * binding_factor::<C>(transcript.clone(), i);
   }
   Ok(res)
@@ -104,38 +103,26 @@ pub fn musig<C: Ciphersuite>(
     binding.push(binding_factor::<C>(transcript.clone(), i));
   }
 
-  // Multiply our private key by our binding factor
-  let mut secret_share = private_key.clone();
-  *secret_share *= binding[pos];
+  // Our secret share is our private key
+  let secret_share = private_key.clone();
 
   // Calculate verification shares
   let mut verification_shares = HashMap::new();
-  // When this library offers a ThresholdView for a specific signing set, it applies the lagrange
-  // factor
-  // Since this is a n-of-n scheme, there's only one possible signing set, and one possible
-  // lagrange factor
-  // In the name of simplicity, we define the group key as the sum of all bound keys
-  // Accordingly, the secret share must be multiplied by the inverse of the lagrange factor, along
-  // with all verification shares
-  // This is less performant than simply defining the group key as the sum of all post-lagrange
-  // bound keys, yet the simplicity is preferred
-  let included = (1 ..= keys_len)
-    // This error also shouldn't be possible, for the same reasons as documented above
-    .map(|l| Participant::new(l).ok_or(DkgError::InvalidSigningSet))
-    .collect::<Result<Vec<_>, _>>()?;
   let mut group_key = C::G::identity();
-  for (l, p) in included.iter().enumerate() {
-    let bound = keys[l] * binding[l];
-    group_key += bound;
+  for l in 1 ..= keys_len {
+    let key = keys[usize::from(l) - 1];
+    group_key += key * binding[usize::from(l - 1)];
 
-    let lagrange_inv = lagrange::<C::F>(*p, &included).invert().unwrap();
-    if params.i() == *p {
-      *secret_share *= lagrange_inv;
-    }
-    verification_shares.insert(*p, bound * lagrange_inv);
+    // These errors also shouldn't be possible, for the same reasons as documented above
+    verification_shares.insert(Participant::new(l).ok_or(DkgError::InvalidSigningSet)?, key);
   }
   debug_assert_eq!(C::generator() * secret_share.deref(), verification_shares[&params.i()]);
   debug_assert_eq!(musig_key::<C>(context, keys).unwrap(), group_key);
 
-  Ok(ThresholdCore { params, secret_share, group_key, verification_shares })
+  Ok(ThresholdCore::new(
+    params,
+    Interpolation::Constant(binding),
+    secret_share,
+    verification_shares,
+  ))
 }

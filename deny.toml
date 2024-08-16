@@ -102,5 +102,6 @@ allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
+  "https://github.com/kayabaNerve/pasta_curves",
   "https://github.com/alloy-rs/core",
 ]

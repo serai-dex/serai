@@ -14,7 +14,6 @@ use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Ed25519,
   Participant, FrostError, ThresholdKeys,
-  dkg::lagrange,
   sign::{
     Preprocess, CachedPreprocess, SignatureShare, PreprocessMachine, SignMachine, SignatureMachine,
     AlgorithmMachine, AlgorithmSignMachine, AlgorithmSignatureMachine,
@@ -34,7 +33,7 @@ use crate::send::{SendError, SignableTransaction, key_image_sort};
 pub struct TransactionMachine {
   signable: SignableTransaction,
 
-  i: Participant,
+  keys: ThresholdKeys<Ed25519>,
 
   // The key image generator, and the scalar offset from the spend key
   key_image_generators_and_offsets: Vec<(EdwardsPoint, Scalar)>,
@@ -45,7 +44,7 @@ pub struct TransactionMachine {
 pub struct TransactionSignMachine {
   signable: SignableTransaction,
 
-  i: Participant,
+  keys: ThresholdKeys<Ed25519>,
 
   key_image_generators_and_offsets: Vec<(EdwardsPoint, Scalar)>,
   clsags: Vec<(ClsagMultisigMaskSender, AlgorithmSignMachine<Ed25519, ClsagMultisig>)>,
@@ -61,7 +60,7 @@ pub struct TransactionSignatureMachine {
 
 impl SignableTransaction {
   /// Create a FROST signing machine out of this signable transaction.
-  pub fn multisig(self, keys: &ThresholdKeys<Ed25519>) -> Result<TransactionMachine, SendError> {
+  pub fn multisig(self, keys: ThresholdKeys<Ed25519>) -> Result<TransactionMachine, SendError> {
     let mut clsags = vec![];
 
     let mut key_image_generators_and_offsets = vec![];
@@ -85,12 +84,7 @@ impl SignableTransaction {
       clsags.push((clsag_mask_send, AlgorithmMachine::new(clsag, offset)));
     }
 
-    Ok(TransactionMachine {
-      signable: self,
-      i: keys.params().i(),
-      key_image_generators_and_offsets,
-      clsags,
-    })
+    Ok(TransactionMachine { signable: self, keys, key_image_generators_and_offsets, clsags })
   }
 }
 
@@ -120,7 +114,7 @@ impl PreprocessMachine for TransactionMachine {
       TransactionSignMachine {
         signable: self.signable,
 
-        i: self.i,
+        keys: self.keys,
 
         key_image_generators_and_offsets: self.key_image_generators_and_offsets,
         clsags,
@@ -173,12 +167,12 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // We do not need to be included here, yet this set of signers has yet to be validated
     // We explicitly remove ourselves to ensure we aren't included twice, if we were redundantly
     // included
-    commitments.remove(&self.i);
+    commitments.remove(&self.keys.params().i());
 
     // Find out who's included
     let mut included = commitments.keys().copied().collect::<Vec<_>>();
     // This push won't duplicate due to the above removal
-    included.push(self.i);
+    included.push(self.keys.params().i());
     // unstable sort may reorder elements of equal order
     // Given our lack of duplicates, we should have no elements of equal order
     included.sort_unstable();
@@ -192,12 +186,15 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     }
 
     // Convert the serialized nonces commitments to a parallelized Vec
+    let view = self.keys.view(included.clone()).map_err(|_| {
+      FrostError::InvalidSigningSet("couldn't form an interpolated view of the key")
+    })?;
     let mut commitments = (0 .. self.clsags.len())
       .map(|c| {
         included
           .iter()
           .map(|l| {
-            let preprocess = if *l == self.i {
+            let preprocess = if *l == self.keys.params().i() {
               self.our_preprocess[c].clone()
             } else {
               commitments.get_mut(l).ok_or(FrostError::MissingParticipant(*l))?[c].clone()
@@ -206,7 +203,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
             // While here, calculate the key image as needed to call sign
             // The CLSAG algorithm will independently calculate the key image/verify these shares
             key_images[c] +=
-              preprocess.addendum.key_image_share().0 * lagrange::<dfg::Scalar>(*l, &included).0;
+              preprocess.addendum.key_image_share().0 * view.interpolation_factor(*l).unwrap().0;
 
             Ok((*l, preprocess))
           })
@@ -217,7 +214,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     // The above inserted our own preprocess into these maps (which is unnecessary)
     // Remove it now
     for map in &mut commitments {
-      map.remove(&self.i);
+      map.remove(&self.keys.params().i());
     }
 
     // The actual TX will have sorted its inputs by key image

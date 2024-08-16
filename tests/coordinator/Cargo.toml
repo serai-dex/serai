@@ -24,7 +24,11 @@ zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
 blake2 = "0.10"
+
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ristretto", "secp256k1"] }
+embedwards25519 = { path = "../../crypto/evrf/embedwards25519" }
+secq256k1 = { path = "../../crypto/evrf/secq256k1" }
+
 schnorrkel = "0.11"
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["tests"] }
 

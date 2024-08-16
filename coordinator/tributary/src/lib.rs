@@ -50,13 +50,17 @@ pub(crate) use crate::tendermint::*;
 pub mod tests;
 
 /// Size limit for an individual transaction.
-pub const TRANSACTION_SIZE_LIMIT: usize = 3_000_000;
+// This needs to be big enough to participate in a 101-of-150 eVRF DKG with each element taking
+// `MAX_KEY_LEN`. This also needs to be big enough to pariticpate in signing 520 Bitcoin inputs
+// with 49 key shares, and signing 120 Monero inputs with 49 key shares.
+// TODO: Add a test for these properties
+pub const TRANSACTION_SIZE_LIMIT: usize = 2_000_000;
 /// Amount of transactions a single account may have in the mempool.
 pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 /// Block size limit.
-// This targets a growth limit of roughly 45 GB a day, under load, in order to prevent a malicious
+// This targets a growth limit of roughly 30 GB a day, under load, in order to prevent a malicious
 // participant from flooding disks and causing out of space errors in order processes.
-pub const BLOCK_SIZE_LIMIT: usize = 3_001_000;
+pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 1;

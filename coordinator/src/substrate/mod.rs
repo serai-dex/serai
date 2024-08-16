@@ -10,7 +10,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use serai_client::{
   SeraiError, Block, Serai, TemporalSerai,
-  primitives::{BlockHash, NetworkId},
+  primitives::{BlockHash, EmbeddedEllipticCurve, NetworkId},
   validator_sets::{primitives::ValidatorSet, ValidatorSetsEvent},
   in_instructions::InInstructionsEvent,
   coins::CoinsEvent,
@@ -60,13 +60,46 @@ async fn handle_new_set<D: Db>(
   {
     log::info!("present in set {:?}", set);
 
-    let set_data = {
+    let validators;
+    let mut evrf_public_keys = vec![];
+    {
       let serai = serai.as_of(block.hash());
       let serai = serai.validator_sets();
       let set_participants =
         serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
 
-      set_participants.into_iter().map(|(k, w)| (k, u16::try_from(w).unwrap())).collect::<Vec<_>>()
+      validators = set_participants
+        .iter()
+        .map(|(k, w)| {
+          (
+            <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut k.0.as_ref())
+              .expect("invalid key registered as participant"),
+            u16::try_from(*w).unwrap(),
+          )
+        })
+        .collect::<Vec<_>>();
+      for (validator, _) in set_participants {
+        // This is only run for external networks which always do a DKG for Serai
+        let substrate = serai
+          .embedded_elliptic_curve_key(validator, EmbeddedEllipticCurve::Embedwards25519)
+          .await?
+          .expect("Serai called NewSet on a validator without an Embedwards25519 key");
+        // `embedded_elliptic_curves` is documented to have the second entry be the
+        // network-specific curve (if it exists and is distinct from Embedwards25519)
+        let network =
+          if let Some(embedded_elliptic_curve) = set.network.embedded_elliptic_curves().get(1) {
+            serai.embedded_elliptic_curve_key(validator, *embedded_elliptic_curve).await?.expect(
+            "Serai called NewSet on a validator without the embedded key required for the network",
+          )
+          } else {
+            substrate.clone()
+          };
+        evrf_public_keys.push((
+          <[u8; 32]>::try_from(substrate)
+            .expect("validator-sets pallet accepted a key of an invalid length"),
+          network,
+        ));
+      }
     };
 
     let time = if let Ok(time) = block.time() {
@@ -90,7 +123,7 @@ async fn handle_new_set<D: Db>(
     const SUBSTRATE_TO_TRIBUTARY_TIME_DELAY: u64 = 120;
     let time = time + SUBSTRATE_TO_TRIBUTARY_TIME_DELAY;
 
-    let spec = TributarySpec::new(block.hash(), time, set, set_data);
+    let spec = TributarySpec::new(block.hash(), time, set, validators, evrf_public_keys);
 
     log::info!("creating new tributary for {:?}", spec.set());
 

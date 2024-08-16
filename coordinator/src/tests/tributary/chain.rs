@@ -7,12 +7,8 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, OsRng};
 use futures_util::{task::Poll, poll};
 
-use ciphersuite::{
-  group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
-};
+use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
-use sp_application_crypto::sr25519;
 use borsh::BorshDeserialize;
 use serai_client::{
   primitives::NetworkId,
@@ -52,12 +48,22 @@ pub fn new_spec<R: RngCore + CryptoRng>(
 
   let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
 
-  let set_participants = keys
+  let validators = keys
     .iter()
-    .map(|key| (sr25519::Public((<Ristretto as Ciphersuite>::generator() * **key).to_bytes()), 1))
+    .map(|key| ((<Ristretto as Ciphersuite>::generator() * **key), 1))
     .collect::<Vec<_>>();
 
-  let res = TributarySpec::new(serai_block, start_time, set, set_participants);
+  // Generate random eVRF keys as none of these test rely on them to have any structure
+  let mut evrf_keys = vec![];
+  for _ in 0 .. keys.len() {
+    let mut substrate = [0; 32];
+    OsRng.fill_bytes(&mut substrate);
+    let mut network = vec![0; 64];
+    OsRng.fill_bytes(&mut network);
+    evrf_keys.push((substrate, network));
+  }
+
+  let res = TributarySpec::new(serai_block, start_time, set, validators, evrf_keys);
   assert_eq!(
     TributarySpec::deserialize_reader(&mut borsh::to_vec(&res).unwrap().as_slice()).unwrap(),
     res,

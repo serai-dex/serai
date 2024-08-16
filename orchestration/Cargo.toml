@@ -24,6 +24,8 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std", "recommended"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+embedwards25519 = { path = "../crypto/evrf/embedwards25519" }
+secq256k1 = { path = "../crypto/evrf/secq256k1" }
 
 zalloc = { path = "../common/zalloc" }
 

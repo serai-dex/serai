@@ -83,6 +83,12 @@ pub mod pallet {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, serde::Serialize, serde::Deserialize)]
+  pub struct AllEmbeddedEllipticCurveKeysAtGenesis {
+    pub embedwards25519: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    pub secq256k1: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+  }
+
   #[pallet::genesis_config]
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct GenesisConfig<T: Config> {
@@ -92,7 +98,7 @@ pub mod pallet {
     /// This stake cannot be withdrawn however as there's no actual stake behind it.
     pub networks: Vec<(NetworkId, Amount)>,
     /// List of participants to place in the initial validator sets.
-    pub participants: Vec<T::AccountId>,
+    pub participants: Vec<(T::AccountId, AllEmbeddedEllipticCurveKeysAtGenesis)>,
   }
 
   impl<T: Config> Default for GenesisConfig<T> {
@@ -190,6 +196,18 @@ pub mod pallet {
       InSet::<T>::contains_key(network, account)
     }
   }
+
+  /// A key on an embedded elliptic curve.
+  #[pallet::storage]
+  pub type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
+    _,
+    Blake2_128Concat,
+    Public,
+    Identity,
+    EmbeddedEllipticCurve,
+    BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    OptionQuery,
+  >;
 
   /// The total stake allocated to this network by the active set of validators.
   #[pallet::storage]
@@ -426,6 +444,14 @@ pub mod pallet {
   pub enum Error<T> {
     /// Validator Set doesn't exist.
     NonExistentValidatorSet,
+    /// An invalid embedded elliptic curve key was specified.
+    ///
+    /// This error not being raised does not mean the key was valid. Solely that it wasn't detected
+    /// by this pallet as invalid.
+    InvalidEmbeddedEllipticCurveKey,
+    /// Trying to perform an operation requiring an embedded elliptic curve key, without an
+    /// embedded elliptic curve key.
+    MissingEmbeddedEllipticCurveKey,
     /// Not enough allocation to obtain a key share in the set.
     InsufficientAllocation,
     /// Trying to deallocate more than allocated.
@@ -469,10 +495,20 @@ pub mod pallet {
     fn build(&self) {
       for (id, stake) in self.networks.clone() {
         AllocationPerKeyShare::<T>::set(id, Some(stake));
-        for participant in self.participants.clone() {
-          if Pallet::<T>::set_allocation(id, participant, stake) {
+        for participant in &self.participants {
+          if Pallet::<T>::set_allocation(id, participant.0, stake) {
             panic!("participants contained duplicates");
           }
+          EmbeddedEllipticCurveKeys::<T>::set(
+            participant.0,
+            EmbeddedEllipticCurve::Embedwards25519,
+            Some(participant.1.embedwards25519.clone()),
+          );
+          EmbeddedEllipticCurveKeys::<T>::set(
+            participant.0,
+            EmbeddedEllipticCurve::Secq256k1,
+            Some(participant.1.secq256k1.clone()),
+          );
         }
         Pallet::<T>::new_set(id);
       }
@@ -941,14 +977,15 @@ pub mod pallet {
     pub fn set_keys(
       origin: OriginFor<T>,
       network: NetworkId,
-      removed_participants: BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
       key_pair: KeyPair,
+      signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
       signature: Signature,
     ) -> DispatchResult {
       ensure_none(origin)?;
 
       // signature isn't checked as this is an unsigned transaction, and validate_unsigned
       // (called by pre_dispatch) checks it
+      let _ = signature_participants;
       let _ = signature;
 
       let session = Self::session(network).unwrap();
@@ -963,15 +1000,6 @@ pub mod pallet {
         Self::set_total_allocated_stake(network);
       }
 
-      // This does not remove from TotalAllocatedStake or InSet in order to:
-      // 1) Not decrease the stake present in this set. This means removed participants are
-      //    still liable for the economic security of the external network. This prevents
-      //    a decided set, which is economically secure, from falling below the threshold.
-      // 2) Not allow parties removed to immediately deallocate, per commentary on deallocation
-      //    scheduling (https://github.com/serai-dex/serai/issues/394).
-      for removed in removed_participants {
-        Self::deposit_event(Event::ParticipantRemoved { set, removed });
-      }
       Self::deposit_event(Event::KeyGen { set, key_pair });
 
       Ok(())
@@ -1004,8 +1032,42 @@ pub mod pallet {
 
     #[pallet::call_index(2)]
     #[pallet::weight(0)] // TODO
+    pub fn set_embedded_elliptic_curve_key(
+      origin: OriginFor<T>,
+      embedded_elliptic_curve: EmbeddedEllipticCurve,
+      key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    ) -> DispatchResult {
+      let validator = ensure_signed(origin)?;
+
+      // We don't have the curve formulas, nor the BigInt arithmetic, necessary here to validate
+      // these keys. Instead, we solely check the key lengths. Validators are responsible to not
+      // provide invalid keys.
+      let expected_len = match embedded_elliptic_curve {
+        EmbeddedEllipticCurve::Embedwards25519 => 32,
+        EmbeddedEllipticCurve::Secq256k1 => 33,
+      };
+      if key.len() != expected_len {
+        Err(Error::<T>::InvalidEmbeddedEllipticCurveKey)?;
+      }
+
+      // This does allow overwriting an existing key which... is unlikely to be done?
+      // Yet it isn't an issue as we'll fix to the key as of any set's declaration (uncaring to if
+      // it's distinct at the latest block)
+      EmbeddedEllipticCurveKeys::<T>::set(validator, embedded_elliptic_curve, Some(key));
+      Ok(())
+    }
+
+    #[pallet::call_index(3)]
+    #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
+      // If this network utilizes embedded elliptic curve(s), require the validator to have set the
+      // appropriate key(s)
+      for embedded_elliptic_curve in network.embedded_elliptic_curves() {
+        if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, *embedded_elliptic_curve) {
+          Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
+        }
+      }
       Coins::<T>::transfer_internal(
         validator,
         Self::account(),
@@ -1014,7 +1076,7 @@ pub mod pallet {
       Self::increase_allocation(network, validator, amount, false)
     }
 
-    #[pallet::call_index(3)]
+    #[pallet::call_index(4)]
     #[pallet::weight(0)] // TODO
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
@@ -1031,7 +1093,7 @@ pub mod pallet {
       Ok(())
     }
 
-    #[pallet::call_index(4)]
+    #[pallet::call_index(5)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn claim_deallocation(
       origin: OriginFor<T>,
@@ -1059,7 +1121,7 @@ pub mod pallet {
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       // Match to be exhaustive
       match call {
-        Call::set_keys { network, ref removed_participants, ref key_pair, ref signature } => {
+        Call::set_keys { network, ref key_pair, ref signature_participants, ref signature } => {
           let network = *network;
 
           // Don't allow the Serai set to set_keys, as they have no reason to do so
@@ -1083,30 +1145,24 @@ pub mod pallet {
           // session on this assumption
           assert_eq!(Pallet::<T>::latest_decided_session(network), Some(current_session));
 
-          // This does not slash the removed participants as that'll be done at the end of the
-          // set's lifetime
-          let mut removed = hashbrown::HashSet::new();
-          for participant in removed_participants {
-            // Confirm this wasn't duplicated
-            if removed.contains(&participant.0) {
-              Err(InvalidTransaction::Custom(2))?;
-            }
-            removed.insert(participant.0);
-          }
-
           let participants =
             Participants::<T>::get(network).expect("session existed without participants");
+
+          // Check the bitvec is of the proper length
+          if participants.len() != signature_participants.len() {
+            Err(InvalidTransaction::Custom(2))?;
+          }
 
           let mut all_key_shares = 0;
           let mut signers = vec![];
           let mut signing_key_shares = 0;
-          for participant in participants {
+          for (participant, in_use) in participants.into_iter().zip(signature_participants) {
             let participant = participant.0;
             let shares = InSet::<T>::get(network, participant)
               .expect("participant from Participants wasn't InSet");
             all_key_shares += shares;
 
-            if removed.contains(&participant.0) {
+            if !in_use {
               continue;
             }
 
@@ -1124,9 +1180,7 @@ pub mod pallet {
           // Verify the signature with the MuSig key of the signers
           // We theoretically don't need set_keys_message to bind to removed_participants, as the
           // key we're signing with effectively already does so, yet there's no reason not to
-          if !musig_key(set, &signers)
-            .verify(&set_keys_message(&set, removed_participants, key_pair), signature)
-          {
+          if !musig_key(set, &signers).verify(&set_keys_message(&set, key_pair), signature) {
             Err(InvalidTransaction::BadProof)?;
           }
 
@@ -1159,9 +1213,10 @@ pub mod pallet {
             .propagate(true)
             .build()
         }
-        Call::allocate { .. } | Call::deallocate { .. } | Call::claim_deallocation { .. } => {
-          Err(InvalidTransaction::Call)?
-        }
+        Call::set_embedded_elliptic_curve_key { .. } |
+        Call::allocate { .. } |
+        Call::deallocate { .. } |
+        Call::claim_deallocation { .. } => Err(InvalidTransaction::Call)?,
         Call::__Ignore(_, _) => unreachable!(),
       }
     }

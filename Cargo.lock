@@ -1109,6 +1109,7 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
+ "serde",
  "tap",
  "wyz",
 ]
@@ -2195,15 +2196,27 @@ dependencies = [
 name = "dkg"
 version = "0.5.1"
 dependencies = [
+ "blake2",
  "borsh",
  "chacha20",
  "ciphersuite",
  "dleq",
+ "ec-divisors",
+ "embedwards25519",
  "flexible-transcript",
+ "generalized-bulletproofs",
+ "generalized-bulletproofs-circuit-abstraction",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 1.1.0",
  "multiexp",
+ "pasta_curves",
+ "rand",
+ "rand_chacha",
  "rand_core",
  "schnorr-signatures",
+ "secq256k1",
  "std-shims",
+ "subtle",
  "thiserror",
  "zeroize",
 ]
@@ -2296,6 +2309,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
 
 [[package]]
+name = "ec-divisors"
+version = "0.1.0"
+dependencies = [
+ "dalek-ff-group",
+ "group",
+ "hex",
+ "pasta_curves",
+ "rand_core",
+ "zeroize",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2372,6 +2397,26 @@ dependencies = [
  "sec1",
  "subtle",
  "tap",
+ "zeroize",
+]
+
+[[package]]
+name = "embedwards25519"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "ciphersuite",
+ "crypto-bigint",
+ "dalek-ff-group",
+ "ec-divisors",
+ "ff-group-tests",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 0.14.7",
+ "hex",
+ "hex-literal",
+ "rand_core",
+ "rustversion",
+ "subtle",
  "zeroize",
 ]
 
@@ -3044,6 +3089,36 @@ dependencies = [
  "fxhash",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "generalized-bulletproofs"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "ciphersuite",
+ "flexible-transcript",
+ "multiexp",
+ "rand_core",
+ "zeroize",
+]
+
+[[package]]
+name = "generalized-bulletproofs-circuit-abstraction"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "generalized-bulletproofs",
+ "zeroize",
+]
+
+[[package]]
+name = "generalized-bulletproofs-ec-gadgets"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+ "generalized-bulletproofs-circuit-abstraction",
+ "generic-array 1.1.0",
 ]
 
 [[package]]
@@ -5789,8 +5864,7 @@ dependencies = [
 [[package]]
 name = "pasta_curves"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
+source = "git+https://github.com/kayabaNerve/pasta_curves?rev=a46b5be95cacbff54d06aad8d3bbcba42e05d616#a46b5be95cacbff54d06aad8d3bbcba42e05d616"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -5799,6 +5873,7 @@ dependencies = [
  "rand",
  "static_assertions",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -7923,6 +7998,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "secq256k1"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "ciphersuite",
+ "crypto-bigint",
+ "ec-divisors",
+ "ff-group-tests",
+ "generalized-bulletproofs-ec-gadgets",
+ "generic-array 0.14.7",
+ "hex",
+ "hex-literal",
+ "k256",
+ "rand_core",
+ "rustversion",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "secrecy"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8006,6 +8101,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 name = "serai-abi"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "borsh",
  "frame-support",
  "parity-scale-codec",
@@ -8030,6 +8126,7 @@ version = "0.1.0"
 dependencies = [
  "async-lock",
  "bitcoin",
+ "bitvec",
  "blake2",
  "ciphersuite",
  "dockertest",
@@ -8087,6 +8184,7 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitvec",
  "blake2",
  "borsh",
  "ciphersuite",
@@ -8124,10 +8222,12 @@ dependencies = [
  "ciphersuite",
  "dkg",
  "dockertest",
+ "embedwards25519",
  "hex",
  "parity-scale-codec",
  "rand_core",
  "schnorrkel",
+ "secq256k1",
  "serai-client",
  "serai-docker-tests",
  "serai-message-queue",
@@ -8379,7 +8479,9 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+ "ciphersuite",
  "clap",
+ "embedwards25519",
  "frame-benchmarking",
  "futures-util",
  "hex",
@@ -8405,6 +8507,7 @@ dependencies = [
  "sc-transaction-pool",
  "sc-transaction-pool-api",
  "schnorrkel",
+ "secq256k1",
  "serai-env",
  "serai-runtime",
  "sp-api",
@@ -8426,11 +8529,13 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite",
+ "embedwards25519",
  "flexible-transcript",
  "hex",
  "home",
  "rand_chacha",
  "rand_core",
+ "secq256k1",
  "zalloc",
  "zeroize",
 ]
@@ -8440,6 +8545,7 @@ name = "serai-primitives"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ciphersuite",
  "frame-support",
  "parity-scale-codec",
  "rand_core",
@@ -8458,11 +8564,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bitcoin-serai",
+ "blake2",
  "borsh",
  "ciphersuite",
  "const-hex",
  "dalek-ff-group",
+ "dkg",
  "dockertest",
+ "ec-divisors",
  "env_logger",
  "ethereum-serai",
  "flexible-transcript",
@@ -8620,9 +8729,9 @@ dependencies = [
 name = "serai-validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "frame-support",
  "frame-system",
- "hashbrown 0.14.5",
  "pallet-babe",
  "pallet-grandpa",
  "parity-scale-codec",
@@ -8631,6 +8740,7 @@ dependencies = [
  "serai-dex-pallet",
  "serai-primitives",
  "serai-validator-sets-primitives",
+ "serde",
  "sp-application-crypto",
  "sp-core",
  "sp-io",

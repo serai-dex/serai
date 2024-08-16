@@ -41,6 +41,18 @@ impl<F: Send + Future, TB: 'static + Send + Sync + Fn(Vec<Processor>) -> F> Test
   }
 }
 
+fn name(i: usize) -> &'static str {
+  match i {
+    0 => "Alice",
+    1 => "Bob",
+    2 => "Charlie",
+    3 => "Dave",
+    4 => "Eve",
+    5 => "Ferdie",
+    _ => panic!("needed a 7th name for a serai node"),
+  }
+}
+
 pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
   let mut unique_id_lock = UNIQUE_ID.get_or_init(|| Mutex::new(0)).lock().await;
 
@@ -50,15 +62,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
   // Spawn one extra coordinator which isn't in-set
   #[allow(clippy::range_plus_one)]
   for i in 0 .. (COORDINATORS + 1) {
-    let name = match i {
-      0 => "Alice",
-      1 => "Bob",
-      2 => "Charlie",
-      3 => "Dave",
-      4 => "Eve",
-      5 => "Ferdie",
-      _ => panic!("needed a 7th name for a serai node"),
-    };
+    let name = name(i);
     let serai_composition = serai_composition(name, fast_epoch);
 
     let (processor_key, message_queue_keys, message_queue_composition) =
@@ -196,14 +200,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
       let mut processors: Vec<Processor> = vec![];
       for (i, (handles, key)) in coordinators.iter().enumerate() {
         processors.push(
-          Processor::new(
-            i.try_into().unwrap(),
-            NetworkId::Bitcoin,
-            &outer_ops,
-            handles.clone(),
-            *key,
-          )
-          .await,
+          Processor::new(name(i), NetworkId::Bitcoin, &outer_ops, handles.clone(), *key).await,
         );
       }
 
