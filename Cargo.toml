@@ -70,6 +70,7 @@ members = [
   "message-queue",
 
   "processor/messages",
+  "processor/key-gen",
   "processor",
 
   "coordinator/tributary/tendermint",
