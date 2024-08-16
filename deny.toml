@@ -46,6 +46,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-message-queue" },
 
   { allow = ["AGPL-3.0"], name = "serai-processor-messages" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-key-gen" },
   { allow = ["AGPL-3.0"], name = "serai-processor" },
 
   { allow = ["AGPL-3.0"], name = "tributary-chain" },
