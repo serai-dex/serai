@@ -8564,7 +8564,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bitcoin-serai",
- "blake2",
  "borsh",
  "ciphersuite",
  "const-hex",
@@ -8597,6 +8596,26 @@ dependencies = [
  "thiserror",
  "tokio",
  "zalloc",
+ "zeroize",
+]
+
+[[package]]
+name = "serai-processor-key-gen"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "borsh",
+ "ciphersuite",
+ "dkg",
+ "ec-divisors",
+ "flexible-transcript",
+ "log",
+ "parity-scale-codec",
+ "rand_chacha",
+ "rand_core",
+ "serai-db",
+ "serai-processor-messages",
+ "serai-validator-sets-primitives",
  "zeroize",
 ]
 

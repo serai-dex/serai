@@ -48,7 +48,7 @@ pub use db::*;
 mod coordinator;
 pub use coordinator::*;
 
-mod key_gen;
+use serai_processor_key_gen as key_gen;
 use key_gen::{SessionDb, KeyConfirmed, KeyGen};
 
 mod signer;
