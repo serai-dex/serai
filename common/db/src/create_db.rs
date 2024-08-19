@@ -38,13 +38,18 @@ pub fn serai_db_key(
 #[macro_export]
 macro_rules! create_db {
   ($db_name: ident {
-    $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty$(,)?)*
+    $(
+      $field_name: ident:
+        $(<$($generic_name: tt: $generic_type: tt),+>)?(
+          $($arg: ident: $arg_type: ty),*
+        ) -> $field_type: ty$(,)?
+    )*
   }) => {
     $(
       #[derive(Clone, Debug)]
       pub(crate) struct $field_name;
       impl $field_name {
-        pub(crate) fn key($($arg: $arg_type),*) -> Vec<u8> {
+        pub(crate) fn key$(<$($generic_name: $generic_type),+>)?($($arg: $arg_type),*) -> Vec<u8> {
           use scale::Encode;
           $crate::serai_db_key(
             stringify!($db_name).as_bytes(),
@@ -52,18 +57,31 @@ macro_rules! create_db {
             ($($arg),*).encode()
           )
         }
-        pub(crate) fn set(txn: &mut impl DbTxn $(, $arg: $arg_type)*, data: &$field_type) {
-          let key = $field_name::key($($arg),*);
+        pub(crate) fn set$(<$($generic_name: $generic_type),+>)?(
+          txn: &mut impl DbTxn
+          $(, $arg: $arg_type)*,
+          data: &$field_type
+        ) {
+          let key = $field_name::key$(::<$($generic_name),+>)?($($arg),*);
           txn.put(&key, borsh::to_vec(data).unwrap());
         }
-        pub(crate) fn get(getter: &impl Get, $($arg: $arg_type),*) -> Option<$field_type> {
-          getter.get($field_name::key($($arg),*)).map(|data| {
+        pub(crate) fn get$(<$($generic_name: $generic_type),+>)?(
+          getter: &impl Get,
+          $($arg: $arg_type),*
+        ) -> Option<$field_type> {
+          getter.get($field_name::key$(::<$($generic_name),+>)?($($arg),*)).map(|data| {
             borsh::from_slice(data.as_ref()).unwrap()
           })
         }
+        // Returns a PhantomData of all generic types so if the generic was only used in the value,
+        // not the keys, this doesn't have unused generic types
         #[allow(dead_code)]
-        pub(crate) fn del(txn: &mut impl DbTxn $(, $arg: $arg_type)*) {
-          txn.del(&$field_name::key($($arg),*))
+        pub(crate) fn del$(<$($generic_name: $generic_type),+>)?(
+          txn: &mut impl DbTxn
+          $(, $arg: $arg_type)*
+      ) -> core::marker::PhantomData<($($($generic_name),+)?)> {
+          txn.del(&$field_name::key$(::<$($generic_name),+>)?($($arg),*));
+          core::marker::PhantomData
         }
       }
     )*
