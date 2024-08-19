@@ -182,7 +182,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
 
     match msg {
       CoordinatorMessage::GenerateKey { session, threshold, evrf_public_keys } => {
-        log::info!("Generating new key. Session: {session:?}");
+        log::info!("generating new key, session: {session:?}");
 
         // Unzip the vector of eVRF keys
         let substrate_evrf_public_keys =
@@ -258,7 +258,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
       }
 
       CoordinatorMessage::Participation { session, participant, participation } => {
-        log::info!("received participation from {:?} for {:?}", participant, session);
+        log::debug!("received participation from {:?} for {:?}", participant, session);
 
         let Params { t: threshold, n, substrate_evrf_public_keys, network_evrf_public_keys } =
           KeyGenDb::<P>::params(txn, session).unwrap();
@@ -293,7 +293,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
             // participations and continue. We solely have to verify them, as to identify malicious
             // participants and prevent DoSs, before returning
             if self.key_shares(session).is_some() {
-              log::info!("already finished generating a key for {:?}", session);
+              log::debug!("already finished generating a key for {:?}", session);
 
               match EvrfDkg::<Ristretto>::verify(
                 &mut OsRng,
@@ -510,6 +510,8 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
           P::tweak_keys(network_keys);
         }
         KeyGenDb::<P>::set_key_shares(txn, session, &substrate_keys, &network_keys);
+
+        log::info!("generated key, session: {session:?}");
 
         // Since no one we verified was invalid, and we had the threshold, yield the new keys
         vec![ProcessorMessage::GeneratedKeyPair {

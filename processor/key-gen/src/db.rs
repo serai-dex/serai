@@ -36,10 +36,10 @@ pub(crate) struct Participations {
 }
 
 create_db!(
-  KeyGenDb {
-    ParamsDb: (session: &Session) -> RawParams,
-    ParticipationsDb: (session: &Session) -> Participations,
-    KeySharesDb: (session: &Session) -> Vec<u8>,
+  KeyGen {
+    Params: (session: &Session) -> RawParams,
+    Participations: (session: &Session) -> Participations,
+    KeyShares: (session: &Session) -> Vec<u8>,
   }
 );
 
@@ -48,7 +48,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   pub(crate) fn set_params(txn: &mut impl DbTxn, session: Session, params: Params<P>) {
     assert_eq!(params.substrate_evrf_public_keys.len(), params.network_evrf_public_keys.len());
 
-    ParamsDb::set(
+    Params::set(
       txn,
       &session,
       &RawParams {
@@ -68,7 +68,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   }
 
   pub(crate) fn params(getter: &impl Get, session: Session) -> Option<Params<P>> {
-    ParamsDb::get(getter, &session).map(|params| Params {
+    Params::get(getter, &session).map(|params| Params {
       t: params.t,
       n: params
         .network_evrf_public_keys
@@ -101,12 +101,13 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     session: Session,
     participations: &Participations,
   ) {
-    ParticipationsDb::set(txn, &session, participations)
+    Participations::set(txn, &session, participations)
   }
   pub(crate) fn participations(getter: &impl Get, session: Session) -> Option<Participations> {
-    ParticipationsDb::get(getter, &session)
+    Participations::get(getter, &session)
   }
 
+  // Set the key shares for a session.
   pub(crate) fn set_key_shares(
     txn: &mut impl DbTxn,
     session: Session,
@@ -120,7 +121,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
       keys.extend(substrate_keys.serialize().as_slice());
       keys.extend(network_keys.serialize().as_slice());
     }
-    KeySharesDb::set(txn, &session, &keys);
+    KeyShares::set(txn, &session, &keys);
   }
 
   #[allow(clippy::type_complexity)]
@@ -128,7 +129,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     getter: &impl Get,
     session: Session,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
-    let keys = KeySharesDb::get(getter, &session)?;
+    let keys = KeyShares::get(getter, &session)?;
     let mut keys: &[u8] = keys.as_ref();
 
     let mut substrate_keys = vec![];

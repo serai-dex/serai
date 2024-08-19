@@ -25,5 +25,9 @@ serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primi
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serai-db = { path = "../../common/db" }
+
 messages = { package = "serai-processor-messages", path = "../messages" }
