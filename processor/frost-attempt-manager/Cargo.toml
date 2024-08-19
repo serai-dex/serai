@@ -1,0 +1,29 @@
+[package]
+name = "serai-processor-frost-attempt-manager"
+version = "0.1.0"
+description = "A manager of multiple attempts of FROST signing protocols"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/frost-attempt-manager"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["frost", "multisig", "threshold"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "^0.8.1", default-features = false }
+
+serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std"] }
+
+hex = { version = "0.4", default-features = false, features = ["std"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+serai-db = { path = "../../common/db" }
+messages = { package = "serai-processor-messages", path = "../messages" }

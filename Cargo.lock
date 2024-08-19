@@ -8600,6 +8600,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-frost-attempt-manager"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "log",
+ "modular-frost",
+ "rand_core",
+ "serai-db",
+ "serai-processor-messages",
+ "serai-validator-sets-primitives",
+]
+
+[[package]]
 name = "serai-processor-key-gen"
 version = "0.1.0"
 dependencies = [

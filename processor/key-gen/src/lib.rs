@@ -17,8 +17,6 @@ use ciphersuite::{
 };
 use dkg::{Participant, ThresholdKeys, evrf::*};
 
-use log::info;
-
 use serai_validator_sets_primitives::Session;
 use messages::key_gen::*;
 
@@ -184,7 +182,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
 
     match msg {
       CoordinatorMessage::GenerateKey { session, threshold, evrf_public_keys } => {
-        info!("Generating new key. Session: {session:?}");
+        log::info!("Generating new key. Session: {session:?}");
 
         // Unzip the vector of eVRF keys
         let substrate_evrf_public_keys =
@@ -260,7 +258,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
       }
 
       CoordinatorMessage::Participation { session, participant, participation } => {
-        info!("received participation from {:?} for {:?}", participant, session);
+        log::info!("received participation from {:?} for {:?}", participant, session);
 
         let Params { t: threshold, n, substrate_evrf_public_keys, network_evrf_public_keys } =
           KeyGenDb::<P>::params(txn, session).unwrap();
@@ -295,7 +293,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
             // participations and continue. We solely have to verify them, as to identify malicious
             // participants and prevent DoSs, before returning
             if self.key_shares(session).is_some() {
-              info!("already finished generating a key for {:?}", session);
+              log::info!("already finished generating a key for {:?}", session);
 
               match EvrfDkg::<Ristretto>::verify(
                 &mut OsRng,
