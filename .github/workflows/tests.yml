@@ -41,6 +41,7 @@ jobs:
             -p serai-processor-messages \
             -p serai-processor-key-gen \
             -p serai-processor-frost-attempt-manager \
+            -p serai-processor-scanner \
             -p serai-processor \
             -p tendermint-machine \
             -p tributary-chain \
