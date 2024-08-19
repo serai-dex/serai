@@ -22,7 +22,6 @@ pub mod key_gen {
   #[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     // Instructs the Processor to begin the key generation process.
-    // TODO: Should this be moved under Substrate?
     GenerateKey { session: Session, threshold: u16, evrf_public_keys: Vec<([u8; 32], Vec<u8>)> },
     // Received participations for the specified key generation protocol.
     Participation { session: Session, participant: Participant, participation: Vec<u8> },
@@ -93,6 +92,8 @@ pub mod sign {
     pub attempt: u32,
   }
 
+  // TODO: Make this generic to the ID once we introduce topics into the message-queue and remove
+  // the global ProcessorMessage/CoordinatorMessage
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     // Received preprocesses for the specified signing protocol.
@@ -101,8 +102,10 @@ pub mod sign {
     Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
     // Re-attempt a signing protocol.
     Reattempt { id: SignId },
+    /* TODO
     // Completed a signing protocol already.
     Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
+    */
   }
 
   impl CoordinatorMessage {
@@ -114,8 +117,8 @@ pub mod sign {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } |
         CoordinatorMessage::Shares { id, .. } |
-        CoordinatorMessage::Reattempt { id } => id.session,
-        CoordinatorMessage::Completed { session, .. } => *session,
+        CoordinatorMessage::Reattempt { id, .. } => id.session,
+        // TODO CoordinatorMessage::Completed { session, .. } => *session,
       }
     }
   }
@@ -123,13 +126,13 @@ pub mod sign {
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     // Participant sent an invalid message during the sign protocol.
-    InvalidParticipant { id: SignId, participant: Participant },
-    // Created preprocess for the specified signing protocol.
-    Preprocess { id: SignId, preprocesses: Vec<Vec<u8>> },
-    // Signed share for the specified signing protocol.
-    Share { id: SignId, shares: Vec<Vec<u8>> },
+    InvalidParticipant { session: Session, participant: Participant },
+    // Created preprocesses for the specified signing protocol.
+    Preprocesses { id: SignId, preprocesses: Vec<Vec<u8>> },
+    // Signed shares for the specified signing protocol.
+    Shares { id: SignId, shares: Vec<Vec<u8>> },
     // Completed a signing protocol already.
-    Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
+    // TODO Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
   }
 }
 
@@ -165,10 +168,6 @@ pub mod coordinator {
   pub enum CoordinatorMessage {
     CosignSubstrateBlock { id: SubstrateSignId, block_number: u64 },
     SignSlashReport { id: SubstrateSignId, report: Vec<([u8; 32], u32)> },
-    SubstratePreprocesses { id: SubstrateSignId, preprocesses: HashMap<Participant, [u8; 64]> },
-    SubstrateShares { id: SubstrateSignId, shares: HashMap<Participant, [u8; 32]> },
-    // Re-attempt a batch signing protocol.
-    BatchReattempt { id: SubstrateSignId },
   }
 
   impl CoordinatorMessage {
@@ -192,9 +191,9 @@ pub mod coordinator {
     SubstrateBlockAck { block: u64, plans: Vec<PlanMeta> },
     InvalidParticipant { id: SubstrateSignId, participant: Participant },
     CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
+    // TODO: Remove BatchPreprocess? Why does this take a BlockHash here and not in its
+    // SubstrateSignId?
     BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<[u8; 64]> },
-    SlashReportPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
-    SubstrateShare { id: SubstrateSignId, shares: Vec<[u8; 32]> },
     // TODO: Make these signatures [u8; 64]?
     CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
     SignedSlashReport { session: Session, signature: Vec<u8> },
@@ -327,19 +326,19 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Sign(msg) => {
         let (sub, id) = match msg {
-          // Unique since SignId includes a hash of the network, and specific transaction info
-          sign::CoordinatorMessage::Preprocesses { id, .. } => (0, id.encode()),
-          sign::CoordinatorMessage::Shares { id, .. } => (1, id.encode()),
-          sign::CoordinatorMessage::Reattempt { id } => (2, id.encode()),
+          // Unique since SignId
+          sign::CoordinatorMessage::Preprocesses { id, .. } => (0, id),
+          sign::CoordinatorMessage::Shares { id, .. } => (1, id),
+          sign::CoordinatorMessage::Reattempt { id, .. } => (2, id),
           // The coordinator should report all reported completions to the processor
           // Accordingly, the intent is a combination of plan ID and actual TX
           // While transaction alone may suffice, that doesn't cover cross-chain TX ID conflicts,
           // which are possible
-          sign::CoordinatorMessage::Completed { id, tx, .. } => (3, (id, tx).encode()),
+          // TODO sign::CoordinatorMessage::Completed { id, tx, .. } => (3, (id, tx).encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
-        res.extend(&id);
+        res.extend(id.encode());
         res
       }
       CoordinatorMessage::Coordinator(msg) => {
@@ -349,10 +348,6 @@ impl CoordinatorMessage {
           // Unique since there's only one of these per session/attempt, and ID is inclusive to
           // both
           coordinator::CoordinatorMessage::SignSlashReport { id, .. } => (1, id.encode()),
-          // Unique since this embeds the batch ID (including its network) and attempt
-          coordinator::CoordinatorMessage::SubstratePreprocesses { id, .. } => (2, id.encode()),
-          coordinator::CoordinatorMessage::SubstrateShares { id, .. } => (3, id.encode()),
-          coordinator::CoordinatorMessage::BatchReattempt { id, .. } => (4, id.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -404,12 +399,15 @@ impl ProcessorMessage {
       }
       ProcessorMessage::Sign(msg) => {
         let (sub, id) = match msg {
+          // Unique since we'll only fatally slash a a participant once
+          sign::ProcessorMessage::InvalidParticipant { session, participant } => {
+            (0, (session, u16::from(*participant)).encode())
+          }
           // Unique since SignId
-          sign::ProcessorMessage::InvalidParticipant { id, .. } => (0, id.encode()),
-          sign::ProcessorMessage::Preprocess { id, .. } => (1, id.encode()),
-          sign::ProcessorMessage::Share { id, .. } => (2, id.encode()),
+          sign::ProcessorMessage::Preprocesses { id, .. } => (1, id.encode()),
+          sign::ProcessorMessage::Shares { id, .. } => (2, id.encode()),
           // Unique since a processor will only sign a TX once
-          sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
+          // TODO sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_SIGN_UID, sub];
@@ -423,11 +421,9 @@ impl ProcessorMessage {
           coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
           coordinator::ProcessorMessage::CosignPreprocess { id, .. } => (2, id.encode()),
           coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (3, id.encode()),
-          coordinator::ProcessorMessage::SlashReportPreprocess { id, .. } => (4, id.encode()),
-          coordinator::ProcessorMessage::SubstrateShare { id, .. } => (5, id.encode()),
           // Unique since only one instance of a signature matters
-          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (6, block.encode()),
-          coordinator::ProcessorMessage::SignedSlashReport { .. } => (7, vec![]),
+          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (4, block.encode()),
+          coordinator::ProcessorMessage::SignedSlashReport { .. } => (5, vec![]),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];
