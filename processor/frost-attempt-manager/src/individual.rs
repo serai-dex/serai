@@ -9,11 +9,19 @@ use frost::{
 
 use serai_validator_sets_primitives::Session;
 
+use serai_db::{Get, DbTxn, Db, create_db};
 use messages::sign::{SignId, ProcessorMessage};
+
+create_db!(
+  FrostAttemptManager {
+    Attempted: (id: [u8; 32]) -> u32,
+  }
+);
 
 /// An instance of a signing protocol with re-attempts handled internally.
 #[allow(clippy::type_complexity)]
-pub(crate) struct SigningProtocol<M: Clone + PreprocessMachine> {
+pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
+  db: D,
   // The session this signing protocol is being conducted by.
   session: Session,
   // The `i` of our first, or starting, set of key shares we will be signing with.
@@ -34,12 +42,19 @@ pub(crate) struct SigningProtocol<M: Clone + PreprocessMachine> {
   >,
 }
 
-impl<M: Clone + PreprocessMachine> SigningProtocol<M> {
+impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   /// Create a new signing protocol.
-  pub(crate) fn new(session: Session, start_i: Participant, id: [u8; 32], root: Vec<M>) -> Self {
+  pub(crate) fn new(
+    db: D,
+    session: Session,
+    start_i: Participant,
+    id: [u8; 32],
+    root: Vec<M>,
+  ) -> Self {
     log::info!("starting signing protocol {}", hex::encode(id));
 
     Self {
+      db,
       session,
       start_i,
       id,
@@ -70,7 +85,15 @@ impl<M: Clone + PreprocessMachine> SigningProtocol<M> {
       We also won't send the share we were supposed to, unfortunately, yet caching/reloading the
       preprocess has enough safety issues it isn't worth the headache.
     */
-    // TODO
+    {
+      let mut txn = self.db.txn();
+      let prior_attempted = Attempted::get(&txn, self.id);
+      if Some(attempt) <= prior_attempted {
+        return vec![];
+      }
+      Attempted::set(&mut txn, self.id, &attempt);
+      txn.commit();
+    }
 
     log::debug!("attemting a new instance of signing protocol {}", hex::encode(self.id));
 
@@ -247,5 +270,12 @@ impl<M: Clone + PreprocessMachine> SigningProtocol<M> {
     log::info!("finished signing for protocol {}", hex::encode(self.id));
 
     Ok(signature)
+  }
+
+  /// Cleanup the database entries for a specified signing protocol.
+  pub(crate) fn cleanup(db: &mut D, id: [u8; 32]) {
+    let mut txn = db.txn();
+    Attempted::del(&mut txn, id);
+    txn.commit();
   }
 }

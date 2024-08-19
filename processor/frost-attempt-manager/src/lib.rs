@@ -8,6 +8,7 @@ use frost::{Participant, sign::PreprocessMachine};
 
 use serai_validator_sets_primitives::Session;
 
+use serai_db::Db;
 use messages::sign::{ProcessorMessage, CoordinatorMessage};
 
 mod individual;
@@ -22,21 +23,28 @@ pub enum Response<M: PreprocessMachine> {
 }
 
 /// A manager of attempts for a variety of signing protocols.
-pub struct AttemptManager<M: Clone + PreprocessMachine> {
+pub struct AttemptManager<D: Db, M: Clone + PreprocessMachine> {
+  db: D,
   session: Session,
   start_i: Participant,
-  active: HashMap<[u8; 32], SigningProtocol<M>>,
+  active: HashMap<[u8; 32], SigningProtocol<D, M>>,
 }
 
-impl<M: Clone + PreprocessMachine> AttemptManager<M> {
+impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// Create a new attempt manager.
-  pub fn new(session: Session, start_i: Participant) -> Self {
-    AttemptManager { session, start_i, active: HashMap::new() }
+  pub fn new(db: D, session: Session, start_i: Participant) -> Self {
+    AttemptManager { db, session, start_i, active: HashMap::new() }
   }
 
   /// Register a signing protocol to attempt.
-  pub fn register(&mut self, id: [u8; 32], machines: Vec<M>) {
-    self.active.insert(id, SigningProtocol::new(self.session, self.start_i, id, machines));
+  ///
+  /// This ID must be unique across all sessions, attempt managers, protocols, etc.
+  pub fn register(&mut self, id: [u8; 32], machines: Vec<M>) -> Vec<ProcessorMessage> {
+    let mut protocol =
+      SigningProtocol::new(self.db.clone(), self.session, self.start_i, id, machines);
+    let messages = protocol.attempt(0);
+    self.active.insert(id, protocol);
+    messages
   }
 
   /// Retire a signing protocol.
@@ -45,10 +53,13 @@ impl<M: Clone + PreprocessMachine> AttemptManager<M> {
   /// This does not stop the protocol from being re-registered and further worked on (with
   /// undefined behavior) then. The higher-level context must never call `register` again with this
   /// ID.
-  // TODO: Also have the DB for this SigningProtocol cleaned up here.
   pub fn retire(&mut self, id: [u8; 32]) {
-    log::info!("retiring signing protocol {}", hex::encode(id));
-    self.active.remove(&id);
+    if self.active.remove(&id).is_none() {
+      log::info!("retiring protocol {}, which we didn't register/already retired", hex::encode(id));
+    } else {
+      log::info!("retired signing protocol {}", hex::encode(id));
+    }
+    SigningProtocol::<D, M>::cleanup(&mut self.db, id);
   }
 
   /// Handle a message for a signing protocol.

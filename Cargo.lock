@@ -8603,9 +8603,11 @@ dependencies = [
 name = "serai-processor-frost-attempt-manager"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "hex",
  "log",
  "modular-frost",
+ "parity-scale-codec",
  "rand_core",
  "serai-db",
  "serai-processor-messages",
