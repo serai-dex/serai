@@ -34,6 +34,24 @@ pub trait Id:
 }
 impl<const N: usize> Id for [u8; N] where [u8; N]: Default {}
 
+/// A wrapper for a group element which implements the borsh traits.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct BorshG<G: GroupEncoding>(pub G);
+impl<G: GroupEncoding> BorshSerialize for BorshG<G> {
+  fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+    writer.write_all(self.0.to_bytes().as_ref())
+  }
+}
+impl<G: GroupEncoding> BorshDeserialize for BorshG<G> {
+  fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
+    let mut repr = G::Repr::default();
+    reader.read_exact(repr.as_mut())?;
+    Ok(Self(
+      Option::<G>::from(G::from_bytes(&repr)).ok_or(borsh::io::Error::other("invalid point"))?,
+    ))
+  }
+}
+
 /// The type of the output.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum OutputType {
@@ -170,22 +188,4 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
 
   /// Scan all outputs within this block to find the outputs spendable by this key.
   fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output>;
-}
-
-/// A wrapper for a group element which implements the borsh traits.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct BorshG<G: GroupEncoding>(pub G);
-impl<G: GroupEncoding> BorshSerialize for BorshG<G> {
-  fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
-    writer.write_all(self.0.to_bytes().as_ref())
-  }
-}
-impl<G: GroupEncoding> BorshDeserialize for BorshG<G> {
-  fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
-    let mut repr = G::Repr::default();
-    reader.read_exact(repr.as_mut())?;
-    Ok(Self(
-      Option::<G>::from(G::from_bytes(&repr)).ok_or(borsh::io::Error::other("invalid point"))?,
-    ))
-  }
 }

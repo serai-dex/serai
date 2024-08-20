@@ -62,7 +62,25 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
         for output in block.scan_for_outputs(key.key.0) {
           assert_eq!(output.key(), key.key.0);
-          // TODO: Check for dust
+
+          // Check this isn't dust
+          {
+            let mut balance = output.balance();
+            // First, subtract 2 * the cost to aggregate, as detailed in
+            // `spec/processor/UTXO Management.md`
+            // TODO: Cache this
+            let cost_to_aggregate =
+              self.feed.cost_to_aggregate(balance.coin, b).await.map_err(|e| {
+                format!("couldn't fetch cost to aggregate {:?} at {b}: {e:?}", balance.coin)
+              })?;
+            balance.amount.0 -= 2 * cost_to_aggregate.0;
+
+            // Now, check it's still past the dust threshold
+            if balance.amount.0 < self.feed.dust(balance.coin).0 {
+              continue;
+            }
+          }
+
           outputs.push(output);
         }
       }
