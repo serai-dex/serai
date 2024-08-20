@@ -12,7 +12,7 @@ struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
 
 #[async_trait::async_trait]
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
-  async fn run_instance(&mut self) -> Result<(), String> {
+  async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the safe to scan block
     let latest_scannable = ScannerDb::<S>::latest_scannable_block(&self.db).expect("ScanForOutputsTask run before writing the start block");
     // Fetch the next block to scan
@@ -43,6 +43,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       }
       assert!(keys.len() <= 2);
 
+      let mut outputs = vec![];
       // Scan for each key
       for key in keys {
         // If this key has yet to active, skip it
@@ -50,7 +51,6 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           continue;
         }
 
-        let mut outputs = vec![];
         for output in network.scan_for_outputs(&block, key).awaits {
           assert_eq!(output.key(), key);
           // TODO: Check for dust
@@ -59,15 +59,14 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       }
 
       let mut txn = self.db.txn();
-      // Update the latest scanned block
+      // Save the outputs
+      ScannerDb::<S>::set_outputs(&mut txn, b, outputs);
+      // Update the next to scan block
       ScannerDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);
-      // TODO: If this had outputs, yield them and mark this block notable
-      /*
-        A block is notable if it's an activation, had outputs, or a retirement block.
-      */
       txn.commit();
     }
 
-    Ok(())
+    // Run dependents if we successfully scanned any blocks
+    Ok(next_to_scan <= latest_scannable)
   }
 }

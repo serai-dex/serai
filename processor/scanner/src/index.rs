@@ -20,7 +20,7 @@ struct IndexFinalizedTask<D: Db, S: ScannerFeed> {
 
 #[async_trait::async_trait]
 impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
-  async fn run_instance(&mut self) -> Result<(), String> {
+  async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the latest finalized block
     let our_latest_finalized = ScannerDb::<S>::latest_finalized_block(&self.db)
       .expect("IndexTask run before writing the start block");
@@ -28,6 +28,18 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
       Ok(latest_finalized) => latest_finalized,
       Err(e) => Err(format!("couldn't fetch the latest finalized block number: {e:?}"))?,
     };
+
+    if latest_finalized < our_latest_finalized {
+      // Explicitly log this as an error as returned ephemeral errors are logged with debug
+      // This doesn't panic as the node should sync along our indexed chain, and if it doesn't,
+      // we'll panic at that point in time
+      log::error!(
+        "node is out of sync, latest finalized {} is behind our indexed {}",
+        latest_finalized,
+        our_latest_finalized
+      );
+      Err("node is out of sync".to_string())?;
+    }
 
     // Index the hashes of all blocks until the latest finalized block
     for b in (our_latest_finalized + 1) ..= latest_finalized {
@@ -57,16 +69,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
       txn.commit();
     }
 
-    Ok(())
+    // Have dependents run if we updated the latest finalized block
+    Ok(our_latest_finalized != latest_finalized)
   }
 }
-
-/*
-  The processor can't index the blockchain unilaterally. It needs to develop a totally ordered view
-  of the blockchain. That requires consensus with other validators on when certain keys are set to
-  activate (and retire). We solve this by only scanning `n` blocks ahead of the last agreed upon
-  block, then waiting for Serai to acknowledge the block. This lets us safely schedule events after
-  this `n` block window (as demonstrated/proven with `mini`).
-
-  TODO
-*/
