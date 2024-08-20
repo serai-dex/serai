@@ -8648,6 +8648,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-primitives"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "borsh",
+ "group",
+ "parity-scale-codec",
+ "serai-primitives",
+]
+
+[[package]]
+name = "serai-processor-scanner"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "borsh",
+ "group",
+ "hex",
+ "log",
+ "parity-scale-codec",
+ "serai-db",
+ "serai-processor-messages",
+ "serai-processor-primitives",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "serai-processor-tests"
 version = "0.1.0"
 dependencies = [

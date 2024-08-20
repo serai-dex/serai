@@ -72,6 +72,8 @@ members = [
   "processor/messages",
   "processor/key-gen",
   "processor/frost-attempt-manager",
+
+  "processor/primitives",
   "processor/scanner",
   "processor",
 

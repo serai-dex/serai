@@ -18,10 +18,12 @@ use log::{info, error};
 
 use tokio::time::sleep;
 
+/* TODO
 #[cfg(not(test))]
 mod scanner;
 #[cfg(test)]
 pub mod scanner;
+*/
 
 use scanner::{ScannerEvent, ScannerHandle, Scanner};
 
