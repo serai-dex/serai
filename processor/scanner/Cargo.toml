@@ -17,17 +17,23 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+# Macros
+async-trait = { version = "0.1", default-features = false }
+thiserror = { version = "1", default-features = false }
 
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "^0.8.1", default-features = false }
-
-serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std"] }
-
+# Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
-log = { version = "0.4", default-features = false, features = ["std"] }
-
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+# Cryptography
+group = { version = "0.13", default-features = false }
+
+# Application
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
 serai-db = { path = "../../common/db" }
 
 messages = { package = "serai-processor-messages", path = "../messages" }
+primitives = { package = "serai-processor-primitives", path = "../primitives" }
