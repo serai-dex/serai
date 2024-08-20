@@ -5,7 +5,7 @@ use serai_db::{Get, DbTxn, create_db};
 
 use primitives::{Id, ReceivedOutput, Block, BorshG};
 
-use crate::ScannerFeed;
+use crate::{ScannerFeed, BlockIdFor, KeyFor, OutputFor};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
@@ -64,25 +64,25 @@ create_db!(
 
 pub(crate) struct ScannerDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerDb<S> {
-  pub(crate) fn set_block(txn: &mut impl DbTxn, number: u64, id: <S::Block as Block>::Id) {
+  pub(crate) fn set_block(txn: &mut impl DbTxn, number: u64, id: BlockIdFor<S>) {
     BlockId::set(txn, number, &id);
     BlockNumber::set(txn, id, &number);
   }
-  pub(crate) fn block_id(getter: &impl Get, number: u64) -> Option<<S::Block as Block>::Id> {
+  pub(crate) fn block_id(getter: &impl Get, number: u64) -> Option<BlockIdFor<S>> {
     BlockId::get(getter, number)
   }
-  pub(crate) fn block_number(getter: &impl Get, id: <S::Block as Block>::Id) -> Option<u64> {
+  pub(crate) fn block_number(getter: &impl Get, id: BlockIdFor<S>) -> Option<u64> {
     BlockNumber::get(getter, id)
   }
 
   // activation_block_number is inclusive, so the key will be scanned for starting at the specified
   // block
-  pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: S::Key) {
+  pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
     // Set this block as notable
     NotableBlock::set(txn, activation_block_number, &());
 
     // Push the key
-    let mut keys: Vec<SeraiKey<BorshG<S::Key>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
+    let mut keys: Vec<SeraiKey<BorshG<KeyFor<S>>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
     for key_i in &keys {
       if key == key_i.key.0 {
         panic!("queueing a key prior queued");
@@ -97,8 +97,8 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   // retirement_block_number is inclusive, so the key will no longer be scanned for as of the
   // specified block
-  pub(crate) fn retire_key(txn: &mut impl DbTxn, retirement_block_number: u64, key: S::Key) {
-    let mut keys: Vec<SeraiKey<BorshG<S::Key>>> =
+  pub(crate) fn retire_key(txn: &mut impl DbTxn, retirement_block_number: u64, key: KeyFor<S>) {
+    let mut keys: Vec<SeraiKey<BorshG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
 
     assert!(keys.len() > 1, "retiring our only key");
@@ -118,15 +118,11 @@ impl<S: ScannerFeed> ScannerDb<S> {
     }
     panic!("retiring key yet not present in keys")
   }
-  pub(crate) fn keys(getter: &impl Get) -> Option<Vec<SeraiKey<BorshG<S::Key>>>> {
+  pub(crate) fn keys(getter: &impl Get) -> Option<Vec<SeraiKey<BorshG<KeyFor<S>>>>> {
     ActiveKeys::get(getter)
   }
 
-  pub(crate) fn set_start_block(
-    txn: &mut impl DbTxn,
-    start_block: u64,
-    id: <S::Block as Block>::Id,
-  ) {
+  pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: BlockIdFor<S>) {
     Self::set_block(txn, start_block, id);
     LatestFinalizedBlock::set(txn, &start_block);
     LatestScannableBlock::set(txn, &start_block);
@@ -189,11 +185,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     HighestAcknowledgedBlock::get(getter)
   }
 
-  pub(crate) fn set_outputs(
-    txn: &mut impl DbTxn,
-    block_number: u64,
-    outputs: Vec<impl ReceivedOutput<S::Key, S::Address>>,
-  ) {
+  pub(crate) fn set_outputs(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputFor<S>>) {
     if outputs.is_empty() {
       return;
     }

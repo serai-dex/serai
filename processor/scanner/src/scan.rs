@@ -60,12 +60,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           continue;
         }
 
-        for output in self
-          .feed
-          .scan_for_outputs(&block, key.key.0)
-          .await
-          .map_err(|e| format!("failed to scan block {b}: {e:?}"))?
-        {
+        for output in block.scan_for_outputs(key.key.0) {
           assert_eq!(output.key(), key.key.0);
           // TODO: Check for dust
           outputs.push(output);

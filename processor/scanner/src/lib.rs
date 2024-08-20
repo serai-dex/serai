@@ -2,7 +2,7 @@ use core::{fmt::Debug, time::Duration};
 
 use tokio::sync::mpsc;
 
-use primitives::{ReceivedOutput, Block};
+use primitives::{ReceivedOutput, BlockHeader, Block};
 
 mod db;
 mod index;
@@ -20,15 +20,6 @@ pub trait ScannerFeed: Send + Sync {
   ///
   /// This value must be at least `1`.
   const CONFIRMATIONS: u64;
-
-  /// The type of the key used to receive coins on this blockchain.
-  type Key: group::Group + group::GroupEncoding;
-
-  /// The type of the address used to specify who to send coins to on this blockchain.
-  type Address;
-
-  /// The type representing a received (and spendable) output.
-  type Output: ReceivedOutput<Self::Key, Self::Address>;
 
   /// The representation of a block for this blockchain.
   ///
@@ -58,16 +49,19 @@ pub trait ScannerFeed: Send + Sync {
     Ok(self.latest_block_number().await? - Self::CONFIRMATIONS)
   }
 
+  /// Fetch a block header by its number.
+  async fn block_header_by_number(
+    &self,
+    number: u64,
+  ) -> Result<<Self::Block as Block>::Header, Self::EphemeralError>;
+
   /// Fetch a block by its number.
   async fn block_by_number(&self, number: u64) -> Result<Self::Block, Self::EphemeralError>;
-
-  /// Scan a block for its outputs.
-  async fn scan_for_outputs(
-    &self,
-    block: &Self::Block,
-    key: Self::Key,
-  ) -> Result<Vec<Self::Output>, Self::EphemeralError>;
 }
+
+type BlockIdFor<S> = <<<S as ScannerFeed>::Block as Block>::Header as BlockHeader>::Id;
+type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
+type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 
 /// A handle to immediately run an iteration of a task.
 #[derive(Clone)]
