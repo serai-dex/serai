@@ -8,7 +8,7 @@ use serai_db::{Db, DbTxn};
 use primitives::{Id, Block};
 
 // TODO: Localize to ReportDb?
-use crate::{db::ScannerDb, ScannerFeed};
+use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
 
 struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
@@ -20,8 +20,10 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let highest_reportable = {
       // Fetch the latest scanned and latest checked block
-      let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db).expect("ReportTask run before writing the start block");
-      let next_to_check = ScannerDb::<S>::next_to_check_for_eventualities_block(&self.db).expect("ReportTask run before writing the start block");
+      let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+        .expect("ReportTask run before writing the start block");
+      let next_to_check = ScannerDb::<S>::next_to_check_for_eventualities_block(&self.db)
+        .expect("ReportTask run before writing the start block");
       // If we haven't done any work, return
       if (next_to_scan == 0) || (next_to_check == 0) {
         return Ok(false);
@@ -31,10 +33,11 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       last_scanned.min(last_checked)
     };
 
-    let next_to_potentially_report = ScannerDb::<S>::next_block_to_potentially_report(&self.db).expect("ReportTask run before writing the start block");
+    let next_to_potentially_report = ScannerDb::<S>::next_to_potentially_report_block(&self.db)
+      .expect("ReportTask run before writing the start block");
 
     for b in next_to_potentially_report ..= highest_reportable {
-      if ScannerDb::<S>::is_block_notable(b) {
+      if ScannerDb::<S>::is_block_notable(&self.db, b) {
         todo!("TODO: Make Batches, which requires handling Forwarded within this crate");
       }
 

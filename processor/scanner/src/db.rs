@@ -13,9 +13,9 @@ impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub(crate) struct SeraiKey<K: Borshy> {
-  activation_block_number: u64,
-  retirement_block_number: Option<u64>,
-  key: K,
+  pub(crate) activation_block_number: u64,
+  pub(crate) retirement_block_number: Option<u64>,
+  pub(crate) key: K,
 }
 
 create_db!(
@@ -208,7 +208,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     SerializedOutputs::set(txn, block_number, &buf);
   }
 
-  pub(crate) fn is_notable_block(getter: &impl Get, number: u64) -> bool {
+  pub(crate) fn is_block_notable(getter: &impl Get, number: u64) -> bool {
     NotableBlock::get(getter, number).is_some()
   }
 }
