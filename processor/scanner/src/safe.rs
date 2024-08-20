@@ -5,7 +5,7 @@ use serai_db::{Db, DbTxn};
 use primitives::{Id, Block};
 
 // TODO: Localize to SafeDb?
-use crate::{db::ScannerDb, ScannerFeed};
+use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
 
 /*
   We mark blocks safe to scan when they're no more than `(CONFIRMATIONS - 1)` blocks after the
@@ -27,7 +27,8 @@ struct SafeToScanTask<D: Db, S: ScannerFeed> {
 impl<D: Db, S: ScannerFeed> ContinuallyRan for SafeToScanTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // First, we fetch the highest acknowledged block
-    let Some(highest_acknowledged_block) = ScannerDb::<S>::highest_acknowledged_block(&self.db) else {
+    let Some(highest_acknowledged_block) = ScannerDb::<S>::highest_acknowledged_block(&self.db)
+    else {
       // If no blocks have been acknowledged, we don't mark any safe
       // Once the start block (implicitly safe) has been acknowledged, we proceed from there
       return Ok(false);
@@ -38,13 +39,15 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SafeToScanTask<D, S> {
       // If we've decided to report (or not report) a block, we know if it needs acknowledgement
       // (and accordingly is pending acknowledgement)
       // Accordingly, the block immediately before this is the latest block with a known status
-      ScannerDb::<S>::next_block_to_potentially_report(&self.db).expect("SafeToScanTask run before writing the start block") - 1
+      ScannerDb::<S>::next_to_potentially_report_block(&self.db)
+        .expect("SafeToScanTask run before writing the start block") -
+        1
     };
 
     let mut oldest_pending_acknowledgement = None;
     for b in (highest_acknowledged_block + 1) ..= latest_block_known_if_pending_acknowledgement {
       // If the block isn't notable, immediately flag it as acknowledged
-      if !ScannerDb::<S>::is_block_notable(b) {
+      if !ScannerDb::<S>::is_block_notable(&self.db, b) {
         let mut txn = self.db.txn();
         ScannerDb::<S>::set_highest_acknowledged_block(&mut txn, b);
         txn.commit();
@@ -61,13 +64,19 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SafeToScanTask<D, S> {
     // acknowledgement, and the oldest block still pending acknowledgement is in the future,
     // we know the safe block to scan to is
     // `>= latest_block_known_if_pending_acknowledgement + (CONFIRMATIONS - 1)`
-    let oldest_pending_acknowledgement = oldest_pending_acknowledgement.unwrap_or(latest_block_known_if_pending_acknowledgement);
+    let oldest_pending_acknowledgement =
+      oldest_pending_acknowledgement.unwrap_or(latest_block_known_if_pending_acknowledgement);
+
+    let old_safe_block = ScannerDb::<S>::latest_scannable_block(&self.db)
+      .expect("SafeToScanTask run before writing the start block");
+    let new_safe_block = oldest_pending_acknowledgement +
+      (S::CONFIRMATIONS.checked_sub(1).expect("CONFIRMATIONS wasn't at least 1"));
 
     // Update the latest scannable block
     let mut txn = self.db.txn();
-    ScannerDb::<S>::set_latest_scannable_block(oldest_pending_acknowledgement + (CONFIRMATIONS - 1));
+    ScannerDb::<S>::set_latest_scannable_block(&mut txn, new_safe_block);
     txn.commit();
 
-    Ok(next_to_potentially_report <= highest_reportable)
+    Ok(old_safe_block != new_safe_block)
   }
 }

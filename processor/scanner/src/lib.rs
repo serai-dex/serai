@@ -6,12 +6,21 @@ use primitives::{ReceivedOutput, Block};
 
 mod db;
 mod index;
+mod scan;
+mod eventuality;
+mod report;
+mod safe;
 
 /// A feed usable to scan a blockchain.
 ///
 /// This defines the primitive types used, along with various getters necessary for indexing.
 #[async_trait::async_trait]
 pub trait ScannerFeed: Send + Sync {
+  /// The amount of confirmations required for a block to be finalized.
+  ///
+  /// This value must be at least `1`.
+  const CONFIRMATIONS: u64;
+
   /// The type of the key used to receive coins on this blockchain.
   type Key: group::Group + group::GroupEncoding;
 
@@ -35,11 +44,19 @@ pub trait ScannerFeed: Send + Sync {
   /// resolve without manual intervention.
   type EphemeralError: Debug;
 
+  /// Fetch the number of the latest block.
+  ///
+  /// The block number is its zero-indexed position within a linear view of the external network's
+  /// consensus. The genesis block accordingly has block number 0.
+  async fn latest_block_number(&self) -> Result<u64, Self::EphemeralError>;
+
   /// Fetch the number of the latest finalized block.
   ///
   /// The block number is its zero-indexed position within a linear view of the external network's
   /// consensus. The genesis block accordingly has block number 0.
-  async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError>;
+  async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError> {
+    Ok(self.latest_block_number().await? - Self::CONFIRMATIONS)
+  }
 
   /// Fetch a block by its number.
   async fn block_by_number(&self, number: u64) -> Result<Self::Block, Self::EphemeralError>;
@@ -49,7 +66,7 @@ pub trait ScannerFeed: Send + Sync {
     &self,
     block: &Self::Block,
     key: Self::Key,
-  ) -> Result<Self::Output, Self::EphemeralError>;
+  ) -> Result<Vec<Self::Output>, Self::EphemeralError>;
 }
 
 /// A handle to immediately run an iteration of a task.

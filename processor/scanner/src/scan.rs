@@ -1,9 +1,9 @@
 use serai_db::{Db, DbTxn};
 
-use primitives::{Id, Block};
+use primitives::{Id, ReceivedOutput, Block};
 
 // TODO: Localize to ScanDb?
-use crate::{db::ScannerDb, ScannerFeed};
+use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
 
 struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
   db: D,
@@ -14,9 +14,11 @@ struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the safe to scan block
-    let latest_scannable = ScannerDb::<S>::latest_scannable_block(&self.db).expect("ScanForOutputsTask run before writing the start block");
+    let latest_scannable = ScannerDb::<S>::latest_scannable_block(&self.db)
+      .expect("ScanForOutputsTask run before writing the start block");
     // Fetch the next block to scan
-    let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db).expect("ScanForOutputsTask run before writing the start block");
+    let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+      .expect("ScanForOutputsTask run before writing the start block");
 
     for b in next_to_scan ..= latest_scannable {
       let block = match self.feed.block_by_number(b).await {
@@ -26,15 +28,22 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       // Check the ID of this block is the expected ID
       {
-        let expected = ScannerDb::<S>::block_id(b).expect("scannable block didn't have its ID saved");
+        let expected =
+          ScannerDb::<S>::block_id(&self.db, b).expect("scannable block didn't have its ID saved");
         if block.id() != expected {
-          panic!("finalized chain reorganized from {} to {} at {}", hex::encode(expected), hex::encode(block.id()), b);
+          panic!(
+            "finalized chain reorganized from {} to {} at {}",
+            hex::encode(expected),
+            hex::encode(block.id()),
+            b
+          );
         }
       }
 
       log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 
-      let keys = ScannerDb::<S>::keys(&self.db).expect("scanning for a blockchain without any keys set");
+      let mut keys =
+        ScannerDb::<S>::keys(&self.db).expect("scanning for a blockchain without any keys set");
       // Remove all the retired keys
       while let Some(retire_at) = keys[0].retirement_block_number {
         if retire_at <= b {
@@ -51,8 +60,13 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           continue;
         }
 
-        for output in network.scan_for_outputs(&block, key).awaits {
-          assert_eq!(output.key(), key);
+        for output in self
+          .feed
+          .scan_for_outputs(&block, key.key.0)
+          .await
+          .map_err(|e| format!("failed to scan block {b}: {e:?}"))?
+        {
+          assert_eq!(output.key(), key.key.0);
           // TODO: Check for dust
           outputs.push(output);
         }
