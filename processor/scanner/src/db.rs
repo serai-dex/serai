@@ -1,11 +1,9 @@
 use core::marker::PhantomData;
 
-use group::GroupEncoding;
-
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{Id, Block, BorshG};
+use primitives::{Id, ReceivedOutput, Block, BorshG};
 
 use crate::ScannerFeed;
 
@@ -14,7 +12,7 @@ trait Borshy: BorshSerialize + BorshDeserialize {}
 impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
 
 #[derive(BorshSerialize, BorshDeserialize)]
-struct SeraiKey<K: Borshy> {
+pub(crate) struct SeraiKey<K: Borshy> {
   activation_block_number: u64,
   retirement_block_number: Option<u64>,
   key: K,
@@ -35,6 +33,10 @@ create_db!(
     NextToScanForOutputsBlock: () -> u64,
     // The next block to check for resolving eventualities
     NextToCheckForEventualitiesBlock: () -> u64,
+    // The next block to potentially report
+    NextToPotentiallyReportBlock: () -> u64,
+    // The highest acknowledged block
+    HighestAcknowledgedBlock: () -> u64,
 
     // If a block was notable
     /*
@@ -55,6 +57,8 @@ create_db!(
     */
     // This collapses from `bool` to `()`, using if the value was set for true and false otherwise
     NotableBlock: (number: u64) -> (),
+
+    SerializedOutputs: (block_number: u64) -> Vec<u8>,
   }
 );
 
@@ -74,6 +78,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
   // activation_block_number is inclusive, so the key will be scanned for starting at the specified
   // block
   pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: S::Key) {
+    // Set this block as notable
+    NotableBlock::set(txn, activation_block_number, &());
+
+    // Push the key
     let mut keys: Vec<SeraiKey<BorshG<S::Key>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
     for key_i in &keys {
       if key == key_i.key.0 {
@@ -124,6 +132,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     LatestScannableBlock::set(txn, &start_block);
     NextToScanForOutputsBlock::set(txn, &start_block);
     NextToCheckForEventualitiesBlock::set(txn, &start_block);
+    NextToPotentiallyReportBlock::set(txn, &start_block);
   }
 
   pub(crate) fn set_latest_finalized_block(txn: &mut impl DbTxn, latest_finalized_block: u64) {
@@ -158,5 +167,48 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn next_to_check_for_eventualities_block(getter: &impl Get) -> Option<u64> {
     NextToCheckForEventualitiesBlock::get(getter)
+  }
+
+  pub(crate) fn set_next_to_potentially_report_block(
+    txn: &mut impl DbTxn,
+    next_to_potentially_report_block: u64,
+  ) {
+    NextToPotentiallyReportBlock::set(txn, &next_to_potentially_report_block);
+  }
+  pub(crate) fn next_to_potentially_report_block(getter: &impl Get) -> Option<u64> {
+    NextToPotentiallyReportBlock::get(getter)
+  }
+
+  pub(crate) fn set_highest_acknowledged_block(
+    txn: &mut impl DbTxn,
+    highest_acknowledged_block: u64,
+  ) {
+    HighestAcknowledgedBlock::set(txn, &highest_acknowledged_block);
+  }
+  pub(crate) fn highest_acknowledged_block(getter: &impl Get) -> Option<u64> {
+    HighestAcknowledgedBlock::get(getter)
+  }
+
+  pub(crate) fn set_outputs(
+    txn: &mut impl DbTxn,
+    block_number: u64,
+    outputs: Vec<impl ReceivedOutput<S::Key, S::Address>>,
+  ) {
+    if outputs.is_empty() {
+      return;
+    }
+
+    // Set this block as notable
+    NotableBlock::set(txn, block_number, &());
+
+    let mut buf = Vec::with_capacity(outputs.len() * 128);
+    for output in outputs {
+      output.write(&mut buf).unwrap();
+    }
+    SerializedOutputs::set(txn, block_number, &buf);
+  }
+
+  pub(crate) fn is_notable_block(getter: &impl Get, number: u64) -> bool {
+    NotableBlock::get(getter, number).is_some()
   }
 }
