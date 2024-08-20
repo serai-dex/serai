@@ -2,6 +2,7 @@ use core::{fmt::Debug, time::Duration};
 
 use tokio::sync::mpsc;
 
+use serai_primitives::{Coin, Amount};
 use primitives::{ReceivedOutput, BlockHeader, Block};
 
 mod db;
@@ -57,6 +58,20 @@ pub trait ScannerFeed: Send + Sync {
 
   /// Fetch a block by its number.
   async fn block_by_number(&self, number: u64) -> Result<Self::Block, Self::EphemeralError>;
+
+  /// The cost to aggregate an input as of the specified block.
+  ///
+  /// This is defined as the transaction fee for a 2-input, 1-output transaction.
+  async fn cost_to_aggregate(
+    &self,
+    coin: Coin,
+    block_number: u64,
+  ) -> Result<Amount, Self::EphemeralError>;
+
+  /// The dust threshold for the specified coin.
+  ///
+  /// This should be a value worth handling at a human level.
+  fn dust(&self, coin: Coin) -> Amount;
 }
 
 type BlockIdFor<S> = <<<S as ScannerFeed>::Block as Block>::Header as BlockHeader>::Id;
