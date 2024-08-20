@@ -27,16 +27,12 @@ create_db!(
 
     // The latest finalized block to appear of a blockchain
     LatestFinalizedBlock: () -> u64,
-    // The latest block which it's safe to scan (dependent on what Serai has acknowledged scanning)
-    LatestScannableBlock: () -> u64,
     // The next block to scan for received outputs
     NextToScanForOutputsBlock: () -> u64,
     // The next block to check for resolving eventualities
     NextToCheckForEventualitiesBlock: () -> u64,
     // The next block to potentially report
     NextToPotentiallyReportBlock: () -> u64,
-    // The highest acknowledged block
-    HighestAcknowledgedBlock: () -> u64,
 
     // If a block was notable
     /*
@@ -125,7 +121,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: BlockIdFor<S>) {
     Self::set_block(txn, start_block, id);
     LatestFinalizedBlock::set(txn, &start_block);
-    LatestScannableBlock::set(txn, &start_block);
     NextToScanForOutputsBlock::set(txn, &start_block);
     NextToCheckForEventualitiesBlock::set(txn, &start_block);
     NextToPotentiallyReportBlock::set(txn, &start_block);
@@ -138,11 +133,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
     LatestFinalizedBlock::get(getter)
   }
 
-  pub(crate) fn set_latest_scannable_block(txn: &mut impl DbTxn, latest_scannable_block: u64) {
-    LatestScannableBlock::set(txn, &latest_scannable_block);
-  }
   pub(crate) fn latest_scannable_block(getter: &impl Get) -> Option<u64> {
-    LatestScannableBlock::get(getter)
+    // This is whatever block we've checked the Eventualities of, plus the window length
+    // See `eventuality.rs` for more info
+    NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH)
   }
 
   pub(crate) fn set_next_to_scan_for_outputs_block(
@@ -173,16 +167,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn next_to_potentially_report_block(getter: &impl Get) -> Option<u64> {
     NextToPotentiallyReportBlock::get(getter)
-  }
-
-  pub(crate) fn set_highest_acknowledged_block(
-    txn: &mut impl DbTxn,
-    highest_acknowledged_block: u64,
-  ) {
-    HighestAcknowledgedBlock::set(txn, &highest_acknowledged_block);
-  }
-  pub(crate) fn highest_acknowledged_block(getter: &impl Get) -> Option<u64> {
-    HighestAcknowledgedBlock::get(getter)
   }
 
   pub(crate) fn set_outputs(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputFor<S>>) {

@@ -19,18 +19,20 @@ struct ReportTask<D: Db, S: ScannerFeed> {
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let highest_reportable = {
-      // Fetch the latest scanned and latest checked block
+      // Fetch the next to scan block
       let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
         .expect("ReportTask run before writing the start block");
-      let next_to_check = ScannerDb::<S>::next_to_check_for_eventualities_block(&self.db)
-        .expect("ReportTask run before writing the start block");
       // If we haven't done any work, return
-      if (next_to_scan == 0) || (next_to_check == 0) {
+      if next_to_scan == 0 {
         return Ok(false);
       }
+      // The last scanned block is the block prior to this
+      #[allow(clippy::let_and_return)]
       let last_scanned = next_to_scan - 1;
-      let last_checked = next_to_check - 1;
-      last_scanned.min(last_checked)
+      // The last scanned block is the highest reportable block as we only scan blocks within a
+      // window where it's safe to immediately report the block
+      // See `eventuality.rs` for more info
+      last_scanned
     };
 
     let next_to_potentially_report = ScannerDb::<S>::next_to_potentially_report_block(&self.db)
