@@ -33,6 +33,8 @@ create_db!(
     NextToCheckForEventualitiesBlock: () -> u64,
     // The next block to potentially report
     NextToPotentiallyReportBlock: () -> u64,
+    // Highest acknowledged block
+    HighestAcknowledgedBlock: () -> u64,
 
     // If a block was notable
     /*
@@ -122,7 +124,9 @@ impl<S: ScannerFeed> ScannerDb<S> {
     Self::set_block(txn, start_block, id);
     LatestFinalizedBlock::set(txn, &start_block);
     NextToScanForOutputsBlock::set(txn, &start_block);
-    NextToCheckForEventualitiesBlock::set(txn, &start_block);
+    // We can receive outputs in this block, but any descending transactions will be in the next
+    // block. This, with the check on-set, creates a bound that this value in the DB is non-zero.
+    NextToCheckForEventualitiesBlock::set(txn, &(start_block + 1));
     NextToPotentiallyReportBlock::set(txn, &start_block);
   }
 
@@ -153,6 +157,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
     txn: &mut impl DbTxn,
     next_to_check_for_eventualities_block: u64,
   ) {
+    assert!(
+      next_to_check_for_eventualities_block != 0,
+      "next to check for eventualities block was 0 when it's bound non-zero"
+    );
     NextToCheckForEventualitiesBlock::set(txn, &next_to_check_for_eventualities_block);
   }
   pub(crate) fn next_to_check_for_eventualities_block(getter: &impl Get) -> Option<u64> {
@@ -167,6 +175,16 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn next_to_potentially_report_block(getter: &impl Get) -> Option<u64> {
     NextToPotentiallyReportBlock::get(getter)
+  }
+
+  pub(crate) fn set_highest_acknowledged_block(
+    txn: &mut impl DbTxn,
+    highest_acknowledged_block: u64,
+  ) {
+    HighestAcknowledgedBlock::set(txn, &highest_acknowledged_block);
+  }
+  pub(crate) fn highest_acknowledged_block(getter: &impl Get) -> Option<u64> {
+    HighestAcknowledgedBlock::get(getter)
   }
 
   pub(crate) fn set_outputs(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputFor<S>>) {
