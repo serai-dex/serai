@@ -1,4 +1,9 @@
-// TODO
+use serai_db::{Db, DbTxn};
+
+use primitives::{Id, ReceivedOutput, Block};
+
+// TODO: Localize to EventualityDb?
+use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
 
 /*
   Note: The following assumes there's some value, `CONFIRMATIONS`, and the finalized block we
@@ -48,3 +53,71 @@
   This forms a backlog only if the latency of scanning, acknowledgement, and intake (including
   checking Eventualities) exceeds the window duration (the desired property).
 */
+struct EventualityTask<D: Db, S: ScannerFeed> {
+  db: D,
+  feed: S,
+}
+
+#[async_trait::async_trait]
+impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
+  async fn run_iteration(&mut self) -> Result<bool, String> {
+    /*
+      The set of Eventualities only increase when a block is acknowledged. Accordingly, we can only
+      iterate up to (and including) the block currently pending acknowledgement. "including" is
+      because even if block `b` causes new Eventualities, they'll only potentially resolve in block
+      `b + 1`.
+
+      We only know blocks will need acknowledgement *for sure* if they were scanned. The only other
+      causes are key activation and retirement (both scheduled outside the scan window). This makes
+      the exclusive upper bound the *next block to scan*.
+    */
+    let exclusive_upper_bound = {
+      // Fetch the next to scan block
+      let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+        .expect("EventualityTask run before writing the start block");
+      // If we haven't done any work, return
+      if next_to_scan == 0 {
+        return Ok(false);
+      }
+      next_to_scan
+    };
+
+    // Fetch the highest acknowledged block
+    let highest_acknowledged = ScannerDb::<S>::highest_acknowledged_block(&self.db)
+      .expect("EventualityTask run before writing the start block");
+
+    // Fetch the next block to check
+    let next_to_check = ScannerDb::<S>::next_to_check_for_eventualities_block(&self.db)
+      .expect("EventualityTask run before writing the start block");
+
+    // Check all blocks
+    let mut iterated = false;
+    for b in next_to_check .. exclusive_upper_bound {
+      // If the prior block was notable *and* not acknowledged, break
+      // This is so if it caused any Eventualities (which may resolve this block), we have them
+      {
+        // This `- 1` is safe as next to check is bound to be non-zero
+        // This is possible since even if we receive coins in block 0, any transactions we'd make
+        // would resolve in block 1 (the first block we'll check under this non-zero rule)
+        let prior_block = b - 1;
+        if ScannerDb::<S>::is_block_notable(&self.db, prior_block) &&
+          (prior_block > highest_acknowledged)
+        {
+          break;
+        }
+      }
+
+      iterated = true;
+
+      todo!("TODO");
+
+      let mut txn = self.db.txn();
+      // Update the next to check block
+      ScannerDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, next_to_check);
+      txn.commit();
+    }
+
+    // Run dependents if we successfully checked any blocks
+    Ok(iterated)
+  }
+}
