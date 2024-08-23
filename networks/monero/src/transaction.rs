@@ -558,7 +558,7 @@ impl Transaction<NotPruned> {
         if (prefix.inputs.len() == 1) && matches!(prefix.inputs[0], Input::Gen(_)) {
           None?;
         }
-        self.hash_with_prunable_hash(PrunableHash::V1(signatures))
+        self.hash_with_prunable_hash(PrunableHash::V1(&[]))
       }
       Transaction::V2 { proofs, .. } => self.hash_with_prunable_hash({
         let Some(proofs) = proofs else { None? };
