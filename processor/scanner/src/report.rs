@@ -46,6 +46,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
     for b in next_to_potentially_report ..= highest_reportable {
       let mut txn = self.db.txn();
 
+      // If this block is notable, create the Batch(s) for it
       if ScannerDb::<S>::is_block_notable(&txn, b) {
         let in_instructions = ScannerDb::<S>::in_instructions(&txn, b)
           .expect("reporting block which didn't set its InInstructions");
