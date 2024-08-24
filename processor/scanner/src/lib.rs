@@ -1,4 +1,4 @@
-use core::{fmt::Debug, time::Duration};
+use core::{marker::PhantomData, fmt::Debug, time::Duration};
 
 use tokio::sync::mpsc;
 
@@ -86,6 +86,7 @@ pub trait ScannerFeed: Send + Sync {
 
 type BlockIdFor<S> = <<<S as ScannerFeed>::Block as Block>::Header as BlockHeader>::Id;
 type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
+type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 
 /// A handle to immediately run an iteration of a task.
@@ -171,8 +172,8 @@ pub(crate) trait ContinuallyRan: Sized {
 }
 
 /// A representation of a scanner.
-pub struct Scanner;
-impl Scanner {
+pub struct Scanner<S: ScannerFeed>(PhantomData<S>);
+impl<S: ScannerFeed> Scanner<S> {
   /// Create a new scanner.
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
@@ -189,9 +190,12 @@ impl Scanner {
     &mut self,
     block_number: u64,
     key_to_activate: Option<()>,
-    forwarded_outputs: Vec<()>,
-    eventualities_created: Vec<()>,
-  ) {
+  ) -> Vec<OutputFor<S>> {
+    todo!("TODO")
+  }
+
+  /// Register the Eventualities caused by a block.
+  pub fn register_eventualities(&mut self, block_number: u64, eventualities: Vec<()>) {
     todo!("TODO")
   }
 }

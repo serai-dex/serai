@@ -3,9 +3,12 @@ use std::io;
 
 use group::GroupEncoding;
 
-use serai_primitives::Balance;
+use serai_primitives::{ExternalAddress, Balance};
 
 use crate::Id;
+
+/// An address on the external network.
+pub trait Address: Send + Sync + TryFrom<ExternalAddress> {}
 
 /// The type of the output.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -81,7 +84,7 @@ impl OutputType {
 }
 
 /// A received output.
-pub trait ReceivedOutput<K: GroupEncoding, A>:
+pub trait ReceivedOutput<K: GroupEncoding, A: Address>:
   Send + Sync + Sized + Clone + PartialEq + Eq + Debug
 {
   /// The type used to identify this output.

@@ -1,16 +1,28 @@
+use group::GroupEncoding;
+
+use scale::{Encode, Decode};
 use serai_db::{Db, DbTxn};
 
-use primitives::{Id, ReceivedOutput, Block};
+use serai_primitives::{MAX_DATA_LEN, ExternalAddress};
+use serai_in_instructions_primitives::{
+  Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
+};
+
+use primitives::{Id, OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to ScanDb?
-use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
+use crate::{
+  lifetime::LifetimeStage,
+  db::{OutputWithInInstruction, ScannerDb},
+  ScannerFeed, AddressFor, OutputFor, ContinuallyRan,
+};
 
 // Construct an InInstruction from an external output.
 //
-// Also returns the address to refund the coins to upon error.
-fn in_instruction_from_output<K: GroupEncoding, A>(
-  output: &impl ReceivedOutput<K, A>,
-) -> (Option<ExternalAddress>, Option<InInstruction>) {
+// Also returns the address to return the coins to upon error.
+fn in_instruction_from_output<S: ScannerFeed>(
+  output: &OutputFor<S>,
+) -> (Option<AddressFor<S>>, Option<InInstruction>) {
   assert_eq!(output.kind(), OutputType::External);
 
   let presumed_origin = output.presumed_origin();
@@ -18,7 +30,7 @@ fn in_instruction_from_output<K: GroupEncoding, A>(
   let mut data = output.data();
   let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
   if data.len() > max_data_len {
-    error!(
+    log::info!(
       "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
       hex::encode(output.id()),
       data.len(),
@@ -29,14 +41,14 @@ fn in_instruction_from_output<K: GroupEncoding, A>(
   let shorthand = match Shorthand::decode(&mut data) {
     Ok(shorthand) => shorthand,
     Err(e) => {
-      info!("data in output {} wasn't valid shorthand: {e:?}", hex::encode(output.id()));
+      log::info!("data in output {} wasn't valid shorthand: {e:?}", hex::encode(output.id()));
       return (presumed_origin, None);
     }
   };
   let instruction = match RefundableInInstruction::try_from(shorthand) {
     Ok(instruction) => instruction,
     Err(e) => {
-      info!(
+      log::info!(
         "shorthand in output {} wasn't convertible to a RefundableInInstruction: {e:?}",
         hex::encode(output.id())
       );
@@ -45,7 +57,7 @@ fn in_instruction_from_output<K: GroupEncoding, A>(
   };
 
   (
-    instruction.origin.and_then(|addr| A::try_from(addr).ok()).or(presumed_origin),
+    instruction.origin.and_then(|addr| AddressFor::<S>::try_from(addr).ok()).or(presumed_origin),
     Some(instruction.instruction),
   )
 }
@@ -174,18 +186,25 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             if balance.amount.0 < self.feed.dust(balance.coin).0 {
               continue;
             }
+
+            balance
           };
 
-          // Decode and save the InInstruction/refund addr for this output
-          match in_instruction_from_output::<S::Key, S::Address>(output) {
-            (refund_addr, Some(instruction)) => {
-              let instruction = InInstructionWithBalance { instruction, balance: balance_to_use };
+          // Decode and save the InInstruction/return addr for this output
+          match in_instruction_from_output::<S>(&output) {
+            (return_address, Some(instruction)) => {
+              let in_instruction =
+                InInstructionWithBalance { instruction, balance: balance_to_use };
               // TODO: Make a proper struct out of this
-              in_instructions.push((output.id(), refund_addr, instruction));
+              in_instructions.push(OutputWithInInstruction {
+                output,
+                return_address,
+                in_instruction,
+              });
               todo!("TODO: Save to be reported")
             }
-            (Some(refund_addr), None) => todo!("TODO: Queue refund"),
-            // Since we didn't receive an instruction nor can we refund this, accumulate it
+            (Some(return_addr), None) => todo!("TODO: Queue return"),
+            // Since we didn't receive an instruction nor can we return this, accumulate it
             (None, None) => {}
           }
         }

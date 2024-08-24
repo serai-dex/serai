@@ -1,11 +1,17 @@
 use core::marker::PhantomData;
+use std::io;
 
+use group::GroupEncoding;
+
+use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
+use serai_in_instructions_primitives::InInstructionWithBalance;
+
 use primitives::{Id, ReceivedOutput, Block, BorshG};
 
-use crate::{lifetime::LifetimeStage, ScannerFeed, BlockIdFor, KeyFor, OutputFor};
+use crate::{lifetime::LifetimeStage, ScannerFeed, BlockIdFor, KeyFor, AddressFor, OutputFor};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
@@ -22,16 +28,16 @@ pub(crate) struct SeraiKey<K> {
   pub(crate) key: K,
 }
 
-pub(crate) struct OutputWithInInstruction<K: GroupEncoding, A, O: ReceivedOutput<K, A>> {
-  output: O,
-  refund_address: A,
-  in_instruction: InInstructionWithBalance,
+pub(crate) struct OutputWithInInstruction<S: ScannerFeed> {
+  pub(crate) output: OutputFor<S>,
+  pub(crate) return_address: Option<AddressFor<S>>,
+  pub(crate) in_instruction: InInstructionWithBalance,
 }
 
-impl<K: GroupEncoding, A, O: ReceivedOutput<K, A>> OutputWithInInstruction<K, A, O> {
+impl<S: ScannerFeed> OutputWithInInstruction<S> {
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     self.output.write(writer)?;
-    // TODO self.refund_address.write(writer)?;
+    // TODO self.return_address.write(writer)?;
     self.in_instruction.encode_to(writer);
     Ok(())
   }
@@ -172,6 +178,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     // We can only scan up to whatever block we've checked the Eventualities of, plus the window
     // length. Since this returns an inclusive bound, we need to subtract 1
     // See `eventuality.rs` for more info
+    // TODO: Adjust based on register eventualities
     NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH - 1)
   }
 
@@ -219,7 +226,11 @@ impl<S: ScannerFeed> ScannerDb<S> {
     HighestAcknowledgedBlock::get(getter)
   }
 
-  pub(crate) fn set_in_instructions(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputWithInInstruction<KeyFor<S>, AddressFor<S>, OutputFor<S>>>) {
+  pub(crate) fn set_in_instructions(
+    txn: &mut impl DbTxn,
+    block_number: u64,
+    outputs: Vec<OutputWithInInstruction<S>>,
+  ) {
     if outputs.is_empty() {
       return;
     }
