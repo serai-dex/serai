@@ -152,6 +152,14 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             to do so at a higher level.
           */
           if output.kind() != OutputType::External {
+            // While we don't report these outputs, we still need consensus on this block and
+            // accordingly still need to set it as notable
+            let balance = outputs.balance();
+            // We ensure it's over the dust limit to prevent people sending 1 satoshi from causing
+            // an invocation of a consensus/signing protocol
+            if balance.amount.0 >= self.feed.dust(balance.coin).0 {
+              ScannerDb::<S>::flag_notable(&mut txn, b);
+            }
             continue;
           }
 

@@ -120,6 +120,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   // TODO: This will be called from the Eventuality task yet this field is read by the scan task
   // We need to write the argument for its safety
+  // TODO: retire_key needs to set the notable block
   pub(crate) fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
@@ -274,6 +275,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
 
     // Save the output itself
     SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
+  }
+
+  pub(crate) fn flag_notable(txn: &mut impl DbTxn, block_number: u64) {
+    NotableBlock::set(txn, block_number, &());
   }
 
   // TODO: Use a DbChannel here, and send the instructions to the report task and the outputs to
