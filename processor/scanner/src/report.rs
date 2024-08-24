@@ -40,6 +40,20 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
 
     for b in next_to_potentially_report ..= highest_reportable {
       if ScannerDb::<S>::is_block_notable(&self.db, b) {
+        let outputs = todo!("TODO");
+        let in_instructions_to_report = vec![];
+        for output in outputs {
+          match output.kind() {
+            // These do get reported since the scanner eliminates any which shouldn't be reported
+            OutputType::External => todo!("TODO"),
+            // These do not get reported in Batches
+            OutputType::Branch | OutputType::Change => {}
+            // These now get reported if they're legitimately forwarded
+            OutputType::Forwarded => {
+              todo!("TODO")
+            }
+          }
+        }
         todo!("TODO: Make Batches, which requires handling Forwarded within this crate");
       }
 

@@ -5,17 +5,36 @@ use serai_db::{Get, DbTxn, create_db};
 
 use primitives::{Id, ReceivedOutput, Block, BorshG};
 
-use crate::{ScannerFeed, BlockIdFor, KeyFor, OutputFor};
+use crate::{lifetime::LifetimeStage, ScannerFeed, BlockIdFor, KeyFor, OutputFor};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
 impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
 
 #[derive(BorshSerialize, BorshDeserialize)]
-pub(crate) struct SeraiKey<K: Borshy> {
-  pub(crate) activation_block_number: u64,
-  pub(crate) retirement_block_number: Option<u64>,
+struct SeraiKeyDbEntry<K: Borshy> {
+  activation_block_number: u64,
+  key: K,
+}
+
+pub(crate) struct SeraiKey<K> {
+  pub(crate) stage: LifetimeStage,
   pub(crate) key: K,
+}
+
+pub(crate) struct OutputWithInInstruction<K: GroupEncoding, A, O: ReceivedOutput<K, A>> {
+  output: O,
+  refund_address: A,
+  in_instruction: InInstructionWithBalance,
+}
+
+impl<K: GroupEncoding, A, O: ReceivedOutput<K, A>> OutputWithInInstruction<K, A, O> {
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+    self.output.write(writer)?;
+    // TODO self.refund_address.write(writer)?;
+    self.in_instruction.encode_to(writer);
+    Ok(())
+  }
 }
 
 create_db!(
@@ -23,7 +42,7 @@ create_db!(
     BlockId: <I: Id>(number: u64) -> I,
     BlockNumber: <I: Id>(id: I) -> u64,
 
-    ActiveKeys: <K: Borshy>() -> Vec<SeraiKey<K>>,
+    ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
 
     // The latest finalized block to appear of a blockchain
     LatestFinalizedBlock: () -> u64,
@@ -80,48 +99,60 @@ impl<S: ScannerFeed> ScannerDb<S> {
     NotableBlock::set(txn, activation_block_number, &());
 
     // Push the key
-    let mut keys: Vec<SeraiKey<BorshG<KeyFor<S>>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
+    let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
     for key_i in &keys {
       if key == key_i.key.0 {
         panic!("queueing a key prior queued");
       }
     }
-    keys.push(SeraiKey {
-      activation_block_number,
-      retirement_block_number: None,
-      key: BorshG(key),
-    });
+    keys.push(SeraiKeyDbEntry { activation_block_number, key: BorshG(key) });
     ActiveKeys::set(txn, &keys);
   }
-  // retirement_block_number is inclusive, so the key will no longer be scanned for as of the
-  // specified block
-  pub(crate) fn retire_key(txn: &mut impl DbTxn, retirement_block_number: u64, key: KeyFor<S>) {
-    let mut keys: Vec<SeraiKey<BorshG<KeyFor<S>>>> =
+  // TODO: This will be called from the Eventuality task yet this field is read by the scan task
+  // We need to write the argument for its safety
+  pub(crate) fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
+    let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
 
     assert!(keys.len() > 1, "retiring our only key");
-    for i in 0 .. keys.len() {
-      if key == keys[i].key.0 {
-        keys[i].retirement_block_number = Some(retirement_block_number);
-        ActiveKeys::set(txn, &keys);
-        return;
-      }
-
-      // This is not the key in question, but since it's older, it already should've been queued
-      // for retirement
-      assert!(
-        keys[i].retirement_block_number.is_some(),
-        "older key wasn't retired before newer key"
-      );
-    }
-    panic!("retiring key yet not present in keys")
+    assert_eq!(keys[0].key.0, key, "not retiring the oldest key");
+    keys.remove(0);
+    ActiveKeys::set(txn, &keys);
   }
-  pub(crate) fn keys(getter: &impl Get) -> Option<Vec<SeraiKey<BorshG<KeyFor<S>>>>> {
-    ActiveKeys::get(getter)
+  pub(crate) fn active_keys_as_of_next_to_scan_for_outputs_block(
+    getter: &impl Get,
+  ) -> Option<Vec<SeraiKey<KeyFor<S>>>> {
+    // We don't take this as an argument as we don't keep all historical keys in memory
+    // If we've scanned block 1,000,000, we can't answer the active keys as of block 0
+    let block_number = Self::next_to_scan_for_outputs_block(getter)?;
+
+    let raw_keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> = ActiveKeys::get(getter)?;
+    let mut keys = Vec::with_capacity(2);
+    for i in 0 .. raw_keys.len() {
+      if block_number < raw_keys[i].activation_block_number {
+        continue;
+      }
+      keys.push(SeraiKey {
+        key: raw_keys[i].key.0,
+        stage: LifetimeStage::calculate::<S>(
+          block_number,
+          raw_keys[i].activation_block_number,
+          raw_keys.get(i + 1).map(|key| key.activation_block_number),
+        ),
+      });
+    }
+    assert!(keys.len() <= 2);
+    Some(keys)
   }
 
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: BlockIdFor<S>) {
+    assert!(
+      LatestFinalizedBlock::get(txn).is_none(),
+      "setting start block but prior set start block"
+    );
+
     Self::set_block(txn, start_block, id);
+
     LatestFinalizedBlock::set(txn, &start_block);
     NextToScanForOutputsBlock::set(txn, &start_block);
     // We can receive outputs in this block, but any descending transactions will be in the next
@@ -138,9 +169,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
 
   pub(crate) fn latest_scannable_block(getter: &impl Get) -> Option<u64> {
-    // This is whatever block we've checked the Eventualities of, plus the window length
+    // We can only scan up to whatever block we've checked the Eventualities of, plus the window
+    // length. Since this returns an inclusive bound, we need to subtract 1
     // See `eventuality.rs` for more info
-    NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH)
+    NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH - 1)
   }
 
   pub(crate) fn set_next_to_scan_for_outputs_block(
@@ -187,7 +219,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     HighestAcknowledgedBlock::get(getter)
   }
 
-  pub(crate) fn set_outputs(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputFor<S>>) {
+  pub(crate) fn set_in_instructions(txn: &mut impl DbTxn, block_number: u64, outputs: Vec<OutputWithInInstruction<KeyFor<S>, AddressFor<S>, OutputFor<S>>>) {
     if outputs.is_empty() {
       return;
     }
