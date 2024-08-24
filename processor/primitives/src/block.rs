@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use group::{Group, GroupEncoding};
 
-use crate::{Id, ReceivedOutput};
+use crate::{Id, Address, ReceivedOutput};
 
 /// A block header from an external network.
 pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
@@ -28,7 +28,7 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   /// The type used to represent keys on this external network.
   type Key: Group + GroupEncoding;
   /// The type used to represent addresses on this external network.
-  type Address;
+  type Address: Address;
   /// The type used to represent received outputs on this external network.
   type Output: ReceivedOutput<Self::Key, Self::Address>;
 
