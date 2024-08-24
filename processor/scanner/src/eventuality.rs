@@ -109,6 +109,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
 
       iterated = true;
 
+      // TODO: Not only check/clear eventualities, if this eventuality forwarded an output, queue
+      // it to be reported in however many blocks
       todo!("TODO");
 
       let mut txn = self.db.txn();
