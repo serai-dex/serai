@@ -212,7 +212,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             LifetimeStage::Forwarding => {
               // When the forwarded output appears, we can see which Plan it's associated with and
               // from there recover this output
-              ScannerDb::<S>::save_output_being_forwarded(&mut txn, &output_with_in_instruction);
+              ScannerDb::<S>::save_output_being_forwarded(&mut txn, b, &output_with_in_instruction);
               continue;
             }
             // We should drop these as we should not be handling new External outputs at this

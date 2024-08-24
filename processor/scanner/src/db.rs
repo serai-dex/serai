@@ -11,7 +11,7 @@ use serai_in_instructions_primitives::InInstructionWithBalance;
 
 use primitives::{Id, ReceivedOutput, Block, BorshG};
 
-use crate::{lifetime::LifetimeStage, ScannerFeed, BlockIdFor, KeyFor, AddressFor, OutputFor};
+use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
@@ -46,8 +46,8 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 
 create_db!(
   Scanner {
-    BlockId: <I: Id>(number: u64) -> I,
-    BlockNumber: <I: Id>(id: I) -> u64,
+    BlockId: (number: u64) -> [u8; 32],
+    BlockNumber: (id: [u8; 32]) -> u64,
 
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
 
@@ -91,14 +91,14 @@ create_db!(
 
 pub(crate) struct ScannerDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerDb<S> {
-  pub(crate) fn set_block(txn: &mut impl DbTxn, number: u64, id: BlockIdFor<S>) {
+  pub(crate) fn set_block(txn: &mut impl DbTxn, number: u64, id: [u8; 32]) {
     BlockId::set(txn, number, &id);
     BlockNumber::set(txn, id, &number);
   }
-  pub(crate) fn block_id(getter: &impl Get, number: u64) -> Option<BlockIdFor<S>> {
+  pub(crate) fn block_id(getter: &impl Get, number: u64) -> Option<[u8; 32]> {
     BlockId::get(getter, number)
   }
-  pub(crate) fn block_number(getter: &impl Get, id: BlockIdFor<S>) -> Option<u64> {
+  pub(crate) fn block_number(getter: &impl Get, id: [u8; 32]) -> Option<u64> {
     BlockNumber::get(getter, id)
   }
 
@@ -154,7 +154,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     Some(keys)
   }
 
-  pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: BlockIdFor<S>) {
+  pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: [u8; 32]) {
     assert!(
       LatestFinalizedBlock::get(txn).is_none(),
       "setting start block but prior set start block"
@@ -276,23 +276,30 @@ impl<S: ScannerFeed> ScannerDb<S> {
     SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
   }
 
+  // TODO: Use a DbChannel here, and send the instructions to the report task and the outputs to
+  // the eventuality task? That way this cleans up after itself
   pub(crate) fn set_in_instructions(
     txn: &mut impl DbTxn,
     block_number: u64,
     outputs: Vec<OutputWithInInstruction<S>>,
   ) {
-    if outputs.is_empty() {
-      return;
+    if !outputs.is_empty() {
+      // Set this block as notable
+      NotableBlock::set(txn, block_number, &());
     }
-
-    // Set this block as notable
-    NotableBlock::set(txn, block_number, &());
 
     let mut buf = Vec::with_capacity(outputs.len() * 128);
     for output in outputs {
       output.write(&mut buf).unwrap();
     }
     SerializedOutputs::set(txn, block_number, &buf);
+  }
+
+  pub(crate) fn in_instructions(
+    getter: &impl Get,
+    block_number: u64,
+  ) -> Option<Vec<OutputWithInInstruction<S>>> {
+    todo!("TODO")
   }
 
   pub(crate) fn is_block_notable(getter: &impl Get, number: u64) -> bool {

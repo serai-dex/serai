@@ -1,15 +1,20 @@
-/*
-  We only report blocks once both tasks, scanning for received ouputs and eventualities, have
-  processed the block. This ensures we've performed all ncessary options.
-*/
-
+use scale::Encode;
 use serai_db::{Db, DbTxn};
 
+use serai_primitives::BlockHash;
+use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 use primitives::{Id, OutputType, Block};
 
 // TODO: Localize to ReportDb?
 use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
 
+/*
+  This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
+
+  We only report blocks once both tasks, scanning for received outputs and checking for resolved
+  Eventualities, have processed the block. This ensures we know if this block is notable, and have
+  the InInstructions for it.
+*/
 struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
   feed: S,
@@ -39,15 +44,49 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       .expect("ReportTask run before writing the start block");
 
     for b in next_to_potentially_report ..= highest_reportable {
-      if ScannerDb::<S>::is_block_notable(&self.db, b) {
-        let in_instructions = todo!("TODO");
-        // TODO: Also pull the InInstructions from forwarding
-        todo!("TODO: Make Batches, which requires handling Forwarded within this crate");
+      let mut txn = self.db.txn();
+
+      if ScannerDb::<S>::is_block_notable(&txn, b) {
+        let in_instructions = ScannerDb::<S>::in_instructions(&txn, b)
+          .expect("reporting block which didn't set its InInstructions");
+
+        let network = S::NETWORK;
+        let block_hash =
+          ScannerDb::<S>::block_id(&txn, b).expect("reporting block we didn't save the ID for");
+        let mut batch_id = ScannerDb::<S>::acquire_batch_id(txn);
+
+        // start with empty batch
+        let mut batches =
+          vec![Batch { network, id: batch_id, block: BlockHash(block_hash), instructions: vec![] }];
+
+        for instruction in in_instructions {
+          let batch = batches.last_mut().unwrap();
+          batch.instructions.push(instruction.in_instruction);
+
+          // check if batch is over-size
+          if batch.encode().len() > MAX_BATCH_SIZE {
+            // pop the last instruction so it's back in size
+            let instruction = batch.instructions.pop().unwrap();
+
+            // bump the id for the new batch
+            batch_id = ScannerDb::<S>::acquire_batch_id(txn);
+
+            // make a new batch with this instruction included
+            batches.push(Batch {
+              network,
+              id: batch_id,
+              block: BlockHash(block_hash),
+              instructions: vec![instruction],
+            });
+          }
+        }
+
+        todo!("TODO: Set/emit batches");
       }
 
-      let mut txn = self.db.txn();
       // Update the next to potentially report block
       ScannerDb::<S>::set_next_to_potentially_report_block(&mut txn, b + 1);
+
       txn.commit();
     }
 
