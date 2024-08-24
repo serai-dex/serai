@@ -2,7 +2,7 @@ use core::{marker::PhantomData, fmt::Debug, time::Duration};
 
 use tokio::sync::mpsc;
 
-use serai_primitives::{Coin, Amount};
+use serai_primitives::{NetworkId, Coin, Amount};
 use primitives::{ReceivedOutput, BlockHeader, Block};
 
 // Logic for deciding where in its lifetime a multisig is.
@@ -24,6 +24,9 @@ mod report;
 /// This defines the primitive types used, along with various getters necessary for indexing.
 #[async_trait::async_trait]
 pub trait ScannerFeed: Send + Sync {
+  /// The ID of the network being scanned for.
+  const NETWORK: NetworkId;
+
   /// The amount of confirmations a block must have to be considered finalized.
   ///
   /// This value must be at least `1`.
@@ -84,7 +87,6 @@ pub trait ScannerFeed: Send + Sync {
   fn dust(&self, coin: Coin) -> Amount;
 }
 
-type BlockIdFor<S> = <<<S as ScannerFeed>::Block as Block>::Header as BlockHeader>::Id;
 type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
 type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
