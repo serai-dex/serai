@@ -103,7 +103,10 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       let mut keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
         .expect("scanning for a blockchain without any keys set");
 
-      let mut in_instructions = vec![];
+      let mut txn = self.db.txn();
+
+      let mut in_instructions = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
+
       // Scan for each key
       for key in keys {
         for output in block.scan_for_outputs(key.key) {
@@ -152,24 +155,6 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             continue;
           }
 
-          // Drop External outputs if they're to a multisig which won't report them
-          // This means we should report any External output we save to disk here
-          #[allow(clippy::match_same_arms)]
-          match key.stage {
-            // TODO: Delay External outputs
-            LifetimeStage::ActiveYetNotReporting => todo!("TODO"),
-            // We should report External outputs in these cases
-            LifetimeStage::Active | LifetimeStage::UsingNewForChange => {}
-            // We should report External outputs only once forwarded, where they'll appear as
-            // OutputType::Forwarded
-            LifetimeStage::Forwarding => todo!("TODO"),
-            // We should drop these as we should not be handling new External outputs at this
-            // time
-            LifetimeStage::Finishing => {
-              continue;
-            }
-          }
-
           // Check this isn't dust
           let balance_to_use = {
             let mut balance = output.balance();
@@ -190,27 +175,59 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             balance
           };
 
-          // Decode and save the InInstruction/return addr for this output
-          match in_instruction_from_output::<S>(&output) {
-            (return_address, Some(instruction)) => {
-              let in_instruction =
-                InInstructionWithBalance { instruction, balance: balance_to_use };
-              // TODO: Make a proper struct out of this
-              in_instructions.push(OutputWithInInstruction {
-                output,
-                return_address,
-                in_instruction,
-              });
-              todo!("TODO: Save to be reported")
+          // Fetch the InInstruction/return addr for this output
+          let output_with_in_instruction = match in_instruction_from_output::<S>(&output) {
+            (return_address, Some(instruction)) => OutputWithInInstruction {
+              output,
+              return_address,
+              in_instruction: InInstructionWithBalance { instruction, balance: balance_to_use },
+            },
+            (Some(return_addr), None) => {
+              // Since there was no instruction here, return this since we parsed a return address
+              ScannerDb::<S>::queue_return(&mut txn, b, return_addr, output);
+              continue;
             }
-            (Some(return_addr), None) => todo!("TODO: Queue return"),
-            // Since we didn't receive an instruction nor can we return this, accumulate it
-            (None, None) => {}
+            // Since we didn't receive an instruction nor can we return this, move on
+            (None, None) => continue,
+          };
+
+          // Drop External outputs if they're to a multisig which won't report them
+          // This means we should report any External output we save to disk here
+          #[allow(clippy::match_same_arms)]
+          match key.stage {
+            // This multisig isn't yet reporting its External outputs to avoid a DoS
+            // Queue the output to be reported when this multisig starts reporting
+            LifetimeStage::ActiveYetNotReporting => {
+              ScannerDb::<S>::queue_output_until_block(
+                &mut txn,
+                key.block_at_which_reporting_starts,
+                &output_with_in_instruction,
+              );
+              continue;
+            }
+            // We should report External outputs in these cases
+            LifetimeStage::Active | LifetimeStage::UsingNewForChange => {}
+            // We should report External outputs only once forwarded, where they'll appear as
+            // OutputType::Forwarded. We save them now for when they appear
+            LifetimeStage::Forwarding => {
+              // When the forwarded output appears, we can see which Plan it's associated with and
+              // from there recover this output
+              ScannerDb::<S>::save_output_being_forwarded(&mut txn, &output_with_in_instruction);
+              continue;
+            }
+            // We should drop these as we should not be handling new External outputs at this
+            // time
+            LifetimeStage::Finishing => {
+              continue;
+            }
           }
+          // Ensures we didn't miss a `continue` above
+          assert!(matches!(key.stage, LifetimeStage::Active | LifetimeStage::UsingNewForChange));
+
+          in_instructions.push(output_with_in_instruction);
         }
       }
 
-      let mut txn = self.db.txn();
       // Save the in instructions
       ScannerDb::<S>::set_in_instructions(&mut txn, b, in_instructions);
       // Update the next to scan block

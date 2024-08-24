@@ -24,8 +24,9 @@ struct SeraiKeyDbEntry<K: Borshy> {
 }
 
 pub(crate) struct SeraiKey<K> {
-  pub(crate) stage: LifetimeStage,
   pub(crate) key: K,
+  pub(crate) stage: LifetimeStage,
+  pub(crate) block_at_which_reporting_starts: u64,
 }
 
 pub(crate) struct OutputWithInInstruction<S: ScannerFeed> {
@@ -81,6 +82,9 @@ create_db!(
     // This collapses from `bool` to `()`, using if the value was set for true and false otherwise
     NotableBlock: (number: u64) -> (),
 
+    SerializedQueuedOutputs: (block_number: u64) -> Vec<u8>,
+    SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
+    SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
     SerializedOutputs: (block_number: u64) -> Vec<u8>,
   }
 );
@@ -138,14 +142,13 @@ impl<S: ScannerFeed> ScannerDb<S> {
       if block_number < raw_keys[i].activation_block_number {
         continue;
       }
-      keys.push(SeraiKey {
-        key: raw_keys[i].key.0,
-        stage: LifetimeStage::calculate::<S>(
+      let (stage, block_at_which_reporting_starts) =
+        LifetimeStage::calculate_stage_and_reporting_start_block::<S>(
           block_number,
           raw_keys[i].activation_block_number,
           raw_keys.get(i + 1).map(|key| key.activation_block_number),
-        ),
-      });
+        );
+      keys.push(SeraiKey { key: raw_keys[i].key.0, stage, block_at_which_reporting_starts });
     }
     assert!(keys.len() <= 2);
     Some(keys)
@@ -224,6 +227,53 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn highest_acknowledged_block(getter: &impl Get) -> Option<u64> {
     HighestAcknowledgedBlock::get(getter)
+  }
+
+  pub(crate) fn take_queued_outputs(
+    txn: &mut impl DbTxn,
+    block_number: u64,
+  ) -> Vec<OutputWithInInstruction<S>> {
+    todo!("TODO")
+  }
+
+  pub(crate) fn queue_return(
+    txn: &mut impl DbTxn,
+    block_queued_from: u64,
+    return_addr: AddressFor<S>,
+    output: OutputFor<S>,
+  ) {
+    todo!("TODO")
+  }
+
+  pub(crate) fn queue_output_until_block(
+    txn: &mut impl DbTxn,
+    queue_for_block: u64,
+    output: &OutputWithInInstruction<S>,
+  ) {
+    let mut outputs =
+      SerializedQueuedOutputs::get(txn, queue_for_block).unwrap_or(Vec::with_capacity(128));
+    output.write(&mut outputs).unwrap();
+    SerializedQueuedOutputs::set(txn, queue_for_block, &outputs);
+  }
+
+  pub(crate) fn save_output_being_forwarded(
+    txn: &mut impl DbTxn,
+    block_forwarded_from: u64,
+    output: &OutputWithInInstruction<S>,
+  ) {
+    let mut buf = Vec::with_capacity(128);
+    output.write(&mut buf).unwrap();
+
+    let id = output.output.id();
+
+    // Save this to an index so we can later fetch all outputs to forward
+    let mut forwarded_outputs = SerializedForwardedOutputsIndex::get(txn, block_forwarded_from)
+      .unwrap_or(Vec::with_capacity(32));
+    forwarded_outputs.extend(id.as_ref());
+    SerializedForwardedOutputsIndex::set(txn, block_forwarded_from, &forwarded_outputs);
+
+    // Save the output itself
+    SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
   }
 
   pub(crate) fn set_in_instructions(

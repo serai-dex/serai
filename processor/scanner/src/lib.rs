@@ -195,6 +195,8 @@ impl<S: ScannerFeed> Scanner<S> {
   }
 
   /// Register the Eventualities caused by a block.
+  // TODO: Replace this with a callback returned by acknowledge_block which panics if it's not
+  // called yet dropped
   pub fn register_eventualities(&mut self, block_number: u64, eventualities: Vec<()>) {
     todo!("TODO")
   }

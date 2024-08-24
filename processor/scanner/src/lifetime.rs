@@ -35,16 +35,16 @@ pub(crate) enum LifetimeStage {
 }
 
 impl LifetimeStage {
-  /// Get the stage of its lifetime this multisig is in based on when the next multisig's key
-  /// activates.
+  /// Get the stage of its lifetime this multisig is in, and the block at which we start reporting
+  /// outputs to it.
   ///
   /// Panics if the multisig being calculated for isn't actually active and a variety of other
   /// insane cases.
-  pub(crate) fn calculate<S: ScannerFeed>(
+  pub(crate) fn calculate_stage_and_reporting_start_block<S: ScannerFeed>(
     block_number: u64,
     activation_block_number: u64,
     next_keys_activation_block_number: Option<u64>,
-  ) -> Self {
+  ) -> (Self, u64) {
     assert!(
       activation_block_number >= block_number,
       "calculating lifetime stage for an inactive multisig"
@@ -53,13 +53,15 @@ impl LifetimeStage {
     // activation block itself is the first block within this window
     let active_yet_not_reporting_end_block =
       activation_block_number + S::CONFIRMATIONS + S::TEN_MINUTES;
+    // The exclusive end block is the inclusive start block
+    let reporting_start_block = active_yet_not_reporting_end_block;
     if block_number < active_yet_not_reporting_end_block {
-      return LifetimeStage::ActiveYetNotReporting;
+      return (LifetimeStage::ActiveYetNotReporting, reporting_start_block);
     }
 
     let Some(next_keys_activation_block_number) = next_keys_activation_block_number else {
       // If there is no next multisig, this is the active multisig
-      return LifetimeStage::Active;
+      return (LifetimeStage::Active, reporting_start_block);
     };
 
     assert!(
@@ -72,14 +74,14 @@ impl LifetimeStage {
     let new_active_yet_not_reporting_end_block =
       next_keys_activation_block_number + S::CONFIRMATIONS + S::TEN_MINUTES;
     if block_number < new_active_yet_not_reporting_end_block {
-      return LifetimeStage::Active;
+      return (LifetimeStage::Active, reporting_start_block);
     }
 
     // Step 4 details a further CONFIRMATIONS
     let new_active_and_used_for_change_end_block =
       new_active_yet_not_reporting_end_block + S::CONFIRMATIONS;
     if block_number < new_active_and_used_for_change_end_block {
-      return LifetimeStage::UsingNewForChange;
+      return (LifetimeStage::UsingNewForChange, reporting_start_block);
     }
 
     // Step 5 details a further 6 hours
@@ -87,10 +89,10 @@ impl LifetimeStage {
     let new_active_and_forwarded_to_end_block =
       new_active_and_used_for_change_end_block + (6 * 6 * S::TEN_MINUTES);
     if block_number < new_active_and_forwarded_to_end_block {
-      return LifetimeStage::Forwarding;
+      return (LifetimeStage::Forwarding, reporting_start_block);
     }
 
     // Step 6
-    LifetimeStage::Finishing
+    (LifetimeStage::Finishing, reporting_start_block)
   }
 }
