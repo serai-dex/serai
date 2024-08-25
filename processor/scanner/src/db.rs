@@ -1,15 +1,13 @@
 use core::marker::PhantomData;
 use std::io;
 
-use group::GroupEncoding;
-
-use scale::{Encode, Decode};
+use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
 
-use primitives::{Id, ReceivedOutput, Block, BorshG};
+use primitives::{ReceivedOutput, BorshG};
 
 use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor};
 
