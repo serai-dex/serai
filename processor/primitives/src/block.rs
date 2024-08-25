@@ -1,8 +1,9 @@
 use core::fmt::Debug;
+use std::collections::HashMap;
 
 use group::{Group, GroupEncoding};
 
-use crate::{Id, Address, ReceivedOutput};
+use crate::{Id, Address, ReceivedOutput, Eventuality, EventualityTracker};
 
 /// A block header from an external network.
 pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
@@ -13,6 +14,12 @@ pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
   fn id(&self) -> [u8; 32];
   /// The ID of the parent block.
   fn parent(&self) -> [u8; 32];
+}
+
+/// A transaction from an external network.
+pub trait Transaction: Send + Sync + Sized {
+  /// The type used to identify transactions on this external network.
+  type Id: Id;
 }
 
 /// A block from an external network.
@@ -30,12 +37,31 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   type Key: Group + GroupEncoding;
   /// The type used to represent addresses on this external network.
   type Address: Address;
+  /// The type used to represent transactions on this external network.
+  type Transaction: Transaction;
   /// The type used to represent received outputs on this external network.
-  type Output: ReceivedOutput<Self::Key, Self::Address>;
+  type Output: ReceivedOutput<
+    Self::Key,
+    Self::Address,
+    TransactionId = <Self::Transaction as Transaction>::Id,
+  >;
+  /// The type used to represent an Eventuality for a transaction on this external network.
+  type Eventuality: Eventuality<
+    OutputId = <Self::Output as ReceivedOutput<Self::Key, Self::Address>>::Id,
+  >;
 
   /// The ID of this block.
   fn id(&self) -> [u8; 32];
 
   /// Scan all outputs within this block to find the outputs spendable by this key.
   fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output>;
+
+  /// Check if this block resolved any Eventualities.
+  ///
+  /// Returns tbe resolved Eventualities, indexed by the ID of the transactions which resolved
+  /// them.
+  fn check_for_eventuality_resolutions(
+    &self,
+    eventualities: &mut EventualityTracker<Self::Eventuality>,
+  ) -> HashMap<<Self::Transaction as Transaction>::Id, Self::Eventuality>;
 }

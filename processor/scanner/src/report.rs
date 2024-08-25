@@ -3,7 +3,8 @@ use serai_db::{Db, DbTxn};
 
 use serai_primitives::BlockHash;
 use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
-use primitives::{Id, OutputType, Block};
+
+use primitives::ReceivedOutput;
 
 // TODO: Localize to ReportDb?
 use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
@@ -48,8 +49,20 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
 
       // If this block is notable, create the Batch(s) for it
       if ScannerDb::<S>::is_block_notable(&txn, b) {
-        let in_instructions = ScannerDb::<S>::in_instructions(&txn, b)
-          .expect("reporting block which didn't set its InInstructions");
+        let in_instructions = {
+          let mut in_instructions = ScannerDb::<S>::in_instructions(&txn, b)
+            .expect("reporting block which didn't set its InInstructions");
+          // Sort these before reporting them in case anything we did is non-deterministic/to have
+          // a well-defined order (not implicit to however we got this result, enabling different
+          // methods to be used in the future)
+          in_instructions.sort_by(|a, b| {
+            use core::cmp::{Ordering, Ord};
+            let res = a.output.id().as_ref().cmp(&b.output.id().as_ref());
+            assert!(res != Ordering::Equal);
+            res
+          });
+          in_instructions
+        };
 
         let network = S::NETWORK;
         let block_hash =

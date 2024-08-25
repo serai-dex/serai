@@ -1,6 +1,6 @@
 use serai_db::{Db, DbTxn};
 
-use primitives::{Id, BlockHeader};
+use primitives::BlockHeader;
 
 // TODO: Localize to IndexDb?
 use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};

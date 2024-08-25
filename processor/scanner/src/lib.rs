@@ -3,7 +3,7 @@ use core::{marker::PhantomData, fmt::Debug, time::Duration};
 use tokio::sync::mpsc;
 
 use serai_primitives::{NetworkId, Coin, Amount};
-use primitives::{ReceivedOutput, BlockHeader, Block};
+use primitives::Block;
 
 // Logic for deciding where in its lifetime a multisig is.
 mod lifetime;
@@ -34,8 +34,8 @@ pub trait ScannerFeed: Send + Sync {
 
   /// The amount of blocks to process in parallel.
   ///
-  /// This value must be at least `1`. This value should be the worst-case latency to handle a
-  /// block divided by the expected block time.
+  /// This must be at least `1`. This must be less than or equal to `CONFIRMATIONS`. This value
+  /// should be the worst-case latency to handle a block divided by the expected block time.
   const WINDOW_LENGTH: u64;
 
   /// The amount of blocks which will occur in 10 minutes (approximate).
@@ -83,7 +83,8 @@ pub trait ScannerFeed: Send + Sync {
 
   /// The dust threshold for the specified coin.
   ///
-  /// This should be a value worth handling at a human level.
+  /// This MUST be constant. Serai MJUST NOT create internal outputs worth less than this. This
+  /// SHOULD be a value worth handling at a human level.
   fn dust(&self, coin: Coin) -> Amount;
 }
 
@@ -188,6 +189,8 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This means this block was ordered on Serai in relation to `Burn` events, and all validators
   /// have achieved synchrony on it.
+  // TODO: If we're acknowledge block `b`, the Eventuality task was already eligible to check it
+  // for Eventualities. We need this to block until the Eventuality task has actually checked it.
   pub fn acknowledge_block(
     &mut self,
     block_number: u64,

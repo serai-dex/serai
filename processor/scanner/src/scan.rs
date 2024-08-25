@@ -1,14 +1,12 @@
-use group::GroupEncoding;
-
-use scale::{Encode, Decode};
+use scale::Decode;
 use serai_db::{Db, DbTxn};
 
-use serai_primitives::{MAX_DATA_LEN, ExternalAddress};
+use serai_primitives::MAX_DATA_LEN;
 use serai_in_instructions_primitives::{
   Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
 };
 
-use primitives::{Id, OutputType, ReceivedOutput, Block};
+use primitives::{OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to ScanDb?
 use crate::{
@@ -100,7 +98,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 
       assert_eq!(ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db).unwrap(), b);
-      let mut keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
+      let keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
         .expect("scanning for a blockchain without any keys set");
 
       let mut txn = self.db.txn();
@@ -154,7 +152,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           if output.kind() != OutputType::External {
             // While we don't report these outputs, we still need consensus on this block and
             // accordingly still need to set it as notable
-            let balance = outputs.balance();
+            let balance = output.balance();
             // We ensure it's over the dust limit to prevent people sending 1 satoshi from causing
             // an invocation of a consensus/signing protocol
             if balance.amount.0 >= self.feed.dust(balance.coin).0 {

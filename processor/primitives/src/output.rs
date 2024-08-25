@@ -89,12 +89,16 @@ pub trait ReceivedOutput<K: GroupEncoding, A: Address>:
 {
   /// The type used to identify this output.
   type Id: 'static + Id;
+  /// The type used to identify the transaction which created this output.
+  type TransactionId: 'static + Id;
 
   /// The type of this output.
   fn kind(&self) -> OutputType;
 
   /// The ID of this output.
   fn id(&self) -> Self::Id;
+  /// The ID of the transaction which created this output.
+  fn transaction_id(&self) -> Self::TransactionId;
   /// The key this output was received by.
   fn key(&self) -> K;
 

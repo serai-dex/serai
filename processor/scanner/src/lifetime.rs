@@ -6,6 +6,7 @@ use crate::ScannerFeed;
 /// rotation process. Steps 7-8 regard a multisig which isn't retiring yet retired, and
 /// accordingly, no longer exists, so they are not modelled here (as this only models active
 /// multisigs. Inactive multisigs aren't represented in the first place).
+#[derive(PartialEq)]
 pub(crate) enum LifetimeStage {
   /// A new multisig, once active, shouldn't actually start receiving coins until several blocks
   /// later. If any UI is premature in sending to this multisig, we delay to report the outputs to

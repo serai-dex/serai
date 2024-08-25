@@ -1,9 +1,9 @@
 use serai_db::{Db, DbTxn};
 
-use primitives::{Id, ReceivedOutput, Block};
+use primitives::{OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to EventualityDb?
-use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
+use crate::{lifetime::LifetimeStage, db::ScannerDb, ScannerFeed, ContinuallyRan};
 
 /*
   Note: The following assumes there's some value, `CONFIRMATIONS`, and the finalized block we
@@ -109,12 +109,105 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
 
       iterated = true;
 
-      // TODO: Not only check/clear eventualities, if this eventuality forwarded an output, queue
-      // it to be reported in however many blocks
-      todo!("TODO");
+      // TODO: Add a helper to fetch an indexed block, de-duplicate with scan
+      let block = match self.feed.block_by_number(b).await {
+        Ok(block) => block,
+        Err(e) => Err(format!("couldn't fetch block {b}: {e:?}"))?,
+      };
+
+      // Check the ID of this block is the expected ID
+      {
+        let expected =
+          ScannerDb::<S>::block_id(&self.db, b).expect("scannable block didn't have its ID saved");
+        if block.id() != expected {
+          panic!(
+            "finalized chain reorganized from {} to {} at {}",
+            hex::encode(expected),
+            hex::encode(block.id()),
+            b
+          );
+        }
+      }
+
+      log::info!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
+
+      /*
+        This is proper as the keys for the next to scan block (at most `WINDOW_LENGTH` ahead,
+        which is `<= CONFIRMATIONS`) will be the keys to use here.
+
+        If we had added a new key (which hasn't actually actived by the block we're currently
+        working on), it won't have any Eventualities for at least `CONFIRMATIONS` blocks (so it'd
+        have no impact here).
+
+        As for retiring a key, that's done on this task's timeline. We ensure we don't bork the
+        scanner by officially retiring the key `WINDOW_LENGTH` blocks in the future (ensuring the
+        scanner never has a malleable view of the keys).
+      */
+      // TODO: Ensure the add key/remove key DB fns are called by the same task to prevent issues
+      // there
+      // TODO: On register eventuality, assert the above timeline assumptions
+      let mut keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
+        .expect("scanning for a blockchain without any keys set");
 
       let mut txn = self.db.txn();
+
+      // Fetch the External outputs we reported, and therefore should yield after handling this
+      // block
+      let mut outputs = ScannerDb::<S>::in_instructions(&txn, b)
+        .expect("handling eventualities/outputs for block which didn't set its InInstructions")
+        .into_iter()
+        .map(|output| output.output)
+        .collect::<Vec<_>>();
+
+      for key in keys {
+        let completed_eventualities = {
+          let mut eventualities = ScannerDb::<S>::eventualities(&txn, key.key);
+          let completed_eventualities = block.check_for_eventuality_resolutions(&mut eventualities);
+          ScannerDb::<S>::set_eventualities(&mut txn, eventualities);
+          completed_eventualities
+        };
+
+        // Fetch all non-External outputs
+        let mut non_external_outputs = block.scan_for_outputs(key.key);
+        non_external_outputs.retain(|output| output.kind() != OutputType::External);
+        // Drop any outputs less than the dust limit
+        non_external_outputs.retain(|output| {
+          let balance = output.balance();
+          balance.amount.0 >= self.feed.dust(balance.coin).0
+        });
+
+        /*
+          Now that we have all non-External outputs, we filter them to be only the outputs which
+          are from transactions which resolve our own Eventualities *if* the multisig is retiring.
+          This implements step 6 of `spec/processor/Multisig Rotation.md`.
+
+          We may receive a Change output. The only issue with accumulating this would be if it
+          extends the multisig's lifetime (by increasing the amount of outputs yet to be
+          forwarded). By checking it's one we made, either:
+          1) It's a legitimate Change output to be forwarded
+          2) It's a Change output created by a user burning coins (specifying the Change address),
+             which can only be created while the multisig is actively handling `Burn`s (therefore
+            ensuring this multisig cannot be kept alive ad-infinitum)
+
+          The commentary on Change outputs also applies to Branch/Forwarded. They'll presumably get
+          ignored if not usable however.
+        */
+        if key.stage == LifetimeStage::Finishing {
+          non_external_outputs
+            .retain(|output| completed_eventualities.contains_key(&output.transaction_id()));
+        }
+
+        // Now, we iterate over all Forwarded outputs and queue their InInstructions
+        todo!("TODO");
+
+        // Accumulate all of these outputs
+        outputs.extend(non_external_outputs);
+      }
+
+      let outputs_to_return = ScannerDb::<S>::take_queued_returns(&mut txn, b);
+
       // Update the next to check block
+      // TODO: Two-stage process
       ScannerDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, next_to_check);
       txn.commit();
     }

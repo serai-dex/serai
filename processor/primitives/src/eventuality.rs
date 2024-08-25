@@ -1,8 +1,12 @@
-use std::collections::HashMap;
-use std::io;
+use std::{io, collections::HashMap};
+
+use crate::Id;
 
 /// A description of a transaction which will eventually happen.
 pub trait Eventuality: Sized + Send + Sync {
+  /// The type used to identify a received output.
+  type OutputId: Id;
+
   /// A unique byte sequence which can be used to identify potentially resolving transactions.
   ///
   /// Both a transaction and an Eventuality are expected to be able to yield lookup sequences.
@@ -14,6 +18,9 @@ pub trait Eventuality: Sized + Send + Sync {
   /// transactions against all Eventualities. Once the potential resolved Eventuality is
   /// identified, the full check is performed.
   fn lookup(&self) -> Vec<u8>;
+
+  /// The output this plan forwarded.
+  fn forwarded_output(&self) -> Option<Self::OutputId>;
 
   /// Read an Eventuality.
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;

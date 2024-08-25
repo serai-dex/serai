@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use core::fmt::Debug;
+use core::{hash::Hash, fmt::Debug};
 
 use group::GroupEncoding;
 
@@ -29,6 +29,8 @@ pub trait Id:
   + Clone
   + Default
   + PartialEq
+  + Eq
+  + Hash
   + AsRef<[u8]>
   + AsMut<[u8]>
   + Debug
