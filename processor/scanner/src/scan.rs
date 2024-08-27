@@ -76,7 +76,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       .expect("ScanForOutputsTask run before writing the start block");
 
     for b in next_to_scan ..= latest_scannable {
-      let block = self.feed.block_by_number(b).await?;
+      let block = self.feed.block_by_number(&self.db, b).await?;
 
       log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 
@@ -173,7 +173,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             },
             (Some(return_addr), None) => {
               // Since there was no instruction here, return this since we parsed a return address
-              ScannerDb::<S>::queue_return(&mut txn, b, return_addr, output);
+              ScannerDb::<S>::queue_return(&mut txn, b, &return_addr, &output);
               continue;
             }
             // Since we didn't receive an instruction nor can we return this, move on

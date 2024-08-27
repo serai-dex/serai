@@ -7,7 +7,7 @@ use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 use primitives::ReceivedOutput;
 
 // TODO: Localize to ReportDb?
-use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
+use crate::{db::ScannerDb, index::IndexDb, ScannerFeed, ContinuallyRan};
 
 /*
   This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
@@ -57,7 +57,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
           // methods to be used in the future)
           in_instructions.sort_by(|a, b| {
             use core::cmp::{Ordering, Ord};
-            let res = a.output.id().as_ref().cmp(&b.output.id().as_ref());
+            let res = a.output.id().as_ref().cmp(b.output.id().as_ref());
             assert!(res != Ordering::Equal);
             res
           });
@@ -66,8 +66,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
 
         let network = S::NETWORK;
         let block_hash =
-          ScannerDb::<S>::block_id(&txn, b).expect("reporting block we didn't save the ID for");
-        let mut batch_id = ScannerDb::<S>::acquire_batch_id(txn);
+          IndexDb::block_id(&txn, b).expect("reporting block we didn't save the ID for");
+        let mut batch_id = ScannerDb::<S>::acquire_batch_id(&mut txn);
 
         // start with empty batch
         let mut batches =
@@ -83,7 +83,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
             let instruction = batch.instructions.pop().unwrap();
 
             // bump the id for the new batch
-            batch_id = ScannerDb::<S>::acquire_batch_id(txn);
+            batch_id = ScannerDb::<S>::acquire_batch_id(&mut txn);
 
             // make a new batch with this instruction included
             batches.push(Batch {

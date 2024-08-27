@@ -2,12 +2,15 @@ use group::GroupEncoding;
 
 use serai_db::{DbTxn, Db};
 
-use primitives::{OutputType, ReceivedOutput, Block};
+use primitives::{OutputType, ReceivedOutput, Eventuality, Block};
 
 // TODO: Localize to EventualityDb?
 use crate::{
   lifetime::LifetimeStage, db::ScannerDb, BlockExt, ScannerFeed, KeyFor, Scheduler, ContinuallyRan,
 };
+
+mod db;
+use db::EventualityDb;
 
 /*
   When we scan a block, we receive outputs. When this block is acknowledged, we accumulate those
@@ -110,7 +113,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       iterated = true;
 
-      let block = self.feed.block_by_number(b).await?;
+      let block = self.feed.block_by_number(&self.db, b).await?;
 
       log::info!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
 
@@ -144,9 +147,9 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       for key in keys {
         let completed_eventualities = {
-          let mut eventualities = ScannerDb::<S>::eventualities(&txn, key.key);
+          let mut eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
           let completed_eventualities = block.check_for_eventuality_resolutions(&mut eventualities);
-          ScannerDb::<S>::set_eventualities(&mut txn, eventualities);
+          EventualityDb::<S>::set_eventualities(&mut txn, key.key, &eventualities);
           completed_eventualities
         };
 
@@ -200,11 +203,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           KeyFor::<S>::from_bytes(&key_repr).unwrap()
         };
 
-        let mut eventualities = ScannerDb::<S>::eventualities(&txn, key);
+        let mut eventualities = EventualityDb::<S>::eventualities(&txn, key);
         for new_eventuality in new_eventualities {
           eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
         }
-        ScannerDb::<S>::set_eventualities(&mut txn, eventualities);
+        EventualityDb::<S>::set_eventualities(&mut txn, key, &eventualities);
       }
 
       // Update the next to check block

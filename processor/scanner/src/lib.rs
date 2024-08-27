@@ -1,13 +1,11 @@
-use core::{marker::PhantomData, fmt::Debug, time::Duration};
+use core::{marker::PhantomData, fmt::Debug};
 use std::collections::HashMap;
 
-use tokio::sync::mpsc;
-
-use serai_db::DbTxn;
+use serai_db::{Get, DbTxn};
 
 use serai_primitives::{NetworkId, Coin, Amount};
 
-use primitives::{task::*, Block};
+use primitives::{task::*, ReceivedOutput, Block};
 
 // Logic for deciding where in its lifetime a multisig is.
 mod lifetime;
@@ -29,10 +27,10 @@ pub(crate) trait BlockExt: Block {
 }
 impl<B: Block> BlockExt for B {
   fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output> {
-    let mut outputs = self.scan_for_outputs_unordered();
+    let mut outputs = self.scan_for_outputs_unordered(key);
     outputs.sort_by(|a, b| {
       use core::cmp::{Ordering, Ord};
-      let res = a.id().as_ref().cmp(&b.id().as_ref());
+      let res = a.id().as_ref().cmp(b.id().as_ref());
       assert!(res != Ordering::Equal, "scanned two outputs within a block with the same ID");
       res
     });
@@ -103,7 +101,11 @@ pub trait ScannerFeed: Send + Sync {
   /// Fetch a block by its number.
   ///
   /// Panics if the block requested wasn't indexed.
-  async fn block_by_number(&self, getter: &impl Get, number: u64) -> Result<Self::Block, String> {
+  async fn block_by_number(
+    &self,
+    getter: &(impl Send + Sync + Get),
+    number: u64,
+  ) -> Result<Self::Block, String> {
     let block = match self.unchecked_block_by_number(number).await {
       Ok(block) => block,
       Err(e) => Err(format!("couldn't fetch block {number}: {e:?}"))?,
@@ -111,8 +113,8 @@ pub trait ScannerFeed: Send + Sync {
 
     // Check the ID of this block is the expected ID
     {
-      let expected =
-        crate::index::IndexDb::block_id(&self.db, number).expect("requested a block which wasn't indexed");
+      let expected = crate::index::IndexDb::block_id(getter, number)
+        .expect("requested a block which wasn't indexed");
       if block.id() != expected {
         panic!(
           "finalized chain reorganized from {} to {} at {}",
@@ -122,6 +124,8 @@ pub trait ScannerFeed: Send + Sync {
         );
       }
     }
+
+    Ok(block)
   }
 
   /// The cost to aggregate an input as of the specified block.
@@ -146,7 +150,7 @@ type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 
 /// The object responsible for accumulating outputs and planning new transactions.
-pub trait Scheduler<S: ScannerFeed> {
+pub trait Scheduler<S: ScannerFeed>: Send {
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key these
