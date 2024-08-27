@@ -215,8 +215,8 @@ impl<S: ScannerFeed> ScannerDb<S> {
   pub(crate) fn queue_return(
     txn: &mut impl DbTxn,
     block_queued_from: u64,
-    return_addr: AddressFor<S>,
-    output: OutputFor<S>,
+    return_addr: &AddressFor<S>,
+    output: &OutputFor<S>,
   ) {
     todo!("TODO")
   }
@@ -253,6 +253,10 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
 
   pub(crate) fn flag_notable(txn: &mut impl DbTxn, block_number: u64) {
+    assert!(
+      NextToPotentiallyReportBlock::get(txn).unwrap() <= block_number,
+      "already potentially reported a block we're only now flagging as notable"
+    );
     NotableBlock::set(txn, block_number, &());
   }
 
@@ -284,5 +288,13 @@ impl<S: ScannerFeed> ScannerDb<S> {
 
   pub(crate) fn is_block_notable(getter: &impl Get, number: u64) -> bool {
     NotableBlock::get(getter, number).is_some()
+  }
+
+  pub(crate) fn take_queued_returns(txn: &mut impl DbTxn, block_number: u64) -> Vec<OutputFor<S>> {
+    todo!("TODO")
+  }
+
+  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
+    todo!("TODO")
   }
 }
