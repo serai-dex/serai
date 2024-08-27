@@ -1,11 +1,17 @@
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn, Db};
 
 use primitives::{task::ContinuallyRan, BlockHeader};
 
 use crate::ScannerFeed;
 
 mod db;
-pub(crate) use db::IndexDb;
+use db::IndexDb;
+
+/// Panics if an unindexed block's ID is requested.
+pub(crate) fn block_id(getter: &impl Get, block_number: u64) -> [u8; 32] {
+  IndexDb::block_id(getter, block_number)
+    .unwrap_or_else(|| panic!("requested block ID for unindexed block {block_number}"))
+}
 
 /*
   This processor should build its own index of the blockchain, yet only for finalized blocks which
@@ -18,6 +24,36 @@ pub(crate) use db::IndexDb;
 struct IndexFinalizedTask<D: Db, S: ScannerFeed> {
   db: D,
   feed: S,
+}
+
+impl<D: Db, S: ScannerFeed> IndexFinalizedTask<D, S> {
+  pub(crate) async fn new(mut db: D, feed: S, start_block: u64) -> Self {
+    if IndexDb::block_id(&db, start_block).is_none() {
+      // Fetch the block for its ID
+      let block = {
+        let mut delay = Self::DELAY_BETWEEN_ITERATIONS;
+        loop {
+          match feed.unchecked_block_header_by_number(start_block).await {
+            Ok(block) => break block,
+            Err(e) => {
+              log::warn!("IndexFinalizedTask couldn't fetch start block {start_block}: {e:?}");
+              tokio::time::sleep(core::time::Duration::from_secs(delay)).await;
+              delay += Self::DELAY_BETWEEN_ITERATIONS;
+              delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
+            }
+          };
+        }
+      };
+
+      // Initialize the DB
+      let mut txn = db.txn();
+      IndexDb::set_block(&mut txn, start_block, block.id());
+      IndexDb::set_latest_finalized_block(&mut txn, start_block);
+      txn.commit();
+    }
+
+    Self { db, feed }
+  }
 }
 
 #[async_trait::async_trait]

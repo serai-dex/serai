@@ -78,7 +78,7 @@ pub trait ContinuallyRan: Sized {
           }
         }
         Err(e) => {
-          log::debug!("{}", e);
+          log::warn!("{}", e);
           increase_sleep_before_next_task(&mut current_sleep_before_next_task);
         }
       }
