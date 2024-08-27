@@ -245,7 +245,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       // Send the scan data to the eventuality task
       ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
-      // Send the in instructions to the report task
+      // Send the InInstructions to the report task
       ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
       // Update the next to scan block
       ScannerDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);

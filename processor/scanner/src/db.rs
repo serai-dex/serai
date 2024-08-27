@@ -82,25 +82,34 @@ create_db!(
 
 pub(crate) struct ScannerDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerDb<S> {
-  // activation_block_number is inclusive, so the key will be scanned for starting at the specified
-  // block
+  /// Queue a key.
+  ///
+  /// Keys may be queued whenever, so long as they're scheduled to activate `WINDOW_LENGTH` blocks
+  /// after the next block acknowledged after they've been set. There is no requirement that any
+  /// prior keys have had their processing completed (meaning what should be a length-2 vector may
+  /// be a length-n vector).
+  ///
+  /// A new key MUST NOT be queued to activate a block preceding the finishing of the key prior to
+  /// its prior. There MUST only be two keys active at one time.
+  ///
+  /// activation_block_number is inclusive, so the key will be scanned for starting at the
+  /// specified block.
   pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
     // Set this block as notable
     NotableBlock::set(txn, activation_block_number, &());
 
+    // TODO: Panic if we've ever seen this key before
+
     // Push the key
     let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
-    for key_i in &keys {
-      if key == key_i.key.0 {
-        panic!("queueing a key prior queued");
-      }
-    }
     keys.push(SeraiKeyDbEntry { activation_block_number, key: BorshG(key) });
     ActiveKeys::set(txn, &keys);
   }
+  /// Retire a key.
+  ///
+  /// The key retired must be the oldest key. There must be another key actively tracked.
   // TODO: This will be called from the Eventuality task yet this field is read by the scan task
   // We need to write the argument for its safety
-  // TODO: retire_key needs to set the notable block
   pub(crate) fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
@@ -110,6 +119,9 @@ impl<S: ScannerFeed> ScannerDb<S> {
     keys.remove(0);
     ActiveKeys::set(txn, &keys);
   }
+  /// Fetch the active keys, as of the next-to-scan-for-outputs Block.
+  ///
+  /// This means the scan task should scan for all keys returned by this.
   pub(crate) fn active_keys_as_of_next_to_scan_for_outputs_block(
     getter: &impl Get,
   ) -> Option<Vec<SeraiKey<KeyFor<S>>>> {
@@ -131,7 +143,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
         );
       keys.push(SeraiKey { key: raw_keys[i].key.0, stage, block_at_which_reporting_starts });
     }
-    assert!(keys.len() <= 2);
+    assert!(keys.len() <= 2, "more than two keys active");
     Some(keys)
   }
 
@@ -152,7 +164,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
     // We can only scan up to whatever block we've checked the Eventualities of, plus the window
     // length. Since this returns an inclusive bound, we need to subtract 1
     // See `eventuality.rs` for more info
-    // TODO: Adjust based on register eventualities
     NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH - 1)
   }
 
