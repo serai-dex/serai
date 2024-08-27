@@ -8,7 +8,7 @@ use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Eventuality, 
 use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, ReceiverScanData, ScannerDb, ScanToEventualityDb},
-  BlockExt, ScannerFeed, KeyFor, SchedulerUpdate, Scheduler,
+  BlockExt, ScannerFeed, KeyFor, SchedulerUpdate, Scheduler, sort_outputs,
 };
 
 mod db;
@@ -214,8 +214,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
       }
 
       // TODO: This also has to intake Burns
-      let new_eventualities =
-        self.scheduler.update(&mut txn, SchedulerUpdate { outputs, forwards, returns });
+      let mut scheduler_update = SchedulerUpdate { outputs, forwards, returns };
+      scheduler_update.outputs.sort_by(sort_outputs);
+      scheduler_update.forwards.sort_by(sort_outputs);
+      scheduler_update.returns.sort_by(|a, b| sort_outputs(&a.output, &b.output));
+      let new_eventualities = self.scheduler.update(&mut txn, scheduler_update);
       for (key, new_eventualities) in new_eventualities {
         let key = {
           let mut key_repr = <KeyFor<S> as GroupEncoding>::Repr::default();
