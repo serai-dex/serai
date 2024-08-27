@@ -43,7 +43,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
 
     // Index the hashes of all blocks until the latest finalized block
     for b in (our_latest_finalized + 1) ..= latest_finalized {
-      let block = match self.feed.block_header_by_number(b).await {
+      let block = match self.feed.unchecked_block_header_by_number(b).await {
         Ok(block) => block,
         Err(e) => Err(format!("couldn't fetch block {b}: {e:?}"))?,
       };
