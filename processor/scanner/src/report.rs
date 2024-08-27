@@ -4,10 +4,11 @@ use serai_db::{DbTxn, Db};
 use serai_primitives::BlockHash;
 use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
-use primitives::ReceivedOutput;
-
-// TODO: Localize to ReportDb?
-use crate::{db::ScannerDb, index, ScannerFeed, ContinuallyRan};
+// TODO: Localize to Report?
+use crate::{
+  db::{ScannerDb, ScanToReportDb},
+  index, ScannerFeed, ContinuallyRan,
+};
 
 /*
   This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
@@ -47,23 +48,15 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
     for b in next_to_potentially_report ..= highest_reportable {
       let mut txn = self.db.txn();
 
+      // Receive the InInstructions for this block
+      // We always do this as we can't trivially tell if we should recv InInstructions before we do
+      let in_instructions = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
+      let notable = ScannerDb::<S>::is_block_notable(&txn, b);
+      if !notable {
+        assert!(in_instructions.is_empty(), "block wasn't notable yet had InInstructions");
+      }
       // If this block is notable, create the Batch(s) for it
-      if ScannerDb::<S>::is_block_notable(&txn, b) {
-        let in_instructions = {
-          let mut in_instructions = ScannerDb::<S>::in_instructions(&txn, b)
-            .expect("reporting block which didn't set its InInstructions");
-          // Sort these before reporting them in case anything we did is non-deterministic/to have
-          // a well-defined order (not implicit to however we got this result, enabling different
-          // methods to be used in the future)
-          in_instructions.sort_by(|a, b| {
-            use core::cmp::{Ordering, Ord};
-            let res = a.output.id().as_ref().cmp(b.output.id().as_ref());
-            assert!(res != Ordering::Equal);
-            res
-          });
-          in_instructions
-        };
-
+      if notable {
         let network = S::NETWORK;
         let block_hash = index::block_id(&txn, b);
         let mut batch_id = ScannerDb::<S>::acquire_batch_id(&mut txn);
@@ -74,7 +67,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
 
         for instruction in in_instructions {
           let batch = batches.last_mut().unwrap();
-          batch.instructions.push(instruction.in_instruction);
+          batch.instructions.push(instruction);
 
           // check if batch is over-size
           if batch.encode().len() > MAX_BATCH_SIZE {
