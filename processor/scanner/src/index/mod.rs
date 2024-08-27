@@ -1,9 +1,11 @@
 use serai_db::{DbTxn, Db};
 
-use primitives::BlockHeader;
+use primitives::{task::ContinuallyRan, BlockHeader};
 
-// TODO: Localize to IndexDb?
-use crate::{db::ScannerDb, ScannerFeed, ContinuallyRan};
+use crate::ScannerFeed;
+
+mod db;
+pub(crate) use db::IndexDb;
 
 /*
   This processor should build its own index of the blockchain, yet only for finalized blocks which
@@ -22,7 +24,7 @@ struct IndexFinalizedTask<D: Db, S: ScannerFeed> {
 impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the latest finalized block
-    let our_latest_finalized = ScannerDb::<S>::latest_finalized_block(&self.db)
+    let our_latest_finalized = IndexDb::latest_finalized_block(&self.db)
       .expect("IndexTask run before writing the start block");
     let latest_finalized = match self.feed.latest_finalized_block_number().await {
       Ok(latest_finalized) => latest_finalized,
@@ -51,7 +53,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
       // Check this descends from our indexed chain
       {
         let expected_parent =
-          ScannerDb::<S>::block_id(&self.db, b - 1).expect("didn't have the ID of the prior block");
+          IndexDb::block_id(&self.db, b - 1).expect("didn't have the ID of the prior block");
         if block.parent() != expected_parent {
           panic!(
             "current finalized block (#{b}, {}) doesn't build off finalized block (#{}, {})",
@@ -64,8 +66,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
 
       // Update the latest finalized block
       let mut txn = self.db.txn();
-      ScannerDb::<S>::set_block(&mut txn, b, block.id());
-      ScannerDb::<S>::set_latest_finalized_block(&mut txn, b);
+      IndexDb::set_block(&mut txn, b, block.id());
+      IndexDb::set_latest_finalized_block(&mut txn, b);
       txn.commit();
     }
 

@@ -44,13 +44,8 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 
 create_db!(
   Scanner {
-    BlockId: (number: u64) -> [u8; 32],
-    BlockNumber: (id: [u8; 32]) -> u64,
-
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
 
-    // The latest finalized block to appear of a blockchain
-    LatestFinalizedBlock: () -> u64,
     // The next block to scan for received outputs
     NextToScanForOutputsBlock: () -> u64,
     // The next block to check for resolving eventualities
@@ -89,17 +84,6 @@ create_db!(
 
 pub(crate) struct ScannerDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerDb<S> {
-  pub(crate) fn set_block(txn: &mut impl DbTxn, number: u64, id: [u8; 32]) {
-    BlockId::set(txn, number, &id);
-    BlockNumber::set(txn, id, &number);
-  }
-  pub(crate) fn block_id(getter: &impl Get, number: u64) -> Option<[u8; 32]> {
-    BlockId::get(getter, number)
-  }
-  pub(crate) fn block_number(getter: &impl Get, id: [u8; 32]) -> Option<u64> {
-    BlockNumber::get(getter, id)
-  }
-
   // activation_block_number is inclusive, so the key will be scanned for starting at the specified
   // block
   pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
@@ -155,25 +139,18 @@ impl<S: ScannerFeed> ScannerDb<S> {
 
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: [u8; 32]) {
     assert!(
-      LatestFinalizedBlock::get(txn).is_none(),
+      NextToScanForOutputsBlock::get(txn).is_none(),
       "setting start block but prior set start block"
     );
 
-    Self::set_block(txn, start_block, id);
+    crate::index::IndexDb::set_block(txn, start_block, id);
+    crate::index::IndexDb::set_latest_finalized_block(txn, start_block);
 
-    LatestFinalizedBlock::set(txn, &start_block);
     NextToScanForOutputsBlock::set(txn, &start_block);
     // We can receive outputs in this block, but any descending transactions will be in the next
     // block. This, with the check on-set, creates a bound that this value in the DB is non-zero.
     NextToCheckForEventualitiesBlock::set(txn, &(start_block + 1));
     NextToPotentiallyReportBlock::set(txn, &start_block);
-  }
-
-  pub(crate) fn set_latest_finalized_block(txn: &mut impl DbTxn, latest_finalized_block: u64) {
-    LatestFinalizedBlock::set(txn, &latest_finalized_block);
-  }
-  pub(crate) fn latest_finalized_block(getter: &impl Get) -> Option<u64> {
-    LatestFinalizedBlock::get(getter)
   }
 
   pub(crate) fn latest_scannable_block(getter: &impl Get) -> Option<u64> {
