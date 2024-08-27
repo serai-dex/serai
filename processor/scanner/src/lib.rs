@@ -113,8 +113,7 @@ pub trait ScannerFeed: Send + Sync {
 
     // Check the ID of this block is the expected ID
     {
-      let expected = crate::index::IndexDb::block_id(getter, number)
-        .expect("requested a block which wasn't indexed");
+      let expected = crate::index::block_id(getter, number);
       if block.id() != expected {
         panic!(
           "finalized chain reorganized from {} to {} at {}",

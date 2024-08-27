@@ -143,9 +143,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
       "setting start block but prior set start block"
     );
 
-    crate::index::IndexDb::set_block(txn, start_block, id);
-    crate::index::IndexDb::set_latest_finalized_block(txn, start_block);
-
     NextToScanForOutputsBlock::set(txn, &start_block);
     // We can receive outputs in this block, but any descending transactions will be in the next
     // block. This, with the check on-set, creates a bound that this value in the DB is non-zero.
