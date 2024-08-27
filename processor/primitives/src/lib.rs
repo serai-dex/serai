@@ -9,6 +9,9 @@ use group::GroupEncoding;
 use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
+/// A module for task-related structs and functionality.
+pub mod task;
+
 mod output;
 pub use output::*;
 
