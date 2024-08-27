@@ -1,4 +1,4 @@
-use serai_db::{Db, DbTxn};
+use serai_db::{DbTxn, Db};
 
 use primitives::BlockHeader;
 

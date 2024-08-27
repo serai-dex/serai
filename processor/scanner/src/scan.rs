@@ -1,5 +1,5 @@
 use scale::Decode;
-use serai_db::{Db, DbTxn};
+use serai_db::{DbTxn, Db};
 
 use serai_primitives::MAX_DATA_LEN;
 use serai_in_instructions_primitives::{

@@ -1,9 +1,11 @@
-use serai_db::{Db, DbTxn};
+use group::GroupEncoding;
+
+use serai_db::{DbTxn, Db};
 
 use primitives::{OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to EventualityDb?
-use crate::{lifetime::LifetimeStage, db::ScannerDb, ScannerFeed, ContinuallyRan};
+use crate::{lifetime::LifetimeStage, db::ScannerDb, ScannerFeed, KeyFor, Scheduler, ContinuallyRan};
 
 /*
   Note: The following assumes there's some value, `CONFIRMATIONS`, and the finalized block we
@@ -53,13 +55,14 @@ use crate::{lifetime::LifetimeStage, db::ScannerDb, ScannerFeed, ContinuallyRan}
   This forms a backlog only if the latency of scanning, acknowledgement, and intake (including
   checking Eventualities) exceeds the window duration (the desired property).
 */
-struct EventualityTask<D: Db, S: ScannerFeed> {
+struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
   db: D,
   feed: S,
+  scheduler: Sch,
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
+impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTask<D, S, Sch> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     /*
       The set of Eventualities only increase when a block is acknowledged. Accordingly, we can only
@@ -168,6 +171,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
         };
 
         // Fetch all non-External outputs
+        // TODO: Have a scan_for_outputs_ext which sorts for us
         let mut non_external_outputs = block.scan_for_outputs(key.key);
         non_external_outputs.retain(|output| output.kind() != OutputType::External);
         // Drop any outputs less than the dust limit
@@ -206,8 +210,24 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for EventualityTask<D, S> {
 
       let outputs_to_return = ScannerDb::<S>::take_queued_returns(&mut txn, b);
 
+      let new_eventualities =
+        self.scheduler.accumulate_outputs_and_return_outputs(&mut txn, outputs, outputs_to_return);
+      for (key, new_eventualities) in new_eventualities {
+        let key = {
+          let mut key_repr = <KeyFor<S> as GroupEncoding>::Repr::default();
+          assert_eq!(key.len(), key_repr.as_ref().len());
+          key_repr.as_mut().copy_from_slice(&key);
+          KeyFor::<S>::from_bytes(&key_repr).unwrap()
+        };
+
+        let mut eventualities = ScannerDb::<S>::eventualities(&txn, key.key);
+        for new_eventuality in new_eventualities {
+          eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
+        }
+        ScannerDb::<S>::set_eventualities(&mut txn, eventualities);
+      }
+
       // Update the next to check block
-      // TODO: Two-stage process
       ScannerDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, next_to_check);
       txn.commit();
     }
