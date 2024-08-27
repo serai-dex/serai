@@ -112,7 +112,7 @@ pub trait ScannerFeed: Send + Sync {
     // Check the ID of this block is the expected ID
     {
       let expected =
-        ScannerDb::<S>::block_id(&self.db, number).expect("requested a block which wasn't indexed");
+        crate::index::IndexDb::block_id(&self.db, number).expect("requested a block which wasn't indexed");
       if block.id() != expected {
         panic!(
           "finalized chain reorganized from {} to {} at {}",
