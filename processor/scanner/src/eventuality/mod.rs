@@ -117,7 +117,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       let block = self.feed.block_by_number(&self.db, b).await?;
 
-      log::info!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
+      log::debug!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
 
       /*
         This is proper as the keys for the next to scan block (at most `WINDOW_LENGTH` ahead,
@@ -147,12 +147,20 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
       let mut outputs = received_external_outputs;
 
       for key in keys {
-        let completed_eventualities = {
+        let (eventualities_is_empty, completed_eventualities) = {
           let mut eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
           let completed_eventualities = block.check_for_eventuality_resolutions(&mut eventualities);
           EventualityDb::<S>::set_eventualities(&mut txn, key.key, &eventualities);
-          completed_eventualities
+          (eventualities.active_eventualities.is_empty(), completed_eventualities)
         };
+
+        for (tx, completed_eventuality) in completed_eventualities {
+          log::info!(
+            "eventuality {} resolved by {}",
+            hex::encode(completed_eventuality.id()),
+            hex::encode(tx.as_ref())
+          );
+        }
 
         // Fetch all non-External outputs
         let mut non_external_outputs = block.scan_for_outputs(key.key);
@@ -213,7 +221,6 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         outputs.extend(non_external_outputs);
       }
 
-      // TODO: This also has to intake Burns
       let mut scheduler_update = SchedulerUpdate { outputs, forwards, returns };
       scheduler_update.outputs.sort_by(sort_outputs);
       scheduler_update.forwards.sort_by(sort_outputs);
@@ -232,6 +239,22 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
         }
         EventualityDb::<S>::set_eventualities(&mut txn, key, &eventualities);
+      }
+
+      for key in keys {
+        if key.stage == LifetimeStage::Finishing {
+          let eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
+          if eventualities.active_eventualities.is_empty() {
+            log::info!(
+              "key {} has finished and is being retired",
+              hex::encode(key.key.to_bytes().as_ref())
+            );
+
+            ScannerDb::<S>::flag_notable(&mut txn, b + S::WINDOW_LENGTH);
+            // TODO: Retire the key
+            todo!("TODO")
+          }
+        }
       }
 
       // Update the next to check block
