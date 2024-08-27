@@ -1,5 +1,5 @@
 use scale::Encode;
-use serai_db::{Db, DbTxn};
+use serai_db::{DbTxn, Db};
 
 use serai_primitives::BlockHash;
 use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};

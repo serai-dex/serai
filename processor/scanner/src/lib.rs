@@ -1,8 +1,12 @@
 use core::{marker::PhantomData, fmt::Debug, time::Duration};
+use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 
+use serai_db::DbTxn;
+
 use serai_primitives::{NetworkId, Coin, Amount};
+
 use primitives::Block;
 
 // Logic for deciding where in its lifetime a multisig is.
@@ -91,6 +95,21 @@ pub trait ScannerFeed: Send + Sync {
 type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
 type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
+type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
+
+/// The object responsible for accumulating outputs and planning new transactions.
+pub trait Scheduler<S: ScannerFeed> {
+  /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
+  ///
+  /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key these
+  /// Eventualities are for.
+  fn accumulate_outputs_and_return_outputs(
+    &mut self,
+    txn: &mut impl DbTxn,
+    outputs: Vec<OutputFor<S>>,
+    outputs_to_return: Vec<OutputFor<S>>,
+  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
+}
 
 /// A handle to immediately run an iteration of a task.
 #[derive(Clone)]
@@ -189,20 +208,14 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This means this block was ordered on Serai in relation to `Burn` events, and all validators
   /// have achieved synchrony on it.
-  // TODO: If we're acknowledge block `b`, the Eventuality task was already eligible to check it
+  // TODO: If we're acknowledging block `b`, the Eventuality task was already eligible to check it
   // for Eventualities. We need this to block until the Eventuality task has actually checked it.
+  // TODO: Does the prior TODO hold with how the callback is now handled?
   pub fn acknowledge_block(
     &mut self,
     block_number: u64,
     key_to_activate: Option<()>,
   ) -> Vec<OutputFor<S>> {
-    todo!("TODO")
-  }
-
-  /// Register the Eventualities caused by a block.
-  // TODO: Replace this with a callback returned by acknowledge_block which panics if it's not
-  // called yet dropped
-  pub fn register_eventualities(&mut self, block_number: u64, eventualities: Vec<()>) {
     todo!("TODO")
   }
 }
