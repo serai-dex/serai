@@ -6,13 +6,13 @@ use serai_in_instructions_primitives::{
   Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
 };
 
-use primitives::{OutputType, ReceivedOutput, Block};
+use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to ScanDb?
 use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToReportDb, ScanToEventualityDb},
-  BlockExt, ScannerFeed, AddressFor, OutputFor, Return, ContinuallyRan,
+  BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
 };
 
 // Construct an InInstruction from an external output.
@@ -96,15 +96,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       let queued_outputs = {
         let mut queued_outputs = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
-
         // Sort the queued outputs in case they weren't queued in a deterministic fashion
-        queued_outputs.sort_by(|a, b| {
-          use core::cmp::{Ordering, Ord};
-          let res = a.output.id().as_ref().cmp(b.output.id().as_ref());
-          assert!(res != Ordering::Equal);
-          res
-        });
-
+        queued_outputs.sort_by(|a, b| sort_outputs(&a.output, &b.output));
         queued_outputs
       };
       for queued_output in queued_outputs {

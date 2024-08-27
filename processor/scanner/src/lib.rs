@@ -1,11 +1,13 @@
 use core::{marker::PhantomData, fmt::Debug};
 use std::collections::HashMap;
 
+use group::GroupEncoding;
+
 use serai_db::{Get, DbTxn};
 
 use serai_primitives::{NetworkId, Coin, Amount};
 
-use primitives::{task::*, ReceivedOutput, Block};
+use primitives::{task::*, Address, ReceivedOutput, Block};
 
 // Logic for deciding where in its lifetime a multisig is.
 mod lifetime;
@@ -21,6 +23,16 @@ mod eventuality;
 /// Task which reports `Batch`s to Substrate.
 mod report;
 
+pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>>(
+  a: &O,
+  b: &O,
+) -> core::cmp::Ordering {
+  use core::cmp::{Ordering, Ord};
+  let res = a.id().as_ref().cmp(b.id().as_ref());
+  assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
+  res
+}
+
 /// Extension traits around Block.
 pub(crate) trait BlockExt: Block {
   fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output>;
@@ -28,12 +40,7 @@ pub(crate) trait BlockExt: Block {
 impl<B: Block> BlockExt for B {
   fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output> {
     let mut outputs = self.scan_for_outputs_unordered(key);
-    outputs.sort_by(|a, b| {
-      use core::cmp::{Ordering, Ord};
-      let res = a.id().as_ref().cmp(b.id().as_ref());
-      assert!(res != Ordering::Equal, "scanned two outputs within a block with the same ID");
-      res
-    });
+    outputs.sort_by(sort_outputs);
     outputs
   }
 }
