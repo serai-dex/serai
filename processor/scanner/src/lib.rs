@@ -148,17 +148,29 @@ type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 
+/// A return to occur.
+pub struct Return<S: ScannerFeed> {
+  address: AddressFor<S>,
+  output: OutputFor<S>,
+}
+
+/// An update for the scheduler.
+pub struct SchedulerUpdate<S: ScannerFeed> {
+  outputs: Vec<OutputFor<S>>,
+  forwards: Vec<OutputFor<S>>,
+  returns: Vec<Return<S>>,
+}
+
 /// The object responsible for accumulating outputs and planning new transactions.
 pub trait Scheduler<S: ScannerFeed>: Send {
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
-  /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key these
+  /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
-  fn accumulate_outputs_and_return_outputs(
+  fn update(
     &mut self,
     txn: &mut impl DbTxn,
-    outputs: Vec<OutputFor<S>>,
-    outputs_to_return: Vec<OutputFor<S>>,
+    update: SchedulerUpdate<S>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 }
 

@@ -2,11 +2,13 @@ use group::GroupEncoding;
 
 use serai_db::{DbTxn, Db};
 
-use primitives::{OutputType, ReceivedOutput, Eventuality, Block};
+use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Eventuality, Block};
 
 // TODO: Localize to EventualityDb?
 use crate::{
-  lifetime::LifetimeStage, db::ScannerDb, BlockExt, ScannerFeed, KeyFor, Scheduler, ContinuallyRan,
+  lifetime::LifetimeStage,
+  db::{OutputWithInInstruction, ReceiverScanData, ScannerDb, ScanToEventualityDb},
+  BlockExt, ScannerFeed, KeyFor, SchedulerUpdate, Scheduler,
 };
 
 mod db;
@@ -137,13 +139,12 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       let mut txn = self.db.txn();
 
-      // Fetch the External outputs we reported, and therefore should yield after handling this
-      // block
-      let mut outputs = ScannerDb::<S>::in_instructions(&txn, b)
-        .expect("handling eventualities/outputs for block which didn't set its InInstructions")
-        .into_iter()
-        .map(|output| output.output)
-        .collect::<Vec<_>>();
+      // Fetch the data from the scanner
+      let scan_data = ScanToEventualityDb::recv_scan_data(&mut txn, b);
+      assert_eq!(scan_data.block_number, b);
+      let ReceiverScanData { block_number: _, received_external_outputs, forwards, returns } =
+        scan_data;
+      let mut outputs = received_external_outputs;
 
       for key in keys {
         let completed_eventualities = {
@@ -184,17 +185,37 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         }
 
         // Now, we iterate over all Forwarded outputs and queue their InInstructions
-        todo!("TODO");
+        for output in
+          non_external_outputs.iter().filter(|output| output.kind() == OutputType::Forwarded)
+        {
+          let Some(eventuality) = completed_eventualities.get(&output.transaction_id()) else {
+            // Output sent to the forwarding address yet not actually forwarded
+            continue;
+          };
+          let Some(forwarded) = eventuality.forwarded_output() else {
+            // This was a TX made by us, yet someone burned to the forwarding address
+            continue;
+          };
+
+          let (return_address, in_instruction) =
+            ScannerDb::<S>::return_address_and_in_instruction_for_forwarded_output(
+              &txn, &forwarded,
+            )
+            .expect("forwarded an output yet didn't save its InInstruction to the DB");
+          ScannerDb::<S>::queue_output_until_block(
+            &mut txn,
+            b + S::WINDOW_LENGTH,
+            &OutputWithInInstruction { output: output.clone(), return_address, in_instruction },
+          );
+        }
 
         // Accumulate all of these outputs
         outputs.extend(non_external_outputs);
       }
 
-      let outputs_to_return = ScannerDb::<S>::take_queued_returns(&mut txn, b);
-
       // TODO: This also has to intake Burns
       let new_eventualities =
-        self.scheduler.accumulate_outputs_and_return_outputs(&mut txn, outputs, outputs_to_return);
+        self.scheduler.update(&mut txn, SchedulerUpdate { outputs, forwards, returns });
       for (key, new_eventualities) in new_eventualities {
         let key = {
           let mut key_repr = <KeyFor<S> as GroupEncoding>::Repr::default();

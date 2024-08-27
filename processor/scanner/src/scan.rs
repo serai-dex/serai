@@ -11,8 +11,8 @@ use primitives::{OutputType, ReceivedOutput, Block};
 // TODO: Localize to ScanDb?
 use crate::{
   lifetime::LifetimeStage,
-  db::{OutputWithInInstruction, ScannerDb},
-  BlockExt, ScannerFeed, AddressFor, OutputFor, ContinuallyRan,
+  db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToEventualityDb},
+  BlockExt, ScannerFeed, AddressFor, OutputFor, Return, ContinuallyRan,
 };
 
 // Construct an InInstruction from an external output.
@@ -86,6 +86,12 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       let mut txn = self.db.txn();
 
+      let mut scan_data = SenderScanData {
+        block_number: b,
+        received_external_outputs: vec![],
+        forwards: vec![],
+        returns: vec![],
+      };
       let mut in_instructions = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
 
       // Scan for each key
@@ -171,13 +177,21 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
               return_address,
               in_instruction: InInstructionWithBalance { instruction, balance: balance_to_use },
             },
-            (Some(return_addr), None) => {
+            (Some(address), None) => {
               // Since there was no instruction here, return this since we parsed a return address
-              ScannerDb::<S>::queue_return(&mut txn, b, &return_addr, &output);
+              if key.stage != LifetimeStage::Finishing {
+                scan_data.returns.push(Return { address, output });
+              }
               continue;
             }
-            // Since we didn't receive an instruction nor can we return this, move on
-            (None, None) => continue,
+            // Since we didn't receive an instruction nor can we return this, queue this for
+            // accumulation and move on
+            (None, None) => {
+              if key.stage != LifetimeStage::Finishing {
+                scan_data.received_external_outputs.push(output);
+              }
+              continue;
+            }
           };
 
           // Drop External outputs if they're to a multisig which won't report them
@@ -201,7 +215,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             LifetimeStage::Forwarding => {
               // When the forwarded output appears, we can see which Plan it's associated with and
               // from there recover this output
-              ScannerDb::<S>::save_output_being_forwarded(&mut txn, b, &output_with_in_instruction);
+              scan_data.forwards.push(output_with_in_instruction);
               continue;
             }
             // We should drop these as we should not be handling new External outputs at this
@@ -213,10 +227,13 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           // Ensures we didn't miss a `continue` above
           assert!(matches!(key.stage, LifetimeStage::Active | LifetimeStage::UsingNewForChange));
 
+          scan_data.received_external_outputs.push(output_with_in_instruction.output.clone());
           in_instructions.push(output_with_in_instruction);
         }
       }
 
+      // Save the outputs to return
+      ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
       // Save the in instructions
       ScannerDb::<S>::set_in_instructions(&mut txn, b, in_instructions);
       // Update the next to scan block

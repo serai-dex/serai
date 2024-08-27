@@ -3,13 +3,13 @@ use std::io;
 
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
 
 use primitives::{ReceivedOutput, BorshG};
 
-use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor};
+use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
@@ -76,8 +76,6 @@ create_db!(
     NotableBlock: (number: u64) -> (),
 
     SerializedQueuedOutputs: (block_number: u64) -> Vec<u8>,
-    SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
-    SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
     SerializedOutputs: (block_number: u64) -> Vec<u8>,
   }
 );
@@ -209,15 +207,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
     todo!("TODO")
   }
 
-  pub(crate) fn queue_return(
-    txn: &mut impl DbTxn,
-    block_queued_from: u64,
-    return_addr: &AddressFor<S>,
-    output: &OutputFor<S>,
-  ) {
-    todo!("TODO")
-  }
-
   pub(crate) fn queue_output_until_block(
     txn: &mut impl DbTxn,
     queue_for_block: u64,
@@ -227,26 +216,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
       SerializedQueuedOutputs::get(txn, queue_for_block).unwrap_or(Vec::with_capacity(128));
     output.write(&mut outputs).unwrap();
     SerializedQueuedOutputs::set(txn, queue_for_block, &outputs);
-  }
-
-  pub(crate) fn save_output_being_forwarded(
-    txn: &mut impl DbTxn,
-    block_forwarded_from: u64,
-    output: &OutputWithInInstruction<S>,
-  ) {
-    let mut buf = Vec::with_capacity(128);
-    output.write(&mut buf).unwrap();
-
-    let id = output.output.id();
-
-    // Save this to an index so we can later fetch all outputs to forward
-    let mut forwarded_outputs = SerializedForwardedOutputsIndex::get(txn, block_forwarded_from)
-      .unwrap_or(Vec::with_capacity(32));
-    forwarded_outputs.extend(id.as_ref());
-    SerializedForwardedOutputsIndex::set(txn, block_forwarded_from, &forwarded_outputs);
-
-    // Save the output itself
-    SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
   }
 
   pub(crate) fn flag_notable(txn: &mut impl DbTxn, block_number: u64) {
@@ -287,11 +256,99 @@ impl<S: ScannerFeed> ScannerDb<S> {
     NotableBlock::get(getter, number).is_some()
   }
 
-  pub(crate) fn take_queued_returns(txn: &mut impl DbTxn, block_number: u64) -> Vec<OutputFor<S>> {
+  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
     todo!("TODO")
   }
 
-  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
+  pub(crate) fn return_address_and_in_instruction_for_forwarded_output(
+    getter: &impl Get,
+    output: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+  ) -> Option<(Option<AddressFor<S>>, InInstructionWithBalance)> {
+    todo!("TODO")
+  }
+}
+
+/// The data produced by scanning a block.
+///
+/// This is the sender's version which includes the forwarded outputs with their InInstructions,
+/// which need to be saved to the database for later retrieval.
+pub(crate) struct SenderScanData<S: ScannerFeed> {
+  /// The block number.
+  pub(crate) block_number: u64,
+  /// The received outputs which should be accumulated into the scheduler.
+  pub(crate) received_external_outputs: Vec<OutputFor<S>>,
+  /// The outputs which need to be forwarded.
+  pub(crate) forwards: Vec<OutputWithInInstruction<S>>,
+  /// The outputs which need to be returned.
+  pub(crate) returns: Vec<Return<S>>,
+}
+
+/// The data produced by scanning a block.
+///
+/// This is the receiver's version which doesn't include the forwarded outputs' InInstructions, as
+/// the Eventuality task doesn't need it to process this block.
+pub(crate) struct ReceiverScanData<S: ScannerFeed> {
+  /// The block number.
+  pub(crate) block_number: u64,
+  /// The received outputs which should be accumulated into the scheduler.
+  pub(crate) received_external_outputs: Vec<OutputFor<S>>,
+  /// The outputs which need to be forwarded.
+  pub(crate) forwards: Vec<OutputFor<S>>,
+  /// The outputs which need to be returned.
+  pub(crate) returns: Vec<Return<S>>,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub(crate) struct SerializedScanData {
+  pub(crate) block_number: u64,
+  pub(crate) data: Vec<u8>,
+}
+
+db_channel! {
+  ScannerScanEventuality {
+    ScannedBlock: (empty_key: ()) -> SerializedScanData,
+  }
+}
+
+pub(crate) struct ScanToEventualityDb<S: ScannerFeed>(PhantomData<S>);
+impl<S: ScannerFeed> ScanToEventualityDb<S> {
+  pub(crate) fn send_scan_data(txn: &mut impl DbTxn, block_number: u64, data: &SenderScanData<S>) {
+    /*
+    SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
+    SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
+
+    pub(crate) fn save_output_being_forwarded(
+      txn: &mut impl DbTxn,
+      block_forwarded_from: u64,
+      output: &OutputWithInInstruction<S>,
+    ) {
+      let mut buf = Vec::with_capacity(128);
+      output.write(&mut buf).unwrap();
+
+      let id = output.output.id();
+
+      // Save this to an index so we can later fetch all outputs to forward
+      let mut forwarded_outputs = SerializedForwardedOutputsIndex::get(txn, block_forwarded_from)
+        .unwrap_or(Vec::with_capacity(32));
+      forwarded_outputs.extend(id.as_ref());
+      SerializedForwardedOutputsIndex::set(txn, block_forwarded_from, &forwarded_outputs);
+
+      // Save the output itself
+      SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
+    }
+    */
+
+    ScannedBlock::send(txn, (), todo!("TODO"));
+  }
+  pub(crate) fn recv_scan_data(txn: &mut impl DbTxn, block_number: u64) -> ReceiverScanData<S> {
+    let data =
+      ScannedBlock::try_recv(txn, ()).expect("receiving data for a scanned block not yet sent");
+    assert_eq!(
+      block_number, data.block_number,
+      "received data for a scanned block distinct than expected"
+    );
+    let data = &data.data;
+
     todo!("TODO")
   }
 }
