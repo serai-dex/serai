@@ -226,32 +226,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
     NotableBlock::set(txn, block_number, &());
   }
 
-  // TODO: Use a DbChannel here, and send the instructions to the report task and the outputs to
-  // the eventuality task? That way this cleans up after itself
-  pub(crate) fn set_in_instructions(
-    txn: &mut impl DbTxn,
-    block_number: u64,
-    outputs: Vec<OutputWithInInstruction<S>>,
-  ) {
-    if !outputs.is_empty() {
-      // Set this block as notable
-      NotableBlock::set(txn, block_number, &());
-    }
-
-    let mut buf = Vec::with_capacity(outputs.len() * 128);
-    for output in outputs {
-      output.write(&mut buf).unwrap();
-    }
-    SerializedOutputs::set(txn, block_number, &buf);
-  }
-
-  pub(crate) fn in_instructions(
-    getter: &impl Get,
-    block_number: u64,
-  ) -> Option<Vec<OutputWithInInstruction<S>>> {
-    todo!("TODO")
-  }
-
   pub(crate) fn is_block_notable(getter: &impl Get, number: u64) -> bool {
     NotableBlock::get(getter, number).is_some()
   }
@@ -350,5 +324,46 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
     let data = &data.data;
 
     todo!("TODO")
+  }
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub(crate) struct BlockBoundInInstructions {
+  pub(crate) block_number: u64,
+  pub(crate) in_instructions: Vec<InInstructionWithBalance>,
+}
+
+db_channel! {
+  ScannerScanReport {
+    InInstructions: (empty_key: ()) -> BlockBoundInInstructions,
+  }
+}
+
+pub(crate) struct ScanToReportDb<S: ScannerFeed>(PhantomData<S>);
+impl<S: ScannerFeed> ScanToReportDb<S> {
+  pub(crate) fn send_in_instructions(
+    txn: &mut impl DbTxn,
+    block_number: u64,
+    in_instructions: Vec<InInstructionWithBalance>,
+  ) {
+    if !in_instructions.is_empty() {
+      // Set this block as notable
+      NotableBlock::set(txn, block_number, &());
+    }
+
+    InInstructions::send(txn, (), &BlockBoundInInstructions { block_number, in_instructions });
+  }
+
+  pub(crate) fn recv_in_instructions(
+    txn: &mut impl DbTxn,
+    block_number: u64,
+  ) -> Vec<InInstructionWithBalance> {
+    let data = InInstructions::try_recv(txn, ())
+      .expect("receiving InInstructions for a scanned block not yet sent");
+    assert_eq!(
+      block_number, data.block_number,
+      "received InInstructions for a scanned block distinct than expected"
+    );
+    data.in_instructions
   }
 }

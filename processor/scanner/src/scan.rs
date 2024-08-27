@@ -11,7 +11,7 @@ use primitives::{OutputType, ReceivedOutput, Block};
 // TODO: Localize to ScanDb?
 use crate::{
   lifetime::LifetimeStage,
-  db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToEventualityDb},
+  db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToReportDb, ScanToEventualityDb},
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, ContinuallyRan,
 };
 
@@ -92,7 +92,25 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
         forwards: vec![],
         returns: vec![],
       };
-      let mut in_instructions = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
+      let mut in_instructions = vec![];
+
+      let queued_outputs = {
+        let mut queued_outputs = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
+
+        // Sort the queued outputs in case they weren't queued in a deterministic fashion
+        queued_outputs.sort_by(|a, b| {
+          use core::cmp::{Ordering, Ord};
+          let res = a.output.id().as_ref().cmp(b.output.id().as_ref());
+          assert!(res != Ordering::Equal);
+          res
+        });
+
+        queued_outputs
+      };
+      for queued_output in queued_outputs {
+        scan_data.received_external_outputs.push(queued_output.output);
+        in_instructions.push(queued_output.in_instruction);
+      }
 
       // Scan for each key
       for key in keys {
@@ -228,14 +246,14 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
           assert!(matches!(key.stage, LifetimeStage::Active | LifetimeStage::UsingNewForChange));
 
           scan_data.received_external_outputs.push(output_with_in_instruction.output.clone());
-          in_instructions.push(output_with_in_instruction);
+          in_instructions.push(output_with_in_instruction.in_instruction);
         }
       }
 
-      // Save the outputs to return
+      // Send the scan data to the eventuality task
       ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
-      // Save the in instructions
-      ScannerDb::<S>::set_in_instructions(&mut txn, b, in_instructions);
+      // Send the in instructions to the report task
+      ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
       // Update the next to scan block
       ScannerDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);
       txn.commit();
