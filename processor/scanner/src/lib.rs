@@ -23,6 +23,23 @@ mod eventuality;
 /// Task which reports `Batch`s to Substrate.
 mod report;
 
+/// Extension traits around Block.
+pub(crate) trait BlockExt: Block {
+  fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output>;
+}
+impl<B: Block> BlockExt for B {
+  fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output> {
+    let mut outputs = self.scan_for_outputs_unordered();
+    outputs.sort_by(|a, b| {
+      use core::cmp::{Ordering, Ord};
+      let res = a.id().as_ref().cmp(&b.id().as_ref());
+      assert!(res != Ordering::Equal, "scanned two outputs within a block with the same ID");
+      res
+    });
+    outputs
+  }
+}
+
 /// A feed usable to scan a blockchain.
 ///
 /// This defines the primitive types used, along with various getters necessary for indexing.
@@ -68,13 +85,44 @@ pub trait ScannerFeed: Send + Sync {
   async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError>;
 
   /// Fetch a block header by its number.
-  async fn block_header_by_number(
+  ///
+  /// This does not check the returned BlockHeader is the header for the block we indexed.
+  async fn unchecked_block_header_by_number(
     &self,
     number: u64,
   ) -> Result<<Self::Block as Block>::Header, Self::EphemeralError>;
 
   /// Fetch a block by its number.
-  async fn block_by_number(&self, number: u64) -> Result<Self::Block, Self::EphemeralError>;
+  ///
+  /// This does not check the returned Block is the block we indexed.
+  async fn unchecked_block_by_number(
+    &self,
+    number: u64,
+  ) -> Result<Self::Block, Self::EphemeralError>;
+
+  /// Fetch a block by its number.
+  ///
+  /// Panics if the block requested wasn't indexed.
+  async fn block_by_number(&self, getter: &impl Get, number: u64) -> Result<Self::Block, String> {
+    let block = match self.unchecked_block_by_number(number).await {
+      Ok(block) => block,
+      Err(e) => Err(format!("couldn't fetch block {number}: {e:?}"))?,
+    };
+
+    // Check the ID of this block is the expected ID
+    {
+      let expected =
+        ScannerDb::<S>::block_id(&self.db, number).expect("requested a block which wasn't indexed");
+      if block.id() != expected {
+        panic!(
+          "finalized chain reorganized from {} to {} at {}",
+          hex::encode(expected),
+          hex::encode(block.id()),
+          number,
+        );
+      }
+    }
+  }
 
   /// The cost to aggregate an input as of the specified block.
   ///

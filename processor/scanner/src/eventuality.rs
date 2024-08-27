@@ -5,13 +5,11 @@ use serai_db::{DbTxn, Db};
 use primitives::{OutputType, ReceivedOutput, Block};
 
 // TODO: Localize to EventualityDb?
-use crate::{lifetime::LifetimeStage, db::ScannerDb, ScannerFeed, KeyFor, Scheduler, ContinuallyRan};
+use crate::{
+  lifetime::LifetimeStage, db::ScannerDb, BlockExt, ScannerFeed, KeyFor, Scheduler, ContinuallyRan,
+};
 
 /*
-  Note: The following assumes there's some value, `CONFIRMATIONS`, and the finalized block we
-  operate on is `CONFIRMATIONS` blocks deep. This is true for Proof-of-Work chains yet not the API
-  actively used here.
-
   When we scan a block, we receive outputs. When this block is acknowledged, we accumulate those
   outputs into some scheduler, potentially causing certain transactions to begin their signing
   protocol.
@@ -112,25 +110,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       iterated = true;
 
-      // TODO: Add a helper to fetch an indexed block, de-duplicate with scan
-      let block = match self.feed.block_by_number(b).await {
-        Ok(block) => block,
-        Err(e) => Err(format!("couldn't fetch block {b}: {e:?}"))?,
-      };
-
-      // Check the ID of this block is the expected ID
-      {
-        let expected =
-          ScannerDb::<S>::block_id(&self.db, b).expect("scannable block didn't have its ID saved");
-        if block.id() != expected {
-          panic!(
-            "finalized chain reorganized from {} to {} at {}",
-            hex::encode(expected),
-            hex::encode(block.id()),
-            b
-          );
-        }
-      }
+      let block = self.feed.block_by_number(b).await?;
 
       log::info!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
 
@@ -171,7 +151,6 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         };
 
         // Fetch all non-External outputs
-        // TODO: Have a scan_for_outputs_ext which sorts for us
         let mut non_external_outputs = block.scan_for_outputs(key.key);
         non_external_outputs.retain(|output| output.kind() != OutputType::External);
         // Drop any outputs less than the dust limit
@@ -210,6 +189,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       let outputs_to_return = ScannerDb::<S>::take_queued_returns(&mut txn, b);
 
+      // TODO: This also has to intake Burns
       let new_eventualities =
         self.scheduler.accumulate_outputs_and_return_outputs(&mut txn, outputs, outputs_to_return);
       for (key, new_eventualities) in new_eventualities {
@@ -220,7 +200,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           KeyFor::<S>::from_bytes(&key_repr).unwrap()
         };
 
-        let mut eventualities = ScannerDb::<S>::eventualities(&txn, key.key);
+        let mut eventualities = ScannerDb::<S>::eventualities(&txn, key);
         for new_eventuality in new_eventualities {
           eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
         }

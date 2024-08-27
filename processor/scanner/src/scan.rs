@@ -12,7 +12,7 @@ use primitives::{OutputType, ReceivedOutput, Block};
 use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, ScannerDb},
-  ScannerFeed, AddressFor, OutputFor, ContinuallyRan,
+  BlockExt, ScannerFeed, AddressFor, OutputFor, ContinuallyRan,
 };
 
 // Construct an InInstruction from an external output.
@@ -76,24 +76,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       .expect("ScanForOutputsTask run before writing the start block");
 
     for b in next_to_scan ..= latest_scannable {
-      let block = match self.feed.block_by_number(b).await {
-        Ok(block) => block,
-        Err(e) => Err(format!("couldn't fetch block {b}: {e:?}"))?,
-      };
-
-      // Check the ID of this block is the expected ID
-      {
-        let expected =
-          ScannerDb::<S>::block_id(&self.db, b).expect("scannable block didn't have its ID saved");
-        if block.id() != expected {
-          panic!(
-            "finalized chain reorganized from {} to {} at {}",
-            hex::encode(expected),
-            hex::encode(block.id()),
-            b
-          );
-        }
-      }
+      let block = self.feed.block_by_number(b).await?;
 
       log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 
@@ -143,7 +126,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             worthwhile, and even if they're not economically, they are technically).
 
             The alternative, we drop outputs here with a generic filter rule and then report back
-            the insolvency created, still doesn't work as we'd only be creating if an insolvency if
+            the insolvency created, still doesn't work as we'd only be creating an insolvency if
             the output was actually made by us (and not simply someone else sending in). We can
             have the Eventuality task report the insolvency, yet that requires the scanner be
             responsible for such filter logic. It's more flexible, and has a cleaner API,
