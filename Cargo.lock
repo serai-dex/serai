@@ -8654,8 +8654,10 @@ dependencies = [
  "async-trait",
  "borsh",
  "group",
+ "log",
  "parity-scale-codec",
  "serai-primitives",
+ "tokio",
 ]
 
 [[package]]
