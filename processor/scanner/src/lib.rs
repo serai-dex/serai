@@ -14,6 +14,7 @@ mod lifetime;
 
 // Database schema definition and associated functions.
 mod db;
+use db::ScannerDb;
 // Task to index the blockchain, ensuring we don't reorganize finalized blocks.
 mod index;
 // Scans blocks for received coins.
@@ -208,7 +209,9 @@ impl<S: ScannerFeed> Scanner<S> {
       "acknowledging a block which wasn't notable"
     );
     ScannerDb::<S>::set_highest_acknowledged_block(txn, block_number);
-    ScannerDb::<S>::queue_key(txn, block_number + S::WINDOW_LENGTH);
+    if let Some(key_to_activate) = key_to_activate {
+      ScannerDb::<S>::queue_key(txn, block_number + S::WINDOW_LENGTH, key_to_activate);
+    }
   }
 
   /// Queue Burns.
@@ -248,11 +251,6 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 
     // Return this block's outputs so they can be pruned from the RAM cache
     outputs
-  }
-  fn latest_scanned_block<G: Get>(getter: &G) -> Option<usize> {
-    getter
-      .get(Self::scanned_block_key())
-      .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()).try_into().unwrap())
   }
 }
 

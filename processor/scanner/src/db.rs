@@ -7,7 +7,7 @@ use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
 
-use primitives::{ReceivedOutput, BorshG};
+use primitives::{ReceivedOutput, EncodableG};
 
 use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return};
 
@@ -24,6 +24,7 @@ struct SeraiKeyDbEntry<K: Borshy> {
 pub(crate) struct SeraiKey<K> {
   pub(crate) key: K,
   pub(crate) stage: LifetimeStage,
+  pub(crate) activation_block_number: u64,
   pub(crate) block_at_which_reporting_starts: u64,
 }
 
@@ -45,11 +46,10 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 create_db!(
   Scanner {
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
+    RetireAt: <K: Encode>(key: K) -> u64,
 
     // The next block to scan for received outputs
     NextToScanForOutputsBlock: () -> u64,
-    // The next block to check for resolving eventualities
-    NextToCheckForEventualitiesBlock: () -> u64,
     // The next block to potentially report
     NextToPotentiallyReportBlock: () -> u64,
     // Highest acknowledged block
@@ -95,29 +95,52 @@ impl<S: ScannerFeed> ScannerDb<S> {
   /// activation_block_number is inclusive, so the key will be scanned for starting at the
   /// specified block.
   pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
-    // Set this block as notable
+    // Set the block which has a key activate as notable
     NotableBlock::set(txn, activation_block_number, &());
 
     // TODO: Panic if we've ever seen this key before
 
     // Push the key
-    let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> = ActiveKeys::get(txn).unwrap_or(vec![]);
-    keys.push(SeraiKeyDbEntry { activation_block_number, key: BorshG(key) });
+    let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
+      ActiveKeys::get(txn).unwrap_or(vec![]);
+    keys.push(SeraiKeyDbEntry { activation_block_number, key: EncodableG(key) });
     ActiveKeys::set(txn, &keys);
   }
   /// Retire a key.
   ///
   /// The key retired must be the oldest key. There must be another key actively tracked.
-  // TODO: This will be called from the Eventuality task yet this field is read by the scan task
-  // We need to write the argument for its safety
-  pub(crate) fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
-    let mut keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> =
+  pub(crate) fn retire_key(txn: &mut impl DbTxn, at_block: u64, key: KeyFor<S>) {
+    // Set the block which has a key retire as notable
+    NotableBlock::set(txn, at_block, &());
+
+    let keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
 
     assert!(keys.len() > 1, "retiring our only key");
     assert_eq!(keys[0].key.0, key, "not retiring the oldest key");
-    keys.remove(0);
-    ActiveKeys::set(txn, &keys);
+
+    RetireAt::set(txn, EncodableG(key), &at_block);
+  }
+  pub(crate) fn tidy_keys(txn: &mut impl DbTxn) {
+    let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
+      ActiveKeys::get(txn).expect("retiring key yet no active keys");
+    let Some(key) = keys.first() else { return };
+
+    // Get the block we're scanning for next
+    let block_number = Self::next_to_scan_for_outputs_block(txn).expect(
+      "tidying keys despite never setting the next to scan for block (done on initialization)",
+    );
+    // If this key is scheduled for retiry...
+    if let Some(retire_at) = RetireAt::get(txn, key.key) {
+      // And is retired by/at this block...
+      if retire_at <= block_number {
+        // Remove it from the list of keys
+        let key = keys.remove(0);
+        ActiveKeys::set(txn, &keys);
+        // Also clean up the retiry block
+        RetireAt::del(txn, key.key);
+      }
+    }
   }
   /// Fetch the active keys, as of the next-to-scan-for-outputs Block.
   ///
@@ -129,9 +152,16 @@ impl<S: ScannerFeed> ScannerDb<S> {
     // If we've scanned block 1,000,000, we can't answer the active keys as of block 0
     let block_number = Self::next_to_scan_for_outputs_block(getter)?;
 
-    let raw_keys: Vec<SeraiKeyDbEntry<BorshG<KeyFor<S>>>> = ActiveKeys::get(getter)?;
+    let raw_keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> = ActiveKeys::get(getter)?;
     let mut keys = Vec::with_capacity(2);
     for i in 0 .. raw_keys.len() {
+      // Ensure this key isn't retired
+      if let Some(retire_at) = RetireAt::get(getter, raw_keys[i].key) {
+        if retire_at <= block_number {
+          continue;
+        }
+      }
+      // Ensure this key isn't yet to activate
       if block_number < raw_keys[i].activation_block_number {
         continue;
       }
@@ -141,7 +171,12 @@ impl<S: ScannerFeed> ScannerDb<S> {
           raw_keys[i].activation_block_number,
           raw_keys.get(i + 1).map(|key| key.activation_block_number),
         );
-      keys.push(SeraiKey { key: raw_keys[i].key.0, stage, block_at_which_reporting_starts });
+      keys.push(SeraiKey {
+        key: raw_keys[i].key.0,
+        stage,
+        activation_block_number: raw_keys[i].activation_block_number,
+        block_at_which_reporting_starts,
+      });
     }
     assert!(keys.len() <= 2, "more than two keys active");
     Some(keys)
@@ -154,17 +189,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     );
 
     NextToScanForOutputsBlock::set(txn, &start_block);
-    // We can receive outputs in this block, but any descending transactions will be in the next
-    // block. This, with the check on-set, creates a bound that this value in the DB is non-zero.
-    NextToCheckForEventualitiesBlock::set(txn, &(start_block + 1));
     NextToPotentiallyReportBlock::set(txn, &start_block);
-  }
-
-  pub(crate) fn latest_scannable_block(getter: &impl Get) -> Option<u64> {
-    // We can only scan up to whatever block we've checked the Eventualities of, plus the window
-    // length. Since this returns an inclusive bound, we need to subtract 1
-    // See `eventuality.rs` for more info
-    NextToCheckForEventualitiesBlock::get(getter).map(|b| b + S::WINDOW_LENGTH - 1)
   }
 
   pub(crate) fn set_next_to_scan_for_outputs_block(
@@ -175,20 +200,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn next_to_scan_for_outputs_block(getter: &impl Get) -> Option<u64> {
     NextToScanForOutputsBlock::get(getter)
-  }
-
-  pub(crate) fn set_next_to_check_for_eventualities_block(
-    txn: &mut impl DbTxn,
-    next_to_check_for_eventualities_block: u64,
-  ) {
-    assert!(
-      next_to_check_for_eventualities_block != 0,
-      "next to check for eventualities block was 0 when it's bound non-zero"
-    );
-    NextToCheckForEventualitiesBlock::set(txn, &next_to_check_for_eventualities_block);
-  }
-  pub(crate) fn next_to_check_for_eventualities_block(getter: &impl Get) -> Option<u64> {
-    NextToCheckForEventualitiesBlock::get(getter)
   }
 
   pub(crate) fn set_next_to_potentially_report_block(
@@ -229,7 +240,15 @@ impl<S: ScannerFeed> ScannerDb<S> {
     SerializedQueuedOutputs::set(txn, queue_for_block, &outputs);
   }
 
-  pub(crate) fn flag_notable(txn: &mut impl DbTxn, block_number: u64) {
+  /*
+    This is so verbosely named as the DB itself already flags upon external outputs. Specifically,
+    if any block yields External outputs to accumulate, we flag it as notable.
+
+    There is the slight edge case where some External outputs are queued for accumulation later. We
+    consider those outputs received as of the block they're queued to (maintaining the policy any
+    blocks in which we receive outputs is notable).
+  */
+  pub(crate) fn flag_notable_due_to_non_external_output(txn: &mut impl DbTxn, block_number: u64) {
     assert!(
       NextToPotentiallyReportBlock::get(txn).unwrap() <= block_number,
       "already potentially reported a block we're only now flagging as notable"
@@ -298,6 +317,17 @@ db_channel! {
 pub(crate) struct ScanToEventualityDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScanToEventualityDb<S> {
   pub(crate) fn send_scan_data(txn: &mut impl DbTxn, block_number: u64, data: &SenderScanData<S>) {
+    // If we received an External output to accumulate, or have an External output to forward
+    // (meaning we received an External output), or have an External output to return (again
+    // meaning we received an External output), set this block as notable due to receiving outputs
+    // The non-External output case is covered with `flag_notable_due_to_non_external_output`
+    if !(data.received_external_outputs.is_empty() &&
+      data.forwards.is_empty() &&
+      data.returns.is_empty())
+    {
+      NotableBlock::set(txn, block_number, &());
+    }
+
     /*
     SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
     SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
@@ -357,11 +387,6 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
     block_number: u64,
     in_instructions: Vec<InInstructionWithBalance>,
   ) {
-    if !in_instructions.is_empty() {
-      // Set this block as notable
-      NotableBlock::set(txn, block_number, &());
-    }
-
     InInstructions::send(txn, (), &BlockBoundInInstructions { block_number, in_instructions });
   }
 

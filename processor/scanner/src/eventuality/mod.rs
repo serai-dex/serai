@@ -1,6 +1,6 @@
 use group::GroupEncoding;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn, Db};
 
 use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Eventuality, Block};
 
@@ -13,6 +13,16 @@ use crate::{
 
 mod db;
 use db::EventualityDb;
+
+/// The latest scannable block, which is determined by this task.
+///
+/// This task decides when a key retires, which impacts the scan task. Accordingly, the scanner is
+/// only allowed to scan `S::WINDOW_LENGTH - 1` blocks ahead so we can safely schedule keys to
+/// retire `S::WINDOW_LENGTH` blocks out.
+pub(crate) fn latest_scannable_block<S: ScannerFeed>(getter: &impl Get) -> Option<u64> {
+  EventualityDb::<S>::next_to_check_for_eventualities_block(getter)
+    .map(|b| b + S::WINDOW_LENGTH - 1)
+}
 
 /*
   When we scan a block, we receive outputs. When this block is acknowledged, we accumulate those
@@ -64,6 +74,21 @@ struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
   scheduler: Sch,
 }
 
+impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
+  pub(crate) fn new(mut db: D, feed: S, scheduler: Sch, start_block: u64) -> Self {
+    if EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none() {
+      // Initialize the DB
+      let mut txn = db.txn();
+      // We can receive outputs in `start_block`, but any descending transactions will be in the
+      // next block
+      EventualityDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, start_block + 1);
+      txn.commit();
+    }
+
+    Self { db, feed, scheduler }
+  }
+}
+
 #[async_trait::async_trait]
 impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTask<D, S, Sch> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
@@ -93,7 +118,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
       .expect("EventualityTask run before writing the start block");
 
     // Fetch the next block to check
-    let next_to_check = ScannerDb::<S>::next_to_check_for_eventualities_block(&self.db)
+    let next_to_check = EventualityDb::<S>::next_to_check_for_eventualities_block(&self.db)
       .expect("EventualityTask run before writing the start block");
 
     // Check all blocks
@@ -121,21 +146,19 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
       /*
         This is proper as the keys for the next to scan block (at most `WINDOW_LENGTH` ahead,
-        which is `<= CONFIRMATIONS`) will be the keys to use here.
+        which is `<= CONFIRMATIONS`) will be the keys to use here, with only minor edge cases.
 
-        If we had added a new key (which hasn't actually actived by the block we're currently
-        working on), it won't have any Eventualities for at least `CONFIRMATIONS` blocks (so it'd
-        have no impact here).
+        This may include a key which has yet to activate by our perception. We can simply drop
+        those.
 
-        As for retiring a key, that's done on this task's timeline. We ensure we don't bork the
-        scanner by officially retiring the key `WINDOW_LENGTH` blocks in the future (ensuring the
-        scanner never has a malleable view of the keys).
+        This may not include a key which has retired by the next-to-scan block. This task is the
+        one which decides when to retire a key, and when it marks a key to be retired, it is done
+        with it. Accordingly, it's not an issue if such a key was dropped.
       */
-      // TODO: Ensure the add key/remove key DB fns are called by the same task to prevent issues
-      // there
-      // TODO: On register eventuality, assert the above timeline assumptions
       let mut keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
         .expect("scanning for a blockchain without any keys set");
+      // Since the next-to-scan block is ahead of us, drop keys which have yet to actually activate
+      keys.retain(|key| b <= key.activation_block_number);
 
       let mut txn = self.db.txn();
 
@@ -146,20 +169,16 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         scan_data;
       let mut outputs = received_external_outputs;
 
-      for key in keys {
-        let (eventualities_is_empty, completed_eventualities) = {
+      for key in &keys {
+        let completed_eventualities = {
           let mut eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
           let completed_eventualities = block.check_for_eventuality_resolutions(&mut eventualities);
           EventualityDb::<S>::set_eventualities(&mut txn, key.key, &eventualities);
-          (eventualities.active_eventualities.is_empty(), completed_eventualities)
+          completed_eventualities
         };
 
-        for (tx, completed_eventuality) in completed_eventualities {
-          log::info!(
-            "eventuality {} resolved by {}",
-            hex::encode(completed_eventuality.id()),
-            hex::encode(tx.as_ref())
-          );
+        for tx in completed_eventualities.keys() {
+          log::info!("eventuality resolved by {}", hex::encode(tx.as_ref()));
         }
 
         // Fetch all non-External outputs
@@ -221,10 +240,12 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         outputs.extend(non_external_outputs);
       }
 
+      // Update the scheduler
       let mut scheduler_update = SchedulerUpdate { outputs, forwards, returns };
       scheduler_update.outputs.sort_by(sort_outputs);
       scheduler_update.forwards.sort_by(sort_outputs);
       scheduler_update.returns.sort_by(|a, b| sort_outputs(&a.output, &b.output));
+      // Intake the new Eventualities
       let new_eventualities = self.scheduler.update(&mut txn, scheduler_update);
       for (key, new_eventualities) in new_eventualities {
         let key = {
@@ -234,6 +255,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           KeyFor::<S>::from_bytes(&key_repr).unwrap()
         };
 
+        keys
+          .iter()
+          .find(|serai_key| serai_key.key == key)
+          .expect("queueing eventuality for key which isn't active");
+
         let mut eventualities = EventualityDb::<S>::eventualities(&txn, key);
         for new_eventuality in new_eventualities {
           eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
@@ -241,24 +267,26 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         EventualityDb::<S>::set_eventualities(&mut txn, key, &eventualities);
       }
 
-      for key in keys {
+      // Now that we've intaked any Eventualities caused, check if we're retiring any keys
+      for key in &keys {
         if key.stage == LifetimeStage::Finishing {
           let eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
+          // TODO: This assumes the Scheduler is empty
           if eventualities.active_eventualities.is_empty() {
             log::info!(
               "key {} has finished and is being retired",
               hex::encode(key.key.to_bytes().as_ref())
             );
 
-            ScannerDb::<S>::flag_notable(&mut txn, b + S::WINDOW_LENGTH);
-            // TODO: Retire the key
-            todo!("TODO")
+            // Retire this key `WINDOW_LENGTH` blocks in the future to ensure the scan task never
+            // has a malleable view of the keys.
+            ScannerDb::<S>::retire_key(&mut txn, b + S::WINDOW_LENGTH, key.key);
           }
         }
       }
 
-      // Update the next to check block
-      ScannerDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, next_to_check);
+      // Update the next-to-check block
+      EventualityDb::<S>::set_next_to_check_for_eventualities_block(&mut txn, next_to_check);
       txn.commit();
     }
 

@@ -45,15 +45,20 @@ pub trait Id:
 }
 impl<const N: usize> Id for [u8; N] where [u8; N]: Default {}
 
-/// A wrapper for a group element which implements the borsh traits.
+/// A wrapper for a group element which implements the scale/borsh traits.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct BorshG<G: GroupEncoding>(pub G);
-impl<G: GroupEncoding> BorshSerialize for BorshG<G> {
+pub struct EncodableG<G: GroupEncoding>(pub G);
+impl<G: GroupEncoding> Encode for EncodableG<G> {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    f(self.0.to_bytes().as_ref())
+  }
+}
+impl<G: GroupEncoding> BorshSerialize for EncodableG<G> {
   fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
     writer.write_all(self.0.to_bytes().as_ref())
   }
 }
-impl<G: GroupEncoding> BorshDeserialize for BorshG<G> {
+impl<G: GroupEncoding> BorshDeserialize for EncodableG<G> {
   fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
     let mut repr = G::Repr::default();
     reader.read_exact(repr.as_mut())?;

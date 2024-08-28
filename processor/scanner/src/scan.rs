@@ -13,6 +13,7 @@ use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToReportDb, ScanToEventualityDb},
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
+  eventuality::latest_scannable_block,
 };
 
 // Construct an InInstruction from an external output.
@@ -69,7 +70,7 @@ struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the safe to scan block
-    let latest_scannable = ScannerDb::<S>::latest_scannable_block(&self.db)
+    let latest_scannable = latest_scannable_block::<S>(&self.db)
       .expect("ScanForOutputsTask run before writing the start block");
     // Fetch the next block to scan
     let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
@@ -80,11 +81,15 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 
-      assert_eq!(ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db).unwrap(), b);
-      let keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
-        .expect("scanning for a blockchain without any keys set");
-
       let mut txn = self.db.txn();
+
+      assert_eq!(ScannerDb::<S>::next_to_scan_for_outputs_block(&txn).unwrap(), b);
+
+      // Tidy the keys, then fetch them
+      // We don't have to tidy them here, we just have to somewhere, so why not here?
+      ScannerDb::<S>::tidy_keys(&mut txn);
+      let keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
+        .expect("scanning for a blockchain without any keys set");
 
       let mut scan_data = SenderScanData {
         block_number: b,
@@ -156,7 +161,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             // We ensure it's over the dust limit to prevent people sending 1 satoshi from causing
             // an invocation of a consensus/signing protocol
             if balance.amount.0 >= self.feed.dust(balance.coin).0 {
-              ScannerDb::<S>::flag_notable(&mut txn, b);
+              ScannerDb::<S>::flag_notable_due_to_non_external_output(&mut txn, b);
             }
             continue;
           }
