@@ -4,10 +4,9 @@ use serai_db::{Get, DbTxn, Db};
 
 use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Eventuality, Block};
 
-// TODO: Localize to EventualityDb?
 use crate::{
   lifetime::LifetimeStage,
-  db::{OutputWithInInstruction, ReceiverScanData, ScannerDb, ScanToEventualityDb},
+  db::{OutputWithInInstruction, ReceiverScanData, ScannerGlobalDb, ScanToEventualityDb},
   BlockExt, ScannerFeed, KeyFor, SchedulerUpdate, Scheduler, sort_outputs,
   scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
@@ -69,7 +68,7 @@ pub(crate) fn latest_scannable_block<S: ScannerFeed>(getter: &impl Get) -> Optio
   This forms a backlog only if the latency of scanning, acknowledgement, and intake (including
   checking Eventualities) exceeds the window duration (the desired property).
 */
-struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
+pub(crate) struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
   db: D,
   feed: S,
   scheduler: Sch,
@@ -115,7 +114,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
     };
 
     // Fetch the highest acknowledged block
-    let highest_acknowledged = ScannerDb::<S>::highest_acknowledged_block(&self.db)
+    let highest_acknowledged = ScannerGlobalDb::<S>::highest_acknowledged_block(&self.db)
       .expect("EventualityTask run before writing the start block");
 
     // Fetch the next block to check
@@ -132,7 +131,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         // This is possible since even if we receive coins in block 0, any transactions we'd make
         // would resolve in block 1 (the first block we'll check under this non-zero rule)
         let prior_block = b - 1;
-        if ScannerDb::<S>::is_block_notable(&self.db, prior_block) &&
+        if ScannerGlobalDb::<S>::is_block_notable(&self.db, prior_block) &&
           (prior_block > highest_acknowledged)
         {
           break;
@@ -156,8 +155,9 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         one which decides when to retire a key, and when it marks a key to be retired, it is done
         with it. Accordingly, it's not an issue if such a key was dropped.
       */
-      let mut keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
-        .expect("scanning for a blockchain without any keys set");
+      let mut keys =
+        ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
+          .expect("scanning for a blockchain without any keys set");
       // Since the next-to-scan block is ahead of us, drop keys which have yet to actually activate
       keys.retain(|key| b <= key.activation_block_number);
 
@@ -226,7 +226,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           };
 
           let (return_address, in_instruction) =
-            ScannerDb::<S>::return_address_and_in_instruction_for_forwarded_output(
+            ScannerGlobalDb::<S>::return_address_and_in_instruction_for_forwarded_output(
               &txn, &forwarded,
             )
             .expect("forwarded an output yet didn't save its InInstruction to the DB");
@@ -281,7 +281,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
             // Retire this key `WINDOW_LENGTH` blocks in the future to ensure the scan task never
             // has a malleable view of the keys.
-            ScannerDb::<S>::retire_key(&mut txn, b + S::WINDOW_LENGTH, key.key);
+            ScannerGlobalDb::<S>::retire_key(&mut txn, b + S::WINDOW_LENGTH, key.key);
           }
         }
       }

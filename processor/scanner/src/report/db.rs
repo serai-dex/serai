@@ -1,0 +1,27 @@
+use core::marker::PhantomData;
+
+use serai_db::{Get, DbTxn, Db, create_db};
+
+create_db!(
+  ScannerReport {
+    // The next block to potentially report
+    NextToPotentiallyReportBlock: () -> u64,
+  }
+);
+
+pub(crate) struct ReportDb;
+impl ReportDb {
+  pub(crate) fn set_next_to_potentially_report_block(
+    txn: &mut impl DbTxn,
+    next_to_potentially_report_block: u64,
+  ) {
+    NextToPotentiallyReportBlock::set(txn, &next_to_potentially_report_block);
+  }
+  pub(crate) fn next_to_potentially_report_block(getter: &impl Get) -> Option<u64> {
+    NextToPotentiallyReportBlock::get(getter)
+  }
+
+  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
+    todo!("TODO")
+  }
+}

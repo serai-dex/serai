@@ -47,7 +47,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 }
 
 create_db!(
-  Scanner {
+  ScannerGlobal {
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
     RetireAt: <K: Encode>(key: K) -> u64,
 
@@ -78,8 +78,8 @@ create_db!(
   }
 );
 
-pub(crate) struct ScannerDb<S: ScannerFeed>(PhantomData<S>);
-impl<S: ScannerFeed> ScannerDb<S> {
+pub(crate) struct ScannerGlobalDb<S: ScannerFeed>(PhantomData<S>);
+impl<S: ScannerFeed> ScannerGlobalDb<S> {
   /// Queue a key.
   ///
   /// Keys may be queued whenever, so long as they're scheduled to activate `WINDOW_LENGTH` blocks
@@ -180,20 +180,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
     Some(keys)
   }
 
-  pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: [u8; 32]) {
-    NextToPotentiallyReportBlock::set(txn, &start_block);
-  }
-
-  pub(crate) fn set_next_to_potentially_report_block(
-    txn: &mut impl DbTxn,
-    next_to_potentially_report_block: u64,
-  ) {
-    NextToPotentiallyReportBlock::set(txn, &next_to_potentially_report_block);
-  }
-  pub(crate) fn next_to_potentially_report_block(getter: &impl Get) -> Option<u64> {
-    NextToPotentiallyReportBlock::get(getter)
-  }
-
   pub(crate) fn set_highest_acknowledged_block(
     txn: &mut impl DbTxn,
     highest_acknowledged_block: u64,
@@ -222,10 +208,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
 
   pub(crate) fn is_block_notable(getter: &impl Get, number: u64) -> bool {
     NotableBlock::get(getter, number).is_some()
-  }
-
-  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
-    todo!("TODO")
   }
 
   pub(crate) fn return_address_and_in_instruction_for_forwarded_output(
