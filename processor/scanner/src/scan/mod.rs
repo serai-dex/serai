@@ -8,7 +8,6 @@ use serai_in_instructions_primitives::{
 
 use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 
-// TODO: Localize to ScanDb?
 use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToReportDb, ScanToEventualityDb},
@@ -28,6 +27,9 @@ pub(crate) fn queue_output_until_block<S: ScannerFeed>(
   queue_for_block: u64,
   output: &OutputWithInInstruction<S>,
 ) {
+  // This isn't a perfect assertion as by the time this txn commits, we may have already started
+  // scanning this block. That doesn't change it should never trip as we queue outside the window
+  // we'll scan
   assert!(
     queue_for_block >=
       next_to_scan_for_outputs_block::<S>(txn)

@@ -4,13 +4,15 @@ use serai_db::{DbTxn, Db};
 use serai_primitives::BlockHash;
 use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
-// TODO: Localize to Report?
 use crate::{
-  db::{ScannerDb, ScanToReportDb},
+  db::{ScannerGlobalDb, ScanToReportDb},
   index,
   scan::next_to_scan_for_outputs_block,
   ScannerFeed, ContinuallyRan,
 };
+
+mod db;
+use db::ReportDb;
 
 /*
   This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
@@ -19,9 +21,22 @@ use crate::{
   Eventualities, have processed the block. This ensures we know if this block is notable, and have
   the InInstructions for it.
 */
-struct ReportTask<D: Db, S: ScannerFeed> {
+pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
   feed: S,
+}
+
+impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
+  pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
+    if ReportDb::next_to_potentially_report_block(&db).is_none() {
+      // Initialize the DB
+      let mut txn = db.txn();
+      ReportDb::set_next_to_potentially_report_block(&mut txn, start_block);
+      txn.commit();
+    }
+
+    Self { db, feed }
+  }
 }
 
 #[async_trait::async_trait]
@@ -44,7 +59,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       last_scanned
     };
 
-    let next_to_potentially_report = ScannerDb::<S>::next_to_potentially_report_block(&self.db)
+    let next_to_potentially_report = ReportDb::next_to_potentially_report_block(&self.db)
       .expect("ReportTask run before writing the start block");
 
     for b in next_to_potentially_report ..= highest_reportable {
@@ -53,7 +68,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       // Receive the InInstructions for this block
       // We always do this as we can't trivially tell if we should recv InInstructions before we do
       let in_instructions = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
-      let notable = ScannerDb::<S>::is_block_notable(&txn, b);
+      let notable = ScannerGlobalDb::<S>::is_block_notable(&txn, b);
       if !notable {
         assert!(in_instructions.is_empty(), "block wasn't notable yet had InInstructions");
       }
@@ -61,7 +76,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       if notable {
         let network = S::NETWORK;
         let block_hash = index::block_id(&txn, b);
-        let mut batch_id = ScannerDb::<S>::acquire_batch_id(&mut txn);
+        let mut batch_id = ReportDb::acquire_batch_id(&mut txn);
 
         // start with empty batch
         let mut batches =
@@ -77,7 +92,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
             let instruction = batch.instructions.pop().unwrap();
 
             // bump the id for the new batch
-            batch_id = ScannerDb::<S>::acquire_batch_id(&mut txn);
+            batch_id = ReportDb::acquire_batch_id(&mut txn);
 
             // make a new batch with this instruction included
             batches.push(Batch {
@@ -93,7 +108,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
       }
 
       // Update the next to potentially report block
-      ScannerDb::<S>::set_next_to_potentially_report_block(&mut txn, b + 1);
+      ReportDb::set_next_to_potentially_report_block(&mut txn, b + 1);
 
       txn.commit();
     }
