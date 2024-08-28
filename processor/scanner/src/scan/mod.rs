@@ -1,5 +1,5 @@
 use scale::Decode;
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::MAX_DATA_LEN;
 use serai_in_instructions_primitives::{
@@ -15,6 +15,27 @@ use crate::{
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
 };
+
+mod db;
+use db::ScanDb;
+
+pub(crate) fn next_to_scan_for_outputs_block<S: ScannerFeed>(getter: &impl Get) -> Option<u64> {
+  ScanDb::<S>::next_to_scan_for_outputs_block(getter)
+}
+
+pub(crate) fn queue_output_until_block<S: ScannerFeed>(
+  txn: &mut impl DbTxn,
+  queue_for_block: u64,
+  output: &OutputWithInInstruction<S>,
+) {
+  assert!(
+    queue_for_block >=
+      next_to_scan_for_outputs_block::<S>(txn)
+        .expect("queueing an output despite no next-to-scan-for-outputs block"),
+    "queueing an output for a block already scanned"
+  );
+  ScanDb::<S>::queue_output_until_block(txn, queue_for_block, output)
+}
 
 // Construct an InInstruction from an external output.
 //
@@ -66,6 +87,19 @@ struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
   feed: S,
 }
 
+impl<D: Db, S: ScannerFeed> ScanForOutputsTask<D, S> {
+  pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
+    if ScanDb::<S>::next_to_scan_for_outputs_block(&db).is_none() {
+      // Initialize the DB
+      let mut txn = db.txn();
+      ScanDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, start_block);
+      txn.commit();
+    }
+
+    Self { db, feed }
+  }
+}
+
 #[async_trait::async_trait]
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
@@ -73,7 +107,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
     let latest_scannable = latest_scannable_block::<S>(&self.db)
       .expect("ScanForOutputsTask run before writing the start block");
     // Fetch the next block to scan
-    let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+    let next_to_scan = ScanDb::<S>::next_to_scan_for_outputs_block(&self.db)
       .expect("ScanForOutputsTask run before writing the start block");
 
     for b in next_to_scan ..= latest_scannable {
@@ -83,7 +117,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       let mut txn = self.db.txn();
 
-      assert_eq!(ScannerDb::<S>::next_to_scan_for_outputs_block(&txn).unwrap(), b);
+      assert_eq!(ScanDb::<S>::next_to_scan_for_outputs_block(&txn).unwrap(), b);
 
       // Tidy the keys, then fetch them
       // We don't have to tidy them here, we just have to somewhere, so why not here?
@@ -100,7 +134,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       let mut in_instructions = vec![];
 
       let queued_outputs = {
-        let mut queued_outputs = ScannerDb::<S>::take_queued_outputs(&mut txn, b);
+        let mut queued_outputs = ScanDb::<S>::take_queued_outputs(&mut txn, b);
         // Sort the queued outputs in case they weren't queued in a deterministic fashion
         queued_outputs.sort_by(|a, b| sort_outputs(&a.output, &b.output));
         queued_outputs
@@ -217,7 +251,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             // This multisig isn't yet reporting its External outputs to avoid a DoS
             // Queue the output to be reported when this multisig starts reporting
             LifetimeStage::ActiveYetNotReporting => {
-              ScannerDb::<S>::queue_output_until_block(
+              ScanDb::<S>::queue_output_until_block(
                 &mut txn,
                 key.block_at_which_reporting_starts,
                 &output_with_in_instruction,
@@ -253,7 +287,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
       // Send the InInstructions to the report task
       ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
       // Update the next to scan block
-      ScannerDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);
+      ScanDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);
       txn.commit();
     }
 

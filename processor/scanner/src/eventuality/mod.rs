@@ -9,6 +9,7 @@ use crate::{
   lifetime::LifetimeStage,
   db::{OutputWithInInstruction, ReceiverScanData, ScannerDb, ScanToEventualityDb},
   BlockExt, ScannerFeed, KeyFor, SchedulerUpdate, Scheduler, sort_outputs,
+  scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
 
 mod db;
@@ -104,7 +105,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
     */
     let exclusive_upper_bound = {
       // Fetch the next to scan block
-      let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+      let next_to_scan = next_to_scan_for_outputs_block::<S>(&self.db)
         .expect("EventualityTask run before writing the start block");
       // If we haven't done any work, return
       if next_to_scan == 0 {
@@ -229,7 +230,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
               &txn, &forwarded,
             )
             .expect("forwarded an output yet didn't save its InInstruction to the DB");
-          ScannerDb::<S>::queue_output_until_block(
+          queue_output_until_block::<S>(
             &mut txn,
             b + S::WINDOW_LENGTH,
             &OutputWithInInstruction { output: output.clone(), return_address, in_instruction },

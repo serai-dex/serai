@@ -7,7 +7,9 @@ use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 // TODO: Localize to Report?
 use crate::{
   db::{ScannerDb, ScanToReportDb},
-  index, ScannerFeed, ContinuallyRan,
+  index,
+  scan::next_to_scan_for_outputs_block,
+  ScannerFeed, ContinuallyRan,
 };
 
 /*
@@ -27,7 +29,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let highest_reportable = {
       // Fetch the next to scan block
-      let next_to_scan = ScannerDb::<S>::next_to_scan_for_outputs_block(&self.db)
+      let next_to_scan = next_to_scan_for_outputs_block::<S>(&self.db)
         .expect("ReportTask run before writing the start block");
       // If we haven't done any work, return
       if next_to_scan == 0 {
