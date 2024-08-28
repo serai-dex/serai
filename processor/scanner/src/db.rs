@@ -9,7 +9,10 @@ use serai_in_instructions_primitives::InInstructionWithBalance;
 
 use primitives::{ReceivedOutput, EncodableG};
 
-use crate::{lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return};
+use crate::{
+  lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return,
+  scan::next_to_scan_for_outputs_block,
+};
 
 // The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
 trait Borshy: BorshSerialize + BorshDeserialize {}
@@ -35,7 +38,7 @@ pub(crate) struct OutputWithInInstruction<S: ScannerFeed> {
 }
 
 impl<S: ScannerFeed> OutputWithInInstruction<S> {
-  fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+  pub(crate) fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     self.output.write(writer)?;
     // TODO self.return_address.write(writer)?;
     self.in_instruction.encode_to(writer);
@@ -48,8 +51,6 @@ create_db!(
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
     RetireAt: <K: Encode>(key: K) -> u64,
 
-    // The next block to scan for received outputs
-    NextToScanForOutputsBlock: () -> u64,
     // The next block to potentially report
     NextToPotentiallyReportBlock: () -> u64,
     // Highest acknowledged block
@@ -74,9 +75,6 @@ create_db!(
     */
     // This collapses from `bool` to `()`, using if the value was set for true and false otherwise
     NotableBlock: (number: u64) -> (),
-
-    SerializedQueuedOutputs: (block_number: u64) -> Vec<u8>,
-    SerializedOutputs: (block_number: u64) -> Vec<u8>,
   }
 );
 
@@ -127,7 +125,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
     let Some(key) = keys.first() else { return };
 
     // Get the block we're scanning for next
-    let block_number = Self::next_to_scan_for_outputs_block(txn).expect(
+    let block_number = next_to_scan_for_outputs_block::<S>(txn).expect(
       "tidying keys despite never setting the next to scan for block (done on initialization)",
     );
     // If this key is scheduled for retiry...
@@ -150,7 +148,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
   ) -> Option<Vec<SeraiKey<KeyFor<S>>>> {
     // We don't take this as an argument as we don't keep all historical keys in memory
     // If we've scanned block 1,000,000, we can't answer the active keys as of block 0
-    let block_number = Self::next_to_scan_for_outputs_block(getter)?;
+    let block_number = next_to_scan_for_outputs_block::<S>(getter)?;
 
     let raw_keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> = ActiveKeys::get(getter)?;
     let mut keys = Vec::with_capacity(2);
@@ -183,23 +181,7 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
 
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, start_block: u64, id: [u8; 32]) {
-    assert!(
-      NextToScanForOutputsBlock::get(txn).is_none(),
-      "setting start block but prior set start block"
-    );
-
-    NextToScanForOutputsBlock::set(txn, &start_block);
     NextToPotentiallyReportBlock::set(txn, &start_block);
-  }
-
-  pub(crate) fn set_next_to_scan_for_outputs_block(
-    txn: &mut impl DbTxn,
-    next_to_scan_for_outputs_block: u64,
-  ) {
-    NextToScanForOutputsBlock::set(txn, &next_to_scan_for_outputs_block);
-  }
-  pub(crate) fn next_to_scan_for_outputs_block(getter: &impl Get) -> Option<u64> {
-    NextToScanForOutputsBlock::get(getter)
   }
 
   pub(crate) fn set_next_to_potentially_report_block(
@@ -220,24 +202,6 @@ impl<S: ScannerFeed> ScannerDb<S> {
   }
   pub(crate) fn highest_acknowledged_block(getter: &impl Get) -> Option<u64> {
     HighestAcknowledgedBlock::get(getter)
-  }
-
-  pub(crate) fn take_queued_outputs(
-    txn: &mut impl DbTxn,
-    block_number: u64,
-  ) -> Vec<OutputWithInInstruction<S>> {
-    todo!("TODO")
-  }
-
-  pub(crate) fn queue_output_until_block(
-    txn: &mut impl DbTxn,
-    queue_for_block: u64,
-    output: &OutputWithInInstruction<S>,
-  ) {
-    let mut outputs =
-      SerializedQueuedOutputs::get(txn, queue_for_block).unwrap_or(Vec::with_capacity(128));
-    output.write(&mut outputs).unwrap();
-    SerializedQueuedOutputs::set(txn, queue_for_block, &outputs);
   }
 
   /*
