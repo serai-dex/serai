@@ -242,7 +242,6 @@ impl<S: ScannerFeed> Scanner<S> {
   /// Create a new scanner.
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
-  // TODO: Take start_time and binary search here?
   pub async fn new(
     db: impl Db,
     feed: S,
