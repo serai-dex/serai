@@ -37,6 +37,7 @@ serai-db = { path = "../../common/db" }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives", default-features = false, features = ["std"] }
+serai-coins-primitives = { path = "../../substrate/coins/primitives", default-features = false, features = ["std"] }
 
 messages = { package = "serai-processor-messages", path = "../messages" }
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
