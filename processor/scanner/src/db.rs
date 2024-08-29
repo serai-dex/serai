@@ -11,7 +11,8 @@ use serai_coins_primitives::OutInstructionWithBalance;
 use primitives::{EncodableG, Address, ReceivedOutput};
 
 use crate::{
-  lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return,
+  lifetime::{LifetimeStage, Lifetime},
+  ScannerFeed, KeyFor, AddressFor, OutputFor, Return,
   scan::next_to_scan_for_outputs_block,
 };
 
@@ -30,6 +31,7 @@ pub(crate) struct SeraiKey<K> {
   pub(crate) stage: LifetimeStage,
   pub(crate) activation_block_number: u64,
   pub(crate) block_at_which_reporting_starts: u64,
+  pub(crate) block_at_which_forwarding_starts: Option<u64>,
 }
 
 pub(crate) struct OutputWithInInstruction<S: ScannerFeed> {
@@ -82,7 +84,7 @@ create_db!(
     /*
       A block is notable if one of three conditions are met:
 
-      1) We activated a key within this block.
+      1) We activated a key within this block (or explicitly forward to an activated key).
       2) We retired a key within this block.
       3) We received outputs within this block.
 
@@ -120,9 +122,32 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
 
     // TODO: Panic if we've ever seen this key before
 
-    // Push the key
+    // Fetch the existing keys
     let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
       ActiveKeys::get(txn).unwrap_or(vec![]);
+
+    // If this new key retires a key, mark the block at which forwarding explicitly occurs notable
+    // This lets us obtain synchrony over the transactions we'll make to accomplish this
+    if let Some(key_retired_by_this) = keys.last() {
+      NotableBlock::set(
+        txn,
+        Lifetime::calculate::<S>(
+          // The 'current block number' used for this calculation
+          activation_block_number,
+          // The activation block of the key we're getting the lifetime of
+          key_retired_by_this.activation_block_number,
+          // The activation block of the key which will retire this key
+          Some(activation_block_number),
+        )
+        .block_at_which_forwarding_starts
+        .expect(
+          "didn't calculate the block forwarding starts at despite passing the next key's info",
+        ),
+        &(),
+      );
+    }
+
+    // Push and save the next key
     keys.push(SeraiKeyDbEntry { activation_block_number, key: EncodableG(key) });
     ActiveKeys::set(txn, &keys);
   }
@@ -185,8 +210,8 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
       if block_number < raw_keys[i].activation_block_number {
         continue;
       }
-      let (stage, block_at_which_reporting_starts) =
-        LifetimeStage::calculate_stage_and_reporting_start_block::<S>(
+      let Lifetime { stage, block_at_which_reporting_starts, block_at_which_forwarding_starts } =
+        Lifetime::calculate::<S>(
           block_number,
           raw_keys[i].activation_block_number,
           raw_keys.get(i + 1).map(|key| key.activation_block_number),
@@ -196,6 +221,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
         stage,
         activation_block_number: raw_keys[i].activation_block_number,
         block_at_which_reporting_starts,
+        block_at_which_forwarding_starts,
       });
     }
     assert!(keys.len() <= 2, "more than two keys active");

@@ -102,7 +102,8 @@ The following timeline is established:
 
 5) For the next 6 hours, all non-`Branch` outputs received are immediately
    forwarded to the new multisig. Only external transactions to the new multisig
-   are included in `Batch`s.
+   are included in `Batch`s. Any outputs not yet transferred as change are
+   explicitly transferred.
 
    The new multisig infers the `InInstruction`, and refund address, for
    forwarded `External` outputs via reading what they were for the original
