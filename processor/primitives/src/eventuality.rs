@@ -23,9 +23,9 @@ pub trait Eventuality: Sized + Send + Sync {
   fn forwarded_output(&self) -> Option<Self::OutputId>;
 
   /// Read an Eventuality.
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
-  /// Serialize an Eventuality to a `Vec<u8>`.
-  fn serialize(&self) -> Vec<u8>;
+  fn read(reader: &mut impl io::Read) -> io::Result<Self>;
+  /// Write an Eventuality.
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()>;
 }
 
 /// A tracker of unresolved Eventualities.
@@ -35,4 +35,17 @@ pub struct EventualityTracker<E: Eventuality> {
   ///
   /// These are keyed by their lookups.
   pub active_eventualities: HashMap<Vec<u8>, E>,
+}
+
+impl<E: Eventuality> Default for EventualityTracker<E> {
+  fn default() -> Self {
+    EventualityTracker { active_eventualities: HashMap::new() }
+  }
+}
+
+impl<E: Eventuality> EventualityTracker<E> {
+  /// Insert an Eventuality into the tracker.
+  pub fn insert(&mut self, eventuality: E) {
+    self.active_eventualities.insert(eventuality.lookup(), eventuality);
+  }
 }

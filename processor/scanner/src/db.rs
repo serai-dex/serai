@@ -1,13 +1,13 @@
 use core::marker::PhantomData;
 use std::io;
 
-use scale::Encode;
+use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
 
-use primitives::{EncodableG, ReceivedOutput};
+use primitives::{EncodableG, Address, ReceivedOutput};
 
 use crate::{
   lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return,
@@ -38,9 +38,30 @@ pub(crate) struct OutputWithInInstruction<S: ScannerFeed> {
 }
 
 impl<S: ScannerFeed> OutputWithInInstruction<S> {
+  pub(crate) fn read(reader: &mut impl io::Read) -> io::Result<Self> {
+    let output = OutputFor::<S>::read(reader)?;
+    let return_address = {
+      let mut opt = [0xff];
+      reader.read_exact(&mut opt)?;
+      assert!((opt[0] == 0) || (opt[0] == 1));
+      if opt[0] == 0 {
+        None
+      } else {
+        Some(AddressFor::<S>::read(reader)?)
+      }
+    };
+    let in_instruction =
+      InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
+    Ok(Self { output, return_address, in_instruction })
+  }
   pub(crate) fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     self.output.write(writer)?;
-    // TODO self.return_address.write(writer)?;
+    if let Some(return_address) = &self.return_address {
+      writer.write_all(&[1])?;
+      return_address.write(writer)?;
+    } else {
+      writer.write_all(&[0])?;
+    }
     self.in_instruction.encode_to(writer);
     Ok(())
   }
