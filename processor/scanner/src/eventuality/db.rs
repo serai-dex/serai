@@ -1,16 +1,11 @@
 use core::marker::PhantomData;
 
 use scale::Encode;
-use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
 use primitives::{EncodableG, Eventuality, EventualityTracker};
 
 use crate::{ScannerFeed, KeyFor, EventualityFor};
-
-// The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
-trait Borshy: BorshSerialize + BorshDeserialize {}
-impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
 
 create_db!(
   ScannerEventuality {
@@ -20,8 +15,6 @@ create_db!(
     LatestHandledNotableBlock: () -> u64,
 
     SerializedEventualities: <K: Encode>(key: K) -> Vec<u8>,
-
-    RetiredKey: <K: Borshy>(block_number: u64) -> K,
   }
 );
 
@@ -69,21 +62,6 @@ impl<S: ScannerFeed> EventualityDb<S> {
     while !serialized.is_empty() {
       let eventuality = EventualityFor::<S>::read(&mut serialized).unwrap();
       res.insert(eventuality);
-    }
-    res
-  }
-
-  pub(crate) fn retire_key(txn: &mut impl DbTxn, block_number: u64, key: KeyFor<S>) {
-    assert!(
-      RetiredKey::get::<EncodableG<KeyFor<S>>>(txn, block_number).is_none(),
-      "retiring multiple keys within the same block"
-    );
-    RetiredKey::set(txn, block_number, &EncodableG(key));
-  }
-  pub(crate) fn take_retired_key(txn: &mut impl DbTxn, block_number: u64) -> Option<KeyFor<S>> {
-    let res = RetiredKey::get::<EncodableG<KeyFor<S>>>(txn, block_number).map(|res| res.0);
-    if res.is_some() {
-      RetiredKey::del::<EncodableG<KeyFor<S>>>(txn, block_number);
     }
     res
   }

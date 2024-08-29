@@ -6,8 +6,8 @@ use crate::ScannerFeed;
 /// rotation process. Steps 7-8 regard a multisig which isn't retiring yet retired, and
 /// accordingly, no longer exists, so they are not modelled here (as this only models active
 /// multisigs. Inactive multisigs aren't represented in the first place).
-#[derive(PartialEq)]
-pub(crate) enum LifetimeStage {
+#[derive(Clone, Copy, PartialEq)]
+pub enum LifetimeStage {
   /// A new multisig, once active, shouldn't actually start receiving coins until several blocks
   /// later. If any UI is premature in sending to this multisig, we delay to report the outputs to
   /// prevent some DoS concerns.
@@ -65,12 +65,20 @@ impl Lifetime {
     // The exclusive end block is the inclusive start block
     let block_at_which_reporting_starts = active_yet_not_reporting_end_block;
     if block_number < active_yet_not_reporting_end_block {
-      return Lifetime { stage: LifetimeStage::ActiveYetNotReporting, block_at_which_reporting_starts, block_at_which_forwarding_starts: None };
+      return Lifetime {
+        stage: LifetimeStage::ActiveYetNotReporting,
+        block_at_which_reporting_starts,
+        block_at_which_forwarding_starts: None,
+      };
     }
 
     let Some(next_keys_activation_block_number) = next_keys_activation_block_number else {
       // If there is no next multisig, this is the active multisig
-      return Lifetime { stage: LifetimeStage::Active, block_at_which_reporting_starts, block_at_which_forwarding_starts: None };
+      return Lifetime {
+        stage: LifetimeStage::Active,
+        block_at_which_reporting_starts,
+        block_at_which_forwarding_starts: None,
+      };
     };
 
     assert!(
@@ -88,12 +96,20 @@ impl Lifetime {
     // If the new multisig is still having its activation block finalized on-chain, this multisig
     // is still active (step 3)
     if block_number < new_active_yet_not_reporting_end_block {
-      return Lifetime { stage: LifetimeStage::Active, block_at_which_reporting_starts, block_at_which_forwarding_starts };
+      return Lifetime {
+        stage: LifetimeStage::Active,
+        block_at_which_reporting_starts,
+        block_at_which_forwarding_starts,
+      };
     }
 
     // Step 4 details a further CONFIRMATIONS
     if block_number < new_active_and_used_for_change_end_block {
-      return Lifetime { stage: LifetimeStage::UsingNewForChange, block_at_which_reporting_starts, block_at_which_forwarding_starts };
+      return Lifetime {
+        stage: LifetimeStage::UsingNewForChange,
+        block_at_which_reporting_starts,
+        block_at_which_forwarding_starts,
+      };
     }
 
     // Step 5 details a further 6 hours
@@ -101,10 +117,18 @@ impl Lifetime {
     let new_active_and_forwarded_to_end_block =
       new_active_and_used_for_change_end_block + (6 * 6 * S::TEN_MINUTES);
     if block_number < new_active_and_forwarded_to_end_block {
-      return Lifetime { stage: LifetimeStage::Forwarding, block_at_which_reporting_starts, block_at_which_forwarding_starts };
+      return Lifetime {
+        stage: LifetimeStage::Forwarding,
+        block_at_which_reporting_starts,
+        block_at_which_forwarding_starts,
+      };
     }
 
     // Step 6
-    Lifetime { stage: LifetimeStage::Finishing, block_at_which_reporting_starts, block_at_which_forwarding_starts }
+    Lifetime {
+      stage: LifetimeStage::Finishing,
+      block_at_which_reporting_starts,
+      block_at_which_forwarding_starts,
+    }
   }
 }
