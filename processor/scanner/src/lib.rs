@@ -199,14 +199,14 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
 
   /// Fulfill a series of payments, yielding the Eventualities now to be scanned for.
   ///
-  /// Any Eventualities returned by this function must include an output-to-self (such as a Branch
+  /// Any Eventualities returned by this function must include an output-to-Serai (such as a Branch
   /// or Change), unless they descend from a transaction returned by this function which satisfies
   /// that requirement.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
   /*
-    We need an output-to-self so we can detect a block with an Eventuality completion with regards
+    We need an output-to-Serai so we can detect a block with an Eventuality completion with regards
     to Burns, forcing us to ensure we have accumulated all the Burns we should by the time we
     handle that block. We explicitly don't require children have this requirement as by detecting
     the first resolution, we ensure we'll accumulate the Burns (therefore becoming aware of the
@@ -223,7 +223,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
                                           ------------------------------
 
     Without wasting pointless Change outputs on every transaction (as there's a single parent which
-    has an output-to-self).
+    has an output-to-Serai, the new primary output).
   */
   fn fulfill(
     &mut self,
@@ -332,7 +332,7 @@ impl<S: ScannerFeed> Scanner<S> {
     to not having yet generated the Eventualities.
 
     We solve this by mandating all transactions made as the result of an Eventuality include a
-    output-to-self worth at least `N::DUST`. If that occurs, the scanner will force a consensus
+    output-to-Serai worth at least `DUST`. If that occurs, the scanner will force a consensus
     protocol on block 2. Accordingly, we won't scan all the way to block 101 (missing the
     resolution of the Eventuality) as we'll obtain synchrony on block 2 and all Burns queued prior
     to it.
