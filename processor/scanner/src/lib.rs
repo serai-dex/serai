@@ -13,6 +13,7 @@ use primitives::{task::*, Address, ReceivedOutput, Block};
 
 // Logic for deciding where in its lifetime a multisig is.
 mod lifetime;
+pub use lifetime::LifetimeStage;
 
 // Database schema definition and associated functions.
 mod db;
@@ -205,16 +206,22 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Retire a key as it'll no longer be used.
   ///
   /// Any key retired MUST NOT still have outputs associated with it. This SHOULD be a NOP other
-  /// than any assertions and database cleanup.
+  /// than any assertions and database cleanup. This MUST NOT be expected to be called in a fashion
+  /// ordered to any other calls.
   fn retire_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>);
 
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
+  ///
+  /// `active_keys` is the list of active keys, potentially including a key for which we've already
+  /// called `retire_key` on. If so, its stage will be `Finishing` and no further operations will
+  /// be expected for it. Nonetheless, it may be present.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
   fn update(
     &mut self,
     txn: &mut impl DbTxn,
+    active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 
@@ -223,6 +230,10 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Any Eventualities returned by this function must include an output-to-Serai (such as a Branch
   /// or Change), unless they descend from a transaction returned by this function which satisfies
   /// that requirement.
+  ///
+  /// `active_keys` is the list of active keys, potentially including a key for which we've already
+  /// called `retire_key` on. If so, its stage will be `Finishing` and no further operations will
+  /// be expected for it. Nonetheless, it may be present.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
@@ -249,6 +260,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   fn fulfill(
     &mut self,
     txn: &mut impl DbTxn,
+    active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<OutInstructionWithBalance>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 }
