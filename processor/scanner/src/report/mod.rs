@@ -6,11 +6,12 @@ use serai_db::{DbTxn, Db};
 use serai_primitives::BlockHash;
 use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
+use primitives::task::ContinuallyRan;
 use crate::{
   db::{ScannerGlobalDb, ScanToReportDb},
   index,
   scan::next_to_scan_for_outputs_block,
-  ScannerFeed, ContinuallyRan,
+  ScannerFeed, BatchPublisher,
 };
 
 mod db;
@@ -24,13 +25,14 @@ use db::ReportDb;
   the InInstructions for it.
 */
 #[allow(non_snake_case)]
-pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
+pub(crate) struct ReportTask<D: Db, S: ScannerFeed, B: BatchPublisher> {
   db: D,
+  batch_publisher: B,
   _S: PhantomData<S>,
 }
 
-impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
-  pub(crate) fn new(mut db: D, start_block: u64) -> Self {
+impl<D: Db, S: ScannerFeed, B: BatchPublisher> ReportTask<D, S, B> {
+  pub(crate) fn new(mut db: D, batch_publisher: B, start_block: u64) -> Self {
     if ReportDb::next_to_potentially_report_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
@@ -38,12 +40,12 @@ impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
       txn.commit();
     }
 
-    Self { db, _S: PhantomData }
+    Self { db, batch_publisher, _S: PhantomData }
   }
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
+impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, S, B> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let highest_reportable = {
       // Fetch the next to scan block
@@ -107,7 +109,13 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
           }
         }
 
-        todo!("TODO: Set/emit batches");
+        for batch in batches {
+          self
+            .batch_publisher
+            .publish_batch(batch)
+            .await
+            .map_err(|e| format!("failed to publish batch: {e:?}"))?;
+        }
       }
 
       // Update the next to potentially report block
