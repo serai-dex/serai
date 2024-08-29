@@ -341,8 +341,15 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         intake_eventualities::<S>(&mut txn, new_eventualities);
       }
 
-      // Now that we've intaked any Eventualities caused, check if we're retiring any keys
       for key in &keys {
+        // If this is the block at which forwarding starts for this key, flush it
+        // We do this after we issue the above update for any efficiencies gained by doing so
+        if key.block_at_which_forwarding_starts == Some(b) {
+          assert!(key.key != keys.last().unwrap().key);
+          self.scheduler.flush_key(&mut txn, key.key, keys.last().unwrap().key);
+        }
+
+        // Now that we've intaked any Eventualities caused, check if we're retiring any keys
         if key.stage == LifetimeStage::Finishing {
           let eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
           // TODO: This assumes the Scheduler is empty
