@@ -1,6 +1,4 @@
-use core::marker::PhantomData;
-
-use serai_db::{Get, DbTxn, Db, create_db};
+use serai_db::{Get, DbTxn, create_db};
 
 create_db!(
   ScannerReport {
