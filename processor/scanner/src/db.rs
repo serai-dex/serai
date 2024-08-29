@@ -6,6 +6,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
+use serai_coins_primitives::OutInstructionWithBalance;
 
 use primitives::{EncodableG, Address, ReceivedOutput};
 
@@ -336,9 +337,9 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
-pub(crate) struct BlockBoundInInstructions {
-  pub(crate) block_number: u64,
-  pub(crate) in_instructions: Vec<InInstructionWithBalance>,
+struct BlockBoundInInstructions {
+  block_number: u64,
+  in_instructions: Vec<InInstructionWithBalance>,
 }
 
 db_channel! {
@@ -368,5 +369,29 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
       "received InInstructions for a scanned block distinct than expected"
     );
     data.in_instructions
+  }
+}
+
+db_channel! {
+  ScannerSubstrateEventuality {
+    Burns: (acknowledged_block: u64) -> Vec<OutInstructionWithBalance>,
+  }
+}
+
+pub(crate) struct SubstrateToEventualityDb;
+impl SubstrateToEventualityDb {
+  pub(crate) fn send_burns(
+    txn: &mut impl DbTxn,
+    acknowledged_block: u64,
+    burns: &Vec<OutInstructionWithBalance>,
+  ) {
+    Burns::send(txn, acknowledged_block, burns);
+  }
+
+  pub(crate) fn try_recv_burns(
+    txn: &mut impl DbTxn,
+    acknowledged_block: u64,
+  ) -> Option<Vec<OutInstructionWithBalance>> {
+    Burns::try_recv(txn, acknowledged_block)
   }
 }
