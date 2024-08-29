@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use group::GroupEncoding;
 
-use serai_db::{Get, DbTxn};
+use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{NetworkId, Coin, Amount};
 
@@ -14,7 +14,7 @@ mod lifetime;
 
 // Database schema definition and associated functions.
 mod db;
-use db::ScannerDb;
+use db::ScannerGlobalDb;
 // Task to index the blockchain, ensuring we don't reorganize finalized blocks.
 mod index;
 // Scans blocks for received coins.
@@ -50,7 +50,7 @@ impl<B: Block> BlockExt for B {
 ///
 /// This defines the primitive types used, along with various getters necessary for indexing.
 #[async_trait::async_trait]
-pub trait ScannerFeed: Send + Sync {
+pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// The ID of the network being scanned for.
   const NETWORK: NetworkId;
 
@@ -170,7 +170,7 @@ pub struct SchedulerUpdate<S: ScannerFeed> {
 }
 
 /// The object responsible for accumulating outputs and planning new transactions.
-pub trait Scheduler<S: ScannerFeed>: Send {
+pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
@@ -183,14 +183,38 @@ pub trait Scheduler<S: ScannerFeed>: Send {
 }
 
 /// A representation of a scanner.
-pub struct Scanner<S: ScannerFeed>(PhantomData<S>);
+#[allow(non_snake_case)]
+pub struct Scanner<S: ScannerFeed> {
+  eventuality_handle: RunNowHandle,
+  _S: PhantomData<S>,
+}
 impl<S: ScannerFeed> Scanner<S> {
   /// Create a new scanner.
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
   // TODO: Take start_time and binary search here?
-  pub fn new(start_block: u64) -> Self {
-    todo!("TODO")
+  pub async fn new(db: impl Db, feed: S, scheduler: impl Scheduler<S>, start_block: u64) -> Self {
+    let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
+    let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
+    let report_task = report::ReportTask::<_, S>::new(db.clone(), start_block);
+    let eventuality_task = eventuality::EventualityTask::new(db, feed, scheduler, start_block);
+
+    let (_index_handle, index_run) = RunNowHandle::new();
+    let (scan_handle, scan_run) = RunNowHandle::new();
+    let (report_handle, report_run) = RunNowHandle::new();
+    let (eventuality_handle, eventuality_run) = RunNowHandle::new();
+
+    // Upon indexing a new block, scan it
+    tokio::spawn(index_task.continually_run(index_run, vec![scan_handle.clone()]));
+    // Upon scanning a block, report it
+    tokio::spawn(scan_task.continually_run(scan_run, vec![report_handle]));
+    // Upon reporting a block, we do nothing
+    tokio::spawn(report_task.continually_run(report_run, vec![]));
+    // Upon handling the Eventualities in a block, we run the scan task as we've advanced the
+    // window its allowed to scan
+    tokio::spawn(eventuality_task.continually_run(eventuality_run, vec![scan_handle]));
+
+    Self { eventuality_handle, _S: PhantomData }
   }
 
   /// Acknowledge a block.
@@ -199,19 +223,26 @@ impl<S: ScannerFeed> Scanner<S> {
   /// have achieved synchrony on it.
   pub fn acknowledge_block(
     &mut self,
-    txn: &mut impl DbTxn,
+    mut txn: impl DbTxn,
     block_number: u64,
     key_to_activate: Option<KeyFor<S>>,
   ) {
     log::info!("acknowledging block {block_number}");
     assert!(
-      ScannerDb::<S>::is_block_notable(txn, block_number),
+      ScannerGlobalDb::<S>::is_block_notable(&txn, block_number),
       "acknowledging a block which wasn't notable"
     );
-    ScannerDb::<S>::set_highest_acknowledged_block(txn, block_number);
+    ScannerGlobalDb::<S>::set_highest_acknowledged_block(&mut txn, block_number);
     if let Some(key_to_activate) = key_to_activate {
-      ScannerDb::<S>::queue_key(txn, block_number + S::WINDOW_LENGTH, key_to_activate);
+      ScannerGlobalDb::<S>::queue_key(&mut txn, block_number + S::WINDOW_LENGTH, key_to_activate);
     }
+
+    // Commit the txn
+    txn.commit();
+    // Run the Eventuality task since we've advanced it
+    // We couldn't successfully do this if that txn was still floating around, uncommitted
+    // The execution of this task won't actually have more work until the txn is committed
+    self.eventuality_handle.run_now();
   }
 
   /// Queue Burns.
@@ -220,7 +251,7 @@ impl<S: ScannerFeed> Scanner<S> {
   /// safely queue Burns so long as they're only actually added once we've handled the outputs from
   /// the block acknowledged prior to their queueing.
   pub fn queue_burns(&mut self, txn: &mut impl DbTxn, burns: Vec<()>) {
-    let queue_as_of = ScannerDb::<S>::highest_acknowledged_block(txn)
+    let queue_as_of = ScannerGlobalDb::<S>::highest_acknowledged_block(txn)
       .expect("queueing Burns yet never acknowledged a block");
     todo!("TODO")
   }
@@ -228,8 +259,8 @@ impl<S: ScannerFeed> Scanner<S> {
 
 /*
 #[derive(Clone, Debug)]
-struct ScannerDb<N: Network, D: Db>(PhantomData<N>, PhantomData<D>);
-impl<N: Network, D: Db> ScannerDb<N, D> {
+struct ScannerGlobalDb<N: Network, D: Db>(PhantomData<N>, PhantomData<D>);
+impl<N: Network, D: Db> ScannerGlobalDb<N, D> {
   fn seen_key(id: &<N::Output as Output<N>>::Id) -> Vec<u8> {
     Self::scanner_key(b"seen", id)
   }
@@ -295,7 +326,7 @@ impl<N: Network, D: Db> ScannerDb<N, D> {
 
             TODO2: Only update ram_outputs after committing the TXN in question.
           */
-          let seen = ScannerDb::<N, D>::seen(&db, &id);
+          let seen = ScannerGlobalDb::<N, D>::seen(&db, &id);
           let id = id.as_ref().to_vec();
           if seen || scanner.ram_outputs.contains(&id) {
             panic!("scanned an output multiple times");

@@ -7,7 +7,7 @@ use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use serai_in_instructions_primitives::InInstructionWithBalance;
 
-use primitives::{ReceivedOutput, EncodableG};
+use primitives::{EncodableG, ReceivedOutput};
 
 use crate::{
   lifetime::LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, Return,

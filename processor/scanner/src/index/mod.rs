@@ -21,12 +21,12 @@ pub(crate) fn block_id(getter: &impl Get, block_number: u64) -> [u8; 32] {
 
   This task finds the finalized blocks, verifies they're continguous, and saves their IDs.
 */
-struct IndexFinalizedTask<D: Db, S: ScannerFeed> {
+pub(crate) struct IndexTask<D: Db, S: ScannerFeed> {
   db: D,
   feed: S,
 }
 
-impl<D: Db, S: ScannerFeed> IndexFinalizedTask<D, S> {
+impl<D: Db, S: ScannerFeed> IndexTask<D, S> {
   pub(crate) async fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if IndexDb::block_id(&db, start_block).is_none() {
       // Fetch the block for its ID
@@ -36,7 +36,7 @@ impl<D: Db, S: ScannerFeed> IndexFinalizedTask<D, S> {
           match feed.unchecked_block_header_by_number(start_block).await {
             Ok(block) => break block,
             Err(e) => {
-              log::warn!("IndexFinalizedTask couldn't fetch start block {start_block}: {e:?}");
+              log::warn!("IndexTask couldn't fetch start block {start_block}: {e:?}");
               tokio::time::sleep(core::time::Duration::from_secs(delay)).await;
               delay += Self::DELAY_BETWEEN_ITERATIONS;
               delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
@@ -57,7 +57,7 @@ impl<D: Db, S: ScannerFeed> IndexFinalizedTask<D, S> {
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexFinalizedTask<D, S> {
+impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the latest finalized block
     let our_latest_finalized = IndexDb::latest_finalized_block(&self.db)

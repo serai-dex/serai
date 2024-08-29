@@ -1,3 +1,5 @@
+use core::marker::PhantomData;
+
 use scale::Encode;
 use serai_db::{DbTxn, Db};
 
@@ -21,13 +23,14 @@ use db::ReportDb;
   Eventualities, have processed the block. This ensures we know if this block is notable, and have
   the InInstructions for it.
 */
+#[allow(non_snake_case)]
 pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
-  feed: S,
+  _S: PhantomData<S>,
 }
 
 impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
-  pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
+  pub(crate) fn new(mut db: D, start_block: u64) -> Self {
     if ReportDb::next_to_potentially_report_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
@@ -35,7 +38,7 @@ impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
       txn.commit();
     }
 
-    Self { db, feed }
+    Self { db, _S: PhantomData }
   }
 }
 

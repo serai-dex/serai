@@ -1,22 +1,8 @@
 use core::marker::PhantomData;
-use std::io;
 
-use scale::Encode;
-use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
-use serai_in_instructions_primitives::InInstructionWithBalance;
-
-use primitives::{EncodableG, ReceivedOutput, EventualityTracker};
-
-use crate::{
-  lifetime::LifetimeStage, db::OutputWithInInstruction, ScannerFeed, KeyFor, AddressFor, OutputFor,
-  EventualityFor, Return, scan::next_to_scan_for_outputs_block,
-};
-
-// The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
-trait Borshy: BorshSerialize + BorshDeserialize {}
-impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
+use crate::{db::OutputWithInInstruction, ScannerFeed};
 
 create_db!(
   ScannerScan {

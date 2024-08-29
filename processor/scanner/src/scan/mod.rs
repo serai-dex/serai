@@ -10,7 +10,9 @@ use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 
 use crate::{
   lifetime::LifetimeStage,
-  db::{OutputWithInInstruction, SenderScanData, ScannerDb, ScanToReportDb, ScanToEventualityDb},
+  db::{
+    OutputWithInInstruction, SenderScanData, ScannerGlobalDb, ScanToReportDb, ScanToEventualityDb,
+  },
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
 };
@@ -84,12 +86,12 @@ fn in_instruction_from_output<S: ScannerFeed>(
   )
 }
 
-struct ScanForOutputsTask<D: Db, S: ScannerFeed> {
+pub(crate) struct ScanTask<D: Db, S: ScannerFeed> {
   db: D,
   feed: S,
 }
 
-impl<D: Db, S: ScannerFeed> ScanForOutputsTask<D, S> {
+impl<D: Db, S: ScannerFeed> ScanTask<D, S> {
   pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if ScanDb::<S>::next_to_scan_for_outputs_block(&db).is_none() {
       // Initialize the DB
@@ -103,14 +105,14 @@ impl<D: Db, S: ScannerFeed> ScanForOutputsTask<D, S> {
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
+impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     // Fetch the safe to scan block
-    let latest_scannable = latest_scannable_block::<S>(&self.db)
-      .expect("ScanForOutputsTask run before writing the start block");
+    let latest_scannable =
+      latest_scannable_block::<S>(&self.db).expect("ScanTask run before writing the start block");
     // Fetch the next block to scan
     let next_to_scan = ScanDb::<S>::next_to_scan_for_outputs_block(&self.db)
-      .expect("ScanForOutputsTask run before writing the start block");
+      .expect("ScanTask run before writing the start block");
 
     for b in next_to_scan ..= latest_scannable {
       let block = self.feed.block_by_number(&self.db, b).await?;
@@ -123,8 +125,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
 
       // Tidy the keys, then fetch them
       // We don't have to tidy them here, we just have to somewhere, so why not here?
-      ScannerDb::<S>::tidy_keys(&mut txn);
-      let keys = ScannerDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
+      ScannerGlobalDb::<S>::tidy_keys(&mut txn);
+      let keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
         .expect("scanning for a blockchain without any keys set");
 
       let mut scan_data = SenderScanData {
@@ -197,7 +199,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
             // We ensure it's over the dust limit to prevent people sending 1 satoshi from causing
             // an invocation of a consensus/signing protocol
             if balance.amount.0 >= self.feed.dust(balance.coin).0 {
-              ScannerDb::<S>::flag_notable_due_to_non_external_output(&mut txn, b);
+              ScannerGlobalDb::<S>::flag_notable_due_to_non_external_output(&mut txn, b);
             }
             continue;
           }
@@ -284,10 +286,10 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanForOutputsTask<D, S> {
         }
       }
 
-      // Send the scan data to the eventuality task
-      ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
       // Send the InInstructions to the report task
       ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
+      // Send the scan data to the eventuality task
+      ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
       // Update the next to scan block
       ScanDb::<S>::set_next_to_scan_for_outputs_block(&mut txn, b + 1);
       txn.commit();
