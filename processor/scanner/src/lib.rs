@@ -6,6 +6,7 @@ use group::GroupEncoding;
 use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{NetworkId, Coin, Amount};
+use serai_in_instructions_primitives::Batch;
 
 use primitives::{task::*, Address, ReceivedOutput, Block};
 
@@ -81,7 +82,7 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// An error encountered when fetching data from the blockchain.
   ///
   /// This MUST be an ephemeral error. Retrying fetching data from the blockchain MUST eventually
-  /// resolve without manual intervention.
+  /// resolve without manual intervention/changing the arguments.
   type EphemeralError: Debug;
 
   /// Fetch the number of the latest finalized block.
@@ -156,6 +157,20 @@ type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 
+#[async_trait::async_trait]
+pub trait BatchPublisher: 'static + Send + Sync {
+  /// An error encountered when publishing the Batch.
+  ///
+  /// This MUST be an ephemeral error. Retrying publication MUST eventually resolve without manual
+  /// intervention/changing the arguments.
+  type EphemeralError: Debug;
+
+  /// Publish a Batch.
+  ///
+  /// This function must be safe to call with the same Batch multiple times.
+  async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError>;
+}
+
 /// A return to occur.
 pub struct Return<S: ScannerFeed> {
   address: AddressFor<S>,
@@ -193,10 +208,16 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
   // TODO: Take start_time and binary search here?
-  pub async fn new(db: impl Db, feed: S, scheduler: impl Scheduler<S>, start_block: u64) -> Self {
+  pub async fn new(
+    db: impl Db,
+    feed: S,
+    batch_publisher: impl BatchPublisher,
+    scheduler: impl Scheduler<S>,
+    start_block: u64,
+  ) -> Self {
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
     let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
-    let report_task = report::ReportTask::<_, S>::new(db.clone(), start_block);
+    let report_task = report::ReportTask::<_, S, _>::new(db.clone(), batch_publisher, start_block);
     let eventuality_task = eventuality::EventualityTask::new(db, feed, scheduler, start_block);
 
     let (_index_handle, index_run) = RunNowHandle::new();
