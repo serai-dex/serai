@@ -141,7 +141,7 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   async fn cost_to_aggregate(
     &self,
     coin: Coin,
-    block_number: u64,
+    reference_block: &Self::Block,
   ) -> Result<Amount, Self::EphemeralError>;
 
   /// The dust threshold for the specified coin.

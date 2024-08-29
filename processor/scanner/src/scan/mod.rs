@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use scale::Decode;
 use serai_db::{Get, DbTxn, Db};
 
@@ -129,14 +131,17 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
       let keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
         .expect("scanning for a blockchain without any keys set");
 
+      // The scan data for this block
       let mut scan_data = SenderScanData {
         block_number: b,
         received_external_outputs: vec![],
         forwards: vec![],
         returns: vec![],
       };
+      // The InInstructions for this block
       let mut in_instructions = vec![];
 
+      // The outputs queued for this block
       let queued_outputs = {
         let mut queued_outputs = ScanDb::<S>::take_queued_outputs(&mut txn, b);
         // Sort the queued outputs in case they weren't queued in a deterministic fashion
@@ -147,6 +152,11 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
         scan_data.received_external_outputs.push(queued_output.output);
         in_instructions.push(queued_output.in_instruction);
       }
+
+      // We subtract the cost to aggregate from some outputs we scan
+      // This cost is fetched with an asynchronous function which may be non-trivial
+      // We cache the result of this function here to avoid calling it multiple times
+      let mut costs_to_aggregate = HashMap::with_capacity(1);
 
       // Scan for each key
       for key in keys {
@@ -207,13 +217,19 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
           // Check this isn't dust
           let balance_to_use = {
             let mut balance = output.balance();
+
             // First, subtract 2 * the cost to aggregate, as detailed in
             // `spec/processor/UTXO Management.md`
-            // TODO: Cache this
-            let cost_to_aggregate =
-              self.feed.cost_to_aggregate(balance.coin, b).await.map_err(|e| {
+
+            // We cache this, so if it isn't yet cached, insert it into the cache
+            if let std::collections::hash_map::Entry::Vacant(e) =
+              costs_to_aggregate.entry(balance.coin)
+            {
+              e.insert(self.feed.cost_to_aggregate(balance.coin, &block).await.map_err(|e| {
                 format!("couldn't fetch cost to aggregate {:?} at {b}: {e:?}", balance.coin)
-              })?;
+              })?);
+            }
+            let cost_to_aggregate = costs_to_aggregate[&balance.coin];
             balance.amount.0 -= 2 * cost_to_aggregate.0;
 
             // Now, check it's still past the dust threshold
