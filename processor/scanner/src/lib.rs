@@ -137,6 +137,12 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
     Ok(block)
   }
 
+  /// The dust threshold for the specified coin.
+  ///
+  /// This MUST be constant. Serai MUST NOT create internal outputs worth less than this. This
+  /// SHOULD be a value worth handling at a human level.
+  fn dust(&self, coin: Coin) -> Amount;
+
   /// The cost to aggregate an input as of the specified block.
   ///
   /// This is defined as the transaction fee for a 2-input, 1-output transaction.
@@ -145,12 +151,6 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
     coin: Coin,
     reference_block: &Self::Block,
   ) -> Result<Amount, Self::EphemeralError>;
-
-  /// The dust threshold for the specified coin.
-  ///
-  /// This MUST be constant. Serai MUST NOT create internal outputs worth less than this. This
-  /// SHOULD be a value worth handling at a human level.
-  fn dust(&self, coin: Coin) -> Amount;
 }
 
 type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
@@ -187,6 +187,27 @@ pub struct SchedulerUpdate<S: ScannerFeed> {
 
 /// The object responsible for accumulating outputs and planning new transactions.
 pub trait Scheduler<S: ScannerFeed>: 'static + Send {
+  /// Activate a key.
+  ///
+  /// This SHOULD setup any necessary database structures. This SHOULD NOT cause the new key to
+  /// be used as the primary key. The multisig rotation time clearly establishes its steps.
+  fn activate_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>);
+
+  /// Flush all outputs within a retiring key to the new key.
+  ///
+  /// When a key is activated, the existing multisig should retain its outputs and utility for a
+  /// certain time period. With `flush_key`, all outputs should be directed towards fulfilling some
+  /// obligation or the `new_key`. Every output MUST be connected to an Eventuality. If a key no
+  /// longer has active Eventualities, it MUST be able to be retired.
+  // TODO: Call this
+  fn flush_key(&mut self, txn: &mut impl DbTxn, retiring_key: KeyFor<S>, new_key: KeyFor<S>);
+
+  /// Retire a key as it'll no longer be used.
+  ///
+  /// Any key retired MUST NOT still have outputs associated with it. This SHOULD be a NOP other
+  /// than any assertions and database cleanup.
+  fn retire_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>);
+
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
