@@ -4,6 +4,8 @@ create_db!(
   ScannerReport {
     // The next block to potentially report
     NextToPotentiallyReportBlock: () -> u64,
+    // The next Batch ID to use
+    NextBatchId: () -> u32,
   }
 );
 
@@ -20,6 +22,8 @@ impl ReportDb {
   }
 
   pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
-    todo!("TODO")
+    let id = NextBatchId::get(txn).unwrap_or(0);
+    NextBatchId::set(txn, &(id + 1));
+    id
   }
 }

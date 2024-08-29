@@ -1,22 +1,18 @@
 use core::marker::PhantomData;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use scale::Encode;
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::EventualityTracker;
+use primitives::{EncodableG, Eventuality, EventualityTracker};
 
 use crate::{ScannerFeed, KeyFor, EventualityFor};
-
-// The DB macro doesn't support `BorshSerialize + BorshDeserialize` as a bound, hence this.
-trait Borshy: BorshSerialize + BorshDeserialize {}
-impl<T: BorshSerialize + BorshDeserialize> Borshy for T {}
 
 create_db!(
   ScannerEventuality {
     // The next block to check for resolving eventualities
     NextToCheckForEventualitiesBlock: () -> u64,
 
-    SerializedEventualities: <K: Borshy>() -> Vec<u8>,
+    SerializedEventualities: <K: Encode>(key: K) -> Vec<u8>,
   }
 );
 
@@ -41,13 +37,25 @@ impl<S: ScannerFeed> EventualityDb<S> {
     key: KeyFor<S>,
     eventualities: &EventualityTracker<EventualityFor<S>>,
   ) {
-    todo!("TODO")
+    let mut serialized = Vec::with_capacity(eventualities.active_eventualities.len() * 128);
+    for eventuality in eventualities.active_eventualities.values() {
+      eventuality.write(&mut serialized).unwrap();
+    }
+    SerializedEventualities::set(txn, EncodableG(key), &serialized);
   }
 
   pub(crate) fn eventualities(
     getter: &impl Get,
     key: KeyFor<S>,
   ) -> EventualityTracker<EventualityFor<S>> {
-    todo!("TODO")
+    let serialized = SerializedEventualities::get(getter, EncodableG(key)).unwrap_or(vec![]);
+    let mut serialized = serialized.as_slice();
+
+    let mut res = EventualityTracker::default();
+    while !serialized.is_empty() {
+      let eventuality = EventualityFor::<S>::read(&mut serialized).unwrap();
+      res.insert(eventuality);
+    }
+    res
   }
 }

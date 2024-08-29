@@ -29,7 +29,14 @@ impl<S: ScannerFeed> ScanDb<S> {
     txn: &mut impl DbTxn,
     block_number: u64,
   ) -> Vec<OutputWithInInstruction<S>> {
-    todo!("TODO")
+    let serialized = SerializedQueuedOutputs::get(txn, block_number).unwrap_or(vec![]);
+    let mut serialized = serialized.as_slice();
+
+    let mut res = Vec::with_capacity(serialized.len() / 128);
+    while !serialized.is_empty() {
+      res.push(OutputWithInInstruction::<S>::read(&mut serialized).unwrap());
+    }
+    res
   }
 
   pub(crate) fn queue_output_until_block(

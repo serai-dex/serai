@@ -263,7 +263,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
         let mut eventualities = EventualityDb::<S>::eventualities(&txn, key);
         for new_eventuality in new_eventualities {
-          eventualities.active_eventualities.insert(new_eventuality.lookup(), new_eventuality);
+          eventualities.insert(new_eventuality);
         }
         EventualityDb::<S>::set_eventualities(&mut txn, key, &eventualities);
       }

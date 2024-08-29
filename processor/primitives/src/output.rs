@@ -8,7 +8,12 @@ use serai_primitives::{ExternalAddress, Balance};
 use crate::Id;
 
 /// An address on the external network.
-pub trait Address: Send + Sync + TryFrom<ExternalAddress> {}
+pub trait Address: Send + Sync + TryFrom<ExternalAddress> {
+  /// Write this address.
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()>;
+  /// Read an address.
+  fn read(reader: &mut impl io::Read) -> io::Result<Self>;
+}
 
 /// The type of the output.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
