@@ -248,6 +248,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
       let mut outputs = received_external_outputs;
 
       for key in &keys {
+        // If this is the key's activation block, activate it
+        if key.activation_block_number == b {
+          self.scheduler.activate_key(&mut txn, key.key);
+        }
+
         let completed_eventualities = {
           let mut eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
           let completed_eventualities = block.check_for_eventuality_resolutions(&mut eventualities);
@@ -349,9 +354,16 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
             // Retire this key `WINDOW_LENGTH` blocks in the future to ensure the scan task never
             // has a malleable view of the keys.
-            ScannerGlobalDb::<S>::retire_key(&mut txn, b + S::WINDOW_LENGTH, key.key);
+            let retire_at = b + S::WINDOW_LENGTH;
+            ScannerGlobalDb::<S>::retire_key(&mut txn, retire_at, key.key);
+            EventualityDb::<S>::retire_key(&mut txn, retire_at, key.key);
           }
         }
+      }
+
+      // If we retired any key at this block, retire it within the scheduler
+      if let Some(key) = EventualityDb::<S>::take_retired_key(&mut txn, b) {
+        self.scheduler.retire_key(&mut txn, key);
       }
 
       // Update the next-to-check block
