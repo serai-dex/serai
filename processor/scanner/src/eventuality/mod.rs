@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use group::GroupEncoding;
 
@@ -288,7 +288,6 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         let mut non_external_outputs = block.scan_for_outputs(key.key);
         non_external_outputs.retain(|output| output.kind() != OutputType::External);
         // Drop any outputs less than the dust limit
-        // TODO: Either further filter to outputs we made or also check cost_to_aggregate
         non_external_outputs.retain(|output| {
           let balance = output.balance();
           balance.amount.0 >= self.feed.dust(balance.coin).0
@@ -313,6 +312,31 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         if key.stage == LifetimeStage::Finishing {
           non_external_outputs
             .retain(|output| completed_eventualities.contains_key(&output.transaction_id()));
+        }
+
+        // Finally, for non-External outputs we didn't make, we check they're worth more than the
+        // cost to aggregate them to avoid some profitable spam attacks by malicious miners
+        {
+          // Fetch and cache the costs to aggregate as this call may be expensive
+          let coins =
+            non_external_outputs.iter().map(|output| output.balance().coin).collect::<HashSet<_>>();
+          let mut costs_to_aggregate = HashMap::new();
+          for coin in coins {
+            costs_to_aggregate.insert(
+              coin,
+              self.feed.cost_to_aggregate(coin, &block).await.map_err(|e| {
+                format!("EventualityTask couldn't fetch cost to aggregate {coin:?} at {b}: {e:?}")
+              })?,
+            );
+          }
+
+          // Only retain out outputs/outputs sufficiently worthwhile
+          non_external_outputs.retain(|output| {
+            completed_eventualities.contains_key(&output.transaction_id()) || {
+              let balance = output.balance();
+              balance.amount.0 >= (2 * costs_to_aggregate[&balance.coin].0)
+            }
+          });
         }
 
         // Now, we iterate over all Forwarded outputs and queue their InInstructions
