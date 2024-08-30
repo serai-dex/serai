@@ -17,6 +17,9 @@ create_db!(
     // The next Batch ID to use
     NextBatchId: () -> u32,
 
+    // The block number which caused a batch
+    BlockNumberForBatch: (batch: u32) -> u64,
+
     // The return addresses for the InInstructions within a Batch
     SerializedReturnAddresses: (batch: u32) -> Vec<u8>,
   }
@@ -39,10 +42,17 @@ impl<S: ScannerFeed> ReportDb<S> {
     NextToPotentiallyReportBlock::get(getter)
   }
 
-  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
+  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn, block_number: u64) -> u32 {
     let id = NextBatchId::get(txn).unwrap_or(0);
     NextBatchId::set(txn, &(id + 1));
+    BlockNumberForBatch::set(txn, id, &block_number);
     id
+  }
+
+  pub(crate) fn take_block_number_for_batch(txn: &mut impl DbTxn, id: u32) -> Option<u64> {
+    let block_number = BlockNumberForBatch::get(txn, id)?;
+    BlockNumberForBatch::del(txn, id);
+    Some(block_number)
   }
 
   pub(crate) fn save_return_information(
@@ -67,6 +77,7 @@ impl<S: ScannerFeed> ReportDb<S> {
     id: u32,
   ) -> Option<Vec<Option<ReturnInformation<S>>>> {
     let buf = SerializedReturnAddresses::get(txn, id)?;
+    SerializedReturnAddresses::del(txn, id);
     let mut buf = buf.as_slice();
 
     let mut res = Vec::with_capacity(buf.len() / (32 + 1 + 8));
