@@ -3,9 +3,9 @@ use core::marker::PhantomData;
 use scale::Encode;
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{EncodableG, Eventuality, EventualityTracker};
+use primitives::{EncodableG, ReceivedOutput, Eventuality, EventualityTracker};
 
-use crate::{ScannerFeed, KeyFor, EventualityFor};
+use crate::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor};
 
 create_db!(
   ScannerEventuality {
@@ -15,6 +15,8 @@ create_db!(
     LatestHandledNotableBlock: () -> u64,
 
     SerializedEventualities: <K: Encode>(key: K) -> Vec<u8>,
+
+    AccumulatedOutput: (id: &[u8]) -> (),
   }
 );
 
@@ -64,5 +66,18 @@ impl<S: ScannerFeed> EventualityDb<S> {
       res.insert(eventuality);
     }
     res
+  }
+
+  pub(crate) fn prior_accumulated_output(
+    getter: &impl Get,
+    id: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+  ) -> bool {
+    AccumulatedOutput::get(getter, id.as_ref()).is_some()
+  }
+  pub(crate) fn accumulated_output(
+    txn: &mut impl DbTxn,
+    id: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+  ) {
+    AccumulatedOutput::set(txn, id.as_ref(), &());
   }
 }
