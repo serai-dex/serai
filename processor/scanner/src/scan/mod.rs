@@ -226,7 +226,10 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
               costs_to_aggregate.entry(balance.coin)
             {
               e.insert(self.feed.cost_to_aggregate(balance.coin, &block).await.map_err(|e| {
-                format!("couldn't fetch cost to aggregate {:?} at {b}: {e:?}", balance.coin)
+                format!(
+                  "ScanTask couldn't fetch cost to aggregate {:?} at {b}: {e:?}",
+                  balance.coin
+                )
               })?);
             }
             let cost_to_aggregate = costs_to_aggregate[&balance.coin];
