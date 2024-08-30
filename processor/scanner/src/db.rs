@@ -72,6 +72,8 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 
 create_db!(
   ScannerGlobal {
+    QueuedKey: <K: Encode>(key: K) -> (),
+
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
     RetireAt: <K: Encode>(key: K) -> u64,
 
@@ -120,7 +122,10 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     // Set the block which has a key activate as notable
     NotableBlock::set(txn, activation_block_number, &());
 
-    // TODO: Panic if we've ever seen this key before
+    // Check this key has never been queued before
+    // This should only happen if a malicious supermajority collude, and breaks indexing by the key
+    assert!(QueuedKey::get(txn, EncodableG(key)).is_none(), "key being queued was prior queued");
+    QueuedKey::set(txn, EncodableG(key), &());
 
     // Fetch the existing keys
     let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
