@@ -1,5 +1,5 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::collections::HashMap;
+use std::{io, collections::HashMap};
 
 use group::GroupEncoding;
 
@@ -177,6 +177,19 @@ pub trait BatchPublisher: 'static + Send + Sync {
 pub struct Return<S: ScannerFeed> {
   address: AddressFor<S>,
   output: OutputFor<S>,
+}
+
+impl<S: ScannerFeed> Return<S> {
+  pub(crate) fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+    self.address.write(writer)?;
+    self.output.write(writer)
+  }
+
+  pub(crate) fn read(reader: &mut impl io::Read) -> io::Result<Self> {
+    let address = AddressFor::<S>::read(reader)?;
+    let output = OutputFor::<S>::read(reader)?;
+    Ok(Return { address, output })
+  }
 }
 
 /// An update for the scheduler.
