@@ -1,0 +1,22 @@
+[package]
+name = "serai-processor-transaction-chaining-scheduler"
+version = "0.1.0"
+description = "Scheduler for networks with transaction chaining for the Serai processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/transaction-chaining"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
