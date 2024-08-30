@@ -101,6 +101,8 @@ create_db!(
     */
     // This collapses from `bool` to `()`, using if the value was set for true and false otherwise
     NotableBlock: (number: u64) -> (),
+
+    SerializedForwardedOutput: (id: &[u8]) -> Vec<u8>,
   }
 );
 
@@ -267,7 +269,15 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     getter: &impl Get,
     output: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) -> Option<(Option<AddressFor<S>>, InInstructionWithBalance)> {
-    todo!("TODO")
+    let buf = SerializedForwardedOutput::get(getter, output.as_ref())?;
+    let mut buf = buf.as_slice();
+
+    let mut opt = [0xff];
+    buf.read_exact(&mut opt).unwrap();
+    assert!((opt[0] == 0) || (opt[0] == 1));
+
+    let address = (opt[0] == 1).then(|| AddressFor::<S>::read(&mut buf).unwrap());
+    Some((address, InInstructionWithBalance::decode(&mut IoReader(buf)).unwrap()))
   }
 }
 
@@ -321,32 +331,19 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
       NotableBlock::set(txn, block_number, &());
     }
 
-    /*
-    TODO
+    // Save all the forwarded outputs' data
+    for forward in &data.forwards {
+      let mut buf = vec![];
+      if let Some(address) = &forward.return_address {
+        buf.write_all(&[1]).unwrap();
+        address.write(&mut buf).unwrap();
+      } else {
+        buf.write_all(&[0]).unwrap();
+      }
+      forward.in_instruction.encode_to(&mut buf);
 
-    SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
-    SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
-
-    pub(crate) fn save_output_being_forwarded(
-      txn: &mut impl DbTxn,
-      block_forwarded_from: u64,
-      output: &OutputWithInInstruction<S>,
-    ) {
-      let mut buf = Vec::with_capacity(128);
-      output.write(&mut buf).unwrap();
-
-      let id = output.output.id();
-
-      // Save this to an index so we can later fetch all outputs to forward
-      let mut forwarded_outputs = SerializedForwardedOutputsIndex::get(txn, block_forwarded_from)
-        .unwrap_or(Vec::with_capacity(32));
-      forwarded_outputs.extend(id.as_ref());
-      SerializedForwardedOutputsIndex::set(txn, block_forwarded_from, &forwarded_outputs);
-
-      // Save the output itself
-      SerializedForwardedOutput::set(txn, id.as_ref(), &buf);
+      SerializedForwardedOutput::set(txn, forward.output.id().as_ref(), &buf);
     }
-    */
 
     let mut buf = vec![];
     buf.write_all(&data.block_number.to_le_bytes()).unwrap();

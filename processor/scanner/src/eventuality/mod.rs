@@ -116,6 +116,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
     Self { db, feed, scheduler }
   }
 
+  #[allow(clippy::type_complexity)]
   fn keys_and_keys_with_stages(
     &self,
     block_number: u64,
