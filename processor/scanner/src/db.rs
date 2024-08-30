@@ -47,11 +47,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
       let mut opt = [0xff];
       reader.read_exact(&mut opt)?;
       assert!((opt[0] == 0) || (opt[0] == 1));
-      if opt[0] == 0 {
-        None
-      } else {
-        Some(AddressFor::<S>::read(reader)?)
-      }
+      (opt[0] == 1).then(|| AddressFor::<S>::read(reader)).transpose()?
     };
     let in_instruction =
       InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
@@ -422,10 +418,39 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
   }
 }
 
+pub(crate) struct Returnable<S: ScannerFeed> {
+  pub(crate) return_address: Option<AddressFor<S>>,
+  pub(crate) in_instruction: InInstructionWithBalance,
+}
+
+impl<S: ScannerFeed> Returnable<S> {
+  fn read(reader: &mut impl io::Read) -> io::Result<Self> {
+    let mut opt = [0xff];
+    reader.read_exact(&mut opt).unwrap();
+    assert!((opt[0] == 0) || (opt[0] == 1));
+
+    let return_address = (opt[0] == 1).then(|| AddressFor::<S>::read(reader)).transpose()?;
+
+    let in_instruction =
+      InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
+    Ok(Returnable { return_address, in_instruction })
+  }
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+    if let Some(return_address) = &self.return_address {
+      writer.write_all(&[1])?;
+      return_address.write(writer)?;
+    } else {
+      writer.write_all(&[0])?;
+    }
+    self.in_instruction.encode_to(writer);
+    Ok(())
+  }
+}
+
 #[derive(BorshSerialize, BorshDeserialize)]
 struct BlockBoundInInstructions {
   block_number: u64,
-  in_instructions: Vec<InInstructionWithBalance>,
+  returnable_in_instructions: Vec<u8>,
 }
 
 db_channel! {
@@ -439,22 +464,36 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
   pub(crate) fn send_in_instructions(
     txn: &mut impl DbTxn,
     block_number: u64,
-    in_instructions: Vec<InInstructionWithBalance>,
+    returnable_in_instructions: &[Returnable<S>],
   ) {
-    InInstructions::send(txn, (), &BlockBoundInInstructions { block_number, in_instructions });
+    let mut buf = vec![];
+    for returnable_in_instruction in returnable_in_instructions {
+      returnable_in_instruction.write(&mut buf).unwrap();
+    }
+    InInstructions::send(
+      txn,
+      (),
+      &BlockBoundInInstructions { block_number, returnable_in_instructions: buf },
+    );
   }
 
   pub(crate) fn recv_in_instructions(
     txn: &mut impl DbTxn,
     block_number: u64,
-  ) -> Vec<InInstructionWithBalance> {
+  ) -> Vec<Returnable<S>> {
     let data = InInstructions::try_recv(txn, ())
       .expect("receiving InInstructions for a scanned block not yet sent");
     assert_eq!(
       block_number, data.block_number,
       "received InInstructions for a scanned block distinct than expected"
     );
-    data.in_instructions
+    let mut buf = data.returnable_in_instructions.as_slice();
+
+    let mut returnable_in_instructions = vec![];
+    while !buf.is_empty() {
+      returnable_in_instructions.push(Returnable::read(&mut buf).unwrap());
+    }
+    returnable_in_instructions
   }
 }
 

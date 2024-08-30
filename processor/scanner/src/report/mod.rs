@@ -8,14 +8,22 @@ use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
 use primitives::task::ContinuallyRan;
 use crate::{
-  db::{ScannerGlobalDb, ScanToReportDb},
+  db::{Returnable, ScannerGlobalDb, ScanToReportDb},
   index,
   scan::next_to_scan_for_outputs_block,
   ScannerFeed, BatchPublisher,
 };
 
 mod db;
+pub(crate) use db::ReturnInformation;
 use db::ReportDb;
+
+pub(crate) fn take_return_information<S: ScannerFeed>(
+  txn: &mut impl DbTxn,
+  id: u32,
+) -> Option<Vec<Option<ReturnInformation<S>>>> {
+  ReportDb::<S>::take_return_information(txn, id)
+}
 
 /*
   This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
@@ -33,10 +41,10 @@ pub(crate) struct ReportTask<D: Db, S: ScannerFeed, B: BatchPublisher> {
 
 impl<D: Db, S: ScannerFeed, B: BatchPublisher> ReportTask<D, S, B> {
   pub(crate) fn new(mut db: D, batch_publisher: B, start_block: u64) -> Self {
-    if ReportDb::next_to_potentially_report_block(&db).is_none() {
+    if ReportDb::<S>::next_to_potentially_report_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
-      ReportDb::set_next_to_potentially_report_block(&mut txn, start_block);
+      ReportDb::<S>::set_next_to_potentially_report_block(&mut txn, start_block);
       txn.commit();
     }
 
@@ -64,7 +72,7 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
       last_scanned
     };
 
-    let next_to_potentially_report = ReportDb::next_to_potentially_report_block(&self.db)
+    let next_to_potentially_report = ReportDb::<S>::next_to_potentially_report_block(&self.db)
       .expect("ReportTask run before writing the start block");
 
     for b in next_to_potentially_report ..= highest_reportable {
@@ -81,32 +89,53 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
       if notable {
         let network = S::NETWORK;
         let block_hash = index::block_id(&txn, b);
-        let mut batch_id = ReportDb::acquire_batch_id(&mut txn);
+        let mut batch_id = ReportDb::<S>::acquire_batch_id(&mut txn);
 
         // start with empty batch
         let mut batches =
           vec![Batch { network, id: batch_id, block: BlockHash(block_hash), instructions: vec![] }];
+        // We also track the return information for the InInstructions within a Batch in case they
+        // error
+        let mut return_information = vec![vec![]];
 
-        for instruction in in_instructions {
+        for Returnable { return_address, in_instruction } in in_instructions {
+          let balance = in_instruction.balance;
+
           let batch = batches.last_mut().unwrap();
-          batch.instructions.push(instruction);
+          batch.instructions.push(in_instruction);
 
           // check if batch is over-size
           if batch.encode().len() > MAX_BATCH_SIZE {
             // pop the last instruction so it's back in size
-            let instruction = batch.instructions.pop().unwrap();
+            let in_instruction = batch.instructions.pop().unwrap();
 
             // bump the id for the new batch
-            batch_id = ReportDb::acquire_batch_id(&mut txn);
+            batch_id = ReportDb::<S>::acquire_batch_id(&mut txn);
 
             // make a new batch with this instruction included
             batches.push(Batch {
               network,
               id: batch_id,
               block: BlockHash(block_hash),
-              instructions: vec![instruction],
+              instructions: vec![in_instruction],
             });
+            // Since we're allocating a new batch, allocate a new set of return addresses for it
+            return_information.push(vec![]);
           }
+
+          // For the set of return addresses for the InInstructions for the batch we just pushed
+          // onto, push this InInstruction's return addresses
+          return_information
+            .last_mut()
+            .unwrap()
+            .push(return_address.map(|address| ReturnInformation { address, balance }));
+        }
+
+        // Save the return addresses to the databse
+        assert_eq!(batches.len(), return_information.len());
+        for (batch, return_information) in batches.iter().zip(&return_information) {
+          assert_eq!(batch.instructions.len(), return_information.len());
+          ReportDb::<S>::save_return_information(&mut txn, batch.id, return_information);
         }
 
         for batch in batches {
@@ -119,7 +148,7 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
       }
 
       // Update the next to potentially report block
-      ReportDb::set_next_to_potentially_report_block(&mut txn, b + 1);
+      ReportDb::<S>::set_next_to_potentially_report_block(&mut txn, b + 1);
 
       txn.commit();
     }

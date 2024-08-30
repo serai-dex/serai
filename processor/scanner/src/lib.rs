@@ -7,7 +7,7 @@ use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{NetworkId, Coin, Amount};
 use serai_in_instructions_primitives::Batch;
-use serai_coins_primitives::OutInstructionWithBalance;
+use serai_coins_primitives::{OutInstruction, OutInstructionWithBalance};
 
 use primitives::{task::*, Address, ReceivedOutput, Block};
 
@@ -327,6 +327,8 @@ impl<S: ScannerFeed> Scanner<S> {
     &mut self,
     mut txn: impl DbTxn,
     block_number: u64,
+    batch_id: u32,
+    in_instruction_succeededs: Vec<bool>,
     key_to_activate: Option<KeyFor<S>>,
   ) {
     log::info!("acknowledging block {block_number}");
@@ -338,8 +340,12 @@ impl<S: ScannerFeed> Scanner<S> {
     if let Some(prior_highest_acknowledged_block) =
       ScannerGlobalDb::<S>::highest_acknowledged_block(&txn)
     {
-      assert!(block_number > prior_highest_acknowledged_block, "acknowledging blocks out-of-order");
-      for b in (prior_highest_acknowledged_block + 1) .. (block_number - 1) {
+      // If a single block produced multiple Batches, the block number won't increment
+      assert!(
+        block_number >= prior_highest_acknowledged_block,
+        "acknowledging blocks out-of-order"
+      );
+      for b in (prior_highest_acknowledged_block + 1) .. block_number {
         assert!(
           !ScannerGlobalDb::<S>::is_block_notable(&txn, b),
           "skipped acknowledging a block which was notable"
@@ -350,6 +356,37 @@ impl<S: ScannerFeed> Scanner<S> {
     ScannerGlobalDb::<S>::set_highest_acknowledged_block(&mut txn, block_number);
     if let Some(key_to_activate) = key_to_activate {
       ScannerGlobalDb::<S>::queue_key(&mut txn, block_number + S::WINDOW_LENGTH, key_to_activate);
+    }
+
+    // Return the balances for any InInstructions which failed to execute
+    {
+      let return_information = report::take_return_information::<S>(&mut txn, batch_id)
+        .expect("didn't save the return information for Batch we published");
+      assert_eq!(
+        in_instruction_succeededs.len(),
+        return_information.len(),
+        "amount of InInstruction succeededs differed from amount of return information saved"
+      );
+
+      // We map these into standard Burns
+      let mut returns = vec![];
+      for (succeeded, return_information) in
+        in_instruction_succeededs.into_iter().zip(return_information)
+      {
+        if succeeded {
+          continue;
+        }
+
+        if let Some(report::ReturnInformation { address, balance }) = return_information {
+          returns.push(OutInstructionWithBalance {
+            instruction: OutInstruction { address: address.into(), data: None },
+            balance,
+          });
+        }
+      }
+      // We send them as stemming from this block
+      // TODO: These should be handled with any Burns from this block
+      SubstrateToEventualityDb::send_burns(&mut txn, block_number, &returns);
     }
 
     // Commit the txn
