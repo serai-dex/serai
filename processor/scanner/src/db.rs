@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use std::io;
+use std::io::{self, Read, Write};
 
 use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -301,15 +301,9 @@ pub(crate) struct ReceiverScanData<S: ScannerFeed> {
   pub(crate) returns: Vec<Return<S>>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
-pub(crate) struct SerializedScanData {
-  pub(crate) block_number: u64,
-  pub(crate) data: Vec<u8>,
-}
-
 db_channel! {
   ScannerScanEventuality {
-    ScannedBlock: (empty_key: ()) -> SerializedScanData,
+    ScannedBlock: (empty_key: ()) -> Vec<u8>,
   }
 }
 
@@ -328,6 +322,8 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
     }
 
     /*
+    TODO
+
     SerializedForwardedOutputsIndex: (block_number: u64) -> Vec<u8>,
     SerializedForwardedOutput: (output_id: &[u8]) -> Vec<u8>,
 
@@ -352,18 +348,80 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
     }
     */
 
-    ScannedBlock::send(txn, (), todo!("TODO"));
+    let mut buf = vec![];
+    buf.write_all(&data.block_number.to_le_bytes()).unwrap();
+    buf
+      .write_all(&u32::try_from(data.received_external_outputs.len()).unwrap().to_le_bytes())
+      .unwrap();
+    for output in &data.received_external_outputs {
+      output.write(&mut buf).unwrap();
+    }
+    buf.write_all(&u32::try_from(data.forwards.len()).unwrap().to_le_bytes()).unwrap();
+    for output_with_in_instruction in &data.forwards {
+      // Only write the output, as we saved the InInstruction above as needed
+      output_with_in_instruction.output.write(&mut buf).unwrap();
+    }
+    buf.write_all(&u32::try_from(data.returns.len()).unwrap().to_le_bytes()).unwrap();
+    for output in &data.returns {
+      output.write(&mut buf).unwrap();
+    }
+    ScannedBlock::send(txn, (), &buf);
   }
-  pub(crate) fn recv_scan_data(txn: &mut impl DbTxn, block_number: u64) -> ReceiverScanData<S> {
+  pub(crate) fn recv_scan_data(
+    txn: &mut impl DbTxn,
+    expected_block_number: u64,
+  ) -> ReceiverScanData<S> {
     let data =
       ScannedBlock::try_recv(txn, ()).expect("receiving data for a scanned block not yet sent");
+    let mut data = data.as_slice();
+
+    let block_number = {
+      let mut block_number = [0; 8];
+      data.read_exact(&mut block_number).unwrap();
+      u64::from_le_bytes(block_number)
+    };
     assert_eq!(
-      block_number, data.block_number,
+      block_number, expected_block_number,
       "received data for a scanned block distinct than expected"
     );
-    let data = &data.data;
 
-    todo!("TODO")
+    let received_external_outputs = {
+      let mut len = [0; 4];
+      data.read_exact(&mut len).unwrap();
+      let len = usize::try_from(u32::from_le_bytes(len)).unwrap();
+
+      let mut received_external_outputs = Vec::with_capacity(len);
+      for _ in 0 .. len {
+        received_external_outputs.push(OutputFor::<S>::read(&mut data).unwrap());
+      }
+      received_external_outputs
+    };
+
+    let forwards = {
+      let mut len = [0; 4];
+      data.read_exact(&mut len).unwrap();
+      let len = usize::try_from(u32::from_le_bytes(len)).unwrap();
+
+      let mut forwards = Vec::with_capacity(len);
+      for _ in 0 .. len {
+        forwards.push(OutputFor::<S>::read(&mut data).unwrap());
+      }
+      forwards
+    };
+
+    let returns = {
+      let mut len = [0; 4];
+      data.read_exact(&mut len).unwrap();
+      let len = usize::try_from(u32::from_le_bytes(len)).unwrap();
+
+      let mut returns = Vec::with_capacity(len);
+      for _ in 0 .. len {
+        returns.push(Return::<S>::read(&mut data).unwrap());
+      }
+      returns
+    };
+
+    ReceiverScanData { block_number, received_external_outputs, forwards, returns }
   }
 }
 
