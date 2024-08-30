@@ -13,7 +13,8 @@ use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 use crate::{
   lifetime::LifetimeStage,
   db::{
-    OutputWithInInstruction, SenderScanData, ScannerGlobalDb, ScanToReportDb, ScanToEventualityDb,
+    OutputWithInInstruction, Returnable, SenderScanData, ScannerGlobalDb, ScanToReportDb,
+    ScanToEventualityDb,
   },
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
@@ -149,7 +150,13 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
         queued_outputs
       };
       for queued_output in queued_outputs {
-        in_instructions.push((queued_output.output.id(), queued_output.in_instruction));
+        in_instructions.push((
+          queued_output.output.id(),
+          Returnable {
+            return_address: queued_output.return_address,
+            in_instruction: queued_output.in_instruction,
+          },
+        ));
         scan_data.received_external_outputs.push(queued_output.output);
       }
 
@@ -302,7 +309,10 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
           in_instructions.push((
             output_with_in_instruction.output.id(),
-            output_with_in_instruction.in_instruction,
+            Returnable {
+              return_address: output_with_in_instruction.return_address,
+              in_instruction: output_with_in_instruction.in_instruction,
+            },
           ));
           scan_data.received_external_outputs.push(output_with_in_instruction.output);
         }
@@ -329,7 +339,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
       let in_instructions =
         in_instructions.into_iter().map(|(_id, in_instruction)| in_instruction).collect::<Vec<_>>();
       // Send the InInstructions to the report task
-      ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
+      ScanToReportDb::<S>::send_in_instructions(&mut txn, b, &in_instructions);
 
       // Send the scan data to the eventuality task
       ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
