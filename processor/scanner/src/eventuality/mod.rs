@@ -351,31 +351,51 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         scheduler_update.forwards.sort_by(sort_outputs);
         scheduler_update.returns.sort_by(|a, b| sort_outputs(&a.output, &b.output));
 
-        // Sanity check we've never accumulated these outputs before
-        {
+        let empty = {
           let a: core::slice::Iter<'_, OutputFor<S>> = scheduler_update.outputs.iter();
           let b: core::slice::Iter<'_, OutputFor<S>> = scheduler_update.forwards.iter();
           let c = scheduler_update.returns.iter().map(|output_to_return| &output_to_return.output);
+          let mut all_outputs = a.chain(b).chain(c).peekable();
 
-          for output in a.chain(b).chain(c) {
+          // If we received any output, sanity check this block is notable
+          let empty = all_outputs.peek().is_none();
+          if !empty {
+            assert!(is_block_notable, "accumulating output(s) in non-notable block");
+          }
+
+          // Sanity check we've never accumulated these outputs before
+          for output in all_outputs {
             assert!(
               !EventualityDb::<S>::prior_accumulated_output(&txn, &output.id()),
               "prior accumulated an output with this ID"
             );
             EventualityDb::<S>::accumulated_output(&mut txn, &output.id());
           }
-        }
 
-        // Intake the new Eventualities
-        let new_eventualities =
-          self.scheduler.update(&mut txn, &keys_with_stages, scheduler_update);
-        for key in new_eventualities.keys() {
-          keys
-            .iter()
-            .find(|serai_key| serai_key.key.to_bytes().as_ref() == key.as_slice())
-            .expect("intaking Eventuality for key which isn't active");
+          empty
+        };
+
+        if !empty {
+          // Accumulate the outputs
+          /*
+            This uses the `keys_with_stages` for the current block, yet this block is notable.
+            Accordingly, all future intaked Burns will use at least this block when determining
+            what LifetimeStage a key is. That makes the LifetimeStage monotonically incremented. If
+            this block wasn't notable, we'd potentially intake Burns with the LifetimeStage
+            determined off an earlier block than this (enabling an earlier LifetimeStage to be used
+            after a later one was already used).
+          */
+          let new_eventualities =
+            self.scheduler.update(&mut txn, &keys_with_stages, scheduler_update);
+          // Intake the new Eventualities
+          for key in new_eventualities.keys() {
+            keys
+              .iter()
+              .find(|serai_key| serai_key.key.to_bytes().as_ref() == key.as_slice())
+              .expect("intaking Eventuality for key which isn't active");
+          }
+          intake_eventualities::<S>(&mut txn, new_eventualities);
         }
-        intake_eventualities::<S>(&mut txn, new_eventualities);
       }
 
       for key in &keys {
