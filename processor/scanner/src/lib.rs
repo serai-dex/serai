@@ -317,21 +317,33 @@ impl<S: ScannerFeed> Scanner<S> {
     Self { eventuality_handle, _S: PhantomData }
   }
 
-  /// Acknowledge a block.
+  /// Acknowledge a Batch having been published on Serai.
   ///
-  /// This means this block was ordered on Serai in relation to `Burn` events, and all validators
-  /// have achieved synchrony on it.
+  /// This means the specified Batch was ordered on Serai in relation to Burn events, and all
+  /// validators have achieved synchrony on it.
+  ///
+  /// `in_instruction_succeededs` is the result of executing each InInstruction within this batch,
+  /// true if it succeeded and false if it did not (and did not cause any state changes on Serai).
+  ///
+  /// `burns` is a list of Burns to queue with the acknowledgement of this Batch for efficiency's
+  /// sake. Any Burns passed here MUST NOT be passed into any other call of `acknowledge_batch` nor
+  /// `queue_burns`. Doing so will cause them to be executed multiple times.
   ///
   /// The calls to this function must be ordered with regards to `queue_burns`.
-  pub fn acknowledge_block(
+  pub fn acknowledge_batch(
     &mut self,
     mut txn: impl DbTxn,
-    block_number: u64,
     batch_id: u32,
     in_instruction_succeededs: Vec<bool>,
+    mut burns: Vec<OutInstructionWithBalance>,
     key_to_activate: Option<KeyFor<S>>,
   ) {
-    log::info!("acknowledging block {block_number}");
+    log::info!("acknowledging batch {batch_id}");
+
+    // TODO: We need to take all of these arguments and send them to a task
+    // Then, when we do have this block number, we need to execute this function
+    let block_number = report::take_block_number_for_batch::<S>(&mut txn, batch_id)
+      .expect("didn't have the block number for a Batch");
 
     assert!(
       ScannerGlobalDb::<S>::is_block_notable(&txn, block_number),
@@ -369,7 +381,6 @@ impl<S: ScannerFeed> Scanner<S> {
       );
 
       // We map these into standard Burns
-      let mut returns = vec![];
       for (succeeded, return_information) in
         in_instruction_succeededs.into_iter().zip(return_information)
       {
@@ -378,15 +389,18 @@ impl<S: ScannerFeed> Scanner<S> {
         }
 
         if let Some(report::ReturnInformation { address, balance }) = return_information {
-          returns.push(OutInstructionWithBalance {
+          burns.push(OutInstructionWithBalance {
             instruction: OutInstruction { address: address.into(), data: None },
             balance,
           });
         }
       }
-      // We send them as stemming from this block
-      // TODO: These should be handled with any Burns from this block
-      SubstrateToEventualityDb::send_burns(&mut txn, block_number, &returns);
+    }
+
+    if !burns.is_empty() {
+      // We send these Burns as stemming from this block we just acknowledged
+      // This causes them to be acted on after we accumulate the outputs from this block
+      SubstrateToEventualityDb::send_burns(&mut txn, block_number, &burns);
     }
 
     // Commit the txn
@@ -402,7 +416,9 @@ impl<S: ScannerFeed> Scanner<S> {
   /// The scanner only updates the scheduler with new outputs upon acknowledging a block. The
   /// ability to fulfill Burns, and therefore their order, is dependent on the current output
   /// state. This immediately sets a bound that this function is ordered with regards to
-  /// `acknowledge_block`.
+  /// `acknowledge_batch`.
+  ///
+  /// The Burns specified here MUST NOT also be passed to `acknowledge_batch`.
   /*
     The fact Burns can be queued during any Substrate block is problematic. The scanner is allowed
     to scan anything within the window set by the Eventuality task. The Eventuality task is allowed
@@ -427,6 +443,10 @@ impl<S: ScannerFeed> Scanner<S> {
     unnecessary).
   */
   pub fn queue_burns(&mut self, txn: &mut impl DbTxn, burns: &Vec<OutInstructionWithBalance>) {
+    if burns.is_empty() {
+      return;
+    }
+
     let queue_as_of = ScannerGlobalDb::<S>::highest_acknowledged_block(txn)
       .expect("queueing Burns yet never acknowledged a block");
 

@@ -25,6 +25,13 @@ pub(crate) fn take_return_information<S: ScannerFeed>(
   ReportDb::<S>::take_return_information(txn, id)
 }
 
+pub(crate) fn take_block_number_for_batch<S: ScannerFeed>(
+  txn: &mut impl DbTxn,
+  id: u32,
+) -> Option<u64> {
+  ReportDb::<S>::take_block_number_for_batch(txn, id)
+}
+
 /*
   This task produces Batches for notable blocks, with all InInstructions, in an ordered fashion.
 
@@ -89,7 +96,7 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
       if notable {
         let network = S::NETWORK;
         let block_hash = index::block_id(&txn, b);
-        let mut batch_id = ReportDb::<S>::acquire_batch_id(&mut txn);
+        let mut batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
 
         // start with empty batch
         let mut batches =
@@ -110,7 +117,7 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
             let in_instruction = batch.instructions.pop().unwrap();
 
             // bump the id for the new batch
-            batch_id = ReportDb::<S>::acquire_batch_id(&mut txn);
+            batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
 
             // make a new batch with this instruction included
             batches.push(Batch {
