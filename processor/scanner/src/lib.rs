@@ -200,7 +200,6 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// certain time period. With `flush_key`, all outputs should be directed towards fulfilling some
   /// obligation or the `new_key`. Every output MUST be connected to an Eventuality. If a key no
   /// longer has active Eventualities, it MUST be able to be retired.
-  // TODO: Call this
   fn flush_key(&mut self, txn: &mut impl DbTxn, retiring_key: KeyFor<S>, new_key: KeyFor<S>);
 
   /// Retire a key as it'll no longer be used.
@@ -384,81 +383,3 @@ impl<S: ScannerFeed> Scanner<S> {
     SubstrateToEventualityDb::send_burns(txn, queue_as_of, burns)
   }
 }
-
-/*
-#[derive(Clone, Debug)]
-struct ScannerGlobalDb<N: Network, D: Db>(PhantomData<N>, PhantomData<D>);
-impl<N: Network, D: Db> ScannerGlobalDb<N, D> {
-  fn seen_key(id: &<N::Output as Output<N>>::Id) -> Vec<u8> {
-    Self::scanner_key(b"seen", id)
-  }
-  fn seen<G: Get>(getter: &G, id: &<N::Output as Output<N>>::Id) -> bool {
-    getter.get(Self::seen_key(id)).is_some()
-  }
-
-  fn save_scanned_block(txn: &mut D::Transaction<'_>, block: usize) -> Vec<N::Output> {
-    let id = Self::block(txn, block); // It may be None for the first key rotated to
-    let outputs =
-      if let Some(id) = id.as_ref() { Self::outputs(txn, id).unwrap_or(vec![]) } else { vec![] };
-
-    // Mark all the outputs from this block as seen
-    for output in &outputs {
-      txn.put(Self::seen_key(&output.id()), b"");
-    }
-
-    txn.put(Self::scanned_block_key(), u64::try_from(block).unwrap().to_le_bytes());
-
-    // Return this block's outputs so they can be pruned from the RAM cache
-    outputs
-  }
-}
-
-        // Panic if we've already seen these outputs
-        for output in &outputs {
-          let id = output.id();
-          info!(
-            "block {} had output {} worth {:?}",
-            hex::encode(&block_id),
-            hex::encode(&id),
-            output.balance(),
-          );
-
-          // On Bitcoin, the output ID should be unique for a given chain
-          // On Monero, it's trivial to make an output sharing an ID with another
-          // We should only scan outputs with valid IDs however, which will be unique
-
-          /*
-            The safety of this code must satisfy the following conditions:
-            1) seen is not set for the first occurrence
-            2) seen is set for any future occurrence
-
-            seen is only written to after this code completes. Accordingly, it cannot be set
-            before the first occurrence UNLESSS it's set, yet the last scanned block isn't.
-            They are both written in the same database transaction, preventing this.
-
-            As for future occurrences, the RAM entry ensures they're handled properly even if
-            the database has yet to be set.
-
-            On reboot, which will clear the RAM, if seen wasn't set, neither was latest scanned
-            block. Accordingly, this will scan from some prior block, re-populating the RAM.
-
-            If seen was set, then this will be successfully read.
-
-            There's also no concern ram_outputs was pruned, yet seen wasn't set, as pruning
-            from ram_outputs will acquire a write lock (preventing this code from acquiring
-            its own write lock and running), and during its holding of the write lock, it
-            commits the transaction setting seen and the latest scanned block.
-
-            This last case isn't true. Committing seen/latest_scanned_block happens after
-            relinquishing the write lock.
-
-            TODO2: Only update ram_outputs after committing the TXN in question.
-          */
-          let seen = ScannerGlobalDb::<N, D>::seen(&db, &id);
-          let id = id.as_ref().to_vec();
-          if seen || scanner.ram_outputs.contains(&id) {
-            panic!("scanned an output multiple times");
-          }
-          scanner.ram_outputs.insert(id);
-        }
-*/

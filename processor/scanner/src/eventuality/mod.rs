@@ -12,7 +12,8 @@ use crate::{
     SeraiKey, OutputWithInInstruction, ReceiverScanData, ScannerGlobalDb, SubstrateToEventualityDb,
     ScanToEventualityDb,
   },
-  BlockExt, ScannerFeed, KeyFor, EventualityFor, SchedulerUpdate, Scheduler, sort_outputs,
+  BlockExt, ScannerFeed, KeyFor, OutputFor, EventualityFor, SchedulerUpdate, Scheduler,
+  sort_outputs,
   scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
 
@@ -349,6 +350,22 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         scheduler_update.outputs.sort_by(sort_outputs);
         scheduler_update.forwards.sort_by(sort_outputs);
         scheduler_update.returns.sort_by(|a, b| sort_outputs(&a.output, &b.output));
+
+        // Sanity check we've never accumulated these outputs before
+        {
+          let a: core::slice::Iter<'_, OutputFor<S>> = scheduler_update.outputs.iter();
+          let b: core::slice::Iter<'_, OutputFor<S>> = scheduler_update.forwards.iter();
+          let c = scheduler_update.returns.iter().map(|output_to_return| &output_to_return.output);
+
+          for output in a.chain(b).chain(c) {
+            assert!(
+              !EventualityDb::<S>::prior_accumulated_output(&txn, &output.id()),
+              "prior accumulated an output with this ID"
+            );
+            EventualityDb::<S>::accumulated_output(&mut txn, &output.id());
+          }
+        }
+
         // Intake the new Eventualities
         let new_eventualities =
           self.scheduler.update(&mut txn, &keys_with_stages, scheduler_update);
@@ -375,7 +392,6 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         // Now that we've intaked any Eventualities caused, check if we're retiring any keys
         if key.stage == LifetimeStage::Finishing {
           let eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
-          // TODO: This assumes the Scheduler is empty
           if eventualities.active_eventualities.is_empty() {
             log::info!(
               "key {} has finished and is being retired",

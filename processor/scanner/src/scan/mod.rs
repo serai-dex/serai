@@ -149,8 +149,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
         queued_outputs
       };
       for queued_output in queued_outputs {
+        in_instructions.push((queued_output.output.id(), queued_output.in_instruction));
         scan_data.received_external_outputs.push(queued_output.output);
-        in_instructions.push(queued_output.in_instruction);
       }
 
       // We subtract the cost to aggregate from some outputs we scan
@@ -297,13 +297,37 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
           // Ensures we didn't miss a `continue` above
           assert!(matches!(key.stage, LifetimeStage::Active | LifetimeStage::UsingNewForChange));
 
-          scan_data.received_external_outputs.push(output_with_in_instruction.output.clone());
-          in_instructions.push(output_with_in_instruction.in_instruction);
+          in_instructions.push((
+            output_with_in_instruction.output.id(),
+            output_with_in_instruction.in_instruction,
+          ));
+          scan_data.received_external_outputs.push(output_with_in_instruction.output);
         }
       }
 
+      // Sort the InInstructions by the output ID
+      in_instructions.sort_by(|(output_id_a, _), (output_id_b, _)| {
+        use core::cmp::{Ordering, Ord};
+        let res = output_id_a.as_ref().cmp(output_id_b.as_ref());
+        assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
+        res
+      });
+      // Check we haven't prior reported an InInstruction for this output
+      // This is a sanity check which is intended to prevent multiple instances of sriXYZ on-chain
+      // due to a single output
+      for (id, _) in &in_instructions {
+        assert!(
+          !ScanDb::<S>::prior_reported_in_instruction_for_output(&txn, id),
+          "prior reported an InInstruction for an output with this ID"
+        );
+        ScanDb::<S>::reported_in_instruction_for_output(&mut txn, id);
+      }
+      // Reformat the InInstructions to just the InInstructions
+      let in_instructions =
+        in_instructions.into_iter().map(|(_id, in_instruction)| in_instruction).collect::<Vec<_>>();
       // Send the InInstructions to the report task
       ScanToReportDb::<S>::send_in_instructions(&mut txn, b, in_instructions);
+
       // Send the scan data to the eventuality task
       ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
       // Update the next to scan block
