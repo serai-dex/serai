@@ -4,7 +4,7 @@
 #[frame_support::pallet]
 pub mod pallet {
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
+  use frame_support::pallet_prelude::*;
 
   use dex_pallet::{Config as DexConfig, Pallet as Dex};
   use coins_pallet::{Config as CoinsConfig, AllowMint};
