@@ -4,5 +4,5 @@ use serai_primitives::NetworkId;
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Event {
-  EconomicSecurityBlock { network: NetworkId, block: u64 },
+  EconomicSecurityReached { network: NetworkId },
 }

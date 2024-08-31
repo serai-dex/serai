@@ -19,7 +19,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    EconomicSecurityBlock { network: NetworkId, block: u64 },
+    EconomicSecurityReached { network: NetworkId },
   }
 
   #[pallet::pallet]
@@ -41,10 +41,7 @@ pub mod pallet {
           <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
         {
           EconomicSecurityBlock::<T>::set(coin.network(), Some(n));
-          Self::deposit_event(Event::EconomicSecurityBlock {
-            network: coin.network(),
-            block: n.saturated_into::<u64>(),
-          });
+          Self::deposit_event(Event::EconomicSecurityReached { network: coin.network() });
         }
       }
 
