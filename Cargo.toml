@@ -79,6 +79,14 @@ members = [
   "substrate/validator-sets/primitives",
   "substrate/validator-sets/pallet",
 
+  "substrate/genesis-liquidity/primitives",
+  "substrate/genesis-liquidity/pallet",
+
+  "substrate/emissions/primitives",
+  "substrate/emissions/pallet",
+
+  "substrate/economic-security/pallet",
+
   "substrate/in-instructions/primitives",
   "substrate/in-instructions/pallet",
 

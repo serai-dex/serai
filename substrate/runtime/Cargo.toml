@@ -63,6 +63,8 @@ validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../va
 genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../genesis-liquidity/pallet", default-features = false }
 emissions-pallet = { package = "serai-emissions-pallet", path = "../emissions/pallet", default-features = false }
 
+economic-security-pallet = { package = "serai-economic-security-pallet", path = "../economic-security/pallet", default-features = false }
+
 in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../in-instructions/pallet", default-features = false }
 
 signals-pallet = { package = "serai-signals-pallet", path = "../signals/pallet", default-features = false }
@@ -119,6 +121,8 @@ std = [
   "validator-sets-pallet/std",
   "genesis-liquidity-pallet/std",
   "emissions-pallet/std",
+
+  "economic-security-pallet/std",
 
   "in-instructions-pallet/std",
 
