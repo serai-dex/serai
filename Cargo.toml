@@ -74,7 +74,8 @@ members = [
   "processor/frost-attempt-manager",
 
   "processor/primitives",
-  "processor/scheduler/transaction-chaining",
+  "processor/scheduler/utxo/primitives",
+  "processor/scheduler/utxo/transaction-chaining",
   "processor/scanner",
   "processor",
 
