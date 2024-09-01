@@ -37,6 +37,18 @@ serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../validator-sets/primitives", default-features = false }
 emissions-primitives = { package = "serai-emissions-primitives", path = "../primitives", default-features = false }
 
+[dev-dependencies]
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+serai-abi = { path = "../../abi", default-features = false, features = ["serde"] }
+
+rand_core = "0.6"
+
 [features]
 std = [
   "scale/std",
@@ -47,6 +59,11 @@ std = [
 
   "sp-std/std",
   "sp-runtime/std",
+  "sp-core/std",
+  "sp-io/std",
+
+  "serai-abi/std",
+  "serai-abi/serde",
 
   "coins-pallet/std",
   "validator-sets-pallet/std",
@@ -55,7 +72,19 @@ std = [
 
   "serai-primitives/std",
   "emissions-primitives/std",
+
+  "pallet-babe/std",
+  "pallet-grandpa/std",
+  "pallet-timestamp/std",
 ]
+
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
+
 fast-epoch = []
-try-runtime = [] # TODO
+
 default = ["std"]

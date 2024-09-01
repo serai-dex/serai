@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod mock;
+
 #[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
 #[frame_support::pallet]
 pub mod pallet {
@@ -295,22 +301,18 @@ pub mod pallet {
             )
             .unwrap();
 
-            if Coins::<T>::mint(
+            Coins::<T>::mint(
               Dex::<T>::get_pool_account(*c),
               Balance { coin: Coin::Serai, amount: Amount(pool_reward) },
             )
-            .is_err()
-            {
-              // TODO: log the failure
-              continue;
-            }
+            .unwrap();
           }
         }
       }
 
       // TODO: we have the past session participants here in the emissions pallet so that we can
       // distribute rewards to them in the next session. Ideally we should be able to fetch this
-      // information from valiadtor sets pallet.
+      // information from validator sets pallet.
       Self::update_participants();
       Weight::zero() // TODO
     }
@@ -323,15 +325,9 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
-      #[cfg(feature = "fast-epoch")]
-      let initial_period_duration = FAST_EPOCH_INITIAL_PERIOD;
-
-      #[cfg(not(feature = "fast-epoch"))]
-      let initial_period_duration = 2 * MONTHS;
-
       let genesis_complete_block = GenesisLiquidity::<T>::genesis_complete_block();
       genesis_complete_block.is_some() &&
-        (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + initial_period_duration))
+        (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + (2 * MONTHS)))
     }
 
     /// Returns true if any of the external networks haven't reached economic security yet.
