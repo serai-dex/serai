@@ -1,6 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
+#[allow(
+  unreachable_patterns,
+  clippy::cast_possible_truncation,
+  clippy::no_effect_underscore_binding,
+  clippy::empty_docs
+)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
@@ -8,7 +13,6 @@ pub mod pallet {
   use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
   use sp_std::{vec, vec::Vec, ops::Mul, collections::btree_map::BTreeMap};
-  use sp_runtime;
 
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use dex_pallet::{Config as DexConfig, Pallet as Dex};

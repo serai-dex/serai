@@ -13,7 +13,7 @@ impl AllowMint for () {
 }
 
 // TODO: Investigate why Substrate generates this
-#[allow(clippy::cast_possible_truncation)]
+#[allow(unreachable_patterns, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;

@@ -95,7 +95,11 @@ pub use types::*;
 pub use weights::WeightInfo;
 
 // TODO: Investigate why Substrate generates these
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding)]
+#[allow(
+  unreachable_patterns,
+  clippy::cast_possible_truncation,
+  clippy::no_effect_underscore_binding
+)]
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;

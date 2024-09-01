@@ -10,7 +10,12 @@ pub use in_instructions_primitives as primitives;
 use primitives::*;
 
 // TODO: Investigate why Substrate generates these
-#[allow(clippy::cast_possible_truncation, clippy::no_effect_underscore_binding, clippy::empty_docs)]
+#[allow(
+  unreachable_patterns,
+  clippy::cast_possible_truncation,
+  clippy::no_effect_underscore_binding,
+  clippy::empty_docs
+)]
 #[frame_support::pallet]
 pub mod pallet {
   use sp_std::vec;

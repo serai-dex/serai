@@ -60,6 +60,7 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
 
 #[allow(
   deprecated,
+  unreachable_patterns,
   clippy::let_unit_value,
   clippy::cast_possible_truncation,
   clippy::ignored_unit_patterns

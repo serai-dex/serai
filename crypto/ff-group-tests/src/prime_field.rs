@@ -31,6 +31,7 @@ pub fn test_from_u128<F: PrimeField>() {
 }
 
 /// Test is_odd/is_even works.
+///
 /// This test assumes an odd modulus with oddness being determined by the least-significant bit.
 /// Accordingly, this test doesn't support fields alternatively defined.
 /// TODO: Improve in the future.
