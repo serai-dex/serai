@@ -6,12 +6,12 @@ use core::fmt::Debug;
 
 use serai_primitives::{Coin, Amount};
 
-use primitives::ReceivedOutput;
-use scanner::{Payment, ScannerFeed, AddressFor, OutputFor};
+use primitives::{ReceivedOutput, Payment};
+use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
 /// An object able to plan a transaction.
 #[async_trait::async_trait]
-pub trait TransactionPlanner<S: ScannerFeed> {
+pub trait TransactionPlanner<S: ScannerFeed>: 'static + Send + Sync {
   /// An error encountered when determining the fee rate.
   ///
   /// This MUST be an ephemeral error. Retrying fetching data from the blockchain MUST eventually
@@ -33,17 +33,22 @@ pub trait TransactionPlanner<S: ScannerFeed> {
     coin: Coin,
   ) -> Result<Self::FeeRate, Self::EphemeralError>;
 
+  /// The branch address for this key of Serai's.
+  fn branch_address(key: KeyFor<S>) -> AddressFor<S>;
+  /// The change address for this key of Serai's.
+  fn change_address(key: KeyFor<S>) -> AddressFor<S>;
+  /// The forwarding address for this key of Serai's.
+  fn forwarding_address(key: KeyFor<S>) -> AddressFor<S>;
+
   /// Calculate the for a tansaction with this structure.
   ///
   /// The fee rate, inputs, and payments, will all be for the same coin. The returned fee is
   /// denominated in this coin.
   fn calculate_fee(
-    &self,
-    block_number: u64,
     fee_rate: Self::FeeRate,
     inputs: Vec<OutputFor<S>>,
-    payments: Vec<Payment<S>>,
-    change: Option<AddressFor<S>>,
+    payments: Vec<Payment<AddressFor<S>>>,
+    change: Option<KeyFor<S>>,
   ) -> Amount;
 
   /// Plan a transaction.
@@ -53,12 +58,10 @@ pub trait TransactionPlanner<S: ScannerFeed> {
   ///
   /// `change` will always be an address belonging to the Serai network.
   fn plan(
-    &self,
-    block_number: u64,
     fee_rate: Self::FeeRate,
     inputs: Vec<OutputFor<S>>,
-    payments: Vec<Payment<S>>,
-    change: Option<AddressFor<S>>,
+    payments: Vec<Payment<AddressFor<S>>>,
+    change: Option<KeyFor<S>>,
   ) -> Self::PlannedTransaction;
 
   /// Obtain a PlannedTransaction via amortizing the fee over the payments.
@@ -69,13 +72,11 @@ pub trait TransactionPlanner<S: ScannerFeed> {
   ///
   /// Returns `None` if the fee exceeded the inputs, or `Some` otherwise.
   fn plan_transaction_with_fee_amortization(
-    &self,
     operating_costs: &mut u64,
-    block_number: u64,
     fee_rate: Self::FeeRate,
     inputs: Vec<OutputFor<S>>,
-    mut payments: Vec<Payment<S>>,
-    change: Option<AddressFor<S>>,
+    mut payments: Vec<Payment<AddressFor<S>>>,
+    mut change: Option<KeyFor<S>>,
   ) -> Option<Self::PlannedTransaction> {
     // Sanity checks
     {
@@ -102,9 +103,7 @@ pub trait TransactionPlanner<S: ScannerFeed> {
       // Sort payments from high amount to low amount
       payments.sort_by(|a, b| a.balance().amount.0.cmp(&b.balance().amount.0).reverse());
 
-      let mut fee = self
-        .calculate_fee(block_number, fee_rate, inputs.clone(), payments.clone(), change.clone())
-        .0;
+      let mut fee = Self::calculate_fee(fee_rate, inputs.clone(), payments.clone(), change).0;
       let mut amortized = 0;
       while !payments.is_empty() {
         // We need to pay the fee, and any accrued operating costs, minus what we've already
@@ -124,9 +123,7 @@ pub trait TransactionPlanner<S: ScannerFeed> {
         if payments.last().unwrap().balance().amount.0 <= (per_payment_fee + S::dust(coin).0) {
           amortized += payments.pop().unwrap().balance().amount.0;
           // Recalculate the fee and try again
-          fee = self
-            .calculate_fee(block_number, fee_rate, inputs.clone(), payments.clone(), change.clone())
-            .0;
+          fee = Self::calculate_fee(fee_rate, inputs.clone(), payments.clone(), change).0;
           continue;
         }
         // Break since all of these payments shouldn't be dropped
@@ -167,6 +164,15 @@ pub trait TransactionPlanner<S: ScannerFeed> {
           amortized += per_payment_fee;
         }
         assert!(amortized >= (*operating_costs + fee));
+
+        // If the change is less than the dust, drop it
+        let would_be_change = inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
+          payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>() -
+          fee;
+        if would_be_change < S::dust(coin).0 {
+          change = None;
+          *operating_costs += would_be_change;
+        }
       }
 
       // Update the amount of operating costs
@@ -174,6 +180,6 @@ pub trait TransactionPlanner<S: ScannerFeed> {
     }
 
     // Because we amortized, or accrued as operating costs, the fee, make the transaction
-    Some(self.plan(block_number, fee_rate, inputs, payments, change))
+    Some(Self::plan(fee_rate, inputs, payments, change))
   }
 }

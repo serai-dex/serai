@@ -1,9 +1,9 @@
 [package]
 name = "serai-processor-transaction-chaining-scheduler"
 version = "0.1.0"
-description = "Scheduler for networks with transaction chaining for the Serai processor"
+description = "Scheduler for UTXO networks with transaction chaining for the Serai processor"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/transaction-chaining"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/utxo/transaction-chaining"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -14,9 +14,22 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["scale"]
+ignored = ["scale", "borsh"]
 
 [lints]
 workspace = true
 
 [dependencies]
+group = { version = "0.13", default-features = false }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+serai-primitives = { path = "../../../../substrate/primitives", default-features = false, features = ["std"] }
+serai-coins-primitives = { path = "../../../../substrate/coins/primitives", default-features = false, features = ["std"] }
+
+serai-db = { path = "../../../../common/db" }
+
+primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
+scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
+scanner = { package = "serai-processor-scanner", path = "../../../scanner" }

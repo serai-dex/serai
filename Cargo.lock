@@ -8656,6 +8656,7 @@ dependencies = [
  "group",
  "log",
  "parity-scale-codec",
+ "serai-coins-primitives",
  "serai-primitives",
  "tokio",
 ]
@@ -8674,9 +8675,7 @@ dependencies = [
  "serai-db",
  "serai-in-instructions-primitives",
  "serai-primitives",
- "serai-processor-messages",
  "serai-processor-primitives",
- "thiserror",
  "tokio",
 ]
 
@@ -8712,6 +8711,17 @@ dependencies = [
 [[package]]
 name = "serai-processor-transaction-chaining-scheduler"
 version = "0.1.0"
+dependencies = [
+ "borsh",
+ "group",
+ "parity-scale-codec",
+ "serai-coins-primitives",
+ "serai-db",
+ "serai-primitives",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-utxo-scheduler-primitives",
+]
 
 [[package]]
 name = "serai-processor-utxo-scheduler-primitives"
