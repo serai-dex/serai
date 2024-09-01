@@ -24,6 +24,7 @@ pub use dex_pallet as dex;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;
 pub use pallet_timestamp as timestamp;
+pub use economic_security_pallet as economic_security;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 // Maximum number of authorities per session.
@@ -44,6 +45,7 @@ construct_runtime!(
     Dex: dex,
     Babe: babe,
     Grandpa: grandpa,
+    EconomicSecurity: economic_security,
   }
 );
 
@@ -134,6 +136,10 @@ impl validator_sets::Config for Test {
 }
 
 impl genesis_liquidity::Config for Test {
+  type RuntimeEvent = RuntimeEvent;
+}
+
+impl economic_security::Config for Test {
   type RuntimeEvent = RuntimeEvent;
 }
 
