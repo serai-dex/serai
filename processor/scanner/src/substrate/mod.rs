@@ -138,6 +138,11 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
             }
           }
 
+          // Drop burns less than the dust
+          let burns = burns
+            .into_iter()
+            .filter(|burn| burn.balance.amount.0 >= S::dust(burn.balance.coin).0)
+            .collect::<Vec<_>>();
           if !burns.is_empty() {
             // We send these Burns as stemming from this block we just acknowledged
             // This causes them to be acted on after we accumulate the outputs from this block

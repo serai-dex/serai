@@ -12,7 +12,7 @@ use crate::{
     SeraiKey, OutputWithInInstruction, ReceiverScanData, ScannerGlobalDb, SubstrateToEventualityDb,
     ScanToEventualityDb,
   },
-  BlockExt, ScannerFeed, KeyFor, OutputFor, EventualityFor, SchedulerUpdate, Scheduler,
+  BlockExt, ScannerFeed, KeyFor, OutputFor, EventualityFor, Payment, SchedulerUpdate, Scheduler,
   sort_outputs,
   scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
@@ -165,7 +165,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       {
         intaked_any = true;
 
-        let new_eventualities = self.scheduler.fulfill(&mut txn, &keys_with_stages, burns);
+        let new_eventualities = self.scheduler.fulfill(
+          &mut txn,
+          &keys_with_stages,
+          burns.into_iter().filter_map(|burn| Payment::try_from(burn).ok()).collect(),
+        );
         intake_eventualities::<S>(&mut txn, new_eventualities);
       }
       txn.commit();
@@ -291,7 +295,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         // Drop any outputs less than the dust limit
         non_external_outputs.retain(|output| {
           let balance = output.balance();
-          balance.amount.0 >= self.feed.dust(balance.coin).0
+          balance.amount.0 >= S::dust(balance.coin).0
         });
 
         /*
