@@ -42,6 +42,7 @@ jobs:
             -p serai-processor-key-gen \
             -p serai-processor-frost-attempt-manager \
             -p serai-processor-primitives \
+            -p serai-processor-utxo-scheduler-primitives \
             -p serai-processor-transaction-chaining-scheduler \
             -p serai-processor-scanner \
             -p serai-processor \

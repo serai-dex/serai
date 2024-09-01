@@ -8710,6 +8710,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-transaction-chaining-scheduler"
+version = "0.1.0"
+
+[[package]]
+name = "serai-processor-utxo-scheduler-primitives"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serai-primitives",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+]
+
+[[package]]
 name = "serai-reproducible-runtime-tests"
 version = "0.1.0"
 dependencies = [

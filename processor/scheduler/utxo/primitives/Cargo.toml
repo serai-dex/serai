@@ -1,0 +1,25 @@
+[package]
+name = "serai-processor-utxo-scheduler-primitives"
+version = "0.1.0"
+description = "Primitives for UTXO schedulers for the Serai processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/utxo/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { version = "0.1", default-features = false }
+
+serai-primitives = { path = "../../../../substrate/primitives", default-features = false, features = ["std"] }
+
+primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
+scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
