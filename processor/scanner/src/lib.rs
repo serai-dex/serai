@@ -5,11 +5,11 @@ use group::GroupEncoding;
 
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::{NetworkId, Coin, Amount, Balance, Data};
+use serai_primitives::{NetworkId, Coin, Amount};
 use serai_in_instructions_primitives::Batch;
 use serai_coins_primitives::OutInstructionWithBalance;
 
-use primitives::{task::*, Address, ReceivedOutput, Block};
+use primitives::{task::*, Address, ReceivedOutput, Block, Payment};
 
 // Logic for deciding where in its lifetime a multisig is.
 mod lifetime;
@@ -195,6 +195,16 @@ impl<S: ScannerFeed> Return<S> {
     let output = OutputFor::<S>::read(reader)?;
     Ok(Return { address, output })
   }
+
+  /// The address to return the output to.
+  pub fn address(&self) -> &AddressFor<S> {
+    &self.address
+  }
+
+  /// The output to return.
+  pub fn output(&self) -> &OutputFor<S> {
+    &self.output
+  }
 }
 
 /// An update for the scheduler.
@@ -216,40 +226,6 @@ impl<S: ScannerFeed> SchedulerUpdate<S> {
   /// The outputs to return.
   pub fn returns(&self) -> &[Return<S>] {
     &self.returns
-  }
-}
-
-/// A payment to fulfill.
-#[derive(Clone)]
-pub struct Payment<S: ScannerFeed> {
-  address: AddressFor<S>,
-  balance: Balance,
-  data: Option<Vec<u8>>,
-}
-
-impl<S: ScannerFeed> TryFrom<OutInstructionWithBalance> for Payment<S> {
-  type Error = ();
-  fn try_from(out_instruction_with_balance: OutInstructionWithBalance) -> Result<Self, ()> {
-    Ok(Payment {
-      address: out_instruction_with_balance.instruction.address.try_into().map_err(|_| ())?,
-      balance: out_instruction_with_balance.balance,
-      data: out_instruction_with_balance.instruction.data.map(Data::consume),
-    })
-  }
-}
-
-impl<S: ScannerFeed> Payment<S> {
-  /// The address to pay.
-  pub fn address(&self) -> &AddressFor<S> {
-    &self.address
-  }
-  /// The balance to transfer.
-  pub fn balance(&self) -> Balance {
-    self.balance
-  }
-  /// The data to associate with this payment.
-  pub fn data(&self) -> &Option<Vec<u8>> {
-    &self.data
   }
 }
 
@@ -327,7 +303,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
     &mut self,
     txn: &mut impl DbTxn,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
-    payments: Vec<Payment<S>>,
+    payments: Vec<Payment<AddressFor<S>>>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 }
 
