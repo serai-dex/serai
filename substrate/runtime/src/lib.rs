@@ -34,6 +34,8 @@ pub use pallet_grandpa as grandpa;
 pub use genesis_liquidity_pallet as genesis_liquidity;
 pub use emissions_pallet as emissions;
 
+pub use economic_security_pallet as economic_security;
+
 // Actually used by the runtime
 use sp_core::OpaqueMetadata;
 use sp_std::prelude::*;
@@ -257,6 +259,10 @@ impl emissions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
 
+impl economic_security::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+}
+
 // for publishing equivocation evidences.
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
@@ -335,6 +341,8 @@ construct_runtime!(
     ValidatorSets: validator_sets,
     GenesisLiquidity: genesis_liquidity,
     Emissions: emissions,
+
+    EconomicSecurity: economic_security,
 
     InInstructions: in_instructions,
 

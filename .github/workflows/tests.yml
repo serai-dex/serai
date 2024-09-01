@@ -63,6 +63,11 @@ jobs:
             -p serai-dex-pallet \
             -p serai-validator-sets-primitives \
             -p serai-validator-sets-pallet \
+            -p serai-genesis-liquidity-primitives \
+            -p serai-genesis-liquidity-pallet \
+            -p serai-emissions-primitives \
+            -p serai-emissions-pallet \
+            -p serai-economic-security-pallet \
             -p serai-in-instructions-primitives \
             -p serai-in-instructions-pallet \
             -p serai-signals-primitives \

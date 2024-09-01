@@ -12,8 +12,10 @@ pub mod pallet {
   use sp_application_crypto::RuntimePublic;
 
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
-  use coins_pallet::{Config as CoinsConfig, Pallet as Coins, AllowMint};
+  use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
+
+  use economic_security_pallet::{Config as EconomicSecurityConfig, Pallet as EconomicSecurity};
 
   use serai_primitives::*;
   use validator_sets_primitives::{ValidatorSet, musig_key};
@@ -29,6 +31,7 @@ pub mod pallet {
     frame_system::Config
     + VsConfig
     + DexConfig
+    + EconomicSecurityConfig
     + CoinsConfig
     + coins_pallet::Config<coins_pallet::Instance1>
   {
@@ -49,7 +52,6 @@ pub mod pallet {
     GenesisLiquidityAdded { by: SeraiAddress, balance: Balance },
     GenesisLiquidityRemoved { by: SeraiAddress, balance: Balance },
     GenesisLiquidityAddedToPool { coin1: Balance, sri: Amount },
-    EconomicSecurityReached { network: NetworkId },
   }
 
   #[pallet::pallet]
@@ -63,10 +65,6 @@ pub mod pallet {
   /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
   pub(crate) type Supply<T: Config> = StorageMap<_, Identity, Coin, LiquidityAmount, OptionQuery>;
-
-  #[pallet::storage]
-  pub(crate) type EconomicSecurityReached<T: Config> =
-    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
 
   #[pallet::storage]
   pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
@@ -170,18 +168,6 @@ pub mod pallet {
         GenesisCompleteBlock::<T>::set(Some(n.saturated_into::<u64>()));
       }
 
-      // we accept we reached economic security once we can mint smallest amount of a network's coin
-      // TODO: move EconomicSecurity to a separate pallet
-      for coin in COINS {
-        let existing = EconomicSecurityReached::<T>::get(coin.network());
-        if existing.is_none() &&
-          <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
-        {
-          EconomicSecurityReached::<T>::set(coin.network(), Some(n));
-          Self::deposit_event(Event::EconomicSecurityReached { network: coin.network() });
-        }
-      }
-
       Weight::zero() // TODO
     }
   }
@@ -237,7 +223,8 @@ pub mod pallet {
     fn blocks_since_ec_security() -> Option<u64> {
       let mut min = u64::MAX;
       for n in NETWORKS {
-        let ec_security_block = EconomicSecurityReached::<T>::get(n)?.saturated_into::<u64>();
+        let ec_security_block =
+          EconomicSecurity::<T>::economic_security_block(n)?.saturated_into::<u64>();
         let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
         let diff = current.saturating_sub(ec_security_block);
         min = diff.min(min);

@@ -554,11 +554,11 @@ impl Transaction<NotPruned> {
   /// This returns None if the transaction is without signatures.
   pub fn signature_hash(&self) -> Option<[u8; 32]> {
     Some(match self {
-      Transaction::V1 { prefix, signatures } => {
+      Transaction::V1 { prefix, .. } => {
         if (prefix.inputs.len() == 1) && matches!(prefix.inputs[0], Input::Gen(_)) {
           None?;
         }
-        self.hash_with_prunable_hash(PrunableHash::V1(signatures))
+        self.hash_with_prunable_hash(PrunableHash::V1(&[]))
       }
       Transaction::V2 { proofs, .. } => self.hash_with_prunable_hash({
         let Some(proofs) = proofs else { None? };
