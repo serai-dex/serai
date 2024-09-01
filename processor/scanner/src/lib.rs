@@ -5,7 +5,7 @@ use group::GroupEncoding;
 
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::{NetworkId, Coin, Amount};
+use serai_primitives::{NetworkId, Coin, Amount, Balance, Data};
 use serai_in_instructions_primitives::Batch;
 use serai_coins_primitives::OutInstructionWithBalance;
 
@@ -143,7 +143,7 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   ///
   /// This MUST be constant. Serai MUST NOT create internal outputs worth less than this. This
   /// SHOULD be a value worth handling at a human level.
-  fn dust(&self, coin: Coin) -> Amount;
+  fn dust(coin: Coin) -> Amount;
 
   /// The cost to aggregate an input as of the specified block.
   ///
@@ -155,10 +155,14 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   ) -> Result<Amount, Self::EphemeralError>;
 }
 
-type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
-type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
-type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
-type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
+/// The key type for this ScannerFeed.
+pub type KeyFor<S> = <<S as ScannerFeed>::Block as Block>::Key;
+/// The address type for this ScannerFeed.
+pub type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
+/// The output type for this ScannerFeed.
+pub type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
+/// The eventuality type for this ScannerFeed.
+pub type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 
 #[async_trait::async_trait]
 pub trait BatchPublisher: 'static + Send + Sync {
@@ -198,6 +202,55 @@ pub struct SchedulerUpdate<S: ScannerFeed> {
   outputs: Vec<OutputFor<S>>,
   forwards: Vec<OutputFor<S>>,
   returns: Vec<Return<S>>,
+}
+
+impl<S: ScannerFeed> SchedulerUpdate<S> {
+  /// The outputs to accumulate.
+  pub fn outputs(&self) -> &[OutputFor<S>] {
+    &self.outputs
+  }
+  /// The outputs to forward to the latest multisig.
+  pub fn forwards(&self) -> &[OutputFor<S>] {
+    &self.forwards
+  }
+  /// The outputs to return.
+  pub fn returns(&self) -> &[Return<S>] {
+    &self.returns
+  }
+}
+
+/// A payment to fulfill.
+#[derive(Clone)]
+pub struct Payment<S: ScannerFeed> {
+  address: AddressFor<S>,
+  balance: Balance,
+  data: Option<Vec<u8>>,
+}
+
+impl<S: ScannerFeed> TryFrom<OutInstructionWithBalance> for Payment<S> {
+  type Error = ();
+  fn try_from(out_instruction_with_balance: OutInstructionWithBalance) -> Result<Self, ()> {
+    Ok(Payment {
+      address: out_instruction_with_balance.instruction.address.try_into().map_err(|_| ())?,
+      balance: out_instruction_with_balance.balance,
+      data: out_instruction_with_balance.instruction.data.map(Data::consume),
+    })
+  }
+}
+
+impl<S: ScannerFeed> Payment<S> {
+  /// The address to pay.
+  pub fn address(&self) -> &AddressFor<S> {
+    &self.address
+  }
+  /// The balance to transfer.
+  pub fn balance(&self) -> Balance {
+    self.balance
+  }
+  /// The data to associate with this payment.
+  pub fn data(&self) -> &Option<Vec<u8>> {
+    &self.data
+  }
 }
 
 /// The object responsible for accumulating outputs and planning new transactions.
@@ -274,7 +327,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
     &mut self,
     txn: &mut impl DbTxn,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
-    payments: Vec<OutInstructionWithBalance>,
+    payments: Vec<Payment<S>>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 }
 

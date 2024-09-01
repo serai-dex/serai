@@ -215,7 +215,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
             let balance = output.balance();
             // We ensure it's over the dust limit to prevent people sending 1 satoshi from causing
             // an invocation of a consensus/signing protocol
-            if balance.amount.0 >= self.feed.dust(balance.coin).0 {
+            if balance.amount.0 >= S::dust(balance.coin).0 {
               ScannerGlobalDb::<S>::flag_notable_due_to_non_external_output(&mut txn, b);
             }
             continue;
@@ -243,7 +243,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
             balance.amount.0 -= 2 * cost_to_aggregate.0;
 
             // Now, check it's still past the dust threshold
-            if balance.amount.0 < self.feed.dust(balance.coin).0 {
+            if balance.amount.0 < S::dust(balance.coin).0 {
               continue;
             }
 
