@@ -81,7 +81,7 @@ mod mock;
 use frame_support::ensure;
 use frame_system::{
   pallet_prelude::{BlockNumberFor, OriginFor},
-  ensure_signed,
+  ensure_signed, RawOrigin,
 };
 
 pub use pallet::*;
@@ -108,7 +108,7 @@ pub mod pallet {
   use sp_core::sr25519::Public;
   use sp_runtime::traits::IntegerSquareRoot;
 
-  use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
+  use coins_pallet::{Pallet as Coins, Config as CoinsConfig};
 
   use serai_primitives::{Coin, Amount, Balance, SubstrateAmount, reverse_lexicographic_order};
 
@@ -812,7 +812,7 @@ pub mod pallet {
       to: &T::AccountId,
       balance: Balance,
     ) -> Result<Amount, DispatchError> {
-      CoinsPallet::<T>::transfer_internal(*from, *to, balance)?;
+      Coins::<T>::transfer_internal(*from, *to, balance)?;
       Ok(balance.amount)
     }
 
@@ -911,7 +911,7 @@ pub mod pallet {
     /// Get the `owner`'s balance of `coin`, which could be the chain's native coin or another
     /// fungible. Returns a value in the form of an `Amount`.
     fn get_balance(owner: &T::AccountId, coin: Coin) -> SubstrateAmount {
-      CoinsPallet::<T>::balance(*owner, coin).0
+      Coins::<T>::balance(*owner, coin).0
     }
 
     /// Returns a pool id constructed from 2 coins.
@@ -979,10 +979,34 @@ pub mod pallet {
           let prev_amount = amounts.last().expect("Always has at least one element");
           let amount_out = Self::get_amount_out(*prev_amount, reserve_in, reserve_out)?;
           amounts.push(amount_out);
+
+          // now that we got swap fee from the user, burn half of it.
+          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin2)?;
         }
       }
 
       Ok(amounts)
+    }
+
+    fn burn_half_of_swap_fee(pool: PoolId, coin: Coin) -> Result<(), DispatchError> {
+      let pool_account = Self::get_pool_account(pool);
+      let origin = RawOrigin::Signed(pool_account.into());
+
+      let balance = Coins::<T>::balance(pool_account, coin).0;
+      let burn_percent =
+        HigherPrecisionBalance::from(T::LPFee::get()).checked_div(2).ok_or(Error::<T>::Overflow)?;
+
+      let burn_amount = HigherPrecisionBalance::from(balance)
+        .checked_mul(burn_percent)
+        .ok_or(Error::<T>::Overflow)?
+        .checked_div(1000)
+        .ok_or(Error::<T>::Overflow)?;
+
+      Coins::<T>::burn(
+        origin.into(),
+        Balance { coin, amount: Amount(burn_amount.try_into().map_err(|_| Error::<T>::Overflow)?) },
+      )?;
+      Ok(())
     }
 
     /// Used by the RPC service to provide current prices.
