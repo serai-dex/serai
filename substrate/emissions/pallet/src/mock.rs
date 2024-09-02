@@ -158,7 +158,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     insecure_pair_from_name("Eve").public(),
     insecure_pair_from_name("Ferdie").public(),
   ];
-  let validators = vec![insecure_pair_from_name("Alice").public()];
+  let validators = accounts.clone();
 
   let networks = NETWORKS
     .iter()

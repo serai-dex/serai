@@ -337,17 +337,21 @@ pub mod pallet {
       }
 
       // stake the rewards
-      for (p, score) in scores {
-        let p_reward = u64::try_from(
-          u128::from(reward).saturating_mul(u128::from(score)) / u128::from(total_score),
-        )
-        .unwrap();
+      let mut total_reward_distributed = 0u64;
+      for (i, (p, score)) in scores.iter().enumerate() {
+        let p_reward = if i == (scores.len() - 1) {
+          reward.saturating_sub(total_reward_distributed)
+        } else {
+          u64::try_from(
+            u128::from(reward).saturating_mul(u128::from(*score)) / u128::from(total_score),
+          )
+          .unwrap()
+        };
 
-        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
-        if ValidatorSets::<T>::distribute_block_rewards(n, p, Amount(p_reward)).is_err() {
-          // TODO: log the failure
-          continue;
-        }
+        Coins::<T>::mint(*p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
+        ValidatorSets::<T>::distribute_block_rewards(n, *p, Amount(p_reward)).unwrap();
+
+        total_reward_distributed = total_reward_distributed.saturating_add(p_reward);
       }
     }
 
