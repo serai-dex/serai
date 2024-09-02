@@ -241,8 +241,12 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// When a key is activated, the existing multisig should retain its outputs and utility for a
   /// certain time period. With `flush_key`, all outputs should be directed towards fulfilling some
-  /// obligation or the `new_key`. Every output MUST be connected to an Eventuality. If a key no
-  /// longer has active Eventualities, it MUST be able to be retired.
+  /// obligation or the `new_key`. Every output held by the retiring key MUST be connected to an
+  /// Eventuality. If a key no longer has active Eventualities, it MUST be able to be retired
+  /// without losing any coins.
+  ///
+  /// If the retiring key has any unfulfilled payments associated with it, those MUST be made
+  /// the responsibility of the new key.
   fn flush_key(&mut self, txn: &mut impl DbTxn, retiring_key: KeyFor<S>, new_key: KeyFor<S>);
 
   /// Retire a key as it'll no longer be used.

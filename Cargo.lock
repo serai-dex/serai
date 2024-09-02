@@ -8680,6 +8680,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-scheduler-primitives"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "group",
+ "parity-scale-codec",
+ "serai-db",
+]
+
+[[package]]
 name = "serai-processor-tests"
 version = "0.1.0"
 dependencies = [
@@ -8715,11 +8725,11 @@ dependencies = [
  "borsh",
  "group",
  "parity-scale-codec",
- "serai-coins-primitives",
  "serai-db",
  "serai-primitives",
  "serai-processor-primitives",
  "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
  "serai-processor-utxo-scheduler-primitives",
 ]
 

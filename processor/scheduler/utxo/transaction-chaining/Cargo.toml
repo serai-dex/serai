@@ -26,10 +26,10 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 serai-primitives = { path = "../../../../substrate/primitives", default-features = false, features = ["std"] }
-serai-coins-primitives = { path = "../../../../substrate/coins/primitives", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../../../common/db" }
 
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
+scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
+utxo-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }

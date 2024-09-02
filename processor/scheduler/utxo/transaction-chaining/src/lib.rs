@@ -5,6 +5,8 @@
 use core::marker::PhantomData;
 use std::collections::HashMap;
 
+use group::GroupEncoding;
+
 use serai_primitives::Coin;
 
 use serai_db::DbTxn;
@@ -15,6 +17,7 @@ use scanner::{
   Scheduler as SchedulerTrait,
 };
 use scheduler_primitives::*;
+use utxo_scheduler_primitives::*;
 
 mod db;
 use db::Db;
@@ -25,7 +28,7 @@ pub struct PlannedTransaction<S: ScannerFeed, T> {
   signable: T,
   /// The outputs we'll receive from this.
   effected_received_outputs: OutputFor<S>,
-  /// The Evtnuality to watch for.
+  /// The Eventuality to watch for.
   eventuality: EventualityFor<S>,
 }
 
@@ -60,13 +63,13 @@ impl<S: ScannerFeed, T, P: TransactionPlanner<S, PlannedTransaction = PlannedTra
 
 impl<
     S: ScannerFeed,
-    T: 'static + Send + Sync,
+    T: 'static + Send + Sync + SignableTransaction,
     P: TransactionPlanner<S, PlannedTransaction = PlannedTransaction<S, T>>,
   > SchedulerTrait<S> for Scheduler<S, T, P>
 {
   fn activate_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
-      Db::<S>::set_outputs(txn, key, *coin, &vec![]);
+      Db::<S>::set_outputs(txn, key, *coin, &[]);
     }
   }
 
@@ -98,22 +101,27 @@ impl<
     {
       let mut planned_txs = vec![];
       for forward in update.forwards() {
-        let forward_to_key = active_keys.last().unwrap();
-        assert_eq!(forward_to_key.1, LifetimeStage::Active);
+        let key = forward.key();
+
+        assert_eq!(active_keys.len(), 2);
+        assert_eq!(active_keys[0].1, LifetimeStage::Forwarding);
+        assert_eq!(active_keys[1].1, LifetimeStage::Active);
+        let forward_to_key = active_keys[1].0;
 
         let Some(plan) = P::plan_transaction_with_fee_amortization(
           // This uses 0 for the operating costs as we don't incur any here
           &mut 0,
           fee_rates[&forward.balance().coin],
           vec![forward.clone()],
-          vec![Payment::new(P::forwarding_address(forward_to_key.0), forward.balance(), None)],
+          vec![Payment::new(P::forwarding_address(forward_to_key), forward.balance(), None)],
           None,
         ) else {
           continue;
         };
-        planned_txs.push(plan);
+        planned_txs.push((key, plan));
       }
       for to_return in update.returns() {
+        let key = to_return.output().key();
         let out_instruction =
           Payment::new(to_return.address().clone(), to_return.output().balance(), None);
         let Some(plan) = P::plan_transaction_with_fee_amortization(
@@ -126,12 +134,24 @@ impl<
         ) else {
           continue;
         };
-        planned_txs.push(plan);
+        planned_txs.push((key, plan));
       }
 
-      // TODO: Send the transactions off for signing
-      // TODO: Return the eventualities
-      todo!("TODO")
+      let mut eventualities = HashMap::new();
+      for (key, planned_tx) in planned_txs {
+        // Send the transactions off for signing
+        TransactionsToSign::<T>::send(txn, &key, &planned_tx.signable);
+
+        // Insert the eventualities into the result
+        eventualities
+          .entry(key.to_bytes().as_ref().to_vec())
+          .or_insert(Vec::with_capacity(1))
+          .push(planned_tx.eventuality);
+      }
+
+      // TODO: Fulfill any payments we prior couldn't
+
+      eventualities
     }
   }
 
