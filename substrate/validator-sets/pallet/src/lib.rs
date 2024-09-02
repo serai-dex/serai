@@ -58,6 +58,10 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
   }
 }
 
+pub trait GenesisCompleted {
+  fn completed() -> bool;
+}
+
 #[allow(
   deprecated,
   unreachable_patterns,
@@ -81,6 +85,7 @@ pub mod pallet {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
 
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
+    type GenesisCompleted: GenesisCompleted;
   }
 
   #[pallet::genesis_config]
@@ -449,6 +454,8 @@ pub mod pallet {
     NonExistentValidator,
     /// Deallocation would take the stake below what is required.
     DeallocationWouldRemoveEconomicSecurity,
+    /// Staking only allowed after the genesis liquidity period is ended.
+    OngoingGenesisLiquidityPeriod,
   }
 
   #[pallet::hooks]
@@ -1006,6 +1013,12 @@ pub mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
+
+      // check that genesis ended
+      if !T::GenesisCompleted::completed() {
+        Err(Error::<T>::OngoingGenesisLiquidityPeriod)?;
+      }
+
       Coins::<T>::transfer_internal(
         validator,
         Self::account(),

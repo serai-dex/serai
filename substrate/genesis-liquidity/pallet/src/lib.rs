@@ -18,7 +18,7 @@ pub mod pallet {
 
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
-  use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
+  use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets, GenesisCompleted};
 
   use economic_security_pallet::{Config as EconomicSecurityConfig, Pallet as EconomicSecurity};
 
@@ -456,6 +456,12 @@ pub mod pallet {
         Call::remove_coin_liquidity { .. } => Err(InvalidTransaction::Call)?,
         Call::__Ignore(_, _) => unreachable!(),
       }
+    }
+  }
+
+  impl<T: Config> GenesisCompleted for Pallet<T> {
+    fn completed() -> bool {
+      GenesisCompleteBlock::<T>::get().is_some()
     }
   }
 }
