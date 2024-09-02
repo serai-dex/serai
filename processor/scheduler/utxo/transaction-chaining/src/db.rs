@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use group::GroupEncoding;
 
-use serai_primitives::Coin;
+use serai_primitives::{Coin, Amount};
 
 use serai_db::{Get, DbTxn, create_db};
 
@@ -11,12 +11,23 @@ use scanner::{ScannerFeed, KeyFor, OutputFor};
 
 create_db! {
   TransactionChainingScheduler {
+    OperatingCosts: (coin: Coin) -> Amount,
     SerializedOutputs: (key: &[u8], coin: Coin) -> Vec<u8>,
+    // We should be immediately able to schedule the fulfillment of payments, yet this may not be
+    // possible if we're in the middle of a multisig rotation (as our output set will be split)
+    SerializedQueuedPayments: (key: &[u8]) > Vec<u8>,
   }
 }
 
 pub(crate) struct Db<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> Db<S> {
+  pub(crate) fn operating_costs(getter: &impl Get, coin: Coin) -> Amount {
+    OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
+  }
+  pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: Coin, amount: Amount) {
+    OperatingCosts::set(txn, coin, &amount)
+  }
+
   pub(crate) fn outputs(
     getter: &impl Get,
     key: KeyFor<S>,
@@ -45,5 +56,18 @@ impl<S: ScannerFeed> Db<S> {
   }
   pub(crate) fn del_outputs(txn: &mut impl DbTxn, key: KeyFor<S>, coin: Coin) {
     SerializedOutputs::del(txn, key.to_bytes().as_ref(), coin);
+  }
+
+  pub(crate) fn queued_payments(
+    getter: &impl Get,
+    key: KeyFor<S>,
+  ) -> Option<Vec<Payment<S>>> {
+    todo!("TODO")
+  }
+  pub(crate) fn set_queued_payments(txn: &mut impl DbTxn, key: KeyFor<S>, queued: Vec<Payment<S>>) {
+    todo!("TODO")
+  }
+  pub(crate) fn del_outputs(txn: &mut impl DbTxn, key: KeyFor<S>) {
+    SerializedQueuedPayments::del(txn, key.to_bytes().as_ref());
   }
 }
