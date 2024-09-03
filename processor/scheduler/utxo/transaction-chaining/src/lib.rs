@@ -37,6 +37,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     &mut self,
     txn: &mut impl DbTxn,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
+    fee_rates: &HashMap<Coin, P::FeeRate>,
     key: KeyFor<S>,
   ) -> Vec<EventualityFor<S>> {
     let mut eventualities = vec![];
@@ -64,11 +65,11 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
       // If we have more than the maximum amount of inputs, aggregate until we don't
       {
-        while outputs.len() > MAX_INPUTS {
+        while outputs.len() > P::MAX_INPUTS {
           let Some(planned) = P::plan_transaction_with_fee_amortization(
             &mut operating_costs,
             fee_rates[coin],
-            outputs.drain(.. MAX_INPUTS).collect::<Vec<_>>(),
+            outputs.drain(.. P::MAX_INPUTS).collect::<Vec<_>>(),
             vec![],
             Some(key_for_change),
           ) else {
@@ -156,13 +157,14 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       }
 
       // Create a tree to fulfill all of the payments
+      #[derive(Clone)]
       struct TreeTransaction<S: ScannerFeed> {
         payments: Vec<Payment<AddressFor<S>>>,
         children: Vec<TreeTransaction<S>>,
         value: u64,
       }
       let mut tree_transactions = vec![];
-      for payments in payments.chunks(MAX_OUTPUTS) {
+      for payments in payments.chunks(P::MAX_OUTPUTS) {
         let value = payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>();
         tree_transactions.push(TreeTransaction::<S> {
           payments: payments.to_vec(),
@@ -172,9 +174,21 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       }
       // While we haven't calculated a tree root, or the tree root doesn't support a change output,
       // keep working
-      while (tree_transactions.len() != 1) || (tree_transactions[0].payments.len() == MAX_OUTPUTS) {
+      while (tree_transactions.len() != 1) ||
+        (tree_transactions[0].payments.len() == P::MAX_OUTPUTS)
+      {
         let mut next_tree_transactions = vec![];
-        for children in tree_transactions.chunks(MAX_OUTPUTS) {
+        for children in tree_transactions.chunks(P::MAX_OUTPUTS) {
+          // If this is the last chunk, and it doesn't need to accumulated, continue
+          if (children.len() < P::MAX_OUTPUTS) &&
+            ((next_tree_transactions.len() + children.len()) < P::MAX_OUTPUTS)
+          {
+            for child in children {
+              next_tree_transactions.push(child.clone());
+            }
+            continue;
+          }
+
           let payments = children
             .iter()
             .map(|child| {
@@ -194,15 +208,111 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         }
         tree_transactions = next_tree_transactions;
       }
+
+      // This is recursive, yet only recurses with logarithmic depth
+      fn execute_tree_transaction<
+        S: ScannerFeed,
+        P: TransactionPlanner<S, EffectedReceivedOutputs<S>>,
+      >(
+        txn: &mut impl DbTxn,
+        fee_rate: P::FeeRate,
+        eventualities: &mut Vec<EventualityFor<S>>,
+        key: KeyFor<S>,
+        mut branch_outputs: Vec<OutputFor<S>>,
+        mut children: Vec<TreeTransaction<S>>,
+      ) {
+        assert_eq!(branch_outputs.len(), children.len());
+
+        // Sort the branch outputs by their value
+        branch_outputs.sort_by(|a, b| a.balance().amount.0.cmp(&b.balance().amount.0));
+        // Find the child for each branch output
+        // This is only done within a transaction, not across the layer, so we don't have branches
+        // created in transactions with less outputs (and therefore less fees) jump places with
+        // other branches
+        children.sort_by(|a, b| a.value.cmp(&b.value));
+
+        for (branch_output, mut child) in branch_outputs.into_iter().zip(children) {
+          assert_eq!(branch_output.kind(), OutputType::Branch);
+          Db::<S>::set_already_accumulated_output(txn, branch_output.id());
+
+          // We need to compensate for the value of this output being less than the value of the
+          // payments
+          {
+            let fee_to_amortize = child.value - branch_output.balance().amount.0;
+            let mut amortized = 0;
+            'outer: while (!child.payments.is_empty()) && (amortized < fee_to_amortize) {
+              let adjusted_fee = fee_to_amortize - amortized;
+              let payments_len = u64::try_from(child.payments.len()).unwrap();
+              let per_payment_fee_check = adjusted_fee.div_ceil(payments_len);
+
+              let mut i = 0;
+              while i < child.payments.len() {
+                let amount = child.payments[i].balance().amount.0;
+                if amount <= per_payment_fee_check {
+                  child.payments.swap_remove(i);
+                  child.children.swap_remove(i);
+                  amortized += amount;
+                  continue 'outer;
+                }
+                i += 1;
+              }
+
+              // Since all payments can pay the fee, deduct accordingly
+              for (i, payment) in child.payments.iter_mut().enumerate() {
+                let Balance { coin, amount } = payment.balance();
+                let mut amount = amount.0;
+                amount -= adjusted_fee / payments_len;
+                if i < usize::try_from(adjusted_fee % payments_len).unwrap() {
+                  amount -= 1;
+                }
+
+                *payment = Payment::new(
+                  payment.address().clone(),
+                  Balance { coin, amount: Amount(amount) },
+                  None,
+                );
+              }
+            }
+            if child.payments.is_empty() {
+              continue;
+            }
+          }
+
+          let Some(planned) = P::plan_transaction_with_fee_amortization(
+            // Uses 0 as there's no operating costs to incur/amortize here
+            &mut 0,
+            fee_rate,
+            vec![branch_output],
+            child.payments,
+            None,
+          ) else {
+            // This Branch isn't viable, so drop it (and its children)
+            continue;
+          };
+          TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
+          eventualities.push(planned.eventuality);
+          if !child.children.is_empty() {
+            execute_tree_transaction::<S, P>(
+              txn,
+              fee_rate,
+              eventualities,
+              key,
+              planned.auxilliary.0,
+              child.children,
+            );
+          }
+        }
+      }
+
       assert_eq!(tree_transactions.len(), 1);
-      assert!((tree_transactions.payments.len() + 1) <= MAX_OUTPUTS);
+      assert!((tree_transactions[0].payments.len() + 1) <= P::MAX_OUTPUTS);
 
       // Create the transaction for the root of the tree
       let Some(planned) = P::plan_transaction_with_fee_amortization(
         &mut operating_costs,
         fee_rates[coin],
         outputs,
-        tree_transactions.payments,
+        tree_transactions[0].payments,
         Some(key_for_change),
       ) else {
         Db::<S>::set_operating_costs(txn, *coin, Amount(operating_costs));
@@ -226,42 +336,15 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       let mut branch_outputs = planned.auxilliary.0;
       branch_outputs.retain(|output| output.kind() == OutputType::Branch);
 
-      // This is recursive, yet only recurses with logarithmic depth
-      let execute_tree_transaction = |branch_outputs, children| {
-        assert_eq!(branch_outputs.len(), children.len());
-
-        // Sort the branch outputs by their value
-        branch_outputs.sort_by(|a, b| a.balance().amount.0.cmp(&b.balance().amount.0));
-        // Find the child for each branch output
-        // This is only done within a transaction, not across the layer, so we don't have branches
-        // created in transactions with less outputs (and therefore less fees) jump places with
-        // other branches
-        children.sort_by(|a, b| a.value.cmp(&b.value));
-
-        for (branch_output, child) in branch_outputs.into_iter().zip(children) {
-          assert_eq!(branch_output.kind(), OutputType::Branch);
-          Db::<S>::set_already_accumulated_output(txn, branch_output.id());
-
-          let Some(planned) = P::plan_transaction_with_fee_amortization(
-            // Uses 0 as there's no operating costs to incur/amortize here
-            &mut 0,
-            fee_rates[coin],
-            vec![branch_output],
-            child.payments,
-            None,
-          ) else {
-            // This Branch isn't viable, so drop it (and its children)
-            continue;
-          };
-          TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
-          eventualities.push(planned.eventuality);
-          if !child.children.is_empty() {
-            execute_tree_transaction(planned.auxilliary.0, child.children);
-          }
-        }
-      };
-      if !tree_transaction.children.is_empty() {
-        execute_tree_transaction(branch_outputs, tree_transaction.children);
+      if !tree_transactions[0].children.is_empty() {
+        execute_tree_transaction::<S, P>(
+          txn,
+          fee_rates[coin],
+          &mut eventualities,
+          key,
+          branch_outputs,
+          tree_transactions[0].children,
+        );
       }
     }
 
@@ -306,6 +389,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   fn update(
     &mut self,
     txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>> {
@@ -336,14 +420,14 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       }
     }
 
-    let mut fee_rates: HashMap<Coin, _> = todo!("TODO");
+    let fee_rates = block.fee_rates();
 
     // Fulfill the payments we prior couldn't
     let mut eventualities = HashMap::new();
     for (key, _stage) in active_keys {
       eventualities.insert(
         key.to_bytes().as_ref().to_vec(),
-        self.handle_queued_payments(txn, active_keys, *key),
+        self.handle_queued_payments(txn, active_keys, fee_rates, *key),
       );
     }
 
@@ -406,6 +490,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   fn fulfill(
     &mut self,
     txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     mut payments: Vec<Payment<AddressFor<S>>>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>> {
@@ -429,7 +514,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     // Handle the queued payments
     HashMap::from([(
       fulfillment_key.to_bytes().as_ref().to_vec(),
-      self.handle_queued_payments(txn, active_keys, fulfillment_key),
+      self.handle_queued_payments(txn, active_keys, block.fee_rates(), fulfillment_key),
     )])
   }
 }
