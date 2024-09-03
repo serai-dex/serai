@@ -13,6 +13,7 @@ create_db! {
   TransactionChainingScheduler {
     OperatingCosts: (coin: Coin) -> Amount,
     SerializedOutputs: (key: &[u8], coin: Coin) -> Vec<u8>,
+    AlreadyAccumulatedOutput: (id: &[u8]) -> (),
     // We should be immediately able to schedule the fulfillment of payments, yet this may not be
     // possible if we're in the middle of a multisig rotation (as our output set will be split)
     SerializedQueuedPayments: (key: &[u8], coin: Coin) -> Vec<u8>,
@@ -56,6 +57,21 @@ impl<S: ScannerFeed> Db<S> {
   }
   pub(crate) fn del_outputs(txn: &mut impl DbTxn, key: KeyFor<S>, coin: Coin) {
     SerializedOutputs::del(txn, key.to_bytes().as_ref(), coin);
+  }
+
+  pub(crate) fn set_already_accumulated_output(
+    txn: &mut impl DbTxn,
+    output: <OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+  ) {
+    AlreadyAccumulatedOutput::set(txn, output.as_ref(), &());
+  }
+  pub(crate) fn take_if_already_accumulated_output(
+    txn: &mut impl DbTxn,
+    output: <OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+  ) -> bool {
+    let res = AlreadyAccumulatedOutput::get(txn, output.as_ref()).is_some();
+    AlreadyAccumulatedOutput::del(txn, output.as_ref());
+    res
   }
 
   pub(crate) fn queued_payments(
