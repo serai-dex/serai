@@ -79,7 +79,8 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   ///
   /// `operating_costs` is accrued to if Serai faces the burden of a fee or drops inputs not worth
   /// accumulating. `operating_costs` will be amortized along with this transaction's fee as
-  /// possible. Please see `spec/processor/UTXO Management.md` for more information.
+  /// possible, if there is a change output. Please see `spec/processor/UTXO Management.md` for
+  /// more information.
   ///
   /// Returns `None` if the fee exceeded the inputs, or `Some` otherwise.
   fn plan_transaction_with_fee_amortization(
@@ -89,6 +90,12 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     mut payments: Vec<Payment<AddressFor<S>>>,
     mut change: Option<KeyFor<S>>,
   ) -> Option<PlannedTransaction<S, Self::SignableTransaction, A>> {
+    // If there's no change output, we can't recoup any operating costs we would amortize
+    // We also don't have any losses if the inputs are written off/the change output is reduced
+    let mut operating_costs_if_no_change = 0;
+    let operating_costs_in_effect =
+      if change.is_none() { &mut operating_costs_if_no_change } else { operating_costs };
+
     // Sanity checks
     {
       assert!(!inputs.is_empty());
@@ -101,7 +108,8 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
         assert_eq!(coin, payment.balance().coin);
       }
       assert!(
-        (inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() + *operating_costs) >=
+        (inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() +
+          *operating_costs_in_effect) >=
           payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>(),
         "attempted to fulfill payments without a sufficient input set"
       );
@@ -119,7 +127,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
       while !payments.is_empty() {
         // We need to pay the fee, and any accrued operating costs, minus what we've already
         // amortized
-        let adjusted_fee = (*operating_costs + fee).saturating_sub(amortized);
+        let adjusted_fee = (*operating_costs_in_effect + fee).saturating_sub(amortized);
 
         /*
           Ideally, we wouldn't use a ceil div yet would be accurate about it. Any remainder could
@@ -154,16 +162,16 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
         // dust
         if inputs < (fee + S::dust(coin).0) {
           // Write off these inputs
-          *operating_costs += inputs;
+          *operating_costs_in_effect += inputs;
           // Yet also claw back the payments we dropped, as we only lost the change
           // The dropped payments will be worth less than the inputs + operating_costs we started
           // with, so this shouldn't use `saturating_sub`
-          *operating_costs -= amortized;
+          *operating_costs_in_effect -= amortized;
           None?;
         }
       } else {
         // Since we have payments which can pay the fee we ended up with, amortize it
-        let adjusted_fee = (*operating_costs + fee).saturating_sub(amortized);
+        let adjusted_fee = (*operating_costs_in_effect + fee).saturating_sub(amortized);
         let per_payment_base_fee = adjusted_fee / u64::try_from(payments.len()).unwrap();
         let payments_paying_one_atomic_unit_more =
           usize::try_from(adjusted_fee % u64::try_from(payments.len()).unwrap()).unwrap();
@@ -174,7 +182,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
           payment.balance().amount.0 -= per_payment_fee;
           amortized += per_payment_fee;
         }
-        assert!(amortized >= (*operating_costs + fee));
+        assert!(amortized >= (*operating_costs_in_effect + fee));
 
         // If the change is less than the dust, drop it
         let would_be_change = inputs.iter().map(|input| input.balance().amount.0).sum::<u64>() -
@@ -182,12 +190,12 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
           fee;
         if would_be_change < S::dust(coin).0 {
           change = None;
-          *operating_costs += would_be_change;
+          *operating_costs_in_effect += would_be_change;
         }
       }
 
       // Update the amount of operating costs
-      *operating_costs = (*operating_costs + fee).saturating_sub(amortized);
+      *operating_costs_in_effect = (*operating_costs_in_effect + fee).saturating_sub(amortized);
     }
 
     // Because we amortized, or accrued as operating costs, the fee, make the transaction
