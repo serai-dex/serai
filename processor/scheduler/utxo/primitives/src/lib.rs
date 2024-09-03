@@ -35,6 +35,11 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// The type representing a signable transaction.
   type SignableTransaction: SignableTransaction;
 
+  /// The maximum amount of inputs allowed in a transaction.
+  const MAX_INPUTS: usize;
+  /// The maximum amount of outputs allowed in a transaction, including the change output.
+  const MAX_OUTPUTS: usize;
+
   /// Obtain the fee rate to pay.
   ///
   /// This must be constant to the finalized block referenced by this block number and the coin.

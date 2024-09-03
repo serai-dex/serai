@@ -277,6 +277,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   fn update(
     &mut self,
     txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
@@ -316,6 +317,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   fn fulfill(
     &mut self,
     txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
