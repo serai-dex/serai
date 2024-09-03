@@ -19,8 +19,11 @@ pub trait Eventuality: Sized + Send + Sync {
   /// identified, the full check is performed.
   fn lookup(&self) -> Vec<u8>;
 
-  /// The output this plan forwarded.
-  fn forwarded_output(&self) -> Option<Self::OutputId>;
+  /// The output the resolution of this Eventuality was supposed to spend.
+  ///
+  /// If the resolution of this Eventuality has multiple inputs, there is no singular spent output
+  /// so this MUST return None.
+  fn singular_spent_output(&self) -> Option<Self::OutputId>;
 
   /// Read an Eventuality.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;

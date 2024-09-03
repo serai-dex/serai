@@ -352,19 +352,24 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           non_external_outputs.iter().filter(|output| output.kind() == OutputType::Forwarded)
         {
           let Some(eventuality) = completed_eventualities.get(&output.transaction_id()) else {
-            // Output sent to the forwarding address yet not actually forwarded
+            // Output sent to the forwarding address yet not one we made
             continue;
           };
-          let Some(forwarded) = eventuality.forwarded_output() else {
-            // This was a TX made by us, yet someone burned to the forwarding address
+          let Some(forwarded) = eventuality.singular_spent_output() else {
+            // This was a TX made by us, yet someone burned to the forwarding address as it doesn't
+            // follow the structure of forwarding transactions
             continue;
           };
 
-          let (return_address, in_instruction) =
+          let Some((return_address, in_instruction)) =
             ScannerGlobalDb::<S>::return_address_and_in_instruction_for_forwarded_output(
               &txn, &forwarded,
             )
-            .expect("forwarded an output yet didn't save its InInstruction to the DB");
+          else {
+            // This was a TX made by us, coincidentally with the necessary structure, yet wasn't
+            // forwarding an output
+            continue;
+          };
           queue_output_until_block::<S>(
             &mut txn,
             b + S::WINDOW_LENGTH,
