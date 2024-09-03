@@ -6,8 +6,8 @@ use serai_primitives::{Coin, Amount};
 
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::ReceivedOutput;
-use scanner::{ScannerFeed, KeyFor, OutputFor};
+use primitives::{Payment, ReceivedOutput};
+use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
 create_db! {
   TransactionChainingScheduler {
@@ -15,7 +15,7 @@ create_db! {
     SerializedOutputs: (key: &[u8], coin: Coin) -> Vec<u8>,
     // We should be immediately able to schedule the fulfillment of payments, yet this may not be
     // possible if we're in the middle of a multisig rotation (as our output set will be split)
-    SerializedQueuedPayments: (key: &[u8]) > Vec<u8>,
+    SerializedQueuedPayments: (key: &[u8], coin: Coin) -> Vec<u8>,
   }
 }
 
@@ -61,13 +61,19 @@ impl<S: ScannerFeed> Db<S> {
   pub(crate) fn queued_payments(
     getter: &impl Get,
     key: KeyFor<S>,
-  ) -> Option<Vec<Payment<S>>> {
+    coin: Coin,
+  ) -> Option<Vec<Payment<AddressFor<S>>>> {
     todo!("TODO")
   }
-  pub(crate) fn set_queued_payments(txn: &mut impl DbTxn, key: KeyFor<S>, queued: Vec<Payment<S>>) {
+  pub(crate) fn set_queued_payments(
+    txn: &mut impl DbTxn,
+    key: KeyFor<S>,
+    coin: Coin,
+    queued: &Vec<Payment<AddressFor<S>>>,
+  ) {
     todo!("TODO")
   }
-  pub(crate) fn del_outputs(txn: &mut impl DbTxn, key: KeyFor<S>) {
-    SerializedQueuedPayments::del(txn, key.to_bytes().as_ref());
+  pub(crate) fn del_queued_payments(txn: &mut impl DbTxn, key: KeyFor<S>, coin: Coin) {
+    SerializedQueuedPayments::del(txn, key.to_bytes().as_ref(), coin);
   }
 }

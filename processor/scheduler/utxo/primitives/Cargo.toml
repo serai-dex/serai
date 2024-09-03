@@ -23,3 +23,4 @@ serai-primitives = { path = "../../../../substrate/primitives", default-features
 
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
+scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
