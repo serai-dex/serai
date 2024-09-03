@@ -361,7 +361,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             continue;
           };
 
-          let Some((return_address, in_instruction)) =
+          let Some((return_address, mut in_instruction)) =
             ScannerGlobalDb::<S>::return_address_and_in_instruction_for_forwarded_output(
               &txn, &forwarded,
             )
@@ -370,6 +370,14 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             // forwarding an output
             continue;
           };
+
+          // We use the original amount, minus twice the cost to aggregate
+          // If the fees we paid to forward this now (less than the cost to aggregate now, yet not
+          // necessarily the cost to aggregate historically) caused this amount to be less, reduce
+          // it accordingly
+          in_instruction.balance.amount.0 =
+            in_instruction.balance.amount.0.min(output.balance().amount.0);
+
           queue_output_until_block::<S>(
             &mut txn,
             b + S::WINDOW_LENGTH,
