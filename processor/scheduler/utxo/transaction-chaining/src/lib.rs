@@ -60,7 +60,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         // that'd risk underflow
         let available =
           operating_costs + outputs.iter().map(|output| output.balance().amount.0).sum::<u64>();
-        assert!(available >= payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>());
+        assert!(
+          available >= payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>()
+        );
       }
 
       let amount_of_payments_that_can_be_handled =
@@ -179,6 +181,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         // Only handle Change so if someone burns to an External address, we don't use it here
         // when the scanner will tell us to return it (without accumulating it)
         effected_received_outputs.retain(|output| output.kind() == OutputType::Change);
+        for output in &effected_received_outputs {
+          Db::<S>::set_already_accumulated_output(txn, output.id());
+        }
         outputs.append(&mut effected_received_outputs);
       }
 
@@ -236,9 +241,13 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       let mut outputs_by_coin = HashMap::with_capacity(1);
       for output in update.outputs().iter().filter(|output| output.key() == *key) {
         match output.kind() {
-          OutputType::External | OutputType::Forwarded => {},
-          // TODO: Only accumulate these if we haven't already, but do accumulate if not
-          OutputType::Branch | OutputType::Change => todo!("TODO"),
+          OutputType::External | OutputType::Forwarded => {}
+          // Only accumulate these if we haven't already
+          OutputType::Branch | OutputType::Change => {
+            if Db::<S>::take_if_already_accumulated_output(txn, output.id()) {
+              continue;
+            }
+          }
         }
         let coin = output.balance().coin;
         if let std::collections::hash_map::Entry::Vacant(e) = outputs_by_coin.entry(coin) {
