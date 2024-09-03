@@ -216,14 +216,24 @@ pub struct SchedulerUpdate<S: ScannerFeed> {
 
 impl<S: ScannerFeed> SchedulerUpdate<S> {
   /// The outputs to accumulate.
+  ///
+  /// These MUST be accumulated.
   pub fn outputs(&self) -> &[OutputFor<S>] {
     &self.outputs
   }
+
   /// The outputs to forward to the latest multisig.
+  ///
+  /// These MUST be forwarded in a 1-input 1-output transaction or dropped (if the fees are too
+  /// high to make the forwarding transaction).
   pub fn forwards(&self) -> &[OutputFor<S>] {
     &self.forwards
   }
+
   /// The outputs to return.
+  ///
+  /// These SHOULD be returned as specified (potentially in batch). They MAY be dropped if the fees
+  /// are too high to make the return transaction.
   pub fn returns(&self) -> &[Return<S>] {
     &self.returns
   }
