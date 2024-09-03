@@ -30,6 +30,6 @@ serai-primitives = { path = "../../../../substrate/primitives", default-features
 serai-db = { path = "../../../../common/db" }
 
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
+scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
 utxo-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
-scanner = { package = "serai-processor-scanner", path = "../../../scanner" }

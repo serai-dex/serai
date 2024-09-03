@@ -7,11 +7,22 @@ use core::fmt::Debug;
 use serai_primitives::{Coin, Amount};
 
 use primitives::{ReceivedOutput, Payment};
-use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
+use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor};
+use scheduler_primitives::*;
+
+/// A planned transaction.
+pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
+  /// The signable transaction.
+  pub signable: ST,
+  /// The Eventuality to watch for.
+  pub eventuality: EventualityFor<S>,
+  /// The auxilliary data for this transaction.
+  pub auxilliary: A,
+}
 
 /// An object able to plan a transaction.
 #[async_trait::async_trait]
-pub trait TransactionPlanner<S: ScannerFeed>: 'static + Send + Sync {
+pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// An error encountered when determining the fee rate.
   ///
   /// This MUST be an ephemeral error. Retrying fetching data from the blockchain MUST eventually
@@ -21,8 +32,8 @@ pub trait TransactionPlanner<S: ScannerFeed>: 'static + Send + Sync {
   /// The type representing a fee rate to use for transactions.
   type FeeRate: Clone + Copy;
 
-  /// The type representing a planned transaction.
-  type PlannedTransaction;
+  /// The type representing a signable transaction.
+  type SignableTransaction: SignableTransaction;
 
   /// Obtain the fee rate to pay.
   ///
@@ -62,7 +73,7 @@ pub trait TransactionPlanner<S: ScannerFeed>: 'static + Send + Sync {
     inputs: Vec<OutputFor<S>>,
     payments: Vec<Payment<AddressFor<S>>>,
     change: Option<KeyFor<S>>,
-  ) -> Self::PlannedTransaction;
+  ) -> PlannedTransaction<S, Self::SignableTransaction, A>;
 
   /// Obtain a PlannedTransaction via amortizing the fee over the payments.
   ///
@@ -77,7 +88,7 @@ pub trait TransactionPlanner<S: ScannerFeed>: 'static + Send + Sync {
     inputs: Vec<OutputFor<S>>,
     mut payments: Vec<Payment<AddressFor<S>>>,
     mut change: Option<KeyFor<S>>,
-  ) -> Option<Self::PlannedTransaction> {
+  ) -> Option<PlannedTransaction<S, Self::SignableTransaction, A>> {
     // Sanity checks
     {
       assert!(!inputs.is_empty());

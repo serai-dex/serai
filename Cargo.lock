@@ -8741,6 +8741,7 @@ dependencies = [
  "serai-primitives",
  "serai-processor-primitives",
  "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
 ]
 
 [[package]]
