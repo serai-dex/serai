@@ -981,7 +981,7 @@ pub mod pallet {
           amounts.push(amount_out);
 
           // now that we got swap fee from the user, burn half of it.
-          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin2)?;
+          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin1)?;
         }
       }
 
@@ -990,7 +990,7 @@ pub mod pallet {
 
     fn burn_half_of_swap_fee(pool: PoolId, coin: Coin) -> Result<(), DispatchError> {
       let pool_account = Self::get_pool_account(pool);
-      let origin = RawOrigin::Signed(pool_account.into());
+      let origin = RawOrigin::Signed(pool_account);
 
       let balance = Coins::<T>::balance(pool_account, coin).0;
       let burn_percent =
