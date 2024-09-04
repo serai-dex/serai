@@ -6,7 +6,7 @@ use blake2::{
 
 use scale::Encode;
 
-use sp_core::Pair;
+use sp_core::{sr25519::Pair, Pair as PairTrait};
 
 use serai_client::{
   primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
@@ -21,7 +21,7 @@ use serai_client::{
 use crate::common::{tx::publish_tx, validator_sets::set_keys};
 
 #[allow(dead_code)]
-pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
+pub async fn provide_batch(serai: &Serai, pairs: &[Pair], batch: Batch) -> [u8; 32] {
   let serai_latest = serai.as_of_latest_finalized_block().await.unwrap();
   let session = serai_latest.validator_sets().session(batch.network).await.unwrap().unwrap();
   let set = ValidatorSet { session, network: batch.network };
@@ -31,7 +31,7 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
     keys
   } else {
     let keys = KeyPair(pair.public(), vec![].try_into().unwrap());
-    set_keys(serai, set, keys.clone(), &[insecure_pair_from_name("Alice")]).await;
+    set_keys(serai, set, keys.clone(), pairs).await;
     keys
   };
   assert_eq!(keys.0, pair.public());
@@ -83,5 +83,5 @@ pub async fn mint_coin(
     }],
   };
 
-  provide_batch(serai, batch).await
+  provide_batch(serai, &[insecure_pair_from_name("Alice")], batch).await
 }

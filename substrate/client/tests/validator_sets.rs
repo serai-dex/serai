@@ -1,13 +1,11 @@
 use rand_core::{RngCore, OsRng};
 
-use sp_core::{
-  sr25519::{Public, Pair},
-  Pair as PairTrait,
-};
+use sp_core::{sr25519::Public, Pair as PairTrait};
 
 use serai_client::{
   primitives::{
-    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION, TARGET_BLOCK_TIME,
+    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION,
+    TARGET_BLOCK_TIME, COINS, Coin,
   },
   validator_sets::{
     primitives::{Session, ValidatorSet, KeyPair},
@@ -21,10 +19,7 @@ use serai_client::{
 };
 
 mod common;
-use common::{
-  tx::publish_tx,
-  validator_sets::{allocate_stake, deallocate_stake, set_keys},
-};
+use common::{tx::publish_tx, validator_sets::*, genesis_liquidity::set_up_genesis};
 
 fn get_random_key_pair() -> KeyPair {
   let mut ristretto_key = [0; 32];
@@ -32,28 +27,6 @@ fn get_random_key_pair() -> KeyPair {
   let mut external_key = vec![0; 33];
   OsRng.fill_bytes(&mut external_key);
   KeyPair(Public(ristretto_key), external_key.try_into().unwrap())
-}
-
-async fn get_ordered_keys(serai: &Serai, network: NetworkId, accounts: &[Pair]) -> Vec<Pair> {
-  // retrieve the current session validators so that we know the order of the keys
-  // that is necessary for the correct musig signature.
-  let validators = serai
-    .as_of_latest_finalized_block()
-    .await
-    .unwrap()
-    .validator_sets()
-    .active_network_validators(network)
-    .await
-    .unwrap();
-
-  // collect the pairs of the validators
-  let mut pairs = vec![];
-  for v in validators {
-    let p = accounts.iter().find(|pair| pair.public() == v).unwrap().clone();
-    pairs.push(p);
-  }
-
-  pairs
 }
 
 serai_test!(
@@ -213,13 +186,19 @@ async fn validator_set_rotation() {
         (NetworkId::Ethereum, default_participants),
       ]);
 
+      // set up the genesis
+      let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
+      let values =
+        HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
+      let (_, mut batch_ids) = set_up_genesis(&serai, &coins, &accounts, &values).await;
+
       // test the set rotation
       for (i, network) in NETWORKS.into_iter().enumerate() {
         let participants = participants.get_mut(&network).unwrap();
 
         // we start the chain with 4 default participants that has a single key share each
         participants.sort();
-        verify_session_and_active_validators(&serai, network, 0, participants).await;
+        verify_session_and_active_validators(&serai, network, 1, participants).await;
 
         // add 1 participant
         let last_participant = accounts[4].clone();
@@ -236,33 +215,6 @@ async fn validator_set_rotation() {
         let activation_session = get_session_at_which_changes_activate(&serai, network, hash).await;
 
         // set the keys if it is an external set
-        if network != NetworkId::Serai {
-          let set = ValidatorSet { session: Session(0), network };
-          let key_pair = get_random_key_pair();
-          let pairs = get_ordered_keys(&serai, network, &accounts).await;
-          set_keys(&serai, set, key_pair, &pairs).await;
-        }
-
-        // verify
-        participants.sort();
-        verify_session_and_active_validators(&serai, network, activation_session, participants)
-          .await;
-
-        // remove 1 participant
-        let participant_to_remove = accounts[1].clone();
-        let hash = deallocate_stake(
-          &serai,
-          network,
-          key_shares[&network],
-          &participant_to_remove,
-          i.try_into().unwrap(),
-        )
-        .await;
-        participants.swap_remove(
-          participants.iter().position(|k| *k == participant_to_remove.public()).unwrap(),
-        );
-        let activation_session = get_session_at_which_changes_activate(&serai, network, hash).await;
-
         if network != NetworkId::Serai {
           // set the keys if it is an external set
           let set = ValidatorSet { session: Session(1), network };
@@ -283,7 +235,87 @@ async fn validator_set_rotation() {
           // provide a batch to complete the handover and retire the previous set
           let mut block_hash = BlockHash([0; 32]);
           OsRng.fill_bytes(&mut block_hash.0);
-          let batch = Batch { network, id: 0, block: block_hash, instructions: vec![] };
+
+          // set up batch id
+          batch_ids
+            .entry(network)
+            .and_modify(|v| {
+              *v += 1;
+            })
+            .or_insert(0);
+
+          let batch =
+            Batch { network, id: batch_ids[&network], block: block_hash, instructions: vec![] };
+          publish_tx(
+            &serai,
+            &SeraiInInstructions::execute_batch(SignedBatch {
+              batch: batch.clone(),
+              signature: substrate_pair.sign(&batch_message(&batch)),
+            }),
+          )
+          .await;
+        }
+
+        // verify
+        participants.sort();
+        verify_session_and_active_validators(&serai, network, activation_session, participants)
+          .await;
+
+        // remove 1 participant
+        let participant_to_remove = accounts[1].clone();
+        let allocation = serai
+          .as_of_latest_finalized_block()
+          .await
+          .unwrap()
+          .validator_sets()
+          .allocation(network, participant_to_remove.public())
+          .await
+          .unwrap()
+          .unwrap();
+        let hash = deallocate_stake(
+          &serai,
+          network,
+          allocation,
+          &participant_to_remove,
+          i.try_into().unwrap(),
+        )
+        .await;
+        participants.swap_remove(
+          participants.iter().position(|k| *k == participant_to_remove.public()).unwrap(),
+        );
+        let activation_session = get_session_at_which_changes_activate(&serai, network, hash).await;
+
+        if network != NetworkId::Serai {
+          // set the keys if it is an external set
+          let set = ValidatorSet { session: Session(2), network };
+
+          // we need the whole substrate key pair to sign the batch
+          let (substrate_pair, key_pair) = {
+            let pair = insecure_pair_from_name("session-2-key-pair");
+            let public = pair.public();
+
+            let mut external_key = vec![0; 33];
+            OsRng.fill_bytes(&mut external_key);
+
+            (pair, KeyPair(public, external_key.try_into().unwrap()))
+          };
+          let pairs = get_ordered_keys(&serai, network, &accounts).await;
+          set_keys(&serai, set, key_pair, &pairs).await;
+
+          // provide a batch to complete the handover and retire the previous set
+          let mut block_hash = BlockHash([0; 32]);
+          OsRng.fill_bytes(&mut block_hash.0);
+
+          // set up batch id
+          batch_ids
+            .entry(network)
+            .and_modify(|v| {
+              *v += 1;
+            })
+            .or_insert(0);
+
+          let batch =
+            Batch { network, id: batch_ids[&network], block: block_hash, instructions: vec![] };
           publish_tx(
             &serai,
             &SeraiInInstructions::execute_batch(SignedBatch {
@@ -312,7 +344,7 @@ async fn validator_set_rotation() {
           )
           .await
           .unwrap();
-        assert_eq!(pending, Some(key_shares[&network]));
+        assert_eq!(pending, Some(allocation));
       }
     })
     .await;

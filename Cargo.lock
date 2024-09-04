@@ -8176,6 +8176,7 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-babe",
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",

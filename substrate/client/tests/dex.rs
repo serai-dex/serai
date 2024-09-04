@@ -236,7 +236,7 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(&serai, batch).await;
+    let block = provide_batch(&serai, &[insecure_pair_from_name("Alice")], batch).await;
     let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::LiquidityAdded { .. }));
     assert_eq!(
@@ -299,6 +299,8 @@ serai_test!(
     let mut rand_bytes = vec![0; 32];
     OsRng.fill_bytes(&mut rand_bytes);
 
+    let pairs = [insecure_pair_from_name("Alice")];
+
     // XMR -> ETH
     {
       // make an out address
@@ -320,7 +322,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(&serai, batch).await;
+      let block = provide_batch(&serai, &pairs, batch).await;
       coin1_batch_id += 1;
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
@@ -360,7 +362,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(&serai, batch).await;
+      let block = provide_batch(&serai, &pairs, batch).await;
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
@@ -398,7 +400,7 @@ serai_test!(
         }],
       };
 
-      let block = provide_batch(&serai, batch).await;
+      let block = provide_batch(&serai, &pairs, batch).await;
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 

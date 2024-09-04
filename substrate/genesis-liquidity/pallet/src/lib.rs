@@ -19,6 +19,7 @@ pub mod pallet {
   use dex_pallet::{Pallet as Dex, Config as DexConfig};
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets, GenesisCompleted};
+  use pallet_babe::{Config as BabeConfig, Pallet as Babe};
 
   use economic_security_pallet::{Config as EconomicSecurityConfig, Pallet as EconomicSecurity};
 
@@ -35,6 +36,7 @@ pub mod pallet {
   pub trait Config:
     frame_system::Config
     + VsConfig
+    + BabeConfig
     + DexConfig
     + EconomicSecurityConfig
     + CoinsConfig
@@ -425,11 +427,8 @@ pub mod pallet {
           };
 
           let set = ValidatorSet { network, session };
-          let signers = ValidatorSets::<T>::participants_for_latest_decided_set(network)
-            .expect("no participant in the current set")
-            .into_iter()
-            .map(|(p, _)| p)
-            .collect::<Vec<_>>();
+          let signers =
+            Babe::<T>::authorities().into_iter().map(|(p, _)| p.into_inner()).collect::<Vec<_>>();
 
           // check this didn't get called before
           if Self::oraclization_is_done() {

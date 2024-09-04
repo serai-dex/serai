@@ -7,8 +7,8 @@ use serai_abi::{
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
   in_instructions::primitives::Batch,
   primitives::{
-    BlockHash, Coin, COINS, FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD, NETWORKS,
-    TARGET_BLOCK_TIME,
+    insecure_pair_from_name, BlockHash, Coin, COINS, FAST_EPOCH_DURATION,
+    FAST_EPOCH_INITIAL_PERIOD, NETWORKS, TARGET_BLOCK_TIME,
   },
   validator_sets::primitives::Session,
 };
@@ -42,7 +42,12 @@ async fn send_batches(serai: &Serai, ids: &mut HashMap<NetworkId, u32>) {
       let mut block = BlockHash([0; 32]);
       OsRng.fill_bytes(&mut block.0);
 
-      provide_batch(serai, Batch { network, id: ids[&network], block, instructions: vec![] }).await;
+      provide_batch(
+        serai,
+        &[insecure_pair_from_name("Alice")],
+        Batch { network, id: ids[&network], block, instructions: vec![] },
+      )
+      .await;
     }
   }
 }
@@ -51,7 +56,8 @@ async fn test_emissions(serai: Serai) {
   // set up the genesis
   let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
   let values = HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
-  let (_, mut batch_ids) = set_up_genesis(&serai, &coins, &values).await;
+  let (_, mut batch_ids) =
+    set_up_genesis(&serai, &coins, &[insecure_pair_from_name("Alice")], &values).await;
 
   // wait until genesis is complete
   let mut genesis_complete_block = None;

@@ -52,7 +52,7 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(&serai, batch.clone()).await;
+    let block = provide_batch(&serai, &[insecure_pair_from_name("Alice")], batch.clone()).await;
 
     let instruction = {
     let serai = serai.as_of(block);

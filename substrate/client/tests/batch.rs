@@ -7,6 +7,7 @@ use blake2::{
 
 use scale::Encode;
 
+use serai_abi::primitives::insecure_pair_from_name;
 use serai_client::{
   primitives::{Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress},
   in_instructions::{
@@ -45,7 +46,7 @@ serai_test!(
       }],
     };
 
-    let block = provide_batch(&serai, batch.clone()).await;
+    let block = provide_batch(&serai, &[insecure_pair_from_name("Alice")], batch.clone()).await;
 
     let serai = serai.as_of(block);
     {

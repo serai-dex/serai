@@ -1,31 +1,29 @@
 use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
-use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
-use frost::dkg::musig::musig;
-use schnorrkel::Schnorrkel;
-
-use sp_core::{sr25519::Signature, Pair as PairTrait};
+use sp_core::sr25519::Pair;
 
 use serai_abi::{
   genesis_liquidity::primitives::{oraclize_values_message, Values},
-  validator_sets::primitives::{musig_context, Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
-  primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, insecure_pair_from_name,
-  },
+  primitives::{Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress},
 };
 
 use serai_client::{Serai, SeraiGenesisLiquidity};
 
-use crate::common::{in_instructions::provide_batch, tx::publish_tx};
+use crate::common::{
+  in_instructions::provide_batch,
+  tx::{get_musig_of_pairs, publish_tx},
+  validator_sets::get_ordered_keys,
+};
 
 #[allow(dead_code)]
 pub async fn set_up_genesis(
   serai: &Serai,
   coins: &[Coin],
+  pairs: &[Pair],
   values: &HashMap<Coin, u64>,
 ) -> (HashMap<Coin, Vec<(SeraiAddress, Amount)>>, HashMap<NetworkId, u32>) {
   // make accounts with amounts
@@ -67,7 +65,7 @@ pub async fn set_up_genesis(
 
     let batch =
       Batch { network: coin.network(), id: batch_ids[&coin.network()], block, instructions };
-    provide_batch(serai, batch).await;
+    provide_batch(serai, &get_ordered_keys(serai, coin.network(), pairs).await, batch).await;
   }
 
   // set values relative to each other. We can do that without checking for genesis period blocks
@@ -75,41 +73,19 @@ pub async fn set_up_genesis(
   // TODO: Random values here
   let values =
     Values { monero: values[&Coin::Monero], ether: values[&Coin::Ether], dai: values[&Coin::Dai] };
-  set_values(serai, &values).await;
+  set_values(serai, &get_ordered_keys(serai, NetworkId::Serai, pairs).await, &values).await;
 
   (accounts, batch_ids)
 }
 
 #[allow(dead_code)]
-async fn set_values(serai: &Serai, values: &Values) {
-  // prepare a Musig tx to oraclize the relative values
-  let pair = insecure_pair_from_name("Alice");
-  let public = pair.public();
+pub async fn set_values(serai: &Serai, pairs: &[Pair], values: &Values) {
   // we publish the tx in set 1
   let set = ValidatorSet { session: Session(1), network: NetworkId::Serai };
 
-  let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
-  let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
-    &mut pair.as_ref().secret.to_bytes()[.. 32].as_ref(),
-  )
-  .unwrap();
-
-  assert_eq!(Ristretto::generator() * secret_key, public_key);
-  let threshold_keys =
-    musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &[public_key]).unwrap();
-
-  let sig = frost::tests::sign_without_caching(
-    &mut OsRng,
-    frost::tests::algorithm_machines(
-      &mut OsRng,
-      &Schnorrkel::new(b"substrate"),
-      &HashMap::from([(threshold_keys.params().i(), threshold_keys.into())]),
-    ),
-    &oraclize_values_message(&set, values),
-  );
+  // prepare a Musig tx to oraclize the relative values
+  let sig = get_musig_of_pairs(pairs, set, &oraclize_values_message(&set, values));
 
   // oraclize values
-  let _ =
-    publish_tx(serai, &SeraiGenesisLiquidity::oraclize_values(*values, Signature(sig.to_bytes())))
-      .await;
+  let _ = publish_tx(serai, &SeraiGenesisLiquidity::oraclize_values(*values, sig)).await;
 }

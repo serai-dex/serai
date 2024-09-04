@@ -2,7 +2,7 @@ use std::{time::Duration, collections::HashMap};
 
 use serai_client::Serai;
 
-use serai_abi::primitives::{Coin, COINS, Amount, GENESIS_SRI};
+use serai_abi::primitives::{insecure_pair_from_name, Amount, Coin, COINS, GENESIS_SRI};
 
 use serai_client::genesis_liquidity::primitives::{
   GENESIS_LIQUIDITY_ACCOUNT, INITIAL_GENESIS_LP_SHARES,
@@ -21,7 +21,8 @@ pub async fn test_genesis_liquidity(serai: Serai) {
   // set up the genesis
   let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
   let values = HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
-  let (accounts, _) = set_up_genesis(&serai, &coins, &values).await;
+  let (accounts, _) =
+    set_up_genesis(&serai, &coins, &[insecure_pair_from_name("Alice")], &values).await;
 
   // wait until genesis is complete
   while serai
