@@ -8761,6 +8761,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-view-keys"
+version = "0.1.0"
+dependencies = [
+ "ciphersuite",
+]
+
+[[package]]
 name = "serai-reproducible-runtime-tests"
 version = "0.1.0"
 dependencies = [
