@@ -102,10 +102,6 @@ pub mod sign {
     Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
     // Re-attempt a signing protocol.
     Reattempt { id: SignId },
-    /* TODO
-    // Completed a signing protocol already.
-    Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
-    */
   }
 
   impl CoordinatorMessage {
@@ -118,7 +114,6 @@ pub mod sign {
         CoordinatorMessage::Preprocesses { id, .. } |
         CoordinatorMessage::Shares { id, .. } |
         CoordinatorMessage::Reattempt { id, .. } => id.session,
-        // TODO CoordinatorMessage::Completed { session, .. } => *session,
       }
     }
   }
@@ -131,8 +126,6 @@ pub mod sign {
     Preprocesses { id: SignId, preprocesses: Vec<Vec<u8>> },
     // Signed shares for the specified signing protocol.
     Shares { id: SignId, shares: Vec<Vec<u8>> },
-    // Completed a signing protocol already.
-    // TODO Completed { session: Session, id: [u8; 32], tx: Vec<u8> },
   }
 }
 
@@ -330,11 +323,6 @@ impl CoordinatorMessage {
           sign::CoordinatorMessage::Preprocesses { id, .. } => (0, id),
           sign::CoordinatorMessage::Shares { id, .. } => (1, id),
           sign::CoordinatorMessage::Reattempt { id, .. } => (2, id),
-          // The coordinator should report all reported completions to the processor
-          // Accordingly, the intent is a combination of plan ID and actual TX
-          // While transaction alone may suffice, that doesn't cover cross-chain TX ID conflicts,
-          // which are possible
-          // TODO sign::CoordinatorMessage::Completed { id, tx, .. } => (3, (id, tx).encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
@@ -406,8 +394,6 @@ impl ProcessorMessage {
           // Unique since SignId
           sign::ProcessorMessage::Preprocesses { id, .. } => (1, id.encode()),
           sign::ProcessorMessage::Shares { id, .. } => (2, id.encode()),
-          // Unique since a processor will only sign a TX once
-          // TODO sign::ProcessorMessage::Completed { id, .. } => (3, id.to_vec()),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_SIGN_UID, sub];
