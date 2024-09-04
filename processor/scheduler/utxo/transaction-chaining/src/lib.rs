@@ -454,6 +454,42 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
     eventualities
   }
+
+  fn flush_outputs(
+    txn: &mut impl DbTxn,
+    eventualities: &mut HashMap<Vec<u8>, Vec<EventualityFor<S>>>,
+    block: &BlockFor<S>,
+    from: KeyFor<S>,
+    to: KeyFor<S>,
+    coin: Coin,
+  ) {
+    let from_bytes = from.to_bytes().as_ref().to_vec();
+    // Ensure our inputs are aggregated
+    eventualities
+      .entry(from_bytes.clone())
+      .or_insert(vec![])
+      .append(&mut Self::aggregate_inputs(txn, block, to, from, coin));
+
+    // Now that our inputs are aggregated, transfer all of them to the new key
+    let mut operating_costs = Db::<S>::operating_costs(txn, coin).0;
+    let outputs = Db::<S>::outputs(txn, from, coin).unwrap();
+    if outputs.is_empty() {
+      return;
+    }
+    let planned = P::plan_transaction_with_fee_amortization(
+      &mut operating_costs,
+      P::fee_rate(block, coin),
+      outputs,
+      vec![],
+      Some(to),
+    );
+    Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
+    let Some(planned) = planned else { return };
+
+    TransactionsToSign::<P::SignableTransaction>::send(txn, &from, &planned.signable);
+    eventualities.get_mut(&from_bytes).unwrap().push(planned.eventuality);
+    Self::accumulate_outputs(txn, planned.auxilliary.0, false);
+  }
 }
 
 impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> SchedulerTrait<S>
@@ -470,22 +506,28 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   fn flush_key(
     txn: &mut impl DbTxn,
-    _block: &BlockFor<S>,
+    block: &BlockFor<S>,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
-  ) {
+  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>> {
+    let mut eventualities = HashMap::new();
     for coin in S::NETWORK.coins() {
-      let still_queued = Db::<S>::queued_payments(txn, retiring_key, *coin).unwrap();
-      let mut new_queued = Db::<S>::queued_payments(txn, new_key, *coin).unwrap();
+      // Move the payments to the new key
+      {
+        let still_queued = Db::<S>::queued_payments(txn, retiring_key, *coin).unwrap();
+        let mut new_queued = Db::<S>::queued_payments(txn, new_key, *coin).unwrap();
 
-      let mut queued = still_queued;
-      queued.append(&mut new_queued);
+        let mut queued = still_queued;
+        queued.append(&mut new_queued);
 
-      Db::<S>::set_queued_payments(txn, retiring_key, *coin, &[]);
-      Db::<S>::set_queued_payments(txn, new_key, *coin, &queued);
+        Db::<S>::set_queued_payments(txn, retiring_key, *coin, &[]);
+        Db::<S>::set_queued_payments(txn, new_key, *coin, &queued);
+      }
 
-      // TODO: Forward all existing outputs
+      // Move the outputs to the new key
+      Self::flush_outputs(txn, &mut eventualities, block, retiring_key, new_key, *coin);
     }
+    eventualities
   }
 
   fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
@@ -512,7 +554,24 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         .insert(key.to_bytes().as_ref().to_vec(), Self::step(txn, active_keys, block, *key));
     }
 
-    // TODO: If this key has been flushed, forward all outputs
+    // If this key has been flushed, forward all outputs
+    match active_keys[0].1 {
+      LifetimeStage::ActiveYetNotReporting |
+      LifetimeStage::Active |
+      LifetimeStage::UsingNewForChange => {}
+      LifetimeStage::Forwarding | LifetimeStage::Finishing => {
+        for coin in S::NETWORK.coins() {
+          Self::flush_outputs(
+            txn,
+            &mut eventualities,
+            block,
+            active_keys[0].0,
+            active_keys[1].0,
+            *coin,
+          );
+        }
+      }
+    }
 
     // Create the transactions for the forwards/burns
     {

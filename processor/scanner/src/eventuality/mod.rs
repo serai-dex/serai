@@ -455,7 +455,9 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             key.key != keys.last().unwrap().key,
             "key which was forwarding was the last key (which has no key after it to forward to)"
           );
-          Sch::flush_key(&mut txn, &block, key.key, keys.last().unwrap().key);
+          let new_eventualities =
+            Sch::flush_key(&mut txn, &block, key.key, keys.last().unwrap().key);
+          intake_eventualities::<S>(&mut txn, new_eventualities);
         }
 
         // Now that we've intaked any Eventualities caused, check if we're retiring any keys
