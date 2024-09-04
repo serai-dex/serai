@@ -61,13 +61,13 @@ impl<S: ScannerFeed> Db<S> {
 
   pub(crate) fn set_already_accumulated_output(
     txn: &mut impl DbTxn,
-    output: <OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+    output: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) {
     AlreadyAccumulatedOutput::set(txn, output.as_ref(), &());
   }
   pub(crate) fn take_if_already_accumulated_output(
     txn: &mut impl DbTxn,
-    output: <OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
+    output: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) -> bool {
     let res = AlreadyAccumulatedOutput::get(txn, output.as_ref()).is_some();
     AlreadyAccumulatedOutput::del(txn, output.as_ref());
@@ -79,15 +79,26 @@ impl<S: ScannerFeed> Db<S> {
     key: KeyFor<S>,
     coin: Coin,
   ) -> Option<Vec<Payment<AddressFor<S>>>> {
-    todo!("TODO")
+    let buf = SerializedQueuedPayments::get(getter, key.to_bytes().as_ref(), coin)?;
+    let mut buf = buf.as_slice();
+
+    let mut res = Vec::with_capacity(buf.len() / 128);
+    while !buf.is_empty() {
+      res.push(Payment::read(&mut buf).unwrap());
+    }
+    Some(res)
   }
   pub(crate) fn set_queued_payments(
     txn: &mut impl DbTxn,
     key: KeyFor<S>,
     coin: Coin,
-    queued: &Vec<Payment<AddressFor<S>>>,
+    queued: &[Payment<AddressFor<S>>],
   ) {
-    todo!("TODO")
+    let mut buf = Vec::with_capacity(queued.len() * 128);
+    for queued in queued {
+      queued.write(&mut buf).unwrap();
+    }
+    SerializedQueuedPayments::set(txn, key.to_bytes().as_ref(), coin, &buf);
   }
   pub(crate) fn del_queued_payments(txn: &mut impl DbTxn, key: KeyFor<S>, coin: Coin) {
     SerializedQueuedPayments::del(txn, key.to_bytes().as_ref(), coin);

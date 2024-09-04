@@ -163,6 +163,8 @@ pub type AddressFor<S> = <<S as ScannerFeed>::Block as Block>::Address;
 pub type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 /// The eventuality type for this ScannerFeed.
 pub type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
+/// The block type for this ScannerFeed.
+pub type BlockFor<S> = <S as ScannerFeed>::Block;
 
 #[async_trait::async_trait]
 pub trait BatchPublisher: 'static + Send + Sync {
@@ -245,7 +247,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// This SHOULD setup any necessary database structures. This SHOULD NOT cause the new key to
   /// be used as the primary key. The multisig rotation time clearly establishes its steps.
-  fn activate_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>);
+  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>);
 
   /// Flush all outputs within a retiring key to the new key.
   ///
@@ -257,14 +259,20 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// If the retiring key has any unfulfilled payments associated with it, those MUST be made
   /// the responsibility of the new key.
-  fn flush_key(&mut self, txn: &mut impl DbTxn, retiring_key: KeyFor<S>, new_key: KeyFor<S>);
+  // TODO: This needs to return a HashMap for the eventualities
+  fn flush_key(
+    txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
+    retiring_key: KeyFor<S>,
+    new_key: KeyFor<S>,
+  );
 
   /// Retire a key as it'll no longer be used.
   ///
   /// Any key retired MUST NOT still have outputs associated with it. This SHOULD be a NOP other
   /// than any assertions and database cleanup. This MUST NOT be expected to be called in a fashion
   /// ordered to any other calls.
-  fn retire_key(&mut self, txn: &mut impl DbTxn, key: KeyFor<S>);
+  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>);
 
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
@@ -275,7 +283,6 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
   fn update(
-    &mut self,
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
@@ -315,7 +322,6 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
     has an output-to-Serai, the new primary output).
   */
   fn fulfill(
-    &mut self,
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
@@ -333,18 +339,17 @@ impl<S: ScannerFeed> Scanner<S> {
   /// Create a new scanner.
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
-  pub async fn new(
+  pub async fn new<Sch: Scheduler<S>>(
     db: impl Db,
     feed: S,
     batch_publisher: impl BatchPublisher,
-    scheduler: impl Scheduler<S>,
     start_block: u64,
   ) -> Self {
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
     let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
     let report_task = report::ReportTask::<_, S, _>::new(db.clone(), batch_publisher, start_block);
     let substrate_task = substrate::SubstrateTask::<_, S>::new(db.clone());
-    let eventuality_task = eventuality::EventualityTask::new(db, feed, scheduler, start_block);
+    let eventuality_task = eventuality::EventualityTask::<_, _, Sch>::new(db, feed, start_block);
 
     let (_index_handle, index_run) = RunNowHandle::new();
     let (scan_handle, scan_run) = RunNowHandle::new();
