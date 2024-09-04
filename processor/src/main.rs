@@ -27,9 +27,6 @@ use serai_env as env;
 
 use message_queue::{Service, client::MessageQueue};
 
-mod plan;
-pub use plan::*;
-
 mod networks;
 use networks::{Block, Network};
 #[cfg(feature = "bitcoin")]
@@ -38,9 +35,6 @@ use networks::Bitcoin;
 use networks::Ethereum;
 #[cfg(feature = "monero")]
 use networks::Monero;
-
-mod additional_key;
-pub use additional_key::additional_key;
 
 mod db;
 pub use db::*;

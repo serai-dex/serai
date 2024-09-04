@@ -40,6 +40,7 @@ jobs:
             -p serai-message-queue \
             -p serai-processor-messages \
             -p serai-processor-key-gen \
+            -p serai-processor-view-keys \
             -p serai-processor-frost-attempt-manager \
             -p serai-processor-primitives \
             -p serai-processor-scanner \

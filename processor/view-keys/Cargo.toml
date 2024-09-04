@@ -1,0 +1,19 @@
+[package]
+name = "serai-processor-view-keys"
+version = "0.1.0"
+description = "View keys for the Serai processor"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/view-keys"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+ciphersuite = { version = "0.4", path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
