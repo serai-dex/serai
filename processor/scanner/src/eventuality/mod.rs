@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use std::collections::{HashSet, HashMap};
 
 use group::GroupEncoding;
@@ -101,11 +102,11 @@ fn intake_eventualities<S: ScannerFeed>(
 pub(crate) struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
   db: D,
   feed: S,
-  scheduler: Sch,
+  scheduler: PhantomData<Sch>,
 }
 
 impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
-  pub(crate) fn new(mut db: D, feed: S, scheduler: Sch, start_block: u64) -> Self {
+  pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
@@ -113,7 +114,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       txn.commit();
     }
 
-    Self { db, feed, scheduler }
+    Self { db, feed, scheduler: PhantomData }
   }
 
   #[allow(clippy::type_complexity)]
@@ -146,7 +147,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
   }
 
   // Returns a boolean of if we intaked any Burns.
-  fn intake_burns(&mut self) -> bool {
+  async fn intake_burns(&mut self) -> Result<bool, String> {
     let mut intaked_any = false;
 
     // If we've handled an notable block, we may have Burns being queued with it as the reference
@@ -158,6 +159,8 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       // others the new key
       let (_keys, keys_with_stages) = self.keys_and_keys_with_stages(latest_handled_notable_block);
 
+      let block = self.feed.block_by_number(&self.db, latest_handled_notable_block).await?;
+
       let mut txn = self.db.txn();
       // Drain the entire channel
       while let Some(burns) =
@@ -165,8 +168,9 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       {
         intaked_any = true;
 
-        let new_eventualities = self.scheduler.fulfill(
+        let new_eventualities = Sch::fulfill(
           &mut txn,
+          &block,
           &keys_with_stages,
           burns
             .into_iter()
@@ -178,7 +182,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       txn.commit();
     }
 
-    intaked_any
+    Ok(intaked_any)
   }
 }
 
@@ -197,7 +201,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
     // Start by intaking any Burns we have sitting around
     // It's important we run this regardless of if we have a new block to handle
-    made_progress |= self.intake_burns();
+    made_progress |= self.intake_burns().await?;
 
     /*
       Eventualities increase upon one of two cases:
@@ -253,7 +257,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         // state will be for the newer block)
         #[allow(unused_assignments)]
         {
-          made_progress |= self.intake_burns();
+          made_progress |= self.intake_burns().await?;
         }
       }
 
@@ -278,7 +282,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
       for key in &keys {
         // If this is the key's activation block, activate it
         if key.activation_block_number == b {
-          self.scheduler.activate_key(&mut txn, key.key);
+          Sch::activate_key(&mut txn, key.key);
         }
 
         let completed_eventualities = {
@@ -431,7 +435,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             after a later one was already used).
           */
           let new_eventualities =
-            self.scheduler.update(&mut txn, &keys_with_stages, scheduler_update);
+            Sch::update(&mut txn, &block, &keys_with_stages, scheduler_update);
           // Intake the new Eventualities
           for key in new_eventualities.keys() {
             keys
@@ -451,7 +455,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             key.key != keys.last().unwrap().key,
             "key which was forwarding was the last key (which has no key after it to forward to)"
           );
-          self.scheduler.flush_key(&mut txn, key.key, keys.last().unwrap().key);
+          Sch::flush_key(&mut txn, &block, key.key, keys.last().unwrap().key);
         }
 
         // Now that we've intaked any Eventualities caused, check if we're retiring any keys
@@ -469,7 +473,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
 
             // We tell the scheduler to retire it now as we're done with it, and this fn doesn't
             // require it be called with a canonical order
-            self.scheduler.retire_key(&mut txn, key.key);
+            Sch::retire_key(&mut txn, key.key);
           }
         }
       }

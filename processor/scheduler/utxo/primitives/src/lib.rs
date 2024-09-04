@@ -2,12 +2,10 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use core::fmt::Debug;
-
 use serai_primitives::{Coin, Amount};
 
 use primitives::{ReceivedOutput, Payment};
-use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor};
+use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
 use scheduler_primitives::*;
 
 /// A planned transaction.
@@ -23,12 +21,6 @@ pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
 /// An object able to plan a transaction.
 #[async_trait::async_trait]
 pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
-  /// An error encountered when determining the fee rate.
-  ///
-  /// This MUST be an ephemeral error. Retrying fetching data from the blockchain MUST eventually
-  /// resolve without manual intervention/changing the arguments.
-  type EphemeralError: Debug;
-
   /// The type representing a fee rate to use for transactions.
   type FeeRate: Clone + Copy;
 
@@ -42,12 +34,8 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
 
   /// Obtain the fee rate to pay.
   ///
-  /// This must be constant to the finalized block referenced by this block number and the coin.
-  async fn fee_rate(
-    &self,
-    block_number: u64,
-    coin: Coin,
-  ) -> Result<Self::FeeRate, Self::EphemeralError>;
+  /// This must be constant to the block and coin.
+  fn fee_rate(block: &BlockFor<S>, coin: Coin) -> Self::FeeRate;
 
   /// The branch address for this key of Serai's.
   fn branch_address(key: KeyFor<S>) -> AddressFor<S>;
