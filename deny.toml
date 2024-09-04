@@ -52,6 +52,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-processor-scanner" },
   { allow = ["AGPL-3.0"], name = "serai-processor-scheduler-primitives" },
   { allow = ["AGPL-3.0"], name = "serai-processor-utxo-scheduler-primitives" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-standard-scheduler" },
   { allow = ["AGPL-3.0"], name = "serai-processor-transaction-chaining-scheduler" },
   { allow = ["AGPL-3.0"], name = "serai-processor" },
 

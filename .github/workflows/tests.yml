@@ -45,6 +45,7 @@ jobs:
             -p serai-processor-scanner \
             -p serai-processor-scheduler-primitives \
             -p serai-processor-utxo-scheduler-primitives \
+            -p serai-processor-utxo-scheduler \
             -p serai-processor-transaction-chaining-scheduler \
             -p serai-processor \
             -p tendermint-machine \

@@ -9,7 +9,7 @@ to build and sign a transaction spending it.
 
 The scheduler is designed to achieve fulfillment of all expected payments with
 an `O(1)` delay (regardless of prior scheduler state), `O(log n)` time, and
-`O(n)` computational complexity.
+`O(log(n) + n)` computational complexity.
 
 Due to the ability to chain transactions, we can immediately plan/sign dependent
 transactions. For the time/computational complexity, we use a tree to fulfill

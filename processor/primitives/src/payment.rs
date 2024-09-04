@@ -1,6 +1,7 @@
 use std::io;
 
 use scale::{Encode, Decode, IoReader};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{Balance, Data};
 use serai_coins_primitives::OutInstructionWithBalance;
@@ -8,7 +9,7 @@ use serai_coins_primitives::OutInstructionWithBalance;
 use crate::Address;
 
 /// A payment to fulfill.
-#[derive(Clone)]
+#[derive(Clone, BorshSerialize, BorshDeserialize)]
 pub struct Payment<A: Address> {
   address: A,
   balance: Balance,
