@@ -8,8 +8,28 @@ use primitives::{ReceivedOutput, Payment};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
 use scheduler_primitives::*;
 
+mod tree;
+pub use tree::*;
+
 /// A planned transaction.
 pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
+  /// The signable transaction.
+  pub signable: ST,
+  /// The Eventuality to watch for.
+  pub eventuality: EventualityFor<S>,
+  /// The auxilliary data for this transaction.
+  pub auxilliary: A,
+}
+
+/// A planned transaction which was created via amortizing the fee.
+pub struct AmortizePlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
+  /// The amounts the included payments were worth.
+  ///
+  /// If the payments passed as an argument are sorted from highest to lowest valued, these `n`
+  /// amounts will be for the first `n` payments.
+  pub effected_payments: Vec<Amount>,
+  /// Whether or not the planned transaction had a change output.
+  pub has_change: bool,
   /// The signable transaction.
   pub signable: ST,
   /// The Eventuality to watch for.
@@ -60,7 +80,8 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// This must only require the same fee as would be returned by `calculate_fee`. The caller is
   /// trusted to maintain `sum(inputs) - sum(payments) >= if change.is_some() { DUST } else { 0 }`.
   ///
-  /// `change` will always be an address belonging to the Serai network.
+  /// `change` will always be an address belonging to the Serai network. If it is `Some`, a change
+  /// output must be created.
   fn plan(
     fee_rate: Self::FeeRate,
     inputs: Vec<OutputFor<S>>,
@@ -82,7 +103,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     inputs: Vec<OutputFor<S>>,
     mut payments: Vec<Payment<AddressFor<S>>>,
     mut change: Option<KeyFor<S>>,
-  ) -> Option<PlannedTransaction<S, Self::SignableTransaction, A>> {
+  ) -> Option<AmortizePlannedTransaction<S, Self::SignableTransaction, A>> {
     // If there's no change output, we can't recoup any operating costs we would amortize
     // We also don't have any losses if the inputs are written off/the change output is reduced
     let mut operating_costs_if_no_change = 0;
@@ -192,6 +213,48 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     }
 
     // Because we amortized, or accrued as operating costs, the fee, make the transaction
-    Some(Self::plan(fee_rate, inputs, payments, change))
+    let effected_payments = payments.iter().map(|payment| payment.balance().amount).collect();
+    let has_change = change.is_some();
+    let PlannedTransaction { signable, eventuality, auxilliary } =
+      Self::plan(fee_rate, inputs, payments, change);
+    Some(AmortizePlannedTransaction {
+      effected_payments,
+      has_change,
+      signable,
+      eventuality,
+      auxilliary,
+    })
+  }
+
+  /// Create a tree to fulfill a set of payments.
+  ///
+  /// Returns a `TreeTransaction` whose children (and arbitrary children of children) fulfill all
+  /// these payments. This tree root will be able to be made with a change output.
+  fn tree(payments: &[Payment<AddressFor<S>>]) -> TreeTransaction<AddressFor<S>> {
+    // This variable is for the current layer of the tree being built
+    let mut tree = Vec::with_capacity(payments.len().div_ceil(Self::MAX_OUTPUTS));
+
+    // Push the branches for the leaves (the payments out)
+    for payments in payments.chunks(Self::MAX_OUTPUTS) {
+      let value = payments.iter().map(|payment| payment.balance().amount.0).sum::<u64>();
+      tree.push(TreeTransaction::<AddressFor<S>>::Leaves { payments: payments.to_vec(), value });
+    }
+
+    // While we haven't calculated a tree root, or the tree root doesn't support a change output,
+    // keep working
+    while (tree.len() != 1) || (tree[0].children() == Self::MAX_OUTPUTS) {
+      let mut branch_layer = vec![];
+      for children in tree.chunks(Self::MAX_OUTPUTS) {
+        branch_layer.push(TreeTransaction::<AddressFor<S>>::Branch {
+          children: children.to_vec(),
+          value: children.iter().map(TreeTransaction::value).sum(),
+        });
+      }
+      tree = branch_layer;
+    }
+    assert_eq!(tree.len(), 1);
+    let tree_root = tree.remove(0);
+    assert!((tree_root.children() + 1) <= Self::MAX_OUTPUTS);
+    tree_root
   }
 }

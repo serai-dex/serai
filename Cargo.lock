@@ -8734,10 +8734,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-utxo-scheduler"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "group",
+ "parity-scale-codec",
+ "serai-db",
+ "serai-primitives",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
+ "serai-processor-utxo-scheduler-primitives",
+]
+
+[[package]]
 name = "serai-processor-utxo-scheduler-primitives"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "borsh",
  "serai-primitives",
  "serai-processor-primitives",
  "serai-processor-scanner",

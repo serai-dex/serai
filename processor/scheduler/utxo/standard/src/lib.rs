@@ -7,11 +7,11 @@ use std::collections::HashMap;
 
 use group::GroupEncoding;
 
-use serai_primitives::{Coin, Amount};
+use serai_primitives::{Coin, Amount, Balance};
 
 use serai_db::DbTxn;
 
-use primitives::{OutputType, ReceivedOutput, Payment};
+use primitives::{ReceivedOutput, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, Scheduler as SchedulerTrait,
@@ -22,43 +22,10 @@ use utxo_scheduler_primitives::*;
 mod db;
 use db::Db;
 
-/// The outputs which will be effected by a PlannedTransaction and received by Serai.
-pub struct EffectedReceivedOutputs<S: ScannerFeed>(Vec<OutputFor<S>>);
+/// A scheduler of transactions for networks premised on the UTXO model.
+pub struct Scheduler<S: ScannerFeed, P: TransactionPlanner<S, ()>>(PhantomData<S>, PhantomData<P>);
 
-/// A scheduler of transactions for networks premised on the UTXO model which support
-/// transaction chaining.
-pub struct Scheduler<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>>(
-  PhantomData<S>,
-  PhantomData<P>,
-);
-
-impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Scheduler<S, P> {
-  fn accumulate_outputs(txn: &mut impl DbTxn, outputs: Vec<OutputFor<S>>, from_scanner: bool) {
-    let mut outputs_by_key = HashMap::new();
-    for output in outputs {
-      if !from_scanner {
-        // Since this isn't being reported by the scanner, flag it so when the scanner does report
-        // it, we don't accumulate it again
-        Db::<S>::set_already_accumulated_output(txn, &output.id());
-      } else if Db::<S>::take_if_already_accumulated_output(txn, &output.id()) {
-        continue;
-      }
-
-      let coin = output.balance().coin;
-      outputs_by_key
-        // Index by key and coin
-        .entry((output.key().to_bytes().as_ref().to_vec(), coin))
-        // If we haven't accumulated here prior, read the outputs from the database
-        .or_insert_with(|| (output.key(), Db::<S>::outputs(txn, output.key(), coin).unwrap()))
-        .1
-        .push(output);
-    }
-    // Write the outputs back to the database
-    for ((_key_vec, coin), (key, outputs)) in outputs_by_key {
-      Db::<S>::set_outputs(txn, key, coin, &outputs);
-    }
-  }
-
+impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
   fn aggregate_inputs(
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
@@ -70,9 +37,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
     let mut operating_costs = Db::<S>::operating_costs(txn, coin).0;
     let mut outputs = Db::<S>::outputs(txn, key, coin).unwrap();
+    outputs.sort_by_key(|output| output.balance().amount.0);
     while outputs.len() > P::MAX_INPUTS {
       let to_aggregate = outputs.drain(.. P::MAX_INPUTS).collect::<Vec<_>>();
-      Db::<S>::set_outputs(txn, key, coin, &outputs);
 
       let Some(planned) = P::plan_transaction_with_fee_amortization(
         &mut operating_costs,
@@ -86,12 +53,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
       TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
       eventualities.push(planned.eventuality);
-      Self::accumulate_outputs(txn, planned.auxilliary.0, false);
-
-      // Reload the outputs for the next loop iteration
-      outputs = Db::<S>::outputs(txn, key, coin).unwrap();
     }
 
+    Db::<S>::set_outputs(txn, key, coin, &outputs);
     Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
     eventualities
   }
@@ -151,6 +115,66 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     }
   }
 
+  fn queue_branches(
+    txn: &mut impl DbTxn,
+    key: KeyFor<S>,
+    coin: Coin,
+    effected_payments: Vec<Amount>,
+    tx: TreeTransaction<AddressFor<S>>,
+  ) {
+    match tx {
+      TreeTransaction::Leaves { .. } => {}
+      TreeTransaction::Branch { mut children, .. } => {
+        children.sort_by_key(TreeTransaction::value);
+        children.reverse();
+
+        /*
+          This may only be a subset of payments but it'll be the originally-highest-valued
+          payments. `zip` will truncate to the first children which will be the highest-valued
+          children thanks to our sort.
+        */
+        for (amount, child) in effected_payments.into_iter().zip(children) {
+          Db::<S>::queue_pending_branch(txn, key, Balance { coin, amount }, &child);
+        }
+      }
+    }
+  }
+
+  fn handle_branch(
+    txn: &mut impl DbTxn,
+    block: &BlockFor<S>,
+    eventualities: &mut Vec<EventualityFor<S>>,
+    output: OutputFor<S>,
+    tx: TreeTransaction<AddressFor<S>>,
+  ) -> bool {
+    let key = output.key();
+    let coin = output.balance().coin;
+    let Some(payments) = tx.payments::<S>(coin, &P::branch_address(key), output.balance().amount.0)
+    else {
+      // If this output has become too small to satisfy this branch, drop it
+      return false;
+    };
+
+    let Some(planned) = P::plan_transaction_with_fee_amortization(
+      // Uses 0 as there's no operating costs to incur/amortize here
+      &mut 0,
+      P::fee_rate(block, coin),
+      vec![output],
+      payments,
+      None,
+    ) else {
+      // This Branch isn't viable, so drop it (and its children)
+      return false;
+    };
+
+    TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
+    eventualities.push(planned.eventuality);
+
+    Self::queue_branches(txn, key, coin, planned.effected_payments, tx);
+
+    true
+  }
+
   fn step(
     txn: &mut impl DbTxn,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
@@ -192,137 +216,57 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         continue;
       }
 
-      // If this is our only key, we should be able to fulfill all payments
-      // Else, we'd be insolvent
-      if active_keys.len() == 1 {
-        assert!(Db::<S>::queued_payments(txn, key, coin).unwrap().is_empty());
-      }
-
       // Create a tree to fulfill the payments
       let mut tree = vec![P::tree(&payments)];
 
       // Create the transaction for the root of the tree
-      let mut branch_outputs = {
-        // Try creating this transaction twice, once with a change output and once with increased
-        // operating costs to ensure a change output (as necessary to meet the requirements of the
-        // scanner API)
-        let mut planned_outer = None;
-        for i in 0 .. 2 {
-          let Some(planned) = P::plan_transaction_with_fee_amortization(
-            &mut operating_costs,
-            P::fee_rate(block, coin),
-            outputs.clone(),
-            tree[0]
-              .payments::<S>(coin, &branch_address, tree[0].value())
-              .expect("payments were dropped despite providing an input of the needed value"),
-            Some(key_for_change),
-          ) else {
-            // This should trip on the first iteration or not at all
-            assert_eq!(i, 0);
-            // This doesn't have inputs even worth aggregating so drop the entire tree
-            Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
-            continue 'coin;
-          };
-
-          // If this doesn't have a change output, increase operating costs and try again
-          if !planned.has_change {
-            /*
-              Since we'll create a change output if it's worth at least dust, amortizing dust from
-              the payments should solve this. If the new transaction can't afford those operating
-              costs, then the payments should be amortized out, causing there to be a change or no
-              transaction at all.
-            */
-            operating_costs += S::dust(coin).0;
-            continue;
-          }
-
-          // Since this had a change output, move forward with it
-          planned_outer = Some(planned);
-          break;
-        }
-        let Some(mut planned) = planned_outer else {
-          panic!("couldn't create a tree root with a change output")
+      // Try creating this transaction twice, once with a change output and once with increased
+      // operating costs to ensure a change output (as necessary to meet the requirements of the
+      // scanner API)
+      let mut planned_outer = None;
+      for i in 0 .. 2 {
+        let Some(planned) = P::plan_transaction_with_fee_amortization(
+          &mut operating_costs,
+          P::fee_rate(block, coin),
+          outputs.clone(),
+          tree[0]
+            .payments::<S>(coin, &branch_address, tree[0].value())
+            .expect("payments were dropped despite providing an input of the needed value"),
+          Some(key_for_change),
+        ) else {
+          // This should trip on the first iteration or not at all
+          assert_eq!(i, 0);
+          // This doesn't have inputs even worth aggregating so drop the entire tree
+          Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
+          continue 'coin;
         };
-        Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
-        TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
-        eventualities.push(planned.eventuality);
 
-        // We accumulate the change output, but not the branches as we'll consume them momentarily
-        Self::accumulate_outputs(
-          txn,
-          planned
-            .auxilliary
-            .0
-            .iter()
-            .filter(|output| output.kind() == OutputType::Change)
-            .cloned()
-            .collect(),
-          false,
-        );
-        planned.auxilliary.0.retain(|output| output.kind() == OutputType::Branch);
-        planned.auxilliary.0
-      };
-
-      // Now execute each layer of the tree
-      tree = match tree.remove(0) {
-        TreeTransaction::Leaves { .. } => vec![],
-        TreeTransaction::Branch { children, .. } => children,
-      };
-      while !tree.is_empty() {
-        // Sort the branch outputs by their value (high to low)
-        branch_outputs.sort_by_key(|a| a.balance().amount.0);
-        branch_outputs.reverse();
-        // Sort the transactions we should create by their value so they share an order with the
-        // branch outputs
-        tree.sort_by_key(TreeTransaction::value);
-        tree.reverse();
-
-        // If we dropped any Branch outputs, drop the associated children
-        tree.truncate(branch_outputs.len());
-        assert_eq!(branch_outputs.len(), tree.len());
-
-        let branch_outputs_for_this_layer = branch_outputs;
-        let this_layer = tree;
-        branch_outputs = vec![];
-        tree = vec![];
-
-        for (branch_output, tx) in branch_outputs_for_this_layer.into_iter().zip(this_layer) {
-          assert_eq!(branch_output.kind(), OutputType::Branch);
-
-          let Some(payments) =
-            tx.payments::<S>(coin, &branch_address, branch_output.balance().amount.0)
-          else {
-            // If this output has become too small to satisfy this branch, drop it
-            continue;
-          };
-
-          let branch_output_id = branch_output.id();
-          let Some(mut planned) = P::plan_transaction_with_fee_amortization(
-            // Uses 0 as there's no operating costs to incur/amortize here
-            &mut 0,
-            P::fee_rate(block, coin),
-            vec![branch_output],
-            payments,
-            None,
-          ) else {
-            // This Branch isn't viable, so drop it (and its children)
-            continue;
-          };
-          // Since we've made a TX spending this output, don't accumulate it later
-          Db::<S>::set_already_accumulated_output(txn, &branch_output_id);
-          TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
-          eventualities.push(planned.eventuality);
-
-          match tx {
-            TreeTransaction::Leaves { .. } => {}
-            // If this was a branch, handle its children
-            TreeTransaction::Branch { mut children, .. } => {
-              branch_outputs.append(&mut planned.auxilliary.0);
-              tree.append(&mut children);
-            }
-          }
+        // If this doesn't have a change output, increase operating costs and try again
+        if !planned.has_change {
+          /*
+            Since we'll create a change output if it's worth at least dust, amortizing dust from
+            the payments should solve this. If the new transaction can't afford those operating
+            costs, then the payments should be amortized out, causing there to be a change or no
+            transaction at all.
+          */
+          operating_costs += S::dust(coin).0;
+          continue;
         }
+
+        // Since this had a change output, move forward with it
+        planned_outer = Some(planned);
+        break;
       }
+      let Some(planned) = planned_outer else {
+        panic!("couldn't create a tree root with a change output")
+      };
+      Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
+      TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
+      eventualities.push(planned.eventuality);
+
+      // Now save the next layer of the tree to the database
+      // We'll execute it when it appears
+      Self::queue_branches(txn, key, coin, planned.effected_payments, tree.remove(0));
     }
 
     eventualities
@@ -361,13 +305,10 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
     TransactionsToSign::<P::SignableTransaction>::send(txn, &from, &planned.signable);
     eventualities.get_mut(&from_bytes).unwrap().push(planned.eventuality);
-    Self::accumulate_outputs(txn, planned.auxilliary.0, false);
   }
 }
 
-impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> SchedulerTrait<S>
-  for Scheduler<S, P>
-{
+impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Scheduler<S, P> {
   fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, *coin).is_none());
@@ -418,14 +359,48 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
   ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>> {
-    Self::accumulate_outputs(txn, update.outputs().to_vec(), true);
+    let mut eventualities = HashMap::new();
+
+    // Accumulate the new outputs
+    {
+      let mut outputs_by_key = HashMap::new();
+      for output in update.outputs() {
+        // If this aligns for a branch, handle it
+        if let Some(branch) = Db::<S>::take_pending_branch(txn, output.key(), output.balance()) {
+          if Self::handle_branch(
+            txn,
+            block,
+            eventualities.entry(output.key().to_bytes().as_ref().to_vec()).or_insert(vec![]),
+            output.clone(),
+            branch,
+          ) {
+            // If we could use it for a branch, we do and move on
+            // Else, we let it be accumulated by the standard accumulation code
+            continue;
+          }
+        }
+
+        let coin = output.balance().coin;
+        outputs_by_key
+          // Index by key and coin
+          .entry((output.key().to_bytes().as_ref().to_vec(), coin))
+          // If we haven't accumulated here prior, read the outputs from the database
+          .or_insert_with(|| (output.key(), Db::<S>::outputs(txn, output.key(), coin).unwrap()))
+          .1
+          .push(output.clone());
+      }
+      // Write the outputs back to the database
+      for ((_key_vec, coin), (key, outputs)) in outputs_by_key {
+        Db::<S>::set_outputs(txn, key, coin, &outputs);
+      }
+    }
 
     // Fulfill the payments we prior couldn't
-    let mut eventualities = HashMap::new();
     for (key, _stage) in active_keys {
-      assert!(eventualities
-        .insert(key.to_bytes().as_ref().to_vec(), Self::step(txn, active_keys, block, *key))
-        .is_none());
+      eventualities
+        .entry(key.to_bytes().as_ref().to_vec())
+        .or_insert(vec![])
+        .append(&mut Self::step(txn, active_keys, block, *key));
     }
 
     // If this key has been flushed, forward all outputs

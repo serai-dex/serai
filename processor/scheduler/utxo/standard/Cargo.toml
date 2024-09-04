@@ -1,9 +1,9 @@
 [package]
-name = "serai-processor-utxo-scheduler-primitives"
+name = "serai-processor-utxo-scheduler"
 version = "0.1.0"
-description = "Primitives for UTXO schedulers for the Serai processor"
+description = "Scheduler for UTXO networks for the Serai processor"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/utxo/primitives"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/scheduler/utxo/standard"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -13,16 +13,23 @@ publish = false
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["scale", "borsh"]
+
 [lints]
 workspace = true
 
 [dependencies]
-async-trait = { version = "0.1", default-features = false }
+group = { version = "0.13", default-features = false }
 
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 serai-primitives = { path = "../../../../substrate/primitives", default-features = false, features = ["std"] }
 
+serai-db = { path = "../../../../common/db" }
+
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
+utxo-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
