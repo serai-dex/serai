@@ -259,13 +259,12 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// If the retiring key has any unfulfilled payments associated with it, those MUST be made
   /// the responsibility of the new key.
-  // TODO: This needs to return a HashMap for the eventualities
   fn flush_key(
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
-  );
+  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 
   /// Retire a key as it'll no longer be used.
   ///
