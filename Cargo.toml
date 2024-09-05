@@ -6,7 +6,6 @@ members = [
   "patches/parking_lot",
   "patches/zstd",
   "patches/rocksdb",
-  "patches/proc-macro-crate",
 
   # std patches
   "patches/matches",
@@ -148,8 +147,6 @@ parking_lot = { path = "patches/parking_lot" }
 zstd = { path = "patches/zstd" }
 # Needed for WAL compression
 rocksdb = { path = "patches/rocksdb" }
-# proc-macro-crate 2 binds to an old version of toml for msrv so we patch to 3
-proc-macro-crate = { path = "patches/proc-macro-crate" }
 
 # is-terminal now has an std-based solution with an equivalent API
 is-terminal = { path = "patches/is-terminal" }
