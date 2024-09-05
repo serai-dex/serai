@@ -368,6 +368,8 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> SchedulerTrait<S>
   for Scheduler<S, P>
 {
+  type SignableTransaction = P::SignableTransaction;
+
   fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, *coin).is_none());

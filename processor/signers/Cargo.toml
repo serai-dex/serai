@@ -20,3 +20,13 @@ ignored = ["borsh", "scale"]
 workspace = true
 
 [dependencies]
+group = { version = "0.13", default-features = false }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+primitives = { package = "serai-processor-primitives", path = "../primitives" }
+scanner = { package = "serai-processor-scanner", path = "../scanner" }
+scheduler = { package = "serai-scheduler-primitives", path = "../scheduler/primitives" }
+
+frost-attempt-manager = { package = "serai-processor-frost-attempt-manager", path = "../frost-attempt-manager" }
