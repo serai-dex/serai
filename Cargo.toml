@@ -81,6 +81,8 @@ members = [
   "processor/scheduler/utxo/primitives",
   "processor/scheduler/utxo/standard",
   "processor/scheduler/utxo/transaction-chaining",
+  "processor/signers",
+
   "processor/bitcoin",
   "processor/ethereum",
   "processor/monero",
