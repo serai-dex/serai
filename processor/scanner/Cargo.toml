@@ -5,9 +5,9 @@ description = "Scanner of abstract blockchains for Serai"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/scanner"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["frost", "multisig", "threshold"]
+keywords = []
 edition = "2021"
-rust-version = "1.79"
+publish = false
 
 [package.metadata.docs.rs]
 all-features = true

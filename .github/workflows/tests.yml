@@ -48,6 +48,7 @@ jobs:
             -p serai-processor-utxo-scheduler-primitives \
             -p serai-processor-utxo-scheduler \
             -p serai-processor-transaction-chaining-scheduler \
+            -p serai-processor-signers \
             -p serai-bitcoin-processor \
             -p serai-ethereum-processor \
             -p serai-monero-processor \

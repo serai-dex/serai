@@ -1,0 +1,22 @@
+[package]
+name = "serai-processor-signers"
+version = "0.1.0"
+description = "Signers for the Serai processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/signers"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["borsh", "scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
