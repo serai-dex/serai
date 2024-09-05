@@ -18,6 +18,7 @@ members = [
 
   "common/std-shims",
   "common/zalloc",
+  "common/patchable-async-sleep",
   "common/db",
   "common/env",
   "common/request",

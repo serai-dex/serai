@@ -25,7 +25,7 @@ parity-scale-codec = { version = "3", default-features = false, features = ["std
 
 futures-util = { version = "0.3", default-features = false, features = ["std", "async-await-macro", "sink", "channel"] }
 futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
-tokio = { version = "1", default-features = false, features = ["time"] }
+patchable-async-sleep = { version = "0.1", path = "../../../common/patchable-async-sleep", default-features = false }
 
 serai-db = { path = "../../../common/db", version = "0.1", default-features = false }
 

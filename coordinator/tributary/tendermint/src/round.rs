@@ -5,7 +5,7 @@ use std::{
 };
 
 use futures_util::{FutureExt, future};
-use tokio::time::sleep;
+use patchable_async_sleep::sleep;
 
 use crate::{
   time::CanonicalInstant,
