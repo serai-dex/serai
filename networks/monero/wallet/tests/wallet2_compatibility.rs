@@ -6,7 +6,7 @@ use serde_json::json;
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
   transaction::Transaction,
-  rpc::Rpc,
+  rpc::{FeePriority, Rpc},
   address::{Network, SubaddressIndex, MoneroAddress},
   extra::{MAX_ARBITRARY_DATA_SIZE, Extra, PaymentId},
   Scanner,
@@ -118,7 +118,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
     scanner.scan(&daemon_rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
   assert_eq!(output.transaction(), tx_hash);
 
-  runner::check_weight_and_fee(&tx, fee_rate);
+  runner::check_weight_and_fee(&daemon_rpc.get_transaction(tx_hash).await.unwrap(), fee_rate);
 
   match spec {
     AddressSpec::Subaddress(index) => {
