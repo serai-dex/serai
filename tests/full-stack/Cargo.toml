@@ -34,7 +34,7 @@ scale = { package = "parity-scale-codec", version = "3" }
 serde = "1"
 serde_json = "1"
 
-processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
+# processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "monero"] }
 
 serai-client = { path = "../../substrate/client", features = ["serai"] }
 

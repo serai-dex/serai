@@ -48,7 +48,9 @@ jobs:
             -p serai-processor-utxo-scheduler-primitives \
             -p serai-processor-utxo-scheduler \
             -p serai-processor-transaction-chaining-scheduler \
-            -p serai-processor \
+            -p serai-bitcoin-processor \
+            -p serai-ethereum-processor \
+            -p serai-monero-processor \
             -p tendermint-machine \
             -p tributary-chain \
             -p serai-coordinator \

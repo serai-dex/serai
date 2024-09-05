@@ -97,6 +97,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// more information.
   ///
   /// Returns `None` if the fee exceeded the inputs, or `Some` otherwise.
+  // TODO: Enum for Change of None, Some, Mandatory
   fn plan_transaction_with_fee_amortization(
     operating_costs: &mut u64,
     fee_rate: Self::FeeRate,

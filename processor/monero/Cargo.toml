@@ -1,0 +1,46 @@
+[package]
+name = "serai-monero-processor"
+version = "0.1.0"
+description = "Serai Monero Processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/monero"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { version = "0.1", default-features = false }
+
+const-hex = { version = "1", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["std"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request", default-features = false, optional = true }
+monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+zalloc = { path = "../../common/zalloc" }
+serai-db = { path = "../../common/db" }
+serai-env = { path = "../../common/env" }
+
+messages = { package = "serai-processor-messages", path = "../messages" }
+
+message-queue = { package = "serai-message-queue", path = "../../message-queue" }
+
+[features]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

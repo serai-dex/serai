@@ -70,6 +70,7 @@ members = [
   "message-queue",
 
   "processor/messages",
+
   "processor/key-gen",
   "processor/view-keys",
   "processor/frost-attempt-manager",
@@ -80,7 +81,9 @@ members = [
   "processor/scheduler/utxo/primitives",
   "processor/scheduler/utxo/standard",
   "processor/scheduler/utxo/transaction-chaining",
-  "processor",
+  "processor/bitcoin",
+  "processor/ethereum",
+  "processor/monero",
 
   "coordinator/tributary/tendermint",
   "coordinator/tributary",

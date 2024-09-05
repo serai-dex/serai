@@ -1,3 +1,7 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
 use std::{sync::OnceLock, time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
