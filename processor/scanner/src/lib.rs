@@ -247,6 +247,9 @@ impl<S: ScannerFeed> SchedulerUpdate<S> {
 
 /// The object responsible for accumulating outputs and planning new transactions.
 pub trait Scheduler<S: ScannerFeed>: 'static + Send {
+  /// The type for a signable transaction.
+  type SignableTransaction: scheduler_primitives::SignableTransaction;
+
   /// Activate a key.
   ///
   /// This SHOULD setup any necessary database structures. This SHOULD NOT cause the new key to

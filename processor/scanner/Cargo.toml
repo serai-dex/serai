@@ -39,3 +39,4 @@ serai-in-instructions-primitives = { path = "../../substrate/in-instructions/pri
 serai-coins-primitives = { path = "../../substrate/coins/primitives", default-features = false, features = ["std", "borsh"] }
 
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
+scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }

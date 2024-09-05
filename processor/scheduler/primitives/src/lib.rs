@@ -10,11 +10,26 @@ use group::GroupEncoding;
 use serai_db::DbTxn;
 
 /// A signable transaction.
-pub trait SignableTransaction: 'static + Sized + Send + Sync {
+pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
+  /// The ciphersuite used to sign this transaction.
+  type Ciphersuite: Cuphersuite;
+  /// The preprocess machine for the signing protocol for this transaction.
+  type PreprocessMachine: PreprocessMachine;
+
   /// Read a `SignableTransaction`.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;
   /// Write a `SignableTransaction`.
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()>;
+
+  /// The ID for this transaction.
+  ///
+  /// This is an internal ID arbitrarily definable so long as it's unique.
+  ///
+  /// This same ID MUST be returned by the Eventuality for this transaction.
+  fn id(&self) -> [u8; 32];
+
+  /// Sign this transaction.
+  fn sign(self, keys: ThresholdKeys<Self::Ciphersuite>) -> Self::PreprocessMachine;
 }
 
 mod db {

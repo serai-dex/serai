@@ -32,6 +32,8 @@ pub struct AttemptManager<D: Db, M: Clone + PreprocessMachine> {
 
 impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// Create a new attempt manager.
+  ///
+  /// This will not restore any signing sessions from the database. Those must be re-registered.
   pub fn new(db: D, session: Session, start_i: Participant) -> Self {
     AttemptManager { db, session, start_i, active: HashMap::new() }
   }
@@ -52,7 +54,7 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// This frees all memory used for it and means no further messages will be handled for it.
   /// This does not stop the protocol from being re-registered and further worked on (with
   /// undefined behavior) then. The higher-level context must never call `register` again with this
-  /// ID.
+  /// ID accordingly.
   pub fn retire(&mut self, id: [u8; 32]) {
     if self.active.remove(&id).is_none() {
       log::info!("retiring protocol {}, which we didn't register/already retired", hex::encode(id));
