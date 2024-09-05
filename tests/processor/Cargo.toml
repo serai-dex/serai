@@ -46,7 +46,7 @@ serde_json = { version = "1", default-features = false }
 
 tokio = { version = "1", features = ["time"] }
 
-processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "ethereum", "monero"] }
+# processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "ethereum", "monero"] }
 
 dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }

@@ -1,3 +1,7 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
 use core::{marker::PhantomData, fmt::Debug};
 use std::{io, collections::HashMap};
 
