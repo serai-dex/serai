@@ -278,9 +278,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   }
 
   /// Cleanup the database entries for a specified signing protocol.
-  pub(crate) fn cleanup(db: &mut D, id: [u8; 32]) {
-    let mut txn = db.txn();
-    Attempted::del(&mut txn, id);
-    txn.commit();
+  pub(crate) fn cleanup(txn: &mut impl DbTxn, id: [u8; 32]) {
+    Attempted::del(txn, id);
   }
 }
