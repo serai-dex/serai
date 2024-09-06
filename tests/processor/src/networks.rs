@@ -305,7 +305,7 @@ impl Wallet {
         use std::sync::Arc;
         use ethereum_serai::{
           alloy::{
-            primitives::{U256, TxKind},
+            primitives::{U256, Signature, TxKind},
             sol_types::SolCall,
             simple_request_transport::SimpleRequest,
             consensus::{TxLegacy, SignableTransaction},
@@ -355,7 +355,7 @@ impl Wallet {
               .unwrap();
 
             let mut bytes = vec![];
-            tx.encode_with_signature_fields(&sig, &mut bytes);
+            tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
             let _ = provider.send_raw_transaction(&bytes).await.unwrap();
 
             provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
@@ -395,7 +395,7 @@ impl Wallet {
             .unwrap();
 
         let mut bytes = vec![];
-        tx.encode_with_signature_fields(&sig.into(), &mut bytes);
+        tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
 
         // We drop the bottom 10 decimals
         (

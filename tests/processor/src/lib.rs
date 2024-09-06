@@ -378,8 +378,7 @@ impl Coordinator {
           .unwrap()
           .unwrap()
           .header
-          .number
-          .unwrap();
+          .number;
         // We mine 96 blocks to mine one epoch, then cause its finalization
         provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
         let end_of_epoch = start + 31;
@@ -389,8 +388,7 @@ impl Coordinator {
           .unwrap()
           .unwrap()
           .header
-          .hash
-          .unwrap();
+          .hash;
 
         let state = provider
           .raw_request::<_, String>("anvil_dumpState".into(), ())

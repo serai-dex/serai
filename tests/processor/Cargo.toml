@@ -48,6 +48,6 @@ tokio = { version = "1", features = ["time"] }
 
 processor = { package = "serai-processor", path = "../../processor", features = ["bitcoin", "ethereum", "monero"] }
 
-dockertest = "0.4"
+dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
 serai-message-queue-tests = { path = "../message-queue" }

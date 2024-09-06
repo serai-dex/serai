@@ -437,8 +437,7 @@ impl<D: Db> Network for Ethereum<D> {
       .map_err(|_| NetworkError::ConnectionError)?
       .ok_or(NetworkError::ConnectionError)?
       .header
-      .number
-      .unwrap();
+      .number;
     // Error if there hasn't been a full epoch yet
     if actual_number < 32 {
       Err(NetworkError::ConnectionError)?
@@ -467,7 +466,6 @@ impl<D: Db> Network for Ethereum<D> {
         .ok_or(NetworkError::ConnectionError)?
         .header
         .hash
-        .unwrap()
         .into()
     };
 
@@ -480,7 +478,7 @@ impl<D: Db> Network for Ethereum<D> {
       .ok_or(NetworkError::ConnectionError)?
       .header;
 
-    let end_hash = end_header.hash.unwrap().into();
+    let end_hash = end_header.hash.into();
     let time = end_header.timestamp;
 
     Ok(Epoch { prior_end_hash, start: start.try_into().unwrap(), end_hash, time })
@@ -813,7 +811,6 @@ impl<D: Db> Network for Ethereum<D> {
       .unwrap()
       .header
       .number
-      .unwrap()
       .try_into()
       .unwrap()
   }
@@ -921,13 +918,13 @@ impl<D: Db> Network for Ethereum<D> {
       .into(),
     };
 
-    use ethereum_serai::alloy::consensus::SignableTransaction;
+    use ethereum_serai::alloy::{primitives::Signature, consensus::SignableTransaction};
     let sig = k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(key).unwrap())
       .sign_prehash_recoverable(tx.signature_hash().as_ref())
       .unwrap();
 
     let mut bytes = vec![];
-    tx.encode_with_signature_fields(&sig.into(), &mut bytes);
+    tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
     let pending_tx = self.provider.send_raw_transaction(&bytes).await.ok().unwrap();
 
     // Mine an epoch containing this TX

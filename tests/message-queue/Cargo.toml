@@ -28,5 +28,5 @@ serai-primitives = { path = "../../substrate/primitives" }
 serai-message-queue = { path = "../../message-queue" }
 
 tokio = { version = "1", features = ["time"] }
-dockertest = "0.4"
+dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
