@@ -5,16 +5,25 @@
 use core::marker::PhantomData;
 use std::io;
 
-use group::GroupEncoding;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
 use serai_db::DbTxn;
+
+/// A transaction.
+pub trait Transaction: Sized {
+  /// Read a `Transaction`.
+  fn read(reader: &mut impl io::Read) -> io::Result<Self>;
+  /// Write a `Transaction`.
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()>;
+}
 
 /// A signable transaction.
 pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
   /// The ciphersuite used to sign this transaction.
-  type Ciphersuite: Cuphersuite;
+  type Ciphersuite: Ciphersuite;
   /// The preprocess machine for the signing protocol for this transaction.
-  type PreprocessMachine: PreprocessMachine;
+  type PreprocessMachine: Clone + PreprocessMachine<Signature: Send>;
 
   /// Read a `SignableTransaction`.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;

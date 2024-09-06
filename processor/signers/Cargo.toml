@@ -20,13 +20,23 @@ ignored = ["borsh", "scale"]
 workspace = true
 
 [dependencies]
-group = { version = "0.13", default-features = false }
+async-trait = { version = "0.1", default-features = false }
 
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std"] }
+
+serai-db = { path = "../../common/db" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
+messages = { package = "serai-processor-messages", path = "../messages" }
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
-scheduler = { package = "serai-scheduler-primitives", path = "../scheduler/primitives" }
+scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
 
 frost-attempt-manager = { package = "serai-processor-frost-attempt-manager", path = "../frost-attempt-manager" }

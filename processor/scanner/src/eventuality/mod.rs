@@ -14,7 +14,7 @@ use crate::{
     ScanToEventualityDb,
   },
   BlockExt, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, SchedulerUpdate, Scheduler,
-  sort_outputs,
+  CompletedEventualities, sort_outputs,
   scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
 
@@ -292,8 +292,13 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           completed_eventualities
         };
 
-        for tx in completed_eventualities.keys() {
-          log::info!("eventuality resolved by {}", hex::encode(tx.as_ref()));
+        for (tx, eventuality) in &completed_eventualities {
+          log::info!(
+            "eventuality {} resolved by {}",
+            hex::encode(eventuality.id()),
+            hex::encode(tx.as_ref())
+          );
+          CompletedEventualities::<S>::send(&mut txn, eventuality.id());
         }
 
         // Fetch all non-External outputs

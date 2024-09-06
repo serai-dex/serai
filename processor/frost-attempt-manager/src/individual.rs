@@ -80,10 +80,15 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
 
       We avoid this by saving to the DB we preprocessed before sending our preprocessed, and only
       keeping our preprocesses for this instance of the processor. Accordingly, on reboot, we will
-      flag the prior preprocess and not send new preprocesses.
+      flag the prior preprocess and not send new preprocesses. This does require our own DB
+      transaction (to ensure we save to the DB we preprocessed before yielding the preprocess
+      messages).
 
       We also won't send the share we were supposed to, unfortunately, yet caching/reloading the
       preprocess has enough safety issues it isn't worth the headache.
+
+      Since we bind a signing attempt to the lifetime of the application, we're also safe against
+      nonce reuse (as the state machines enforce single-use and we never reuse a preprocess).
     */
     {
       let mut txn = self.db.txn();

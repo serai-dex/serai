@@ -520,3 +520,26 @@ impl SubstrateToEventualityDb {
     Burns::try_recv(txn, acknowledged_block)
   }
 }
+
+mod _completed_eventualities {
+  use serai_db::{Get, DbTxn, create_db, db_channel};
+
+  db_channel! {
+    ScannerPublic {
+      CompletedEventualities: (empty_key: ()) -> [u8; 32],
+    }
+  }
+}
+
+/// The IDs of completed Eventualities found on-chain, within a finalized block.
+pub struct CompletedEventualities<S: ScannerFeed>(PhantomData<S>);
+impl<S: ScannerFeed> CompletedEventualities<S> {
+  pub(crate) fn send(txn: &mut impl DbTxn, id: [u8; 32]) {
+    _completed_eventualities::CompletedEventualities::send(txn, (), &id);
+  }
+
+  /// Receive the ID of a completed Eventuality.
+  pub fn try_recv(txn: &mut impl DbTxn) -> Option<[u8; 32]> {
+    _completed_eventualities::CompletedEventualities::try_recv(txn, ())
+  }
+}

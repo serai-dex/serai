@@ -7,7 +7,7 @@ pub trait Eventuality: Sized + Send + Sync {
   /// The type used to identify a received output.
   type OutputId: Id;
 
-  /// The ID of the transaction this Eventuality is for.
+  /// The ID of the SignableTransaction this Eventuality is for.
   ///
   /// This is an internal ID arbitrarily definable so long as it's unique.
   fn id(&self) -> [u8; 32];
