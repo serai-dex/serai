@@ -2,7 +2,37 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
+use core::fmt::Debug;
+
+use frost::sign::PreprocessMachine;
+
+use scheduler::SignableTransaction;
+
+pub(crate) mod db;
+
 mod transaction;
+
+/// An object capable of publishing a transaction.
+#[async_trait::async_trait]
+pub trait TransactionPublisher<S: SignableTransaction>: 'static + Send + Sync {
+  /// An error encountered when publishing a transaction.
+  ///
+  /// This MUST be an ephemeral error. Retrying publication MUST eventually resolve without manual
+  /// intervention/changing the arguments.
+  ///
+  /// The transaction already being present in the mempool/on-chain SHOULD NOT be considered an
+  /// error.
+  type EphemeralError: Debug;
+
+  /// Publish a transaction.
+  ///
+  /// This will be called multiple times, with the same transaction, until the transaction is
+  /// confirmed on-chain.
+  async fn publish(
+    &self,
+    tx: <S::PreprocessMachine as PreprocessMachine>::Signature,
+  ) -> Result<(), Self::EphemeralError>;
+}
 
 /*
 // The signers used by a Processor, key-scoped.

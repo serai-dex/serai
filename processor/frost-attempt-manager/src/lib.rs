@@ -65,6 +65,10 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   }
 
   /// Handle a message for a signing protocol.
+  ///
+  /// Handling a message multiple times is safe and will cause subsequent calls to return
+  /// `Response::Messages(vec![])`. Handling a message for a signing protocol which isn't being
+  /// worked on (potentially due to rebooting) will also return `Response::Messages(vec![])`.
   pub fn handle(&mut self, msg: CoordinatorMessage) -> Response<M> {
     match msg {
       CoordinatorMessage::Preprocesses { id, preprocesses } => {

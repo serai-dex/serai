@@ -20,7 +20,8 @@ ignored = ["scale", "borsh"]
 workspace = true
 
 [dependencies]
-group = { version = "0.13", default-features = false }
+ciphersuite = { path = "../../../crypto/ciphersuite", default-features = false, features = ["std"] }
+frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }

@@ -21,6 +21,7 @@ pub use lifetime::LifetimeStage;
 
 // Database schema definition and associated functions.
 mod db;
+pub use db::CompletedEventualities;
 // Task to index the blockchain, ensuring we don't reorganize finalized blocks.
 mod index;
 // Scans blocks for received coins.
@@ -170,6 +171,10 @@ pub type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 /// The block type for this ScannerFeed.
 pub type BlockFor<S> = <S as ScannerFeed>::Block;
 
+/// An object usable to publish a Batch.
+// This will presumably be the Batch signer defined in `serai-processor-signers` or a test shim.
+// It could also be some app-layer database for the purpose of verifying the Batches published to
+// Serai.
 #[async_trait::async_trait]
 pub trait BatchPublisher: 'static + Send + Sync {
   /// An error encountered when publishing the Batch.
