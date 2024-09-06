@@ -8,7 +8,7 @@ use frost::{Participant, sign::PreprocessMachine};
 
 use serai_validator_sets_primitives::Session;
 
-use serai_db::Db;
+use serai_db::{DbTxn, Db};
 use messages::sign::{ProcessorMessage, CoordinatorMessage};
 
 mod individual;
@@ -19,7 +19,12 @@ pub enum Response<M: PreprocessMachine> {
   /// Messages to send to the coordinator.
   Messages(Vec<ProcessorMessage>),
   /// A produced signature.
-  Signature(M::Signature),
+  Signature {
+    /// The ID of the protocol this is for.
+    id: [u8; 32],
+    /// The signature.
+    signature: M::Signature,
+  },
 }
 
 /// A manager of attempts for a variety of signing protocols.
@@ -55,13 +60,13 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// This does not stop the protocol from being re-registered and further worked on (with
   /// undefined behavior) then. The higher-level context must never call `register` again with this
   /// ID accordingly.
-  pub fn retire(&mut self, id: [u8; 32]) {
+  pub fn retire(&mut self, txn: &mut impl DbTxn, id: [u8; 32]) {
     if self.active.remove(&id).is_none() {
       log::info!("retiring protocol {}, which we didn't register/already retired", hex::encode(id));
     } else {
       log::info!("retired signing protocol {}", hex::encode(id));
     }
-    SigningProtocol::<D, M>::cleanup(&mut self.db, id);
+    SigningProtocol::<D, M>::cleanup(txn, id);
   }
 
   /// Handle a message for a signing protocol.
@@ -90,7 +95,7 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
           return Response::Messages(vec![]);
         };
         match protocol.shares(id.attempt, shares) {
-          Ok(signature) => Response::Signature(signature),
+          Ok(signature) => Response::Signature { id: id.id, signature },
           Err(messages) => Response::Messages(messages),
         }
       }

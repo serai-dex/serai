@@ -19,15 +19,15 @@ pub trait TransactionPublisher<S: SignableTransaction>: 'static + Send + Sync {
   ///
   /// This MUST be an ephemeral error. Retrying publication MUST eventually resolve without manual
   /// intervention/changing the arguments.
-  ///
-  /// The transaction already being present in the mempool/on-chain SHOULD NOT be considered an
-  /// error.
   type EphemeralError: Debug;
 
   /// Publish a transaction.
   ///
   /// This will be called multiple times, with the same transaction, until the transaction is
   /// confirmed on-chain.
+  ///
+  /// The transaction already being present in the mempool/on-chain MUST NOT be considered an
+  /// error.
   async fn publish(
     &self,
     tx: <S::PreprocessMachine as PreprocessMachine>::Signature,

@@ -23,7 +23,7 @@ pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
   /// The ciphersuite used to sign this transaction.
   type Ciphersuite: Ciphersuite;
   /// The preprocess machine for the signing protocol for this transaction.
-  type PreprocessMachine: Clone + PreprocessMachine<Signature: Send>;
+  type PreprocessMachine: Clone + PreprocessMachine<Signature: Send + Transaction>;
 
   /// Read a `SignableTransaction`.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;
