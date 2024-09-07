@@ -4,6 +4,14 @@ use serai_db::{Get, DbTxn, create_db, db_channel};
 
 use messages::sign::{ProcessorMessage, CoordinatorMessage};
 
+create_db! {
+  SignersGlobal {
+    RegisteredKeys: () -> Vec<Session>,
+    SerializedKeys: (session: Session) -> Vec<u8>,
+    LatestRetiredSession: () -> Session,
+  }
+}
+
 db_channel! {
   SignersGlobal {
     // CompletedEventualities needs to be handled by each signer, meaning we need to turn its

@@ -8735,6 +8735,7 @@ dependencies = [
  "serai-processor-scheduler-primitives",
  "serai-validator-sets-primitives",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
