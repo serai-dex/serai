@@ -11,7 +11,6 @@ use serai_db::{DbTxn, Db};
 
 use primitives::task::ContinuallyRan;
 use scheduler::{Transaction, SignableTransaction, TransactionsToSign};
-use scanner::{ScannerFeed, Scheduler};
 
 use frost_attempt_manager::*;
 
@@ -26,40 +25,35 @@ use crate::{
 mod db;
 use db::*;
 
-type TransactionFor<S, Sch> = <
-  <
-    <Sch as Scheduler<S>
-  >::SignableTransaction as SignableTransaction>::PreprocessMachine as PreprocessMachine
->::Signature;
+type TransactionFor<ST> =
+  <<ST as SignableTransaction>::PreprocessMachine as PreprocessMachine>::Signature;
 
 // Fetches transactions to sign and signs them.
 pub(crate) struct TransactionTask<
   D: Db,
-  S: ScannerFeed,
-  Sch: Scheduler<S>,
-  P: TransactionPublisher<Sch::SignableTransaction>,
+  ST: SignableTransaction,
+  P: TransactionPublisher<TransactionFor<ST>>,
 > {
   db: D,
   publisher: P,
 
   session: Session,
-  keys: Vec<ThresholdKeys<<Sch::SignableTransaction as SignableTransaction>::Ciphersuite>>,
+  keys: Vec<ThresholdKeys<ST::Ciphersuite>>,
 
   active_signing_protocols: HashSet<[u8; 32]>,
-  attempt_manager:
-    AttemptManager<D, <Sch::SignableTransaction as SignableTransaction>::PreprocessMachine>,
+  attempt_manager: AttemptManager<D, <ST as SignableTransaction>::PreprocessMachine>,
 
   last_publication: Instant,
 }
 
-impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::SignableTransaction>>
-  TransactionTask<D, S, Sch, P>
+impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>>
+  TransactionTask<D, ST, P>
 {
   pub(crate) fn new(
     db: D,
     publisher: P,
     session: Session,
-    keys: Vec<ThresholdKeys<<Sch::SignableTransaction as SignableTransaction>::Ciphersuite>>,
+    keys: Vec<ThresholdKeys<ST::Ciphersuite>>,
   ) -> Self {
     let mut active_signing_protocols = HashSet::new();
     let mut attempt_manager = AttemptManager::new(
@@ -74,8 +68,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::Sign
 
       let signable_transaction_buf = SerializedSignableTransactions::get(&db, tx).unwrap();
       let mut signable_transaction_buf = signable_transaction_buf.as_slice();
-      let signable_transaction =
-        <Sch as Scheduler<S>>::SignableTransaction::read(&mut signable_transaction_buf).unwrap();
+      let signable_transaction = ST::read(&mut signable_transaction_buf).unwrap();
       assert!(signable_transaction_buf.is_empty());
       assert_eq!(signable_transaction.id(), tx);
 
@@ -99,8 +92,8 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::Sign
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::SignableTransaction>>
-  ContinuallyRan for TransactionTask<D, S, Sch, P>
+impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>> ContinuallyRan
+  for TransactionTask<D, ST, P>
 {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let mut iterated = false;
@@ -108,10 +101,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::Sign
     // Check for new transactions to sign
     loop {
       let mut txn = self.db.txn();
-      let Some(tx) = TransactionsToSign::<Sch::SignableTransaction>::try_recv(
-        &mut txn,
-        &self.keys[0].group_key(),
-      ) else {
+      let Some(tx) = TransactionsToSign::<ST>::try_recv(&mut txn, &self.keys[0].group_key()) else {
         break;
       };
       iterated = true;
@@ -208,7 +198,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>, P: TransactionPublisher<Sch::Sign
       for tx in &self.active_signing_protocols {
         let Some(tx_buf) = SerializedTransactions::get(&self.db, *tx) else { continue };
         let mut tx_buf = tx_buf.as_slice();
-        let tx = TransactionFor::<S, Sch>::read(&mut tx_buf).unwrap();
+        let tx = TransactionFor::<ST>::read(&mut tx_buf).unwrap();
         assert!(tx_buf.is_empty());
 
         self

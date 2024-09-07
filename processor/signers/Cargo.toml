@@ -21,6 +21,7 @@ workspace = true
 
 [dependencies]
 async-trait = { version = "0.1", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["std"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
