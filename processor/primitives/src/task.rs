@@ -1,34 +1,78 @@
 use core::time::Duration;
+use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot, Mutex};
 
-/// A handle to immediately run an iteration of a task.
+enum Closed {
+  NotClosed(Option<oneshot::Receiver<()>>),
+  Closed,
+}
+
+/// A handle for a task.
 #[derive(Clone)]
-pub struct RunNowHandle(mpsc::Sender<()>);
-/// An instruction recipient to immediately run an iteration of a task.
-pub struct RunNowRecipient(mpsc::Receiver<()>);
+pub struct TaskHandle {
+  run_now: mpsc::Sender<()>,
+  close: mpsc::Sender<()>,
+  closed: Arc<Mutex<Closed>>,
+}
+/// A task's internal structures.
+pub struct Task {
+  run_now: mpsc::Receiver<()>,
+  close: mpsc::Receiver<()>,
+  closed: oneshot::Sender<()>,
+}
 
-impl RunNowHandle {
-  /// Create a new run-now handle to be assigned to a task.
-  pub fn new() -> (Self, RunNowRecipient) {
+impl Task {
+  /// Create a new task definition.
+  pub fn new() -> (Self, TaskHandle) {
     // Uses a capacity of 1 as any call to run as soon as possible satisfies all calls to run as
     // soon as possible
-    let (send, recv) = mpsc::channel(1);
-    (Self(send), RunNowRecipient(recv))
+    let (run_now_send, run_now_recv) = mpsc::channel(1);
+    // And any call to close satisfies all calls to close
+    let (close_send, close_recv) = mpsc::channel(1);
+    let (closed_send, closed_recv) = oneshot::channel();
+    (
+      Self { run_now: run_now_recv, close: close_recv, closed: closed_send },
+      TaskHandle {
+        run_now: run_now_send,
+        close: close_send,
+        closed: Arc::new(Mutex::new(Closed::NotClosed(Some(closed_recv)))),
+      },
+    )
   }
+}
 
+impl TaskHandle {
   /// Tell the task to run now (and not whenever its next iteration on a timer is).
   ///
   /// Panics if the task has been dropped.
   pub fn run_now(&self) {
     #[allow(clippy::match_same_arms)]
-    match self.0.try_send(()) {
+    match self.run_now.try_send(()) {
       Ok(()) => {}
       // NOP on full, as this task will already be ran as soon as possible
       Err(mpsc::error::TrySendError::Full(())) => {}
       Err(mpsc::error::TrySendError::Closed(())) => {
         panic!("task was unexpectedly closed when calling run_now")
       }
+    }
+  }
+
+  /// Close the task.
+  ///
+  /// Returns once the task shuts down after it finishes its current iteration (which may be of
+  /// unbounded time).
+  pub async fn close(self) {
+    // If another instance of the handle called tfhis, don't error
+    let _ = self.close.send(()).await;
+    // Wait until we receive the closed message
+    let mut closed = self.closed.lock().await;
+    match &mut *closed {
+      Closed::NotClosed(ref mut recv) => {
+        assert_eq!(recv.take().unwrap().await, Ok(()), "continually ran task dropped itself?");
+        *closed = Closed::Closed;
+      }
+      Closed::Closed => {}
     }
   }
 }
@@ -50,10 +94,7 @@ pub trait ContinuallyRan: Sized {
   async fn run_iteration(&mut self) -> Result<bool, String>;
 
   /// Continually run the task.
-  ///
-  /// This returns a channel which can have a message set to immediately trigger a new run of an
-  /// iteration.
-  async fn continually_run(mut self, mut run_now: RunNowRecipient, dependents: Vec<RunNowHandle>) {
+  async fn continually_run(mut self, mut task: Task, dependents: Vec<TaskHandle>) {
     // The default number of seconds to sleep before running the task again
     let default_sleep_before_next_task = Self::DELAY_BETWEEN_ITERATIONS;
     // The current number of seconds to sleep before running the task again
@@ -66,6 +107,15 @@ pub trait ContinuallyRan: Sized {
     };
 
     loop {
+      // If we were told to close/all handles were dropped, drop it
+      {
+        let should_close = task.close.try_recv();
+        match should_close {
+          Ok(()) | Err(mpsc::error::TryRecvError::Disconnected) => break,
+          Err(mpsc::error::TryRecvError::Empty) => {}
+        }
+      }
+
       match self.run_iteration().await {
         Ok(run_dependents) => {
           // Upon a successful (error-free) loop iteration, reset the amount of time we sleep
@@ -86,8 +136,15 @@ pub trait ContinuallyRan: Sized {
       // Don't run the task again for another few seconds UNLESS told to run now
       tokio::select! {
         () = tokio::time::sleep(Duration::from_secs(current_sleep_before_next_task)) => {},
-        msg = run_now.0.recv() => assert_eq!(msg, Some(()), "run now handle was dropped"),
+        msg = task.run_now.recv() => {
+          // Check if this is firing because the handle was dropped
+          if msg.is_none() {
+            break;
+          }
+        },
       }
     }
+
+    task.closed.send(()).unwrap();
   }
 }
