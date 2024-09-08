@@ -343,7 +343,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
 /// A representation of a scanner.
 #[allow(non_snake_case)]
 pub struct Scanner<S: ScannerFeed> {
-  substrate_handle: RunNowHandle,
+  substrate_handle: TaskHandle,
   _S: PhantomData<S>,
 }
 impl<S: ScannerFeed> Scanner<S> {
@@ -362,11 +362,11 @@ impl<S: ScannerFeed> Scanner<S> {
     let substrate_task = substrate::SubstrateTask::<_, S>::new(db.clone());
     let eventuality_task = eventuality::EventualityTask::<_, _, Sch>::new(db, feed, start_block);
 
-    let (_index_handle, index_run) = RunNowHandle::new();
-    let (scan_handle, scan_run) = RunNowHandle::new();
-    let (report_handle, report_run) = RunNowHandle::new();
-    let (substrate_handle, substrate_run) = RunNowHandle::new();
-    let (eventuality_handle, eventuality_run) = RunNowHandle::new();
+    let (index_run, _index_handle) = Task::new();
+    let (scan_run, scan_handle) = Task::new();
+    let (report_run, report_handle) = Task::new();
+    let (substrate_run, substrate_handle) = Task::new();
+    let (eventuality_run, eventuality_handle) = Task::new();
 
     // Upon indexing a new block, scan it
     tokio::spawn(index_task.continually_run(index_run, vec![scan_handle.clone()]));

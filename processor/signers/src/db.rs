@@ -9,6 +9,7 @@ create_db! {
     RegisteredKeys: () -> Vec<Session>,
     SerializedKeys: (session: Session) -> Vec<u8>,
     LatestRetiredSession: () -> Session,
+    ToCleanup: () -> Vec<(Session, Vec<u8>)>,
   }
 }
 

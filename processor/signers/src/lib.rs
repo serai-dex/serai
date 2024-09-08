@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 use core::{fmt::Debug, marker::PhantomData};
+use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
@@ -13,6 +14,7 @@ use frost::dkg::{ThresholdCore, ThresholdKeys};
 
 use serai_db::{DbTxn, Db};
 
+use primitives::task::TaskHandle;
 use scheduler::{Transaction, SignableTransaction, TransactionsToSign};
 
 pub(crate) mod db;
@@ -39,7 +41,10 @@ pub trait TransactionPublisher<T: Transaction>: 'static + Send + Sync {
 }
 
 /// The signers used by a processor.
-pub struct Signers<ST: SignableTransaction>(PhantomData<ST>);
+pub struct Signers<ST: SignableTransaction> {
+  tasks: HashMap<Session, Vec<TaskHandle>>,
+  _ST: PhantomData<ST>,
+}
 
 /*
   This is completely outside of consensus, so the worst that can happen is:
@@ -58,6 +63,8 @@ impl<ST: SignableTransaction> Signers<ST> {
   ///
   /// This will spawn tasks for any historically registered keys.
   pub fn new(db: impl Db) -> Self {
+    let mut tasks = HashMap::new();
+
     for session in db::RegisteredKeys::get(&db).unwrap_or(vec![]) {
       let buf = db::SerializedKeys::get(&db, session).unwrap();
       let mut buf = buf.as_slice();
@@ -74,7 +81,7 @@ impl<ST: SignableTransaction> Signers<ST> {
       todo!("TODO")
     }
 
-    todo!("TODO")
+    Self { tasks, _ST: PhantomData }
   }
 
   /// Register a set of keys to sign with.
@@ -87,6 +94,7 @@ impl<ST: SignableTransaction> Signers<ST> {
     substrate_keys: Vec<ThresholdKeys<Ristretto>>,
     network_keys: Vec<ThresholdKeys<ST::Ciphersuite>>,
   ) {
+    // Don't register already retired keys
     if Some(session.0) <= db::LatestRetiredSession::get(txn).map(|session| session.0) {
       return;
     }
@@ -125,9 +133,6 @@ impl<ST: SignableTransaction> Signers<ST> {
       db::LatestRetiredSession::set(txn, &session);
     }
 
-    // Kill the tasks
-    todo!("TODO");
-
     // Update RegisteredKeys/SerializedKeys
     if let Some(registered) = db::RegisteredKeys::get(txn) {
       db::RegisteredKeys::set(
@@ -136,6 +141,20 @@ impl<ST: SignableTransaction> Signers<ST> {
       );
     }
     db::SerializedKeys::del(txn, session);
+
+    // Queue the session for clean up
+    let mut to_cleanup = db::ToCleanup::get(txn).unwrap_or(vec![]);
+    to_cleanup.push((session, external_key.to_bytes().as_ref().to_vec()));
+    db::ToCleanup::set(txn, &to_cleanup);
+
+    // TODO: Handle all of the following cleanup on a task
+    /*
+    // Kill the tasks
+    if let Some(tasks) = self.tasks.remove(&session) {
+      for task in tasks {
+        task.close().await;
+      }
+    }
 
     // Drain the transactions to sign
     // Presumably, TransactionsToSign will be fully populated before retiry occurs, making this
@@ -152,6 +171,7 @@ impl<ST: SignableTransaction> Signers<ST> {
     while db::SlashReportSignerToCoordinatorMessages::try_recv(txn, session).is_some() {}
     while db::CoordinatorToCosignerMessages::try_recv(txn, session).is_some() {}
     while db::CosignerToCoordinatorMessages::try_recv(txn, session).is_some() {}
+    */
   }
 }
 
