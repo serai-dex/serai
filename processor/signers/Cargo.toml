@@ -31,6 +31,7 @@ frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std"] }
 serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives", default-features = false, features = ["std"] }
 

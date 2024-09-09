@@ -21,7 +21,7 @@ pub use lifetime::LifetimeStage;
 // Database schema definition and associated functions.
 mod db;
 use db::ScannerGlobalDb;
-pub use db::{BatchesToSign, AcknowledgedBatches, CompletedEventualities};
+pub use db::{Batches, BatchesToSign, AcknowledgedBatches, CompletedEventualities};
 // Task to index the blockchain, ensuring we don't reorganize finalized blocks.
 mod index;
 // Scans blocks for received coins.

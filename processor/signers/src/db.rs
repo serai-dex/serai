@@ -17,6 +17,7 @@ db_channel! {
   SignersGlobal {
     Cosign: (session: Session) -> (u64, [u8; 32]),
     SlashReport: (session: Session) -> Vec<Slash>,
+    SlashReportSignature: (session: Session) -> Vec<u8>,
 
     CoordinatorToCosignerMessages: (session: Session) -> CoordinatorMessage,
     CosignerToCoordinatorMessages: (session: Session) -> ProcessorMessage,

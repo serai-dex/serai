@@ -8731,6 +8731,7 @@ dependencies = [
  "rand_core",
  "serai-db",
  "serai-in-instructions-primitives",
+ "serai-primitives",
  "serai-processor-frost-attempt-manager",
  "serai-processor-messages",
  "serai-processor-primitives",

@@ -7,9 +7,9 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use dkg::Participant;
 
 use serai_primitives::BlockHash;
-use in_instructions_primitives::{Batch, SignedBatch};
-use coins_primitives::OutInstructionWithBalance;
 use validator_sets_primitives::{Session, KeyPair, Slash};
+use coins_primitives::OutInstructionWithBalance;
+use in_instructions_primitives::{Batch, SignedBatch};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SubstrateContext {
@@ -84,7 +84,7 @@ pub mod sign {
   pub enum VariantSignId {
     Cosign([u8; 32]),
     Batch(u32),
-    SlashReport([u8; 32]),
+    SlashReport(Session),
     Transaction([u8; 32]),
   }
   impl fmt::Debug for VariantSignId {
@@ -94,10 +94,9 @@ pub mod sign {
           f.debug_struct("VariantSignId::Cosign").field("0", &hex::encode(cosign)).finish()
         }
         Self::Batch(batch) => f.debug_struct("VariantSignId::Batch").field("0", &batch).finish(),
-        Self::SlashReport(slash_report) => f
-          .debug_struct("VariantSignId::SlashReport")
-          .field("0", &hex::encode(slash_report))
-          .finish(),
+        Self::SlashReport(session) => {
+          f.debug_struct("VariantSignId::SlashReport").field("0", &session).finish()
+        }
         Self::Transaction(tx) => {
           f.debug_struct("VariantSignId::Transaction").field("0", &hex::encode(tx)).finish()
         }
