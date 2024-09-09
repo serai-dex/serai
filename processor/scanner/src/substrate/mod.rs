@@ -144,16 +144,9 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
             }
           }
 
-          // Drop burns less than the dust
-          let burns = burns
-            .into_iter()
-            .filter(|burn| burn.balance.amount.0 >= S::dust(burn.balance.coin).0)
-            .collect::<Vec<_>>();
-          if !burns.is_empty() {
-            // We send these Burns as stemming from this block we just acknowledged
-            // This causes them to be acted on after we accumulate the outputs from this block
-            SubstrateToEventualityDb::send_burns(&mut txn, block_number, &burns);
-          }
+          // We send these Burns as stemming from this block we just acknowledged
+          // This causes them to be acted on after we accumulate the outputs from this block
+          SubstrateToEventualityDb::send_burns::<S>(&mut txn, block_number, burns);
         }
 
         Action::QueueBurns(burns) => {
@@ -163,7 +156,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
           let queue_as_of = ScannerGlobalDb::<S>::highest_acknowledged_block(&txn)
             .expect("queueing Burns yet never acknowledged a block");
 
-          SubstrateToEventualityDb::send_burns(&mut txn, queue_as_of, &burns);
+          SubstrateToEventualityDb::send_burns::<S>(&mut txn, queue_as_of, burns);
         }
       }
 

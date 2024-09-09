@@ -46,8 +46,11 @@ pub trait Coordinator: 'static + Send + Sync {
   /// Send a `messages::sign::ProcessorMessage`.
   async fn send(&mut self, message: ProcessorMessage) -> Result<(), Self::EphemeralError>;
 
+  /// Publish a `Batch`.
+  async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError>;
+
   /// Publish a `SignedBatch`.
-  async fn publish_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError>;
+  async fn publish_signed_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError>;
 }
 
 /// An object capable of publishing a transaction.
