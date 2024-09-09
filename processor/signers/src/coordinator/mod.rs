@@ -90,6 +90,21 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
         txn.commit();
       }
 
+      // Publish the cosigns from this session
+      {
+        let mut txn = self.db.txn();
+        while let Some(((block_number, block_id), signature)) = Cosign::try_recv(&mut txn, session)
+        {
+          iterated = true;
+          self
+            .coordinator
+            .publish_cosign(block_number, block_id, <_>::decode(&mut signature.as_slice()).unwrap())
+            .await
+            .map_err(|e| format!("couldn't publish Cosign: {e:?}"))?;
+        }
+        txn.commit();
+      }
+
       // If this session signed its slash report, publish its signature
       {
         let mut txn = self.db.txn();

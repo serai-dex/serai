@@ -82,7 +82,7 @@ pub mod sign {
 
   #[derive(Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, BorshSerialize, BorshDeserialize)]
   pub enum VariantSignId {
-    Cosign([u8; 32]),
+    Cosign(u64),
     Batch(u32),
     SlashReport(Session),
     Transaction([u8; 32]),
@@ -91,7 +91,7 @@ pub mod sign {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
       match self {
         Self::Cosign(cosign) => {
-          f.debug_struct("VariantSignId::Cosign").field("0", &hex::encode(cosign)).finish()
+          f.debug_struct("VariantSignId::Cosign").field("0", &cosign).finish()
         }
         Self::Batch(batch) => f.debug_struct("VariantSignId::Batch").field("0", &batch).finish(),
         Self::SlashReport(session) => {

@@ -26,7 +26,7 @@ use crate::{
   WrappedSchnorrkelMachine,
 };
 
-// Fetches slash_reportes to sign and signs them.
+// Fetches slash reports to sign and signs them.
 #[allow(non_snake_case)]
 pub(crate) struct SlashReportSignerTask<D: Db, S: ScannerFeed> {
   db: D,
@@ -44,7 +44,7 @@ impl<D: Db, S: ScannerFeed> SlashReportSignerTask<D, S> {
     let attempt_manager = AttemptManager::new(
       db.clone(),
       session,
-      keys.first().expect("creating a slash_report signer with 0 keys").params().i(),
+      keys.first().expect("creating a slash report signer with 0 keys").params().i(),
     );
 
     Self { db, _S: PhantomData, session, keys, has_slash_report: false, attempt_manager }

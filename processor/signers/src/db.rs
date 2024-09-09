@@ -10,12 +10,15 @@ create_db! {
     SerializedKeys: (session: Session) -> Vec<u8>,
     LatestRetiredSession: () -> Session,
     ToCleanup: () -> Vec<(Session, Vec<u8>)>,
+
+    ToCosign: (session: Session) -> (u64, [u8; 32]),
   }
 }
 
 db_channel! {
   SignersGlobal {
-    Cosign: (session: Session) -> (u64, [u8; 32]),
+    Cosign: (session: Session) -> ((u64, [u8; 32]), Vec<u8>),
+
     SlashReport: (session: Session) -> Vec<Slash>,
     SlashReportSignature: (session: Session) -> Vec<u8>,
 
