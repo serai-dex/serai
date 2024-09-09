@@ -2,11 +2,12 @@ use core::marker::PhantomData;
 use std::io::{self, Read, Write};
 
 use group::GroupEncoding;
+
 use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use serai_in_instructions_primitives::InInstructionWithBalance;
+use serai_in_instructions_primitives::{InInstructionWithBalance, Batch};
 use serai_coins_primitives::OutInstructionWithBalance;
 
 use primitives::{EncodableG, Address, ReceivedOutput};
@@ -105,6 +106,10 @@ create_db!(
 
 pub(crate) struct ScannerGlobalDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerGlobalDb<S> {
+  pub(crate) fn has_any_key_been_queued(getter: &impl Get) -> bool {
+    ActiveKeys::get::<EncodableG<KeyFor<S>>>(getter).is_some()
+  }
+
   /// Queue a key.
   ///
   /// Keys may be queued whenever, so long as they're scheduled to activate `WINDOW_LENGTH` blocks
@@ -460,15 +465,20 @@ db_channel! {
   }
 }
 
+pub(crate) struct InInstructionData<S: ScannerFeed> {
+  pub(crate) external_key_for_session_to_sign_batch: KeyFor<S>,
+  pub(crate) returnable_in_instructions: Vec<Returnable<S>>,
+}
+
 pub(crate) struct ScanToReportDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScanToReportDb<S> {
   pub(crate) fn send_in_instructions(
     txn: &mut impl DbTxn,
     block_number: u64,
-    returnable_in_instructions: &[Returnable<S>],
+    data: &InInstructionData<S>,
   ) {
-    let mut buf = vec![];
-    for returnable_in_instruction in returnable_in_instructions {
+    let mut buf = data.external_key_for_session_to_sign_batch.to_bytes().as_ref().to_vec();
+    for returnable_in_instruction in &data.returnable_in_instructions {
       returnable_in_instruction.write(&mut buf).unwrap();
     }
     InInstructions::send(
@@ -481,7 +491,7 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
   pub(crate) fn recv_in_instructions(
     txn: &mut impl DbTxn,
     block_number: u64,
-  ) -> Vec<Returnable<S>> {
+  ) -> InInstructionData<S> {
     let data = InInstructions::try_recv(txn, ())
       .expect("receiving InInstructions for a scanned block not yet sent");
     assert_eq!(
@@ -490,11 +500,20 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
     );
     let mut buf = data.returnable_in_instructions.as_slice();
 
+    let external_key_for_session_to_sign_batch = {
+      let mut external_key_for_session_to_sign_batch =
+        <KeyFor<S> as GroupEncoding>::Repr::default();
+      let key_len = external_key_for_session_to_sign_batch.as_ref().len();
+      external_key_for_session_to_sign_batch.as_mut().copy_from_slice(&buf[.. key_len]);
+      buf = &buf[key_len ..];
+      KeyFor::<S>::from_bytes(&external_key_for_session_to_sign_batch).unwrap()
+    };
+
     let mut returnable_in_instructions = vec![];
     while !buf.is_empty() {
       returnable_in_instructions.push(Returnable::read(&mut buf).unwrap());
     }
-    returnable_in_instructions
+    InInstructionData { external_key_for_session_to_sign_batch, returnable_in_instructions }
   }
 }
 
@@ -522,13 +541,43 @@ impl SubstrateToEventualityDb {
   }
 }
 
-mod _completed_eventualities {
+mod _public_db {
+  use serai_in_instructions_primitives::Batch;
+
   use serai_db::{Get, DbTxn, create_db, db_channel};
 
   db_channel! {
     ScannerPublic {
+      BatchToSign: (key: &[u8]) -> Batch,
+      AcknowledgedBatch: (key: &[u8]) -> u32,
       CompletedEventualities: (key: &[u8]) -> [u8; 32],
     }
+  }
+}
+
+/// The batches to sign and publish.
+pub struct BatchToSign<K: GroupEncoding>(PhantomData<K>);
+impl<K: GroupEncoding> BatchToSign<K> {
+  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: &Batch) {
+    _public_db::BatchToSign::send(txn, key.to_bytes().as_ref(), batch);
+  }
+
+  /// Receive a batch to sign and publish.
+  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<Batch> {
+    _public_db::BatchToSign::try_recv(txn, key.to_bytes().as_ref())
+  }
+}
+
+/// The batches which were acknowledged on-chain.
+pub struct AcknowledgedBatch<K: GroupEncoding>(PhantomData<K>);
+impl<K: GroupEncoding> AcknowledgedBatch<K> {
+  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: u32) {
+    _public_db::AcknowledgedBatch::send(txn, key.to_bytes().as_ref(), &batch);
+  }
+
+  /// Receive the ID of a batch which was acknowledged.
+  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<u32> {
+    _public_db::AcknowledgedBatch::try_recv(txn, key.to_bytes().as_ref())
   }
 }
 
@@ -536,11 +585,11 @@ mod _completed_eventualities {
 pub struct CompletedEventualities<K: GroupEncoding>(PhantomData<K>);
 impl<K: GroupEncoding> CompletedEventualities<K> {
   pub(crate) fn send(txn: &mut impl DbTxn, key: &K, id: [u8; 32]) {
-    _completed_eventualities::CompletedEventualities::send(txn, key.to_bytes().as_ref(), &id);
+    _public_db::CompletedEventualities::send(txn, key.to_bytes().as_ref(), &id);
   }
 
   /// Receive the ID of a completed Eventuality.
   pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<[u8; 32]> {
-    _completed_eventualities::CompletedEventualities::try_recv(txn, key.to_bytes().as_ref())
+    _public_db::CompletedEventualities::try_recv(txn, key.to_bytes().as_ref())
   }
 }

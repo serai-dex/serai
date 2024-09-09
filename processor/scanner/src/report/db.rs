@@ -1,6 +1,8 @@
 use core::marker::PhantomData;
 use std::io::{Read, Write};
 
+use group::GroupEncoding;
+
 use scale::{Encode, Decode, IoReader};
 use serai_db::{Get, DbTxn, create_db};
 
@@ -8,7 +10,7 @@ use serai_primitives::Balance;
 
 use primitives::Address;
 
-use crate::{ScannerFeed, AddressFor};
+use crate::{ScannerFeed, KeyFor, AddressFor};
 
 create_db!(
   ScannerReport {
@@ -19,6 +21,9 @@ create_db!(
 
     // The block number which caused a batch
     BlockNumberForBatch: (batch: u32) -> u64,
+
+    // The external key for the session which should sign a batch
+    ExternalKeyForSessionToSignBatch: (batch: u32) -> Vec<u8>,
 
     // The return addresses for the InInstructions within a Batch
     SerializedReturnAddresses: (batch: u32) -> Vec<u8>,
@@ -53,6 +58,29 @@ impl<S: ScannerFeed> ReportDb<S> {
     let block_number = BlockNumberForBatch::get(txn, id)?;
     BlockNumberForBatch::del(txn, id);
     Some(block_number)
+  }
+
+  pub(crate) fn save_external_key_for_session_to_sign_batch(
+    txn: &mut impl DbTxn,
+    id: u32,
+    external_key_for_session_to_sign_batch: &KeyFor<S>,
+  ) {
+    ExternalKeyForSessionToSignBatch::set(
+      txn,
+      id,
+      &external_key_for_session_to_sign_batch.to_bytes().as_ref().to_vec(),
+    );
+  }
+
+  pub(crate) fn take_external_key_for_session_to_sign_batch(
+    txn: &mut impl DbTxn,
+    id: u32,
+  ) -> Option<KeyFor<S>> {
+    ExternalKeyForSessionToSignBatch::get(txn, id).map(|key_vec| {
+      let mut key = <KeyFor<S> as GroupEncoding>::Repr::default();
+      key.as_mut().copy_from_slice(&key_vec);
+      KeyFor::<S>::from_bytes(&key).unwrap()
+    })
   }
 
   pub(crate) fn save_return_information(

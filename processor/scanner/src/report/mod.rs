@@ -8,28 +8,35 @@ use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
 use primitives::task::ContinuallyRan;
 use crate::{
-  db::{Returnable, ScannerGlobalDb, ScanToReportDb},
+  db::{Returnable, ScannerGlobalDb, InInstructionData, ScanToReportDb, BatchToSign},
   index,
   scan::next_to_scan_for_outputs_block,
-  ScannerFeed, BatchPublisher,
+  ScannerFeed, KeyFor,
 };
 
 mod db;
 pub(crate) use db::ReturnInformation;
 use db::ReportDb;
 
-pub(crate) fn take_return_information<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
-  id: u32,
-) -> Option<Vec<Option<ReturnInformation<S>>>> {
-  ReportDb::<S>::take_return_information(txn, id)
-}
-
 pub(crate) fn take_block_number_for_batch<S: ScannerFeed>(
   txn: &mut impl DbTxn,
   id: u32,
 ) -> Option<u64> {
   ReportDb::<S>::take_block_number_for_batch(txn, id)
+}
+
+pub(crate) fn take_external_key_for_session_to_sign_batch<S: ScannerFeed>(
+  txn: &mut impl DbTxn,
+  id: u32,
+) -> Option<KeyFor<S>> {
+  ReportDb::<S>::take_external_key_for_session_to_sign_batch(txn, id)
+}
+
+pub(crate) fn take_return_information<S: ScannerFeed>(
+  txn: &mut impl DbTxn,
+  id: u32,
+) -> Option<Vec<Option<ReturnInformation<S>>>> {
+  ReportDb::<S>::take_return_information(txn, id)
 }
 
 /*
@@ -40,14 +47,13 @@ pub(crate) fn take_block_number_for_batch<S: ScannerFeed>(
   the InInstructions for it.
 */
 #[allow(non_snake_case)]
-pub(crate) struct ReportTask<D: Db, S: ScannerFeed, B: BatchPublisher> {
+pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
-  batch_publisher: B,
   _S: PhantomData<S>,
 }
 
-impl<D: Db, S: ScannerFeed, B: BatchPublisher> ReportTask<D, S, B> {
-  pub(crate) fn new(mut db: D, batch_publisher: B, start_block: u64) -> Self {
+impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
+  pub(crate) fn new(mut db: D, start_block: u64) -> Self {
     if ReportDb::<S>::next_to_potentially_report_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
@@ -55,12 +61,12 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ReportTask<D, S, B> {
       txn.commit();
     }
 
-    Self { db, batch_publisher, _S: PhantomData }
+    Self { db, _S: PhantomData }
   }
 }
 
 #[async_trait::async_trait]
-impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, S, B> {
+impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let highest_reportable = {
       // Fetch the next to scan block
@@ -87,7 +93,10 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
 
       // Receive the InInstructions for this block
       // We always do this as we can't trivially tell if we should recv InInstructions before we do
-      let in_instructions = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
+      let InInstructionData {
+        external_key_for_session_to_sign_batch,
+        returnable_in_instructions: in_instructions,
+      } = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
       let notable = ScannerGlobalDb::<S>::is_block_notable(&txn, b);
       if !notable {
         assert!(in_instructions.is_empty(), "block wasn't notable yet had InInstructions");
@@ -138,19 +147,20 @@ impl<D: Db, S: ScannerFeed, B: BatchPublisher> ContinuallyRan for ReportTask<D, 
             .push(return_address.map(|address| ReturnInformation { address, balance }));
         }
 
-        // Save the return addresses to the databse
+        // Save the return addresses to the database
         assert_eq!(batches.len(), return_information.len());
         for (batch, return_information) in batches.iter().zip(&return_information) {
           assert_eq!(batch.instructions.len(), return_information.len());
+          ReportDb::<S>::save_external_key_for_session_to_sign_batch(
+            &mut txn,
+            batch.id,
+            &external_key_for_session_to_sign_batch,
+          );
           ReportDb::<S>::save_return_information(&mut txn, batch.id, return_information);
         }
 
         for batch in batches {
-          self
-            .batch_publisher
-            .publish_batch(batch)
-            .await
-            .map_err(|e| format!("failed to publish batch: {e:?}"))?;
+          BatchToSign::send(&mut txn, &external_key_for_session_to_sign_batch, &batch);
         }
       }
 
