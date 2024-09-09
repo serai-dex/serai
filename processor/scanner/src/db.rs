@@ -548,36 +548,36 @@ mod _public_db {
 
   db_channel! {
     ScannerPublic {
-      BatchToSign: (key: &[u8]) -> Batch,
-      AcknowledgedBatch: (key: &[u8]) -> u32,
+      BatchesToSign: (key: &[u8]) -> Batch,
+      AcknowledgedBatches: (key: &[u8]) -> u32,
       CompletedEventualities: (key: &[u8]) -> [u8; 32],
     }
   }
 }
 
 /// The batches to sign and publish.
-pub struct BatchToSign<K: GroupEncoding>(PhantomData<K>);
-impl<K: GroupEncoding> BatchToSign<K> {
+pub struct BatchesToSign<K: GroupEncoding>(PhantomData<K>);
+impl<K: GroupEncoding> BatchesToSign<K> {
   pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: &Batch) {
-    _public_db::BatchToSign::send(txn, key.to_bytes().as_ref(), batch);
+    _public_db::BatchesToSign::send(txn, key.to_bytes().as_ref(), batch);
   }
 
   /// Receive a batch to sign and publish.
   pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<Batch> {
-    _public_db::BatchToSign::try_recv(txn, key.to_bytes().as_ref())
+    _public_db::BatchesToSign::try_recv(txn, key.to_bytes().as_ref())
   }
 }
 
 /// The batches which were acknowledged on-chain.
-pub struct AcknowledgedBatch<K: GroupEncoding>(PhantomData<K>);
-impl<K: GroupEncoding> AcknowledgedBatch<K> {
+pub struct AcknowledgedBatches<K: GroupEncoding>(PhantomData<K>);
+impl<K: GroupEncoding> AcknowledgedBatches<K> {
   pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: u32) {
-    _public_db::AcknowledgedBatch::send(txn, key.to_bytes().as_ref(), &batch);
+    _public_db::AcknowledgedBatches::send(txn, key.to_bytes().as_ref(), &batch);
   }
 
   /// Receive the ID of a batch which was acknowledged.
   pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<u32> {
-    _public_db::AcknowledgedBatch::try_recv(txn, key.to_bytes().as_ref())
+    _public_db::AcknowledgedBatches::try_recv(txn, key.to_bytes().as_ref())
   }
 }
 

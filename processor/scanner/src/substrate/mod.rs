@@ -6,7 +6,7 @@ use serai_coins_primitives::{OutInstruction, OutInstructionWithBalance};
 
 use primitives::task::ContinuallyRan;
 use crate::{
-  db::{ScannerGlobalDb, SubstrateToEventualityDb, AcknowledgedBatch},
+  db::{ScannerGlobalDb, SubstrateToEventualityDb, AcknowledgedBatches},
   report, ScannerFeed, KeyFor,
 };
 
@@ -82,7 +82,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
           {
             let external_key_for_session_to_sign_batch =
               report::take_external_key_for_session_to_sign_batch::<S>(&mut txn, batch_id).unwrap();
-            AcknowledgedBatch::send(&mut txn, &external_key_for_session_to_sign_batch, batch_id);
+            AcknowledgedBatches::send(&mut txn, &external_key_for_session_to_sign_batch, batch_id);
           }
 
           // Mark we made progress and handle this

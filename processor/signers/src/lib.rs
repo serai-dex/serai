@@ -11,6 +11,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::{ThresholdCore, ThresholdKeys};
 
 use serai_validator_sets_primitives::Session;
+use serai_in_instructions_primitives::SignedBatch;
 
 use serai_db::{DbTxn, Db};
 
@@ -19,25 +20,34 @@ use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 use primitives::task::{Task, TaskHandle, ContinuallyRan};
 use scheduler::{Transaction, SignableTransaction, TransactionFor};
 
+mod wrapped_schnorrkel;
+pub(crate) use wrapped_schnorrkel::WrappedSchnorrkelMachine;
+
 pub(crate) mod db;
 
 mod coordinator;
 use coordinator::CoordinatorTask;
 
+mod batch;
+use batch::BatchSignerTask;
+
 mod transaction;
-use transaction::TransactionTask;
+use transaction::TransactionSignerTask;
 
 /// A connection to the Coordinator which messages can be published with.
 #[async_trait::async_trait]
 pub trait Coordinator: 'static + Send + Sync {
-  /// An error encountered when sending a message.
+  /// An error encountered when interacting with a coordinator.
   ///
-  /// This MUST be an ephemeral error. Retrying sending a message MUST eventually resolve without
+  /// This MUST be an ephemeral error. Retrying an interaction MUST eventually resolve without
   /// manual intervention/changing the arguments.
   type EphemeralError: Debug;
 
   /// Send a `messages::sign::ProcessorMessage`.
   async fn send(&mut self, message: ProcessorMessage) -> Result<(), Self::EphemeralError>;
+
+  /// Publish a `SignedBatch`.
+  async fn publish_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError>;
 }
 
 /// An object capable of publishing a transaction.
@@ -111,13 +121,18 @@ impl<ST: SignableTransaction> Signers<ST> {
           <ST::Ciphersuite as Ciphersuite>::read_G(&mut external_key_bytes).unwrap();
         assert!(external_key_bytes.is_empty());
 
+        // Drain the Batches to sign
+        // This will be fully populated by the scanner before retiry occurs, making this perfect
+        // in not leaving any pending blobs behind
+        while scanner::BatchesToSign::try_recv(&mut txn, &external_key).is_some() {}
+        // Drain the acknowledged batches to no longer sign
+        while scanner::AcknowledgedBatches::try_recv(&mut txn, &external_key).is_some() {}
+
         // Drain the transactions to sign
-        // TransactionsToSign will be fully populated by the scheduler before retiry occurs, making
-        // this perfect in not leaving any pending blobs behind
+        // This will be fully populated by the scheduler before retiry
         while scheduler::TransactionsToSign::<ST>::try_recv(&mut txn, &external_key).is_some() {}
 
         // Drain the completed Eventualities
-        // This will be fully populated by the scanner before retiry
         while scanner::CompletedEventualities::try_recv(&mut txn, &external_key).is_some() {}
 
         // Drain our DB channels
@@ -156,18 +171,37 @@ impl<ST: SignableTransaction> Signers<ST> {
 
       // TODO: Batch signer, cosigner, slash report signers
 
-      let (transaction_task, transaction_handle) = Task::new();
+      let (batch_task, batch_handle) = Task::new();
       tokio::spawn(
-        TransactionTask::<_, ST, _>::new(db.clone(), publisher.clone(), session, external_keys)
-          .continually_run(transaction_task, vec![coordinator_handle.clone()]),
+        BatchSignerTask::new(
+          db.clone(),
+          session,
+          external_keys[0].group_key(),
+          substrate_keys.clone(),
+        )
+        .continually_run(batch_task, vec![coordinator_handle.clone()]),
       );
 
-      tasks.insert(session, Tasks {
-        cosigner: todo!("TODO"),
-        batch: todo!("TODO"),
-        slash_report: todo!("TODO"),
-        transaction: transaction_handle,
-      });
+      let (transaction_task, transaction_handle) = Task::new();
+      tokio::spawn(
+        TransactionSignerTask::<_, ST, _>::new(
+          db.clone(),
+          publisher.clone(),
+          session,
+          external_keys,
+        )
+        .continually_run(transaction_task, vec![coordinator_handle.clone()]),
+      );
+
+      tasks.insert(
+        session,
+        Tasks {
+          cosigner: todo!("TODO"),
+          batch: batch_handle,
+          slash_report: todo!("TODO"),
+          transaction: transaction_handle,
+        },
+      );
     }
 
     Self { coordinator_handle, tasks, _ST: PhantomData }
@@ -246,19 +280,27 @@ impl<ST: SignableTransaction> Signers<ST> {
     match sign_id.id {
       VariantSignId::Cosign(_) => {
         db::CoordinatorToCosignerMessages::send(txn, sign_id.session, message);
-        if let Some(tasks) = tasks { tasks.cosigner.run_now(); }
+        if let Some(tasks) = tasks {
+          tasks.cosigner.run_now();
+        }
       }
       VariantSignId::Batch(_) => {
         db::CoordinatorToBatchSignerMessages::send(txn, sign_id.session, message);
-        if let Some(tasks) = tasks { tasks.batch.run_now(); }
+        if let Some(tasks) = tasks {
+          tasks.batch.run_now();
+        }
       }
       VariantSignId::SlashReport(_) => {
         db::CoordinatorToSlashReportSignerMessages::send(txn, sign_id.session, message);
-        if let Some(tasks) = tasks { tasks.slash_report.run_now(); }
+        if let Some(tasks) = tasks {
+          tasks.slash_report.run_now();
+        }
       }
       VariantSignId::Transaction(_) => {
         db::CoordinatorToTransactionSignerMessages::send(txn, sign_id.session, message);
-        if let Some(tasks) = tasks { tasks.transaction.run_now(); }
+        if let Some(tasks) = tasks {
+          tasks.transaction.run_now();
+        }
       }
     }
   }
