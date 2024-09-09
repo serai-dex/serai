@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::{ThresholdCore, ThresholdKeys};
 
-use serai_validator_sets_primitives::Session;
+use serai_validator_sets_primitives::{Session, Slash};
 use serai_in_instructions_primitives::SignedBatch;
 
 use serai_db::{DbTxn, Db};
@@ -139,6 +139,8 @@ impl<ST: SignableTransaction> Signers<ST> {
         while scanner::CompletedEventualities::try_recv(&mut txn, &external_key).is_some() {}
 
         // Drain our DB channels
+        while db::Cosign::try_recv(&mut txn, session).is_some() {}
+        while db::SlashReport::try_recv(&mut txn, session).is_some() {}
         while db::CoordinatorToCosignerMessages::try_recv(&mut txn, session).is_some() {}
         while db::CosignerToCoordinatorMessages::try_recv(&mut txn, session).is_some() {}
         while db::CoordinatorToBatchSignerMessages::try_recv(&mut txn, session).is_some() {}
@@ -276,7 +278,7 @@ impl<ST: SignableTransaction> Signers<ST> {
 
   /// Queue handling a message.
   ///
-  /// This is a cheap call and able to be done inline with a higher-level loop.
+  /// This is a cheap call and able to be done inline from a higher-level loop.
   pub fn queue_message(&mut self, txn: &mut impl DbTxn, message: &CoordinatorMessage) {
     let sign_id = message.sign_id();
     let tasks = self.tasks.get(&sign_id.session);
@@ -305,6 +307,41 @@ impl<ST: SignableTransaction> Signers<ST> {
           tasks.transaction.run_now();
         }
       }
+    }
+  }
+
+  /// Cosign a block.
+  ///
+  /// This is a cheap call and able to be done inline from a higher-level loop.
+  pub fn cosign_block(
+    &mut self,
+    mut txn: impl DbTxn,
+    session: Session,
+    block_number: u64,
+    block: [u8; 32],
+  ) {
+    db::Cosign::send(&mut txn, session, &(block_number, block));
+    txn.commit();
+
+    if let Some(tasks) = self.tasks.get(&session) {
+      tasks.cosign.run_now();
+    }
+  }
+
+  /// Sign a slash report.
+  ///
+  /// This is a cheap call and able to be done inline from a higher-level loop.
+  pub fn sign_slash_report(
+    &mut self,
+    mut txn: impl DbTxn,
+    session: Session,
+    slash_report: Vec<Slash>,
+  ) {
+    db::SlashReport::send(&mut txn, session, &slash_report);
+    txn.commit();
+
+    if let Some(tasks) = self.tasks.get(&session) {
+      tasks.slash_report.run_now();
     }
   }
 }

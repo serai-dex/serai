@@ -103,7 +103,25 @@ pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
   (b"ValidatorSets-set_keys", set, key_pair).encode()
 }
 
-pub fn report_slashes_message(set: &ValidatorSet, slashes: &[(Public, u32)]) -> Vec<u8> {
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Slash {
+  #[cfg_attr(
+    feature = "borsh",
+    borsh(
+      serialize_with = "serai_primitives::borsh_serialize_public",
+      deserialize_with = "serai_primitives::borsh_deserialize_public"
+    )
+  )]
+  key: Public,
+  points: u32,
+}
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct SlashReport(pub BoundedVec<Slash, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>);
+
+pub fn report_slashes_message(set: &ValidatorSet, slashes: &SlashReport) -> Vec<u8> {
   (b"ValidatorSets-report_slashes", set, slashes).encode()
 }
 

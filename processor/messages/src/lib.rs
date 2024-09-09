@@ -9,7 +9,7 @@ use dkg::Participant;
 use serai_primitives::BlockHash;
 use in_instructions_primitives::{Batch, SignedBatch};
 use coins_primitives::OutInstructionWithBalance;
-use validator_sets_primitives::{Session, KeyPair};
+use validator_sets_primitives::{Session, KeyPair, Slash};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SubstrateContext {
@@ -163,7 +163,7 @@ pub mod coordinator {
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     CosignSubstrateBlock { session: Session, block_number: u64, block: [u8; 32] },
-    SignSlashReport { session: Session, report: Vec<([u8; 32], u32)> },
+    SignSlashReport { session: Session, report: Vec<Slash> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
