@@ -8630,7 +8630,6 @@ name = "serai-processor-frost-attempt-manager"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "hex",
  "log",
  "modular-frost",
  "parity-scale-codec",
@@ -8666,6 +8665,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "dkg",
+ "hex",
  "parity-scale-codec",
  "serai-coins-primitives",
  "serai-in-instructions-primitives",

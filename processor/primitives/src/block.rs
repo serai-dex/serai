@@ -60,6 +60,8 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
 
   /// Check if this block resolved any Eventualities.
   ///
+  /// This MUST mutate `eventualities` to no longer contain the resolved Eventualities.
+  ///
   /// Returns tbe resolved Eventualities, indexed by the ID of the transactions which resolved
   /// them.
   fn check_for_eventuality_resolutions(

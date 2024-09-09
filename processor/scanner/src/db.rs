@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 use std::io::{self, Read, Write};
 
+use group::GroupEncoding;
 use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
@@ -526,20 +527,20 @@ mod _completed_eventualities {
 
   db_channel! {
     ScannerPublic {
-      CompletedEventualities: (empty_key: ()) -> [u8; 32],
+      CompletedEventualities: (key: &[u8]) -> [u8; 32],
     }
   }
 }
 
 /// The IDs of completed Eventualities found on-chain, within a finalized block.
-pub struct CompletedEventualities<S: ScannerFeed>(PhantomData<S>);
-impl<S: ScannerFeed> CompletedEventualities<S> {
-  pub(crate) fn send(txn: &mut impl DbTxn, id: [u8; 32]) {
-    _completed_eventualities::CompletedEventualities::send(txn, (), &id);
+pub struct CompletedEventualities<K: GroupEncoding>(PhantomData<K>);
+impl<K: GroupEncoding> CompletedEventualities<K> {
+  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, id: [u8; 32]) {
+    _completed_eventualities::CompletedEventualities::send(txn, key.to_bytes().as_ref(), &id);
   }
 
   /// Receive the ID of a completed Eventuality.
-  pub fn try_recv(txn: &mut impl DbTxn) -> Option<[u8; 32]> {
-    _completed_eventualities::CompletedEventualities::try_recv(txn, ())
+  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<[u8; 32]> {
+    _completed_eventualities::CompletedEventualities::try_recv(txn, key.to_bytes().as_ref())
   }
 }
