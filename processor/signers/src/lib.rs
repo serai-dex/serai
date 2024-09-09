@@ -30,6 +30,9 @@ pub(crate) mod db;
 mod coordinator;
 use coordinator::CoordinatorTask;
 
+mod cosign;
+use cosign::CosignerTask;
+
 mod batch;
 use batch::BatchSignerTask;
 
@@ -50,6 +53,14 @@ pub trait Coordinator: 'static + Send + Sync {
 
   /// Send a `messages::sign::ProcessorMessage`.
   async fn send(&mut self, message: ProcessorMessage) -> Result<(), Self::EphemeralError>;
+
+  /// Publish a cosign.
+  async fn publish_cosign(
+    &mut self,
+    block_number: u64,
+    block_id: [u8; 32],
+    signature: Signature,
+  ) -> Result<(), Self::EphemeralError>;
 
   /// Publish a `Batch`.
   async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError>;
@@ -92,7 +103,14 @@ struct Tasks {
 
 /// The signers used by a processor.
 #[allow(non_snake_case)]
-pub struct Signers<S: ScannerFeed, Sch: Scheduler<S>> {
+pub struct Signers<
+  D: Db,
+  S: ScannerFeed,
+  Sch: Scheduler<S>,
+  P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
+> {
+  db: D,
+  publisher: P,
   coordinator_handle: TaskHandle,
   tasks: HashMap<Session, Tasks>,
   _Sch: PhantomData<Sch>,
@@ -115,15 +133,66 @@ type SignableTransactionFor<S, Sch> = <Sch as Scheduler<S>>::SignableTransaction
   completion comes in *before* we registered a key, the signer will hold the signing protocol in
   memory until the session is retired entirely.
 */
-impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
+impl<
+    D: Db,
+    S: ScannerFeed,
+    Sch: Scheduler<S>,
+    P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
+  > Signers<D, S, Sch, P>
+{
+  fn tasks(
+    db: D,
+    publisher: P,
+    coordinator_handle: TaskHandle,
+    session: Session,
+    substrate_keys: Vec<ThresholdKeys<Ristretto>>,
+    external_keys: Vec<ThresholdKeys<CiphersuiteFor<S, Sch>>>,
+  ) -> Tasks {
+    let (cosign_task, cosign_handle) = Task::new();
+    tokio::spawn(
+      CosignerTask::new(db.clone(), session, substrate_keys.clone())
+        .continually_run(cosign_task, vec![coordinator_handle.clone()]),
+    );
+
+    let (batch_task, batch_handle) = Task::new();
+    tokio::spawn(
+      BatchSignerTask::new(
+        db.clone(),
+        session,
+        external_keys[0].group_key(),
+        substrate_keys.clone(),
+      )
+      .continually_run(batch_task, vec![coordinator_handle.clone()]),
+    );
+
+    let (slash_report_task, slash_report_handle) = Task::new();
+    tokio::spawn(
+      SlashReportSignerTask::<_, S>::new(db.clone(), session, substrate_keys)
+        .continually_run(slash_report_task, vec![coordinator_handle.clone()]),
+    );
+
+    let (transaction_task, transaction_handle) = Task::new();
+    tokio::spawn(
+      TransactionSignerTask::<_, SignableTransactionFor<S, Sch>, _>::new(
+        db,
+        publisher,
+        session,
+        external_keys,
+      )
+      .continually_run(transaction_task, vec![coordinator_handle]),
+    );
+
+    Tasks {
+      cosigner: cosign_handle,
+      batch: batch_handle,
+      slash_report: slash_report_handle,
+      transaction: transaction_handle,
+    }
+  }
   /// Initialize the signers.
   ///
   /// This will spawn tasks for any historically registered keys.
-  pub fn new(
-    mut db: impl Db,
-    coordinator: impl Coordinator,
-    publisher: &impl TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
-  ) -> Self {
+  pub fn new(mut db: D, coordinator: impl Coordinator, publisher: P) -> Self {
     /*
       On boot, perform any database cleanup which was queued.
 
@@ -158,6 +227,8 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
         // Drain the completed Eventualities
         while scanner::CompletedEventualities::try_recv(&mut txn, &external_key).is_some() {}
 
+        // Delete the cosign this session should be working on
+        db::ToCosign::del(&mut txn, session);
         // Drain our DB channels
         while db::Cosign::try_recv(&mut txn, session).is_some() {}
         while db::SlashReport::try_recv(&mut txn, session).is_some() {}
@@ -195,48 +266,20 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
         ));
       }
 
-      // TODO: Cosigner
-
-      let (batch_task, batch_handle) = Task::new();
-      tokio::spawn(
-        BatchSignerTask::new(
-          db.clone(),
-          session,
-          external_keys[0].group_key(),
-          substrate_keys.clone(),
-        )
-        .continually_run(batch_task, vec![coordinator_handle.clone()]),
-      );
-
-      let (slash_report_task, slash_report_handle) = Task::new();
-      tokio::spawn(
-        SlashReportSignerTask::<_, S>::new(db.clone(), session, substrate_keys.clone())
-          .continually_run(slash_report_task, vec![coordinator_handle.clone()]),
-      );
-
-      let (transaction_task, transaction_handle) = Task::new();
-      tokio::spawn(
-        TransactionSignerTask::<_, SignableTransactionFor<S, Sch>, _>::new(
-          db.clone(),
-          publisher.clone(),
-          session,
-          external_keys,
-        )
-        .continually_run(transaction_task, vec![coordinator_handle.clone()]),
-      );
-
       tasks.insert(
         session,
-        Tasks {
-          cosigner: todo!("TODO"),
-          batch: batch_handle,
-          slash_report: slash_report_handle,
-          transaction: transaction_handle,
-        },
+        Self::tasks(
+          db.clone(),
+          publisher.clone(),
+          coordinator_handle.clone(),
+          session,
+          substrate_keys,
+          external_keys,
+        ),
       );
     }
 
-    Self { coordinator_handle, tasks, _Sch: PhantomData, _S: PhantomData }
+    Self { db, publisher, coordinator_handle, tasks, _Sch: PhantomData, _S: PhantomData }
   }
 
   /// Register a set of keys to sign with.
@@ -247,7 +290,7 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
     txn: &mut impl DbTxn,
     session: Session,
     substrate_keys: Vec<ThresholdKeys<Ristretto>>,
-    network_keys: Vec<ThresholdKeys<CiphersuiteFor<S, Sch>>>,
+    external_keys: Vec<ThresholdKeys<CiphersuiteFor<S, Sch>>>,
   ) {
     // Don't register already retired keys
     if Some(session.0) <= db::LatestRetiredSession::get(txn).map(|session| session.0) {
@@ -262,12 +305,25 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
 
     {
       let mut buf = Zeroizing::new(Vec::with_capacity(2 * substrate_keys.len() * 128));
-      for (substrate_keys, network_keys) in substrate_keys.into_iter().zip(network_keys) {
+      for (substrate_keys, external_keys) in substrate_keys.iter().zip(&external_keys) {
         buf.extend(&*substrate_keys.serialize());
-        buf.extend(&*network_keys.serialize());
+        buf.extend(&*external_keys.serialize());
       }
       db::SerializedKeys::set(txn, session, &buf);
     }
+
+    // Spawn the tasks
+    self.tasks.insert(
+      session,
+      Self::tasks(
+        self.db.clone(),
+        self.publisher.clone(),
+        self.coordinator_handle.clone(),
+        session,
+        substrate_keys,
+        external_keys,
+      ),
+    );
   }
 
   /// Retire the signers for a session.
@@ -302,6 +358,9 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
     let mut to_cleanup = db::ToCleanup::get(txn).unwrap_or(vec![]);
     to_cleanup.push((session, external_key.to_bytes().as_ref().to_vec()));
     db::ToCleanup::set(txn, &to_cleanup);
+
+    // Drop the task handles, which will cause the tasks to close
+    self.tasks.remove(&session);
   }
 
   /// Queue handling a message.
@@ -348,7 +407,7 @@ impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
     block_number: u64,
     block: [u8; 32],
   ) {
-    db::Cosign::send(&mut txn, session, &(block_number, block));
+    db::ToCosign::set(&mut txn, session, &(block_number, block));
     txn.commit();
 
     if let Some(tasks) = self.tasks.get(&session) {
