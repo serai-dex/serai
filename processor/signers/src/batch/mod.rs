@@ -6,7 +6,7 @@ use frost::dkg::ThresholdKeys;
 use serai_validator_sets_primitives::Session;
 use serai_in_instructions_primitives::{SignedBatch, batch_message};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn, Db};
 
 use messages::sign::VariantSignId;
 
@@ -22,6 +22,14 @@ use crate::{
 
 mod db;
 use db::*;
+
+pub(crate) fn last_acknowledged_batch(getter: &impl Get) -> Option<u32> {
+  LastAcknowledgedBatch::get(getter)
+}
+
+pub(crate) fn signed_batch(getter: &impl Get, id: u32) -> Option<SignedBatch> {
+  SignedBatches::get(getter, id)
+}
 
 // Fetches batches to sign and signs them.
 pub(crate) struct BatchSignerTask<D: Db, E: GroupEncoding> {

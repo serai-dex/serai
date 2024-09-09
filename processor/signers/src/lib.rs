@@ -169,7 +169,7 @@ impl<ST: SignableTransaction> Signers<ST> {
           .push(ThresholdKeys::from(ThresholdCore::<ST::Ciphersuite>::read(&mut buf).unwrap()));
       }
 
-      // TODO: Batch signer, cosigner, slash report signers
+      // TODO: Cosigner and slash report signers
 
       let (batch_task, batch_handle) = Task::new();
       tokio::spawn(

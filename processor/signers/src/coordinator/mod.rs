@@ -10,6 +10,8 @@ use crate::{
   Coordinator,
 };
 
+mod db;
+
 // Fetches messages to send the coordinator and sends them.
 pub(crate) struct CoordinatorTask<D: Db, C: Coordinator> {
   db: D,
@@ -93,7 +95,26 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
       }
     }
 
-    // TODO: For max(last acknowledged batch, last published batch) onwards, publish every batch
+    // Publish the signed Batches
+    {
+      let mut txn = self.db.txn();
+      // The last acknowledged Batch may exceed the last Batch we published if we didn't sign for
+      // the prior Batch(es) (and accordingly didn't publish them)
+      let last_batch =
+        crate::batch::last_acknowledged_batch(&txn).max(db::LastPublishedBatch::get(&txn));
+      let mut next_batch = last_batch.map_or(0, |id| id + 1);
+      while let Some(batch) = crate::batch::signed_batch(&txn, next_batch) {
+        iterated = true;
+        db::LastPublishedBatch::set(&mut txn, &batch.batch.id);
+        self
+          .coordinator
+          .publish_batch(batch)
+          .await
+          .map_err(|e| format!("couldn't publish Batch: {e:?}"))?;
+        next_batch += 1;
+      }
+      txn.commit();
+    }
 
     Ok(iterated)
   }
