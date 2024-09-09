@@ -26,7 +26,7 @@ mod db;
 use db::*;
 
 // Fetches transactions to sign and signs them.
-pub(crate) struct TransactionTask<
+pub(crate) struct TransactionSignerTask<
   D: Db,
   ST: SignableTransaction,
   P: TransactionPublisher<TransactionFor<ST>>,
@@ -44,7 +44,7 @@ pub(crate) struct TransactionTask<
 }
 
 impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>>
-  TransactionTask<D, ST, P>
+  TransactionSignerTask<D, ST, P>
 {
   pub(crate) fn new(
     db: D,
@@ -90,7 +90,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
 
 #[async_trait::async_trait]
 impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>> ContinuallyRan
-  for TransactionTask<D, ST, P>
+  for TransactionSignerTask<D, ST, P>
 {
   async fn run_iteration(&mut self) -> Result<bool, String> {
     let mut iterated = false;
@@ -193,17 +193,16 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
               &mut txn,
               match id {
                 VariantSignId::Transaction(id) => id,
-                _ => panic!("TransactionTask signed a non-transaction"),
+                _ => panic!("TransactionSignerTask signed a non-transaction"),
               },
               &buf,
             );
           }
 
-          self
-            .publisher
-            .publish(signed_tx)
-            .await
-            .map_err(|e| format!("couldn't publish transaction: {e:?}"))?;
+          match self.publisher.publish(signed_tx).await {
+            Ok(()) => {}
+            Err(e) => log::warn!("couldn't broadcast transaction: {e:?}"),
+          }
         }
       }
 

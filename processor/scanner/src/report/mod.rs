@@ -8,7 +8,7 @@ use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
 
 use primitives::task::ContinuallyRan;
 use crate::{
-  db::{Returnable, ScannerGlobalDb, InInstructionData, ScanToReportDb, BatchToSign},
+  db::{Returnable, ScannerGlobalDb, InInstructionData, ScanToReportDb, BatchesToSign},
   index,
   scan::next_to_scan_for_outputs_block,
   ScannerFeed, KeyFor,
@@ -160,7 +160,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
         }
 
         for batch in batches {
-          BatchToSign::send(&mut txn, &external_key_for_session_to_sign_batch, &batch);
+          BatchesToSign::send(&mut txn, &external_key_for_session_to_sign_batch, &batch);
         }
       }
 

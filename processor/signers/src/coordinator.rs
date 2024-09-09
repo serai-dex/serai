@@ -93,6 +93,8 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
       }
     }
 
+    // TODO: For max(last acknowledged batch, last published batch) onwards, publish every batch
+
     Ok(iterated)
   }
 }
