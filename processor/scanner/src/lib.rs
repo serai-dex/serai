@@ -10,7 +10,6 @@ use group::GroupEncoding;
 use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{NetworkId, Coin, Amount};
-use serai_in_instructions_primitives::Batch;
 use serai_coins_primitives::OutInstructionWithBalance;
 
 use primitives::{task::*, Address, ReceivedOutput, Block, Payment};
@@ -21,7 +20,8 @@ pub use lifetime::LifetimeStage;
 
 // Database schema definition and associated functions.
 mod db;
-pub use db::CompletedEventualities;
+use db::ScannerGlobalDb;
+pub use db::{BatchToSign, AcknowledgedBatch, CompletedEventualities};
 // Task to index the blockchain, ensuring we don't reorganize finalized blocks.
 mod index;
 // Scans blocks for received coins.
@@ -170,24 +170,6 @@ pub type OutputFor<S> = <<S as ScannerFeed>::Block as Block>::Output;
 pub type EventualityFor<S> = <<S as ScannerFeed>::Block as Block>::Eventuality;
 /// The block type for this ScannerFeed.
 pub type BlockFor<S> = <S as ScannerFeed>::Block;
-
-/// An object usable to publish a Batch.
-// This will presumably be the Batch signer defined in `serai-processor-signers` or a test shim.
-// It could also be some app-layer database for the purpose of verifying the Batches published to
-// Serai.
-#[async_trait::async_trait]
-pub trait BatchPublisher: 'static + Send + Sync {
-  /// An error encountered when publishing the Batch.
-  ///
-  /// This MUST be an ephemeral error. Retrying publication MUST eventually resolve without manual
-  /// intervention/changing the arguments.
-  type EphemeralError: Debug;
-
-  /// Publish a Batch.
-  ///
-  /// This function must be safe to call with the same Batch multiple times.
-  async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError>;
-}
 
 /// A return to occur.
 pub struct Return<S: ScannerFeed> {
@@ -351,14 +333,20 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
   pub async fn new<Sch: Scheduler<S>>(
-    db: impl Db,
+    mut db: impl Db,
     feed: S,
-    batch_publisher: impl BatchPublisher,
     start_block: u64,
+    start_key: KeyFor<S>,
   ) -> Self {
+    if !ScannerGlobalDb::<S>::has_any_key_been_queued(&db) {
+      let mut txn = db.txn();
+      ScannerGlobalDb::<S>::queue_key(&mut txn, start_block, start_key);
+      txn.commit();
+    }
+
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
     let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
-    let report_task = report::ReportTask::<_, S, _>::new(db.clone(), batch_publisher, start_block);
+    let report_task = report::ReportTask::<_, S>::new(db.clone(), start_block);
     let substrate_task = substrate::SubstrateTask::<_, S>::new(db.clone());
     let eventuality_task = eventuality::EventualityTask::<_, _, Sch>::new(db, feed, start_block);
 

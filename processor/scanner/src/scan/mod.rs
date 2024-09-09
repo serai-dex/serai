@@ -13,8 +13,8 @@ use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 use crate::{
   lifetime::LifetimeStage,
   db::{
-    OutputWithInInstruction, Returnable, SenderScanData, ScannerGlobalDb, ScanToReportDb,
-    ScanToEventualityDb,
+    OutputWithInInstruction, Returnable, SenderScanData, ScannerGlobalDb, InInstructionData,
+    ScanToReportDb, ScanToEventualityDb,
   },
   BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
@@ -166,7 +166,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
       let mut costs_to_aggregate = HashMap::with_capacity(1);
 
       // Scan for each key
-      for key in keys {
+      for key in &keys {
         for output in block.scan_for_outputs(key.key) {
           assert_eq!(output.key(), key.key);
 
@@ -339,7 +339,17 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
       let in_instructions =
         in_instructions.into_iter().map(|(_id, in_instruction)| in_instruction).collect::<Vec<_>>();
       // Send the InInstructions to the report task
-      ScanToReportDb::<S>::send_in_instructions(&mut txn, b, &in_instructions);
+      // We need to also specify which key is responsible for signing the Batch for these, which
+      // will always be the oldest key (as the new key signing the Batch signifies handover
+      // acceptance)
+      ScanToReportDb::<S>::send_in_instructions(
+        &mut txn,
+        b,
+        &InInstructionData {
+          external_key_for_session_to_sign_batch: keys[0].key,
+          returnable_in_instructions: in_instructions,
+        },
+      );
 
       // Send the scan data to the eventuality task
       ScanToEventualityDb::<S>::send_scan_data(&mut txn, b, &scan_data);
