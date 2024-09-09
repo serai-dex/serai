@@ -298,7 +298,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
             hex::encode(eventuality.id()),
             hex::encode(tx.as_ref())
           );
-          CompletedEventualities::<S>::send(&mut txn, eventuality.id());
+          CompletedEventualities::send(&mut txn, &key.key, eventuality.id());
         }
 
         // Fetch all non-External outputs

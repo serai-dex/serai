@@ -3,30 +3,27 @@ use std::{
   time::{Duration, Instant},
 };
 
-use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
+use frost::dkg::ThresholdKeys;
 
 use serai_validator_sets_primitives::Session;
 
 use serai_db::{DbTxn, Db};
 
+use messages::sign::VariantSignId;
+
 use primitives::task::ContinuallyRan;
-use scheduler::{Transaction, SignableTransaction, TransactionsToSign};
+use scheduler::{Transaction, SignableTransaction, TransactionFor, TransactionsToSign};
+use scanner::CompletedEventualities;
 
 use frost_attempt_manager::*;
 
 use crate::{
-  db::{
-    CoordinatorToTransactionSignerMessages, TransactionSignerToCoordinatorMessages,
-    CompletedEventualitiesForEachKey,
-  },
+  db::{CoordinatorToTransactionSignerMessages, TransactionSignerToCoordinatorMessages},
   TransactionPublisher,
 };
 
 mod db;
 use db::*;
-
-type TransactionFor<ST> =
-  <<ST as SignableTransaction>::PreprocessMachine as PreprocessMachine>::Signature;
 
 // Fetches transactions to sign and signs them.
 pub(crate) struct TransactionTask<
@@ -76,7 +73,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
       for keys in &keys {
         machines.push(signable_transaction.clone().sign(keys.clone()));
       }
-      attempt_manager.register(tx, machines);
+      attempt_manager.register(VariantSignId::Transaction(tx), machines);
     }
 
     Self {
@@ -123,7 +120,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
       for keys in &self.keys {
         machines.push(tx.clone().sign(keys.clone()));
       }
-      for msg in self.attempt_manager.register(tx.id(), machines) {
+      for msg in self.attempt_manager.register(VariantSignId::Transaction(tx.id()), machines) {
         TransactionSignerToCoordinatorMessages::send(&mut txn, self.session, &msg);
       }
 
@@ -133,28 +130,42 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
     // Check for completed Eventualities (meaning we should no longer sign for these transactions)
     loop {
       let mut txn = self.db.txn();
-      let Some(id) = CompletedEventualitiesForEachKey::try_recv(&mut txn, self.session) else {
+      let Some(id) = CompletedEventualities::try_recv(&mut txn, &self.keys[0].group_key()) else {
         break;
       };
+
+      /*
+        We may have yet to register this signing protocol.
+
+        While `TransactionsToSign` is populated before `CompletedEventualities`, we could
+        theoretically have `TransactionsToSign` populated with a new transaction _while iterating
+        over `CompletedEventualities`_, and then have `CompletedEventualities` populated. In that
+        edge case, we will see the completion notification before we see the transaction.
+
+        In such a case, we break (dropping the txn, re-queueing the completion notification). On
+        the task's next iteration, we'll process the transaction from `TransactionsToSign` and be
+        able to make progress.
+      */
+      if !self.active_signing_protocols.remove(&id) {
+        break;
+      }
       iterated = true;
 
-      // This may or may not be an ID this key was responsible for
-      if self.active_signing_protocols.remove(&id) {
-        // Since it was, remove this as an active signing protocol
-        ActiveSigningProtocols::set(
-          &mut txn,
-          self.session,
-          &self.active_signing_protocols.iter().copied().collect(),
-        );
-        // Clean up the database
-        SerializedSignableTransactions::del(&mut txn, id);
-        SerializedTransactions::del(&mut txn, id);
+      // Since it was, remove this as an active signing protocol
+      ActiveSigningProtocols::set(
+        &mut txn,
+        self.session,
+        &self.active_signing_protocols.iter().copied().collect(),
+      );
+      // Clean up the database
+      SerializedSignableTransactions::del(&mut txn, id);
+      SerializedTransactions::del(&mut txn, id);
 
-        // We retire with a txn so we either successfully flag this Eventuality as completed, and
-        // won't re-register it (making this retire safe), or we don't flag it, meaning we will
-        // re-register it, yet that's safe as we have yet to retire it
-        self.attempt_manager.retire(&mut txn, id);
-      }
+      // We retire with a txn so we either successfully flag this Eventuality as completed, and
+      // won't re-register it (making this retire safe), or we don't flag it, meaning we will
+      // re-register it, yet that's safe as we have yet to retire it
+      self.attempt_manager.retire(&mut txn, VariantSignId::Transaction(id));
+
       txn.commit();
     }
 
@@ -178,7 +189,14 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
           {
             let mut buf = Vec::with_capacity(256);
             signed_tx.write(&mut buf).unwrap();
-            SerializedTransactions::set(&mut txn, id, &buf);
+            SerializedTransactions::set(
+              &mut txn,
+              match id {
+                VariantSignId::Transaction(id) => id,
+                _ => panic!("TransactionTask signed a non-transaction"),
+              },
+              &buf,
+            );
           }
 
           self

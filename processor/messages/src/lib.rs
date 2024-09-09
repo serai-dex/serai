@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 
 use scale::{Encode, Decode};
@@ -85,10 +86,37 @@ pub mod key_gen {
 pub mod sign {
   use super::*;
 
-  #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
+  #[derive(Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, BorshSerialize, BorshDeserialize)]
+  pub enum VariantSignId {
+    Cosign([u8; 32]),
+    Batch(u32),
+    SlashReport([u8; 32]),
+    Transaction([u8; 32]),
+  }
+  impl fmt::Debug for VariantSignId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+      match self {
+        Self::Cosign(cosign) => {
+          f.debug_struct("VariantSignId::Cosign").field("0", &hex::encode(cosign)).finish()
+        }
+        Self::Batch(batch) => f.debug_struct("VariantSignId::Batch").field("0", &batch).finish(),
+        Self::SlashReport(slash_report) => f
+          .debug_struct("VariantSignId::SlashReport")
+          .field("0", &hex::encode(slash_report))
+          .finish(),
+        Self::Transaction(tx) => {
+          f.debug_struct("VariantSignId::Transaction").field("0", &hex::encode(tx)).finish()
+        }
+      }
+    }
+  }
+
+  #[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
+  )]
   pub struct SignId {
     pub session: Session,
-    pub id: [u8; 32],
+    pub id: VariantSignId,
     pub attempt: u32,
   }
 
@@ -109,11 +137,11 @@ pub mod sign {
       None
     }
 
-    pub fn session(&self) -> Session {
+    pub fn sign_id(&self) -> &SignId {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } |
         CoordinatorMessage::Shares { id, .. } |
-        CoordinatorMessage::Reattempt { id, .. } => id.session,
+        CoordinatorMessage::Reattempt { id, .. } => id,
       }
     }
   }

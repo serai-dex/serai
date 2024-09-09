@@ -41,6 +41,10 @@ pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
   fn sign(self, keys: ThresholdKeys<Self::Ciphersuite>) -> Self::PreprocessMachine;
 }
 
+/// The transaction type for a SignableTransaction.
+pub type TransactionFor<ST> =
+  <<ST as SignableTransaction>::PreprocessMachine as PreprocessMachine>::Signature;
+
 mod db {
   use serai_db::{Get, DbTxn, create_db, db_channel};
 

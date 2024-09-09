@@ -362,24 +362,24 @@ impl<S: ScannerFeed> Scanner<S> {
     let substrate_task = substrate::SubstrateTask::<_, S>::new(db.clone());
     let eventuality_task = eventuality::EventualityTask::<_, _, Sch>::new(db, feed, start_block);
 
-    let (index_run, _index_handle) = Task::new();
-    let (scan_run, scan_handle) = Task::new();
-    let (report_run, report_handle) = Task::new();
-    let (substrate_run, substrate_handle) = Task::new();
-    let (eventuality_run, eventuality_handle) = Task::new();
+    let (index_task_def, _index_handle) = Task::new();
+    let (scan_task_def, scan_handle) = Task::new();
+    let (report_task_def, report_handle) = Task::new();
+    let (substrate_task_def, substrate_handle) = Task::new();
+    let (eventuality_task_def, eventuality_handle) = Task::new();
 
     // Upon indexing a new block, scan it
-    tokio::spawn(index_task.continually_run(index_run, vec![scan_handle.clone()]));
+    tokio::spawn(index_task.continually_run(index_task_def, vec![scan_handle.clone()]));
     // Upon scanning a block, report it
-    tokio::spawn(scan_task.continually_run(scan_run, vec![report_handle]));
+    tokio::spawn(scan_task.continually_run(scan_task_def, vec![report_handle]));
     // Upon reporting a block, we do nothing (as the burden is on Substrate which won't be
     // immediately ready)
-    tokio::spawn(report_task.continually_run(report_run, vec![]));
+    tokio::spawn(report_task.continually_run(report_task_def, vec![]));
     // Upon handling an event from Substrate, we run the Eventuality task (as it's what's affected)
-    tokio::spawn(substrate_task.continually_run(substrate_run, vec![eventuality_handle]));
+    tokio::spawn(substrate_task.continually_run(substrate_task_def, vec![eventuality_handle]));
     // Upon handling the Eventualities in a block, we run the scan task as we've advanced the
     // window its allowed to scan
-    tokio::spawn(eventuality_task.continually_run(eventuality_run, vec![scan_handle]));
+    tokio::spawn(eventuality_task.continually_run(eventuality_task_def, vec![scan_handle]));
 
     Self { substrate_handle, _S: PhantomData }
   }

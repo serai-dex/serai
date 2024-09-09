@@ -10,11 +10,11 @@ use frost::{
 use serai_validator_sets_primitives::Session;
 
 use serai_db::{Get, DbTxn, Db, create_db};
-use messages::sign::{SignId, ProcessorMessage};
+use messages::sign::{VariantSignId, SignId, ProcessorMessage};
 
 create_db!(
   FrostAttemptManager {
-    Attempted: (id: [u8; 32]) -> u32,
+    Attempted: (id: VariantSignId) -> u32,
   }
 );
 
@@ -28,7 +28,7 @@ pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
   // The key shares we sign with are expected to be continguous from this position.
   start_i: Participant,
   // The ID of this signing protocol.
-  id: [u8; 32],
+  id: VariantSignId,
   // This accepts a vector of `root` machines in order to support signing with multiple key shares.
   root: Vec<M>,
   preprocessed: HashMap<u32, (Vec<M::SignMachine>, HashMap<Participant, Vec<u8>>)>,
@@ -48,10 +48,10 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
     db: D,
     session: Session,
     start_i: Participant,
-    id: [u8; 32],
+    id: VariantSignId,
     root: Vec<M>,
   ) -> Self {
-    log::info!("starting signing protocol {}", hex::encode(id));
+    log::info!("starting signing protocol {id:?}");
 
     Self {
       db,
@@ -100,7 +100,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
       txn.commit();
     }
 
-    log::debug!("attemting a new instance of signing protocol {}", hex::encode(self.id));
+    log::debug!("attemting a new instance of signing protocol {:?}", self.id);
 
     let mut our_preprocesses = HashMap::with_capacity(self.root.len());
     let mut preprocessed = Vec::with_capacity(self.root.len());
@@ -137,7 +137,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
     attempt: u32,
     serialized_preprocesses: HashMap<Participant, Vec<u8>>,
   ) -> Vec<ProcessorMessage> {
-    log::debug!("handling preprocesses for signing protocol {}", hex::encode(self.id));
+    log::debug!("handling preprocesses for signing protocol {:?}", self.id);
 
     let Some((machines, our_serialized_preprocesses)) = self.preprocessed.remove(&attempt) else {
       return vec![];
@@ -211,8 +211,8 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
 
     assert!(self.shared.insert(attempt, (shared.swap_remove(0), our_shares)).is_none());
     log::debug!(
-      "successfully handled preprocesses for signing protocol {}, sending shares",
-      hex::encode(self.id)
+      "successfully handled preprocesses for signing protocol {:?}, sending shares",
+      self.id,
     );
     msgs.push(ProcessorMessage::Shares {
       id: SignId { session: self.session, id: self.id, attempt },
@@ -229,7 +229,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
     attempt: u32,
     serialized_shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<M::Signature, Vec<ProcessorMessage>> {
-    log::debug!("handling shares for signing protocol {}", hex::encode(self.id));
+    log::debug!("handling shares for signing protocol {:?}", self.id);
 
     let Some((machine, our_serialized_shares)) = self.shared.remove(&attempt) else { Err(vec![])? };
 
@@ -272,13 +272,13 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
       },
     };
 
-    log::info!("finished signing for protocol {}", hex::encode(self.id));
+    log::info!("finished signing for protocol {:?}", self.id);
 
     Ok(signature)
   }
 
   /// Cleanup the database entries for a specified signing protocol.
-  pub(crate) fn cleanup(txn: &mut impl DbTxn, id: [u8; 32]) {
+  pub(crate) fn cleanup(txn: &mut impl DbTxn, id: VariantSignId) {
     Attempted::del(txn, id);
   }
 }

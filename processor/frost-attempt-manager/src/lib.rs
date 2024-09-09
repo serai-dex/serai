@@ -9,7 +9,7 @@ use frost::{Participant, sign::PreprocessMachine};
 use serai_validator_sets_primitives::Session;
 
 use serai_db::{DbTxn, Db};
-use messages::sign::{ProcessorMessage, CoordinatorMessage};
+use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
 mod individual;
 use individual::SigningProtocol;
@@ -21,7 +21,7 @@ pub enum Response<M: PreprocessMachine> {
   /// A produced signature.
   Signature {
     /// The ID of the protocol this is for.
-    id: [u8; 32],
+    id: VariantSignId,
     /// The signature.
     signature: M::Signature,
   },
@@ -32,7 +32,7 @@ pub struct AttemptManager<D: Db, M: Clone + PreprocessMachine> {
   db: D,
   session: Session,
   start_i: Participant,
-  active: HashMap<[u8; 32], SigningProtocol<D, M>>,
+  active: HashMap<VariantSignId, SigningProtocol<D, M>>,
 }
 
 impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
@@ -46,7 +46,7 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// Register a signing protocol to attempt.
   ///
   /// This ID must be unique across all sessions, attempt managers, protocols, etc.
-  pub fn register(&mut self, id: [u8; 32], machines: Vec<M>) -> Vec<ProcessorMessage> {
+  pub fn register(&mut self, id: VariantSignId, machines: Vec<M>) -> Vec<ProcessorMessage> {
     let mut protocol =
       SigningProtocol::new(self.db.clone(), self.session, self.start_i, id, machines);
     let messages = protocol.attempt(0);
@@ -60,11 +60,11 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// This does not stop the protocol from being re-registered and further worked on (with
   /// undefined behavior) then. The higher-level context must never call `register` again with this
   /// ID accordingly.
-  pub fn retire(&mut self, txn: &mut impl DbTxn, id: [u8; 32]) {
+  pub fn retire(&mut self, txn: &mut impl DbTxn, id: VariantSignId) {
     if self.active.remove(&id).is_none() {
-      log::info!("retiring protocol {}, which we didn't register/already retired", hex::encode(id));
+      log::info!("retiring protocol {id:?}, which we didn't register/already retired");
     } else {
-      log::info!("retired signing protocol {}", hex::encode(id));
+      log::info!("retired signing protocol {id:?}");
     }
     SigningProtocol::<D, M>::cleanup(txn, id);
   }
@@ -79,8 +79,8 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
       CoordinatorMessage::Preprocesses { id, preprocesses } => {
         let Some(protocol) = self.active.get_mut(&id.id) else {
           log::trace!(
-            "handling preprocesses for signing protocol {}, which we're not actively running",
-            hex::encode(id.id)
+            "handling preprocesses for signing protocol {:?}, which we're not actively running",
+            id.id,
           );
           return Response::Messages(vec![]);
         };
@@ -89,8 +89,8 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
       CoordinatorMessage::Shares { id, shares } => {
         let Some(protocol) = self.active.get_mut(&id.id) else {
           log::trace!(
-            "handling shares for signing protocol {}, which we're not actively running",
-            hex::encode(id.id)
+            "handling shares for signing protocol {:?}, which we're not actively running",
+            id.id,
           );
           return Response::Messages(vec![]);
         };
@@ -102,8 +102,8 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
       CoordinatorMessage::Reattempt { id } => {
         let Some(protocol) = self.active.get_mut(&id.id) else {
           log::trace!(
-            "reattempting signing protocol {}, which we're not actively running",
-            hex::encode(id.id)
+            "reattempting signing protocol {:?}, which we're not actively running",
+            id.id,
           );
           return Response::Messages(vec![]);
         };
