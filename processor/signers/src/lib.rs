@@ -10,8 +10,9 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::dkg::{ThresholdCore, ThresholdKeys};
 
+use serai_primitives::Signature;
 use serai_validator_sets_primitives::{Session, Slash};
-use serai_in_instructions_primitives::SignedBatch;
+use serai_in_instructions_primitives::{Batch, SignedBatch};
 
 use serai_db::{DbTxn, Db};
 
@@ -19,6 +20,7 @@ use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
 use primitives::task::{Task, TaskHandle, ContinuallyRan};
 use scheduler::{Transaction, SignableTransaction, TransactionFor};
+use scanner::{ScannerFeed, Scheduler};
 
 mod wrapped_schnorrkel;
 pub(crate) use wrapped_schnorrkel::WrappedSchnorrkelMachine;
@@ -30,6 +32,9 @@ use coordinator::CoordinatorTask;
 
 mod batch;
 use batch::BatchSignerTask;
+
+mod slash_report;
+use slash_report::SlashReportSignerTask;
 
 mod transaction;
 use transaction::TransactionSignerTask;
@@ -51,6 +56,12 @@ pub trait Coordinator: 'static + Send + Sync {
 
   /// Publish a `SignedBatch`.
   async fn publish_signed_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError>;
+
+  /// Publish a slash report's signature.
+  async fn publish_slash_report_signature(
+    &mut self,
+    signature: Signature,
+  ) -> Result<(), Self::EphemeralError>;
 }
 
 /// An object capable of publishing a transaction.
@@ -81,11 +92,16 @@ struct Tasks {
 
 /// The signers used by a processor.
 #[allow(non_snake_case)]
-pub struct Signers<ST: SignableTransaction> {
+pub struct Signers<S: ScannerFeed, Sch: Scheduler<S>> {
   coordinator_handle: TaskHandle,
   tasks: HashMap<Session, Tasks>,
-  _ST: PhantomData<ST>,
+  _Sch: PhantomData<Sch>,
+  _S: PhantomData<S>,
 }
+
+type CiphersuiteFor<S, Sch> =
+  <<Sch as Scheduler<S>>::SignableTransaction as SignableTransaction>::Ciphersuite;
+type SignableTransactionFor<S, Sch> = <Sch as Scheduler<S>>::SignableTransaction;
 
 /*
   This is completely outside of consensus, so the worst that can happen is:
@@ -99,14 +115,14 @@ pub struct Signers<ST: SignableTransaction> {
   completion comes in *before* we registered a key, the signer will hold the signing protocol in
   memory until the session is retired entirely.
 */
-impl<ST: SignableTransaction> Signers<ST> {
+impl<S: ScannerFeed, Sch: Scheduler<S>> Signers<S, Sch> {
   /// Initialize the signers.
   ///
   /// This will spawn tasks for any historically registered keys.
   pub fn new(
     mut db: impl Db,
     coordinator: impl Coordinator,
-    publisher: &impl TransactionPublisher<TransactionFor<ST>>,
+    publisher: &impl TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
   ) -> Self {
     /*
       On boot, perform any database cleanup which was queued.
@@ -120,8 +136,7 @@ impl<ST: SignableTransaction> Signers<ST> {
       let mut txn = db.txn();
       for (session, external_key_bytes) in db::ToCleanup::get(&txn).unwrap_or(vec![]) {
         let mut external_key_bytes = external_key_bytes.as_slice();
-        let external_key =
-          <ST::Ciphersuite as Ciphersuite>::read_G(&mut external_key_bytes).unwrap();
+        let external_key = CiphersuiteFor::<S, Sch>::read_G(&mut external_key_bytes).unwrap();
         assert!(external_key_bytes.is_empty());
 
         // Drain the Batches to sign
@@ -133,7 +148,12 @@ impl<ST: SignableTransaction> Signers<ST> {
 
         // Drain the transactions to sign
         // This will be fully populated by the scheduler before retiry
-        while scheduler::TransactionsToSign::<ST>::try_recv(&mut txn, &external_key).is_some() {}
+        while scheduler::TransactionsToSign::<SignableTransactionFor<S, Sch>>::try_recv(
+          &mut txn,
+          &external_key,
+        )
+        .is_some()
+        {}
 
         // Drain the completed Eventualities
         while scanner::CompletedEventualities::try_recv(&mut txn, &external_key).is_some() {}
@@ -170,11 +190,12 @@ impl<ST: SignableTransaction> Signers<ST> {
       while !buf.is_empty() {
         substrate_keys
           .push(ThresholdKeys::from(ThresholdCore::<Ristretto>::read(&mut buf).unwrap()));
-        external_keys
-          .push(ThresholdKeys::from(ThresholdCore::<ST::Ciphersuite>::read(&mut buf).unwrap()));
+        external_keys.push(ThresholdKeys::from(
+          ThresholdCore::<CiphersuiteFor<S, Sch>>::read(&mut buf).unwrap(),
+        ));
       }
 
-      // TODO: Cosigner and slash report signers
+      // TODO: Cosigner
 
       let (batch_task, batch_handle) = Task::new();
       tokio::spawn(
@@ -187,9 +208,15 @@ impl<ST: SignableTransaction> Signers<ST> {
         .continually_run(batch_task, vec![coordinator_handle.clone()]),
       );
 
+      let (slash_report_task, slash_report_handle) = Task::new();
+      tokio::spawn(
+        SlashReportSignerTask::<_, S>::new(db.clone(), session, substrate_keys.clone())
+          .continually_run(slash_report_task, vec![coordinator_handle.clone()]),
+      );
+
       let (transaction_task, transaction_handle) = Task::new();
       tokio::spawn(
-        TransactionSignerTask::<_, ST, _>::new(
+        TransactionSignerTask::<_, SignableTransactionFor<S, Sch>, _>::new(
           db.clone(),
           publisher.clone(),
           session,
@@ -203,13 +230,13 @@ impl<ST: SignableTransaction> Signers<ST> {
         Tasks {
           cosigner: todo!("TODO"),
           batch: batch_handle,
-          slash_report: todo!("TODO"),
+          slash_report: slash_report_handle,
           transaction: transaction_handle,
         },
       );
     }
 
-    Self { coordinator_handle, tasks, _ST: PhantomData }
+    Self { coordinator_handle, tasks, _Sch: PhantomData, _S: PhantomData }
   }
 
   /// Register a set of keys to sign with.
@@ -220,7 +247,7 @@ impl<ST: SignableTransaction> Signers<ST> {
     txn: &mut impl DbTxn,
     session: Session,
     substrate_keys: Vec<ThresholdKeys<Ristretto>>,
-    network_keys: Vec<ThresholdKeys<ST::Ciphersuite>>,
+    network_keys: Vec<ThresholdKeys<CiphersuiteFor<S, Sch>>>,
   ) {
     // Don't register already retired keys
     if Some(session.0) <= db::LatestRetiredSession::get(txn).map(|session| session.0) {
@@ -246,7 +273,8 @@ impl<ST: SignableTransaction> Signers<ST> {
   /// Retire the signers for a session.
   ///
   /// This MUST be called in order, for every session (even if we didn't register keys for this
-  /// session).
+  /// session). This MUST only be called after slash report publication, or after that process
+  /// times out (not once the key is done with regards to the external network).
   pub fn retire_session(
     &mut self,
     txn: &mut impl DbTxn,
@@ -324,7 +352,7 @@ impl<ST: SignableTransaction> Signers<ST> {
     txn.commit();
 
     if let Some(tasks) = self.tasks.get(&session) {
-      tasks.cosign.run_now();
+      tasks.cosigner.run_now();
     }
   }
 
@@ -335,9 +363,9 @@ impl<ST: SignableTransaction> Signers<ST> {
     &mut self,
     mut txn: impl DbTxn,
     session: Session,
-    slash_report: Vec<Slash>,
+    slash_report: &Vec<Slash>,
   ) {
-    db::SlashReport::send(&mut txn, session, &slash_report);
+    db::SlashReport::send(&mut txn, session, slash_report);
     txn.commit();
 
     if let Some(tasks) = self.tasks.get(&session) {
