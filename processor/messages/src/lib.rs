@@ -46,12 +46,6 @@ pub mod key_gen {
     }
   }
 
-  impl CoordinatorMessage {
-    pub fn required_block(&self) -> Option<BlockHash> {
-      None
-    }
-  }
-
   #[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     // Participated in the specified key generation protocol.
@@ -133,10 +127,6 @@ pub mod sign {
   }
 
   impl CoordinatorMessage {
-    pub fn required_block(&self) -> Option<BlockHash> {
-      None
-    }
-
     pub fn sign_id(&self) -> &SignId {
       match self {
         CoordinatorMessage::Preprocesses { id, .. } |
@@ -160,6 +150,7 @@ pub mod sign {
 pub mod coordinator {
   use super::*;
 
+  // TODO: Why does this not simply take the block hash?
   pub fn cosign_block_msg(block_number: u64, block: [u8; 32]) -> Vec<u8> {
     const DST: &[u8] = b"Cosign";
     let mut res = vec![u8::try_from(DST.len()).unwrap()];
@@ -169,36 +160,10 @@ pub mod coordinator {
     res
   }
 
-  #[derive(
-    Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-  )]
-  pub enum SubstrateSignableId {
-    CosigningSubstrateBlock([u8; 32]),
-    Batch(u32),
-    SlashReport,
-  }
-
-  #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
-  pub struct SubstrateSignId {
-    pub session: Session,
-    pub id: SubstrateSignableId,
-    pub attempt: u32,
-  }
-
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
-    CosignSubstrateBlock { id: SubstrateSignId, block_number: u64 },
-    SignSlashReport { id: SubstrateSignId, report: Vec<([u8; 32], u32)> },
-  }
-
-  impl CoordinatorMessage {
-    // The Coordinator will only send Batch messages once the Batch ID has been recognized
-    // The ID will only be recognized when the block is acknowledged by a super-majority of the
-    // network *and the local node*
-    // This synchrony obtained lets us ignore the synchrony requirement offered here
-    pub fn required_block(&self) -> Option<BlockHash> {
-      None
-    }
+    CosignSubstrateBlock { session: Session, block_number: u64, block: [u8; 32] },
+    SignSlashReport { session: Session, report: Vec<([u8; 32], u32)> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -209,14 +174,9 @@ pub mod coordinator {
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
-    SubstrateBlockAck { block: u64, plans: Vec<PlanMeta> },
-    InvalidParticipant { id: SubstrateSignId, participant: Participant },
-    CosignPreprocess { id: SubstrateSignId, preprocesses: Vec<[u8; 64]> },
-    // TODO: Remove BatchPreprocess? Why does this take a BlockHash here and not in its
-    // SubstrateSignId?
-    BatchPreprocess { id: SubstrateSignId, block: BlockHash, preprocesses: Vec<[u8; 64]> },
-    // TODO: Make these signatures [u8; 64]?
     CosignedBlock { block_number: u64, block: [u8; 32], signature: Vec<u8> },
+    SignedBatch { batch: SignedBatch },
+    SubstrateBlockAck { block: u64, plans: Vec<PlanMeta> },
     SignedSlashReport { session: Session, signature: Vec<u8> },
   }
 }
@@ -226,33 +186,23 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
-    ConfirmKeyPair {
-      context: SubstrateContext,
-      session: Session,
-      key_pair: KeyPair,
-    },
-    SubstrateBlock {
-      context: SubstrateContext,
+    /// Keys set on the Serai network.
+    SetKeys { serai_time: u64, session: Session, key_pair: KeyPair },
+    /// The data from a block which acknowledged a Batch.
+    BlockWithBatchAcknowledgement {
       block: u64,
+      batch_id: u32,
+      in_instruction_succeededs: Vec<bool>,
       burns: Vec<OutInstructionWithBalance>,
-      batches: Vec<u32>,
+      key_to_activate: Option<KeyPair>,
     },
-  }
-
-  impl CoordinatorMessage {
-    pub fn required_block(&self) -> Option<BlockHash> {
-      let context = match self {
-        CoordinatorMessage::ConfirmKeyPair { context, .. } |
-        CoordinatorMessage::SubstrateBlock { context, .. } => context,
-      };
-      Some(context.network_latest_finalized_block)
-    }
+    /// The data from a block which didn't acknowledge a Batch.
+    BlockWithoutBatchAcknowledgement { block: u64, burns: Vec<OutInstructionWithBalance> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     Batch { batch: Batch },
-    SignedBatch { batch: SignedBatch },
   }
 }
 
@@ -279,24 +229,6 @@ impl_from!(sign, CoordinatorMessage, Sign);
 impl_from!(coordinator, CoordinatorMessage, Coordinator);
 impl_from!(substrate, CoordinatorMessage, Substrate);
 
-impl CoordinatorMessage {
-  pub fn required_block(&self) -> Option<BlockHash> {
-    let required = match self {
-      CoordinatorMessage::KeyGen(msg) => msg.required_block(),
-      CoordinatorMessage::Sign(msg) => msg.required_block(),
-      CoordinatorMessage::Coordinator(msg) => msg.required_block(),
-      CoordinatorMessage::Substrate(msg) => msg.required_block(),
-    };
-
-    // 0 is used when Serai hasn't acknowledged *any* block for this network, which also means
-    // there's no need to wait for the block in question
-    if required == Some(BlockHash([0; 32])) {
-      return None;
-    }
-    required
-  }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum ProcessorMessage {
   KeyGen(key_gen::ProcessorMessage),
@@ -315,10 +247,10 @@ impl_from!(substrate, ProcessorMessage, Substrate);
 const COORDINATOR_UID: u8 = 0;
 const PROCESSOR_UID: u8 = 1;
 
-const TYPE_KEY_GEN_UID: u8 = 2;
-const TYPE_SIGN_UID: u8 = 3;
-const TYPE_COORDINATOR_UID: u8 = 4;
-const TYPE_SUBSTRATE_UID: u8 = 5;
+const TYPE_KEY_GEN_UID: u8 = 0;
+const TYPE_SIGN_UID: u8 = 1;
+const TYPE_COORDINATOR_UID: u8 = 2;
+const TYPE_SUBSTRATE_UID: u8 = 3;
 
 impl CoordinatorMessage {
   /// The intent for this message, which should be unique across the validator's entire system,
@@ -359,11 +291,12 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
-          // Unique since this ID contains the hash of the block being cosigned
-          coordinator::CoordinatorMessage::CosignSubstrateBlock { id, .. } => (0, id.encode()),
-          // Unique since there's only one of these per session/attempt, and ID is inclusive to
-          // both
-          coordinator::CoordinatorMessage::SignSlashReport { id, .. } => (1, id.encode()),
+          // We only cosign a block once, and Reattempt is a separate message
+          coordinator::CoordinatorMessage::CosignSubstrateBlock { block_number, .. } => {
+            (0, block_number.encode())
+          }
+          // We only sign one slash report, and Reattempt is a separate message
+          coordinator::CoordinatorMessage::SignSlashReport { session, .. } => (1, session.encode()),
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -372,9 +305,13 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
-          // Unique since there's only one key pair for a session
-          substrate::CoordinatorMessage::ConfirmKeyPair { session, .. } => (0, session.encode()),
-          substrate::CoordinatorMessage::SubstrateBlock { block, .. } => (1, block.encode()),
+          substrate::CoordinatorMessage::SetKeys { session, .. } => (0, session.encode()),
+          substrate::CoordinatorMessage::BlockWithBatchAcknowledgement { block, .. } => {
+            (1, block.encode())
+          }
+          substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement { block, .. } => {
+            (2, block.encode())
+          }
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SUBSTRATE_UID, sub];
@@ -430,14 +367,10 @@ impl ProcessorMessage {
       }
       ProcessorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
-          coordinator::ProcessorMessage::SubstrateBlockAck { block, .. } => (0, block.encode()),
-          // Unique since SubstrateSignId
-          coordinator::ProcessorMessage::InvalidParticipant { id, .. } => (1, id.encode()),
-          coordinator::ProcessorMessage::CosignPreprocess { id, .. } => (2, id.encode()),
-          coordinator::ProcessorMessage::BatchPreprocess { id, .. } => (3, id.encode()),
-          // Unique since only one instance of a signature matters
-          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (4, block.encode()),
-          coordinator::ProcessorMessage::SignedSlashReport { .. } => (5, vec![]),
+          coordinator::ProcessorMessage::CosignedBlock { block, .. } => (0, block.encode()),
+          coordinator::ProcessorMessage::SignedBatch { batch, .. } => (1, batch.batch.id.encode()),
+          coordinator::ProcessorMessage::SubstrateBlockAck { block, .. } => (2, block.encode()),
+          coordinator::ProcessorMessage::SignedSlashReport { session, .. } => (3, session.encode()),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -446,11 +379,7 @@ impl ProcessorMessage {
       }
       ProcessorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
-          // Unique since network and ID binding
-          substrate::ProcessorMessage::Batch { batch } => (0, (batch.network, batch.id).encode()),
-          substrate::ProcessorMessage::SignedBatch { batch, .. } => {
-            (1, (batch.batch.network, batch.batch.id).encode())
-          }
+          substrate::ProcessorMessage::Batch { batch } => (0, batch.id.encode()),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_SUBSTRATE_UID, sub];

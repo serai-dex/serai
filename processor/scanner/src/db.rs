@@ -525,12 +525,19 @@ db_channel! {
 
 pub(crate) struct SubstrateToEventualityDb;
 impl SubstrateToEventualityDb {
-  pub(crate) fn send_burns(
+  pub(crate) fn send_burns<S: ScannerFeed>(
     txn: &mut impl DbTxn,
     acknowledged_block: u64,
-    burns: &Vec<OutInstructionWithBalance>,
+    burns: Vec<OutInstructionWithBalance>,
   ) {
-    Burns::send(txn, acknowledged_block, burns);
+    // Drop burns less than the dust
+    let burns = burns
+      .into_iter()
+      .filter(|burn| burn.balance.amount.0 >= S::dust(burn.balance.coin).0)
+      .collect::<Vec<_>>();
+    if !burns.is_empty() {
+      Burns::send(txn, acknowledged_block, &burns);
+    }
   }
 
   pub(crate) fn try_recv_burns(
@@ -548,6 +555,7 @@ mod _public_db {
 
   db_channel! {
     ScannerPublic {
+      Batches: (empty_key: ()) -> Batch,
       BatchesToSign: (key: &[u8]) -> Batch,
       AcknowledgedBatches: (key: &[u8]) -> u32,
       CompletedEventualities: (key: &[u8]) -> [u8; 32],
@@ -555,7 +563,24 @@ mod _public_db {
   }
 }
 
+/// The batches to publish.
+///
+/// This is used for auditing the Batches published to Serai.
+pub struct Batches;
+impl Batches {
+  pub(crate) fn send(txn: &mut impl DbTxn, batch: &Batch) {
+    _public_db::Batches::send(txn, (), batch);
+  }
+
+  /// Receive a batch to publish.
+  pub fn try_recv(txn: &mut impl DbTxn) -> Option<Batch> {
+    _public_db::Batches::try_recv(txn, ())
+  }
+}
+
 /// The batches to sign and publish.
+///
+/// This is used for publishing Batches onto Serai.
 pub struct BatchesToSign<K: GroupEncoding>(PhantomData<K>);
 impl<K: GroupEncoding> BatchesToSign<K> {
   pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: &Batch) {

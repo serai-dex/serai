@@ -95,6 +95,20 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
       }
     }
 
+    // Publish the Batches
+    {
+      let mut txn = self.db.txn();
+      while let Some(batch) = scanner::Batches::try_recv(&mut txn) {
+        iterated = true;
+        self
+          .coordinator
+          .publish_batch(batch)
+          .await
+          .map_err(|e| format!("couldn't publish Batch: {e:?}"))?;
+      }
+      txn.commit();
+    }
+
     // Publish the signed Batches
     {
       let mut txn = self.db.txn();
@@ -108,7 +122,7 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
         db::LastPublishedBatch::set(&mut txn, &batch.batch.id);
         self
           .coordinator
-          .publish_batch(batch)
+          .publish_signed_batch(batch)
           .await
           .map_err(|e| format!("couldn't publish Batch: {e:?}"))?;
         next_batch += 1;
