@@ -4,11 +4,10 @@ use std::io::{Read, Write};
 use group::GroupEncoding;
 
 use scale::{Encode, Decode, IoReader};
+use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
 use serai_primitives::Balance;
-
-use primitives::Address;
 
 use crate::{ScannerFeed, KeyFor, AddressFor};
 
@@ -92,7 +91,7 @@ impl<S: ScannerFeed> ReportDb<S> {
     for return_information in return_information {
       if let Some(ReturnInformation { address, balance }) = return_information {
         buf.write_all(&[1]).unwrap();
-        address.write(&mut buf).unwrap();
+        address.serialize(&mut buf).unwrap();
         balance.encode_to(&mut buf);
       } else {
         buf.write_all(&[0]).unwrap();
@@ -115,7 +114,7 @@ impl<S: ScannerFeed> ReportDb<S> {
       assert!((opt[0] == 0) || (opt[0] == 1));
 
       res.push((opt[0] == 1).then(|| {
-        let address = AddressFor::<S>::read(&mut buf).unwrap();
+        let address = AddressFor::<S>::deserialize_reader(&mut buf).unwrap();
         let balance = Balance::decode(&mut IoReader(&mut buf)).unwrap();
         ReturnInformation { address, balance }
       }));

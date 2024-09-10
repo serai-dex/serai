@@ -185,6 +185,8 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
           }
         }
         Response::Signature { id, signature: signed_tx } => {
+          let signed_tx: TransactionFor<ST> = signed_tx.into();
+
           // Save this transaction to the database
           {
             let mut buf = Vec::with_capacity(256);

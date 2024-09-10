@@ -62,7 +62,7 @@ pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, co
 // Monero, our current longest address candidate, has a longest address of featured
 // 1 (enum) + 1 (flags) + 64 (two keys) = 66
 // When JAMTIS arrives, it'll become 112 or potentially even 142 bytes
-pub const MAX_ADDRESS_LEN: u32 = 196;
+pub const MAX_ADDRESS_LEN: u32 = 192;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -88,10 +88,6 @@ impl ExternalAddress {
   #[cfg(feature = "std")]
   pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
     Ok(ExternalAddress(address.try_into().map_err(|_| "address length exceeds {MAX_ADDRESS_LEN}")?))
-  }
-
-  pub fn address(&self) -> &[u8] {
-    self.0.as_ref()
   }
 
   #[cfg(feature = "std")]

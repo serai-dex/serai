@@ -2,7 +2,15 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use std::{sync::OnceLock, time::Duration, io, collections::HashMap};
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
+
+mod output;
+mod transaction;
+
+/*
+use std::{sync::LazyLock, time::Duration, io, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -49,127 +57,9 @@ use serai_client::{
   primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
   networks::bitcoin::Address,
 };
+*/
 
-use crate::{
-  networks::{
-    NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
-  },
-  Payment,
-  multisigs::scheduler::utxo::Scheduler,
-};
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct OutputId(pub [u8; 36]);
-impl Default for OutputId {
-  fn default() -> Self {
-    Self([0; 36])
-  }
-}
-impl AsRef<[u8]> for OutputId {
-  fn as_ref(&self) -> &[u8] {
-    self.0.as_ref()
-  }
-}
-impl AsMut<[u8]> for OutputId {
-  fn as_mut(&mut self) -> &mut [u8] {
-    self.0.as_mut()
-  }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Output {
-  kind: OutputType,
-  presumed_origin: Option<Address>,
-  output: ReceivedOutput,
-  data: Vec<u8>,
-}
-
-impl OutputTrait<Bitcoin> for Output {
-  type Id = OutputId;
-
-  fn kind(&self) -> OutputType {
-    self.kind
-  }
-
-  fn id(&self) -> Self::Id {
-    let mut res = OutputId::default();
-    self.output.outpoint().consensus_encode(&mut res.as_mut()).unwrap();
-    debug_assert_eq!(
-      {
-        let mut outpoint = vec![];
-        self.output.outpoint().consensus_encode(&mut outpoint).unwrap();
-        outpoint
-      },
-      res.as_ref().to_vec()
-    );
-    res
-  }
-
-  fn tx_id(&self) -> [u8; 32] {
-    let mut hash = *self.output.outpoint().txid.as_raw_hash().as_byte_array();
-    hash.reverse();
-    hash
-  }
-
-  fn key(&self) -> ProjectivePoint {
-    let script = &self.output.output().script_pubkey;
-    assert!(script.is_p2tr());
-    let Instruction::PushBytes(key) = script.instructions_minimal().last().unwrap().unwrap() else {
-      panic!("last item in v1 Taproot script wasn't bytes")
-    };
-    let key = XOnlyPublicKey::from_slice(key.as_ref())
-      .expect("last item in v1 Taproot script wasn't x-only public key");
-    Secp256k1::read_G(&mut key.public_key(Parity::Even).serialize().as_slice()).unwrap() -
-      (ProjectivePoint::GENERATOR * self.output.offset())
-  }
-
-  fn presumed_origin(&self) -> Option<Address> {
-    self.presumed_origin.clone()
-  }
-
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Bitcoin, amount: Amount(self.output.value()) }
-  }
-
-  fn data(&self) -> &[u8] {
-    &self.data
-  }
-
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.kind.write(writer)?;
-    let presumed_origin: Option<Vec<u8>> = self.presumed_origin.clone().map(Into::into);
-    writer.write_all(&presumed_origin.encode())?;
-    self.output.write(writer)?;
-    writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
-    writer.write_all(&self.data)
-  }
-
-  fn read<R: io::Read>(mut reader: &mut R) -> io::Result<Self> {
-    Ok(Output {
-      kind: OutputType::read(reader)?,
-      presumed_origin: {
-        let mut io_reader = scale::IoReader(reader);
-        let res = Option::<Vec<u8>>::decode(&mut io_reader)
-          .unwrap()
-          .map(|address| Address::try_from(address).unwrap());
-        reader = io_reader.0;
-        res
-      },
-      output: ReceivedOutput::read(reader)?,
-      data: {
-        let mut data_len = [0; 2];
-        reader.read_exact(&mut data_len)?;
-
-        let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
-        reader.read_exact(&mut data)?;
-        data
-      },
-    })
-  }
-}
-
+/*
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Fee(u64);
 
@@ -198,71 +88,6 @@ impl TransactionTrait<Bitcoin> for Transaction {
       value -= output.value.to_sat();
     }
     value
-  }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Eventuality([u8; 32]);
-
-#[derive(Clone, PartialEq, Eq, Default, Debug)]
-pub struct EmptyClaim;
-impl AsRef<[u8]> for EmptyClaim {
-  fn as_ref(&self) -> &[u8] {
-    &[]
-  }
-}
-impl AsMut<[u8]> for EmptyClaim {
-  fn as_mut(&mut self) -> &mut [u8] {
-    &mut []
-  }
-}
-
-impl EventualityTrait for Eventuality {
-  type Claim = EmptyClaim;
-  type Completion = Transaction;
-
-  fn lookup(&self) -> Vec<u8> {
-    self.0.to_vec()
-  }
-
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut id = [0; 32];
-    reader
-      .read_exact(&mut id)
-      .map_err(|_| io::Error::other("couldn't decode ID in eventuality"))?;
-    Ok(Eventuality(id))
-  }
-  fn serialize(&self) -> Vec<u8> {
-    self.0.to_vec()
-  }
-
-  fn claim(_: &Transaction) -> EmptyClaim {
-    EmptyClaim
-  }
-  fn serialize_completion(completion: &Transaction) -> Vec<u8> {
-    let mut buf = vec![];
-    completion.consensus_encode(&mut buf).unwrap();
-    buf
-  }
-  fn read_completion<R: io::Read>(reader: &mut R) -> io::Result<Transaction> {
-    Transaction::consensus_decode(&mut io::BufReader::with_capacity(0, reader))
-      .map_err(|e| io::Error::other(format!("{e}")))
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct SignableTransaction {
-  actual: BSignableTransaction,
-}
-impl PartialEq for SignableTransaction {
-  fn eq(&self, other: &SignableTransaction) -> bool {
-    self.actual == other.actual
-  }
-}
-impl Eq for SignableTransaction {}
-impl SignableTransactionTrait for SignableTransaction {
-  fn fee(&self) -> u64 {
-    self.actual.fee()
   }
 }
 
@@ -944,3 +769,4 @@ impl Network for Bitcoin {
 impl UtxoNetwork for Bitcoin {
   const MAX_INPUTS: usize = MAX_INPUTS;
 }
+*/

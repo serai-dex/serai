@@ -11,7 +11,7 @@ use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 use serai_db::DbTxn;
 
 /// A transaction.
-pub trait Transaction: Sized {
+pub trait Transaction: Sized + Send {
   /// Read a `Transaction`.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;
   /// Write a `Transaction`.
@@ -20,10 +20,12 @@ pub trait Transaction: Sized {
 
 /// A signable transaction.
 pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
+  /// The underlying transaction type.
+  type Transaction: Transaction;
   /// The ciphersuite used to sign this transaction.
   type Ciphersuite: Ciphersuite;
   /// The preprocess machine for the signing protocol for this transaction.
-  type PreprocessMachine: Clone + PreprocessMachine<Signature: Send + Transaction>;
+  type PreprocessMachine: Clone + PreprocessMachine<Signature: Send + Into<Self::Transaction>>;
 
   /// Read a `SignableTransaction`.
   fn read(reader: &mut impl io::Read) -> io::Result<Self>;
@@ -42,8 +44,7 @@ pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
 }
 
 /// The transaction type for a SignableTransaction.
-pub type TransactionFor<ST> =
-  <<ST as SignableTransaction>::PreprocessMachine as PreprocessMachine>::Signature;
+pub type TransactionFor<ST> = <ST as SignableTransaction>::Transaction;
 
 mod db {
   use serai_db::{Get, DbTxn, create_db, db_channel};
