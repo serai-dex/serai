@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use group::{Group, GroupEncoding};
 
-use crate::{Id, Address, ReceivedOutput, Eventuality, EventualityTracker};
+use crate::{Address, ReceivedOutput, Eventuality, EventualityTracker};
 
 /// A block header from an external network.
 pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
@@ -14,12 +14,6 @@ pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
   fn id(&self) -> [u8; 32];
   /// The ID of the parent block.
   fn parent(&self) -> [u8; 32];
-}
-
-/// A transaction from an external network.
-pub trait Transaction: Send + Sync + Sized {
-  /// The type used to identify transactions on this external network.
-  type Id: Id;
 }
 
 /// A block from an external network.
@@ -37,14 +31,8 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   type Key: Group + GroupEncoding;
   /// The type used to represent addresses on this external network.
   type Address: Address;
-  /// The type used to represent transactions on this external network.
-  type Transaction: Transaction;
   /// The type used to represent received outputs on this external network.
-  type Output: ReceivedOutput<
-    Self::Key,
-    Self::Address,
-    TransactionId = <Self::Transaction as Transaction>::Id,
-  >;
+  type Output: ReceivedOutput<Self::Key, Self::Address>;
   /// The type used to represent an Eventuality for a transaction on this external network.
   type Eventuality: Eventuality<
     OutputId = <Self::Output as ReceivedOutput<Self::Key, Self::Address>>::Id,
@@ -64,8 +52,12 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   ///
   /// Returns tbe resolved Eventualities, indexed by the ID of the transactions which resolved
   /// them.
+  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,
-  ) -> HashMap<<Self::Transaction as Transaction>::Id, Self::Eventuality>;
+  ) -> HashMap<
+    <Self::Output as ReceivedOutput<Self::Key, Self::Address>>::TransactionId,
+    Self::Eventuality,
+  >;
 }

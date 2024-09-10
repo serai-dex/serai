@@ -8,6 +8,7 @@ use bitcoin_serai::{
     key::{Parity, XOnlyPublicKey},
     consensus::Encodable,
     script::Instruction,
+    transaction::Transaction,
   },
   wallet::ReceivedOutput as WalletOutput,
 };
@@ -21,6 +22,8 @@ use serai_client::{
 };
 
 use primitives::{OutputType, ReceivedOutput};
+
+use crate::scanner::{offsets_for_key, presumed_origin, extract_serai_data};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId([u8; 36]);
@@ -48,6 +51,20 @@ pub(crate) struct Output {
   data: Vec<u8>,
 }
 
+impl Output {
+  pub fn new(key: <Secp256k1 as Ciphersuite>::G, tx: &Transaction, output: WalletOutput) -> Self {
+    Self {
+      kind: offsets_for_key(key)
+        .into_iter()
+        .find_map(|(kind, offset)| (offset == output.offset()).then_some(kind))
+        .expect("scanned output for unknown offset"),
+      presumed_origin: presumed_origin(tx),
+      output,
+      data: extract_serai_data(tx),
+    }
+  }
+}
+
 impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];
@@ -63,7 +80,9 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   }
 
   fn transaction_id(&self) -> Self::TransactionId {
-    self.output.outpoint().txid.to_raw_hash().to_byte_array()
+    let mut res = self.output.outpoint().txid.to_raw_hash().to_byte_array();
+    res.reverse();
+    res
   }
 
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
