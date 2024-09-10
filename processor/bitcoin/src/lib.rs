@@ -6,11 +6,18 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
-mod scanner;
+// Internal utilities for scanning transactions
+mod scan;
 
+// Output trait satisfaction
 mod output;
+// Transaction/SignableTransaction/Eventuality trait satisfaction
 mod transaction;
+// Block trait satisfaction
 mod block;
+
+// ScannerFeed trait satisfaction
+mod scanner_feed;
 
 pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
   use bitcoin_serai::bitcoin::hashes::Hash;
