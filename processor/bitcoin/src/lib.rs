@@ -6,8 +6,19 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
+mod scanner;
+
 mod output;
 mod transaction;
+mod block;
+
+pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
+  use bitcoin_serai::bitcoin::hashes::Hash;
+
+  let mut res = hash.to_byte_array();
+  res.reverse();
+  res
+}
 
 /*
 use std::{sync::LazyLock, time::Duration, io, collections::HashMap};
@@ -297,59 +308,6 @@ impl Bitcoin {
         panic!("created a too large transaction despite limiting inputs/outputs")
       }
     }
-  }
-
-  // Expected script has to start with SHA256 PUSH MSG_HASH OP_EQUALVERIFY ..
-  fn segwit_data_pattern(script: &ScriptBuf) -> Option<bool> {
-    let mut ins = script.instructions();
-
-    // first item should be SHA256 code
-    if ins.next()?.ok()?.opcode()? != OP_SHA256 {
-      return Some(false);
-    }
-
-    // next should be a data push
-    ins.next()?.ok()?.push_bytes()?;
-
-    // next should be a equality check
-    if ins.next()?.ok()?.opcode()? != OP_EQUALVERIFY {
-      return Some(false);
-    }
-
-    Some(true)
-  }
-
-  fn extract_serai_data(tx: &Transaction) -> Vec<u8> {
-    // check outputs
-    let mut data = (|| {
-      for output in &tx.output {
-        if output.script_pubkey.is_op_return() {
-          match output.script_pubkey.instructions_minimal().last() {
-            Some(Ok(Instruction::PushBytes(data))) => return data.as_bytes().to_vec(),
-            _ => continue,
-          }
-        }
-      }
-      vec![]
-    })();
-
-    // check inputs
-    if data.is_empty() {
-      for input in &tx.input {
-        let witness = input.witness.to_vec();
-        // expected witness at least has to have 2 items, msg and the redeem script.
-        if witness.len() >= 2 {
-          let redeem_script = ScriptBuf::from_bytes(witness.last().unwrap().clone());
-          if Self::segwit_data_pattern(&redeem_script) == Some(true) {
-            data.clone_from(&witness[witness.len() - 2]); // len() - 1 is the redeem_script
-            break;
-          }
-        }
-      }
-    }
-
-    data.truncate(MAX_DATA_LEN.try_into().unwrap());
-    data
   }
 
   #[cfg(test)]
