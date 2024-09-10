@@ -123,8 +123,8 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
     block_number: u64,
   ) -> (Vec<SeraiKey<KeyFor<S>>>, Vec<(KeyFor<S>, LifetimeStage)>) {
     /*
-      This is proper as the keys for the next-to-scan block (at most `WINDOW_LENGTH` ahead,
-      which is `<= CONFIRMATIONS`) will be the keys to use here, with only minor edge cases.
+      This is proper as the keys for the next-to-scan block (at most `WINDOW_LENGTH` ahead) will be
+      the keys to use here, with only minor edge cases.
 
       This may include a key which has yet to activate by our perception. We can simply drop
       those.
@@ -136,7 +136,6 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       This also may include a key we've retired which has yet to officially retire. That's fine as
       we'll do nothing with it, and the Scheduler traits document this behavior.
     */
-    assert!(S::WINDOW_LENGTH <= S::CONFIRMATIONS);
     let mut keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
       .expect("scanning for a blockchain without any keys set");
     // Since the next-to-scan block is ahead of us, drop keys which have yet to actually activate

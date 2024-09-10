@@ -120,7 +120,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
   /// A new key MUST NOT be queued to activate a block preceding the finishing of the key prior to
   /// its prior. There MUST only be two keys active at one time.
   ///
-  /// activation_block_number is inclusive, so the key will be scanned for starting at the
+  /// `activation_block_number` is inclusive, so the key will be scanned for starting at the
   /// specified block.
   pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
     // Set the block which has a key activate as notable
