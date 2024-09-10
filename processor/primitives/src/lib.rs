@@ -46,7 +46,24 @@ pub trait Id:
   + BorshDeserialize
 {
 }
-impl<const N: usize> Id for [u8; N] where [u8; N]: Default {}
+impl<
+    I: Send
+      + Sync
+      + Clone
+      + Default
+      + PartialEq
+      + Eq
+      + Hash
+      + AsRef<[u8]>
+      + AsMut<[u8]>
+      + Debug
+      + Encode
+      + Decode
+      + BorshSerialize
+      + BorshDeserialize,
+  > Id for I
+{
+}
 
 /// A wrapper for a group element which implements the scale/borsh traits.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

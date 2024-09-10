@@ -10,7 +10,7 @@ use serai_db::{Get, DbTxn, create_db, db_channel};
 use serai_in_instructions_primitives::{InInstructionWithBalance, Batch};
 use serai_coins_primitives::OutInstructionWithBalance;
 
-use primitives::{EncodableG, Address, ReceivedOutput};
+use primitives::{EncodableG, ReceivedOutput};
 
 use crate::{
   lifetime::{LifetimeStage, Lifetime},
@@ -49,7 +49,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
       let mut opt = [0xff];
       reader.read_exact(&mut opt)?;
       assert!((opt[0] == 0) || (opt[0] == 1));
-      (opt[0] == 1).then(|| AddressFor::<S>::read(reader)).transpose()?
+      (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(reader)).transpose()?
     };
     let in_instruction =
       InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
@@ -59,7 +59,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
     self.output.write(writer)?;
     if let Some(return_address) = &self.return_address {
       writer.write_all(&[1])?;
-      return_address.write(writer)?;
+      return_address.serialize(writer)?;
     } else {
       writer.write_all(&[0])?;
     }
@@ -278,7 +278,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     buf.read_exact(&mut opt).unwrap();
     assert!((opt[0] == 0) || (opt[0] == 1));
 
-    let address = (opt[0] == 1).then(|| AddressFor::<S>::read(&mut buf).unwrap());
+    let address = (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(&mut buf).unwrap());
     Some((address, InInstructionWithBalance::decode(&mut IoReader(buf)).unwrap()))
   }
 }
@@ -338,7 +338,7 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
       let mut buf = vec![];
       if let Some(address) = &forward.return_address {
         buf.write_all(&[1]).unwrap();
-        address.write(&mut buf).unwrap();
+        address.serialize(&mut buf).unwrap();
       } else {
         buf.write_all(&[0]).unwrap();
       }
@@ -435,7 +435,8 @@ impl<S: ScannerFeed> Returnable<S> {
     reader.read_exact(&mut opt).unwrap();
     assert!((opt[0] == 0) || (opt[0] == 1));
 
-    let return_address = (opt[0] == 1).then(|| AddressFor::<S>::read(reader)).transpose()?;
+    let return_address =
+      (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(reader)).transpose()?;
 
     let in_instruction =
       InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
@@ -444,7 +445,7 @@ impl<S: ScannerFeed> Returnable<S> {
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     if let Some(return_address) = &self.return_address {
       writer.write_all(&[1])?;
-      return_address.write(writer)?;
+      return_address.serialize(writer)?;
     } else {
       writer.write_all(&[0])?;
     }

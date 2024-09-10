@@ -1,6 +1,7 @@
 use core::{str::FromStr, fmt};
 
 use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use bitcoin::{
   hashes::{Hash as HashTrait, hash160::Hash},
@@ -10,47 +11,10 @@ use bitcoin::{
   address::{AddressType, NetworkChecked, Address as BAddress},
 };
 
-#[derive(Clone, Eq, Debug)]
-pub struct Address(ScriptBuf);
+use crate::primitives::ExternalAddress;
 
-impl PartialEq for Address {
-  fn eq(&self, other: &Self) -> bool {
-    // Since Serai defines the Bitcoin-address specification as a variant of the script alone,
-    // define equivalency as the script alone
-    self.0 == other.0
-  }
-}
-
-impl From<Address> for ScriptBuf {
-  fn from(addr: Address) -> ScriptBuf {
-    addr.0
-  }
-}
-
-impl FromStr for Address {
-  type Err = ();
-  fn from_str(str: &str) -> Result<Address, ()> {
-    Address::new(
-      BAddress::from_str(str)
-        .map_err(|_| ())?
-        .require_network(Network::Bitcoin)
-        .map_err(|_| ())?
-        .script_pubkey(),
-    )
-    .ok_or(())
-  }
-}
-
-impl fmt::Display for Address {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    BAddress::<NetworkChecked>::from_script(&self.0, Network::Bitcoin)
-      .map_err(|_| fmt::Error)?
-      .fmt(f)
-  }
-}
-
-// SCALE-encoded variant of Monero addresses.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+// SCALE-encodable representation of Bitcoin addresses, used internally.
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
 enum EncodedAddress {
   P2PKH([u8; 20]),
   P2SH([u8; 20]),
@@ -59,34 +23,13 @@ enum EncodedAddress {
   P2TR([u8; 32]),
 }
 
-impl TryFrom<Vec<u8>> for Address {
+impl TryFrom<&ScriptBuf> for EncodedAddress {
   type Error = ();
-  fn try_from(data: Vec<u8>) -> Result<Address, ()> {
-    Ok(Address(match EncodedAddress::decode(&mut data.as_ref()).map_err(|_| ())? {
-      EncodedAddress::P2PKH(hash) => {
-        ScriptBuf::new_p2pkh(&PubkeyHash::from_raw_hash(Hash::from_byte_array(hash)))
-      }
-      EncodedAddress::P2SH(hash) => {
-        ScriptBuf::new_p2sh(&ScriptHash::from_raw_hash(Hash::from_byte_array(hash)))
-      }
-      EncodedAddress::P2WPKH(hash) => {
-        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V0, &hash).unwrap())
-      }
-      EncodedAddress::P2WSH(hash) => {
-        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V0, &hash).unwrap())
-      }
-      EncodedAddress::P2TR(key) => {
-        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V1, &key).unwrap())
-      }
-    }))
-  }
-}
-
-fn try_to_vec(addr: &Address) -> Result<Vec<u8>, ()> {
-  let parsed_addr =
-    BAddress::<NetworkChecked>::from_script(&addr.0, Network::Bitcoin).map_err(|_| ())?;
-  Ok(
-    (match parsed_addr.address_type() {
+  fn try_from(script_buf: &ScriptBuf) -> Result<Self, ()> {
+    // This uses mainnet as our encodings don't specify a network.
+    let parsed_addr =
+      BAddress::<NetworkChecked>::from_script(script_buf, Network::Bitcoin).map_err(|_| ())?;
+    Ok(match parsed_addr.address_type() {
       Some(AddressType::P2pkh) => {
         EncodedAddress::P2PKH(*parsed_addr.pubkey_hash().unwrap().as_raw_hash().as_byte_array())
       }
@@ -110,23 +53,119 @@ fn try_to_vec(addr: &Address) -> Result<Vec<u8>, ()> {
       }
       _ => Err(())?,
     })
-    .encode(),
-  )
+  }
 }
 
-impl From<Address> for Vec<u8> {
-  fn from(addr: Address) -> Vec<u8> {
+impl From<EncodedAddress> for ScriptBuf {
+  fn from(encoded: EncodedAddress) -> Self {
+    match encoded {
+      EncodedAddress::P2PKH(hash) => {
+        ScriptBuf::new_p2pkh(&PubkeyHash::from_raw_hash(Hash::from_byte_array(hash)))
+      }
+      EncodedAddress::P2SH(hash) => {
+        ScriptBuf::new_p2sh(&ScriptHash::from_raw_hash(Hash::from_byte_array(hash)))
+      }
+      EncodedAddress::P2WPKH(hash) => {
+        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V0, &hash).unwrap())
+      }
+      EncodedAddress::P2WSH(hash) => {
+        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V0, &hash).unwrap())
+      }
+      EncodedAddress::P2TR(key) => {
+        ScriptBuf::new_witness_program(&WitnessProgram::new(WitnessVersion::V1, &key).unwrap())
+      }
+    }
+  }
+}
+
+/// A Bitcoin address usable with Serai.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Address(ScriptBuf);
+
+// Support consuming into the underlying ScriptBuf.
+impl From<Address> for ScriptBuf {
+  fn from(addr: Address) -> ScriptBuf {
+    addr.0
+  }
+}
+
+impl From<&Address> for BAddress {
+  fn from(addr: &Address) -> BAddress {
+    // This fails if the script doesn't have an address representation, yet all our representable
+    // addresses' scripts do
+    BAddress::<NetworkChecked>::from_script(&addr.0, Network::Bitcoin).unwrap()
+  }
+}
+
+// Support converting a string into an address.
+impl FromStr for Address {
+  type Err = ();
+  fn from_str(str: &str) -> Result<Address, ()> {
+    Address::new(
+      BAddress::from_str(str)
+        .map_err(|_| ())?
+        .require_network(Network::Bitcoin)
+        .map_err(|_| ())?
+        .script_pubkey(),
+    )
+    .ok_or(())
+  }
+}
+
+// Support converting an address into a string.
+impl fmt::Display for Address {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    BAddress::from(self).fmt(f)
+  }
+}
+
+impl TryFrom<ExternalAddress> for Address {
+  type Error = ();
+  fn try_from(data: ExternalAddress) -> Result<Address, ()> {
+    // Decode as an EncodedAddress, then map to a ScriptBuf
+    let mut data = data.as_ref();
+    let encoded = EncodedAddress::decode(&mut data).map_err(|_| ())?;
+    if !data.is_empty() {
+      Err(())?
+    }
+    Ok(Address(ScriptBuf::from(encoded)))
+  }
+}
+
+impl From<Address> for EncodedAddress {
+  fn from(addr: Address) -> EncodedAddress {
     // Safe since only encodable addresses can be created
-    try_to_vec(&addr).unwrap()
+    EncodedAddress::try_from(&addr.0).unwrap()
+  }
+}
+
+impl From<Address> for ExternalAddress {
+  fn from(addr: Address) -> ExternalAddress {
+    // Safe since all variants are fixed-length and fit into MAX_ADDRESS_LEN
+    ExternalAddress::new(EncodedAddress::from(addr).encode()).unwrap()
+  }
+}
+
+impl BorshSerialize for Address {
+  fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+    EncodedAddress::from(self.clone()).serialize(writer)
+  }
+}
+
+impl BorshDeserialize for Address {
+  fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
+    Ok(Self(ScriptBuf::from(EncodedAddress::deserialize_reader(reader)?)))
   }
 }
 
 impl Address {
-  pub fn new(address: ScriptBuf) -> Option<Self> {
-    let res = Self(address);
-    if try_to_vec(&res).is_ok() {
-      return Some(res);
+  /// Create a new Address from a ScriptBuf.
+  pub fn new(script_buf: ScriptBuf) -> Option<Self> {
+    // If we can represent this Script, it's an acceptable address
+    if EncodedAddress::try_from(&script_buf).is_ok() {
+      return Some(Self(script_buf));
     }
+    // Else, it isn't acceptable
     None
   }
 }

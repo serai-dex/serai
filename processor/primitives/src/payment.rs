@@ -48,7 +48,7 @@ impl<A: Address> Payment<A> {
 
   /// Read a Payment.
   pub fn read(reader: &mut impl io::Read) -> io::Result<Self> {
-    let address = A::read(reader)?;
+    let address = A::deserialize_reader(reader)?;
     let reader = &mut IoReader(reader);
     let balance = Balance::decode(reader).map_err(io::Error::other)?;
     let data = Option::<Vec<u8>>::decode(reader).map_err(io::Error::other)?;
@@ -56,7 +56,7 @@ impl<A: Address> Payment<A> {
   }
   /// Write the Payment.
   pub fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
-    self.address.write(writer).unwrap();
+    self.address.serialize(writer)?;
     self.balance.encode_to(writer);
     self.data.encode_to(writer);
     Ok(())

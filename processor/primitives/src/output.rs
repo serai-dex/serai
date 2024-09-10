@@ -19,10 +19,19 @@ pub trait Address:
   + BorshSerialize
   + BorshDeserialize
 {
-  /// Write this address.
-  fn write(&self, writer: &mut impl io::Write) -> io::Result<()>;
-  /// Read an address.
-  fn read(reader: &mut impl io::Read) -> io::Result<Self>;
+}
+// This casts a wide net, yet it only implements `Address` for things `Into<ExternalAddress>` so
+// it should only implement this for addresses
+impl<
+    A: Send
+      + Sync
+      + Clone
+      + Into<ExternalAddress>
+      + TryFrom<ExternalAddress>
+      + BorshSerialize
+      + BorshDeserialize,
+  > Address for A
+{
 }
 
 /// The type of the output.

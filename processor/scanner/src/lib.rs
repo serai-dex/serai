@@ -7,6 +7,7 @@ use std::{io, collections::HashMap};
 
 use group::GroupEncoding;
 
+use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{NetworkId, Coin, Amount};
@@ -179,12 +180,12 @@ pub struct Return<S: ScannerFeed> {
 
 impl<S: ScannerFeed> Return<S> {
   pub(crate) fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
-    self.address.write(writer)?;
+    self.address.serialize(writer)?;
     self.output.write(writer)
   }
 
   pub(crate) fn read(reader: &mut impl io::Read) -> io::Result<Self> {
-    let address = AddressFor::<S>::read(reader)?;
+    let address = AddressFor::<S>::deserialize_reader(reader)?;
     let output = OutputFor::<S>::read(reader)?;
     Ok(Return { address, output })
   }
