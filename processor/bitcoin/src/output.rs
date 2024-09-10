@@ -23,7 +23,7 @@ use serai_client::{
 
 use primitives::{OutputType, ReceivedOutput};
 
-use crate::scanner::{offsets_for_key, presumed_origin, extract_serai_data};
+use crate::scan::{offsets_for_key, presumed_origin, extract_serai_data};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId([u8; 36]);

@@ -71,8 +71,14 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
 
   /// The amount of blocks to process in parallel.
   ///
-  /// This must be at least `1`. This value should be the worst-case latency to handle a block
-  /// divided by the expected block time.
+  /// This must be at least `1`. This value MUST be at least the worst-case latency to publish a
+  /// Batch for a block divided by the expected block time. Setting this value too low will risk a
+  /// backlog forming. Setting this value too high will only delay key rotation and forwarded
+  /// outputs.
+  // The latency to publish a Batch for a block is the latency of a provided transaction
+  // (1 minute), the latency of a signing protocol (1 minute), the latency of Serai to finalize a
+  // block (1 minute), and the latency to cosign such a block (5 minutes for the cosign distance
+  // plus 1 minute). Accordingly, this should be at least ~30 minutes, ideally 60 minutes.
   const WINDOW_LENGTH: u64;
 
   /// The amount of blocks which will occur in 10 minutes (approximate).

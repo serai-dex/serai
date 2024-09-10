@@ -8,10 +8,10 @@ use serai_client::networks::bitcoin::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 
-use crate::{hash_bytes, scanner::scanner, output::Output, transaction::Eventuality};
+use crate::{hash_bytes, scan::scanner, output::Output, transaction::Eventuality};
 
 #[derive(Clone, Debug)]
-pub(crate) struct BlockHeader(Header);
+pub(crate) struct BlockHeader(pub(crate) Header);
 impl primitives::BlockHeader for BlockHeader {
   fn id(&self) -> [u8; 32] {
     hash_bytes(self.0.block_hash().to_raw_hash())
@@ -22,7 +22,7 @@ impl primitives::BlockHeader for BlockHeader {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Block(BBlock);
+pub(crate) struct Block(pub(crate) BBlock);
 
 #[async_trait::async_trait]
 impl primitives::Block for Block {
