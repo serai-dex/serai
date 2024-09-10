@@ -71,8 +71,8 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
 
   /// The amount of blocks to process in parallel.
   ///
-  /// This must be at least `1`. This must be less than or equal to `CONFIRMATIONS`. This value
-  /// should be the worst-case latency to handle a block divided by the expected block time.
+  /// This must be at least `1`. This value should be the worst-case latency to handle a block
+  /// divided by the expected block time.
   const WINDOW_LENGTH: u64;
 
   /// The amount of blocks which will occur in 10 minutes (approximate).
