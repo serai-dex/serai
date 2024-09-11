@@ -67,7 +67,7 @@ impl<D: Db> ContinuallyRan for TxIndexTask<D> {
         let txid = hash_bytes(tx.compute_txid().to_raw_hash());
         for (o, output) in tx.output.iter().enumerate() {
           let o = u32::try_from(o).unwrap();
-          // Set the script pub key for this transaction
+          // Set the script public key for this transaction
           db::ScriptPubKey::set(&mut txn, txid, o, &output.script_pubkey.clone().into_bytes());
         }
       }
