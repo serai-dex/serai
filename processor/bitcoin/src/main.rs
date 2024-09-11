@@ -9,9 +9,11 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 use ciphersuite::Ciphersuite;
 
 use serai_db::{DbTxn, Db};
+use ::primitives::EncodableG;
+use ::key_gen::KeyGenParams as KeyGenParamsTrait;
 
 mod primitives;
-pub(crate) use primitives::*;
+pub(crate) use crate::primitives::*;
 
 // Internal utilities for scanning transactions
 mod scan;
@@ -50,59 +52,123 @@ async fn send_message(_msg: messages::ProcessorMessage) {
 
 async fn coordinator_loop<D: Db>(
   mut db: D,
-  mut key_gen: ::key_gen::KeyGen<KeyGenParams, D>,
+  mut key_gen: ::key_gen::KeyGen<KeyGenParams>,
   mut signers: signers::Signers<D, Rpc<D>, Scheduler<D>, Rpc<D>>,
   mut scanner: Option<scanner::Scanner<Rpc<D>>>,
 ) {
   loop {
-    let mut txn = Some(db.txn());
-    let msg = next_message(txn.as_mut().unwrap()).await;
+    let mut txn = db.txn();
+    let msg = next_message(&mut txn).await;
+    let mut txn = Some(txn);
     match msg {
       messages::CoordinatorMessage::KeyGen(msg) => {
+        let txn = txn.as_mut().unwrap();
+        let mut new_key = None;
         // This is a computationally expensive call yet it happens infrequently
-        for msg in key_gen.handle(txn.as_mut().unwrap(), msg) {
+        for msg in key_gen.handle(txn, msg) {
+          if let messages::key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } = &msg {
+            new_key = Some(*session)
+          }
           send_message(messages::ProcessorMessage::KeyGen(msg)).await;
         }
+
+        // If we were yielded a key, register it in the signers
+        if let Some(session) = new_key {
+          let (substrate_keys, network_keys) =
+            ::key_gen::KeyGen::<KeyGenParams>::key_shares(txn, session)
+              .expect("generated key pair yet couldn't get key shares");
+          signers.register_keys(txn, session, substrate_keys, network_keys);
+        }
       }
+
       // These are cheap calls which are fine to be here in this loop
-      messages::CoordinatorMessage::Sign(msg) => signers.queue_message(txn.as_mut().unwrap(), &msg),
+      messages::CoordinatorMessage::Sign(msg) => {
+        let txn = txn.as_mut().unwrap();
+        signers.queue_message(txn, &msg)
+      }
       messages::CoordinatorMessage::Coordinator(
         messages::coordinator::CoordinatorMessage::CosignSubstrateBlock {
           session,
           block_number,
           block,
         },
-      ) => signers.cosign_block(txn.take().unwrap(), session, block_number, block),
+      ) => {
+        let txn = txn.take().unwrap();
+        signers.cosign_block(txn, session, block_number, block)
+      }
       messages::CoordinatorMessage::Coordinator(
         messages::coordinator::CoordinatorMessage::SignSlashReport { session, report },
-      ) => signers.sign_slash_report(txn.take().unwrap(), session, &report),
+      ) => {
+        let txn = txn.take().unwrap();
+        signers.sign_slash_report(txn, session, &report)
+      }
+
       messages::CoordinatorMessage::Substrate(msg) => match msg {
         messages::substrate::CoordinatorMessage::SetKeys { serai_time, session, key_pair } => {
-          db::ExternalKeyForSession::set(txn.as_mut().unwrap(), session, &key_pair.1.into_inner());
-          todo!("TODO: Register in signers");
-          todo!("TODO: Scanner activation")
+          let txn = txn.as_mut().unwrap();
+          let key = EncodableG(
+            KeyGenParams::decode_key(key_pair.1.as_ref()).expect("invalid key set on serai"),
+          );
+
+          // Queue the key to be activated upon the next Batch
+          db::KeyToActivate::send::<
+            <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
+          >(txn, &key);
+
+          // Set the external key, as needed by the signers
+          db::ExternalKeyForSessionForSigners::set::<
+            <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
+          >(txn, session, &key);
+
+          // This isn't cheap yet only happens for the very first set of keys
+          if scanner.is_none() {
+            todo!("TODO")
+          }
         }
         messages::substrate::CoordinatorMessage::SlashesReported { session } => {
-          let key_bytes = db::ExternalKeyForSession::get(txn.as_ref().unwrap(), session).unwrap();
-          let mut key_bytes = key_bytes.as_slice();
-          let key =
-            <KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve::read_G(&mut key_bytes)
-              .unwrap();
-          assert!(key_bytes.is_empty());
+          let txn = txn.as_mut().unwrap();
 
-          signers.retire_session(txn.as_mut().unwrap(), session, &key)
+          // Since this session had its slashes reported, it has finished all its signature
+          // protocols and has been fully retired. We retire it from the signers accordingly
+          let key = db::ExternalKeyForSessionForSigners::take::<
+            <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
+          >(txn, session)
+          .unwrap()
+          .0;
+
+          // This is a cheap call
+          signers.retire_session(txn, session, &key)
         }
         messages::substrate::CoordinatorMessage::BlockWithBatchAcknowledgement {
-          block,
+          block: _,
           batch_id,
           in_instruction_succeededs,
           burns,
-          key_to_activate,
-        } => todo!("TODO"),
+        } => {
+          let mut txn = txn.take().unwrap();
+          let scanner = scanner.as_mut().unwrap();
+          let key_to_activate = db::KeyToActivate::try_recv::<
+            <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
+          >(&mut txn)
+          .map(|key| key.0);
+          // This is a cheap call as it internally just queues this to be done later
+          scanner.acknowledge_batch(
+            txn,
+            batch_id,
+            in_instruction_succeededs,
+            burns,
+            key_to_activate,
+          )
+        }
         messages::substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement {
-          block,
+          block: _,
           burns,
-        } => todo!("TODO"),
+        } => {
+          let txn = txn.take().unwrap();
+          let scanner = scanner.as_mut().unwrap();
+          // This is a cheap call as it internally just queues this to be done later
+          scanner.queue_burns(txn, burns)
+        }
       },
     };
     // If the txn wasn't already consumed and committed, commit it

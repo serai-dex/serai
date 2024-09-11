@@ -79,9 +79,21 @@ macro_rules! create_db {
         pub(crate) fn del$(<$($generic_name: $generic_type),+>)?(
           txn: &mut impl DbTxn
           $(, $arg: $arg_type)*
-      ) -> core::marker::PhantomData<($($($generic_name),+)?)> {
+        ) -> core::marker::PhantomData<($($($generic_name),+)?)> {
           txn.del(&$field_name::key$(::<$($generic_name),+>)?($($arg),*));
           core::marker::PhantomData
+        }
+
+        pub(crate) fn take$(<$($generic_name: $generic_type),+>)?(
+          txn: &mut impl DbTxn
+          $(, $arg: $arg_type)*
+        ) -> Option<$field_type> {
+          let key = $field_name::key$(::<$($generic_name),+>)?($($arg),*);
+          let res = txn.get(&key).map(|data| borsh::from_slice(data.as_ref()).unwrap());
+          if res.is_some() {
+            txn.del(key);
+          }
+          res
         }
       }
     )*
@@ -91,19 +103,30 @@ macro_rules! create_db {
 #[macro_export]
 macro_rules! db_channel {
   ($db_name: ident {
-    $($field_name: ident: ($($arg: ident: $arg_type: ty),*) -> $field_type: ty$(,)?)*
+    $($field_name: ident:
+      $(<$($generic_name: tt: $generic_type: tt),+>)?(
+        $($arg: ident: $arg_type: ty),*
+      ) -> $field_type: ty$(,)?
+    )*
   }) => {
     $(
       create_db! {
         $db_name {
-          $field_name: ($($arg: $arg_type,)* index: u32) -> $field_type,
+          $field_name: $(<$($generic_name: $generic_type),+>)?(
+            $($arg: $arg_type,)*
+            index: u32
+          ) -> $field_type
         }
       }
 
       impl $field_name {
-        pub(crate) fn send(txn: &mut impl DbTxn $(, $arg: $arg_type)*, value: &$field_type) {
+        pub(crate) fn send$(<$($generic_name: $generic_type),+>)?(
+          txn: &mut impl DbTxn
+          $(, $arg: $arg_type)*
+          , value: &$field_type
+        ) {
           // Use index 0 to store the amount of messages
-          let messages_sent_key = $field_name::key($($arg),*, 0);
+          let messages_sent_key = $field_name::key$(::<$($generic_name),+>)?($($arg,)* 0);
           let messages_sent = txn.get(&messages_sent_key).map(|counter| {
             u32::from_le_bytes(counter.try_into().unwrap())
           }).unwrap_or(0);
@@ -114,19 +137,22 @@ macro_rules! db_channel {
           // at the same time
           let index_to_use = messages_sent + 2;
 
-          $field_name::set(txn, $($arg),*, index_to_use, value);
+          $field_name::set$(::<$($generic_name),+>)?(txn, $($arg,)* index_to_use, value);
         }
-        pub(crate) fn try_recv(txn: &mut impl DbTxn $(, $arg: $arg_type)*) -> Option<$field_type> {
-          let messages_recvd_key = $field_name::key($($arg),*, 1);
+        pub(crate) fn try_recv$(<$($generic_name: $generic_type),+>)?(
+          txn: &mut impl DbTxn
+          $(, $arg: $arg_type)*
+        ) -> Option<$field_type> {
+          let messages_recvd_key = $field_name::key$(::<$($generic_name),+>)?($($arg,)* 1);
           let messages_recvd = txn.get(&messages_recvd_key).map(|counter| {
             u32::from_le_bytes(counter.try_into().unwrap())
           }).unwrap_or(0);
 
           let index_to_read = messages_recvd + 2;
 
-          let res = $field_name::get(txn, $($arg),*, index_to_read);
+          let res = $field_name::get$(::<$($generic_name),+>)?(txn, $($arg,)* index_to_read);
           if res.is_some() {
-            $field_name::del(txn, $($arg),*, index_to_read);
+            $field_name::del$(::<$($generic_name),+>)?(txn, $($arg,)* index_to_read);
             txn.put(&messages_recvd_key, (messages_recvd + 1).to_le_bytes());
           }
           res
