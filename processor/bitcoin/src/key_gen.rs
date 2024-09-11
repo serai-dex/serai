@@ -1,12 +1,10 @@
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
-use key_gen::KeyGenParams;
-
 use crate::scan::scanner;
 
-pub(crate) struct KeyGen;
-impl KeyGenParams for KeyGen {
+pub(crate) struct KeyGenParams;
+impl key_gen::KeyGenParams for KeyGenParams {
   const ID: &'static str = "Bitcoin";
 
   type ExternalNetworkCurve = Secp256k1;
