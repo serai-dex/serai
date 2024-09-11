@@ -13,6 +13,7 @@ pub(crate) use primitives::*;
 mod scan;
 
 // App-logic trait satisfactions
+mod key_gen;
 mod rpc;
 mod scheduler;
 
@@ -223,12 +224,6 @@ impl Network for Bitcoin {
   // 200 vbytes at 1 sat/weight (our current minimum fee, 4 sat/vbyte) = 800 sat fee for the
   // aggregation TX
   const COST_TO_AGGREGATE: u64 = 800;
-
-  fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
-    *keys = tweak_keys(keys);
-    // Also create a scanner to assert these keys, and all expected paths, are usable
-    scanner(keys.group_key());
-  }
 
   #[cfg(test)]
   async fn get_block_number(&self, id: &[u8; 32]) -> usize {
