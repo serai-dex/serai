@@ -113,8 +113,6 @@ pub mod sign {
     pub attempt: u32,
   }
 
-  // TODO: Make this generic to the ID once we introduce topics into the message-queue and remove
-  // the global ProcessorMessage/CoordinatorMessage
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     // Received preprocesses for the specified signing protocol.
@@ -185,8 +183,10 @@ pub mod substrate {
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
-    /// Keys set on the Serai network.
+    /// Keys set on the Serai blockchain.
     SetKeys { serai_time: u64, session: Session, key_pair: KeyPair },
+    /// Slashes reported on the Serai blockchain OR the process timed out.
+    SlashesReported { session: Session },
     /// The data from a block which acknowledged a Batch.
     BlockWithBatchAcknowledgement {
       block: u64,
@@ -305,11 +305,12 @@ impl CoordinatorMessage {
       CoordinatorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
           substrate::CoordinatorMessage::SetKeys { session, .. } => (0, session.encode()),
+          substrate::CoordinatorMessage::SlashesReported { session } => (1, session.encode()),
           substrate::CoordinatorMessage::BlockWithBatchAcknowledgement { block, .. } => {
-            (1, block.encode())
+            (2, block.encode())
           }
           substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement { block, .. } => {
-            (2, block.encode())
+            (3, block.encode())
           }
         };
 

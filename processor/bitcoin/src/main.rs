@@ -6,6 +6,10 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
+use ciphersuite::Ciphersuite;
+
+use serai_db::{DbTxn, Db};
+
 mod primitives;
 pub(crate) use primitives::*;
 
@@ -14,8 +18,11 @@ mod scan;
 
 // App-logic trait satisfactions
 mod key_gen;
+use crate::key_gen::KeyGenParams;
 mod rpc;
+use rpc::Rpc;
 mod scheduler;
+use scheduler::Scheduler;
 
 // Our custom code for Bitcoin
 mod db;
@@ -27,6 +34,82 @@ pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) ->
   let mut res = hash.to_byte_array();
   res.reverse();
   res
+}
+
+/// Fetch the next message from the Coordinator.
+///
+/// This message is guaranteed to have never been handled before, where handling is defined as
+/// this `txn` being committed.
+async fn next_message(_txn: &mut impl DbTxn) -> messages::CoordinatorMessage {
+  todo!("TODO")
+}
+
+async fn send_message(_msg: messages::ProcessorMessage) {
+  todo!("TODO")
+}
+
+async fn coordinator_loop<D: Db>(
+  mut db: D,
+  mut key_gen: ::key_gen::KeyGen<KeyGenParams, D>,
+  mut signers: signers::Signers<D, Rpc<D>, Scheduler<D>, Rpc<D>>,
+  mut scanner: Option<scanner::Scanner<Rpc<D>>>,
+) {
+  loop {
+    let mut txn = Some(db.txn());
+    let msg = next_message(txn.as_mut().unwrap()).await;
+    match msg {
+      messages::CoordinatorMessage::KeyGen(msg) => {
+        // This is a computationally expensive call yet it happens infrequently
+        for msg in key_gen.handle(txn.as_mut().unwrap(), msg) {
+          send_message(messages::ProcessorMessage::KeyGen(msg)).await;
+        }
+      }
+      // These are cheap calls which are fine to be here in this loop
+      messages::CoordinatorMessage::Sign(msg) => signers.queue_message(txn.as_mut().unwrap(), &msg),
+      messages::CoordinatorMessage::Coordinator(
+        messages::coordinator::CoordinatorMessage::CosignSubstrateBlock {
+          session,
+          block_number,
+          block,
+        },
+      ) => signers.cosign_block(txn.take().unwrap(), session, block_number, block),
+      messages::CoordinatorMessage::Coordinator(
+        messages::coordinator::CoordinatorMessage::SignSlashReport { session, report },
+      ) => signers.sign_slash_report(txn.take().unwrap(), session, &report),
+      messages::CoordinatorMessage::Substrate(msg) => match msg {
+        messages::substrate::CoordinatorMessage::SetKeys { serai_time, session, key_pair } => {
+          db::ExternalKeyForSession::set(txn.as_mut().unwrap(), session, &key_pair.1.into_inner());
+          todo!("TODO: Register in signers");
+          todo!("TODO: Scanner activation")
+        }
+        messages::substrate::CoordinatorMessage::SlashesReported { session } => {
+          let key_bytes = db::ExternalKeyForSession::get(txn.as_ref().unwrap(), session).unwrap();
+          let mut key_bytes = key_bytes.as_slice();
+          let key =
+            <KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve::read_G(&mut key_bytes)
+              .unwrap();
+          assert!(key_bytes.is_empty());
+
+          signers.retire_session(txn.as_mut().unwrap(), session, &key)
+        }
+        messages::substrate::CoordinatorMessage::BlockWithBatchAcknowledgement {
+          block,
+          batch_id,
+          in_instruction_succeededs,
+          burns,
+          key_to_activate,
+        } => todo!("TODO"),
+        messages::substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement {
+          block,
+          burns,
+        } => todo!("TODO"),
+      },
+    };
+    // If the txn wasn't already consumed and committed, commit it
+    if let Some(txn) = txn {
+      txn.commit();
+    }
+  }
 }
 
 #[tokio::main]
