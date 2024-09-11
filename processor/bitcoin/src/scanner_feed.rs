@@ -46,7 +46,39 @@ impl ScannerFeed for Rpc {
 
   fn dust(coin: Coin) -> Amount {
     assert_eq!(coin, Coin::Bitcoin);
-    // 10,000 satoshis, or $5 if 1 BTC = 50,000 USD
+
+    /*
+      A Taproot input is:
+      - 36 bytes for the OutPoint
+      - 0 bytes for the script (+1 byte for the length)
+      - 4 bytes for the sequence
+      Per https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
+
+      There's also:
+      - 1 byte for the witness length
+      - 1 byte for the signature length
+      - 64 bytes for the signature
+      which have the SegWit discount.
+
+      (4 * (36 + 1 + 4)) + (1 + 1 + 64) = 164 + 66 = 230 weight units
+      230 ceil div 4 = 57 vbytes
+
+      Bitcoin defines multiple minimum feerate constants *per kilo-vbyte*. Currently, these are:
+      - 1000 sat/kilo-vbyte for a transaction to be relayed
+      - Each output's value must exceed the fee of the TX spending it at 3000 sat/kilo-vbyte
+      The DUST constant needs to be determined by the latter.
+      Since these are solely relay rules, and may be raised, we require all outputs be spendable
+      under a 5000 sat/kilo-vbyte fee rate.
+
+      5000 sat/kilo-vbyte = 5 sat/vbyte
+      5 * 57 = 285 sats/spent-output
+
+      Even if an output took 100 bytes (it should be just ~29-43), taking 400 weight units, adding
+      100 vbytes, tripling the transaction size, then the sats/tx would be < 1000.
+
+      Increase by an order of magnitude, in order to ensure this is actually worth our time, and we
+      get 10,000 satoshis. This is $5 if 1 BTC = 50,000 USD.
+    */
     Amount(10_000)
   }
 

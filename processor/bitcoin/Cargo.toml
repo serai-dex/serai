@@ -45,6 +45,8 @@ messages = { package = "serai-processor-messages", path = "../messages" }
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
 scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
+utxo-scheduler = { package = "serai-processor-utxo-scheduler-primitives", path = "../scheduler/utxo/primitives" }
+transaction-chaining-scheduler = { package = "serai-processor-transaction-chaining-scheduler", path = "../scheduler/utxo/transaction-chaining" }
 
 message-queue = { package = "serai-message-queue", path = "../../message-queue" }
 

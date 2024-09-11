@@ -47,7 +47,7 @@ impl AsMut<[u8]> for OutputId {
 pub(crate) struct Output {
   kind: OutputType,
   presumed_origin: Option<Address>,
-  output: WalletOutput,
+  pub(crate) output: WalletOutput,
   data: Vec<u8>,
 }
 

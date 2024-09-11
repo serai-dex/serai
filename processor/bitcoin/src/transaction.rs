@@ -48,11 +48,10 @@ impl scheduler::Transaction for Transaction {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SignableTransaction {
-  inputs: Vec<ReceivedOutput>,
-  payments: Vec<(Address, u64)>,
-  change: Option<Address>,
-  data: Option<Vec<u8>>,
-  fee_per_vbyte: u64,
+  pub(crate) inputs: Vec<ReceivedOutput>,
+  pub(crate) payments: Vec<(Address, u64)>,
+  pub(crate) change: Option<Address>,
+  pub(crate) fee_per_vbyte: u64,
 }
 
 impl SignableTransaction {
@@ -66,7 +65,7 @@ impl SignableTransaction {
         .map(|(address, amount)| (ScriptBuf::from(address), amount))
         .collect::<Vec<_>>(),
       self.change.map(ScriptBuf::from),
-      self.data,
+      None,
       self.fee_per_vbyte,
     )
   }
@@ -111,10 +110,9 @@ impl scheduler::SignableTransaction for SignableTransaction {
 
     let payments = <_>::deserialize_reader(reader)?;
     let change = <_>::deserialize_reader(reader)?;
-    let data = <_>::deserialize_reader(reader)?;
     let fee_per_vbyte = <_>::deserialize_reader(reader)?;
 
-    Ok(Self { inputs, payments, change, data, fee_per_vbyte })
+    Ok(Self { inputs, payments, change, fee_per_vbyte })
   }
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.inputs.len()).unwrap().to_le_bytes())?;
@@ -124,7 +122,6 @@ impl scheduler::SignableTransaction for SignableTransaction {
 
     self.payments.serialize(writer)?;
     self.change.serialize(writer)?;
-    self.data.serialize(writer)?;
     self.fee_per_vbyte.serialize(writer)?;
 
     Ok(())
@@ -141,8 +138,8 @@ impl scheduler::SignableTransaction for SignableTransaction {
 
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct Eventuality {
-  txid: [u8; 32],
-  singular_spent_output: Option<OutputId>,
+  pub(crate) txid: [u8; 32],
+  pub(crate) singular_spent_output: Option<OutputId>,
 }
 
 impl primitives::Eventuality for Eventuality {

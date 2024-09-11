@@ -8143,6 +8143,8 @@ dependencies = [
  "serai-processor-primitives",
  "serai-processor-scanner",
  "serai-processor-scheduler-primitives",
+ "serai-processor-transaction-chaining-scheduler",
+ "serai-processor-utxo-scheduler-primitives",
  "tokio",
  "zalloc",
 ]
@@ -8809,7 +8811,6 @@ dependencies = [
 name = "serai-processor-utxo-scheduler-primitives"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "serai-primitives",
  "serai-processor-primitives",
