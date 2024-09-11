@@ -37,7 +37,7 @@ pub(crate) enum Action<S: ScannerFeed> {
 
 db_channel!(
   ScannerSubstrate {
-    Actions: (empty_key: ()) -> ActionEncodable,
+    Actions: () -> ActionEncodable,
   }
 );
 
@@ -52,7 +52,6 @@ impl<S: ScannerFeed> SubstrateDb<S> {
   ) {
     Actions::send(
       txn,
-      (),
       &ActionEncodable::AcknowledgeBatch(AcknowledgeBatchEncodable {
         batch_id,
         in_instruction_succeededs,
@@ -62,11 +61,11 @@ impl<S: ScannerFeed> SubstrateDb<S> {
     );
   }
   pub(crate) fn queue_queue_burns(txn: &mut impl DbTxn, burns: Vec<OutInstructionWithBalance>) {
-    Actions::send(txn, (), &ActionEncodable::QueueBurns(burns));
+    Actions::send(txn, &ActionEncodable::QueueBurns(burns));
   }
 
   pub(crate) fn next_action(txn: &mut impl DbTxn) -> Option<Action<S>> {
-    let action_encodable = Actions::try_recv(txn, ())?;
+    let action_encodable = Actions::try_recv(txn)?;
     Some(match action_encodable {
       ActionEncodable::AcknowledgeBatch(AcknowledgeBatchEncodable {
         batch_id,
