@@ -59,10 +59,22 @@ fn signable_transaction<D: Db>(
       })
     })
     .collect::<Vec<_>>();
+  /*
+    Push a payment to a key with a known private key which anyone can spend. If this transaction
+    gets stuck, this lets anyone create a child transaction spending this output, raising the fee,
+    getting the transaction unstuck (via CPFP).
+  */
+  payments.push(Payment::new(
+    // The generator is even so this is valid
+    Address::new(p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR)),
+    // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
+    Balance { coin: Coin::Bitcoin, amount: Amount(bitcoin_serai::wallet::DUST) },
+    None,
+  ));
+
   let change = change
     .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
 
-  // TODO: ACP output
   BSignableTransaction::new(
     inputs.clone(),
     &payments
