@@ -181,6 +181,24 @@ pub mod coordinator {
 pub mod substrate {
   use super::*;
 
+  /* TODO
+  #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+  pub enum InInstructionResult {
+    Succeeded,
+    Failed,
+  }
+  #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+  pub struct ExecutedBatch {
+    batch_id: u32,
+    in_instructions: Vec<InInstructionResult>,
+  }
+  Block {
+    block: u64,
+    batches: Vec<ExecutedBatch>,
+    burns: Vec<OutInstructionWithBalance>,
+  }
+  */
+
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
     /// Keys set on the Serai blockchain.
@@ -193,7 +211,6 @@ pub mod substrate {
       batch_id: u32,
       in_instruction_succeededs: Vec<bool>,
       burns: Vec<OutInstructionWithBalance>,
-      key_to_activate: Option<KeyPair>,
     },
     /// The data from a block which didn't acknowledge a Batch.
     BlockWithoutBatchAcknowledgement { block: u64, burns: Vec<OutInstructionWithBalance> },
