@@ -34,6 +34,50 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     db::LatestBlockToYieldAsFinalized::get(&self.db).ok_or(RpcError::ConnectionError)
   }
 
+  async fn time_of_block(&self, number: u64) -> Result<u64, Self::EphemeralError> {
+    let number = usize::try_from(number).unwrap();
+
+    /*
+      The block time isn't guaranteed to be monotonic. It is guaranteed to be greater than the
+      median time of prior blocks, as detailed in BIP-0113 (a BIP which used that fact to improve
+      CLTV). This creates a monotonic median time which we use as the block time.
+    */
+    // This implements `GetMedianTimePast`
+    let median = {
+      const MEDIAN_TIMESPAN: usize = 11;
+      let mut timestamps = Vec::with_capacity(MEDIAN_TIMESPAN);
+      for i in number.saturating_sub(MEDIAN_TIMESPAN) .. number {
+        timestamps.push(self.rpc.get_block(&self.rpc.get_block_hash(i).await?).await?.header.time);
+      }
+      timestamps.sort();
+      timestamps[timestamps.len() / 2]
+    };
+
+    /*
+      This block's timestamp is guaranteed to be greater than this median:
+        https://github.com/bitcoin/bitcoin/blob/0725a374941355349bb4bc8a79dad1affb27d3b9
+          /src/validation.cpp#L4182-L4184
+
+      This does not guarantee the median always increases however. Take the following trivial
+      example, as the window is initially built:
+
+      0 block has time 0   // Prior blocks: []
+      1 block has time 1   // Prior blocks: [0]
+      2 block has time 2   // Prior blocks: [0, 1]
+      3 block has time 2   // Prior blocks: [0, 1, 2]
+
+      These two blocks have the same time (both greater than the median of their prior blocks) and
+      the same median.
+
+      The median will never decrease however. The values pushed onto the window will always be
+      greater than the median. If a value greater than the median is popped, the median will remain
+      the same (due to the counterbalance of the pushed value). If a value less than the median is
+      popped, the median will increase (either to another instance of the same value, yet one
+      closer to the end of the repeating sequence, or to a higher value).
+    */
+    Ok(median.into())
+  }
+
   async fn unchecked_block_header_by_number(
     &self,
     number: u64,

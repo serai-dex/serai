@@ -106,6 +106,11 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// consensus. The genesis block accordingly has block number 0.
   async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError>;
 
+  /// Fetch the timestamp of a block (represented in seconds since the epoch).
+  ///
+  /// This must be monotonically incrementing. Two blocks may share a timestamp.
+  async fn time_of_block(&self, number: u64) -> Result<u64, Self::EphemeralError>;
+
   /// Fetch a block header by its number.
   ///
   /// This does not check the returned BlockHeader is the header for the block we indexed.

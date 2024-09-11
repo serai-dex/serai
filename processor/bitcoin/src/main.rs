@@ -6,11 +6,16 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
+use core::cmp::Ordering;
+
 use ciphersuite::Ciphersuite;
+
+use serai_client::validator_sets::primitives::Session;
 
 use serai_db::{DbTxn, Db};
 use ::primitives::EncodableG;
 use ::key_gen::KeyGenParams as KeyGenParamsTrait;
+use scanner::{ScannerFeed, Scanner};
 
 mod primitives;
 pub(crate) use crate::primitives::*;
@@ -38,6 +43,56 @@ pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) ->
   res
 }
 
+async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u64 {
+  async fn first_block_after_time_iteration<S: ScannerFeed>(
+    feed: &S,
+    serai_time: u64,
+  ) -> Result<Option<u64>, S::EphemeralError> {
+    let latest = feed.latest_finalized_block_number().await?;
+    let latest_time = feed.time_of_block(latest).await?;
+    if latest_time < serai_time {
+      tokio::time::sleep(core::time::Duration::from_secs(serai_time - latest_time)).await;
+      return Ok(None);
+    }
+
+    // A finalized block has a time greater than or equal to the time we want to start at
+    // Find the first such block with a binary search
+    // start_search and end_search are inclusive
+    let mut start_search = 0;
+    let mut end_search = latest;
+    while start_search != end_search {
+      // This on purposely chooses the earlier block in the case two blocks are both in the middle
+      let to_check = start_search + ((end_search - start_search) / 2);
+      let block_time = feed.time_of_block(to_check).await?;
+      match block_time.cmp(&serai_time) {
+        Ordering::Less => {
+          start_search = to_check + 1;
+          assert!(start_search <= end_search);
+        }
+        Ordering::Equal | Ordering::Greater => {
+          // This holds true since we pick the earlier block upon an even search distance
+          // If it didn't, this would cause an infinite loop
+          assert!(to_check < end_search);
+          end_search = to_check;
+        }
+      }
+    }
+    Ok(Some(start_search))
+  }
+  loop {
+    match first_block_after_time_iteration(feed, serai_time).await {
+      Ok(Some(block)) => return block,
+      Ok(None) => {
+        log::info!("waiting for block to activate at (a block with timestamp >= {serai_time})");
+      }
+      Err(e) => {
+        log::error!("couldn't find the first block Serai should scan due to an RPC error: {e:?}");
+      }
+    }
+    tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+  }
+}
+
 /// Fetch the next message from the Coordinator.
 ///
 /// This message is guaranteed to have never been handled before, where handling is defined as
@@ -52,11 +107,13 @@ async fn send_message(_msg: messages::ProcessorMessage) {
 
 async fn coordinator_loop<D: Db>(
   mut db: D,
+  feed: Rpc<D>,
   mut key_gen: ::key_gen::KeyGen<KeyGenParams>,
   mut signers: signers::Signers<D, Rpc<D>, Scheduler<D>, Rpc<D>>,
   mut scanner: Option<scanner::Scanner<Rpc<D>>>,
 ) {
   loop {
+    let db_clone = db.clone();
     let mut txn = db.txn();
     let msg = next_message(&mut txn).await;
     let mut txn = Some(txn);
@@ -120,9 +177,13 @@ async fn coordinator_loop<D: Db>(
             <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
           >::set(txn, session, &key);
 
-          // This isn't cheap yet only happens for the very first set of keys
-          if scanner.is_none() {
-            todo!("TODO")
+          // This is presumed extremely expensive, potentially blocking for several minutes, yet
+          // only happens for the very first set of keys
+          if session == Session(0) {
+            assert!(scanner.is_none());
+            let start_block = first_block_after_time(&feed, serai_time).await;
+            scanner =
+              Some(Scanner::new::<Scheduler<D>>(db_clone, feed.clone(), start_block, key.0).await);
           }
         }
         messages::substrate::CoordinatorMessage::SlashesReported { session } => {
@@ -238,36 +299,6 @@ impl TransactionTrait<Bitcoin> for Transaction {
       value -= output.value.to_sat();
     }
     value
-  }
-}
-
-#[async_trait]
-impl BlockTrait<Bitcoin> for Block {
-  async fn time(&self, rpc: &Bitcoin) -> u64 {
-    // Use the network median time defined in BIP-0113 since the in-block time isn't guaranteed to
-    // be monotonic
-    let mut timestamps = vec![u64::from(self.header.time)];
-    let mut parent = self.parent();
-    // BIP-0113 uses a median of the prior 11 blocks
-    while timestamps.len() < 11 {
-      let mut parent_block;
-      while {
-        parent_block = rpc.rpc.get_block(&parent).await;
-        parent_block.is_err()
-      } {
-        log::error!("couldn't get parent block when trying to get block time: {parent_block:?}");
-        sleep(Duration::from_secs(5)).await;
-      }
-      let parent_block = parent_block.unwrap();
-      timestamps.push(u64::from(parent_block.header.time));
-      parent = parent_block.parent();
-
-      if parent == [0; 32] {
-        break;
-      }
-    }
-    timestamps.sort();
-    timestamps[timestamps.len() / 2]
   }
 }
 
