@@ -158,7 +158,7 @@ async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u6
 }
 
 /// The main loop of a Processor, interacting with the Coordinator.
-pub async fn coordinator_loop<
+pub async fn main_loop<
   S: ScannerFeed,
   K: KeyGenParams<ExternalNetworkCiphersuite: Ciphersuite<G = KeyFor<S>>>,
   Sch: Scheduler<
@@ -192,7 +192,7 @@ pub async fn coordinator_loop<
           if let messages::key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } = &msg {
             new_key = Some(*session)
           }
-          coordinator.send_message(messages::ProcessorMessage::KeyGen(msg)).await;
+          coordinator.send_message(&messages::ProcessorMessage::KeyGen(msg));
         }
 
         // If we were yielded a key, register it in the signers
