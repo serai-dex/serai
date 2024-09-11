@@ -57,8 +57,7 @@ async fn main() {
   tokio::spawn(TxIndexTask(feed.clone()).continually_run(index_task, vec![]));
   core::mem::forget(index_handle);
 
-  bin::coordinator_loop::<_, KeyGenParams, Scheduler<_>, Rpc<bin::Db>>(db, feed.clone(), feed)
-    .await;
+  bin::main_loop::<_, KeyGenParams, Scheduler<_>, Rpc<bin::Db>>(db, feed.clone(), feed).await;
 }
 
 /*

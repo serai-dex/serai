@@ -1,21 +1,4 @@
-use ciphersuite::group::GroupEncoding;
-
-use serai_client::validator_sets::primitives::Session;
-
-use serai_db::{Get, DbTxn, create_db, db_channel};
-use primitives::EncodableG;
-
-create_db! {
-  Processor {
-    ExternalKeyForSessionForSigners: <K: GroupEncoding>(session: Session) -> EncodableG<K>,
-  }
-}
-
-db_channel! {
-  Processor {
-    KeyToActivate: <K: GroupEncoding>() -> EncodableG<K>
-  }
-}
+use serai_db::{Get, DbTxn, create_db};
 
 create_db! {
   BitcoinProcessor {
