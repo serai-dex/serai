@@ -26,6 +26,9 @@ pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) ->
   res
 }
 
+#[tokio::main]
+async fn main() {}
+
 /*
 use bitcoin_serai::{
   bitcoin::{
