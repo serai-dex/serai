@@ -19,7 +19,7 @@ pub(crate) struct Params<P: KeyGenParams> {
   pub(crate) substrate_evrf_public_keys:
     Vec<<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G>,
   pub(crate) network_evrf_public_keys:
-    Vec<<<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G>,
+    Vec<<<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -93,9 +93,9 @@ impl<P: KeyGenParams> KeyGenDb<P> {
         .network_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::read_G::<&[u8]>(
-            &mut key.as_ref(),
-          )
+          <<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::read_G::<
+            &[u8],
+          >(&mut key.as_ref())
           .unwrap()
         })
         .collect(),
@@ -118,7 +118,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     txn: &mut impl DbTxn,
     session: Session,
     substrate_keys: &[ThresholdKeys<Ristretto>],
-    network_keys: &[ThresholdKeys<P::ExternalNetworkCurve>],
+    network_keys: &[ThresholdKeys<P::ExternalNetworkCiphersuite>],
   ) {
     assert_eq!(substrate_keys.len(), network_keys.len());
 
@@ -134,7 +134,8 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   pub(crate) fn key_shares(
     getter: &impl Get,
     session: Session,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCiphersuite>>)>
+  {
     let keys = _db::KeyShares::get(getter, &session)?;
     let mut keys: &[u8] = keys.as_ref();
 

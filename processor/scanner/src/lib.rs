@@ -344,17 +344,10 @@ impl<S: ScannerFeed> Scanner<S> {
   /// Create a new scanner.
   ///
   /// This will begin its execution, spawning several asynchronous tasks.
-  pub async fn new<Sch: Scheduler<S>>(
-    mut db: impl Db,
-    feed: S,
-    start_block: u64,
-    start_key: KeyFor<S>,
-  ) -> Self {
-    if !ScannerGlobalDb::<S>::has_any_key_been_queued(&db) {
-      let mut txn = db.txn();
-      ScannerGlobalDb::<S>::queue_key(&mut txn, start_block, start_key);
-      txn.commit();
-    }
+  ///
+  /// This will return None if the Scanner was never initialized.
+  pub async fn new<Sch: Scheduler<S>>(db: impl Db, feed: S) -> Option<Self> {
+    let start_block = ScannerGlobalDb::<S>::start_block(&db)?;
 
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
     let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
@@ -381,7 +374,28 @@ impl<S: ScannerFeed> Scanner<S> {
     // window its allowed to scan
     tokio::spawn(eventuality_task.continually_run(eventuality_task_def, vec![scan_handle]));
 
-    Self { substrate_handle, _S: PhantomData }
+    Some(Self { substrate_handle, _S: PhantomData })
+  }
+
+  /// Initialize the scanner.
+  ///
+  /// This will begin its execution, spawning several asynchronous tasks.
+  ///
+  /// This passes through to `Scanner::new` if prior called.
+  pub async fn initialize<Sch: Scheduler<S>>(
+    mut db: impl Db,
+    feed: S,
+    start_block: u64,
+    start_key: KeyFor<S>,
+  ) -> Self {
+    if ScannerGlobalDb::<S>::start_block(&db).is_none() {
+      let mut txn = db.txn();
+      ScannerGlobalDb::<S>::set_start_block(&mut txn, start_block);
+      ScannerGlobalDb::<S>::queue_key(&mut txn, start_block, start_key);
+      txn.commit();
+    }
+
+    Self::new::<Sch>(db, feed).await.unwrap()
   }
 
   /// Acknowledge a Batch having been published on Serai.

@@ -34,27 +34,29 @@ pub trait KeyGenParams {
   const ID: &'static str;
 
   /// The curve used for the external network.
-  type ExternalNetworkCurve: EvrfCurve<
+  type ExternalNetworkCiphersuite: EvrfCurve<
     EmbeddedCurve: Ciphersuite<
-      G: ec_divisors::DivisorCurve<FieldElement = <Self::ExternalNetworkCurve as Ciphersuite>::F>,
+      G: ec_divisors::DivisorCurve<
+        FieldElement = <Self::ExternalNetworkCiphersuite as Ciphersuite>::F,
+      >,
     >,
   >;
 
   /// Tweaks keys as necessary/beneficial.
-  fn tweak_keys(keys: &mut ThresholdKeys<Self::ExternalNetworkCurve>);
+  fn tweak_keys(keys: &mut ThresholdKeys<Self::ExternalNetworkCiphersuite>);
 
   /// Encode keys as optimal.
   ///
   /// A default implementation is provided which calls the traditional `to_bytes`.
-  fn encode_key(key: <Self::ExternalNetworkCurve as Ciphersuite>::G) -> Vec<u8> {
+  fn encode_key(key: <Self::ExternalNetworkCiphersuite as Ciphersuite>::G) -> Vec<u8> {
     key.to_bytes().as_ref().to_vec()
   }
 
   /// Decode keys from their optimal encoding.
   ///
   /// A default implementation is provided which calls the traditional `from_bytes`.
-  fn decode_key(mut key: &[u8]) -> Option<<Self::ExternalNetworkCurve as Ciphersuite>::G> {
-    let res = <Self::ExternalNetworkCurve as Ciphersuite>::read_G(&mut key).ok()?;
+  fn decode_key(mut key: &[u8]) -> Option<<Self::ExternalNetworkCiphersuite as Ciphersuite>::G> {
+    let res = <Self::ExternalNetworkCiphersuite as Ciphersuite>::read_G(&mut key).ok()?;
     if !key.is_empty() {
       None?;
     }
@@ -143,7 +145,7 @@ pub struct KeyGen<P: KeyGenParams> {
   substrate_evrf_private_key:
     Zeroizing<<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
   network_evrf_private_key:
-    Zeroizing<<<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
+    Zeroizing<<<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
 }
 
 impl<P: KeyGenParams> KeyGen<P> {
@@ -154,7 +156,7 @@ impl<P: KeyGenParams> KeyGen<P> {
       <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
     >,
     network_evrf_private_key: Zeroizing<
-      <<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
+      <<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
     >,
   ) -> KeyGen<P> {
     KeyGen { substrate_evrf_private_key, network_evrf_private_key }
@@ -165,7 +167,8 @@ impl<P: KeyGenParams> KeyGen<P> {
   pub fn key_shares(
     getter: &impl Get,
     session: Session,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
+  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCiphersuite>>)>
+  {
     // This is safe, despite not having a txn, since it's a static value
     // It doesn't change over time/in relation to other operations
     // It is solely set or unset
@@ -198,7 +201,7 @@ impl<P: KeyGenParams> KeyGen<P> {
         let network_evrf_public_keys =
           evrf_public_keys.into_iter().map(|(_, key)| key).collect::<Vec<_>>();
         let (network_evrf_public_keys, additional_faulty) =
-          coerce_keys::<P::ExternalNetworkCurve>(&network_evrf_public_keys);
+          coerce_keys::<P::ExternalNetworkCiphersuite>(&network_evrf_public_keys);
         faulty.extend(additional_faulty);
 
         // Participate for both Substrate and the network
@@ -228,7 +231,7 @@ impl<P: KeyGenParams> KeyGen<P> {
           &self.substrate_evrf_private_key,
           &mut participation,
         );
-        participate::<P::ExternalNetworkCurve>(
+        participate::<P::ExternalNetworkCiphersuite>(
           context::<P>(session, NETWORK_KEY_CONTEXT),
           threshold,
           &network_evrf_public_keys,
@@ -283,7 +286,7 @@ impl<P: KeyGenParams> KeyGen<P> {
             };
             let len_at_network_participation_start_pos = participation.len();
             let Ok(network_participation) =
-              Participation::<P::ExternalNetworkCurve>::read(&mut participation, n)
+              Participation::<P::ExternalNetworkCiphersuite>::read(&mut participation, n)
             else {
               return blame;
             };
@@ -317,7 +320,7 @@ impl<P: KeyGenParams> KeyGen<P> {
                 }
               }
 
-              match EvrfDkg::<P::ExternalNetworkCurve>::verify(
+              match EvrfDkg::<P::ExternalNetworkCiphersuite>::verify(
                 &mut OsRng,
                 generators(),
                 context::<P>(session, NETWORK_KEY_CONTEXT),
@@ -490,7 +493,7 @@ impl<P: KeyGenParams> KeyGen<P> {
           Err(blames) => return blames,
         };
 
-        let network_dkg = match verify_dkg::<P, P::ExternalNetworkCurve>(
+        let network_dkg = match verify_dkg::<P, P::ExternalNetworkCiphersuite>(
           txn,
           session,
           false,

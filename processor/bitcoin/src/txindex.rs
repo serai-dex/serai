@@ -35,7 +35,7 @@ pub(crate) fn script_pubkey_for_on_chain_output(
   )
 }
 
-pub(crate) struct TxIndexTask<D: Db>(Rpc<D>);
+pub(crate) struct TxIndexTask<D: Db>(pub(crate) Rpc<D>);
 
 #[async_trait::async_trait]
 impl<D: Db> ContinuallyRan for TxIndexTask<D> {

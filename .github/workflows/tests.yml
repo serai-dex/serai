@@ -49,6 +49,7 @@ jobs:
             -p serai-processor-utxo-scheduler \
             -p serai-processor-transaction-chaining-scheduler \
             -p serai-processor-signers \
+            -p serai-processor-bin \
             -p serai-bitcoin-processor \
             -p serai-ethereum-processor \
             -p serai-monero-processor \

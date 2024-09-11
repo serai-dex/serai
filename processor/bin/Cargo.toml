@@ -1,9 +1,9 @@
 [package]
-name = "serai-bitcoin-processor"
+name = "serai-processor-bin"
 version = "0.1.0"
-description = "Serai Bitcoin Processor"
+description = "Framework for Serai processor binaries"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/processor/bitcoin"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/bin"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -53,10 +53,8 @@ utxo-scheduler = { package = "serai-processor-utxo-scheduler-primitives", path =
 transaction-chaining-scheduler = { package = "serai-processor-transaction-chaining-scheduler", path = "../scheduler/utxo/transaction-chaining" }
 signers = { package = "serai-processor-signers", path = "../signers" }
 
-bin = { package = "serai-processor-bin", path = "../bin" }
-
 message-queue = { package = "serai-message-queue", path = "../../message-queue" }
 
 [features]
-parity-db = ["bin/parity-db"]
-rocksdb = ["bin/rocksdb"]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]
