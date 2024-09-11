@@ -16,7 +16,7 @@ use serai_client::networks::bitcoin::Address;
 use serai_db::Get;
 use primitives::OutputType;
 
-use crate::{db, hash_bytes};
+use crate::hash_bytes;
 
 const KEY_DST: &[u8] = b"Serai Bitcoin Processor Key Offset";
 static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
@@ -62,9 +62,9 @@ pub(crate) fn presumed_origin(getter: &impl Get, tx: &Transaction) -> Option<Add
   for input in &tx.input {
     let txid = hash_bytes(input.previous_output.txid.to_raw_hash());
     let vout = input.previous_output.vout;
-    if let Some(address) = Address::new(ScriptBuf::from_bytes(
-      db::ScriptPubKey::get(getter, txid, vout).expect("unknown output being spent by input"),
-    )) {
+    if let Some(address) =
+      Address::new(crate::txindex::script_pubkey_for_on_chain_output(getter, txid, vout))
+    {
       return Some(address);
     }
   }

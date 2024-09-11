@@ -14,12 +14,26 @@
   This task builds that index.
 */
 
-use serai_db::{DbTxn, Db};
+use bitcoin_serai::bitcoin::ScriptBuf;
+
+use serai_db::{Get, DbTxn, Db};
 
 use primitives::task::ContinuallyRan;
 use scanner::ScannerFeed;
 
 use crate::{db, rpc::Rpc, hash_bytes};
+
+pub(crate) fn script_pubkey_for_on_chain_output(
+  getter: &impl Get,
+  txid: [u8; 32],
+  vout: u32,
+) -> ScriptBuf {
+  // We index every single output on the blockchain, so this shouldn't be possible
+  ScriptBuf::from_bytes(
+    db::ScriptPubKey::get(getter, txid, vout)
+      .expect("requested script public key for unknown output"),
+  )
+}
 
 pub(crate) struct TxIndexTask<D: Db>(Rpc<D>);
 
@@ -39,6 +53,18 @@ impl<D: Db> ContinuallyRan for TxIndexTask<D> {
         "blockchain only just started and doesn't have {} blocks yet",
         Rpc::<D>::CONFIRMATIONS
       ))?;
+
+    /*
+      `finalized_block_number` is the latest block number minus confirmations. The blockchain may
+      undetectably re-organize though, as while the scanner will maintain an index of finalized
+      blocks and panics on reorganization, this runs prior to the scanner and that index.
+
+      A reorganization of `CONFIRMATIONS` blocks is still an invariant. Even if that occurs, this
+      saves the script public keys *by the transaction hash an output index*. Accordingly, it isn't
+      invalidated on reorganization. The only risk would be if the new chain reorganized to
+      include a transaction to Serai which we didn't index the parents of. If that happens, we'll
+      panic when we scan the transaction, causing the invariant to be detected.
+    */
 
     let finalized_block_number_in_db = db::LatestBlockToYieldAsFinalized::get(&self.0.db);
     let next_block = finalized_block_number_in_db.map_or(0, |block| block + 1);
@@ -63,7 +89,7 @@ impl<D: Db> ContinuallyRan for TxIndexTask<D> {
 
       let mut txn = self.0.db.txn();
 
-      for tx in &block.txdata[1 ..] {
+      for tx in &block.txdata {
         let txid = hash_bytes(tx.compute_txid().to_raw_hash());
         for (o, output) in tx.output.iter().enumerate() {
           let o = u32::try_from(o).unwrap();
