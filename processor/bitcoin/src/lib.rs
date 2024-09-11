@@ -15,7 +15,7 @@ mod transaction;
 mod block;
 
 // App-logic trait satisfactions
-mod scanner_feed;
+mod rpc;
 mod scheduler;
 
 pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {

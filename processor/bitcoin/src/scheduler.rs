@@ -19,7 +19,7 @@ use crate::{
   scan::{offsets_for_key, scanner},
   output::Output,
   transaction::{SignableTransaction, Eventuality},
-  scanner_feed::Rpc,
+  rpc::Rpc,
 };
 
 fn address_from_serai_key(key: <Secp256k1 as Ciphersuite>::G, kind: OutputType) -> Address {
