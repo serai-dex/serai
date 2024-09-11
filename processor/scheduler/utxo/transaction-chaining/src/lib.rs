@@ -23,7 +23,7 @@ mod db;
 use db::Db;
 
 /// The outputs which will be effected by a PlannedTransaction and received by Serai.
-pub struct EffectedReceivedOutputs<S: ScannerFeed>(Vec<OutputFor<S>>);
+pub struct EffectedReceivedOutputs<S: ScannerFeed>(pub Vec<OutputFor<S>>);
 
 /// A scheduler of transactions for networks premised on the UTXO model which support
 /// transaction chaining.
@@ -179,6 +179,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       // Fetch the operating costs/outputs
       let mut operating_costs = Db::<S>::operating_costs(txn, coin).0;
       let outputs = Db::<S>::outputs(txn, key, coin).unwrap();
+      if outputs.is_empty() {
+        continue;
+      }
 
       // Fetch the fulfillable payments
       let payments = Self::fulfillable_payments(

@@ -39,7 +39,6 @@ pub struct AmortizePlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A
 }
 
 /// An object able to plan a transaction.
-#[async_trait::async_trait]
 pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// The type representing a fee rate to use for transactions.
   type FeeRate: Clone + Copy;

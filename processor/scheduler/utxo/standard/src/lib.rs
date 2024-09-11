@@ -203,6 +203,9 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
       // Fetch the operating costs/outputs
       let mut operating_costs = Db::<S>::operating_costs(txn, coin).0;
       let outputs = Db::<S>::outputs(txn, key, coin).unwrap();
+      if outputs.is_empty() {
+        continue;
+      }
 
       // Fetch the fulfillable payments
       let payments = Self::fulfillable_payments(

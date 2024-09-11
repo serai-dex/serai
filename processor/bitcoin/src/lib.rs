@@ -9,15 +9,14 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 // Internal utilities for scanning transactions
 mod scan;
 
-// Output trait satisfaction
+// Primitive trait satisfactions
 mod output;
-// Transaction/SignableTransaction/Eventuality trait satisfaction
 mod transaction;
-// Block trait satisfaction
 mod block;
 
-// ScannerFeed trait satisfaction
+// App-logic trait satisfactions
 mod scanner_feed;
+mod scheduler;
 
 pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
   use bitcoin_serai::bitcoin::hashes::Hash;
@@ -28,21 +27,6 @@ pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) ->
 }
 
 /*
-use std::{sync::LazyLock, time::Duration, io, collections::HashMap};
-
-use async_trait::async_trait;
-
-use scale::{Encode, Decode};
-
-use ciphersuite::group::ff::PrimeField;
-use k256::{ProjectivePoint, Scalar};
-use frost::{
-  curve::{Curve, Secp256k1},
-  ThresholdKeys,
-};
-
-use tokio::time::sleep;
-
 use bitcoin_serai::{
   bitcoin::{
     hashes::Hash as HashTrait,
@@ -111,19 +95,6 @@ impl TransactionTrait<Bitcoin> for Transaction {
 
 #[async_trait]
 impl BlockTrait<Bitcoin> for Block {
-  type Id = [u8; 32];
-  fn id(&self) -> Self::Id {
-    let mut hash = *self.block_hash().as_raw_hash().as_byte_array();
-    hash.reverse();
-    hash
-  }
-
-  fn parent(&self) -> Self::Id {
-    let mut hash = *self.header.prev_blockhash.as_raw_hash().as_byte_array();
-    hash.reverse();
-    hash
-  }
-
   async fn time(&self, rpc: &Bitcoin) -> u64 {
     // Use the network median time defined in BIP-0113 since the in-block time isn't guaranteed to
     // be monotonic
@@ -152,51 +123,6 @@ impl BlockTrait<Bitcoin> for Block {
   }
 }
 
-const KEY_DST: &[u8] = b"Serai Bitcoin Output Offset";
-static BRANCH_OFFSET: OnceLock<Scalar> = OnceLock::new();
-static CHANGE_OFFSET: OnceLock<Scalar> = OnceLock::new();
-static FORWARD_OFFSET: OnceLock<Scalar> = OnceLock::new();
-
-// Always construct the full scanner in order to ensure there's no collisions
-fn scanner(
-  key: ProjectivePoint,
-) -> (Scanner, HashMap<OutputType, Scalar>, HashMap<Vec<u8>, OutputType>) {
-  let mut scanner = Scanner::new(key).unwrap();
-  let mut offsets = HashMap::from([(OutputType::External, Scalar::ZERO)]);
-
-  let zero = Scalar::ZERO.to_repr();
-  let zero_ref: &[u8] = zero.as_ref();
-  let mut kinds = HashMap::from([(zero_ref.to_vec(), OutputType::External)]);
-
-  let mut register = |kind, offset| {
-    let offset = scanner.register_offset(offset).expect("offset collision");
-    offsets.insert(kind, offset);
-
-    let offset = offset.to_repr();
-    let offset_ref: &[u8] = offset.as_ref();
-    kinds.insert(offset_ref.to_vec(), kind);
-  };
-
-  register(
-    OutputType::Branch,
-    *BRANCH_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"branch")),
-  );
-  register(
-    OutputType::Change,
-    *CHANGE_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"change")),
-  );
-  register(
-    OutputType::Forwarded,
-    *FORWARD_OFFSET.get_or_init(|| Secp256k1::hash_to_F(KEY_DST, b"forward")),
-  );
-
-  (scanner, offsets, kinds)
-}
-
-#[derive(Clone, Debug)]
-pub struct Bitcoin {
-  pub(crate) rpc: Rpc,
-}
 // Shim required for testing/debugging purposes due to generic arguments also necessitating trait
 // bounds
 impl PartialEq for Bitcoin {
@@ -355,20 +281,6 @@ impl Bitcoin {
   }
 }
 
-// Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT)
-// A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes
-// While our inputs are entirely SegWit, such fine tuning is not necessary and could create
-// issues in the future (if the size decreases or we misevaluate it)
-// It also offers a minimal amount of benefit when we are able to logarithmically accumulate
-// inputs
-// For 128-byte inputs (36-byte output specification, 64-byte signature, whatever overhead) and
-// 64-byte outputs (40-byte script, 8-byte amount, whatever overhead), they together take up 192
-// bytes
-// 100,000 / 192 = 520
-// 520 * 192 leaves 160 bytes of overhead for the transaction structure itself
-const MAX_INPUTS: usize = 520;
-const MAX_OUTPUTS: usize = 520;
-
 fn address_from_key(key: ProjectivePoint) -> Address {
   Address::new(
     p2tr_script_buf(key).expect("creating address from key which isn't properly tweaked"),
@@ -378,58 +290,7 @@ fn address_from_key(key: ProjectivePoint) -> Address {
 
 #[async_trait]
 impl Network for Bitcoin {
-  type Curve = Secp256k1;
-
-  type Transaction = Transaction;
-  type Block = Block;
-
-  type Output = Output;
-  type SignableTransaction = SignableTransaction;
-  type Eventuality = Eventuality;
-  type TransactionMachine = TransactionMachine;
-
   type Scheduler = Scheduler<Bitcoin>;
-
-  type Address = Address;
-
-  const NETWORK: NetworkId = NetworkId::Bitcoin;
-  const ID: &'static str = "Bitcoin";
-  const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
-  const CONFIRMATIONS: usize = 6;
-
-  /*
-    A Taproot input is:
-    - 36 bytes for the OutPoint
-    - 0 bytes for the script (+1 byte for the length)
-    - 4 bytes for the sequence
-    Per https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
-
-    There's also:
-    - 1 byte for the witness length
-    - 1 byte for the signature length
-    - 64 bytes for the signature
-    which have the SegWit discount.
-
-    (4 * (36 + 1 + 4)) + (1 + 1 + 64) = 164 + 66 = 230 weight units
-    230 ceil div 4 = 57 vbytes
-
-    Bitcoin defines multiple minimum feerate constants *per kilo-vbyte*. Currently, these are:
-    - 1000 sat/kilo-vbyte for a transaction to be relayed
-    - Each output's value must exceed the fee of the TX spending it at 3000 sat/kilo-vbyte
-    The DUST constant needs to be determined by the latter.
-    Since these are solely relay rules, and may be raised, we require all outputs be spendable
-    under a 5000 sat/kilo-vbyte fee rate.
-
-    5000 sat/kilo-vbyte = 5 sat/vbyte
-    5 * 57 = 285 sats/spent-output
-
-    Even if an output took 100 bytes (it should be just ~29-43), taking 400 weight units, adding
-    100 vbytes, tripling the transaction size, then the sats/tx would be < 1000.
-
-    Increase by an order of magnitude, in order to ensure this is actually worth our time, and we
-    get 10,000 satoshis.
-  */
-  const DUST: u64 = 10_000;
 
   // 2 inputs should be 2 * 230 = 460 weight units
   // The output should be ~36 bytes, or 144 weight units
@@ -465,195 +326,6 @@ impl Network for Bitcoin {
   fn forward_address(key: ProjectivePoint) -> Option<Address> {
     let (_, offsets, _) = scanner(key);
     Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded])))
-  }
-
-  async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
-    self.rpc.get_latest_block_number().await.map_err(|_| NetworkError::ConnectionError)
-  }
-
-  async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
-    let block_hash =
-      self.rpc.get_block_hash(number).await.map_err(|_| NetworkError::ConnectionError)?;
-    self.rpc.get_block(&block_hash).await.map_err(|_| NetworkError::ConnectionError)
-  }
-
-  async fn get_outputs(&self, block: &Self::Block, key: ProjectivePoint) -> Vec<Output> {
-    let (scanner, _, kinds) = scanner(key);
-
-    let mut outputs = vec![];
-    // Skip the coinbase transaction which is burdened by maturity
-    for tx in &block.txdata[1 ..] {
-      for output in scanner.scan_transaction(tx) {
-        let offset_repr = output.offset().to_repr();
-        let offset_repr_ref: &[u8] = offset_repr.as_ref();
-        let kind = kinds[offset_repr_ref];
-
-        let output = Output { kind, presumed_origin: None, output, data: vec![] };
-        assert_eq!(output.tx_id(), tx.id());
-        outputs.push(output);
-      }
-
-      if outputs.is_empty() {
-        continue;
-      }
-
-      // populate the outputs with the origin and data
-      let presumed_origin = {
-        // This may identify the P2WSH output *embedding the InInstruction* as the origin, which
-        // would be a bit trickier to spend that a traditional output...
-        // There's no risk of the InInstruction going missing as it'd already be on-chain though
-        // We *could* parse out the script *without the InInstruction prefix* and declare that the
-        // origin
-        // TODO
-        let spent_output = {
-          let input = &tx.input[0];
-          let mut spent_tx = input.previous_output.txid.as_raw_hash().to_byte_array();
-          spent_tx.reverse();
-          let mut tx;
-          while {
-            tx = self.rpc.get_transaction(&spent_tx).await;
-            tx.is_err()
-          } {
-            log::error!("couldn't get transaction from bitcoin node: {tx:?}");
-            sleep(Duration::from_secs(5)).await;
-          }
-          tx.unwrap().output.swap_remove(usize::try_from(input.previous_output.vout).unwrap())
-        };
-        Address::new(spent_output.script_pubkey)
-      };
-      let data = Self::extract_serai_data(tx);
-      for output in &mut outputs {
-        if output.kind == OutputType::External {
-          output.data.clone_from(&data);
-        }
-        output.presumed_origin.clone_from(&presumed_origin);
-      }
-    }
-
-    outputs
-  }
-
-  async fn get_eventuality_completions(
-    &self,
-    eventualities: &mut EventualitiesTracker<Eventuality>,
-    block: &Self::Block,
-  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
-    let mut res = HashMap::new();
-    if eventualities.map.is_empty() {
-      return res;
-    }
-
-    fn check_block(
-      eventualities: &mut EventualitiesTracker<Eventuality>,
-      block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
-    ) {
-      for tx in &block.txdata[1 ..] {
-        if let Some((plan, _)) = eventualities.map.remove(tx.id().as_slice()) {
-          res.insert(plan, (eventualities.block_number, tx.id(), tx.clone()));
-        }
-      }
-
-      eventualities.block_number += 1;
-    }
-
-    let this_block_hash = block.id();
-    let this_block_num = (async {
-      loop {
-        match self.rpc.get_block_number(&this_block_hash).await {
-          Ok(number) => return number,
-          Err(e) => {
-            log::error!("couldn't get the block number for {}: {}", hex::encode(this_block_hash), e)
-          }
-        }
-        sleep(Duration::from_secs(60)).await;
-      }
-    })
-    .await;
-
-    for block_num in (eventualities.block_number + 1) .. this_block_num {
-      let block = {
-        let mut block;
-        while {
-          block = self.get_block(block_num).await;
-          block.is_err()
-        } {
-          log::error!("couldn't get block {}: {}", block_num, block.err().unwrap());
-          sleep(Duration::from_secs(60)).await;
-        }
-        block.unwrap()
-      };
-
-      check_block(eventualities, &block, &mut res);
-    }
-
-    // Also check the current block
-    check_block(eventualities, block, &mut res);
-    assert_eq!(eventualities.block_number, this_block_num);
-
-    res
-  }
-
-  async fn needed_fee(
-    &self,
-    block_number: usize,
-    inputs: &[Output],
-    payments: &[Payment<Self>],
-    change: &Option<Address>,
-  ) -> Result<Option<u64>, NetworkError> {
-    Ok(
-      self
-        .make_signable_transaction(block_number, inputs, payments, change, true)
-        .await?
-        .map(|signable| signable.needed_fee()),
-    )
-  }
-
-  async fn signable_transaction(
-    &self,
-    block_number: usize,
-    _plan_id: &[u8; 32],
-    _key: ProjectivePoint,
-    inputs: &[Output],
-    payments: &[Payment<Self>],
-    change: &Option<Address>,
-    (): &(),
-  ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
-    Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
-      |signable| {
-        let eventuality = Eventuality(signable.txid());
-        (SignableTransaction { actual: signable }, eventuality)
-      },
-    ))
-  }
-
-  async fn attempt_sign(
-    &self,
-    keys: ThresholdKeys<Self::Curve>,
-    transaction: Self::SignableTransaction,
-  ) -> Result<Self::TransactionMachine, NetworkError> {
-    Ok(transaction.actual.clone().multisig(&keys).expect("used the wrong keys"))
-  }
-
-  async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {
-    match self.rpc.send_raw_transaction(tx).await {
-      Ok(_) => (),
-      Err(RpcError::ConnectionError) => Err(NetworkError::ConnectionError)?,
-      // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
-      // invalid transaction
-      Err(e) => panic!("failed to publish TX {}: {e}", tx.compute_txid()),
-    }
-    Ok(())
-  }
-
-  async fn confirm_completion(
-    &self,
-    eventuality: &Self::Eventuality,
-    _: &EmptyClaim,
-  ) -> Result<Option<Transaction>, NetworkError> {
-    Ok(Some(
-      self.rpc.get_transaction(&eventuality.0).await.map_err(|_| NetworkError::ConnectionError)?,
-    ))
   }
 
   #[cfg(test)]
