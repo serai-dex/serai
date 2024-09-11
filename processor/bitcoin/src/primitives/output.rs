@@ -53,7 +53,7 @@ pub(crate) struct Output {
 }
 
 impl Output {
-  pub fn new(
+  pub(crate) fn new(
     getter: &impl Get,
     key: <Secp256k1 as Ciphersuite>::G,
     tx: &Transaction,
@@ -70,7 +70,7 @@ impl Output {
     }
   }
 
-  pub fn new_with_presumed_origin(
+  pub(crate) fn new_with_presumed_origin(
     key: <Secp256k1 as Ciphersuite>::G,
     tx: &Transaction,
     presumed_origin: Option<Address>,

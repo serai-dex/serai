@@ -6,13 +6,11 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
+mod primitives;
+pub(crate) use primitives::*;
+
 // Internal utilities for scanning transactions
 mod scan;
-
-// Primitive trait satisfactions
-mod output;
-mod transaction;
-mod block;
 
 // App-logic trait satisfactions
 mod rpc;
@@ -70,17 +68,10 @@ use serai_client::{
 
 /*
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Fee(u64);
+pub(crate) struct Fee(u64);
 
 #[async_trait]
 impl TransactionTrait<Bitcoin> for Transaction {
-  type Id = [u8; 32];
-  fn id(&self) -> Self::Id {
-    let mut hash = *self.compute_txid().as_raw_hash().as_byte_array();
-    hash.reverse();
-    hash
-  }
-
   #[cfg(test)]
   async fn fee(&self, network: &Bitcoin) -> u64 {
     let mut value = 0;
@@ -130,17 +121,8 @@ impl BlockTrait<Bitcoin> for Block {
   }
 }
 
-// Shim required for testing/debugging purposes due to generic arguments also necessitating trait
-// bounds
-impl PartialEq for Bitcoin {
-  fn eq(&self, _: &Self) -> bool {
-    true
-  }
-}
-impl Eq for Bitcoin {}
-
 impl Bitcoin {
-  pub async fn new(url: String) -> Bitcoin {
+  pub(crate) async fn new(url: String) -> Bitcoin {
     let mut res = Rpc::new(url.clone()).await;
     while let Err(e) = res {
       log::error!("couldn't connect to Bitcoin node: {e:?}");
@@ -151,7 +133,7 @@ impl Bitcoin {
   }
 
   #[cfg(test)]
-  pub async fn fresh_chain(&self) {
+  pub(crate) async fn fresh_chain(&self) {
     if self.rpc.get_latest_block_number().await.unwrap() > 0 {
       self
         .rpc
@@ -194,64 +176,8 @@ impl Bitcoin {
     Ok(Fee(fee.max(1)))
   }
 
-  async fn make_signable_transaction(
-    &self,
-    block_number: usize,
-    inputs: &[Output],
-    payments: &[Payment<Self>],
-    change: &Option<Address>,
-    calculating_fee: bool,
-  ) -> Result<Option<BSignableTransaction>, NetworkError> {
-    for payment in payments {
-      assert_eq!(payment.balance.coin, Coin::Bitcoin);
-    }
-
-    // TODO2: Use an fee representative of several blocks, cached inside Self
-    let block_for_fee = self.get_block(block_number).await?;
-    let fee = self.median_fee(&block_for_fee).await?;
-
-    let payments = payments
-      .iter()
-      .map(|payment| {
-        (
-          payment.address.clone().into(),
-          // If we're solely estimating the fee, don't specify the actual amount
-          // This won't affect the fee calculation yet will ensure we don't hit a not enough funds
-          // error
-          if calculating_fee { Self::DUST } else { payment.balance.amount.0 },
-        )
-      })
-      .collect::<Vec<_>>();
-
-    match BSignableTransaction::new(
-      inputs.iter().map(|input| input.output.clone()).collect(),
-      &payments,
-      change.clone().map(Into::into),
-      None,
-      fee.0,
-    ) {
-      Ok(signable) => Ok(Some(signable)),
-      Err(TransactionError::NoInputs) => {
-        panic!("trying to create a bitcoin transaction without inputs")
-      }
-      // No outputs left and the change isn't worth enough/not even enough funds to pay the fee
-      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds) => Ok(None),
-      // amortize_fee removes payments which fall below the dust threshold
-      Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
-      Err(TransactionError::TooMuchData) => {
-        panic!("too much data despite not specifying data")
-      }
-      Err(TransactionError::TooLowFee) => {
-        panic!("created a transaction whose fee is below the minimum")
-      }
-      Err(TransactionError::TooLargeTransaction) => {
-        panic!("created a too large transaction despite limiting inputs/outputs")
-      }
-    }
-  }
-
   #[cfg(test)]
-  pub fn sign_btc_input_for_p2pkh(
+  pub(crate) fn sign_btc_input_for_p2pkh(
     tx: &Transaction,
     input_index: usize,
     private_key: &PrivateKey,
@@ -288,17 +214,8 @@ impl Bitcoin {
   }
 }
 
-fn address_from_key(key: ProjectivePoint) -> Address {
-  Address::new(
-    p2tr_script_buf(key).expect("creating address from key which isn't properly tweaked"),
-  )
-  .expect("couldn't create Serai-representable address for P2TR script")
-}
-
 #[async_trait]
 impl Network for Bitcoin {
-  type Scheduler = Scheduler<Bitcoin>;
-
   // 2 inputs should be 2 * 230 = 460 weight units
   // The output should be ~36 bytes, or 144 weight units
   // The overhead should be ~20 bytes at most, or 80 weight units
@@ -307,32 +224,10 @@ impl Network for Bitcoin {
   // aggregation TX
   const COST_TO_AGGREGATE: u64 = 800;
 
-  const MAX_OUTPUTS: usize = MAX_OUTPUTS;
-
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
     *keys = tweak_keys(keys);
     // Also create a scanner to assert these keys, and all expected paths, are usable
     scanner(keys.group_key());
-  }
-
-  #[cfg(test)]
-  async fn external_address(&self, key: ProjectivePoint) -> Address {
-    address_from_key(key)
-  }
-
-  fn branch_address(key: ProjectivePoint) -> Option<Address> {
-    let (_, offsets, _) = scanner(key);
-    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Branch])))
-  }
-
-  fn change_address(key: ProjectivePoint) -> Option<Address> {
-    let (_, offsets, _) = scanner(key);
-    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Change])))
-  }
-
-  fn forward_address(key: ProjectivePoint) -> Option<Address> {
-    let (_, offsets, _) = scanner(key);
-    Some(address_from_key(key + (ProjectivePoint::GENERATOR * offsets[&OutputType::Forwarded])))
   }
 
   #[cfg(test)]
@@ -408,9 +303,5 @@ impl Network for Bitcoin {
     }
     self.get_block(block).await.unwrap()
   }
-}
-
-impl UtxoNetwork for Bitcoin {
-  const MAX_INPUTS: usize = MAX_INPUTS;
 }
 */
