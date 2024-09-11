@@ -107,7 +107,7 @@ create_db!(
 pub(crate) struct ScannerGlobalDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerGlobalDb<S> {
   pub(crate) fn has_any_key_been_queued(getter: &impl Get) -> bool {
-    ActiveKeys::get::<EncodableG<KeyFor<S>>>(getter).is_some()
+    ActiveKeys::<EncodableG<KeyFor<S>>>::get(getter).is_some()
   }
 
   /// Queue a key.
@@ -315,7 +315,7 @@ pub(crate) struct ReceiverScanData<S: ScannerFeed> {
 
 db_channel! {
   ScannerScanEventuality {
-    ScannedBlock: (empty_key: ()) -> Vec<u8>,
+    ScannedBlock: () -> Vec<u8>,
   }
 }
 
@@ -364,14 +364,14 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
     for output in &data.returns {
       output.write(&mut buf).unwrap();
     }
-    ScannedBlock::send(txn, (), &buf);
+    ScannedBlock::send(txn, &buf);
   }
   pub(crate) fn recv_scan_data(
     txn: &mut impl DbTxn,
     expected_block_number: u64,
   ) -> ReceiverScanData<S> {
     let data =
-      ScannedBlock::try_recv(txn, ()).expect("receiving data for a scanned block not yet sent");
+      ScannedBlock::try_recv(txn).expect("receiving data for a scanned block not yet sent");
     let mut data = data.as_slice();
 
     let block_number = {
@@ -462,7 +462,7 @@ struct BlockBoundInInstructions {
 
 db_channel! {
   ScannerScanReport {
-    InInstructions: (empty_key: ()) -> BlockBoundInInstructions,
+    InInstructions: () -> BlockBoundInInstructions,
   }
 }
 
@@ -484,7 +484,6 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
     }
     InInstructions::send(
       txn,
-      (),
       &BlockBoundInInstructions { block_number, returnable_in_instructions: buf },
     );
   }
@@ -493,7 +492,7 @@ impl<S: ScannerFeed> ScanToReportDb<S> {
     txn: &mut impl DbTxn,
     block_number: u64,
   ) -> InInstructionData<S> {
-    let data = InInstructions::try_recv(txn, ())
+    let data = InInstructions::try_recv(txn)
       .expect("receiving InInstructions for a scanned block not yet sent");
     assert_eq!(
       block_number, data.block_number,
@@ -556,7 +555,7 @@ mod _public_db {
 
   db_channel! {
     ScannerPublic {
-      Batches: (empty_key: ()) -> Batch,
+      Batches: () -> Batch,
       BatchesToSign: (key: &[u8]) -> Batch,
       AcknowledgedBatches: (key: &[u8]) -> u32,
       CompletedEventualities: (key: &[u8]) -> [u8; 32],
@@ -570,12 +569,12 @@ mod _public_db {
 pub struct Batches;
 impl Batches {
   pub(crate) fn send(txn: &mut impl DbTxn, batch: &Batch) {
-    _public_db::Batches::send(txn, (), batch);
+    _public_db::Batches::send(txn, batch);
   }
 
   /// Receive a batch to publish.
   pub fn try_recv(txn: &mut impl DbTxn) -> Option<Batch> {
-    _public_db::Batches::try_recv(txn, ())
+    _public_db::Batches::try_recv(txn)
   }
 }
 

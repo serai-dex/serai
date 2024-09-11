@@ -54,9 +54,7 @@ impl<S: ScannerFeed> ReportDb<S> {
   }
 
   pub(crate) fn take_block_number_for_batch(txn: &mut impl DbTxn, id: u32) -> Option<u64> {
-    let block_number = BlockNumberForBatch::get(txn, id)?;
-    BlockNumberForBatch::del(txn, id);
-    Some(block_number)
+    BlockNumberForBatch::take(txn, id)
   }
 
   pub(crate) fn save_external_key_for_session_to_sign_batch(
@@ -103,8 +101,7 @@ impl<S: ScannerFeed> ReportDb<S> {
     txn: &mut impl DbTxn,
     id: u32,
   ) -> Option<Vec<Option<ReturnInformation<S>>>> {
-    let buf = SerializedReturnAddresses::get(txn, id)?;
-    SerializedReturnAddresses::del(txn, id);
+    let buf = SerializedReturnAddresses::take(txn, id)?;
     let mut buf = buf.as_slice();
 
     let mut res = Vec::with_capacity(buf.len() / (32 + 1 + 8));

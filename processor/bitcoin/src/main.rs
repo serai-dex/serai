@@ -111,14 +111,14 @@ async fn coordinator_loop<D: Db>(
           );
 
           // Queue the key to be activated upon the next Batch
-          db::KeyToActivate::send::<
+          db::KeyToActivate::<
             <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
-          >(txn, &key);
+          >::send(txn, &key);
 
           // Set the external key, as needed by the signers
-          db::ExternalKeyForSessionForSigners::set::<
+          db::ExternalKeyForSessionForSigners::<
             <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
-          >(txn, session, &key);
+          >::set(txn, session, &key);
 
           // This isn't cheap yet only happens for the very first set of keys
           if scanner.is_none() {
@@ -130,9 +130,9 @@ async fn coordinator_loop<D: Db>(
 
           // Since this session had its slashes reported, it has finished all its signature
           // protocols and has been fully retired. We retire it from the signers accordingly
-          let key = db::ExternalKeyForSessionForSigners::take::<
+          let key = db::ExternalKeyForSessionForSigners::<
             <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
-          >(txn, session)
+          >::take(txn, session)
           .unwrap()
           .0;
 
@@ -147,9 +147,9 @@ async fn coordinator_loop<D: Db>(
         } => {
           let mut txn = txn.take().unwrap();
           let scanner = scanner.as_mut().unwrap();
-          let key_to_activate = db::KeyToActivate::try_recv::<
+          let key_to_activate = db::KeyToActivate::<
             <<KeyGenParams as ::key_gen::KeyGenParams>::ExternalNetworkCurve as Ciphersuite>::G,
-          >(&mut txn)
+          >::try_recv(&mut txn)
           .map(|key| key.0);
           // This is a cheap call as it internally just queues this to be done later
           scanner.acknowledge_batch(

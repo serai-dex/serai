@@ -69,9 +69,7 @@ impl<S: ScannerFeed> Db<S> {
     txn: &mut impl DbTxn,
     output: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) -> bool {
-    let res = AlreadyAccumulatedOutput::get(txn, output.as_ref()).is_some();
-    AlreadyAccumulatedOutput::del(txn, output.as_ref());
-    res
+    AlreadyAccumulatedOutput::take(txn, output.as_ref()).is_some()
   }
 
   pub(crate) fn queued_payments(
