@@ -22,6 +22,19 @@ db_channel! {
     SlashReport: (session: Session) -> Vec<Slash>,
     SlashReportSignature: (session: Session) -> Vec<u8>,
 
+    /*
+      TODO: Most of these are pointless? We drop all active signing sessions on reboot. It's
+      accordingly not valuable to use a DB-backed channel to communicate messages for signing
+      sessions (Preprocess/Shares).
+
+      Transactions, Batches, Slash Reports, and Cosigns all have their own mechanisms/DB entries
+      and don't use the following channels. The only questions are:
+
+      1) If it's safe to drop Reattempt? Or if we need tweaks to enable that
+      2) If we reboot with a pending Reattempt, we'll participate on reboot. If we drop that
+         Reattempt, we won't. Accordingly, we have degraded performance in that edge case in
+         exchange for less disk IO in the majority of cases. Is that work it?
+    */
     CoordinatorToCosignerMessages: (session: Session) -> CoordinatorMessage,
     CosignerToCoordinatorMessages: (session: Session) -> ProcessorMessage,
 
