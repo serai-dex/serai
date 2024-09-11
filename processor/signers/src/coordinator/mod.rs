@@ -114,6 +114,7 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
           self
             .coordinator
             .publish_slash_report_signature(
+              session,
               <_>::decode(&mut slash_report_signature.as_slice()).unwrap(),
             )
             .await

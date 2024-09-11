@@ -83,6 +83,7 @@ members = [
   "processor/scheduler/utxo/transaction-chaining",
   "processor/signers",
 
+  "processor/bin",
   "processor/bitcoin",
   "processor/ethereum",
   "processor/monero",

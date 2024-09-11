@@ -70,6 +70,8 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
 
 create_db!(
   ScannerGlobal {
+    StartBlock: () -> u64,
+
     QueuedKey: <K: Encode>(key: K) -> (),
 
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
@@ -106,8 +108,11 @@ create_db!(
 
 pub(crate) struct ScannerGlobalDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScannerGlobalDb<S> {
-  pub(crate) fn has_any_key_been_queued(getter: &impl Get) -> bool {
-    ActiveKeys::<EncodableG<KeyFor<S>>>::get(getter).is_some()
+  pub(crate) fn start_block(getter: &impl Get) -> Option<u64> {
+    StartBlock::get(getter)
+  }
+  pub(crate) fn set_start_block(txn: &mut impl DbTxn, block: u64) {
+    StartBlock::set(txn, &block)
   }
 
   /// Queue a key.

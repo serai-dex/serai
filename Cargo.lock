@@ -8131,6 +8131,7 @@ dependencies = [
  "dkg",
  "env_logger",
  "flexible-transcript",
+ "hex",
  "log",
  "modular-frost",
  "parity-scale-codec",
@@ -8140,6 +8141,7 @@ dependencies = [
  "serai-db",
  "serai-env",
  "serai-message-queue",
+ "serai-processor-bin",
  "serai-processor-key-gen",
  "serai-processor-messages",
  "serai-processor-primitives",
@@ -8150,6 +8152,7 @@ dependencies = [
  "serai-processor-utxo-scheduler-primitives",
  "tokio",
  "zalloc",
+ "zeroize",
 ]
 
 [[package]]
@@ -8632,6 +8635,40 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "zeroize",
+]
+
+[[package]]
+name = "serai-processor-bin"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bitcoin-serai",
+ "borsh",
+ "ciphersuite",
+ "dkg",
+ "env_logger",
+ "flexible-transcript",
+ "hex",
+ "log",
+ "modular-frost",
+ "parity-scale-codec",
+ "rand_core",
+ "secp256k1",
+ "serai-client",
+ "serai-db",
+ "serai-env",
+ "serai-message-queue",
+ "serai-processor-key-gen",
+ "serai-processor-messages",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
+ "serai-processor-signers",
+ "serai-processor-transaction-chaining-scheduler",
+ "serai-processor-utxo-scheduler-primitives",
+ "tokio",
+ "zalloc",
  "zeroize",
 ]
 

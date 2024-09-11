@@ -71,6 +71,7 @@ pub trait Coordinator: 'static + Send + Sync {
   /// Publish a slash report's signature.
   async fn publish_slash_report_signature(
     &mut self,
+    session: Session,
     signature: Signature,
   ) -> Result<(), Self::EphemeralError>;
 }
