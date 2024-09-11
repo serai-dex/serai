@@ -2,34 +2,36 @@ use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 
 use serai_client::primitives::{NetworkId, Coin, Amount};
 
+use serai_db::Db;
 use scanner::ScannerFeed;
 use signers::TransactionPublisher;
 
 use crate::{
+  db,
   transaction::Transaction,
   block::{BlockHeader, Block},
 };
 
 #[derive(Clone)]
-pub(crate) struct Rpc(BRpc);
+pub(crate) struct Rpc<D: Db> {
+  pub(crate) db: D,
+  pub(crate) rpc: BRpc,
+}
 
 #[async_trait::async_trait]
-impl ScannerFeed for Rpc {
+impl<D: Db> ScannerFeed for Rpc<D> {
   const NETWORK: NetworkId = NetworkId::Bitcoin;
   const CONFIRMATIONS: u64 = 6;
   const WINDOW_LENGTH: u64 = 6;
 
   const TEN_MINUTES: u64 = 1;
 
-  type Block = Block;
+  type Block = Block<D>;
 
   type EphemeralError = RpcError;
 
   async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError> {
-    u64::try_from(self.0.get_latest_block_number().await?)
-      .unwrap()
-      .checked_sub(Self::CONFIRMATIONS)
-      .ok_or(RpcError::ConnectionError)
+    db::LatestBlockToYieldAsFinalized::get(&self.db).ok_or(RpcError::ConnectionError)
   }
 
   async fn unchecked_block_header_by_number(
@@ -37,7 +39,7 @@ impl ScannerFeed for Rpc {
     number: u64,
   ) -> Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError> {
     Ok(BlockHeader(
-      self.0.get_block(&self.0.get_block_hash(number.try_into().unwrap()).await?).await?.header,
+      self.rpc.get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?).await?.header,
     ))
   }
 
@@ -45,7 +47,10 @@ impl ScannerFeed for Rpc {
     &self,
     number: u64,
   ) -> Result<Self::Block, Self::EphemeralError> {
-    Ok(Block(self.0.get_block(&self.0.get_block_hash(number.try_into().unwrap()).await?).await?))
+    Ok(Block(
+      self.db.clone(),
+      self.rpc.get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?).await?,
+    ))
   }
 
   fn dust(coin: Coin) -> Amount {
@@ -98,10 +103,10 @@ impl ScannerFeed for Rpc {
 }
 
 #[async_trait::async_trait]
-impl TransactionPublisher<Transaction> for Rpc {
+impl<D: Db> TransactionPublisher<Transaction> for Rpc<D> {
   type EphemeralError = RpcError;
 
   async fn publish(&self, tx: Transaction) -> Result<(), Self::EphemeralError> {
-    self.0.send_raw_transaction(&tx.0).await.map(|_| ())
+    self.rpc.send_raw_transaction(&tx.0).await.map(|_| ())
   }
 }

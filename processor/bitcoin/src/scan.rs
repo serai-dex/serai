@@ -13,7 +13,10 @@ use bitcoin_serai::{
 
 use serai_client::networks::bitcoin::Address;
 
+use serai_db::Get;
 use primitives::OutputType;
+
+use crate::{db, hash_bytes};
 
 const KEY_DST: &[u8] = b"Serai Bitcoin Processor Key Offset";
 static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
@@ -55,26 +58,17 @@ pub(crate) fn scanner(key: <Secp256k1 as Ciphersuite>::G) -> Scanner {
   scanner
 }
 
-pub(crate) fn presumed_origin(tx: &Transaction) -> Option<Address> {
-  todo!("TODO")
-
-  /*
-  let spent_output = {
-    let input = &tx.input[0];
-    let mut spent_tx = input.previous_output.txid.as_raw_hash().to_byte_array();
-    spent_tx.reverse();
-    let mut tx;
-    while {
-      tx = self.rpc.get_transaction(&spent_tx).await;
-      tx.is_err()
-    } {
-      log::error!("couldn't get transaction from bitcoin node: {tx:?}");
-      sleep(Duration::from_secs(5)).await;
+pub(crate) fn presumed_origin(getter: &impl Get, tx: &Transaction) -> Option<Address> {
+  for input in &tx.input {
+    let txid = hash_bytes(input.previous_output.txid.to_raw_hash());
+    let vout = input.previous_output.vout;
+    if let Some(address) = Address::new(ScriptBuf::from_bytes(
+      db::ScriptPubKey::get(getter, txid, vout).expect("unknown output being spent by input"),
+    )) {
+      return Some(address);
     }
-    tx.unwrap().output.swap_remove(usize::try_from(input.previous_output.vout).unwrap())
-  };
-  Address::new(spent_output.script_pubkey)
-  */
+  }
+  None?
 }
 
 // Checks if this script matches SHA256 PUSH MSG_HASH OP_EQUALVERIFY ..

@@ -10,6 +10,7 @@ use serai_client::{
   networks::bitcoin::Address,
 };
 
+use serai_db::Db;
 use primitives::{OutputType, ReceivedOutput, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
 use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
@@ -31,17 +32,24 @@ fn address_from_serai_key(key: <Secp256k1 as Ciphersuite>::G, kind: OutputType) 
   .expect("couldn't create Serai-representable address for P2TR script")
 }
 
-fn signable_transaction(
+fn signable_transaction<D: Db>(
   fee_per_vbyte: u64,
-  inputs: Vec<OutputFor<Rpc>>,
-  payments: Vec<Payment<AddressFor<Rpc>>>,
-  change: Option<KeyFor<Rpc>>,
+  inputs: Vec<OutputFor<Rpc<D>>>,
+  payments: Vec<Payment<AddressFor<Rpc<D>>>>,
+  change: Option<KeyFor<Rpc<D>>>,
 ) -> Result<(SignableTransaction, BSignableTransaction), TransactionError> {
-  assert!(inputs.len() < Planner::MAX_INPUTS);
-  assert!((payments.len() + usize::from(u8::from(change.is_some()))) < Planner::MAX_OUTPUTS);
+  assert!(
+    inputs.len() <
+      <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_INPUTS
+  );
+  assert!(
+    (payments.len() + usize::from(u8::from(change.is_some()))) <
+      <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_OUTPUTS
+  );
 
   let inputs = inputs.into_iter().map(|input| input.output).collect::<Vec<_>>();
-  let payments = payments
+
+  let mut payments = payments
     .into_iter()
     .map(|payment| {
       (payment.address().clone(), {
@@ -51,7 +59,8 @@ fn signable_transaction(
       })
     })
     .collect::<Vec<_>>();
-  let change = change.map(Planner::change_address);
+  let change = change
+    .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
 
   // TODO: ACP output
   BSignableTransaction::new(
@@ -69,7 +78,7 @@ fn signable_transaction(
 }
 
 pub(crate) struct Planner;
-impl TransactionPlanner<Rpc, EffectedReceivedOutputs<Rpc>> for Planner {
+impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner {
   type FeeRate = u64;
 
   type SignableTransaction = SignableTransaction;
@@ -94,29 +103,29 @@ impl TransactionPlanner<Rpc, EffectedReceivedOutputs<Rpc>> for Planner {
   // to unstick any transactions which had too low of a fee.
   const MAX_OUTPUTS: usize = 519;
 
-  fn fee_rate(block: &BlockFor<Rpc>, coin: Coin) -> Self::FeeRate {
+  fn fee_rate(block: &BlockFor<Rpc<D>>, coin: Coin) -> Self::FeeRate {
     assert_eq!(coin, Coin::Bitcoin);
     // TODO
     1
   }
 
-  fn branch_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+  fn branch_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
     address_from_serai_key(key, OutputType::Branch)
   }
-  fn change_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+  fn change_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
     address_from_serai_key(key, OutputType::Change)
   }
-  fn forwarding_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+  fn forwarding_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
     address_from_serai_key(key, OutputType::Forwarded)
   }
 
   fn calculate_fee(
     fee_rate: Self::FeeRate,
-    inputs: Vec<OutputFor<Rpc>>,
-    payments: Vec<Payment<AddressFor<Rpc>>>,
-    change: Option<KeyFor<Rpc>>,
+    inputs: Vec<OutputFor<Rpc<D>>>,
+    payments: Vec<Payment<AddressFor<Rpc<D>>>>,
+    change: Option<KeyFor<Rpc<D>>>,
   ) -> Amount {
-    match signable_transaction(fee_rate, inputs, payments, change) {
+    match signable_transaction::<D>(fee_rate, inputs, payments, change) {
       Ok(tx) => Amount(tx.1.needed_fee()),
       Err(
         TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
@@ -133,17 +142,17 @@ impl TransactionPlanner<Rpc, EffectedReceivedOutputs<Rpc>> for Planner {
 
   fn plan(
     fee_rate: Self::FeeRate,
-    inputs: Vec<OutputFor<Rpc>>,
-    payments: Vec<Payment<AddressFor<Rpc>>>,
-    change: Option<KeyFor<Rpc>>,
-  ) -> PlannedTransaction<Rpc, Self::SignableTransaction, EffectedReceivedOutputs<Rpc>> {
+    inputs: Vec<OutputFor<Rpc<D>>>,
+    payments: Vec<Payment<AddressFor<Rpc<D>>>>,
+    change: Option<KeyFor<Rpc<D>>>,
+  ) -> PlannedTransaction<Rpc<D>, Self::SignableTransaction, EffectedReceivedOutputs<Rpc<D>>> {
     let key = inputs.first().unwrap().key();
     for input in &inputs {
       assert_eq!(key, input.key());
     }
 
     let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
-    match signable_transaction(fee_rate, inputs, payments, change) {
+    match signable_transaction::<D>(fee_rate, inputs.clone(), payments, change) {
       Ok(tx) => PlannedTransaction {
         signable: tx.0,
         eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },
@@ -153,7 +162,14 @@ impl TransactionPlanner<Rpc, EffectedReceivedOutputs<Rpc>> for Planner {
 
           let mut res = vec![];
           for output in scanner.scan_transaction(tx) {
-            res.push(Output::new(key, tx, output));
+            res.push(Output::new_with_presumed_origin(
+              key,
+              tx,
+              // It shouldn't matter if this is wrong as we should never try to return these
+              // We still provide an accurate value to ensure a lack of discrepancies
+              Some(Address::new(inputs[0].output.output().script_pubkey.clone()).unwrap()),
+              output,
+            ));
           }
           res
         }),
@@ -174,4 +190,4 @@ impl TransactionPlanner<Rpc, EffectedReceivedOutputs<Rpc>> for Planner {
   }
 }
 
-pub(crate) type Scheduler = GenericScheduler<Rpc, Planner>;
+pub(crate) type Scheduler<D> = GenericScheduler<Rpc<D>, Planner>;

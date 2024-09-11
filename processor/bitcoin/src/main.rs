@@ -18,6 +18,10 @@ mod block;
 mod rpc;
 mod scheduler;
 
+// Our custom code for Bitcoin
+mod db;
+mod txindex;
+
 pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
   use bitcoin_serai::bitcoin::hashes::Hash;
 

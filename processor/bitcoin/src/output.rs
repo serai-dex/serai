@@ -15,6 +15,7 @@ use bitcoin_serai::{
 
 use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
+use serai_db::Get;
 
 use serai_client::{
   primitives::{Coin, Amount, Balance, ExternalAddress},
@@ -52,13 +53,35 @@ pub(crate) struct Output {
 }
 
 impl Output {
-  pub fn new(key: <Secp256k1 as Ciphersuite>::G, tx: &Transaction, output: WalletOutput) -> Self {
+  pub fn new(
+    getter: &impl Get,
+    key: <Secp256k1 as Ciphersuite>::G,
+    tx: &Transaction,
+    output: WalletOutput,
+  ) -> Self {
     Self {
       kind: offsets_for_key(key)
         .into_iter()
         .find_map(|(kind, offset)| (offset == output.offset()).then_some(kind))
         .expect("scanned output for unknown offset"),
-      presumed_origin: presumed_origin(tx),
+      presumed_origin: presumed_origin(getter, tx),
+      output,
+      data: extract_serai_data(tx),
+    }
+  }
+
+  pub fn new_with_presumed_origin(
+    key: <Secp256k1 as Ciphersuite>::G,
+    tx: &Transaction,
+    presumed_origin: Option<Address>,
+    output: WalletOutput,
+  ) -> Self {
+    Self {
+      kind: offsets_for_key(key)
+        .into_iter()
+        .find_map(|(kind, offset)| (offset == output.offset()).then_some(kind))
+        .expect("scanned output for unknown offset"),
+      presumed_origin,
       output,
       data: extract_serai_data(tx),
     }
