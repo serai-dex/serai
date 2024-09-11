@@ -3,8 +3,12 @@ use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 use serai_client::primitives::{NetworkId, Coin, Amount};
 
 use scanner::ScannerFeed;
+use signers::TransactionPublisher;
 
-use crate::block::{BlockHeader, Block};
+use crate::{
+  transaction::Transaction,
+  block::{BlockHeader, Block},
+};
 
 #[derive(Clone)]
 pub(crate) struct Rpc(BRpc);
@@ -90,5 +94,14 @@ impl ScannerFeed for Rpc {
     assert_eq!(coin, Coin::Bitcoin);
     // TODO
     Ok(Amount(0))
+  }
+}
+
+#[async_trait::async_trait]
+impl TransactionPublisher<Transaction> for Rpc {
+  type EphemeralError = RpcError;
+
+  async fn publish(&self, tx: Transaction) -> Result<(), Self::EphemeralError> {
+    self.0.send_raw_transaction(&tx.0).await.map(|_| ())
   }
 }

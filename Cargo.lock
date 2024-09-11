@@ -8143,6 +8143,7 @@ dependencies = [
  "serai-processor-primitives",
  "serai-processor-scanner",
  "serai-processor-scheduler-primitives",
+ "serai-processor-signers",
  "serai-processor-transaction-chaining-scheduler",
  "serai-processor-utxo-scheduler-primitives",
  "tokio",

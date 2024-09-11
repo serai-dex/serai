@@ -24,7 +24,7 @@ use serai_client::networks::bitcoin::Address;
 use crate::output::OutputId;
 
 #[derive(Clone, Debug)]
-pub(crate) struct Transaction(BTransaction);
+pub(crate) struct Transaction(pub(crate) BTransaction);
 
 impl From<BTransaction> for Transaction {
   fn from(tx: BTransaction) -> Self {
