@@ -29,158 +29,15 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
   substrate_mutable: &mut SubstrateMutable<N, D>,
   msg: &Message,
 ) {
-  async fn activate_key<N: Network, D: Db>(
-    network: &N,
-    substrate_mutable: &mut SubstrateMutable<N, D>,
-    tributary_mutable: &mut TributaryMutable<N, D>,
-    txn: &mut D::Transaction<'_>,
-    session: Session,
-    key_pair: KeyPair,
-    activation_number: usize,
-  ) {
-    info!("activating {session:?}'s keys at {activation_number}");
-
-    let network_key = <N as Network>::Curve::read_G::<&[u8]>(&mut key_pair.1.as_ref())
-      .expect("Substrate finalized invalid point as a network's key");
-
-    if tributary_mutable.key_gen.in_set(&session) {
-      // See TributaryMutable's struct definition for why this block is safe
-      let KeyConfirmed { substrate_keys, network_keys } =
-        tributary_mutable.key_gen.confirm(txn, session, &key_pair);
-      if session.0 == 0 {
-        tributary_mutable.batch_signer =
-          Some(BatchSigner::new(N::NETWORK, session, substrate_keys));
-      }
-      tributary_mutable
-        .signers
-        .insert(session, Signer::new(network.clone(), session, network_keys));
-    }
-
-    substrate_mutable.add_key(txn, activation_number, network_key).await;
-  }
-
   match msg.msg.clone() {
     CoordinatorMessage::Substrate(msg) => {
       match msg {
-        messages::substrate::CoordinatorMessage::ConfirmKeyPair { context, session, key_pair } => {
-          // This is the first key pair for this network so no block has been finalized yet
-          // TODO: Write documentation for this in docs/
-          // TODO: Use an Option instead of a magic?
-          if context.network_latest_finalized_block.0 == [0; 32] {
-            assert!(tributary_mutable.signers.is_empty());
-            assert!(tributary_mutable.batch_signer.is_none());
-            assert!(tributary_mutable.cosigner.is_none());
-            // We can't check this as existing is no longer pub
-            // assert!(substrate_mutable.existing.as_ref().is_none());
-
-            // Wait until a network's block's time exceeds Serai's time
-            // These time calls are extremely expensive for what they do, yet they only run when
-            // confirming the first key pair, before any network activity has occurred, so they
-            // should be fine
-
-            // If the latest block number is 10, then the block indexed by 1 has 10 confirms
-            // 10 + 1 - 10 = 1
-            let mut block_i;
-            while {
-              block_i = (network.get_latest_block_number_with_retries().await + 1)
-                .saturating_sub(N::CONFIRMATIONS);
-              network.get_block_with_retries(block_i).await.time(network).await < context.serai_time
-            } {
-              info!(
-                "serai confirmed the first key pair for a set. {} {}",
-                "we're waiting for a network's finalized block's time to exceed unix time ",
-                context.serai_time,
-              );
-              sleep(Duration::from_secs(5)).await;
-            }
-
-            // Find the first block to do so
-            let mut earliest = block_i;
-            // earliest > 0 prevents a panic if Serai creates keys before the genesis block
-            // which... should be impossible
-            // Yet a prevented panic is a prevented panic
-            while (earliest > 0) &&
-              (network.get_block_with_retries(earliest - 1).await.time(network).await >=
-                context.serai_time)
-            {
-              earliest -= 1;
-            }
-
-            // Use this as the activation block
-            let activation_number = earliest;
-
-            activate_key(
-              network,
-              substrate_mutable,
-              tributary_mutable,
-              txn,
-              session,
-              key_pair,
-              activation_number,
-            )
-            .await;
-          } else {
-            let mut block_before_queue_block = <N::Block as Block<N>>::Id::default();
-            block_before_queue_block
-              .as_mut()
-              .copy_from_slice(&context.network_latest_finalized_block.0);
-            // We can't set these keys for activation until we know their queue block, which we
-            // won't until the next Batch is confirmed
-            // Set this variable so when we get the next Batch event, we can handle it
-            PendingActivationsDb::set_pending_activation::<N>(
-              txn,
-              &block_before_queue_block,
-              session,
-              key_pair,
-            );
-          }
-        }
-
         messages::substrate::CoordinatorMessage::SubstrateBlock {
           context,
           block: substrate_block,
           burns,
           batches,
         } => {
-          if let Some((block, session, key_pair)) =
-            PendingActivationsDb::pending_activation::<N>(txn)
-          {
-            // Only run if this is a Batch belonging to a distinct block
-            if context.network_latest_finalized_block.as_ref() != block.as_ref() {
-              let mut queue_block = <N::Block as Block<N>>::Id::default();
-              queue_block.as_mut().copy_from_slice(context.network_latest_finalized_block.as_ref());
-
-              let activation_number = substrate_mutable
-                .block_number(txn, &queue_block)
-                .await
-                .expect("KeyConfirmed from context we haven't synced") +
-                N::CONFIRMATIONS;
-
-              activate_key(
-                network,
-                substrate_mutable,
-                tributary_mutable,
-                txn,
-                session,
-                key_pair,
-                activation_number,
-              )
-              .await;
-              //clear pending activation
-              txn.del(PendingActivationsDb::key());
-            }
-          }
-
-          // Since this block was acknowledged, we no longer have to sign the batches within it
-          if let Some(batch_signer) = tributary_mutable.batch_signer.as_mut() {
-            for batch_id in batches {
-              batch_signer.batch_signed(txn, batch_id);
-            }
-          }
-
-          let (acquired_lock, to_sign) =
-            substrate_mutable.substrate_block(txn, network, context, burns).await;
-
           // Send SubstrateBlockAck, with relevant plan IDs, before we trigger the signing of these
           // plans
           if !tributary_mutable.signers.is_empty() {
@@ -196,23 +53,6 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
                   .collect(),
               })
               .await;
-          }
-
-          // See commentary in TributaryMutable for why this is safe
-          let signers = &mut tributary_mutable.signers;
-          for (key, id, tx, eventuality) in to_sign {
-            if let Some(session) = SessionDb::get(txn, key.to_bytes().as_ref()) {
-              let signer = signers.get_mut(&session).unwrap();
-              if let Some(msg) = signer.sign_transaction(txn, id, tx, &eventuality).await {
-                coordinator.send(msg).await;
-              }
-            }
-          }
-
-          // This is not premature, even if this block had multiple `Batch`s created, as the first
-          // `Batch` alone will trigger all Plans/Eventualities/Signs
-          if acquired_lock {
-            substrate_mutable.release_scanner_lock().await;
           }
         }
       }
