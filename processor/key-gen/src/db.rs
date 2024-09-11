@@ -9,7 +9,7 @@ use dkg::{Participant, ThresholdCore, ThresholdKeys, evrf::EvrfCurve};
 use serai_validator_sets_primitives::Session;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, DbTxn};
 
 use crate::KeyGenParams;
 
@@ -35,20 +35,26 @@ pub(crate) struct Participations {
   pub(crate) network_participations: HashMap<Participant, Vec<u8>>,
 }
 
-create_db!(
-  KeyGen {
-    Params: (session: &Session) -> RawParams,
-    Participations: (session: &Session) -> Participations,
-    KeyShares: (session: &Session) -> Vec<u8>,
-  }
-);
+mod _db {
+  use serai_validator_sets_primitives::Session;
+
+  use serai_db::{Get, DbTxn, create_db};
+
+  create_db!(
+    KeyGen {
+      Params: (session: &Session) -> super::RawParams,
+      Participations: (session: &Session) -> super::Participations,
+      KeyShares: (session: &Session) -> Vec<u8>,
+    }
+  );
+}
 
 pub(crate) struct KeyGenDb<P: KeyGenParams>(PhantomData<P>);
 impl<P: KeyGenParams> KeyGenDb<P> {
   pub(crate) fn set_params(txn: &mut impl DbTxn, session: Session, params: Params<P>) {
     assert_eq!(params.substrate_evrf_public_keys.len(), params.network_evrf_public_keys.len());
 
-    Params::set(
+    _db::Params::set(
       txn,
       &session,
       &RawParams {
@@ -68,7 +74,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   }
 
   pub(crate) fn params(getter: &impl Get, session: Session) -> Option<Params<P>> {
-    Params::get(getter, &session).map(|params| Params {
+    _db::Params::get(getter, &session).map(|params| Params {
       t: params.t,
       n: params
         .network_evrf_public_keys
@@ -101,10 +107,10 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     session: Session,
     participations: &Participations,
   ) {
-    Participations::set(txn, &session, participations)
+    _db::Participations::set(txn, &session, participations)
   }
   pub(crate) fn participations(getter: &impl Get, session: Session) -> Option<Participations> {
-    Participations::get(getter, &session)
+    _db::Participations::get(getter, &session)
   }
 
   // Set the key shares for a session.
@@ -121,7 +127,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
       keys.extend(substrate_keys.serialize().as_slice());
       keys.extend(network_keys.serialize().as_slice());
     }
-    KeyShares::set(txn, &session, &keys);
+    _db::KeyShares::set(txn, &session, &keys);
   }
 
   #[allow(clippy::type_complexity)]
@@ -129,7 +135,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     getter: &impl Get,
     session: Session,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
-    let keys = KeyShares::get(getter, &session)?;
+    let keys = _db::KeyShares::get(getter, &session)?;
     let mut keys: &[u8] = keys.as_ref();
 
     let mut substrate_keys = vec![];
