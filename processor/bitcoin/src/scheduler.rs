@@ -64,12 +64,12 @@ fn signable_transaction<D: Db>(
     gets stuck, this lets anyone create a child transaction spending this output, raising the fee,
     getting the transaction unstuck (via CPFP).
   */
-  payments.push(Payment::new(
+  payments.push((
     // The generator is even so this is valid
-    Address::new(p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR)),
+    Address::new(p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR).unwrap()).unwrap(),
     // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
-    Balance { coin: Coin::Bitcoin, amount: Amount(bitcoin_serai::wallet::DUST) },
-    None,
+    // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
+    bitcoin_serai::wallet::DUST,
   ));
 
   let change = change
