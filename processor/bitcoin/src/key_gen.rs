@@ -1,7 +1,7 @@
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 use frost::ThresholdKeys;
 
-use crate::scan::scanner;
+use crate::{primitives::x_coord_to_even_point, scan::scanner};
 
 pub(crate) struct KeyGenParams;
 impl key_gen::KeyGenParams for KeyGenParams {
@@ -20,5 +20,9 @@ impl key_gen::KeyGenParams for KeyGenParams {
     let key: &[u8] = key.as_ref();
     // Skip the parity encoding as we know this key is even
     key[1 ..].to_vec()
+  }
+
+  fn decode_key(key: &[u8]) -> Option<<Self::ExternalNetworkCurve as Ciphersuite>::G> {
+    x_coord_to_even_point(key)
   }
 }

@@ -20,7 +20,7 @@ use dkg::{Participant, ThresholdKeys, evrf::*};
 use serai_validator_sets_primitives::Session;
 use messages::key_gen::*;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Get, DbTxn};
 
 mod generators;
 use generators::generators;
@@ -48,6 +48,17 @@ pub trait KeyGenParams {
   /// A default implementation is provided which calls the traditional `to_bytes`.
   fn encode_key(key: <Self::ExternalNetworkCurve as Ciphersuite>::G) -> Vec<u8> {
     key.to_bytes().as_ref().to_vec()
+  }
+
+  /// Decode keys from their optimal encoding.
+  ///
+  /// A default implementation is provided which calls the traditional `from_bytes`.
+  fn decode_key(mut key: &[u8]) -> Option<<Self::ExternalNetworkCurve as Ciphersuite>::G> {
+    let res = <Self::ExternalNetworkCurve as Ciphersuite>::read_G(&mut key).ok()?;
+    if !key.is_empty() {
+      None?;
+    }
+    Some(res)
   }
 }
 
@@ -128,47 +139,41 @@ fn coerce_keys<C: EvrfCurve>(
 
 /// An instance of the Serai key generation protocol.
 #[derive(Debug)]
-pub struct KeyGen<P: KeyGenParams, D: Db> {
-  db: D,
+pub struct KeyGen<P: KeyGenParams> {
   substrate_evrf_private_key:
     Zeroizing<<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
   network_evrf_private_key:
     Zeroizing<<<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
 }
 
-impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
+impl<P: KeyGenParams> KeyGen<P> {
   /// Create a new key generation instance.
   #[allow(clippy::new_ret_no_self)]
   pub fn new(
-    db: D,
     substrate_evrf_private_key: Zeroizing<
       <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
     >,
     network_evrf_private_key: Zeroizing<
       <<P::ExternalNetworkCurve as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F,
     >,
-  ) -> KeyGen<P, D> {
-    KeyGen { db, substrate_evrf_private_key, network_evrf_private_key }
+  ) -> KeyGen<P> {
+    KeyGen { substrate_evrf_private_key, network_evrf_private_key }
   }
 
   /// Fetch the key shares for a specific session.
   #[allow(clippy::type_complexity)]
   pub fn key_shares(
-    &self,
+    getter: &impl Get,
     session: Session,
   ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCurve>>)> {
     // This is safe, despite not having a txn, since it's a static value
     // It doesn't change over time/in relation to other operations
     // It is solely set or unset
-    KeyGenDb::<P>::key_shares(&self.db, session)
+    KeyGenDb::<P>::key_shares(getter, session)
   }
 
   /// Handle a message from the coordinator.
-  pub fn handle(
-    &mut self,
-    txn: &mut D::Transaction<'_>,
-    msg: CoordinatorMessage,
-  ) -> Vec<ProcessorMessage> {
+  pub fn handle(&mut self, txn: &mut impl DbTxn, msg: CoordinatorMessage) -> Vec<ProcessorMessage> {
     const SUBSTRATE_KEY_CONTEXT: &[u8] = b"substrate";
     const NETWORK_KEY_CONTEXT: &[u8] = b"network";
     fn context<P: KeyGenParams>(session: Session, key_context: &[u8]) -> [u8; 32] {
@@ -292,7 +297,7 @@ impl<P: KeyGenParams, D: Db> KeyGen<P, D> {
             // If we've already generated these keys, we don't actually need to save these
             // participations and continue. We solely have to verify them, as to identify malicious
             // participants and prevent DoSs, before returning
-            if self.key_shares(session).is_some() {
+            if Self::key_shares(txn, session).is_some() {
               log::debug!("already finished generating a key for {:?}", session);
 
               match EvrfDkg::<Ristretto>::verify(

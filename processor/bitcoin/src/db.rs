@@ -1,10 +1,19 @@
+use ciphersuite::group::GroupEncoding;
+
 use serai_client::validator_sets::primitives::Session;
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, DbTxn, create_db, db_channel};
+use primitives::EncodableG;
 
 create_db! {
   Processor {
-    ExternalKeyForSession: (session: Session) -> Vec<u8>,
+    ExternalKeyForSessionForSigners: <K: GroupEncoding>(session: Session) -> EncodableG<K>,
+  }
+}
+
+db_channel! {
+  Processor {
+    KeyToActivate: <K: GroupEncoding>() -> EncodableG<K>
   }
 }
 

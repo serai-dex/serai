@@ -4,11 +4,7 @@ use ciphersuite::{Ciphersuite, Secp256k1};
 
 use bitcoin_serai::{
   bitcoin::{
-    hashes::Hash as HashTrait,
-    key::{Parity, XOnlyPublicKey},
-    consensus::Encodable,
-    script::Instruction,
-    transaction::Transaction,
+    hashes::Hash as HashTrait, consensus::Encodable, script::Instruction, transaction::Transaction,
   },
   wallet::ReceivedOutput as WalletOutput,
 };
@@ -24,7 +20,10 @@ use serai_client::{
 
 use primitives::{OutputType, ReceivedOutput};
 
-use crate::scan::{offsets_for_key, presumed_origin, extract_serai_data};
+use crate::{
+  primitives::x_coord_to_even_point,
+  scan::{offsets_for_key, presumed_origin, extract_serai_data},
+};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId([u8; 36]);
@@ -117,15 +116,11 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     let Instruction::PushBytes(key) = script.instructions_minimal().last().unwrap().unwrap() else {
       panic!("last item in v1 Taproot script wasn't bytes")
     };
-    let key = XOnlyPublicKey::from_slice(key.as_ref())
-      .expect("last item in v1 Taproot script wasn't a valid x-only public key");
+    let key = x_coord_to_even_point(key.as_ref())
+      .expect("last item in scanned v1 Taproot script wasn't a valid x-only public key");
 
-    // Convert to a full key
-    let key = key.public_key(Parity::Even);
-    // Convert to a k256 key (from libsecp256k1)
-    let output_key = Secp256k1::read_G(&mut key.serialize().as_slice()).unwrap();
     // The output's key minus the output's offset is the root key
-    output_key - (<Secp256k1 as Ciphersuite>::G::GENERATOR * self.output.offset())
+    key - (<Secp256k1 as Ciphersuite>::G::GENERATOR * self.output.offset())
   }
 
   fn presumed_origin(&self) -> Option<Address> {
