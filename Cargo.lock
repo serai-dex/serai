@@ -5033,6 +5033,7 @@ dependencies = [
  "hex",
  "modular-frost",
  "monero-address",
+ "monero-clsag",
  "monero-rpc",
  "monero-serai",
  "monero-simple-request-rpc",

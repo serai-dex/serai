@@ -39,6 +39,7 @@ frost = { package = "modular-frost", path = "../../../crypto/frost", default-fea
 
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
+monero-clsag = { path = "../ringct/clsag", default-features = false }
 monero-serai = { path = "..", default-features = false }
 monero-rpc = { path = "../rpc", default-features = false }
 monero-address = { path = "./address", default-features = false }
@@ -66,10 +67,11 @@ std = [
   "rand_chacha/std",
   "rand_distr/std",
 
+  "monero-clsag/std",
   "monero-serai/std",
   "monero-rpc/std",
   "monero-address/std",
 ]
 compile-time-generators = ["curve25519-dalek/precomputed-tables", "monero-serai/compile-time-generators"]
-multisig = ["transcript", "group", "dalek-ff-group", "frost", "monero-serai/multisig", "std"]
+multisig = ["std", "transcript", "group", "dalek-ff-group", "frost", "monero-clsag/multisig"]
 default = ["std", "compile-time-generators"]
