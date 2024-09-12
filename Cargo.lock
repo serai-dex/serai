@@ -8063,10 +8063,13 @@ dependencies = [
  "frame-system",
  "pallet-transaction-payment",
  "parity-scale-codec",
+ "rand_core",
  "scale-info",
+ "serai-abi",
  "serai-coins-primitives",
  "serai-primitives",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
