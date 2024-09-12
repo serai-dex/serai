@@ -39,8 +39,6 @@ sp-io = { git = "https://github.com/serai-dex/substrate", default-features = fal
 
 serai-abi = { path = "../../abi", default-features = false, features = ["serde"] }
 
-rand_core = "0.6"
-
 [features]
 std = [
   "frame-system/std",
