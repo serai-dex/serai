@@ -18,7 +18,6 @@ workspace = true
 
 [dependencies]
 async-trait = { version = "0.1", default-features = false }
-zeroize = { version = "1", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
@@ -33,17 +32,14 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 secp256k1 = { version = "0.29", default-features = false, features = ["std", "global-context", "rand-std"] }
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std"] }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
-
-zalloc = { path = "../../common/zalloc" }
-serai-db = { path = "../../common/db" }
-serai-env = { path = "../../common/env" }
-
 serai-client = { path = "../../substrate/client", default-features = false, features = ["bitcoin"] }
 
-messages = { package = "serai-processor-messages", path = "../messages" }
+zalloc = { path = "../../common/zalloc" }
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+serai-db = { path = "../../common/db" }
+
 key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
@@ -54,8 +50,6 @@ transaction-chaining-scheduler = { package = "serai-processor-transaction-chaini
 signers = { package = "serai-processor-signers", path = "../signers" }
 
 bin = { package = "serai-processor-bin", path = "../bin" }
-
-message-queue = { package = "serai-message-queue", path = "../../message-queue" }
 
 [features]
 parity-db = ["bin/parity-db"]

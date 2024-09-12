@@ -19,29 +19,22 @@ workspace = true
 [dependencies]
 async-trait = { version = "0.1", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
-rand_core = { version = "0.6", default-features = false }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "secp256k1"] }
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-secp256k1"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ristretto"] }
 
-secp256k1 = { version = "0.29", default-features = false, features = ["std", "global-context", "rand-std"] }
-bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std"] }
+serai-client = { path = "../../substrate/client", default-features = false, features = ["bitcoin"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-zalloc = { path = "../../common/zalloc" }
-serai-db = { path = "../../common/db" }
 serai-env = { path = "../../common/env" }
-
-serai-client = { path = "../../substrate/client", default-features = false, features = ["bitcoin"] }
+serai-db = { path = "../../common/db" }
 
 messages = { package = "serai-processor-messages", path = "../messages" }
 key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
@@ -49,8 +42,6 @@ key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
 scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
-utxo-scheduler = { package = "serai-processor-utxo-scheduler-primitives", path = "../scheduler/utxo/primitives" }
-transaction-chaining-scheduler = { package = "serai-processor-transaction-chaining-scheduler", path = "../scheduler/utxo/transaction-chaining" }
 signers = { package = "serai-processor-signers", path = "../signers" }
 
 message-queue = { package = "serai-message-queue", path = "../../message-queue" }

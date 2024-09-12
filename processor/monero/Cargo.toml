@@ -18,29 +18,39 @@ workspace = true
 
 [dependencies]
 async-trait = { version = "0.1", default-features = false }
+rand_core = { version = "0.6", default-features = false }
 
-const-hex = { version = "1", default-features = false }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-serde_json = { version = "1", default-features = false, features = ["std"] }
 
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
-monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request", default-features = false, optional = true }
-monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ed25519"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ed25519"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig"] }
+
+serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
 
 zalloc = { path = "../../common/zalloc" }
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
 serai-db = { path = "../../common/db" }
-serai-env = { path = "../../common/env" }
 
-messages = { package = "serai-processor-messages", path = "../messages" }
+key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 
-message-queue = { package = "serai-message-queue", path = "../../message-queue" }
+primitives = { package = "serai-processor-primitives", path = "../primitives" }
+scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
+scanner = { package = "serai-processor-scanner", path = "../scanner" }
+utxo-scheduler = { package = "serai-processor-utxo-scheduler-primitives", path = "../scheduler/utxo/primitives" }
+utxo-standard-scheduler = { package = "serai-processor-utxo-scheduler", path = "../scheduler/utxo/standard" }
+signers = { package = "serai-processor-signers", path = "../signers" }
+
+bin = { package = "serai-processor-bin", path = "../bin" }
 
 [features]
-parity-db = ["serai-db/parity-db"]
-rocksdb = ["serai-db/rocksdb"]
+parity-db = ["bin/parity-db"]
+rocksdb = ["bin/rocksdb"]
