@@ -1,3 +1,4 @@
+/*
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
@@ -809,3 +810,4 @@ impl UtxoNetwork for Monero {
   // TODO: Test creating a TX this big
   const MAX_INPUTS: usize = 120;
 }
+*/

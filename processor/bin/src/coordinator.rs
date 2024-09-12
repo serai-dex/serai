@@ -69,6 +69,7 @@ impl Coordinator {
       "monero" => NetworkId::Monero,
       _ => panic!("unrecognized network"),
     };
+    // TODO: Read this from ScannerFeed
     let service = Service::Processor(network_id);
     let message_queue = Arc::new(MessageQueue::from_env(service));
 
