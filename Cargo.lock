@@ -8064,7 +8064,6 @@ dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
  "scale-info",
- "serai-abi",
  "serai-coins-primitives",
  "serai-primitives",
  "sp-core",
