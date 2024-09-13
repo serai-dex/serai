@@ -1,119 +1,4 @@
 /*
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![doc = include_str!("../README.md")]
-#![deny(missing_docs)]
-
-use std::{time::Duration, collections::HashMap, io};
-
-use async_trait::async_trait;
-
-use zeroize::Zeroizing;
-
-use rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
-use transcript::{Transcript, RecommendedTranscript};
-
-use ciphersuite::group::{ff::Field, Group};
-use dalek_ff_group::{Scalar, EdwardsPoint};
-use frost::{curve::Ed25519, ThresholdKeys};
-
-use monero_simple_request_rpc::SimpleRequestRpc;
-use monero_wallet::{
-  ringct::RctType,
-  transaction::Transaction,
-  block::Block,
-  rpc::{FeeRate, RpcError, Rpc},
-  address::{Network as MoneroNetwork, SubaddressIndex},
-  ViewPair, GuaranteedViewPair, WalletOutput, OutputWithDecoys, GuaranteedScanner,
-  send::{
-    SendError, Change, SignableTransaction as MSignableTransaction, Eventuality, TransactionMachine,
-  },
-};
-#[cfg(test)]
-use monero_wallet::Scanner;
-
-use tokio::time::sleep;
-
-pub use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
-  networks::monero::Address,
-};
-
-use crate::{
-  Payment, additional_key,
-  networks::{
-    NetworkError, Block as BlockTrait, OutputType, Output as OutputTrait,
-    Transaction as TransactionTrait, SignableTransaction as SignableTransactionTrait,
-    Eventuality as EventualityTrait, EventualitiesTracker, Network, UtxoNetwork,
-  },
-  multisigs::scheduler::utxo::Scheduler,
-};
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Output(WalletOutput);
-
-const EXTERNAL_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(0, 0);
-const BRANCH_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(1, 0);
-const CHANGE_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(2, 0);
-const FORWARD_SUBADDRESS: Option<SubaddressIndex> = SubaddressIndex::new(3, 0);
-
-impl OutputTrait<Monero> for Output {
-  // While we could use (tx, o), using the key ensures we won't be susceptible to the burning bug.
-  // While we already are immune, thanks to using featured address, this doesn't hurt and is
-  // technically more efficient.
-  type Id = [u8; 32];
-
-  fn kind(&self) -> OutputType {
-    match self.0.subaddress() {
-      EXTERNAL_SUBADDRESS => OutputType::External,
-      BRANCH_SUBADDRESS => OutputType::Branch,
-      CHANGE_SUBADDRESS => OutputType::Change,
-      FORWARD_SUBADDRESS => OutputType::Forwarded,
-      _ => panic!("unrecognized address was scanned for"),
-    }
-  }
-
-  fn id(&self) -> Self::Id {
-    self.0.key().compress().to_bytes()
-  }
-
-  fn tx_id(&self) -> [u8; 32] {
-    self.0.transaction()
-  }
-
-  fn key(&self) -> EdwardsPoint {
-    EdwardsPoint(self.0.key() - (EdwardsPoint::generator().0 * self.0.key_offset()))
-  }
-
-  fn presumed_origin(&self) -> Option<Address> {
-    None
-  }
-
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Monero, amount: Amount(self.0.commitment().amount) }
-  }
-
-  fn data(&self) -> &[u8] {
-    let Some(data) = self.0.arbitrary_data().first() else { return &[] };
-    // If the data is too large, prune it
-    // This should cause decoding the instruction to fail, and trigger a refund as appropriate
-    if data.len() > usize::try_from(MAX_DATA_LEN).unwrap() {
-      return &[];
-    }
-    data
-  }
-
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.0.write(writer)?;
-    Ok(())
-  }
-
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(Output(WalletOutput::read(reader)?))
-  }
-}
-
 // TODO: Consider ([u8; 32], TransactionPruned)
 #[async_trait]
 impl TransactionTrait<Monero> for Transaction {
@@ -225,29 +110,6 @@ impl BlockTrait<Monero> for Block {
     // Ensure monotonicity despite both these issues by adding the block number to the median time
     res + u64::try_from(self.number().unwrap()).unwrap()
   }
-}
-
-#[derive(Clone, Debug)]
-pub struct Monero {
-  rpc: SimpleRequestRpc,
-}
-// Shim required for testing/debugging purposes due to generic arguments also necessitating trait
-// bounds
-impl PartialEq for Monero {
-  fn eq(&self, _: &Self) -> bool {
-    true
-  }
-}
-impl Eq for Monero {}
-
-#[allow(clippy::needless_pass_by_value)] // Needed to satisfy API expectations
-fn map_rpc_err(err: RpcError) -> NetworkError {
-  if let RpcError::InvalidNode(reason) = &err {
-    log::error!("Monero RpcError::InvalidNode({reason})");
-  } else {
-    log::debug!("Monero RpcError {err:?}");
-  }
-  NetworkError::ConnectionError
 }
 
 enum MakeSignableTransactionResult {
@@ -461,20 +323,6 @@ impl Monero {
 
 #[async_trait]
 impl Network for Monero {
-  type Curve = Ed25519;
-
-  type Transaction = Transaction;
-  type Block = Block;
-
-  type Output = Output;
-  type SignableTransaction = SignableTransaction;
-  type Eventuality = Eventuality;
-  type TransactionMachine = TransactionMachine;
-
-  type Scheduler = Scheduler<Monero>;
-
-  type Address = Address;
-
   const NETWORK: NetworkId = NetworkId::Monero;
   const ID: &'static str = "Monero";
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
@@ -487,9 +335,6 @@ impl Network for Monero {
 
   // TODO
   const COST_TO_AGGREGATE: u64 = 0;
-
-  // Monero doesn't require/benefit from tweaking
-  fn tweak_keys(_: &mut ThresholdKeys<Self::Curve>) {}
 
   #[cfg(test)]
   async fn external_address(&self, key: EdwardsPoint) -> Address {
@@ -506,121 +351,6 @@ impl Network for Monero {
 
   fn forward_address(key: EdwardsPoint) -> Option<Address> {
     Some(Self::address_internal(key, FORWARD_SUBADDRESS))
-  }
-
-  async fn get_latest_block_number(&self) -> Result<usize, NetworkError> {
-    // Monero defines height as chain length, so subtract 1 for block number
-    Ok(self.rpc.get_height().await.map_err(map_rpc_err)? - 1)
-  }
-
-  async fn get_block(&self, number: usize) -> Result<Self::Block, NetworkError> {
-    Ok(
-      self
-        .rpc
-        .get_block(self.rpc.get_block_hash(number).await.map_err(map_rpc_err)?)
-        .await
-        .map_err(map_rpc_err)?,
-    )
-  }
-
-  async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Output> {
-    let outputs = loop {
-      match self
-        .rpc
-        .get_scannable_block(block.clone())
-        .await
-        .map_err(|e| format!("{e:?}"))
-        .and_then(|block| Self::scanner(key).scan(block).map_err(|e| format!("{e:?}")))
-      {
-        Ok(outputs) => break outputs,
-        Err(e) => {
-          log::error!("couldn't scan block {}: {e:?}", hex::encode(block.id()));
-          sleep(Duration::from_secs(60)).await;
-          continue;
-        }
-      }
-    };
-
-    // Miner transactions are required to explicitly state their timelock, so this does exclude
-    // those (which have an extended timelock we don't want to deal with)
-    let raw_outputs = outputs.not_additionally_locked();
-    let mut outputs = Vec::with_capacity(raw_outputs.len());
-    for output in raw_outputs {
-      // This should be pointless as we shouldn't be able to scan for any other subaddress
-      // This just helps ensures nothing invalid makes it through
-      assert!([EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARD_SUBADDRESS]
-        .contains(&output.subaddress()));
-
-      outputs.push(Output(output));
-    }
-
-    outputs
-  }
-
-  async fn get_eventuality_completions(
-    &self,
-    eventualities: &mut EventualitiesTracker<Eventuality>,
-    block: &Block,
-  ) -> HashMap<[u8; 32], (usize, [u8; 32], Transaction)> {
-    let mut res = HashMap::new();
-    if eventualities.map.is_empty() {
-      return res;
-    }
-
-    async fn check_block(
-      network: &Monero,
-      eventualities: &mut EventualitiesTracker<Eventuality>,
-      block: &Block,
-      res: &mut HashMap<[u8; 32], (usize, [u8; 32], Transaction)>,
-    ) {
-      for hash in &block.transactions {
-        let tx = {
-          let mut tx;
-          while {
-            tx = network.rpc.get_transaction(*hash).await;
-            tx.is_err()
-          } {
-            log::error!("couldn't get transaction {}: {}", hex::encode(hash), tx.err().unwrap());
-            sleep(Duration::from_secs(60)).await;
-          }
-          tx.unwrap()
-        };
-
-        if let Some((_, eventuality)) = eventualities.map.get(&tx.prefix().extra) {
-          if eventuality.matches(&tx.clone().into()) {
-            res.insert(
-              eventualities.map.remove(&tx.prefix().extra).unwrap().0,
-              (block.number().unwrap(), tx.id(), tx),
-            );
-          }
-        }
-      }
-
-      eventualities.block_number += 1;
-      assert_eq!(eventualities.block_number, block.number().unwrap());
-    }
-
-    for block_num in (eventualities.block_number + 1) .. block.number().unwrap() {
-      let block = {
-        let mut block;
-        while {
-          block = self.get_block(block_num).await;
-          block.is_err()
-        } {
-          log::error!("couldn't get block {}: {}", block_num, block.err().unwrap());
-          sleep(Duration::from_secs(60)).await;
-        }
-        block.unwrap()
-      };
-
-      check_block(self, eventualities, &block, &mut res).await;
-    }
-
-    // Also check the current block
-    check_block(self, eventualities, block, &mut res).await;
-    assert_eq!(eventualities.block_number, block.number().unwrap());
-
-    res
   }
 
   async fn needed_fee(
@@ -684,19 +414,6 @@ impl Network for Monero {
       // TODO: Distinguish already in pool vs double spend (other signing attempt succeeded) vs
       // invalid transaction
       Err(e) => panic!("failed to publish TX {}: {e}", hex::encode(tx.hash())),
-    }
-  }
-
-  async fn confirm_completion(
-    &self,
-    eventuality: &Eventuality,
-    id: &[u8; 32],
-  ) -> Result<Option<Transaction>, NetworkError> {
-    let tx = self.rpc.get_transaction(*id).await.map_err(map_rpc_err)?;
-    if eventuality.matches(&tx.clone().into()) {
-      Ok(Some(tx))
-    } else {
-      Ok(None)
     }
   }
 
