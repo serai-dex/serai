@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use core::{fmt::Debug, marker::PhantomData};
+use core::{future::Future, fmt::Debug, marker::PhantomData};
 use std::collections::HashMap;
 
 use zeroize::Zeroizing;
@@ -43,7 +43,6 @@ mod transaction;
 use transaction::TransactionSignerTask;
 
 /// A connection to the Coordinator which messages can be published with.
-#[async_trait::async_trait]
 pub trait Coordinator: 'static + Send + Sync {
   /// An error encountered when interacting with a coordinator.
   ///
@@ -52,32 +51,38 @@ pub trait Coordinator: 'static + Send + Sync {
   type EphemeralError: Debug;
 
   /// Send a `messages::sign::ProcessorMessage`.
-  async fn send(&mut self, message: ProcessorMessage) -> Result<(), Self::EphemeralError>;
+  fn send(
+    &mut self,
+    message: ProcessorMessage,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 
   /// Publish a cosign.
-  async fn publish_cosign(
+  fn publish_cosign(
     &mut self,
     block_number: u64,
     block_id: [u8; 32],
     signature: Signature,
-  ) -> Result<(), Self::EphemeralError>;
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 
   /// Publish a `Batch`.
-  async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError>;
+  fn publish_batch(&mut self, batch: Batch)
+    -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 
   /// Publish a `SignedBatch`.
-  async fn publish_signed_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError>;
+  fn publish_signed_batch(
+    &mut self,
+    batch: SignedBatch,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 
   /// Publish a slash report's signature.
-  async fn publish_slash_report_signature(
+  fn publish_slash_report_signature(
     &mut self,
     session: Session,
     signature: Signature,
-  ) -> Result<(), Self::EphemeralError>;
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 }
 
 /// An object capable of publishing a transaction.
-#[async_trait::async_trait]
 pub trait TransactionPublisher<T: Transaction>: 'static + Send + Sync + Clone {
   /// An error encountered when publishing a transaction.
   ///
@@ -92,7 +97,7 @@ pub trait TransactionPublisher<T: Transaction>: 'static + Send + Sync + Clone {
   ///
   /// The transaction already being present in the mempool/on-chain MUST NOT be considered an
   /// error.
-  async fn publish(&self, tx: T) -> Result<(), Self::EphemeralError>;
+  fn publish(&self, tx: T) -> impl Send + Future<Output = Result<(), Self::EphemeralError>>;
 }
 
 struct Tasks {

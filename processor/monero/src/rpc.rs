@@ -1,3 +1,5 @@
+use core::future::Future;
+
 use monero_wallet::rpc::{RpcError, Rpc as RpcTrait};
 use monero_simple_request_rpc::SimpleRequestRpc;
 
@@ -16,7 +18,6 @@ pub(crate) struct Rpc {
   pub(crate) rpc: SimpleRequestRpc,
 }
 
-#[async_trait::async_trait]
 impl ScannerFeed for Rpc {
   const NETWORK: NetworkId = NetworkId::Monero;
   // Outputs aren't spendable until 10 blocks later due to the 10-block lock
@@ -32,28 +33,44 @@ impl ScannerFeed for Rpc {
 
   type EphemeralError = RpcError;
 
-  async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError> {
-    Ok(self.rpc.get_height().await?.checked_sub(1).expect("connected to an invalid Monero RPC").try_into().unwrap())
+  fn latest_finalized_block_number(
+    &self,
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
+    async move {
+      Ok(
+        self
+          .rpc
+          .get_height()
+          .await?
+          .checked_sub(1)
+          .expect("connected to an invalid Monero RPC")
+          .try_into()
+          .unwrap(),
+      )
+    }
   }
 
-  async fn time_of_block(&self, number: u64) -> Result<u64, Self::EphemeralError> {
-    todo!("TODO")
-  }
-
-  async fn unchecked_block_header_by_number(
+  fn time_of_block(
     &self,
     number: u64,
-  ) -> Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError> {
-    Ok(BlockHeader(
-      self.rpc.get_block_by_number(number.try_into().unwrap()).await?
-    ))
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
+    async move{todo!("TODO")}
   }
 
-  async fn unchecked_block_by_number(
+  fn unchecked_block_header_by_number(
     &self,
     number: u64,
-  ) -> Result<Self::Block, Self::EphemeralError> {
-    todo!("TODO")
+  ) -> impl Send
+       + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
+  {
+    async move { Ok(BlockHeader(self.rpc.get_block_by_number(number.try_into().unwrap()).await?)) }
+  }
+
+  fn unchecked_block_by_number(
+    &self,
+    number: u64,
+  ) -> impl Send + Future<Output = Result<Self::Block, Self::EphemeralError>> {
+    async move { todo!("TODO") }
   }
 
   fn dust(coin: Coin) -> Amount {
@@ -62,22 +79,26 @@ impl ScannerFeed for Rpc {
     todo!("TODO")
   }
 
-  async fn cost_to_aggregate(
+  fn cost_to_aggregate(
     &self,
     coin: Coin,
     _reference_block: &Self::Block,
-  ) -> Result<Amount, Self::EphemeralError> {
-    assert_eq!(coin, Coin::Bitcoin);
-    // TODO
-    Ok(Amount(0))
+  ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
+    async move {
+      assert_eq!(coin, Coin::Bitcoin);
+      // TODO
+      Ok(Amount(0))
+    }
   }
 }
 
-#[async_trait::async_trait]
 impl TransactionPublisher<Transaction> for Rpc {
   type EphemeralError = RpcError;
 
-  async fn publish(&self, tx: Transaction) -> Result<(), Self::EphemeralError> {
-    self.rpc.publish_transaction(&tx.0).await
+  fn publish(
+    &self,
+    tx: Transaction,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move { self.rpc.publish_transaction(&tx.0).await }
   }
 }

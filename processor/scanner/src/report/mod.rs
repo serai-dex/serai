@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, future::Future};
 
 use scale::Encode;
 use serai_db::{DbTxn, Db};
@@ -65,113 +65,119 @@ impl<D: Db, S: ScannerFeed> ReportTask<D, S> {
   }
 }
 
-#[async_trait::async_trait]
 impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
-  async fn run_iteration(&mut self) -> Result<bool, String> {
-    let highest_reportable = {
-      // Fetch the next to scan block
-      let next_to_scan = next_to_scan_for_outputs_block::<S>(&self.db)
+  fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, String>> {
+    async move {
+      let highest_reportable = {
+        // Fetch the next to scan block
+        let next_to_scan = next_to_scan_for_outputs_block::<S>(&self.db)
+          .expect("ReportTask run before writing the start block");
+        // If we haven't done any work, return
+        if next_to_scan == 0 {
+          return Ok(false);
+        }
+        // The last scanned block is the block prior to this
+        #[allow(clippy::let_and_return)]
+        let last_scanned = next_to_scan - 1;
+        // The last scanned block is the highest reportable block as we only scan blocks within a
+        // window where it's safe to immediately report the block
+        // See `eventuality.rs` for more info
+        last_scanned
+      };
+
+      let next_to_potentially_report = ReportDb::<S>::next_to_potentially_report_block(&self.db)
         .expect("ReportTask run before writing the start block");
-      // If we haven't done any work, return
-      if next_to_scan == 0 {
-        return Ok(false);
-      }
-      // The last scanned block is the block prior to this
-      #[allow(clippy::let_and_return)]
-      let last_scanned = next_to_scan - 1;
-      // The last scanned block is the highest reportable block as we only scan blocks within a
-      // window where it's safe to immediately report the block
-      // See `eventuality.rs` for more info
-      last_scanned
-    };
 
-    let next_to_potentially_report = ReportDb::<S>::next_to_potentially_report_block(&self.db)
-      .expect("ReportTask run before writing the start block");
+      for b in next_to_potentially_report ..= highest_reportable {
+        let mut txn = self.db.txn();
 
-    for b in next_to_potentially_report ..= highest_reportable {
-      let mut txn = self.db.txn();
+        // Receive the InInstructions for this block
+        // We always do this as we can't trivially tell if we should recv InInstructions before we
+        // do
+        let InInstructionData {
+          external_key_for_session_to_sign_batch,
+          returnable_in_instructions: in_instructions,
+        } = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
+        let notable = ScannerGlobalDb::<S>::is_block_notable(&txn, b);
+        if !notable {
+          assert!(in_instructions.is_empty(), "block wasn't notable yet had InInstructions");
+        }
+        // If this block is notable, create the Batch(s) for it
+        if notable {
+          let network = S::NETWORK;
+          let block_hash = index::block_id(&txn, b);
+          let mut batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
 
-      // Receive the InInstructions for this block
-      // We always do this as we can't trivially tell if we should recv InInstructions before we do
-      let InInstructionData {
-        external_key_for_session_to_sign_batch,
-        returnable_in_instructions: in_instructions,
-      } = ScanToReportDb::<S>::recv_in_instructions(&mut txn, b);
-      let notable = ScannerGlobalDb::<S>::is_block_notable(&txn, b);
-      if !notable {
-        assert!(in_instructions.is_empty(), "block wasn't notable yet had InInstructions");
-      }
-      // If this block is notable, create the Batch(s) for it
-      if notable {
-        let network = S::NETWORK;
-        let block_hash = index::block_id(&txn, b);
-        let mut batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
+          // start with empty batch
+          let mut batches = vec![Batch {
+            network,
+            id: batch_id,
+            block: BlockHash(block_hash),
+            instructions: vec![],
+          }];
+          // We also track the return information for the InInstructions within a Batch in case
+          // they error
+          let mut return_information = vec![vec![]];
 
-        // start with empty batch
-        let mut batches =
-          vec![Batch { network, id: batch_id, block: BlockHash(block_hash), instructions: vec![] }];
-        // We also track the return information for the InInstructions within a Batch in case they
-        // error
-        let mut return_information = vec![vec![]];
+          for Returnable { return_address, in_instruction } in in_instructions {
+            let balance = in_instruction.balance;
 
-        for Returnable { return_address, in_instruction } in in_instructions {
-          let balance = in_instruction.balance;
+            let batch = batches.last_mut().unwrap();
+            batch.instructions.push(in_instruction);
 
-          let batch = batches.last_mut().unwrap();
-          batch.instructions.push(in_instruction);
+            // check if batch is over-size
+            if batch.encode().len() > MAX_BATCH_SIZE {
+              // pop the last instruction so it's back in size
+              let in_instruction = batch.instructions.pop().unwrap();
 
-          // check if batch is over-size
-          if batch.encode().len() > MAX_BATCH_SIZE {
-            // pop the last instruction so it's back in size
-            let in_instruction = batch.instructions.pop().unwrap();
+              // bump the id for the new batch
+              batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
 
-            // bump the id for the new batch
-            batch_id = ReportDb::<S>::acquire_batch_id(&mut txn, b);
+              // make a new batch with this instruction included
+              batches.push(Batch {
+                network,
+                id: batch_id,
+                block: BlockHash(block_hash),
+                instructions: vec![in_instruction],
+              });
+              // Since we're allocating a new batch, allocate a new set of return addresses for it
+              return_information.push(vec![]);
+            }
 
-            // make a new batch with this instruction included
-            batches.push(Batch {
-              network,
-              id: batch_id,
-              block: BlockHash(block_hash),
-              instructions: vec![in_instruction],
-            });
-            // Since we're allocating a new batch, allocate a new set of return addresses for it
-            return_information.push(vec![]);
+            // For the set of return addresses for the InInstructions for the batch we just pushed
+            // onto, push this InInstruction's return addresses
+            return_information
+              .last_mut()
+              .unwrap()
+              .push(return_address.map(|address| ReturnInformation { address, balance }));
           }
 
-          // For the set of return addresses for the InInstructions for the batch we just pushed
-          // onto, push this InInstruction's return addresses
-          return_information
-            .last_mut()
-            .unwrap()
-            .push(return_address.map(|address| ReturnInformation { address, balance }));
+          // Save the return addresses to the database
+          assert_eq!(batches.len(), return_information.len());
+          for (batch, return_information) in batches.iter().zip(&return_information) {
+            assert_eq!(batch.instructions.len(), return_information.len());
+            ReportDb::<S>::save_external_key_for_session_to_sign_batch(
+              &mut txn,
+              batch.id,
+              &external_key_for_session_to_sign_batch,
+            );
+            ReportDb::<S>::save_return_information(&mut txn, batch.id, return_information);
+          }
+
+          for batch in batches {
+            Batches::send(&mut txn, &batch);
+            BatchesToSign::send(&mut txn, &external_key_for_session_to_sign_batch, &batch);
+          }
         }
 
-        // Save the return addresses to the database
-        assert_eq!(batches.len(), return_information.len());
-        for (batch, return_information) in batches.iter().zip(&return_information) {
-          assert_eq!(batch.instructions.len(), return_information.len());
-          ReportDb::<S>::save_external_key_for_session_to_sign_batch(
-            &mut txn,
-            batch.id,
-            &external_key_for_session_to_sign_batch,
-          );
-          ReportDb::<S>::save_return_information(&mut txn, batch.id, return_information);
-        }
+        // Update the next to potentially report block
+        ReportDb::<S>::set_next_to_potentially_report_block(&mut txn, b + 1);
 
-        for batch in batches {
-          Batches::send(&mut txn, &batch);
-          BatchesToSign::send(&mut txn, &external_key_for_session_to_sign_batch, &batch);
-        }
+        txn.commit();
       }
 
-      // Update the next to potentially report block
-      ReportDb::<S>::set_next_to_potentially_report_block(&mut txn, b + 1);
-
-      txn.commit();
+      // Run dependents if we decided to report any blocks
+      Ok(next_to_potentially_report <= highest_reportable)
     }
-
-    // Run dependents if we decided to report any blocks
-    Ok(next_to_potentially_report <= highest_reportable)
   }
 }

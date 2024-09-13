@@ -14,13 +14,12 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["borsh", "scale"]
+ignored = ["borsh"]
 
 [lints]
 workspace = true
 
 [dependencies]
-async-trait = { version = "0.1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 

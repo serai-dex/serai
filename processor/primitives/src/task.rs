@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{future::Future, time::Duration};
 use std::sync::Arc;
 
 use tokio::sync::{mpsc, oneshot, Mutex};
@@ -78,8 +78,7 @@ impl TaskHandle {
 }
 
 /// A task to be continually ran.
-#[async_trait::async_trait]
-pub trait ContinuallyRan: Sized {
+pub trait ContinuallyRan: Sized + Send {
   /// The amount of seconds before this task should be polled again.
   const DELAY_BETWEEN_ITERATIONS: u64 = 5;
   /// The maximum amount of seconds before this task should be run again.
@@ -91,60 +90,66 @@ pub trait ContinuallyRan: Sized {
   ///
   /// If this returns `true`, all dependents of the task will immediately have a new iteration ran
   /// (without waiting for whatever timer they were already on).
-  async fn run_iteration(&mut self) -> Result<bool, String>;
+  fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, String>>;
 
   /// Continually run the task.
-  async fn continually_run(mut self, mut task: Task, dependents: Vec<TaskHandle>) {
-    // The default number of seconds to sleep before running the task again
-    let default_sleep_before_next_task = Self::DELAY_BETWEEN_ITERATIONS;
-    // The current number of seconds to sleep before running the task again
-    // We increment this upon errors in order to not flood the logs with errors
-    let mut current_sleep_before_next_task = default_sleep_before_next_task;
-    let increase_sleep_before_next_task = |current_sleep_before_next_task: &mut u64| {
-      let new_sleep = *current_sleep_before_next_task + default_sleep_before_next_task;
-      // Set a limit of sleeping for two minutes
-      *current_sleep_before_next_task = new_sleep.max(Self::MAX_DELAY_BETWEEN_ITERATIONS);
-    };
+  fn continually_run(
+    mut self,
+    mut task: Task,
+    dependents: Vec<TaskHandle>,
+  ) -> impl Send + Future<Output = ()> {
+    async move {
+      // The default number of seconds to sleep before running the task again
+      let default_sleep_before_next_task = Self::DELAY_BETWEEN_ITERATIONS;
+      // The current number of seconds to sleep before running the task again
+      // We increment this upon errors in order to not flood the logs with errors
+      let mut current_sleep_before_next_task = default_sleep_before_next_task;
+      let increase_sleep_before_next_task = |current_sleep_before_next_task: &mut u64| {
+        let new_sleep = *current_sleep_before_next_task + default_sleep_before_next_task;
+        // Set a limit of sleeping for two minutes
+        *current_sleep_before_next_task = new_sleep.max(Self::MAX_DELAY_BETWEEN_ITERATIONS);
+      };
 
-    loop {
-      // If we were told to close/all handles were dropped, drop it
-      {
-        let should_close = task.close.try_recv();
-        match should_close {
-          Ok(()) | Err(mpsc::error::TryRecvError::Disconnected) => break,
-          Err(mpsc::error::TryRecvError::Empty) => {}
+      loop {
+        // If we were told to close/all handles were dropped, drop it
+        {
+          let should_close = task.close.try_recv();
+          match should_close {
+            Ok(()) | Err(mpsc::error::TryRecvError::Disconnected) => break,
+            Err(mpsc::error::TryRecvError::Empty) => {}
+          }
         }
-      }
 
-      match self.run_iteration().await {
-        Ok(run_dependents) => {
-          // Upon a successful (error-free) loop iteration, reset the amount of time we sleep
-          current_sleep_before_next_task = default_sleep_before_next_task;
+        match self.run_iteration().await {
+          Ok(run_dependents) => {
+            // Upon a successful (error-free) loop iteration, reset the amount of time we sleep
+            current_sleep_before_next_task = default_sleep_before_next_task;
 
-          if run_dependents {
-            for dependent in &dependents {
-              dependent.run_now();
+            if run_dependents {
+              for dependent in &dependents {
+                dependent.run_now();
+              }
             }
           }
-        }
-        Err(e) => {
-          log::warn!("{}", e);
-          increase_sleep_before_next_task(&mut current_sleep_before_next_task);
-        }
-      }
-
-      // Don't run the task again for another few seconds UNLESS told to run now
-      tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(current_sleep_before_next_task)) => {},
-        msg = task.run_now.recv() => {
-          // Check if this is firing because the handle was dropped
-          if msg.is_none() {
-            break;
+          Err(e) => {
+            log::warn!("{}", e);
+            increase_sleep_before_next_task(&mut current_sleep_before_next_task);
           }
-        },
-      }
-    }
+        }
 
-    task.closed.send(()).unwrap();
+        // Don't run the task again for another few seconds UNLESS told to run now
+        tokio::select! {
+          () = tokio::time::sleep(Duration::from_secs(current_sleep_before_next_task)) => {},
+          msg = task.run_now.recv() => {
+            // Check if this is firing because the handle was dropped
+            if msg.is_none() {
+              break;
+            }
+          },
+        }
+      }
+
+      task.closed.send(()).unwrap();
+    }
   }
 }

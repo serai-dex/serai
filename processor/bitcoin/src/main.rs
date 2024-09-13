@@ -96,7 +96,6 @@ use serai_client::{
 */
 
 /*
-#[async_trait]
 impl TransactionTrait<Bitcoin> for Transaction {
   #[cfg(test)]
   async fn fee(&self, network: &Bitcoin) -> u64 {
@@ -210,7 +209,6 @@ impl Bitcoin {
   }
 }
 
-#[async_trait]
 impl Network for Bitcoin {
   // 2 inputs should be 2 * 230 = 460 weight units
   // The output should be ~36 bytes, or 144 weight units

@@ -1,3 +1,4 @@
+use core::future::Future;
 use std::sync::{LazyLock, Arc, Mutex};
 
 use tokio::sync::mpsc;
@@ -169,59 +170,74 @@ impl Coordinator {
   }
 }
 
-#[async_trait::async_trait]
 impl signers::Coordinator for CoordinatorSend {
   type EphemeralError = ();
 
-  async fn send(
+  fn send(
     &mut self,
     msg: messages::sign::ProcessorMessage,
-  ) -> Result<(), Self::EphemeralError> {
-    self.send(&messages::ProcessorMessage::Sign(msg));
-    Ok(())
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move {
+      self.send(&messages::ProcessorMessage::Sign(msg));
+      Ok(())
+    }
   }
 
-  async fn publish_cosign(
+  fn publish_cosign(
     &mut self,
     block_number: u64,
     block: [u8; 32],
     signature: Signature,
-  ) -> Result<(), Self::EphemeralError> {
-    self.send(&messages::ProcessorMessage::Coordinator(
-      messages::coordinator::ProcessorMessage::CosignedBlock {
-        block_number,
-        block,
-        signature: signature.encode(),
-      },
-    ));
-    Ok(())
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move {
+      self.send(&messages::ProcessorMessage::Coordinator(
+        messages::coordinator::ProcessorMessage::CosignedBlock {
+          block_number,
+          block,
+          signature: signature.encode(),
+        },
+      ));
+      Ok(())
+    }
   }
 
-  async fn publish_batch(&mut self, batch: Batch) -> Result<(), Self::EphemeralError> {
-    self.send(&messages::ProcessorMessage::Substrate(
-      messages::substrate::ProcessorMessage::Batch { batch },
-    ));
-    Ok(())
+  fn publish_batch(
+    &mut self,
+    batch: Batch,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move {
+      self.send(&messages::ProcessorMessage::Substrate(
+        messages::substrate::ProcessorMessage::Batch { batch },
+      ));
+      Ok(())
+    }
   }
 
-  async fn publish_signed_batch(&mut self, batch: SignedBatch) -> Result<(), Self::EphemeralError> {
-    self.send(&messages::ProcessorMessage::Coordinator(
-      messages::coordinator::ProcessorMessage::SignedBatch { batch },
-    ));
-    Ok(())
+  fn publish_signed_batch(
+    &mut self,
+    batch: SignedBatch,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move {
+      self.send(&messages::ProcessorMessage::Coordinator(
+        messages::coordinator::ProcessorMessage::SignedBatch { batch },
+      ));
+      Ok(())
+    }
   }
 
-  async fn publish_slash_report_signature(
+  fn publish_slash_report_signature(
     &mut self,
     session: Session,
     signature: Signature,
-  ) -> Result<(), Self::EphemeralError> {
-    self.send(&messages::ProcessorMessage::Coordinator(
-      messages::coordinator::ProcessorMessage::SignedSlashReport {
-        session,
-        signature: signature.encode(),
-      },
-    ));
-    Ok(())
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move {
+      self.send(&messages::ProcessorMessage::Coordinator(
+        messages::coordinator::ProcessorMessage::SignedSlashReport {
+          session,
+          signature: signature.encode(),
+        },
+      ));
+      Ok(())
+    }
   }
 }

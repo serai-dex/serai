@@ -71,7 +71,7 @@ pub async fn test_scanner<N: Network>(
   let block_id = block.id();
 
   // Verify the Scanner picked them up
-  let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async {
+  let verify_event = |mut scanner: ScannerHandle<N, MemDb>| async move {
     let outputs =
       match timeout(Duration::from_secs(30), scanner.events.recv()).await.unwrap().unwrap() {
         ScannerEvent::Block { is_retirement_block, block, outputs } => {

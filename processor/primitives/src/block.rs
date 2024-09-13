@@ -22,7 +22,6 @@ pub trait BlockHeader: Send + Sync + Sized + Clone + Debug {
 /// necessary to literally define it as whatever the external network defines as a block. For
 /// external networks which finalize block(s), this block type should be a representation of all
 /// transactions within a period finalization (whether block or epoch).
-#[async_trait::async_trait]
 pub trait Block: Send + Sync + Sized + Clone + Debug {
   /// The type used for this block's header.
   type Header: BlockHeader;
