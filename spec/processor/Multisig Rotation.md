@@ -12,11 +12,11 @@ The following timeline is established:
 1) The new multisig is created, and has its keys set on Serai. Once the next
    `Batch` with a new external network block is published, its block becomes the
    "queue block". The new multisig is set to activate at the "queue block", plus
-   `CONFIRMATIONS` blocks (the "activation block").
+   `WINDOW_LENGTH` blocks (the "activation block").
 
    We don't use the last `Batch`'s external network block, as that `Batch` may
-   be older than `CONFIRMATIONS` blocks. Any yet-to-be-included-and-finalized
-   `Batch` will be within `CONFIRMATIONS` blocks of what any processor has
+   be older than `WINDOW_LENGTH` blocks. Any yet-to-be-included-and-finalized
+   `Batch` will be within `WINDOW_LENGTH` blocks of what any processor has
    scanned however, as it'll wait for inclusion and finalization before
    continuing scanning.
 
@@ -122,7 +122,7 @@ The following timeline is established:
 
    Once all the 6 hour period has expired, no `Eventuality`s remain, and all
    outputs are forwarded, the multisig publishes a final `Batch` of the first
-   block, plus `CONFIRMATIONS`, which met these conditions, regardless of if it
+   block, plus `WINDOW_LENGTH`, which met these conditions, regardless of if it
    would've otherwise had a `Batch`. No further actions by it, nor its
    validators, are expected (unless, of course, those validators remain present
    in the new multisig).
