@@ -145,25 +145,27 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
     getter: &(impl Send + Sync + Get),
     number: u64,
   ) -> impl Send + Future<Output = Result<Self::Block, String>> {
-    async move {let block = match self.unchecked_block_by_number(number).await {
-      Ok(block) => block,
-      Err(e) => Err(format!("couldn't fetch block {number}: {e:?}"))?,
-    };
+    async move {
+      let block = match self.unchecked_block_by_number(number).await {
+        Ok(block) => block,
+        Err(e) => Err(format!("couldn't fetch block {number}: {e:?}"))?,
+      };
 
-    // Check the ID of this block is the expected ID
-    {
-      let expected = crate::index::block_id(getter, number);
-      if block.id() != expected {
-        panic!(
-          "finalized chain reorganized from {} to {} at {}",
-          hex::encode(expected),
-          hex::encode(block.id()),
-          number,
-        );
+      // Check the ID of this block is the expected ID
+      {
+        let expected = crate::index::block_id(getter, number);
+        if block.id() != expected {
+          panic!(
+            "finalized chain reorganized from {} to {} at {}",
+            hex::encode(expected),
+            hex::encode(block.id()),
+            number,
+          );
+        }
       }
-    }
 
-    Ok(block)}
+      Ok(block)
+    }
   }
 
   /// The dust threshold for the specified coin.
