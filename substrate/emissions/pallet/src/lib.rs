@@ -12,7 +12,7 @@ pub mod pallet {
   use frame_system::{pallet_prelude::*, RawOrigin};
   use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
-  use sp_std::{vec, vec::Vec, ops::Mul, collections::btree_map::BTreeMap};
+  use sp_std::{vec, vec::Vec, collections::btree_map::BTreeMap};
 
   use coins_pallet::{Config as CoinsConfig, Pallet as Coins};
   use dex_pallet::{Config as DexConfig, Pallet as Dex};
@@ -59,6 +59,7 @@ pub mod pallet {
     NetworkHasEconomicSecurity,
     NoValueForCoin,
     InsufficientAllocation,
+    AmountOverflow,
   }
 
   #[pallet::event]
@@ -399,9 +400,17 @@ pub mod pallet {
       let last_block = <frame_system::Pallet<T>>::block_number() - 1u32.into();
       let value = Dex::<T>::spot_price_for_block(last_block, balance.coin)
         .ok_or(Error::<T>::NoValueForCoin)?;
-      // TODO: may panic? It might be best for this math ops to return the result as is instead of
-      // doing an unwrap so that it can be properly dealt with.
-      let sri_amount = balance.amount.mul(value);
+
+      let sri_amount = Amount(
+        u64::try_from(
+          u128::from(balance.amount.0)
+            .checked_mul(u128::from(value.0))
+            .ok_or(Error::<T>::AmountOverflow)?
+            .checked_div(u128::from(10u64.pow(balance.coin.decimals())))
+            .ok_or(Error::<T>::AmountOverflow)?,
+        )
+        .map_err(|_| Error::<T>::AmountOverflow)?,
+      );
 
       // Mint
       Coins::<T>::mint(to, Balance { coin: Coin::Serai, amount: sri_amount })?;
