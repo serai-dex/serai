@@ -33,7 +33,7 @@ impl AsMut<[u8]> for OutputId {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Output(WalletOutput);
+pub(crate) struct Output(pub(crate) WalletOutput);
 
 impl Output {
   pub(crate) fn new(output: WalletOutput) -> Self {

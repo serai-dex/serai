@@ -5105,6 +5105,7 @@ dependencies = [
  "hex",
  "modular-frost",
  "monero-address",
+ "monero-clsag",
  "monero-rpc",
  "monero-serai",
  "monero-simple-request-rpc",
@@ -8534,8 +8535,10 @@ dependencies = [
  "serai-processor-signers",
  "serai-processor-utxo-scheduler",
  "serai-processor-utxo-scheduler-primitives",
+ "serai-processor-view-keys",
  "tokio",
  "zalloc",
+ "zeroize",
 ]
 
 [[package]]

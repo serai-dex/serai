@@ -83,7 +83,7 @@ impl scheduler::SignableTransaction for SignableTransaction {
 pub(crate) struct Eventuality {
   id: [u8; 32],
   singular_spent_output: Option<OutputId>,
-  eventuality: MEventuality,
+  pub(crate) eventuality: MEventuality,
 }
 
 impl primitives::Eventuality for Eventuality {

@@ -54,7 +54,7 @@ impl ScannerFeed for Rpc {
     &self,
     number: u64,
   ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
-    async move{todo!("TODO")}
+    async move { todo!("TODO") }
   }
 
   fn unchecked_block_header_by_number(
