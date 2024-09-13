@@ -1,3 +1,4 @@
+use core::future::Future;
 use std::collections::HashSet;
 
 use ciphersuite::{group::GroupEncoding, Ristretto};
@@ -75,114 +76,115 @@ impl<D: Db, E: GroupEncoding> BatchSignerTask<D, E> {
   }
 }
 
-#[async_trait::async_trait]
 impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
-  async fn run_iteration(&mut self) -> Result<bool, String> {
-    let mut iterated = false;
+  fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, String>> {
+    async move {
+      let mut iterated = false;
 
-    // Check for new batches to sign
-    loop {
-      let mut txn = self.db.txn();
-      let Some(batch) = BatchesToSign::try_recv(&mut txn, &self.external_key) else {
-        break;
-      };
-      iterated = true;
+      // Check for new batches to sign
+      loop {
+        let mut txn = self.db.txn();
+        let Some(batch) = BatchesToSign::try_recv(&mut txn, &self.external_key) else {
+          break;
+        };
+        iterated = true;
 
-      // Save this to the database as a transaction to sign
-      self.active_signing_protocols.insert(batch.id);
-      ActiveSigningProtocols::set(
-        &mut txn,
-        self.session,
-        &self.active_signing_protocols.iter().copied().collect(),
-      );
-      Batches::set(&mut txn, batch.id, &batch);
+        // Save this to the database as a transaction to sign
+        self.active_signing_protocols.insert(batch.id);
+        ActiveSigningProtocols::set(
+          &mut txn,
+          self.session,
+          &self.active_signing_protocols.iter().copied().collect(),
+        );
+        Batches::set(&mut txn, batch.id, &batch);
 
-      let mut machines = Vec::with_capacity(self.keys.len());
-      for keys in &self.keys {
-        machines.push(WrappedSchnorrkelMachine::new(keys.clone(), batch_message(&batch)));
-      }
-      for msg in self.attempt_manager.register(VariantSignId::Batch(batch.id), machines) {
-        BatchSignerToCoordinatorMessages::send(&mut txn, self.session, &msg);
-      }
-
-      txn.commit();
-    }
-
-    // Check for acknowledged Batches (meaning we should no longer sign for these Batches)
-    loop {
-      let mut txn = self.db.txn();
-      let Some(id) = AcknowledgedBatches::try_recv(&mut txn, &self.external_key) else {
-        break;
-      };
-
-      {
-        let last_acknowledged = LastAcknowledgedBatch::get(&txn);
-        if Some(id) > last_acknowledged {
-          LastAcknowledgedBatch::set(&mut txn, &id);
+        let mut machines = Vec::with_capacity(self.keys.len());
+        for keys in &self.keys {
+          machines.push(WrappedSchnorrkelMachine::new(keys.clone(), batch_message(&batch)));
         }
+        for msg in self.attempt_manager.register(VariantSignId::Batch(batch.id), machines) {
+          BatchSignerToCoordinatorMessages::send(&mut txn, self.session, &msg);
+        }
+
+        txn.commit();
       }
 
-      /*
-        We may have yet to register this signing protocol.
+      // Check for acknowledged Batches (meaning we should no longer sign for these Batches)
+      loop {
+        let mut txn = self.db.txn();
+        let Some(id) = AcknowledgedBatches::try_recv(&mut txn, &self.external_key) else {
+          break;
+        };
 
-        While `BatchesToSign` is populated before `AcknowledgedBatches`, we could theoretically have
-        `BatchesToSign` populated with a new batch _while iterating over `AcknowledgedBatches`_, and
-        then have `AcknowledgedBatched` populated. In that edge case, we will see the
-        acknowledgement notification before we see the transaction.
-
-        In such a case, we break (dropping the txn, re-queueing the acknowledgement notification).
-        On the task's next iteration, we'll process the Batch from `BatchesToSign` and be
-        able to make progress.
-      */
-      if !self.active_signing_protocols.remove(&id) {
-        break;
-      }
-      iterated = true;
-
-      // Since it was, remove this as an active signing protocol
-      ActiveSigningProtocols::set(
-        &mut txn,
-        self.session,
-        &self.active_signing_protocols.iter().copied().collect(),
-      );
-      // Clean up the database
-      Batches::del(&mut txn, id);
-      SignedBatches::del(&mut txn, id);
-
-      // We retire with a txn so we either successfully flag this Batch as acknowledged, and
-      // won't re-register it (making this retire safe), or we don't flag it, meaning we will
-      // re-register it, yet that's safe as we have yet to retire it
-      self.attempt_manager.retire(&mut txn, VariantSignId::Batch(id));
-
-      txn.commit();
-    }
-
-    // Handle any messages sent to us
-    loop {
-      let mut txn = self.db.txn();
-      let Some(msg) = CoordinatorToBatchSignerMessages::try_recv(&mut txn, self.session) else {
-        break;
-      };
-      iterated = true;
-
-      match self.attempt_manager.handle(msg) {
-        Response::Messages(msgs) => {
-          for msg in msgs {
-            BatchSignerToCoordinatorMessages::send(&mut txn, self.session, &msg);
+        {
+          let last_acknowledged = LastAcknowledgedBatch::get(&txn);
+          if Some(id) > last_acknowledged {
+            LastAcknowledgedBatch::set(&mut txn, &id);
           }
         }
-        Response::Signature { id, signature } => {
-          let VariantSignId::Batch(id) = id else { panic!("BatchSignerTask signed a non-Batch") };
-          let batch =
-            Batches::get(&txn, id).expect("signed a Batch we didn't save to the database");
-          let signed_batch = SignedBatch { batch, signature: signature.into() };
-          SignedBatches::set(&mut txn, signed_batch.batch.id, &signed_batch);
+
+        /*
+          We may have yet to register this signing protocol.
+
+          While `BatchesToSign` is populated before `AcknowledgedBatches`, we could theoretically
+          have `BatchesToSign` populated with a new batch _while iterating over
+          `AcknowledgedBatches`_, and then have `AcknowledgedBatched` populated. In that edge case,
+          we will see the acknowledgement notification before we see the transaction.
+
+          In such a case, we break (dropping the txn, re-queueing the acknowledgement notification).
+          On the task's next iteration, we'll process the Batch from `BatchesToSign` and be
+          able to make progress.
+        */
+        if !self.active_signing_protocols.remove(&id) {
+          break;
         }
+        iterated = true;
+
+        // Since it was, remove this as an active signing protocol
+        ActiveSigningProtocols::set(
+          &mut txn,
+          self.session,
+          &self.active_signing_protocols.iter().copied().collect(),
+        );
+        // Clean up the database
+        Batches::del(&mut txn, id);
+        SignedBatches::del(&mut txn, id);
+
+        // We retire with a txn so we either successfully flag this Batch as acknowledged, and
+        // won't re-register it (making this retire safe), or we don't flag it, meaning we will
+        // re-register it, yet that's safe as we have yet to retire it
+        self.attempt_manager.retire(&mut txn, VariantSignId::Batch(id));
+
+        txn.commit();
       }
 
-      txn.commit();
-    }
+      // Handle any messages sent to us
+      loop {
+        let mut txn = self.db.txn();
+        let Some(msg) = CoordinatorToBatchSignerMessages::try_recv(&mut txn, self.session) else {
+          break;
+        };
+        iterated = true;
 
-    Ok(iterated)
+        match self.attempt_manager.handle(msg) {
+          Response::Messages(msgs) => {
+            for msg in msgs {
+              BatchSignerToCoordinatorMessages::send(&mut txn, self.session, &msg);
+            }
+          }
+          Response::Signature { id, signature } => {
+            let VariantSignId::Batch(id) = id else { panic!("BatchSignerTask signed a non-Batch") };
+            let batch =
+              Batches::get(&txn, id).expect("signed a Batch we didn't save to the database");
+            let signed_batch = SignedBatch { batch, signature: signature.into() };
+            SignedBatches::set(&mut txn, signed_batch.batch.id, &signed_batch);
+          }
+        }
+
+        txn.commit();
+      }
+
+      Ok(iterated)
+    }
   }
 }

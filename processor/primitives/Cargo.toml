@@ -17,8 +17,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-async-trait = { version = "0.1", default-features = false }
-
 group = { version = "0.13", default-features = false }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }

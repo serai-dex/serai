@@ -31,7 +31,6 @@ impl<D: Db> fmt::Debug for Block<D> {
   }
 }
 
-#[async_trait::async_trait]
 impl<D: Db> primitives::Block for Block<D> {
   type Header = BlockHeader;
 

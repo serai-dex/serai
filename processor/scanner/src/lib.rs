@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use core::{marker::PhantomData, fmt::Debug};
+use core::{marker::PhantomData, future::Future, fmt::Debug};
 use std::{io, collections::HashMap};
 
 use group::GroupEncoding;
@@ -59,7 +59,6 @@ impl<B: Block> BlockExt for B {
 /// A feed usable to scan a blockchain.
 ///
 /// This defines the primitive types used, along with various getters necessary for indexing.
-#[async_trait::async_trait]
 pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// The ID of the network being scanned for.
   const NETWORK: NetworkId;
@@ -110,38 +109,43 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   ///
   /// The block number is its zero-indexed position within a linear view of the external network's
   /// consensus. The genesis block accordingly has block number 0.
-  async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError>;
+  fn latest_finalized_block_number(
+    &self,
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>>;
 
   /// Fetch the timestamp of a block (represented in seconds since the epoch).
   ///
   /// This must be monotonically incrementing. Two blocks may share a timestamp.
-  async fn time_of_block(&self, number: u64) -> Result<u64, Self::EphemeralError>;
+  fn time_of_block(
+    &self,
+    number: u64,
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>>;
 
   /// Fetch a block header by its number.
   ///
   /// This does not check the returned BlockHeader is the header for the block we indexed.
-  async fn unchecked_block_header_by_number(
+  fn unchecked_block_header_by_number(
     &self,
     number: u64,
-  ) -> Result<<Self::Block as Block>::Header, Self::EphemeralError>;
+  ) -> impl Send + Future<Output = Result<<Self::Block as Block>::Header, Self::EphemeralError>>;
 
   /// Fetch a block by its number.
   ///
   /// This does not check the returned Block is the block we indexed.
-  async fn unchecked_block_by_number(
+  fn unchecked_block_by_number(
     &self,
     number: u64,
-  ) -> Result<Self::Block, Self::EphemeralError>;
+  ) -> impl Send + Future<Output = Result<Self::Block, Self::EphemeralError>>;
 
   /// Fetch a block by its number.
   ///
   /// Panics if the block requested wasn't indexed.
-  async fn block_by_number(
+  fn block_by_number(
     &self,
     getter: &(impl Send + Sync + Get),
     number: u64,
-  ) -> Result<Self::Block, String> {
-    let block = match self.unchecked_block_by_number(number).await {
+  ) -> impl Send + Future<Output = Result<Self::Block, String>> {
+    async move {let block = match self.unchecked_block_by_number(number).await {
       Ok(block) => block,
       Err(e) => Err(format!("couldn't fetch block {number}: {e:?}"))?,
     };
@@ -159,7 +163,7 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
       }
     }
 
-    Ok(block)
+    Ok(block)}
   }
 
   /// The dust threshold for the specified coin.
@@ -171,11 +175,11 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// The cost to aggregate an input as of the specified block.
   ///
   /// This is defined as the transaction fee for a 2-input, 1-output transaction.
-  async fn cost_to_aggregate(
+  fn cost_to_aggregate(
     &self,
     coin: Coin,
     reference_block: &Self::Block,
-  ) -> Result<Amount, Self::EphemeralError>;
+  ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>>;
 }
 
 /// The key type for this ScannerFeed.

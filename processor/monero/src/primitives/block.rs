@@ -24,7 +24,6 @@ impl primitives::BlockHeader for BlockHeader {
 #[derive(Clone, Debug)]
 pub(crate) struct Block(pub(crate) MBlock, Vec<Transaction>);
 
-#[async_trait::async_trait]
 impl primitives::Block for Block {
   type Header = BlockHeader;
 

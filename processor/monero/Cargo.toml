@@ -17,7 +17,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-async-trait = { version = "0.1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }

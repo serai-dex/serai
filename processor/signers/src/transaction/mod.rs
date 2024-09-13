@@ -1,3 +1,4 @@
+use core::future::Future;
 use std::{
   collections::HashSet,
   time::{Duration, Instant},
@@ -88,11 +89,10 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
   }
 }
 
-#[async_trait::async_trait]
 impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>> ContinuallyRan
   for TransactionSignerTask<D, ST, P>
 {
-  async fn run_iteration(&mut self) -> Result<bool, String> {
+  fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, String>> {async{
     let mut iterated = false;
 
     // Check for new transactions to sign
@@ -232,4 +232,5 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
 
     Ok(iterated)
   }
+}
 }

@@ -1,3 +1,5 @@
+use core::future::Future;
+
 use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 
 use serai_client::primitives::{NetworkId, Coin, Amount};
@@ -18,7 +20,6 @@ pub(crate) struct Rpc<D: Db> {
   pub(crate) rpc: BRpc,
 }
 
-#[async_trait::async_trait]
 impl<D: Db> ScannerFeed for Rpc<D> {
   const NETWORK: NetworkId = NetworkId::Bitcoin;
   // 6 confirmations is widely accepted as secure and shouldn't occur
@@ -32,71 +33,89 @@ impl<D: Db> ScannerFeed for Rpc<D> {
 
   type EphemeralError = RpcError;
 
-  async fn latest_finalized_block_number(&self) -> Result<u64, Self::EphemeralError> {
-    db::LatestBlockToYieldAsFinalized::get(&self.db).ok_or(RpcError::ConnectionError)
+  fn latest_finalized_block_number(
+    &self,
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
+    async move { db::LatestBlockToYieldAsFinalized::get(&self.db).ok_or(RpcError::ConnectionError) }
   }
 
-  async fn time_of_block(&self, number: u64) -> Result<u64, Self::EphemeralError> {
-    let number = usize::try_from(number).unwrap();
-
-    /*
-      The block time isn't guaranteed to be monotonic. It is guaranteed to be greater than the
-      median time of prior blocks, as detailed in BIP-0113 (a BIP which used that fact to improve
-      CLTV). This creates a monotonic median time which we use as the block time.
-    */
-    // This implements `GetMedianTimePast`
-    let median = {
-      const MEDIAN_TIMESPAN: usize = 11;
-      let mut timestamps = Vec::with_capacity(MEDIAN_TIMESPAN);
-      for i in number.saturating_sub(MEDIAN_TIMESPAN) .. number {
-        timestamps.push(self.rpc.get_block(&self.rpc.get_block_hash(i).await?).await?.header.time);
-      }
-      timestamps.sort();
-      timestamps[timestamps.len() / 2]
-    };
-
-    /*
-      This block's timestamp is guaranteed to be greater than this median:
-        https://github.com/bitcoin/bitcoin/blob/0725a374941355349bb4bc8a79dad1affb27d3b9
-          /src/validation.cpp#L4182-L4184
-
-      This does not guarantee the median always increases however. Take the following trivial
-      example, as the window is initially built:
-
-      0 block has time 0   // Prior blocks: []
-      1 block has time 1   // Prior blocks: [0]
-      2 block has time 2   // Prior blocks: [0, 1]
-      3 block has time 2   // Prior blocks: [0, 1, 2]
-
-      These two blocks have the same time (both greater than the median of their prior blocks) and
-      the same median.
-
-      The median will never decrease however. The values pushed onto the window will always be
-      greater than the median. If a value greater than the median is popped, the median will remain
-      the same (due to the counterbalance of the pushed value). If a value less than the median is
-      popped, the median will increase (either to another instance of the same value, yet one
-      closer to the end of the repeating sequence, or to a higher value).
-    */
-    Ok(median.into())
-  }
-
-  async fn unchecked_block_header_by_number(
+  fn time_of_block(
     &self,
     number: u64,
-  ) -> Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError> {
-    Ok(BlockHeader(
-      self.rpc.get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?).await?.header,
-    ))
+  ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
+    async move {
+      let number = usize::try_from(number).unwrap();
+
+      /*
+        The block time isn't guaranteed to be monotonic. It is guaranteed to be greater than the
+        median time of prior blocks, as detailed in BIP-0113 (a BIP which used that fact to improve
+        CLTV). This creates a monotonic median time which we use as the block time.
+      */
+      // This implements `GetMedianTimePast`
+      let median = {
+        const MEDIAN_TIMESPAN: usize = 11;
+        let mut timestamps = Vec::with_capacity(MEDIAN_TIMESPAN);
+        for i in number.saturating_sub(MEDIAN_TIMESPAN) .. number {
+          timestamps
+            .push(self.rpc.get_block(&self.rpc.get_block_hash(i).await?).await?.header.time);
+        }
+        timestamps.sort();
+        timestamps[timestamps.len() / 2]
+      };
+
+      /*
+        This block's timestamp is guaranteed to be greater than this median:
+          https://github.com/bitcoin/bitcoin/blob/0725a374941355349bb4bc8a79dad1affb27d3b9
+            /src/validation.cpp#L4182-L4184
+
+        This does not guarantee the median always increases however. Take the following trivial
+        example, as the window is initially built:
+
+        0 block has time 0   // Prior blocks: []
+        1 block has time 1   // Prior blocks: [0]
+        2 block has time 2   // Prior blocks: [0, 1]
+        3 block has time 2   // Prior blocks: [0, 1, 2]
+
+        These two blocks have the same time (both greater than the median of their prior blocks) and
+        the same median.
+
+        The median will never decrease however. The values pushed onto the window will always be
+        greater than the median. If a value greater than the median is popped, the median will
+        remain the same (due to the counterbalance of the pushed value). If a value less than the
+        median is popped, the median will increase (either to another instance of the same value,
+        yet one closer to the end of the repeating sequence, or to a higher value).
+      */
+      Ok(median.into())
+    }
   }
 
-  async fn unchecked_block_by_number(
+  fn unchecked_block_header_by_number(
     &self,
     number: u64,
-  ) -> Result<Self::Block, Self::EphemeralError> {
-    Ok(Block(
-      self.db.clone(),
-      self.rpc.get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?).await?,
-    ))
+  ) -> impl Send
+       + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
+  {
+    async move {
+      Ok(BlockHeader(
+        self
+          .rpc
+          .get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?)
+          .await?
+          .header,
+      ))
+    }
+  }
+
+  fn unchecked_block_by_number(
+    &self,
+    number: u64,
+  ) -> impl Send + Future<Output = Result<Self::Block, Self::EphemeralError>> {
+    async move {
+      Ok(Block(
+        self.db.clone(),
+        self.rpc.get_block(&self.rpc.get_block_hash(number.try_into().unwrap()).await?).await?,
+      ))
+    }
   }
 
   fn dust(coin: Coin) -> Amount {
@@ -137,22 +156,26 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     Amount(10_000)
   }
 
-  async fn cost_to_aggregate(
+  fn cost_to_aggregate(
     &self,
     coin: Coin,
     _reference_block: &Self::Block,
-  ) -> Result<Amount, Self::EphemeralError> {
-    assert_eq!(coin, Coin::Bitcoin);
-    // TODO
-    Ok(Amount(0))
+  ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
+    async move {
+      assert_eq!(coin, Coin::Bitcoin);
+      // TODO
+      Ok(Amount(0))
+    }
   }
 }
 
-#[async_trait::async_trait]
 impl<D: Db> TransactionPublisher<Transaction> for Rpc<D> {
   type EphemeralError = RpcError;
 
-  async fn publish(&self, tx: Transaction) -> Result<(), Self::EphemeralError> {
-    self.rpc.send_raw_transaction(&tx.0).await.map(|_| ())
+  fn publish(
+    &self,
+    tx: Transaction,
+  ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    async move { self.rpc.send_raw_transaction(&tx.0).await.map(|_| ()) }
   }
 }
