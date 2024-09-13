@@ -8123,7 +8123,6 @@ dependencies = [
 name = "serai-bitcoin-processor"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bitcoin-serai",
  "borsh",
  "ciphersuite",
@@ -8349,7 +8348,6 @@ version = "0.1.0"
 name = "serai-ethereum-processor"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "const-hex",
  "env_logger",
@@ -8514,7 +8512,6 @@ dependencies = [
 name = "serai-monero-processor"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "ciphersuite",
  "dalek-ff-group",
@@ -8644,7 +8641,6 @@ dependencies = [
 name = "serai-processor-bin"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "ciphersuite",
  "dkg",
@@ -8718,7 +8714,6 @@ dependencies = [
 name = "serai-processor-primitives"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "group",
  "log",
@@ -8732,7 +8727,6 @@ dependencies = [
 name = "serai-processor-scanner"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "group",
  "hex",
@@ -8762,7 +8756,6 @@ dependencies = [
 name = "serai-processor-signers"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "borsh",
  "ciphersuite",
  "frost-schnorrkel",

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use ciphersuite::{Ciphersuite, Ed25519};
 
-use monero_wallet::{transaction::Transaction, block::Block as MBlock};
+use monero_wallet::{transaction::Transaction, block::Block as MBlock, ViewPairError, GuaranteedViewPair, GuaranteedScanner};
 
 use serai_client::networks::monero::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 
-use crate::{output::Output, transaction::Eventuality};
+use crate::{EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS, output::Output, transaction::Eventuality};
 
 #[derive(Clone, Debug)]
 pub(crate) struct BlockHeader(pub(crate) MBlock);
@@ -37,6 +37,15 @@ impl primitives::Block for Block {
   }
 
   fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output> {
+    let view_pair = match GuaranteedViewPair::new(key.0, additional_key) {
+      Ok(view_pair) => view_pair,
+      Err(ViewPairError::TorsionedSpendKey) => unreachable!("dalek_ff_group::EdwardsPoint has torsion"),
+  };
+    let mut scanner = GuaranteedScanner::new(view_pair);
+    scanner.register_subaddress(EXTERNAL_SUBADDRESS.unwrap());
+    scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
+    scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
+    scanner.register_subaddress(FORWARDED_SUBADDRESS.unwrap());
     todo!("TODO")
   }
 
