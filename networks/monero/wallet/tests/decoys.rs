@@ -16,9 +16,8 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 2000000000000);
       output
@@ -94,9 +93,8 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 2000000000000);
       output

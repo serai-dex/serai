@@ -1,7 +1,11 @@
 use monero_serai::transaction::Transaction;
+use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{rpc::Rpc, extra::MAX_ARBITRARY_DATA_SIZE, send::SendError};
 
 mod runner;
+
+#[allow(clippy::upper_case_acronyms)]
+type SRR = SimpleRequestRpc;
 
 test!(
   add_single_data_less_than_max,
@@ -15,9 +19,8 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), (arbitrary_data,))
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, data: (Vec<u8>,)| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SRR, block, tx: Transaction, mut scanner: Scanner, data: (Vec<u8>,)| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data()[0], data.0);
@@ -42,9 +45,8 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), data)
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, data: Vec<Vec<u8>>| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SRR, block, tx: Transaction, mut scanner: Scanner, data: Vec<Vec<u8>>| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data(), data);
@@ -70,9 +72,8 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), data)
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, data: Vec<u8>| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SRR, block, tx: Transaction, mut scanner: Scanner, data: Vec<u8>| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
       assert_eq!(output.arbitrary_data(), vec![data]);

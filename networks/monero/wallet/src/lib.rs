@@ -23,7 +23,7 @@ pub use monero_rpc as rpc;
 pub use monero_address as address;
 
 mod view_pair;
-pub use view_pair::{ViewPair, GuaranteedViewPair};
+pub use view_pair::{ViewPairError, ViewPair, GuaranteedViewPair};
 
 /// Structures and functionality for working with transactions' extra fields.
 pub mod extra;
@@ -33,7 +33,7 @@ pub(crate) mod output;
 pub use output::WalletOutput;
 
 mod scan;
-pub use scan::{Scanner, GuaranteedScanner};
+pub use scan::{ScanError, Scanner, GuaranteedScanner};
 
 mod decoys;
 pub use decoys::OutputWithDecoys;

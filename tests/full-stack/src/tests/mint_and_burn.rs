@@ -357,8 +357,7 @@ async fn mint_and_burn_test() {
       let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE)).unwrap();
       let mut scanner = Scanner::new(view_pair.clone());
       let output = scanner
-        .scan(&rpc, &rpc.get_block_by_number(1).await.unwrap())
-        .await
+        .scan(rpc.get_scannable_block_by_number(1).await.unwrap())
         .unwrap()
         .additional_timelock_satisfied_by(rpc.get_height().await.unwrap(), 0)
         .swap_remove(0);
@@ -587,7 +586,10 @@ async fn mint_and_burn_test() {
       while i < (5 * 6) {
         if let Ok(block) = rpc.get_block_by_number(start_monero_block).await {
           start_monero_block += 1;
-          let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+          let outputs = scanner
+            .scan(rpc.get_scannable_block(block.clone()).await.unwrap())
+            .unwrap()
+            .not_additionally_locked();
           if !outputs.is_empty() {
             assert_eq!(outputs.len(), 1);
 

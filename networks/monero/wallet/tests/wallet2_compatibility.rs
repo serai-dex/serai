@@ -106,6 +106,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
 
   // unlock it
   let block = runner::mine_until_unlocked(&daemon_rpc, &wallet_rpc_addr, tx_hash).await;
+  let block = daemon_rpc.get_scannable_block(block).await.unwrap();
 
   // Create the scanner
   let mut scanner = Scanner::new(view_pair);
@@ -114,8 +115,7 @@ async fn from_wallet_rpc_to_self(spec: AddressSpec) {
   }
 
   // Retrieve it and scan it
-  let output =
-    scanner.scan(&daemon_rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+  let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
   assert_eq!(output.transaction(), tx_hash);
 
   runner::check_weight_and_fee(&daemon_rpc.get_transaction(tx_hash).await.unwrap(), fee_rate);

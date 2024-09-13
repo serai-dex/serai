@@ -520,7 +520,13 @@ impl Network for Monero {
 
   async fn get_outputs(&self, block: &Block, key: EdwardsPoint) -> Vec<Output> {
     let outputs = loop {
-      match Self::scanner(key).scan(&self.rpc, block).await {
+      match self
+        .rpc
+        .get_scannable_block(block.clone())
+        .await
+        .map_err(|e| format!("{e:?}"))
+        .and_then(|block| Self::scanner(key).scan(block).map_err(|e| format!("{e:?}")))
+      {
         Ok(outputs) => break outputs,
         Err(e) => {
           log::error!("couldn't scan block {}: {e:?}", hex::encode(block.id()));
@@ -738,8 +744,10 @@ impl Network for Monero {
     }
 
     let new_block = self.rpc.get_block_by_number(new_block).await.unwrap();
-    let mut outputs =
-      Self::test_scanner().scan(&self.rpc, &new_block).await.unwrap().ignore_additional_timelock();
+    let mut outputs = Self::test_scanner()
+      .scan(self.rpc.get_scannable_block(new_block.clone()).await.unwrap())
+      .unwrap()
+      .ignore_additional_timelock();
     let output = outputs.swap_remove(0);
 
     let amount = output.commitment().amount;

@@ -429,8 +429,7 @@ impl Wallet {
             block.transactions.contains(&last_tx.1)
           {
             outputs = Scanner::new(view_pair.clone())
-              .scan(&rpc, &block)
-              .await
+              .scan(rpc.get_scannable_block(block).await.unwrap())
               .unwrap()
               .ignore_additional_timelock();
           }
