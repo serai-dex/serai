@@ -14,7 +14,6 @@ use serai_db::Db;
 use primitives::{OutputType, ReceivedOutput, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
 use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
-use transaction_chaining_scheduler::{EffectedReceivedOutputs, Scheduler as GenericScheduler};
 
 use crate::{
   scan::{offsets_for_key, scanner},
@@ -40,11 +39,11 @@ fn signable_transaction<D: Db>(
 ) -> Result<(SignableTransaction, BSignableTransaction), TransactionError> {
   assert!(
     inputs.len() <
-      <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_INPUTS
+      <Planner as TransactionPlanner<Rpc<D>, ()>>::MAX_INPUTS
   );
   assert!(
     (payments.len() + usize::from(u8::from(change.is_some()))) <
-      <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_OUTPUTS
+      <Planner as TransactionPlanner<Rpc<D>, ()>>::MAX_OUTPUTS
   );
 
   let inputs = inputs.into_iter().map(|input| input.output).collect::<Vec<_>>();
@@ -73,7 +72,7 @@ fn signable_transaction<D: Db>(
   ));
 
   let change = change
-    .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
+    .map(<Planner as TransactionPlanner<Rpc<D>, ()>>::change_address);
 
   BSignableTransaction::new(
     inputs.clone(),
@@ -90,7 +89,7 @@ fn signable_transaction<D: Db>(
 }
 
 pub(crate) struct Planner;
-impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner {
+impl TransactionPlanner<Rpc, ()> for Planner {
   type FeeRate = u64;
 
   type SignableTransaction = SignableTransaction;
@@ -157,7 +156,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
     inputs: Vec<OutputFor<Rpc<D>>>,
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
     change: Option<KeyFor<Rpc<D>>>,
-  ) -> PlannedTransaction<Rpc<D>, Self::SignableTransaction, EffectedReceivedOutputs<Rpc<D>>> {
+  ) -> PlannedTransaction<Rpc<D>, Self::SignableTransaction, ()> {
     let key = inputs.first().unwrap().key();
     for input in &inputs {
       assert_eq!(key, input.key());
@@ -168,23 +167,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
       Ok(tx) => PlannedTransaction {
         signable: tx.0,
         eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },
-        auxilliary: EffectedReceivedOutputs({
-          let tx = tx.1.transaction();
-          let scanner = scanner(key);
-
-          let mut res = vec![];
-          for output in scanner.scan_transaction(tx) {
-            res.push(Output::new_with_presumed_origin(
-              key,
-              tx,
-              // It shouldn't matter if this is wrong as we should never try to return these
-              // We still provide an accurate value to ensure a lack of discrepancies
-              Some(Address::new(inputs[0].output.output().script_pubkey.clone()).unwrap()),
-              output,
-            ));
-          }
-          res
-        }),
+        auxilliary: (),
       },
       Err(
         TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
@@ -202,4 +185,4 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
   }
 }
 
-pub(crate) type Scheduler<D> = GenericScheduler<Rpc<D>, Planner>;
+pub(crate) type Scheduler = utxo_standard_scheduler::Scheduler<Rpc, Planner>;
