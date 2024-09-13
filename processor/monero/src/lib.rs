@@ -54,64 +54,6 @@ impl SignableTransactionTrait for SignableTransaction {
   }
 }
 
-#[async_trait]
-impl BlockTrait<Monero> for Block {
-  type Id = [u8; 32];
-  fn id(&self) -> Self::Id {
-    self.hash()
-  }
-
-  fn parent(&self) -> Self::Id {
-    self.header.previous
-  }
-
-  async fn time(&self, rpc: &Monero) -> u64 {
-    // Constant from Monero
-    const BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW: usize = 60;
-
-    // If Monero doesn't have enough blocks to build a window, it doesn't define a network time
-    if (self.number().unwrap() + 1) < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
-      // Use the block number as the time
-      return u64::try_from(self.number().unwrap()).unwrap();
-    }
-
-    let mut timestamps = vec![self.header.timestamp];
-    let mut parent = self.parent();
-    while timestamps.len() < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
-      let mut parent_block;
-      while {
-        parent_block = rpc.rpc.get_block(parent).await;
-        parent_block.is_err()
-      } {
-        log::error!("couldn't get parent block when trying to get block time: {parent_block:?}");
-        sleep(Duration::from_secs(5)).await;
-      }
-      let parent_block = parent_block.unwrap();
-      timestamps.push(parent_block.header.timestamp);
-      parent = parent_block.parent();
-
-      if parent_block.number().unwrap() == 0 {
-        break;
-      }
-    }
-    timestamps.sort();
-
-    // Because 60 has two medians, Monero's epee picks the in-between value, calculated by the
-    // following formula (from the "get_mid" function)
-    let n = timestamps.len() / 2;
-    let a = timestamps[n - 1];
-    let b = timestamps[n];
-    #[rustfmt::skip] // Enables Ctrl+F'ing for everything after the `= `
-    let res = (a/2) + (b/2) + ((a - 2*(a/2)) + (b - 2*(b/2)))/2;
-    // Technically, res may be 1 if all prior blocks had a timestamp by 0, which would break
-    // monotonicity with our above definition of height as time
-    // Monero also solely requires the block's time not be less than the median, it doesn't ensure
-    // it advances the median forward
-    // Ensure monotonicity despite both these issues by adding the block number to the median time
-    res + u64::try_from(self.number().unwrap()).unwrap()
-  }
-}
-
 enum MakeSignableTransactionResult {
   Fee(u64),
   SignableTransaction(MSignableTransaction),
@@ -329,9 +271,6 @@ impl Network for Monero {
   const CONFIRMATIONS: usize = 10;
 
   const MAX_OUTPUTS: usize = 16;
-
-  // 0.01 XMR
-  const DUST: u64 = 10000000000;
 
   // TODO
   const COST_TO_AGGREGATE: u64 = 0;

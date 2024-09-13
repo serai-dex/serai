@@ -5,8 +5,8 @@ use zeroize::Zeroizing;
 use ciphersuite::{Ciphersuite, Ed25519};
 
 use monero_wallet::{
-  block::Block as MBlock, rpc::ScannableBlock as MScannableBlock,
-  ViewPairError, GuaranteedViewPair, ScanError, GuaranteedScanner,
+  block::Block as MBlock, rpc::ScannableBlock as MScannableBlock, ViewPairError,
+  GuaranteedViewPair, ScanError, GuaranteedScanner,
 };
 
 use serai_client::networks::monero::Address;
@@ -58,8 +58,12 @@ impl primitives::Block for Block {
     scanner.register_subaddress(FORWARDED_SUBADDRESS.unwrap());
     match scanner.scan(self.0.clone()) {
       Ok(outputs) => outputs.not_additionally_locked().into_iter().map(Output).collect(),
-      Err(ScanError::UnsupportedProtocol(version)) => panic!("Monero unexpectedly hard-forked (version {version})"),
-      Err(ScanError::InvalidScannableBlock(reason)) => panic!("fetched an invalid scannable block from the RPC: {reason}"),
+      Err(ScanError::UnsupportedProtocol(version)) => {
+        panic!("Monero unexpectedly hard-forked (version {version})")
+      }
+      Err(ScanError::InvalidScannableBlock(reason)) => {
+        panic!("fetched an invalid scannable block from the RPC: {reason}")
+      }
     }
   }
 
@@ -76,10 +80,7 @@ impl primitives::Block for Block {
     for (hash, tx) in self.0.block.transactions.iter().zip(&self.0.transactions) {
       if let Some(eventuality) = eventualities.active_eventualities.get(&tx.prefix().extra) {
         if eventuality.eventuality.matches(tx) {
-          res.insert(
-            *hash,
-            eventualities.active_eventualities.remove(&tx.prefix().extra).unwrap(),
-          );
+          res.insert(*hash, eventualities.active_eventualities.remove(&tx.prefix().extra).unwrap());
         }
       }
     }
