@@ -4949,7 +4949,6 @@ dependencies = [
 name = "monero-rpc"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "curve25519-dalek",
  "hex",
  "monero-address",
@@ -5013,7 +5012,6 @@ dependencies = [
 name = "monero-simple-request-rpc"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "digest_auth",
  "hex",
  "monero-address",

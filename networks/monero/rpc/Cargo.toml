@@ -18,7 +18,6 @@ workspace = true
 [dependencies]
 std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
 
-async-trait = { version = "0.1", default-features = false }
 thiserror = { version = "1", default-features = false, optional = true }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
