@@ -11,6 +11,10 @@ rust-version = "1.80"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+rust-version = "1.80"
+
+[package.metadata.cargo-machete]
+ignored = ["monero-clsag"]
 
 [lints]
 workspace = true
