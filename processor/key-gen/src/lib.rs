@@ -43,7 +43,11 @@ pub trait KeyGenParams {
   >;
 
   /// Tweaks keys as necessary/beneficial.
-  fn tweak_keys(keys: &mut ThresholdKeys<Self::ExternalNetworkCiphersuite>);
+  ///
+  /// A default implementation which doesn't perform any tweaking is provided.
+  fn tweak_keys(keys: &mut ThresholdKeys<Self::ExternalNetworkCiphersuite>) {
+    let _ = keys;
+  }
 
   /// Encode keys as optimal.
   ///

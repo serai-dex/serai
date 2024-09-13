@@ -67,6 +67,12 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// The amount of confirmations a block must have to be considered finalized.
   ///
   /// This value must be at least `1`.
+  // This is distinct from `WINDOW_LENGTH` as it's only used for determining the lifetime of the
+  // key. The key switches to various stages of its lifetime depending on when user transactions
+  // will hit the Serai network (relative to the time they're made) and when outputs created by
+  // Serai become available again. If we set a long WINDOW_LENGTH, say two hours, that doesn't mean
+  // we expect user transactions made within a few minutes of a new key being declared to only
+  // appear in finalized blocks two hours later.
   const CONFIRMATIONS: u64;
 
   /// The amount of blocks to process in parallel.

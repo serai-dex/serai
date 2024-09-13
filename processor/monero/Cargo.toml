@@ -31,6 +31,7 @@ dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", 
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
 monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
 

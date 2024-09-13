@@ -21,7 +21,9 @@ pub(crate) struct Rpc<D: Db> {
 #[async_trait::async_trait]
 impl<D: Db> ScannerFeed for Rpc<D> {
   const NETWORK: NetworkId = NetworkId::Bitcoin;
+  // 6 confirmations is widely accepted as secure and shouldn't occur
   const CONFIRMATIONS: u64 = 6;
+  // The window length should be roughly an hour
   const WINDOW_LENGTH: u64 = 6;
 
   const TEN_MINUTES: u64 = 1;

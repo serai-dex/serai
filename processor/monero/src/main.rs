@@ -11,11 +11,11 @@ use monero_wallet::rpc::Rpc as MRpc;
 mod primitives;
 pub(crate) use crate::primitives::*;
 
-/*
 mod key_gen;
 use crate::key_gen::KeyGenParams;
 mod rpc;
 use rpc::Rpc;
+/*
 mod scheduler;
 use scheduler::Scheduler;
 
