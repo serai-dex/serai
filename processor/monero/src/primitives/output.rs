@@ -14,6 +14,8 @@ use serai_client::{
 
 use primitives::{OutputType, ReceivedOutput};
 
+use crate::{EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS};
+
 #[rustfmt::skip]
 #[derive(
   Clone, Copy, PartialEq, Eq, Default, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
@@ -44,7 +46,19 @@ impl ReceivedOutput<<Ed25519 as Ciphersuite>::G, Address> for Output {
   type TransactionId = [u8; 32];
 
   fn kind(&self) -> OutputType {
-    todo!("TODO")
+    if self.0.subaddress() == EXTERNAL_SUBADDRESS {
+      return OutputType::External;
+    }
+    if self.0.subaddress() == BRANCH_SUBADDRESS {
+      return OutputType::Branch;
+    }
+    if self.0.subaddress() == CHANGE_SUBADDRESS {
+      return OutputType::Change;
+    }
+    if self.0.subaddress() == FORWARDED_SUBADDRESS {
+      return OutputType::Forwarded;
+    }
+    unreachable!("scanned output to unknown subaddress");
   }
 
   fn id(&self) -> Self::Id {
