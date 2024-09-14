@@ -100,10 +100,11 @@ impl Change {
   ///
   /// 1) The change in the TX is shunted to the fee (making it fingerprintable).
   ///
-  /// 2) If there are two outputs in the TX, Monero would create a payment ID for the non-change
-  ///    output so an observer can't tell apart TXs with a payment ID from TXs without a payment
-  ///    ID. monero-wallet will simply not create a payment ID in this case, revealing it's a
-  ///    monero-wallet TX without change.
+  /// 2) In two-output transactions, where the payment address doesn't have a payment ID, wallet2
+  ///    includes an encrypted dummy payment ID for the non-change output in order to not allow
+  ///    differentiating if transactions send to addresses with payment IDs or not. monero-wallet
+  ///    includes a dummy payment ID which at least one recipient will identify as not the expected
+  ///    dummy payment ID, revealing to the recipient(s) the sender is using non-wallet2 software.
   pub fn fingerprintable(address: Option<MoneroAddress>) -> Change {
     if let Some(address) = address {
       Change(Some(ChangeEnum::AddressOnly(address)))
