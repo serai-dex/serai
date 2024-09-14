@@ -25,8 +25,6 @@ group = { version = "0.13", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-serai-primitives = { path = "../../../substrate/primitives", default-features = false, features = ["std"] }
-
 serai-db = { path = "../../../common/db" }
 
 primitives = { package = "serai-processor-primitives", path = "../../primitives" }

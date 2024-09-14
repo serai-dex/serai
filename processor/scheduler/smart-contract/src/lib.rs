@@ -29,49 +29,61 @@ pub trait SmartContract<S: ScannerFeed>: 'static + Send {
 
   /// Rotate from the retiring key to the new key.
   fn rotate(
+    &self,
     nonce: u64,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
   ) -> (Self::SignableTransaction, EventualityFor<S>);
+
   /// Fulfill the set of payments, dropping any not worth handling.
   fn fulfill(
+    &self,
     starting_nonce: u64,
+    key: KeyFor<S>,
     payments: Vec<Payment<AddressFor<S>>>,
   ) -> Vec<(Self::SignableTransaction, EventualityFor<S>)>;
 }
 
 /// A scheduler for a smart contract representing the Serai processor.
 #[allow(non_snake_case)]
-#[derive(Clone, Default)]
-pub struct Scheduler<S: ScannerFeed, SC: SmartContract<S>> {
+#[derive(Clone)]
+pub struct Scheduler<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> {
+  smart_contract: SC,
   _S: PhantomData<S>,
-  _SC: PhantomData<SC>,
 }
 
-fn fulfill_payments<S: ScannerFeed, SC: SmartContract<S>>(
-  txn: &mut impl DbTxn,
-  active_keys: &[(KeyFor<S>, LifetimeStage)],
-  payments: Vec<Payment<AddressFor<S>>>,
-) -> KeyScopedEventualities<S> {
-  let key = match active_keys[0].1 {
-    LifetimeStage::ActiveYetNotReporting |
-    LifetimeStage::Active |
-    LifetimeStage::UsingNewForChange => active_keys[0].0,
-    LifetimeStage::Forwarding | LifetimeStage::Finishing => active_keys[1].0,
-  };
-
-  let mut nonce = NextNonce::get(txn).unwrap_or(0);
-  let mut eventualities = Vec::with_capacity(1);
-  for (signable, eventuality) in SC::fulfill(nonce, payments) {
-    TransactionsToSign::<SC::SignableTransaction>::send(txn, &key, &signable);
-    nonce += 1;
-    eventualities.push(eventuality);
+impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> Scheduler<S, SC> {
+  /// Create a new scheduler.
+  pub fn new(smart_contract: SC) -> Self {
+    Self { smart_contract, _S: PhantomData }
   }
-  NextNonce::set(txn, &nonce);
-  HashMap::from([(key.to_bytes().as_ref().to_vec(), eventualities)])
+
+  fn fulfill_payments(
+    &self,
+    txn: &mut impl DbTxn,
+    active_keys: &[(KeyFor<S>, LifetimeStage)],
+    payments: Vec<Payment<AddressFor<S>>>,
+  ) -> KeyScopedEventualities<S> {
+    let key = match active_keys[0].1 {
+      LifetimeStage::ActiveYetNotReporting |
+      LifetimeStage::Active |
+      LifetimeStage::UsingNewForChange => active_keys[0].0,
+      LifetimeStage::Forwarding | LifetimeStage::Finishing => active_keys[1].0,
+    };
+
+    let mut nonce = NextNonce::get(txn).unwrap_or(0);
+    let mut eventualities = Vec::with_capacity(1);
+    for (signable, eventuality) in self.smart_contract.fulfill(nonce, key, payments) {
+      TransactionsToSign::<SC::SignableTransaction>::send(txn, &key, &signable);
+      nonce += 1;
+      eventualities.push(eventuality);
+    }
+    NextNonce::set(txn, &nonce);
+    HashMap::from([(key.to_bytes().as_ref().to_vec(), eventualities)])
+  }
 }
 
-impl<S: ScannerFeed, SC: SmartContract<S>> SchedulerTrait<S> for Scheduler<S, SC> {
+impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> SchedulerTrait<S> for Scheduler<S, SC> {
   type EphemeralError = ();
   type SignableTransaction = SC::SignableTransaction;
 
@@ -86,7 +98,7 @@ impl<S: ScannerFeed, SC: SmartContract<S>> SchedulerTrait<S> for Scheduler<S, SC
   ) -> impl Send + Future<Output = Result<KeyScopedEventualities<S>, Self::EphemeralError>> {
     async move {
       let nonce = NextNonce::get(txn).unwrap_or(0);
-      let (signable, eventuality) = SC::rotate(nonce, retiring_key, new_key);
+      let (signable, eventuality) = self.smart_contract.rotate(nonce, retiring_key, new_key);
       NextNonce::set(txn, &(nonce + 1));
       TransactionsToSign::<SC::SignableTransaction>::send(txn, &retiring_key, &signable);
       Ok(HashMap::from([(retiring_key.to_bytes().as_ref().to_vec(), vec![eventuality])]))
@@ -110,17 +122,19 @@ impl<S: ScannerFeed, SC: SmartContract<S>> SchedulerTrait<S> for Scheduler<S, SC
       assert!(update.forwards().is_empty());
 
       // Create the transactions for the returns
-      Ok(fulfill_payments::<S, SC>(
-        txn,
-        active_keys,
-        update
-          .returns()
-          .iter()
-          .map(|to_return| {
-            Payment::new(to_return.address().clone(), to_return.output().balance(), None)
-          })
-          .collect::<Vec<_>>(),
-      ))
+      Ok(
+        self.fulfill_payments(
+          txn,
+          active_keys,
+          update
+            .returns()
+            .iter()
+            .map(|to_return| {
+              Payment::new(to_return.address().clone(), to_return.output().balance(), None)
+            })
+            .collect::<Vec<_>>(),
+        ),
+      )
     }
   }
 
@@ -131,6 +145,6 @@ impl<S: ScannerFeed, SC: SmartContract<S>> SchedulerTrait<S> for Scheduler<S, SC
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,
   ) -> impl Send + Future<Output = Result<KeyScopedEventualities<S>, Self::EphemeralError>> {
-    async move { Ok(fulfill_payments::<S, SC>(txn, active_keys, payments)) }
+    async move { Ok(self.fulfill_payments(txn, active_keys, payments)) }
   }
 }
