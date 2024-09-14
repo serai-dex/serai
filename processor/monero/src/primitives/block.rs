@@ -1,21 +1,17 @@
 use std::collections::HashMap;
 
-use zeroize::Zeroizing;
-
 use ciphersuite::{Ciphersuite, Ed25519};
 
 use monero_wallet::{
-  block::Block as MBlock, rpc::ScannableBlock as MScannableBlock, ViewPairError,
-  GuaranteedViewPair, ScanError, GuaranteedScanner,
+  block::Block as MBlock, rpc::ScannableBlock as MScannableBlock, ScanError, GuaranteedScanner,
 };
 
 use serai_client::networks::monero::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
-use view_keys::view_key;
 use crate::{
-  EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS, output::Output,
-  transaction::Eventuality,
+  EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS, view_pair,
+  output::Output, transaction::Eventuality,
 };
 
 #[derive(Clone, Debug)]
@@ -45,17 +41,11 @@ impl primitives::Block for Block {
   }
 
   fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output> {
-    let view_pair = match GuaranteedViewPair::new(key.0, Zeroizing::new(*view_key::<Ed25519>(0))) {
-      Ok(view_pair) => view_pair,
-      Err(ViewPairError::TorsionedSpendKey) => {
-        unreachable!("dalek_ff_group::EdwardsPoint had torsion")
-      }
-    };
-    let mut scanner = GuaranteedScanner::new(view_pair);
-    scanner.register_subaddress(EXTERNAL_SUBADDRESS.unwrap());
-    scanner.register_subaddress(BRANCH_SUBADDRESS.unwrap());
-    scanner.register_subaddress(CHANGE_SUBADDRESS.unwrap());
-    scanner.register_subaddress(FORWARDED_SUBADDRESS.unwrap());
+    let mut scanner = GuaranteedScanner::new(view_pair(key));
+    scanner.register_subaddress(EXTERNAL_SUBADDRESS);
+    scanner.register_subaddress(BRANCH_SUBADDRESS);
+    scanner.register_subaddress(CHANGE_SUBADDRESS);
+    scanner.register_subaddress(FORWARDED_SUBADDRESS);
     match scanner.scan(self.0.clone()) {
       Ok(outputs) => outputs.not_additionally_locked().into_iter().map(Output).collect(),
       Err(ScanError::UnsupportedProtocol(version)) => {
