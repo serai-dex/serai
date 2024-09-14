@@ -8525,6 +8525,7 @@ dependencies = [
  "monero-simple-request-rpc",
  "monero-wallet",
  "parity-scale-codec",
+ "rand_chacha",
  "rand_core",
  "serai-client",
  "serai-db",

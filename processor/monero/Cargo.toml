@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 rand_core = { version = "0.6", default-features = false }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }

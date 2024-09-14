@@ -35,7 +35,7 @@ fn address_from_serai_key(key: <Secp256k1 as Ciphersuite>::G, kind: OutputType) 
 }
 
 fn signable_transaction<D: Db>(
-  fee_per_vbyte: u64,
+  _reference_block: &BlockFor<Rpc<D>>,
   inputs: Vec<OutputFor<Rpc<D>>>,
   payments: Vec<Payment<AddressFor<Rpc<D>>>>,
   change: Option<KeyFor<Rpc<D>>>,
@@ -49,12 +49,15 @@ fn signable_transaction<D: Db>(
       <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_OUTPUTS
   );
 
+  // TODO
+  let fee_per_vbyte = 1;
+
   let inputs = inputs.into_iter().map(|input| input.output).collect::<Vec<_>>();
 
   let mut payments = payments
     .into_iter()
     .map(|payment| {
-      (payment.address().clone(), {
+      (ScriptBuf::from(payment.address().clone()), {
         let balance = payment.balance();
         assert_eq!(balance.coin, Coin::Bitcoin);
         balance.amount.0
@@ -68,7 +71,7 @@ fn signable_transaction<D: Db>(
   */
   payments.push((
     // The generator is even so this is valid
-    Address::new(p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR).unwrap()).unwrap(),
+    p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR).unwrap(),
     // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
     // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
     bitcoin_serai::wallet::DUST,
@@ -79,11 +82,7 @@ fn signable_transaction<D: Db>(
 
   BSignableTransaction::new(
     inputs.clone(),
-    &payments
-      .iter()
-      .cloned()
-      .map(|(address, amount)| (ScriptBuf::from(address), amount))
-      .collect::<Vec<_>>(),
+    &payments,
     change.clone().map(ScriptBuf::from),
     None,
     fee_per_vbyte,
@@ -95,7 +94,6 @@ fn signable_transaction<D: Db>(
 pub(crate) struct Planner;
 impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner {
   type EphemeralError = ();
-  type FeeRate = u64;
 
   type SignableTransaction = SignableTransaction;
 
@@ -119,12 +117,6 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
   // to unstick any transactions which had too low of a fee.
   const MAX_OUTPUTS: usize = 519;
 
-  fn fee_rate(block: &BlockFor<Rpc<D>>, coin: Coin) -> Self::FeeRate {
-    assert_eq!(coin, Coin::Bitcoin);
-    // TODO
-    1
-  }
-
   fn branch_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
     address_from_serai_key(key, OutputType::Branch)
   }
@@ -136,29 +128,32 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
   }
 
   fn calculate_fee(
-    fee_rate: Self::FeeRate,
+    &self,
+    reference_block: &BlockFor<Rpc<D>>,
     inputs: Vec<OutputFor<Rpc<D>>>,
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
     change: Option<KeyFor<Rpc<D>>>,
-  ) -> Amount {
-    match signable_transaction::<D>(fee_rate, inputs, payments, change) {
-      Ok(tx) => Amount(tx.1.needed_fee()),
-      Err(
-        TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
-      ) => panic!("malformed arguments to calculate_fee"),
-      // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
-      Err(
-        TransactionError::TooMuchData |
-        TransactionError::TooLowFee |
-        TransactionError::TooLargeTransaction,
-      ) => unreachable!(),
-      Err(TransactionError::NotEnoughFunds { fee, .. }) => Amount(fee),
+  ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
+    async move {
+      Ok(match signable_transaction::<D>(reference_block, inputs, payments, change) {
+        Ok(tx) => Amount(tx.1.needed_fee()),
+        Err(
+          TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
+        ) => panic!("malformed arguments to calculate_fee"),
+        // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
+        Err(
+          TransactionError::TooMuchData |
+          TransactionError::TooLowFee |
+          TransactionError::TooLargeTransaction,
+        ) => unreachable!(),
+        Err(TransactionError::NotEnoughFunds { fee, .. }) => Amount(fee),
+      })
     }
   }
 
   fn plan(
     &self,
-    fee_rate: Self::FeeRate,
+    reference_block: &BlockFor<Rpc<D>>,
     inputs: Vec<OutputFor<Rpc<D>>>,
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
     change: Option<KeyFor<Rpc<D>>>,
@@ -176,7 +171,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
       }
 
       let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
-      match signable_transaction::<D>(fee_rate, inputs.clone(), payments, change) {
+      match signable_transaction::<D>(reference_block, inputs.clone(), payments, change) {
         Ok(tx) => Ok(PlannedTransaction {
           signable: tx.0,
           eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },

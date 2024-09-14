@@ -224,15 +224,6 @@ impl Network for Bitcoin {
   }
 
   #[cfg(test)]
-  async fn check_eventuality_by_claim(
-    &self,
-    eventuality: &Self::Eventuality,
-    _: &EmptyClaim,
-  ) -> bool {
-    self.rpc.get_transaction(&eventuality.0).await.is_ok()
-  }
-
-  #[cfg(test)]
   async fn get_transaction_by_eventuality(&self, _: usize, id: &Eventuality) -> Transaction {
     self.rpc.get_transaction(&id.0).await.unwrap()
   }

@@ -4,7 +4,7 @@
 
 use core::{fmt::Debug, future::Future};
 
-use serai_primitives::{Coin, Amount};
+use serai_primitives::Amount;
 
 use primitives::{ReceivedOutput, Payment};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
@@ -48,9 +48,6 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// resolve manual intervention/changing the arguments.
   type EphemeralError: Debug;
 
-  /// The type representing a fee rate to use for transactions.
-  type FeeRate: Send + Clone + Copy;
-
   /// The type representing a signable transaction.
   type SignableTransaction: SignableTransaction;
 
@@ -58,11 +55,6 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   const MAX_INPUTS: usize;
   /// The maximum amount of outputs allowed in a transaction, including the change output.
   const MAX_OUTPUTS: usize;
-
-  /// Obtain the fee rate to pay.
-  ///
-  /// This must be constant to the block and coin.
-  fn fee_rate(block: &BlockFor<S>, coin: Coin) -> Self::FeeRate;
 
   /// The branch address for this key of Serai's.
   fn branch_address(key: KeyFor<S>) -> AddressFor<S>;
@@ -76,11 +68,12 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// The fee rate, inputs, and payments, will all be for the same coin. The returned fee is
   /// denominated in this coin.
   fn calculate_fee(
-    fee_rate: Self::FeeRate,
+    &self,
+    reference_block: &BlockFor<S>,
     inputs: Vec<OutputFor<S>>,
     payments: Vec<Payment<AddressFor<S>>>,
     change: Option<KeyFor<S>>,
-  ) -> Amount;
+  ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>>;
 
   /// Plan a transaction.
   ///
@@ -91,7 +84,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   /// output must be created.
   fn plan(
     &self,
-    fee_rate: Self::FeeRate,
+    reference_block: &BlockFor<S>,
     inputs: Vec<OutputFor<S>>,
     payments: Vec<Payment<AddressFor<S>>>,
     change: Option<KeyFor<S>>,
@@ -112,7 +105,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   fn plan_transaction_with_fee_amortization(
     &self,
     operating_costs: &mut u64,
-    fee_rate: Self::FeeRate,
+    reference_block: &BlockFor<S>,
     inputs: Vec<OutputFor<S>>,
     mut payments: Vec<Payment<AddressFor<S>>>,
     mut change: Option<KeyFor<S>>,
@@ -156,7 +149,8 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
         // Sort payments from high amount to low amount
         payments.sort_by(|a, b| a.balance().amount.0.cmp(&b.balance().amount.0).reverse());
 
-        let mut fee = Self::calculate_fee(fee_rate, inputs.clone(), payments.clone(), change).0;
+        let mut fee =
+          self.calculate_fee(reference_block, inputs.clone(), payments.clone(), change).await?.0;
         let mut amortized = 0;
         while !payments.is_empty() {
           // We need to pay the fee, and any accrued operating costs, minus what we've already
@@ -176,7 +170,10 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
           if payments.last().unwrap().balance().amount.0 <= (per_payment_fee + S::dust(coin).0) {
             amortized += payments.pop().unwrap().balance().amount.0;
             // Recalculate the fee and try again
-            fee = Self::calculate_fee(fee_rate, inputs.clone(), payments.clone(), change).0;
+            fee = self
+              .calculate_fee(reference_block, inputs.clone(), payments.clone(), change)
+              .await?
+              .0;
             continue;
           }
           // Break since all of these payments shouldn't be dropped
@@ -237,7 +234,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
       let has_change = change.is_some();
 
       let PlannedTransaction { signable, eventuality, auxilliary } =
-        self.plan(fee_rate, inputs, payments, change).await?;
+        self.plan(reference_block, inputs, payments, change).await?;
       Ok(Some(AmortizePlannedTransaction {
         effected_payments,
         has_change,

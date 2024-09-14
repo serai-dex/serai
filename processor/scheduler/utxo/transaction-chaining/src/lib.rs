@@ -86,7 +86,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         .planner
         .plan_transaction_with_fee_amortization(
           &mut operating_costs,
-          P::fee_rate(block, coin),
+          block,
           to_aggregate,
           vec![],
           Some(key_for_change),
@@ -229,7 +229,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
             .planner
             .plan_transaction_with_fee_amortization(
               &mut operating_costs,
-              P::fee_rate(block, coin),
+              block,
               outputs.clone(),
               tree[0]
                 .payments::<S>(coin, &branch_address, tree[0].value())
@@ -323,7 +323,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
             .plan_transaction_with_fee_amortization(
               // Uses 0 as there's no operating costs to incur/amortize here
               &mut 0,
-              P::fee_rate(block, coin),
+              block,
               vec![branch_output],
               payments,
               None,
@@ -379,7 +379,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       .planner
       .plan_transaction_with_fee_amortization(
         &mut operating_costs,
-        P::fee_rate(block, coin),
+        block,
         outputs,
         vec![],
         Some(to),
@@ -505,7 +505,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
               // This uses 0 for the operating costs as we don't incur any here
               // If the output can't pay for itself to be forwarded, we simply drop it
               &mut 0,
-              P::fee_rate(block, forward.balance().coin),
+              block,
               vec![forward.clone()],
               vec![Payment::new(P::forwarding_address(forward_to_key), forward.balance(), None)],
               None,
@@ -526,7 +526,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
               // This uses 0 for the operating costs as we don't incur any here
               // If the output can't pay for itself to be returned, we simply drop it
               &mut 0,
-              P::fee_rate(block, out_instruction.balance().coin),
+              block,
               vec![to_return.output().clone()],
               vec![out_instruction],
               None,

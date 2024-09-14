@@ -34,13 +34,6 @@ impl AsMut<[u8]> for OutputId {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Output(pub(crate) WalletOutput);
-
-impl Output {
-  pub(crate) fn new(output: WalletOutput) -> Self {
-    Self(output)
-  }
-}
-
 impl ReceivedOutput<<Ed25519 as Ciphersuite>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];

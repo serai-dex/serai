@@ -34,8 +34,8 @@ impl scheduler::Transaction for Transaction {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SignableTransaction {
-  id: [u8; 32],
-  signable: MSignableTransaction,
+  pub(crate) id: [u8; 32],
+  pub(crate) signable: MSignableTransaction,
 }
 
 #[derive(Clone)]
@@ -81,8 +81,8 @@ impl scheduler::SignableTransaction for SignableTransaction {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct Eventuality {
-  id: [u8; 32],
-  singular_spent_output: Option<OutputId>,
+  pub(crate) id: [u8; 32],
+  pub(crate) singular_spent_output: Option<OutputId>,
   pub(crate) eventuality: MEventuality,
 }
 
