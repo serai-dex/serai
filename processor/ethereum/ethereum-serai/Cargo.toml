@@ -21,11 +21,11 @@ thiserror = { version = "1", default-features = false }
 
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["recommended"] }
+transcript = { package = "flexible-transcript", path = "../../../crypto/transcript", default-features = false, features = ["recommended"] }
 
 group = { version = "0.13", default-features = false }
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa", "arithmetic"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["secp256k1"] }
+frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["secp256k1"] }
 
 alloy-core = { version = "0.8", default-features = false }
 alloy-sol-types = { version = "0.8", default-features = false, features = ["json"] }
@@ -33,13 +33,13 @@ alloy-consensus = { version = "0.3", default-features = false, features = ["k256
 alloy-network = { version = "0.3", default-features = false }
 alloy-rpc-types-eth = { version = "0.3", default-features = false }
 alloy-rpc-client = { version = "0.3", default-features = false }
-alloy-simple-request-transport = { path = "./alloy-simple-request-transport", default-features = false }
+alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
 alloy-provider = { version = "0.3", default-features = false }
 
 alloy-node-bindings = { version = "0.3", default-features = false, optional = true }
 
 [dev-dependencies]
-frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["tests"] }
+frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["tests"] }
 
 tokio = { version = "1", features = ["macros"] }
 
