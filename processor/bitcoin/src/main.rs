@@ -22,7 +22,7 @@ use crate::key_gen::KeyGenParams;
 mod rpc;
 use rpc::Rpc;
 mod scheduler;
-use scheduler::Scheduler;
+use scheduler::{Planner, Scheduler};
 
 // Our custom code for Bitcoin
 mod db;
@@ -57,7 +57,7 @@ async fn main() {
   tokio::spawn(TxIndexTask(feed.clone()).continually_run(index_task, vec![]));
   core::mem::forget(index_handle);
 
-  bin::main_loop::<_, KeyGenParams, Scheduler<_>, Rpc<bin::Db>>(db, feed.clone(), feed).await;
+  bin::main_loop::<_, KeyGenParams, _>(db, feed.clone(), Scheduler::new(Planner), feed).await;
 }
 
 /*

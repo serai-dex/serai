@@ -1,3 +1,5 @@
+use core::future::Future;
+
 use ciphersuite::{Ciphersuite, Secp256k1};
 
 use bitcoin_serai::{
@@ -89,8 +91,10 @@ fn signable_transaction<D: Db>(
   .map(|bst| (SignableTransaction { inputs, payments, change, fee_per_vbyte }, bst))
 }
 
+#[derive(Clone)]
 pub(crate) struct Planner;
 impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner {
+  type EphemeralError = ();
   type FeeRate = u64;
 
   type SignableTransaction = SignableTransaction;
@@ -153,50 +157,59 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
   }
 
   fn plan(
+    &self,
     fee_rate: Self::FeeRate,
     inputs: Vec<OutputFor<Rpc<D>>>,
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
     change: Option<KeyFor<Rpc<D>>>,
-  ) -> PlannedTransaction<Rpc<D>, Self::SignableTransaction, EffectedReceivedOutputs<Rpc<D>>> {
-    let key = inputs.first().unwrap().key();
-    for input in &inputs {
-      assert_eq!(key, input.key());
-    }
+  ) -> impl Send
+       + Future<
+    Output = Result<
+      PlannedTransaction<Rpc<D>, Self::SignableTransaction, EffectedReceivedOutputs<Rpc<D>>>,
+      Self::EphemeralError,
+    >,
+  > {
+    async move {
+      let key = inputs.first().unwrap().key();
+      for input in &inputs {
+        assert_eq!(key, input.key());
+      }
 
-    let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
-    match signable_transaction::<D>(fee_rate, inputs.clone(), payments, change) {
-      Ok(tx) => PlannedTransaction {
-        signable: tx.0,
-        eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },
-        auxilliary: EffectedReceivedOutputs({
-          let tx = tx.1.transaction();
-          let scanner = scanner(key);
+      let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
+      match signable_transaction::<D>(fee_rate, inputs.clone(), payments, change) {
+        Ok(tx) => Ok(PlannedTransaction {
+          signable: tx.0,
+          eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },
+          auxilliary: EffectedReceivedOutputs({
+            let tx = tx.1.transaction();
+            let scanner = scanner(key);
 
-          let mut res = vec![];
-          for output in scanner.scan_transaction(tx) {
-            res.push(Output::new_with_presumed_origin(
-              key,
-              tx,
-              // It shouldn't matter if this is wrong as we should never try to return these
-              // We still provide an accurate value to ensure a lack of discrepancies
-              Some(Address::new(inputs[0].output.output().script_pubkey.clone()).unwrap()),
-              output,
-            ));
-          }
-          res
+            let mut res = vec![];
+            for output in scanner.scan_transaction(tx) {
+              res.push(Output::new_with_presumed_origin(
+                key,
+                tx,
+                // It shouldn't matter if this is wrong as we should never try to return these
+                // We still provide an accurate value to ensure a lack of discrepancies
+                Some(Address::new(inputs[0].output.output().script_pubkey.clone()).unwrap()),
+                output,
+              ));
+            }
+            res
+          }),
         }),
-      },
-      Err(
-        TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
-      ) => panic!("malformed arguments to plan"),
-      // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
-      Err(
-        TransactionError::TooMuchData |
-        TransactionError::TooLowFee |
-        TransactionError::TooLargeTransaction,
-      ) => unreachable!(),
-      Err(TransactionError::NotEnoughFunds { .. }) => {
-        panic!("plan called for a transaction without enough funds")
+        Err(
+          TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
+        ) => panic!("malformed arguments to plan"),
+        // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
+        Err(
+          TransactionError::TooMuchData |
+          TransactionError::TooLowFee |
+          TransactionError::TooLargeTransaction,
+        ) => unreachable!(),
+        Err(TransactionError::NotEnoughFunds { .. }) => {
+          panic!("plan called for a transaction without enough funds")
+        }
       }
     }
   }
