@@ -256,8 +256,17 @@ impl<S: ScannerFeed> SchedulerUpdate<S> {
   }
 }
 
+/// Eventualities, keyed by the encoding of the key the Eventualities are for.
+pub type KeyScopedEventualities<S> = HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
+
 /// The object responsible for accumulating outputs and planning new transactions.
 pub trait Scheduler<S: ScannerFeed>: 'static + Send {
+  /// An error encountered when handling updates/payments.
+  ///
+  /// This MUST be an ephemeral error. Retrying handling updates/payments MUST eventually
+  /// resolve without manual intervention/changing the arguments.
+  type EphemeralError: Debug;
+
   /// The type for a signable transaction.
   type SignableTransaction: scheduler_primitives::SignableTransaction;
 
@@ -278,11 +287,12 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// If the retiring key has any unfulfilled payments associated with it, those MUST be made
   /// the responsibility of the new key.
   fn flush_key(
+    &self,
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
-  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
+  ) -> impl Send + Future<Output = Result<KeyScopedEventualities<S>, Self::EphemeralError>>;
 
   /// Retire a key as it'll no longer be used.
   ///
@@ -300,11 +310,12 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// The `Vec<u8>` used as the key in the returned HashMap should be the encoded key the
   /// Eventualities are for.
   fn update(
+    &self,
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
-  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
+  ) -> impl Send + Future<Output = Result<KeyScopedEventualities<S>, Self::EphemeralError>>;
 
   /// Fulfill a series of payments, yielding the Eventualities now to be scanned for.
   ///
@@ -339,11 +350,12 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
     has an output-to-Serai, the new primary output).
   */
   fn fulfill(
+    &self,
     txn: &mut impl DbTxn,
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,
-  ) -> HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
+  ) -> impl Send + Future<Output = Result<KeyScopedEventualities<S>, Self::EphemeralError>>;
 }
 
 /// A representation of a scanner.
@@ -358,14 +370,15 @@ impl<S: ScannerFeed> Scanner<S> {
   /// This will begin its execution, spawning several asynchronous tasks.
   ///
   /// This will return None if the Scanner was never initialized.
-  pub async fn new<Sch: Scheduler<S>>(db: impl Db, feed: S) -> Option<Self> {
+  pub async fn new(db: impl Db, feed: S, scheduler: impl Scheduler<S>) -> Option<Self> {
     let start_block = ScannerGlobalDb::<S>::start_block(&db)?;
 
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
     let scan_task = scan::ScanTask::new(db.clone(), feed.clone(), start_block);
     let report_task = report::ReportTask::<_, S>::new(db.clone(), start_block);
     let substrate_task = substrate::SubstrateTask::<_, S>::new(db.clone());
-    let eventuality_task = eventuality::EventualityTask::<_, _, Sch>::new(db, feed, start_block);
+    let eventuality_task =
+      eventuality::EventualityTask::<_, _, _>::new(db, feed, scheduler, start_block);
 
     let (index_task_def, _index_handle) = Task::new();
     let (scan_task_def, scan_handle) = Task::new();
@@ -394,9 +407,10 @@ impl<S: ScannerFeed> Scanner<S> {
   /// This will begin its execution, spawning several asynchronous tasks.
   ///
   /// This passes through to `Scanner::new` if prior called.
-  pub async fn initialize<Sch: Scheduler<S>>(
+  pub async fn initialize(
     mut db: impl Db,
     feed: S,
+    scheduler: impl Scheduler<S>,
     start_block: u64,
     start_key: KeyFor<S>,
   ) -> Self {
@@ -407,7 +421,7 @@ impl<S: ScannerFeed> Scanner<S> {
       txn.commit();
     }
 
-    Self::new::<Sch>(db, feed).await.unwrap()
+    Self::new(db, feed, scheduler).await.unwrap()
   }
 
   /// Acknowledge a Batch having been published on Serai.

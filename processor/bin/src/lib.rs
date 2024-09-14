@@ -15,7 +15,7 @@ use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
 use primitives::EncodableG;
 use ::key_gen::{KeyGenParams, KeyGen};
-use scheduler::SignableTransaction;
+use scheduler::{SignableTransaction, TransactionFor};
 use scanner::{ScannerFeed, Scanner, KeyFor, Scheduler};
 use signers::{TransactionPublisher, Signers};
 
@@ -161,22 +161,23 @@ async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u6
 pub async fn main_loop<
   S: ScannerFeed,
   K: KeyGenParams<ExternalNetworkCiphersuite: Ciphersuite<G = KeyFor<S>>>,
-  Sch: Scheduler<
-    S,
-    SignableTransaction: SignableTransaction<Ciphersuite = K::ExternalNetworkCiphersuite>,
-  >,
-  P: TransactionPublisher<<Sch::SignableTransaction as SignableTransaction>::Transaction>,
+  Sch: Clone
+    + Scheduler<
+      S,
+      SignableTransaction: SignableTransaction<Ciphersuite = K::ExternalNetworkCiphersuite>,
+    >,
 >(
   mut db: Db,
   feed: S,
-  publisher: P,
+  scheduler: Sch,
+  publisher: impl TransactionPublisher<TransactionFor<Sch::SignableTransaction>>,
 ) {
   let mut coordinator = Coordinator::new(db.clone());
 
   let mut key_gen = key_gen::<K>();
-  let mut scanner = Scanner::new::<Sch>(db.clone(), feed.clone()).await;
+  let mut scanner = Scanner::new(db.clone(), feed.clone(), scheduler.clone()).await;
   let mut signers =
-    Signers::<Db, S, Sch, P>::new(db.clone(), coordinator.coordinator_send(), publisher);
+    Signers::<Db, S, Sch, _>::new(db.clone(), coordinator.coordinator_send(), publisher);
 
   loop {
     let db_clone = db.clone();
@@ -242,8 +243,10 @@ pub async fn main_loop<
           if session == Session(0) {
             assert!(scanner.is_none());
             let start_block = first_block_after_time(&feed, serai_time).await;
-            scanner =
-              Some(Scanner::initialize::<Sch>(db_clone, feed.clone(), start_block, key.0).await);
+            scanner = Some(
+              Scanner::initialize(db_clone, feed.clone(), scheduler.clone(), start_block, key.0)
+                .await,
+            );
           }
         }
         messages::substrate::CoordinatorMessage::SlashesReported { session } => {

@@ -16,7 +16,6 @@ use crate::key_gen::KeyGenParams;
 mod rpc;
 use rpc::Rpc;
 
-mod decoys;
 /*
 mod scheduler;
 use scheduler::Scheduler;

@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, future::Future};
+use core::future::Future;
 use std::collections::{HashSet, HashMap};
 
 use group::GroupEncoding;
@@ -102,11 +102,11 @@ fn intake_eventualities<S: ScannerFeed>(
 pub(crate) struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
   db: D,
   feed: S,
-  scheduler: PhantomData<Sch>,
+  scheduler: Sch,
 }
 
 impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
-  pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
+  pub(crate) fn new(mut db: D, feed: S, scheduler: Sch, start_block: u64) -> Self {
     if EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none() {
       // Initialize the DB
       let mut txn = db.txn();
@@ -114,7 +114,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       txn.commit();
     }
 
-    Self { db, feed, scheduler: PhantomData }
+    Self { db, feed, scheduler }
   }
 
   #[allow(clippy::type_complexity)]
@@ -167,15 +167,19 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       {
         intaked_any = true;
 
-        let new_eventualities = Sch::fulfill(
-          &mut txn,
-          &block,
-          &keys_with_stages,
-          burns
-            .into_iter()
-            .filter_map(|burn| Payment::<AddressFor<S>>::try_from(burn).ok())
-            .collect(),
-        );
+        let new_eventualities = self
+          .scheduler
+          .fulfill(
+            &mut txn,
+            &block,
+            &keys_with_stages,
+            burns
+              .into_iter()
+              .filter_map(|burn| Payment::<AddressFor<S>>::try_from(burn).ok())
+              .collect(),
+          )
+          .await
+          .map_err(|e| format!("failed to queue fulfilling payments: {e:?}"))?;
         intake_eventualities::<S>(&mut txn, new_eventualities);
       }
       txn.commit();
@@ -443,8 +447,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
               determined off an earlier block than this (enabling an earlier LifetimeStage to be
               used after a later one was already used).
             */
-            let new_eventualities =
-              Sch::update(&mut txn, &block, &keys_with_stages, scheduler_update);
+            let new_eventualities = self
+              .scheduler
+              .update(&mut txn, &block, &keys_with_stages, scheduler_update)
+              .await
+              .map_err(|e| format!("failed to update scheduler: {e:?}"))?;
             // Intake the new Eventualities
             for key in new_eventualities.keys() {
               keys
@@ -464,8 +471,11 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
               key.key != keys.last().unwrap().key,
               "key which was forwarding was the last key (which has no key after it to forward to)"
             );
-            let new_eventualities =
-              Sch::flush_key(&mut txn, &block, key.key, keys.last().unwrap().key);
+            let new_eventualities = self
+              .scheduler
+              .flush_key(&mut txn, &block, key.key, keys.last().unwrap().key)
+              .await
+              .map_err(|e| format!("failed to flush key from scheduler: {e:?}"))?;
             intake_eventualities::<S>(&mut txn, new_eventualities);
           }
 
