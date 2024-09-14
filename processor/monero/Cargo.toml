@@ -21,12 +21,9 @@ rand_core = { version = "0.6", default-features = false }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 
-hex = { version = "0.4", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ed25519"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ed25519"] }
@@ -40,8 +37,6 @@ serai-client = { path = "../../substrate/client", default-features = false, feat
 zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
-
-serai-db = { path = "../../common/db" }
 
 key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 view-keys = { package = "serai-processor-view-keys", path = "../view-keys" }

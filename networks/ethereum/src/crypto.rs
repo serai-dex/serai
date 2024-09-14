@@ -1,10 +1,12 @@
 use group::ff::PrimeField;
 use k256::{
-  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
-  ProjectivePoint, Scalar, U256 as KU256,
+  elliptic_curve::{
+    ops::Reduce,
+    point::{AffineCoordinates, DecompressPoint},
+    sec1::ToEncodedPoint,
+  },
+  AffinePoint, ProjectivePoint, Scalar, U256 as KU256,
 };
-#[cfg(test)]
-use k256::{elliptic_curve::point::DecompressPoint, AffinePoint};
 
 use frost::{
   algorithm::{Hram, SchnorrSignature},
@@ -99,12 +101,11 @@ impl PublicKey {
     self.A
   }
 
-  pub(crate) fn eth_repr(&self) -> [u8; 32] {
+  pub fn eth_repr(&self) -> [u8; 32] {
     self.px.to_repr().into()
   }
 
-  #[cfg(test)]
-  pub(crate) fn from_eth_repr(repr: [u8; 32]) -> Option<Self> {
+  pub fn from_eth_repr(repr: [u8; 32]) -> Option<Self> {
     #[allow(non_snake_case)]
     let A = Option::<AffinePoint>::from(AffinePoint::decompress(&repr.into(), 0.into()))?.into();
     Option::from(Scalar::from_repr(repr.into())).map(|px| PublicKey { A, px })

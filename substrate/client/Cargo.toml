@@ -65,6 +65,7 @@ borsh = ["serai-abi/borsh"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
+ethereum = ["networks"]
 monero = ["networks", "ciphersuite/ed25519", "monero-address"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
