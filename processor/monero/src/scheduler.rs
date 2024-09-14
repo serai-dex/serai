@@ -1,3 +1,4 @@
+/*
 async fn make_signable_transaction(
 block_number: usize,
 plan_id: &[u8; 32],
@@ -136,10 +137,106 @@ match MSignableTransaction::new(
   },
 }
 }
+*/
 
+use core::future::Future;
+
+use ciphersuite::{Ciphersuite, Ed25519};
+
+use monero_wallet::rpc::{FeeRate, RpcError};
+
+use serai_client::{
+  primitives::{Coin, Amount},
+  networks::monero::Address,
+};
+
+use primitives::{OutputType, ReceivedOutput, Payment};
+use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
+use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
+
+use monero_wallet::address::Network;
+
+use crate::{
+  EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS, view_pair,
+  output::Output,
+  transaction::{SignableTransaction, Eventuality},
+  rpc::Rpc,
+};
+
+fn address_from_serai_key(key: <Ed25519 as Ciphersuite>::G, kind: OutputType) -> Address {
+  view_pair(key)
+    .address(
+      Network::Mainnet,
+      Some(match kind {
+        OutputType::External => EXTERNAL_SUBADDRESS,
+        OutputType::Branch => BRANCH_SUBADDRESS,
+        OutputType::Change => CHANGE_SUBADDRESS,
+        OutputType::Forwarded => FORWARDED_SUBADDRESS,
+      }),
+      None,
+    )
+    .try_into()
+    .expect("created address which wasn't representable")
+}
+
+#[derive(Clone)]
+pub(crate) struct Planner(pub(crate) Rpc);
+impl TransactionPlanner<Rpc, ()> for Planner {
+  type EphemeralError = RpcError;
+
+  type FeeRate = FeeRate;
+
+  type SignableTransaction = SignableTransaction;
+
+  // wallet2 will not create a transaction larger than 100 KB, and Monero won't relay a transaction
+  // larger than 150 KB. This fits within the 100 KB mark to fit in and not poke the bear.
+  // Technically, it can be ~124, yet a small bit of buffer is appreciated
+  // TODO: Test creating a TX this big
+  const MAX_INPUTS: usize = 120;
+  const MAX_OUTPUTS: usize = 16;
+
+  fn fee_rate(block: &BlockFor<Rpc>, coin: Coin) -> Self::FeeRate {
+    assert_eq!(coin, Coin::Monero);
+    // TODO
+    todo!("TODO")
+  }
+
+  fn branch_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+    address_from_serai_key(key, OutputType::Branch)
+  }
+  fn change_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+    address_from_serai_key(key, OutputType::Change)
+  }
+  fn forwarding_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
+    address_from_serai_key(key, OutputType::Forwarded)
+  }
+
+  fn calculate_fee(
+    fee_rate: Self::FeeRate,
+    inputs: Vec<OutputFor<Rpc>>,
+    payments: Vec<Payment<AddressFor<Rpc>>>,
+    change: Option<KeyFor<Rpc>>,
+  ) -> Amount {
+    todo!("TODO")
+  }
+
+  fn plan(
+    &self,
+    fee_rate: Self::FeeRate,
+    inputs: Vec<OutputFor<Rpc>>,
+    payments: Vec<Payment<AddressFor<Rpc>>>,
+    change: Option<KeyFor<Rpc>>,
+  ) -> impl Send
+       + Future<Output = Result<PlannedTransaction<Rpc, Self::SignableTransaction, ()>, RpcError>>
+  {
+    async move { todo!("TODO") }
+  }
+}
+
+pub(crate) type Scheduler = utxo_standard_scheduler::Scheduler<Rpc, Planner>;
 
 /*
-use ciphersuite::{Ciphersuite, Secp256k1};
+use ciphersuite::{Ciphersuite, Ed25519};
 
 use bitcoin_serai::{
   bitcoin::ScriptBuf,
@@ -163,8 +260,8 @@ use crate::{
   rpc::Rpc,
 };
 
-fn address_from_serai_key(key: <Secp256k1 as Ciphersuite>::G, kind: OutputType) -> Address {
-  let offset = <Secp256k1 as Ciphersuite>::G::GENERATOR * offsets_for_key(key)[&kind];
+fn address_from_serai_key(key: <Ed25519 as Ciphersuite>::G, kind: OutputType) -> Address {
+  let offset = <Ed25519 as Ciphersuite>::G::GENERATOR * offsets_for_key(key)[&kind];
   Address::new(
     p2tr_script_buf(key + offset)
       .expect("creating address from Serai key which wasn't properly tweaked"),
@@ -174,17 +271,17 @@ fn address_from_serai_key(key: <Secp256k1 as Ciphersuite>::G, kind: OutputType) 
 
 fn signable_transaction<D: Db>(
   fee_per_vbyte: u64,
-  inputs: Vec<OutputFor<Rpc<D>>>,
-  payments: Vec<Payment<AddressFor<Rpc<D>>>>,
-  change: Option<KeyFor<Rpc<D>>>,
+  inputs: Vec<OutputFor<Rpc>>,
+  payments: Vec<Payment<AddressFor<Rpc>>>,
+  change: Option<KeyFor<Rpc>>,
 ) -> Result<(SignableTransaction, BSignableTransaction), TransactionError> {
   assert!(
     inputs.len() <
-      <Planner as TransactionPlanner<Rpc<D>, ()>>::MAX_INPUTS
+      <Planner as TransactionPlanner<Rpc, ()>>::MAX_INPUTS
   );
   assert!(
     (payments.len() + usize::from(u8::from(change.is_some()))) <
-      <Planner as TransactionPlanner<Rpc<D>, ()>>::MAX_OUTPUTS
+      <Planner as TransactionPlanner<Rpc, ()>>::MAX_OUTPUTS
   );
 
   let inputs = inputs.into_iter().map(|input| input.output).collect::<Vec<_>>();
@@ -194,7 +291,7 @@ fn signable_transaction<D: Db>(
     .map(|payment| {
       (payment.address().clone(), {
         let balance = payment.balance();
-        assert_eq!(balance.coin, Coin::Bitcoin);
+        assert_eq!(balance.coin, Coin::Monero);
         balance.amount.0
       })
     })
@@ -206,14 +303,14 @@ fn signable_transaction<D: Db>(
   */
   payments.push((
     // The generator is even so this is valid
-    Address::new(p2tr_script_buf(<Secp256k1 as Ciphersuite>::G::GENERATOR).unwrap()).unwrap(),
+    Address::new(p2tr_script_buf(<Ed25519 as Ciphersuite>::G::GENERATOR).unwrap()).unwrap(),
     // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
     // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
     bitcoin_serai::wallet::DUST,
   ));
 
   let change = change
-    .map(<Planner as TransactionPlanner<Rpc<D>, ()>>::change_address);
+    .map(<Planner as TransactionPlanner<Rpc, ()>>::change_address);
 
   BSignableTransaction::new(
     inputs.clone(),
@@ -231,12 +328,14 @@ fn signable_transaction<D: Db>(
 
 pub(crate) struct Planner;
 impl TransactionPlanner<Rpc, ()> for Planner {
+  type EphemeralError = RpcError;
+
   type FeeRate = u64;
 
   type SignableTransaction = SignableTransaction;
 
   /*
-    Bitcoin has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT).
+    Monero has a max weight of 400,000 (MAX_STANDARD_TX_WEIGHT).
 
     A non-SegWit TX will have 4 weight units per byte, leaving a max size of 100,000 bytes. While
     our inputs are entirely SegWit, such fine tuning is not necessary and could create issues in
@@ -255,27 +354,27 @@ impl TransactionPlanner<Rpc, ()> for Planner {
   // to unstick any transactions which had too low of a fee.
   const MAX_OUTPUTS: usize = 519;
 
-  fn fee_rate(block: &BlockFor<Rpc<D>>, coin: Coin) -> Self::FeeRate {
-    assert_eq!(coin, Coin::Bitcoin);
+  fn fee_rate(block: &BlockFor<Rpc>, coin: Coin) -> Self::FeeRate {
+    assert_eq!(coin, Coin::Monero);
     // TODO
     1
   }
 
-  fn branch_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
+  fn branch_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
     address_from_serai_key(key, OutputType::Branch)
   }
-  fn change_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
+  fn change_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
     address_from_serai_key(key, OutputType::Change)
   }
-  fn forwarding_address(key: KeyFor<Rpc<D>>) -> AddressFor<Rpc<D>> {
+  fn forwarding_address(key: KeyFor<Rpc>) -> AddressFor<Rpc> {
     address_from_serai_key(key, OutputType::Forwarded)
   }
 
   fn calculate_fee(
     fee_rate: Self::FeeRate,
-    inputs: Vec<OutputFor<Rpc<D>>>,
-    payments: Vec<Payment<AddressFor<Rpc<D>>>>,
-    change: Option<KeyFor<Rpc<D>>>,
+    inputs: Vec<OutputFor<Rpc>>,
+    payments: Vec<Payment<AddressFor<Rpc>>>,
+    change: Option<KeyFor<Rpc>>,
   ) -> Amount {
     match signable_transaction::<D>(fee_rate, inputs, payments, change) {
       Ok(tx) => Amount(tx.1.needed_fee()),
@@ -294,10 +393,10 @@ impl TransactionPlanner<Rpc, ()> for Planner {
 
   fn plan(
     fee_rate: Self::FeeRate,
-    inputs: Vec<OutputFor<Rpc<D>>>,
-    payments: Vec<Payment<AddressFor<Rpc<D>>>>,
-    change: Option<KeyFor<Rpc<D>>>,
-  ) -> PlannedTransaction<Rpc<D>, Self::SignableTransaction, ()> {
+    inputs: Vec<OutputFor<Rpc>>,
+    payments: Vec<Payment<AddressFor<Rpc>>>,
+    change: Option<KeyFor<Rpc>>,
+  ) -> PlannedTransaction<Rpc, Self::SignableTransaction, ()> {
     let key = inputs.first().unwrap().key();
     for input in &inputs {
       assert_eq!(key, input.key());

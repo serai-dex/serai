@@ -46,16 +46,17 @@ impl ReceivedOutput<<Ed25519 as Ciphersuite>::G, Address> for Output {
   type TransactionId = [u8; 32];
 
   fn kind(&self) -> OutputType {
-    if self.0.subaddress() == EXTERNAL_SUBADDRESS {
+    let subaddress = self.0.subaddress().unwrap();
+    if subaddress == EXTERNAL_SUBADDRESS {
       return OutputType::External;
     }
-    if self.0.subaddress() == BRANCH_SUBADDRESS {
+    if subaddress == BRANCH_SUBADDRESS {
       return OutputType::Branch;
     }
-    if self.0.subaddress() == CHANGE_SUBADDRESS {
+    if subaddress == CHANGE_SUBADDRESS {
       return OutputType::Change;
     }
-    if self.0.subaddress() == FORWARDED_SUBADDRESS {
+    if subaddress == FORWARDED_SUBADDRESS {
       return OutputType::Forwarded;
     }
     unreachable!("scanned output to unknown subaddress");

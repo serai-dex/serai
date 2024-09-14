@@ -130,8 +130,6 @@ impl Network for Monero {
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
 
-  const MAX_OUTPUTS: usize = 16;
-
   // TODO
   const COST_TO_AGGREGATE: u64 = 0;
 
@@ -317,13 +315,5 @@ impl Network for Monero {
     }
     self.get_block(block).await.unwrap()
   }
-}
-
-impl UtxoNetwork for Monero {
-  // wallet2 will not create a transaction larger than 100kb, and Monero won't relay a transaction
-  // larger than 150kb. This fits within the 100kb mark
-  // Technically, it can be ~124, yet a small bit of buffer is appreciated
-  // TODO: Test creating a TX this big
-  const MAX_INPUTS: usize = 120;
 }
 */
