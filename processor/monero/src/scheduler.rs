@@ -1,3 +1,144 @@
+async fn make_signable_transaction(
+block_number: usize,
+plan_id: &[u8; 32],
+inputs: &[Output],
+payments: &[Payment<Self>],
+change: &Option<Address>,
+calculating_fee: bool,
+) -> Result<Option<MakeSignableTransactionResult>, NetworkError> {
+for payment in payments {
+  assert_eq!(payment.balance.coin, Coin::Monero);
+}
+
+// TODO2: Use an fee representative of several blocks, cached inside Self
+let block_for_fee = self.get_block(block_number).await?;
+let fee_rate = self.median_fee(&block_for_fee).await?;
+
+// Determine the RCT proofs to make based off the hard fork
+// TODO: Make a fn for this block which is duplicated with tests
+let rct_type = match block_for_fee.header.hardfork_version {
+  14 => RctType::ClsagBulletproof,
+  15 | 16 => RctType::ClsagBulletproofPlus,
+  _ => panic!("Monero hard forked and the processor wasn't updated for it"),
+};
+
+let mut transcript =
+  RecommendedTranscript::new(b"Serai Processor Monero Transaction Transcript");
+transcript.append_message(b"plan", plan_id);
+
+// All signers need to select the same decoys
+// All signers use the same height and a seeded RNG to make sure they do so.
+let mut inputs_actual = Vec::with_capacity(inputs.len());
+for input in inputs {
+  inputs_actual.push(
+    OutputWithDecoys::fingerprintable_deterministic_new(
+      &mut ChaCha20Rng::from_seed(transcript.rng_seed(b"decoys")),
+      &self.rpc,
+      // TODO: Have Decoys take RctType
+      match rct_type {
+        RctType::ClsagBulletproof => 11,
+        RctType::ClsagBulletproofPlus => 16,
+        _ => panic!("selecting decoys for an unsupported RctType"),
+      },
+      block_number + 1,
+      input.0.clone(),
+    )
+    .await
+    .map_err(map_rpc_err)?,
+  );
+}
+
+// Monero requires at least two outputs
+// If we only have one output planned, add a dummy payment
+let mut payments = payments.to_vec();
+let outputs = payments.len() + usize::from(u8::from(change.is_some()));
+if outputs == 0 {
+  return Ok(None);
+} else if outputs == 1 {
+  payments.push(Payment {
+    address: Address::new(
+      ViewPair::new(EdwardsPoint::generator().0, Zeroizing::new(Scalar::ONE.0))
+        .unwrap()
+        .legacy_address(MoneroNetwork::Mainnet),
+    )
+    .unwrap(),
+    balance: Balance { coin: Coin::Monero, amount: Amount(0) },
+    data: None,
+  });
+}
+
+let payments = payments
+  .into_iter()
+  .map(|payment| (payment.address.into(), payment.balance.amount.0))
+  .collect::<Vec<_>>();
+
+match MSignableTransaction::new(
+  rct_type,
+  // Use the plan ID as the outgoing view key
+  Zeroizing::new(*plan_id),
+  inputs_actual,
+  payments,
+  Change::fingerprintable(change.as_ref().map(|change| change.clone().into())),
+  vec![],
+  fee_rate,
+) {
+  Ok(signable) => Ok(Some({
+    if calculating_fee {
+      MakeSignableTransactionResult::Fee(signable.necessary_fee())
+    } else {
+      MakeSignableTransactionResult::SignableTransaction(signable)
+    }
+  })),
+  Err(e) => match e {
+    SendError::UnsupportedRctType => {
+      panic!("trying to use an RctType unsupported by monero-wallet")
+    }
+    SendError::NoInputs |
+    SendError::InvalidDecoyQuantity |
+    SendError::NoOutputs |
+    SendError::TooManyOutputs |
+    SendError::NoChange |
+    SendError::TooMuchArbitraryData |
+    SendError::TooLargeTransaction |
+    SendError::WrongPrivateKey => {
+      panic!("created an invalid Monero transaction: {e}");
+    }
+    SendError::MultiplePaymentIds => {
+      panic!("multiple payment IDs despite not supporting integrated addresses");
+    }
+    SendError::NotEnoughFunds { inputs, outputs, necessary_fee } => {
+      log::debug!(
+        "Monero NotEnoughFunds. inputs: {:?}, outputs: {:?}, necessary_fee: {necessary_fee:?}",
+        inputs,
+        outputs
+      );
+      match necessary_fee {
+        Some(necessary_fee) => {
+          // If we're solely calculating the fee, return the fee this TX will cost
+          if calculating_fee {
+            Ok(Some(MakeSignableTransactionResult::Fee(necessary_fee)))
+          } else {
+            // If we're actually trying to make the TX, return None
+            Ok(None)
+          }
+        }
+        // We didn't have enough funds to even cover the outputs
+        None => {
+          // Ensure we're not misinterpreting this
+          assert!(outputs > inputs);
+          Ok(None)
+        }
+      }
+    }
+    SendError::MaliciousSerialization | SendError::ClsagError(_) | SendError::FrostError(_) => {
+      panic!("supposedly unreachable (at this time) Monero error: {e}");
+    }
+  },
+}
+}
+
+
+/*
 use ciphersuite::{Ciphersuite, Secp256k1};
 
 use bitcoin_serai::{
@@ -186,3 +327,4 @@ impl TransactionPlanner<Rpc, ()> for Planner {
 }
 
 pub(crate) type Scheduler = utxo_standard_scheduler::Scheduler<Rpc, Planner>;
+*/

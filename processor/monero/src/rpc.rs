@@ -5,6 +5,7 @@ use monero_simple_request_rpc::SimpleRequestRpc;
 
 use serai_client::primitives::{NetworkId, Coin, Amount};
 
+use serai_db::Db;
 use scanner::ScannerFeed;
 use signers::TransactionPublisher;
 
@@ -14,11 +15,12 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct Rpc {
+pub(crate) struct Rpc<D: Db> {
+  pub(crate) db: D,
   pub(crate) rpc: SimpleRequestRpc,
 }
 
-impl ScannerFeed for Rpc {
+impl<D: Db> ScannerFeed for Rpc<D> {
   const NETWORK: NetworkId = NetworkId::Monero;
   // Outputs aren't spendable until 10 blocks later due to the 10-block lock
   // Since we assumed scanned outputs are spendable, that sets a minimum confirmation depth of 10
@@ -37,16 +39,15 @@ impl ScannerFeed for Rpc {
     &self,
   ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
     async move {
-      Ok(
-        self
-          .rpc
-          .get_height()
-          .await?
-          .checked_sub(1)
-          .expect("connected to an invalid Monero RPC")
-          .try_into()
-          .unwrap(),
-      )
+      // The decoys task only indexes finalized blocks
+      crate::decoys::NextToIndexBlock::get(&self.db)
+        .ok_or_else(|| {
+          RpcError::InternalError("decoys task hasn't indexed any blocks yet".to_string())
+        })?
+        .checked_sub(1)
+        .ok_or_else(|| {
+          RpcError::InternalError("only the genesis block has been indexed".to_string())
+        })
     }
   }
 
@@ -127,7 +128,7 @@ impl ScannerFeed for Rpc {
   }
 }
 
-impl TransactionPublisher<Transaction> for Rpc {
+impl<D: Db> TransactionPublisher<Transaction> for Rpc<D> {
   type EphemeralError = RpcError;
 
   fn publish(

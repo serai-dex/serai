@@ -25,6 +25,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ed25519"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ed25519"] }

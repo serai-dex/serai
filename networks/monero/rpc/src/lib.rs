@@ -249,7 +249,7 @@ fn rpc_point(point: &str) -> Result<EdwardsPoint, RpcError> {
 /// While no implementors are directly provided, [monero-simple-request-rpc](
 ///   https://github.com/serai-dex/serai/tree/develop/networks/monero/rpc/simple-request
 /// ) is recommended.
-pub trait Rpc: Sync + Clone + Debug {
+pub trait Rpc: Sync + Clone {
   /// Perform a POST request to the specified route with the specified body.
   ///
   /// The implementor is left to handle anything such as authentication.
@@ -1003,10 +1003,10 @@ pub trait Rpc: Sync + Clone + Debug {
 /// An implementation is provided for any satisfier of `Rpc`. It is not recommended to use an `Rpc`
 /// object to satisfy this. This should be satisfied by a local store of the output distribution,
 /// both for performance and to prevent potential attacks a remote node can perform.
-pub trait DecoyRpc: Sync + Clone + Debug {
+pub trait DecoyRpc: Sync {
   /// Get the height the output distribution ends at.
   ///
-  /// This is equivalent to the hight of the blockchain it's for. This is intended to be cheaper
+  /// This is equivalent to the height of the blockchain it's for. This is intended to be cheaper
   /// than fetching the entire output distribution.
   fn get_output_distribution_end_height(
     &self,
