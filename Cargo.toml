@@ -47,7 +47,6 @@ members = [
   "networks/bitcoin",
 
   "networks/ethereum/alloy-simple-request-transport",
-  "networks/ethereum",
   "networks/ethereum/relayer",
 
   "networks/monero/io",
@@ -86,6 +85,7 @@ members = [
 
   "processor/bin",
   "processor/bitcoin",
+  "processor/ethereum/ethereum-serai",
   "processor/ethereum",
   "processor/monero",
 

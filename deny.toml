@@ -40,7 +40,6 @@ allow = [
 exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-env" },
 
-  { allow = ["AGPL-3.0"], name = "ethereum-serai" },
   { allow = ["AGPL-3.0"], name = "serai-ethereum-relayer" },
 
   { allow = ["AGPL-3.0"], name = "serai-message-queue" },
@@ -59,6 +58,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-processor-signers" },
 
   { allow = ["AGPL-3.0"], name = "serai-bitcoin-processor" },
+  { allow = ["AGPL-3.0"], name = "ethereum-serai" },
   { allow = ["AGPL-3.0"], name = "serai-ethereum-processor" },
   { allow = ["AGPL-3.0"], name = "serai-monero-processor" },
 

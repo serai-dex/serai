@@ -29,7 +29,7 @@ dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", 
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["std"] }
-ethereum-serai = { path = "../../networks/ethereum", default-features = false, optional = true }
+ethereum-serai = { path = "./ethereum-serai", default-features = false, optional = true }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["ethereum"] }
 
