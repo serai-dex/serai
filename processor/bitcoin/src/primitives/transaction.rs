@@ -49,7 +49,7 @@ impl scheduler::Transaction for Transaction {
 #[derive(Clone, Debug)]
 pub(crate) struct SignableTransaction {
   pub(crate) inputs: Vec<ReceivedOutput>,
-  pub(crate) payments: Vec<(Address, u64)>,
+  pub(crate) payments: Vec<(ScriptBuf, u64)>,
   pub(crate) change: Option<Address>,
   pub(crate) fee_per_vbyte: u64,
 }
@@ -58,12 +58,7 @@ impl SignableTransaction {
   fn signable(self) -> Result<BSignableTransaction, TransactionError> {
     BSignableTransaction::new(
       self.inputs,
-      &self
-        .payments
-        .iter()
-        .cloned()
-        .map(|(address, amount)| (ScriptBuf::from(address), amount))
-        .collect::<Vec<_>>(),
+      &self.payments,
       self.change.map(ScriptBuf::from),
       None,
       self.fee_per_vbyte,
@@ -108,11 +103,19 @@ impl scheduler::SignableTransaction for SignableTransaction {
       inputs
     };
 
-    let payments = <_>::deserialize_reader(reader)?;
+    let payments = Vec::<(Vec<u8>, u64)>::deserialize_reader(reader)?;
     let change = <_>::deserialize_reader(reader)?;
     let fee_per_vbyte = <_>::deserialize_reader(reader)?;
 
-    Ok(Self { inputs, payments, change, fee_per_vbyte })
+    Ok(Self {
+      inputs,
+      payments: payments
+        .into_iter()
+        .map(|(address, amount)| (ScriptBuf::from_bytes(address), amount))
+        .collect(),
+      change,
+      fee_per_vbyte,
+    })
   }
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.inputs.len()).unwrap().to_le_bytes())?;
@@ -120,7 +123,9 @@ impl scheduler::SignableTransaction for SignableTransaction {
       input.write(writer)?;
     }
 
-    self.payments.serialize(writer)?;
+    for payment in &self.payments {
+      (payment.0.as_script().as_bytes(), payment.1).serialize(writer)?;
+    }
     self.change.serialize(writer)?;
     self.fee_per_vbyte.serialize(writer)?;
 
