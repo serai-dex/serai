@@ -8515,6 +8515,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite",
+ "curve25519-dalek",
  "dalek-ff-group",
  "dkg",
  "flexible-transcript",
