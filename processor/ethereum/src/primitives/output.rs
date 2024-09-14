@@ -17,17 +17,10 @@ use serai_client::{
 
 use primitives::{OutputType, ReceivedOutput};
 
-#[cfg(not(test))]
 const DAI: [u8; 20] =
   match const_hex::const_decode_to_array(b"0x6B175474E89094C44Da98b954EedeAC495271d0F") {
     Ok(res) => res,
     Err(_) => panic!("invalid non-test DAI hex address"),
-  };
-#[cfg(test)] // TODO
-const DAI: [u8; 20] =
-  match const_hex::const_decode_to_array(b"0000000000000000000000000000000000000000") {
-    Ok(res) => res,
-    Err(_) => panic!("invalid test DAI hex address"),
   };
 
 fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
