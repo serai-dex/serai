@@ -8350,18 +8350,25 @@ name = "serai-ethereum-processor"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "const-hex",
- "env_logger",
+ "ciphersuite",
+ "dkg",
  "ethereum-serai",
+ "flexible-transcript",
  "hex",
  "k256",
  "log",
+ "modular-frost",
  "parity-scale-codec",
+ "rand_core",
+ "serai-client",
  "serai-db",
- "serai-env",
- "serai-message-queue",
- "serai-processor-messages",
- "serde_json",
+ "serai-processor-bin",
+ "serai-processor-key-gen",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
+ "serai-processor-signers",
+ "serai-processor-smart-contract-scheduler",
  "tokio",
  "zalloc",
 ]
@@ -8779,6 +8786,20 @@ dependencies = [
  "serai-validator-sets-primitives",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "serai-processor-smart-contract-scheduler"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "group",
+ "parity-scale-codec",
+ "serai-db",
+ "serai-primitives",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
 ]
 
 [[package]]

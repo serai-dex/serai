@@ -470,7 +470,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
         }
       }
 
-      // Create the transactions for the forwards/burns
+      // Create the transactions for the forwards/returns
       {
         let mut planned_txs = vec![];
         for forward in update.forwards() {

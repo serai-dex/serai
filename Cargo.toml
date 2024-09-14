@@ -81,6 +81,7 @@ members = [
   "processor/scheduler/utxo/primitives",
   "processor/scheduler/utxo/standard",
   "processor/scheduler/utxo/transaction-chaining",
+  "processor/scheduler/smart-contract",
   "processor/signers",
 
   "processor/bin",

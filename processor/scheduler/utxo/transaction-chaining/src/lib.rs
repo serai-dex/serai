@@ -488,7 +488,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         }
       }
 
-      // Create the transactions for the forwards/burns
+      // Create the transactions for the forwards/returns
       {
         let mut planned_txs = vec![];
         for forward in update.forwards() {
