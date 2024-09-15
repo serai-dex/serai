@@ -46,6 +46,7 @@ members = [
 
   "networks/bitcoin",
 
+  "networks/ethereum/build-contracts",
   "networks/ethereum/alloy-simple-request-transport",
   "networks/ethereum/relayer",
 
