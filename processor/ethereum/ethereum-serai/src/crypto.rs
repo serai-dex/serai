@@ -13,6 +13,8 @@ use frost::{
   curve::{Ciphersuite, Secp256k1},
 };
 
+pub use ethereum_schnorr_contract::*;
+
 use alloy_core::primitives::{Parity, Signature as AlloySignature};
 use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
 
@@ -75,13 +77,5 @@ impl Hram<Secp256k1> for EthereumHram {
     data.extend(m);
 
     <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(&data).into())
-  }
-}
-
-impl From<&Signature> for AbiSignature {
-  fn from(sig: &Signature) -> AbiSignature {
-    let c: [u8; 32] = sig.c.to_repr().into();
-    let s: [u8; 32] = sig.s.to_repr().into();
-    AbiSignature { c: c.into(), s: s.into() }
   }
 }

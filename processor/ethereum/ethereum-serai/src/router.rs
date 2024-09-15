@@ -127,7 +127,6 @@ impl InInstruction {
 pub struct Executed {
   pub tx_id: [u8; 32],
   pub nonce: u64,
-  pub signature: [u8; 64],
 }
 
 /// The contract Serai uses to manage its state.
@@ -142,7 +141,7 @@ impl Router {
   pub(crate) fn init_code(key: &PublicKey) -> Vec<u8> {
     let mut bytecode = Self::code();
     // Append the constructor arguments
-    bytecode.extend((abi::constructorCall { _seraiKey: key.eth_repr().into() }).abi_encode());
+    bytecode.extend((abi::constructorCall { initialSeraiKey: key.eth_repr().into() }).abi_encode());
     bytecode
   }
 
@@ -392,13 +391,9 @@ impl Router {
         let log =
           log.log_decode::<SeraiKeyUpdated>().map_err(|_| Error::ConnectionError)?.inner.data;
 
-        let mut signature = [0; 64];
-        signature[.. 32].copy_from_slice(log.signature.c.as_ref());
-        signature[32 ..].copy_from_slice(log.signature.s.as_ref());
         res.push(Executed {
           tx_id,
           nonce: log.nonce.try_into().map_err(|_| Error::ConnectionError)?,
-          signature,
         });
       }
     }
@@ -418,13 +413,9 @@ impl Router {
 
         let log = log.log_decode::<ExecutedEvent>().map_err(|_| Error::ConnectionError)?.inner.data;
 
-        let mut signature = [0; 64];
-        signature[.. 32].copy_from_slice(log.signature.c.as_ref());
-        signature[32 ..].copy_from_slice(log.signature.s.as_ref());
         res.push(Executed {
           tx_id,
           nonce: log.nonce.try_into().map_err(|_| Error::ConnectionError)?,
-          signature,
         });
       }
     }

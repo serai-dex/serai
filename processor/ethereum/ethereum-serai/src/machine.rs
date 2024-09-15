@@ -236,7 +236,7 @@ impl RouterCommand {
         writer.write_all(&[0])?;
         writer.write_all(&chain_id.as_le_bytes())?;
         writer.write_all(&nonce.as_le_bytes())?;
-        writer.write_all(&key.A.to_bytes())
+        writer.write_all(&key.point().to_bytes())
       }
       RouterCommand::Execute { chain_id, nonce, outs } => {
         writer.write_all(&[1])?;
@@ -406,9 +406,9 @@ impl SignatureMachine<SignedRouterCommand> for RouterCommandSignatureMachine {
     self,
     shares: HashMap<Participant, Self::SignatureShare>,
   ) -> Result<SignedRouterCommand, FrostError> {
-    let sig = self.machine.complete(shares)?;
-    let signature = Signature::new(&self.key, &self.command.msg(), sig)
-      .expect("machine produced an invalid signature");
+    let signature = self.machine.complete(shares)?;
+    let signature = Signature::new(signature).expect("machine produced an invalid signature");
+    assert!(signature.verify(&self.key, &self.command.msg()));
     Ok(SignedRouterCommand { command: self.command, signature })
   }
 }
