@@ -1,0 +1,34 @@
+[package]
+name = "serai-processor-ethereum-deployer"
+version = "0.1.0"
+description = "The deployer for Serai's Ethereum contracts"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/deployer"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-core = { version = "0.8", default-features = false }
+alloy-consensus = { version = "0.3", default-features = false }
+
+alloy-sol-types = { version = "0.8", default-features = false }
+alloy-sol-macro = { version = "0.8", default-features = false }
+
+alloy-rpc-types-eth = { version = "0.3", default-features = false }
+alloy-transport = { version = "0.3", default-features = false }
+alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
+alloy-provider = { version = "0.3", default-features = false }
+
+ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "../primitives", default-features = false }
+
+[build-dependencies]
+build-solidity-contracts = { path = "../../../networks/ethereum/build-contracts", default-features = false }

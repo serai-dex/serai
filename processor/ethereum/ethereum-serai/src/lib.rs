@@ -15,6 +15,7 @@ pub mod alloy {
 
 pub mod crypto;
 
+/*
 pub(crate) mod abi {
   pub use contracts::erc20;
   pub use contracts::deployer;
@@ -37,3 +38,4 @@ pub enum Error {
   #[error("couldn't make call/send TX")]
   ConnectionError,
 }
+*/

@@ -53,6 +53,9 @@ jobs:
             -p serai-processor-bin \
             -p serai-bitcoin-processor \
             -p serai-processor-ethereum-contracts \
+            -p serai-processor-ethereum-primitives \
+            -p serai-processor-ethereum-deployer \
+            -p ethereum-serai \
             -p serai-ethereum-processor \
             -p serai-monero-processor \
             -p tendermint-machine \

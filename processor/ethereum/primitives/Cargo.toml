@@ -1,0 +1,24 @@
+[package]
+name = "serai-processor-ethereum-primitives"
+version = "0.1.0"
+description = "Primitives for Serai's Ethereum Processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+group = { version = "0.13", default-features = false }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic"] }
+
+alloy-core = { version = "0.8", default-features = false }
+alloy-consensus = { version = "0.3", default-features = false, features = ["k256"] }

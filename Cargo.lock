@@ -8722,6 +8722,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-processor-ethereum-deployer"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-core",
+ "alloy-provider",
+ "alloy-rpc-types-eth",
+ "alloy-simple-request-transport",
+ "alloy-sol-macro",
+ "alloy-sol-types",
+ "alloy-transport",
+ "build-solidity-contracts",
+ "serai-processor-ethereum-primitives",
+]
+
+[[package]]
+name = "serai-processor-ethereum-primitives"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-core",
+ "group",
+ "k256",
+]
+
+[[package]]
 name = "serai-processor-frost-attempt-manager"
 version = "0.1.0"
 dependencies = [

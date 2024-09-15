@@ -15,10 +15,8 @@ use frost::{
 
 pub use ethereum_schnorr_contract::*;
 
-use alloy_core::primitives::{Parity, Signature as AlloySignature};
+use alloy_core::primitives::{Parity, Signature as AlloySignature, Address};
 use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
-
-use crate::abi::router::{Signature as AbiSignature};
 
 pub(crate) fn keccak256(data: &[u8]) -> [u8; 32] {
   alloy_core::primitives::keccak256(data).into()
@@ -28,11 +26,9 @@ pub(crate) fn hash_to_scalar(data: &[u8]) -> Scalar {
   <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(data).into())
 }
 
-pub fn address(point: &ProjectivePoint) -> [u8; 20] {
+pub(crate) fn address(point: &ProjectivePoint) -> [u8; 20] {
   let encoded_point = point.to_encoded_point(false);
-  // Last 20 bytes of the hash of the concatenated x and y coordinates
-  // We obtain the concatenated x and y coordinates via the uncompressed encoding of the point
-  keccak256(&encoded_point.as_ref()[1 .. 65])[12 ..].try_into().unwrap()
+  **Address::from_raw_public_key(&encoded_point.as_ref()[1 .. 65])
 }
 
 /// Deterministically sign a transaction.
@@ -64,18 +60,15 @@ pub fn deterministically_sign(tx: &TxLegacy) -> Signed<TxLegacy> {
   }
 }
 
-/// The HRAm to use for the Schnorr contract.
+/// The HRAm to use for the Schnorr Solidity library.
+///
+/// This will panic if the public key being signed for is not representable within the Schnorr
+/// Solidity library.
 #[derive(Clone, Default)]
 pub struct EthereumHram {}
 impl Hram<Secp256k1> for EthereumHram {
   #[allow(non_snake_case)]
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-    let x_coord = A.to_affine().x();
-
-    let mut data = address(R).to_vec();
-    data.extend(x_coord.as_slice());
-    data.extend(m);
-
-    <Scalar as Reduce<KU256>>::reduce_bytes(&keccak256(&data).into())
+    Signature::challenge(*R, &PublicKey::new(*A).unwrap(), m)
   }
 }
