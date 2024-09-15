@@ -2516,6 +2516,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-simple-request-transport",
  "alloy-sol-types",
+ "ethereum-schnorr-contract",
  "flexible-transcript",
  "group",
  "k256",
@@ -6127,6 +6128,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479cf940fbbb3426c32c5d5176f62ad57549a0bb84773423ba8be9d089f5faba"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.77",
+]
+
+[[package]]
 name = "primeorder"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6291,7 +6302,7 @@ dependencies = [
  "log",
  "multimap",
  "petgraph",
- "prettyplease",
+ "prettyplease 0.1.25",
  "prost",
  "prost-types",
  "regex",
@@ -8700,8 +8711,14 @@ dependencies = [
 name = "serai-processor-ethereum-contracts"
 version = "0.1.0"
 dependencies = [
+ "alloy-sol-macro-expander",
+ "alloy-sol-macro-input",
  "alloy-sol-types",
  "build-solidity-contracts",
+ "prettyplease 0.2.22",
+ "serde_json",
+ "syn 2.0.77",
+ "syn-solidity",
 ]
 
 [[package]]

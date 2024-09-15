@@ -38,6 +38,7 @@ alloy-provider = { version = "0.3", default-features = false }
 
 alloy-node-bindings = { version = "0.3", default-features = false, optional = true }
 
+ethereum-schnorr-contract = { path = "../../../networks/ethereum/schnorr", default-features = false }
 contracts = { package = "serai-processor-ethereum-contracts", path = "../contracts" }
 
 [dev-dependencies]

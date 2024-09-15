@@ -21,3 +21,12 @@ alloy-sol-types = { version = "0.8", default-features = false, features = ["json
 
 [build-dependencies]
 build-solidity-contracts = { path = "../../../networks/ethereum/build-contracts" }
+
+syn = { version = "2", default-features = false, features = ["proc-macro"] }
+
+serde_json = { version = "1", default-features = false, features = ["std"] }
+
+syn-solidity = { version = "0.8", default-features = false }
+alloy-sol-macro-input = { version = "0.8", default-features = false }
+alloy-sol-macro-expander = { version = "0.8", default-features = false }
+prettyplease = { version = "0.2", default-features = false }

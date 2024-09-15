@@ -12,6 +12,13 @@ pub fn build(
   contracts_path: &str,
   artifacts_path: &str,
 ) -> Result<(), String> {
+  if !fs::exists(artifacts_path)
+    .map_err(|e| format!("couldn't check if artifacts directory already exists: {e:?}"))?
+  {
+    fs::create_dir(artifacts_path)
+      .map_err(|e| format!("couldn't create the non-existent artifacts directory: {e:?}"))?;
+  }
+
   println!("cargo:rerun-if-changed={contracts_path}/*");
   println!("cargo:rerun-if-changed={artifacts_path}/*");
 
