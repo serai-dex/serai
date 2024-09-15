@@ -17,6 +17,8 @@ use alloy_node_bindings::{Anvil, AnvilInstance};
 
 use crate::{PublicKey, Signature};
 
+mod premise;
+
 #[expect(warnings)]
 #[expect(needless_pass_by_value)]
 #[expect(clippy::all)]

@@ -7,8 +7,9 @@ library Schnorr {
   uint256 constant private Q =
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
-  // We fix the key to have an even y coordinate to save a word when verifying
-  // signatures. This is comparable to Bitcoin Taproot's encoding of keys
+  // We fix the key to have:
+  // 1) An even y-coordinate
+  // 2) An x-coordinate < Q
   uint8 constant private KEY_PARITY = 27;
 
   // px := public key x-coordinate, where the public key has an even y-coordinate
@@ -27,11 +28,17 @@ library Schnorr {
     bytes32 sa = bytes32(Q - mulmod(uint256(s), uint256(px), Q));
     bytes32 ca = bytes32(Q - mulmod(uint256(c), uint256(px), Q));
 
-    // For safety, we want each input to ecrecover to not be 0 (sa, px, ca)
-    // The ecrecover precompile checks `r` and `s` (`px` and `ca`) are non-zero
-    // That leaves us to check `sa` are non-zero
-    if (sa == 0) return false;
+    /*
+      The ecrecover precompile checks `r` and `s` (`px` and `ca`) are non-zero,
+      banning the two keys with zero for their x-coordinate and zero challenge.
+      Each has negligible probability of occuring (assuming zero x-coordinates
+      are even on-curve in the first place).
+
+      `sa` is not checked to be non-zero yet it does not need to be. The inverse
+      of it is never taken.
+    */
     address R = ecrecover(sa, KEY_PARITY, px, ca);
+    // The ecrecover failed
     if (R == address(0)) return false;
 
     // Check the signature is correct by rebuilding the challenge
