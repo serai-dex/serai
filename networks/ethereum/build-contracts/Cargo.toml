@@ -1,0 +1,15 @@
+[package]
+name = "build-solidity-contracts"
+version = "0.1.0"
+description = "A helper function to build Solidity contracts"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/build-contracts"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
