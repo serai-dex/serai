@@ -6,7 +6,6 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/schnorr"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
 edition = "2021"
-publish = false
 rust-version = "1.79"
 
 [package.metadata.docs.rs]
