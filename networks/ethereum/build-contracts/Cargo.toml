@@ -1,6 +1,6 @@
 [package]
 name = "build-solidity-contracts"
-version = "0.1.0"
+version = "0.1.1"
 description = "A helper function to build Solidity contracts"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/build-contracts"

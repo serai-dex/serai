@@ -17,11 +17,11 @@ use alloy_node_bindings::{Anvil, AnvilInstance};
 
 use crate::{PublicKey, Signature};
 
-#[allow(warnings)]
-#[allow(needless_pass_by_value)]
-#[allow(clippy::all)]
-#[allow(clippy::ignored_unit_patterns)]
-#[allow(clippy::redundant_closure_for_method_calls)]
+#[expect(warnings)]
+#[expect(needless_pass_by_value)]
+#[expect(clippy::all)]
+#[expect(clippy::ignored_unit_patterns)]
+#[expect(clippy::redundant_closure_for_method_calls)]
 mod abi {
   alloy_sol_types::sol!("contracts/tests/Schnorr.sol");
   pub(crate) use TestSchnorr::*;
@@ -40,7 +40,14 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider<SimpleRequest>>, Addre
   let _: () = provider
     .raw_request(
       "anvil_setCode".into(),
-      [address.to_string(), include_str!("../artifacts/TestSchnorr.bin-runtime").to_string()],
+      [
+        address.to_string(),
+        include_str!(concat!(
+          env!("OUT_DIR"),
+          "/ethereum-schnorr-contract/TestSchnorr.bin-runtime"
+        ))
+        .to_string(),
+      ],
     )
     .await
     .unwrap();
