@@ -30,7 +30,7 @@ impl Deployer {
   /// funded for this transaction to be submitted. This account has no known private key to anyone,
   /// so ETH sent can be neither misappropriated nor returned.
   pub fn deployment_tx() -> Signed<TxLegacy> {
-    let bytecode = include_str!("../artifacts/Deployer.bin");
+    let bytecode = contracts::deployer::BYTECODE;
     let bytecode =
       Bytes::from_hex(bytecode).expect("compiled-in Deployer bytecode wasn't valid hex");
 

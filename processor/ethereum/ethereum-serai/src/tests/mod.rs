@@ -21,7 +21,7 @@ use crate::crypto::{address, deterministically_sign, PublicKey};
 mod crypto;
 
 #[cfg(test)]
-mod abi;
+use contracts::tests as abi;
 #[cfg(test)]
 mod schnorr;
 #[cfg(test)]
