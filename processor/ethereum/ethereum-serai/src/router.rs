@@ -135,7 +135,7 @@ pub struct Executed {
 pub struct Router(Arc<RootProvider<SimpleRequest>>, Address);
 impl Router {
   pub(crate) fn code() -> Vec<u8> {
-    let bytecode = include_str!("../artifacts/Router.bin");
+    let bytecode = contracts::router::BYTECODE;
     Bytes::from_hex(bytecode).expect("compiled-in Router bytecode wasn't valid hex").to_vec()
   }
 

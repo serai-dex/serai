@@ -85,6 +85,7 @@ members = [
 
   "processor/bin",
   "processor/bitcoin",
+  "processor/ethereum/contracts",
   "processor/ethereum/ethereum-serai",
   "processor/ethereum",
   "processor/monero",

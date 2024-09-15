@@ -1,0 +1,20 @@
+[package]
+name = "serai-processor-ethereum-contracts"
+version = "0.1.0"
+description = "Ethereum contracts for the Serai processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/contracts"
+authors = ["Luke Parker <lukeparker5132@gmail.com>", "Elizabeth Binks <elizabethjbinks@gmail.com>"]
+edition = "2021"
+publish = false
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+alloy-sol-types = { version = "0.8", default-features = false }

@@ -28,14 +28,18 @@ fn main() {
     "./contracts/Sandbox.sol",
     "./contracts/Router.sol",
 
-    "./src/tests/contracts/Schnorr.sol",
-    "./src/tests/contracts/ERC20.sol",
+    "./contracts/tests/Schnorr.sol",
+    "./contracts/tests/ERC20.sol",
 
     "--no-color",
   ];
   let solc = Command::new("solc").args(args).output().unwrap();
   assert!(solc.status.success());
-  for line in String::from_utf8(solc.stderr).unwrap().lines() {
-    assert!(!line.starts_with("Error:"));
+  let stderr = String::from_utf8(solc.stderr).unwrap();
+  for line in stderr.lines() {
+    if line.contains("Error:") {
+      println!("{stderr}");
+      panic!()
+    }
   }
 }

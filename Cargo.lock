@@ -2497,6 +2497,7 @@ dependencies = [
  "k256",
  "modular-frost",
  "rand_core",
+ "serai-processor-ethereum-contracts",
  "thiserror",
  "tokio",
 ]
@@ -8669,6 +8670,13 @@ dependencies = [
  "serai-processor-signers",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "serai-processor-ethereum-contracts"
+version = "0.1.0"
+dependencies = [
+ "alloy-sol-types",
 ]
 
 [[package]]

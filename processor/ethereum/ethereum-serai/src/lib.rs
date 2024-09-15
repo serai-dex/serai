@@ -15,7 +15,11 @@ pub mod alloy {
 
 pub mod crypto;
 
-pub(crate) mod abi;
+pub(crate) mod abi {
+  pub use contracts::erc20;
+  pub use contracts::deployer;
+  pub use contracts::router;
+}
 
 pub mod erc20;
 pub mod deployer;

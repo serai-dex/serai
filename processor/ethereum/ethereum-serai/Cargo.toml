@@ -38,6 +38,8 @@ alloy-provider = { version = "0.3", default-features = false }
 
 alloy-node-bindings = { version = "0.3", default-features = false, optional = true }
 
+contracts = { package = "serai-processor-ethereum-contracts", path = "../contracts" }
+
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../../../crypto/frost", default-features = false, features = ["tests"] }
 

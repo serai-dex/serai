@@ -8,6 +8,6 @@ use alloy_sol_types::sol;
 #[allow(clippy::redundant_closure_for_method_calls)]
 mod schnorr_container {
   use super::*;
-  sol!("src/tests/contracts/Schnorr.sol");
+  sol!("contracts/tests/Schnorr.sol");
 }
-pub(crate) use schnorr_container::TestSchnorr as schnorr;
+pub use schnorr_container::TestSchnorr as schnorr;
