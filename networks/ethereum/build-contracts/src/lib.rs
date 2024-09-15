@@ -4,7 +4,7 @@
 
 use std::{path::PathBuf, fs, process::Command};
 
-/// Build contracts placed in `contracts/`, outputting to `artifacts/`.
+/// Build contracts from the specified path, outputting the artifacts to the specified path.
 ///
 /// Requires solc 0.8.25.
 pub fn build(contracts_path: &str, artifacts_path: &str) -> Result<(), String> {
@@ -33,7 +33,7 @@ pub fn build(contracts_path: &str, artifacts_path: &str) -> Result<(), String> {
   #[rustfmt::skip]
   let args = [
     "--base-path", ".",
-    "-o", "./artifacts", "--overwrite",
+    "-o", artifacts_path, "--overwrite",
     "--bin", "--bin-runtime", "--abi",
     "--via-ir", "--optimize",
     "--no-color",
