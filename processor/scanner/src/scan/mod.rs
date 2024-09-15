@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use scale::Decode;
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::MAX_DATA_LEN;
 use serai_in_instructions_primitives::{
   Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
 };
@@ -56,16 +55,6 @@ fn in_instruction_from_output<S: ScannerFeed>(
   let presumed_origin = output.presumed_origin();
 
   let mut data = output.data();
-  let max_data_len = usize::try_from(MAX_DATA_LEN).unwrap();
-  if data.len() > max_data_len {
-    log::info!(
-      "data in output {} exceeded MAX_DATA_LEN ({MAX_DATA_LEN}): {}. skipping",
-      hex::encode(output.id()),
-      data.len(),
-    );
-    return (presumed_origin, None);
-  }
-
   let shorthand = match Shorthand::decode(&mut data) {
     Ok(shorthand) => shorthand,
     Err(e) => {

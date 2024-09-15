@@ -205,11 +205,7 @@ pub mod pallet {
                 let coin_balance =
                   Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), out_balance.coin);
                 let instruction = OutInstructionWithBalance {
-                  instruction: OutInstruction {
-                    address: out_address.as_external().unwrap(),
-                    // TODO: Properly pass data. Replace address with an OutInstruction entirely?
-                    data: None,
-                  },
+                  instruction: OutInstruction { address: out_address.as_external().unwrap() },
                   balance: Balance { coin: out_balance.coin, amount: coin_balance },
                 };
                 Coins::<T>::burn_with_instruction(origin.into(), instruction)?;

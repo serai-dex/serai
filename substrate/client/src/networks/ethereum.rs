@@ -1,35 +1,93 @@
-use core::{str::FromStr, fmt};
+use core::str::FromStr;
+use std::io::Read;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::primitives::ExternalAddress;
+use crate::primitives::{MAX_ADDRESS_LEN, ExternalAddress};
 
-/// A representation of an Ethereum address.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-pub struct Address([u8; 20]);
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub struct ContractDeployment {
+  /// The gas limit to use for this contract's execution.
+  ///
+  /// THis MUST be less than the Serai gas limit. The cost of it will be deducted from the amount
+  /// transferred.
+  gas: u32,
+  /// The initialization code of the contract to deploy.
+  ///
+  /// This contract will be deployed (executing the initialization code). No further calls will
+  /// be made.
+  code: Vec<u8>,
+}
 
-impl From<[u8; 20]> for Address {
-  fn from(address: [u8; 20]) -> Self {
-    Self(address)
+/// A contract to deploy, enabling executing arbitrary code.
+impl ContractDeployment {
+  pub fn new(gas: u32, code: Vec<u8>) -> Option<Self> {
+    // The max address length, minus the type byte, minus the size of the gas
+    const MAX_CODE_LEN: usize = (MAX_ADDRESS_LEN as usize) - (1 + core::mem::size_of::<u32>());
+    if code.len() > MAX_CODE_LEN {
+      None?;
+    }
+    Some(Self { gas, code })
   }
 }
 
-impl From<Address> for [u8; 20] {
-  fn from(address: Address) -> Self {
-    address.0
+/// A representation of an Ethereum address.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum Address {
+  /// A traditional address.
+  Address([u8; 20]),
+  /// A contract to deploy, enabling executing arbitrary code.
+  Contract(ContractDeployment),
+}
+
+impl From<[u8; 20]> for Address {
+  fn from(address: [u8; 20]) -> Self {
+    Address::Address(address)
   }
 }
 
 impl TryFrom<ExternalAddress> for Address {
   type Error = ();
   fn try_from(data: ExternalAddress) -> Result<Address, ()> {
-    Ok(Self(data.as_ref().try_into().map_err(|_| ())?))
+    let mut kind = [0xff];
+    let mut reader: &[u8] = data.as_ref();
+    reader.read_exact(&mut kind).map_err(|_| ())?;
+    Ok(match kind[0] {
+      0 => {
+        let mut address = [0xff; 20];
+        reader.read_exact(&mut address).map_err(|_| ())?;
+        Address::Address(address)
+      }
+      1 => {
+        let mut gas = [0xff; 4];
+        reader.read_exact(&mut gas).map_err(|_| ())?;
+        // The code is whatever's left since the ExternalAddress is a delimited container of
+        // appropriately bounded length
+        Address::Contract(ContractDeployment {
+          gas: u32::from_le_bytes(gas),
+          code: reader.to_vec(),
+        })
+      }
+      _ => Err(())?,
+    })
   }
 }
 impl From<Address> for ExternalAddress {
   fn from(address: Address) -> ExternalAddress {
-    // This is 20 bytes which is less than MAX_ADDRESS_LEN
-    ExternalAddress::new(address.0.to_vec()).unwrap()
+    let mut res = Vec::with_capacity(1 + 20);
+    match address {
+      Address::Address(address) => {
+        res.push(0);
+        res.extend(&address);
+      }
+      Address::Contract(ContractDeployment { gas, code }) => {
+        res.push(1);
+        res.extend(&gas.to_le_bytes());
+        res.extend(&code);
+      }
+    }
+    // We only construct addresses whose code is small enough this can safely be constructed
+    ExternalAddress::new(res).unwrap()
   }
 }
 
@@ -40,12 +98,8 @@ impl FromStr for Address {
     if address.len() != 40 {
       Err(())?
     };
-    Ok(Self(hex::decode(address.to_lowercase()).map_err(|_| ())?.try_into().unwrap()))
-  }
-}
-
-impl fmt::Display for Address {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "0x{}", hex::encode(self.0))
+    Ok(Address::Address(
+      hex::decode(address.to_lowercase()).map_err(|_| ())?.try_into().map_err(|_| ())?,
+    ))
   }
 }

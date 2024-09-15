@@ -130,7 +130,7 @@ impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> SchedulerTrait<S> for S
             .returns()
             .iter()
             .map(|to_return| {
-              Payment::new(to_return.address().clone(), to_return.output().balance(), None)
+              Payment::new(to_return.address().clone(), to_return.output().balance())
             })
             .collect::<Vec<_>>(),
         ),

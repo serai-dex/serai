@@ -88,7 +88,6 @@ pub async fn test_wallet<N: Network>(
     outputs.clone(),
     vec![Payment {
       address: N::external_address(&network, key).await,
-      data: None,
       balance: Balance {
         coin: match N::NETWORK {
           NetworkId::Serai => panic!("test_wallet called with Serai"),
@@ -116,7 +115,6 @@ pub async fn test_wallet<N: Network>(
     plans[0].payments,
     vec![Payment {
       address: N::external_address(&network, key).await,
-      data: None,
       balance: Balance {
         coin: match N::NETWORK {
           NetworkId::Serai => panic!("test_wallet called with Serai"),

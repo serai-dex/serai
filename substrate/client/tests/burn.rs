@@ -12,7 +12,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, Data, ExternalAddress,
+    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
   },
   in_instructions::{
@@ -55,39 +55,35 @@ serai_test!(
     let block = provide_batch(&serai, batch.clone()).await;
 
     let instruction = {
-    let serai = serai.as_of(block);
-    let batches = serai.in_instructions().batch_events().await.unwrap();
-    assert_eq!(
-      batches,
-      vec![InInstructionsEvent::Batch {
-        network,
-        id,
-        block: block_hash,
-        instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
-      }]
-    );
+      let serai = serai.as_of(block);
+      let batches = serai.in_instructions().batch_events().await.unwrap();
+      assert_eq!(
+        batches,
+        vec![InInstructionsEvent::Batch {
+          network,
+          id,
+          block: block_hash,
+          instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+        }]
+      );
 
-    assert_eq!(
-      serai.coins().mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { to: address, balance }]
-    );
-    assert_eq!(serai.coins().coin_supply(coin).await.unwrap(), amount);
-    assert_eq!(serai.coins().coin_balance(coin, address).await.unwrap(), amount);
+      assert_eq!(
+        serai.coins().mint_events().await.unwrap(),
+        vec![CoinsEvent::Mint { to: address, balance }]
+      );
+      assert_eq!(serai.coins().coin_supply(coin).await.unwrap(), amount);
+      assert_eq!(serai.coins().coin_balance(coin, address).await.unwrap(), amount);
 
-    // Now burn it
-    let mut rand_bytes = vec![0; 32];
-    OsRng.fill_bytes(&mut rand_bytes);
-    let external_address = ExternalAddress::new(rand_bytes).unwrap();
+      // Now burn it
+      let mut rand_bytes = vec![0; 32];
+      OsRng.fill_bytes(&mut rand_bytes);
+      let external_address = ExternalAddress::new(rand_bytes).unwrap();
 
-    let mut rand_bytes = vec![0; 32];
-    OsRng.fill_bytes(&mut rand_bytes);
-    let data = Data::new(rand_bytes).unwrap();
-
-    OutInstructionWithBalance {
-      balance,
-      instruction: OutInstruction { address: external_address, data: Some(data) },
-    }
-};
+      OutInstructionWithBalance {
+        balance,
+        instruction: OutInstruction { address: external_address },
+      }
+    };
 
     let block = publish_tx(
       &serai,

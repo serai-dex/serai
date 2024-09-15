@@ -507,7 +507,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
               &mut 0,
               block,
               vec![forward.clone()],
-              vec![Payment::new(P::forwarding_address(forward_to_key), forward.balance(), None)],
+              vec![Payment::new(P::forwarding_address(forward_to_key), forward.balance())],
               None,
             )
             .await?
@@ -519,7 +519,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         for to_return in update.returns() {
           let key = to_return.output().key();
           let out_instruction =
-            Payment::new(to_return.address().clone(), to_return.output().balance(), None);
+            Payment::new(to_return.address().clone(), to_return.output().balance());
           let Some(plan) = self
             .planner
             .plan_transaction_with_fee_amortization(

@@ -59,10 +59,7 @@ pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, co
   vec.try_into().map_err(|_| borsh::io::Error::other("bound exceeded"))
 }
 
-// Monero, our current longest address candidate, has a longest address of featured
-// 1 (enum) + 1 (flags) + 64 (two keys) = 66
-// When JAMTIS arrives, it'll become 112 or potentially even 142 bytes
-pub const MAX_ADDRESS_LEN: u32 = 192;
+pub const MAX_ADDRESS_LEN: u32 = 512;
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -97,51 +94,6 @@ impl ExternalAddress {
 }
 
 impl AsRef<[u8]> for ExternalAddress {
-  fn as_ref(&self) -> &[u8] {
-    self.0.as_ref()
-  }
-}
-
-// Should be enough for a Uniswap v3 call
-pub const MAX_DATA_LEN: u32 = 512;
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Data(
-  #[cfg_attr(
-    feature = "borsh",
-    borsh(
-      serialize_with = "borsh_serialize_bounded_vec",
-      deserialize_with = "borsh_deserialize_bounded_vec"
-    )
-  )]
-  BoundedVec<u8, ConstU32<{ MAX_DATA_LEN }>>,
-);
-
-#[cfg(feature = "std")]
-impl Zeroize for Data {
-  fn zeroize(&mut self) {
-    self.0.as_mut().zeroize()
-  }
-}
-
-impl Data {
-  #[cfg(feature = "std")]
-  pub fn new(data: Vec<u8>) -> Result<Data, &'static str> {
-    Ok(Data(data.try_into().map_err(|_| "data length exceeds {MAX_DATA_LEN}")?))
-  }
-
-  pub fn data(&self) -> &[u8] {
-    self.0.as_ref()
-  }
-
-  #[cfg(feature = "std")]
-  pub fn consume(self) -> Vec<u8> {
-    self.0.into_inner()
-  }
-}
-
-impl AsRef<[u8]> for Data {
   fn as_ref(&self) -> &[u8] {
     self.0.as_ref()
   }

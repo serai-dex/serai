@@ -192,7 +192,7 @@ contract Router {
         _transferOut(nextAddress, transactions[i].coin, transactions[i].value);
 
         // Perform the calls with a set gas budget
-        (uint24 gas, bytes memory code) = abi.decode(transactions[i].destination, (uint24, bytes));
+        (uint32 gas, bytes memory code) = abi.decode(transactions[i].destination, (uint32, bytes));
         address(this).call{
           gas: gas
         }(abi.encodeWithSelector(Router.arbitaryCallOut.selector, code));
