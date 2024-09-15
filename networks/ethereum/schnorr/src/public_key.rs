@@ -37,7 +37,13 @@ impl PublicKey {
       None?;
     }
 
-    Some(PublicKey { A, x_coordinate: x_coordinate.into() })
+    let x_coordinate: [u8; 32] = x_coordinate.into();
+    // Returns None if the x-coordinate is 0
+    // Such keys will never have their signatures able to be verified
+    if x_coordinate == [0; 32] {
+      None?;
+    }
+    Some(PublicKey { A, x_coordinate })
   }
 
   /// The point for this public key.

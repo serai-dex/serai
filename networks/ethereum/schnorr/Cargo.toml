@@ -21,15 +21,16 @@ sha3 = { version = "0.10", default-features = false, features = ["std"] }
 group = { version = "0.13", default-features = false, features = ["alloc"] }
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic"] }
 
-alloy-sol-types = { version = "0.8", default-features = false }
-
 [build-dependencies]
 build-solidity-contracts = { path = "../build-contracts", version = "0.1" }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
+k256 = { version = "^0.13.1", default-features = false, features = ["ecdsa"] }
+
 alloy-core = { version = "0.8", default-features = false }
+alloy-sol-types = { version = "0.8", default-features = false }
 
 alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
 alloy-rpc-types-eth = { version = "0.3", default-features = false }
