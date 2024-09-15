@@ -13,17 +13,17 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, system_address};
+use serai_primitives::{Balance, SeraiAddress, ExternalAddress, system_address};
 
 pub const FEE_ACCOUNT: SeraiAddress = system_address(b"Coins-fees");
 
+// TODO: Replace entirely with just Address
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct OutInstruction {
   pub address: ExternalAddress,
-  pub data: Option<Data>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]

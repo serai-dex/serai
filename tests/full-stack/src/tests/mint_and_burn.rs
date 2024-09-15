@@ -493,7 +493,7 @@ async fn mint_and_burn_test() {
         move |nonce, coin, amount, address| async move {
           let out_instruction = OutInstructionWithBalance {
             balance: Balance { coin, amount: Amount(amount) },
-            instruction: OutInstruction { address, data: None },
+            instruction: OutInstruction { address },
           };
 
           serai

@@ -184,7 +184,6 @@ pub async fn test_signer<N: Network>(
     let mut scheduler = N::Scheduler::new::<MemDb>(&mut txn, key, N::NETWORK);
     let payments = vec![Payment {
       address: N::external_address(&network, key).await,
-      data: None,
       balance: Balance {
         coin: match N::NETWORK {
           NetworkId::Serai => panic!("test_signer called with Serai"),

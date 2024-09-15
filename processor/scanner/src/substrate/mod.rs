@@ -142,7 +142,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
 
                 if let Some(report::ReturnInformation { address, balance }) = return_information {
                   burns.push(OutInstructionWithBalance {
-                    instruction: OutInstruction { address: address.into(), data: None },
+                    instruction: OutInstruction { address: address.into() },
                     balance,
                   });
                 }

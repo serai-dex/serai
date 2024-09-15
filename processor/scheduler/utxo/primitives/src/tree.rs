@@ -115,11 +115,7 @@ impl<A: Address> TreeTransaction<A> {
           .filter_map(|(payment, amount)| {
             amount.map(|amount| {
               // The existing payment, with the new amount
-              Payment::new(
-                payment.address().clone(),
-                Balance { coin, amount: Amount(amount) },
-                payment.data().clone(),
-              )
+              Payment::new(payment.address().clone(), Balance { coin, amount: Amount(amount) })
             })
           })
           .collect()
@@ -130,7 +126,7 @@ impl<A: Address> TreeTransaction<A> {
           .filter_map(|amount| {
             amount.map(|amount| {
               // A branch output with the new amount
-              Payment::new(branch_address.clone(), Balance { coin, amount: Amount(amount) }, None)
+              Payment::new(branch_address.clone(), Balance { coin, amount: Amount(amount) })
             })
           })
           .collect()

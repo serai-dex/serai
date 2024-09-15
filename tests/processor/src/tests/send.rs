@@ -246,7 +246,7 @@ fn send_test() {
             },
             block: substrate_block_num,
             burns: vec![OutInstructionWithBalance {
-              instruction: OutInstruction { address: wallet.address(), data: None },
+              instruction: OutInstruction { address: wallet.address() },
               balance: Balance { coin: balance_sent.coin, amount: amount_minted },
             }],
             batches: vec![batch.batch.id],
