@@ -5,5 +5,5 @@ fn main() {
   if !fs::exists(&artifacts_path).unwrap() {
     fs::create_dir(&artifacts_path).unwrap();
   }
-  build_solidity_contracts::build("contracts", &artifacts_path).unwrap();
+  build_solidity_contracts::build(&[], "contracts", &artifacts_path).unwrap();
 }

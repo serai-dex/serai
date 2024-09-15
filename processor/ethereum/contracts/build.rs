@@ -1,3 +1,8 @@
 fn main() {
-  build_solidity_contracts::build("contracts", "artifacts").unwrap();
+  build_solidity_contracts::build(
+    &["../../../networks/ethereum/schnorr/contracts"],
+    "contracts",
+    "artifacts",
+  )
+  .unwrap();
 }
