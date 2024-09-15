@@ -34,7 +34,7 @@ pub fn build(contracts_path: &str, artifacts_path: &str) -> Result<(), String> {
   let args = [
     "--base-path", ".",
     "-o", "./artifacts", "--overwrite",
-    "--bin", "--abi",
+    "--bin", "--bin-runtime", "--abi",
     "--via-ir", "--optimize",
     "--no-color",
   ];

@@ -23,8 +23,6 @@ mod crypto;
 #[cfg(test)]
 use contracts::tests as abi;
 #[cfg(test)]
-mod schnorr;
-#[cfg(test)]
 mod router;
 
 pub fn key_gen() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) {

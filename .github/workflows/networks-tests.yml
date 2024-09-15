@@ -31,6 +31,7 @@ jobs:
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p bitcoin-serai \
             -p build-solidity-contracts \
+            -p ethereum-schnorr-contract \
             -p alloy-simple-request-transport \
             -p serai-ethereum-relayer \
             -p monero-io \

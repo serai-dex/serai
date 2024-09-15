@@ -62,56 +62,6 @@ pub fn deterministically_sign(tx: &TxLegacy) -> Signed<TxLegacy> {
   }
 }
 
-/// The public key for a Schnorr-signing account.
-#[allow(non_snake_case)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct PublicKey {
-  pub(crate) A: ProjectivePoint,
-  pub(crate) px: Scalar,
-}
-
-impl PublicKey {
-  /// Construct a new `PublicKey`.
-  ///
-  /// This will return None if the provided point isn't eligible to be a public key (due to
-  /// bounds such as parity).
-  #[allow(non_snake_case)]
-  pub fn new(A: ProjectivePoint) -> Option<PublicKey> {
-    let affine = A.to_affine();
-    // Only allow even keys to save a word within Ethereum
-    let is_odd = bool::from(affine.y_is_odd());
-    if is_odd {
-      None?;
-    }
-
-    let x_coord = affine.x();
-    let x_coord_scalar = <Scalar as Reduce<KU256>>::reduce_bytes(&x_coord);
-    // Return None if a reduction would occur
-    // Reductions would be incredibly unlikely and shouldn't be an issue, yet it's one less
-    // headache/concern to have
-    // This does ban a trivial amoount of public keys
-    if x_coord_scalar.to_repr() != x_coord {
-      None?;
-    }
-
-    Some(PublicKey { A, px: x_coord_scalar })
-  }
-
-  pub fn point(&self) -> ProjectivePoint {
-    self.A
-  }
-
-  pub fn eth_repr(&self) -> [u8; 32] {
-    self.px.to_repr().into()
-  }
-
-  pub fn from_eth_repr(repr: [u8; 32]) -> Option<Self> {
-    #[allow(non_snake_case)]
-    let A = Option::<AffinePoint>::from(AffinePoint::decompress(&repr.into(), 0.into()))?.into();
-    Option::from(Scalar::from_repr(repr.into())).map(|px| PublicKey { A, px })
-  }
-}
-
 /// The HRAm to use for the Schnorr contract.
 #[derive(Clone, Default)]
 pub struct EthereumHram {}
@@ -128,58 +78,6 @@ impl Hram<Secp256k1> for EthereumHram {
   }
 }
 
-/// A signature for the Schnorr contract.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Signature {
-  pub(crate) c: Scalar,
-  pub(crate) s: Scalar,
-}
-impl Signature {
-  pub fn verify(&self, public_key: &PublicKey, message: &[u8]) -> bool {
-    #[allow(non_snake_case)]
-    let R = (Secp256k1::generator() * self.s) - (public_key.A * self.c);
-    EthereumHram::hram(&R, &public_key.A, message) == self.c
-  }
-
-  /// Construct a new `Signature`.
-  ///
-  /// This will return None if the signature is invalid.
-  pub fn new(
-    public_key: &PublicKey,
-    message: &[u8],
-    signature: SchnorrSignature<Secp256k1>,
-  ) -> Option<Signature> {
-    let c = EthereumHram::hram(&signature.R, &public_key.A, message);
-    if !signature.verify(public_key.A, c) {
-      None?;
-    }
-
-    let res = Signature { c, s: signature.s };
-    assert!(res.verify(public_key, message));
-    Some(res)
-  }
-
-  pub fn c(&self) -> Scalar {
-    self.c
-  }
-  pub fn s(&self) -> Scalar {
-    self.s
-  }
-
-  pub fn to_bytes(&self) -> [u8; 64] {
-    let mut res = [0; 64];
-    res[.. 32].copy_from_slice(self.c.to_repr().as_ref());
-    res[32 ..].copy_from_slice(self.s.to_repr().as_ref());
-    res
-  }
-
-  pub fn from_bytes(bytes: [u8; 64]) -> std::io::Result<Self> {
-    let mut reader = bytes.as_slice();
-    let c = Secp256k1::read_F(&mut reader)?;
-    let s = Secp256k1::read_F(&mut reader)?;
-    Ok(Signature { c, s })
-  }
-}
 impl From<&Signature> for AbiSignature {
   fn from(sig: &Signature) -> AbiSignature {
     let c: [u8; 32] = sig.c.to_repr().into();

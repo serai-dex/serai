@@ -2484,6 +2484,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum-schnorr-contract"
+version = "0.1.0"
+dependencies = [
+ "alloy-core",
+ "alloy-node-bindings",
+ "alloy-provider",
+ "alloy-rpc-client",
+ "alloy-rpc-types-eth",
+ "alloy-simple-request-transport",
+ "alloy-sol-types",
+ "build-solidity-contracts",
+ "group",
+ "k256",
+ "rand_core",
+ "sha3",
+ "subtle",
+ "tokio",
+]
+
+[[package]]
 name = "ethereum-serai"
 version = "0.1.0"
 dependencies = [
