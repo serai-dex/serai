@@ -44,5 +44,3 @@ pub mod router {
   pub const BYTECODE: &str = include_str!("../artifacts/Router.bin");
   pub use super::router_container::Router::*;
 }
-
-pub mod tests;

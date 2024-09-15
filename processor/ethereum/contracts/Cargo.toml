@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-alloy-sol-types = { version = "0.8", default-features = false }
+alloy-sol-types = { version = "0.8", default-features = false, features = ["json"] }
 
 [build-dependencies]
 build-solidity-contracts = { path = "../../../networks/ethereum/build-contracts" }

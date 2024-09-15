@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.26;
 
 // See https://github.com/noot/schnorr-verify for implementation details
 library Schnorr {
