@@ -25,6 +25,19 @@ use crate::{
   },
 };
 
+/// The HRAm to use for the Schnorr Solidity library.
+///
+/// This will panic if the public key being signed for is not representable within the Schnorr
+/// Solidity library.
+#[derive(Clone, Default)]
+pub struct EthereumHram {}
+impl Hram<Secp256k1> for EthereumHram {
+  #[allow(non_snake_case)]
+  fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
+    Signature::challenge(*R, &PublicKey::new(*A).unwrap(), m)
+  }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Call {
   pub to: [u8; 20],
