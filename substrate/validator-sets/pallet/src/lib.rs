@@ -706,7 +706,7 @@ pub mod pallet {
         (!Keys::<T>::contains_key(ValidatorSet { network, session: Session(session.0 - 1) }))
     }
 
-    fn new_session() {
+    pub fn new_session() {
       for network in serai_primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };

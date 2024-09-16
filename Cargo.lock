@@ -8258,7 +8258,11 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-babe",
+ "pallet-grandpa",
+ "pallet-timestamp",
  "parity-scale-codec",
+ "rand_core",
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
@@ -8269,6 +8273,8 @@ dependencies = [
  "serai-validator-sets-primitives",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
+ "sp-runtime",
  "sp-std",
 ]
 
