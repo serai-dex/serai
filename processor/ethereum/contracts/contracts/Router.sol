@@ -35,7 +35,9 @@ contract Router {
   }
 
   event SeraiKeyUpdated(uint256 indexed nonce, bytes32 indexed key);
-  event InInstruction(address indexed from, address indexed coin, uint256 amount, bytes instruction);
+  event InInstruction(
+    address indexed from, address indexed coin, uint256 amount, bytes instruction
+  );
   event Executed(uint256 indexed nonce, bytes32 indexed batch);
 
   error InvalidSignature();
@@ -62,10 +64,10 @@ contract Router {
 
   // updateSeraiKey validates the given Schnorr signature against the current public key, and if
   // successful, updates the contract's public key to the one specified.
-  function updateSeraiKey(
-    bytes32 newSeraiKey,
-    Signature calldata signature
-  ) external _updateSeraiKeyAtEndOfFn(_nonce, newSeraiKey) {
+  function updateSeraiKey(bytes32 newSeraiKey, Signature calldata signature)
+    external
+    _updateSeraiKeyAtEndOfFn(_nonce, newSeraiKey)
+  {
     bytes memory message = abi.encodePacked("updateSeraiKey", block.chainid, _nonce, newSeraiKey);
     _nonce++;
 
@@ -74,25 +76,15 @@ contract Router {
     }
   }
 
-  function inInstruction(
-    address coin,
-    uint256 amount,
-    bytes memory instruction
-  ) external payable {
+  function inInstruction(address coin, uint256 amount, bytes memory instruction) external payable {
     if (coin == address(0)) {
       if (amount != msg.value) {
         revert InvalidAmount();
       }
     } else {
-      (bool success, bytes memory res) =
-        address(coin).call(
-          abi.encodeWithSelector(
-            IERC20.transferFrom.selector,
-            msg.sender,
-            address(this),
-            amount
-          )
-        );
+      (bool success, bytes memory res) = address(coin).call(
+        abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), amount)
+      );
 
       // Require there was nothing returned, which is done by some non-standard tokens, or that the
       // ERC20 contract did in fact return true
@@ -193,9 +185,9 @@ contract Router {
 
         // Perform the calls with a set gas budget
         (uint32 gas, bytes memory code) = abi.decode(transactions[i].destination, (uint32, bytes));
-        address(this).call{
-          gas: gas
-        }(abi.encodeWithSelector(Router.arbitaryCallOut.selector, code));
+        address(this).call{ gas: gas }(
+          abi.encodeWithSelector(Router.arbitaryCallOut.selector, code)
+        );
       }
     }
   }

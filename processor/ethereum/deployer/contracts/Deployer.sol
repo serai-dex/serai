@@ -38,6 +38,7 @@ contract Deployer {
     uint64 block_number;
     address created_contract;
   }
+
   mapping(bytes32 => Deployment) public deployments;
 
   error Reentrancy();
@@ -51,11 +52,15 @@ contract Deployer {
     bool called;
     // This contract doesn't have any other use of transient storage, nor is to be inherited, making
     // this usage of the zero address safe
-    assembly { called := tload(0) }
+    assembly {
+      called := tload(0)
+    }
     if (called) {
       revert Reentrancy();
     }
-    assembly { tstore(0, 1) }
+    assembly {
+      tstore(0, 1)
+    }
 
     // Check this wasn't prior deployed
     bytes32 init_code_hash = keccak256(init_code);
