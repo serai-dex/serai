@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import "./IERC20.sol";
+import "IERC20.sol";
 
 import "Schnorr.sol";
 
@@ -22,6 +22,15 @@ contract Router {
     Code
   }
 
+  struct AddressDestination {
+    address destination;
+  }
+
+  struct CodeDestination {
+    uint32 gas;
+    bytes code;
+  }
+
   struct OutInstruction {
     DestinationType destinationType;
     bytes destination;
@@ -38,7 +47,7 @@ contract Router {
   event InInstruction(
     address indexed from, address indexed coin, uint256 amount, bytes instruction
   );
-  event Executed(uint256 indexed nonce, bytes32 indexed batch);
+  event Executed(uint256 indexed nonce, bytes32 indexed message_hash);
 
   error InvalidSignature();
   error InvalidAmount();
@@ -68,7 +77,7 @@ contract Router {
     external
     _updateSeraiKeyAtEndOfFn(_nonce, newSeraiKey)
   {
-    bytes memory message = abi.encodePacked("updateSeraiKey", block.chainid, _nonce, newSeraiKey);
+    bytes32 message = keccak256(abi.encodePacked("updateSeraiKey", block.chainid, _nonce, newSeraiKey));
     _nonce++;
 
     if (!Schnorr.verify(_seraiKey, message, signature.c, signature.s)) {
@@ -132,6 +141,7 @@ contract Router {
     */
     if (coin == address(0)) {
       // Enough gas to service the transfer and a minimal amount of logic
+      // TODO: If we're constructing a contract, we can do this at the same time as construction
       to.call{ value: value, gas: 5_000 }("");
     } else {
       coin.call{ gas: 100_000 }(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, value));
@@ -156,13 +166,16 @@ contract Router {
   // Execute a list of transactions if they were signed by the current key with the current nonce
   function execute(OutInstruction[] calldata transactions, Signature calldata signature) external {
     // Verify the signature
-    bytes memory message = abi.encode("execute", block.chainid, _nonce, transactions);
+    // We hash the message here as we need the message's hash for the Executed event
+    // Since we're already going to hash it, hashing it prior to verifying the signature reduces the
+    // amount of words hashed by its challenge function (reducing our gas costs)
+    bytes32 message = keccak256(abi.encode("execute", block.chainid, _nonce, transactions));
     if (!Schnorr.verify(_seraiKey, message, signature.c, signature.s)) {
       revert InvalidSignature();
     }
 
     // Since the signature was verified, perform execution
-    emit Executed(_nonce, keccak256(message));
+    emit Executed(_nonce, message);
     // While this is sufficient to prevent replays, it's still technically possible for instructions
     // from later batches to be executed before these instructions upon re-entrancy
     _nonce++;
@@ -172,8 +185,8 @@ contract Router {
       if (transactions[i].destinationType == DestinationType.Address) {
         // This may cause a panic and the contract to become stuck if the destination isn't actually
         // 20 bytes. Serai is trusted to not pass a malformed destination
-        (address destination) = abi.decode(transactions[i].destination, (address));
-        _transferOut(destination, transactions[i].coin, transactions[i].value);
+        (AddressDestination memory destination) = abi.decode(transactions[i].destination, (AddressDestination));
+        _transferOut(destination.destination, transactions[i].coin, transactions[i].value);
       } else {
         // The destination is a piece of initcode. We calculate the hash of the will-be contract,
         // transfer to it, and then run the initcode
@@ -184,9 +197,9 @@ contract Router {
         _transferOut(nextAddress, transactions[i].coin, transactions[i].value);
 
         // Perform the calls with a set gas budget
-        (uint32 gas, bytes memory code) = abi.decode(transactions[i].destination, (uint32, bytes));
-        address(this).call{ gas: gas }(
-          abi.encodeWithSelector(Router.arbitaryCallOut.selector, code)
+        (CodeDestination memory destination) = abi.decode(transactions[i].destination, (CodeDestination));
+        address(this).call{ gas: destination.gas }(
+          abi.encodeWithSelector(Router.arbitaryCallOut.selector, destination.code)
         );
       }
     }

@@ -1,0 +1,49 @@
+[package]
+name = "serai-processor-ethereum-router"
+version = "0.1.0"
+description = "The Router used by the Serai Processor for Ethereum"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/router"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+group = { version = "0.13", default-features = false }
+k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa", "arithmetic"] }
+
+alloy-core = { version = "0.8", default-features = false }
+alloy-consensus = { version = "0.3", default-features = false }
+
+alloy-sol-types = { version = "0.8", default-features = false }
+alloy-sol-macro = { version = "0.8", default-features = false }
+
+alloy-rpc-types-eth = { version = "0.3", default-features = false }
+alloy-transport = { version = "0.3", default-features = false }
+alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
+alloy-provider = { version = "0.3", default-features = false }
+
+ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false }
+
+ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "../primitives", default-features = false }
+ethereum-deployer = { package = "serai-processor-ethereum-deployer", path = "../deployer", default-features = false }
+erc20 = { package = "serai-processor-ethereum-erc20", path = "../erc20", default-features = false }
+
+serai-client = { path = "../../../substrate/client", default-features = false, features = ["ethereum"] }
+
+[build-dependencies]
+build-solidity-contracts = { path = "../../../networks/ethereum/build-contracts", default-features = false }
+
+syn = { version = "2", default-features = false, features = ["proc-macro"] }
+
+syn-solidity = { version = "0.8", default-features = false }
+alloy-sol-macro-input = { version = "0.8", default-features = false }
+alloy-sol-macro-expander = { version = "0.8", default-features = false }
