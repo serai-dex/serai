@@ -30,7 +30,7 @@ mod abi {
 /// compatible chain. It then supports retrieving the Router contract's address (which isn't
 /// deterministic) using a single call.
 #[derive(Clone, Debug)]
-pub struct Deployer;
+pub struct Deployer(Arc<RootProvider<SimpleRequest>>);
 impl Deployer {
   /// Obtain the transaction to deploy this contract, already signed.
   ///
@@ -38,8 +38,8 @@ impl Deployer {
   /// funded for this transaction to be submitted. This account has no known private key to anyone
   /// so ETH sent can be neither misappropriated nor returned.
   pub fn deployment_tx() -> Signed<TxLegacy> {
-    pub const BYTECODE: &str =
-      include_str!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-deployer/Deployer.bin"));
+    pub const BYTECODE: &[u8] =
+      include_bytes!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-deployer/Deployer.bin"));
     let bytecode =
       Bytes::from_hex(BYTECODE).expect("compiled-in Deployer bytecode wasn't valid hex");
 
@@ -75,28 +75,27 @@ impl Deployer {
     if code.is_empty() {
       return Ok(None);
     }
-    Ok(Some(Self))
+    Ok(Some(Self(provider)))
   }
 
   /// Find the deployment of a contract.
   pub async fn find_deployment(
     &self,
-    provider: Arc<RootProvider<SimpleRequest>>,
     init_code_hash: [u8; 32],
-  ) -> Result<Option<abi::Deployer::Deployment>, RpcError<TransportErrorKind>> {
+  ) -> Result<Option<Address>, RpcError<TransportErrorKind>> {
     let call = TransactionRequest::default().to(Self::address()).input(TransactionInput::new(
       abi::Deployer::deploymentsCall::new((init_code_hash.into(),)).abi_encode().into(),
     ));
-    let bytes = provider.call(&call).await?;
+    let bytes = self.0.call(&call).await?;
     let deployment = abi::Deployer::deploymentsCall::abi_decode_returns(&bytes, true)
       .map_err(|e| {
         TransportErrorKind::Custom(
-          format!("node returned a non-Deployment for function returning Deployment: {e:?}").into(),
+          format!("node returned a non-address for function returning address: {e:?}").into(),
         )
       })?
       ._0;
 
-    if deployment.created_contract == [0; 20] {
+    if **deployment == [0; 20] {
       return Ok(None);
     }
     Ok(Some(deployment))
