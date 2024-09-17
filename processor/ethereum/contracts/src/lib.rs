@@ -10,7 +10,7 @@ pub mod erc20 {
   pub use super::abigen::erc20::IERC20::*;
 }
 pub mod router {
-  pub const BYTECODE: &str =
-    include_str!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-contracts/Router.bin"));
+  pub const BYTECODE: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-contracts/Router.bin"));
   pub use super::abigen::router::Router::*;
 }

@@ -22,7 +22,8 @@ use alloy_provider::{Provider, RootProvider};
 mod abi {
   alloy_sol_macro::sol!("contracts/IERC20.sol");
 }
-use abi::IERC20::{IERC20Calls, Transfer, transferCall, transferFromCall};
+use abi::IERC20::{IERC20Calls, transferCall, transferFromCall};
+pub use abi::IERC20::Transfer;
 
 /// A top-level ERC20 transfer
 #[derive(Clone, Debug)]
@@ -50,12 +51,12 @@ impl Erc20 {
   pub async fn top_level_transfers(
     &self,
     block: u64,
-    to: [u8; 20],
+    to: Address,
   ) -> Result<Vec<TopLevelErc20Transfer>, RpcError<TransportErrorKind>> {
     let filter = Filter::new().from_block(block).to_block(block).address(self.1);
     let filter = filter.event_signature(Transfer::SIGNATURE_HASH);
     let mut to_topic = [0; 32];
-    to_topic[12 ..].copy_from_slice(&to);
+    to_topic[12 ..].copy_from_slice(to.as_ref());
     let filter = filter.topic2(B256::from(to_topic));
     let logs = self.0.get_logs(&filter).await?;
 
