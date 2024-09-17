@@ -34,41 +34,12 @@ pragma solidity ^0.8.26;
 */
 
 contract Deployer {
-  struct Deployment {
-    uint64 block_number;
-    address created_contract;
-  }
+  mapping(bytes32 => address) public deployments;
 
-  mapping(bytes32 => Deployment) public deployments;
-
-  error Reentrancy();
   error PriorDeployed();
   error DeploymentFailed();
 
   function deploy(bytes memory init_code) external {
-    // Prevent re-entrancy
-    // If we did allow it, one could deploy the same contract multiple times (with one overwriting
-    // the other's set value in storage)
-    bool called;
-    // This contract doesn't have any other use of transient storage, nor is to be inherited, making
-    // this usage of the zero address safe
-    assembly {
-      called := tload(0)
-    }
-    if (called) {
-      revert Reentrancy();
-    }
-    assembly {
-      tstore(0, 1)
-    }
-
-    // Check this wasn't prior deployed
-    bytes32 init_code_hash = keccak256(init_code);
-    Deployment memory deployment = deployments[init_code_hash];
-    if (deployment.created_contract == address(0)) {
-      revert PriorDeployed();
-    }
-
     // Deploy the contract
     address created_contract;
     assembly {
@@ -78,9 +49,15 @@ contract Deployer {
       revert DeploymentFailed();
     }
 
-    // Set the dpeloyment to storage
-    deployment.block_number = uint64(block.number);
-    deployment.created_contract = created_contract;
-    deployments[init_code_hash] = deployment;
+    bytes32 init_code_hash = keccak256(init_code);
+
+    // Check this wasn't prior deployed
+    // We check this *after* deploymeing (in violation of CEI) to handle re-entrancy related bugs
+    if (deployments[init_code_hash] != address(0)) {
+      revert PriorDeployed();
+    }
+
+    // Write the deployment to storage
+    deployments[init_code_hash] = created_contract;
   }
 }
