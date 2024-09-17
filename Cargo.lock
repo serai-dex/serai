@@ -8748,6 +8748,7 @@ dependencies = [
  "alloy-sol-macro",
  "alloy-sol-types",
  "alloy-transport",
+ "tokio",
 ]
 
 [[package]]

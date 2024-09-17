@@ -25,7 +25,7 @@ use alloy_provider::{Provider, RootProvider};
 
 use ethereum_schnorr::{PublicKey, Signature};
 use ethereum_deployer::Deployer;
-use erc20::Transfer;
+use erc20::{Transfer, Erc20};
 
 use serai_client::{primitives::Amount, networks::ethereum::Address as SeraiAddress};
 
@@ -346,11 +346,6 @@ impl Router {
       let tx_hash = log.transaction_hash.ok_or_else(|| {
         TransportErrorKind::Custom("log didn't have its transaction hash set".to_string().into())
       })?;
-      let tx = self.0.get_transaction_by_hash(tx_hash).await?.ok_or_else(|| {
-        TransportErrorKind::Custom(
-          "node didn't have a transaction it had the logs of".to_string().into(),
-        )
-      })?;
 
       let log = log
         .log_decode::<InInstructionEvent>()
@@ -371,23 +366,6 @@ impl Router {
           continue;
         }
 
-        /*
-          If this also counts as a top-level transfer of a token, drop it.
-
-          This event will only exist if there's an ERC20 which has some form of programmability
-          (`onTransferFrom`), and when a top-level transfer was made, that hook made its own call
-          into the Serai router.
-
-          If such an ERC20 exists, Serai would parse it as a top-level transfer and as a router
-          InInstruction. While no such ERC20 is planned to be integrated, this enures we don't
-          allow a double-spend on that premise.
-
-          TODO: See below note.
-        */
-        if tx.to == Some(token.into()) {
-          continue;
-        }
-
         // Get all logs for this TX
         let receipt = self.0.get_transaction_receipt(tx_hash).await?.ok_or_else(|| {
           TransportErrorKind::Custom(
@@ -397,9 +375,14 @@ impl Router {
         let tx_logs = receipt.inner.logs();
 
         /*
-          TODO: If this is also a top-level transfer, drop the log from the top-level transfer and
-          only iterate over the rest of the logs.
+          The transfer which causes an InInstruction event won't be a top-level transfer.
+          Accordingly, when looking for the matching transfer, disregard the top-level transfer (if
+          one exists).
         */
+        if let Some(matched) = Erc20::match_top_level_transfer(&self.0, tx_hash, self.1).await? {
+          // Mark this log index as used so it isn't used again
+          transfer_check.insert(matched.log_index);
+        }
 
         // Find a matching transfer log
         let mut found_transfer = false;
@@ -409,6 +392,7 @@ impl Router {
               "log in transaction receipt didn't have its log index set".to_string().into(),
             )
           })?;
+
           // Ensure we didn't already use this transfer to check a distinct InInstruction event
           if transfer_check.contains(&log_index) {
             continue;
@@ -420,7 +404,7 @@ impl Router {
           }
           // Check if this is a transfer log
           // https://github.com/alloy-rs/core/issues/589
-          if tx_log.topics()[0] != Transfer::SIGNATURE_HASH {
+          if tx_log.topics().first() != Some(&Transfer::SIGNATURE_HASH) {
             continue;
           }
           let Ok(transfer) = Transfer::decode_log(&tx_log.inner.clone(), true) else { continue };
