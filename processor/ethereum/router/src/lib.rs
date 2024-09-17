@@ -156,6 +156,42 @@ impl InInstruction {
   }
 }
 
+/// A list of `OutInstruction`s.
+#[derive(Clone)]
+pub struct OutInstructions(Vec<abi::OutInstruction>);
+impl From<&[(SeraiAddress, (Coin, Amount))]> for OutInstructions {
+  fn from(outs: &[(SeraiAddress, (Coin, Amount))]) -> Self {
+    Self(
+      outs
+        .iter()
+        .map(|(address, (coin, amount))| {
+          #[allow(non_snake_case)]
+          let (destinationType, destination) = match address {
+            SeraiAddress::Address(address) => (
+              abi::DestinationType::Address,
+              (abi::AddressDestination { destination: Address::from(address) }).abi_encode(),
+            ),
+            SeraiAddress::Contract(contract) => (
+              abi::DestinationType::Code,
+              (abi::CodeDestination { gas: contract.gas(), code: contract.code().to_vec().into() })
+                .abi_encode(),
+            ),
+          };
+          abi::OutInstruction {
+            destinationType,
+            destination: destination.into(),
+            coin: match coin {
+              Coin::Ether => [0; 20].into(),
+              Coin::Erc20(address) => address.into(),
+            },
+            value: amount.0.try_into().expect("couldn't convert u64 to u256"),
+          }
+        })
+        .collect(),
+    )
+  }
+}
+
 /// Executed an command.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Executed {
@@ -188,13 +224,13 @@ impl Executed {
 #[derive(Clone, Debug)]
 pub struct Router(Arc<RootProvider<SimpleRequest>>, Address);
 impl Router {
-  pub(crate) fn code() -> Vec<u8> {
+  fn code() -> Vec<u8> {
     const BYTECODE: &[u8] =
       include_bytes!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-router/Router.bin"));
     Bytes::from_hex(BYTECODE).expect("compiled-in Router bytecode wasn't valid hex").to_vec()
   }
 
-  pub(crate) fn init_code(key: &PublicKey) -> Vec<u8> {
+  fn init_code(key: &PublicKey) -> Vec<u8> {
     let mut bytecode = Self::code();
     // Append the constructor arguments
     bytecode.extend((abi::constructorCall { initialSeraiKey: key.eth_repr().into() }).abi_encode());
@@ -226,6 +262,17 @@ impl Router {
     self.1
   }
 
+  /// Get the message to be signed in order to update the key for Serai.
+  pub fn update_serai_key_message(chain_id: U256, nonce: u64, key: &PublicKey) -> Vec<u8> {
+    (
+      "updateSeraiKey",
+      chain_id,
+      U256::try_from(nonce).expect("couldn't convert u64 to u256"),
+      key.eth_repr(),
+    )
+      .abi_encode_packed()
+  }
+
   /// Construct a transaction to update the key representing Serai.
   pub fn update_serai_key(&self, public_key: &PublicKey, sig: &Signature) -> TxLegacy {
     // TODO: Set a more accurate gas
@@ -239,110 +286,23 @@ impl Router {
     }
   }
 
+  /// Get the message to be signed in order to execute a series of `OutInstruction`s.
+  pub fn execute_message(chain_id: U256, nonce: u64, outs: OutInstructions) -> Vec<u8> {
+    ("execute", chain_id, U256::try_from(nonce).expect("couldn't convert u64 to u256"), outs.0)
+      .abi_encode()
+  }
+
   /// Construct a transaction to execute a batch of `OutInstruction`s.
-  pub fn execute(&self, outs: &[(SeraiAddress, (Coin, Amount))], sig: &Signature) -> TxLegacy {
+  pub fn execute(&self, outs: OutInstructions, sig: &Signature) -> TxLegacy {
+    let outs_len = outs.0.len();
     TxLegacy {
       to: TxKind::Call(self.1),
-      input: abi::executeCall::new((
-        outs
-          .iter()
-          .map(|(address, (coin, amount))| {
-            #[allow(non_snake_case)]
-            let (destinationType, destination) = match address {
-              SeraiAddress::Address(address) => (
-                abi::DestinationType::Address,
-                (abi::AddressDestination { destination: Address::from(address) }).abi_encode(),
-              ),
-              SeraiAddress::Contract(contract) => (
-                abi::DestinationType::Code,
-                (abi::CodeDestination {
-                  gas: contract.gas(),
-                  code: contract.code().to_vec().into(),
-                })
-                .abi_encode(),
-              ),
-            };
-            abi::OutInstruction {
-              destinationType,
-              destination: destination.into(),
-              coin: match coin {
-                Coin::Ether => [0; 20].into(),
-                Coin::Erc20(address) => address.into(),
-              },
-              value: amount.0.try_into().expect("couldn't convert u64 to u256"),
-            }
-          })
-          .collect(),
-        sig.into(),
-      ))
-      .abi_encode()
-      .into(),
+      input: abi::executeCall::new((outs.0, sig.into())).abi_encode().into(),
       // TODO
-      gas_limit: 100_000 + ((200_000 + 10_000) * u128::try_from(outs.len()).unwrap()),
+      gas_limit: 100_000 + ((200_000 + 10_000) * u128::try_from(outs_len).unwrap()),
       ..Default::default()
     }
   }
-
-  /*
-  /// Get the key for Serai at the specified block.
-  #[cfg(test)]
-  pub async fn serai_key(&self, at: [u8; 32]) -> Result<PublicKey, RpcError<TransportErrorKind>> {
-    let call = TransactionRequest::default()
-      .to(self.1)
-      .input(TransactionInput::new(abi::seraiKeyCall::new(()).abi_encode().into()));
-    let bytes = self
-      .0
-      .call(&call)
-      .block(BlockId::Hash(B256::from(at).into()))
-      .await
-      ?;
-    let res =
-      abi::seraiKeyCall::abi_decode_returns(&bytes, true)?;
-    PublicKey::from_eth_repr(res._0.0).ok_or_else(|| TransportErrorKind::Custom(
-    "TODO".to_string().into()))
-  }
-  */
-
-  /*
-  /// Get the message to be signed in order to update the key for Serai.
-  pub(crate) fn update_serai_key_message(chain_id: U256, nonce: U256, key: &PublicKey) -> Vec<u8> {
-    let mut buffer = b"updateSeraiKey".to_vec();
-    buffer.extend(&chain_id.to_be_bytes::<32>());
-    buffer.extend(&nonce.to_be_bytes::<32>());
-    buffer.extend(&key.eth_repr());
-    buffer
-  }
-  */
-
-  /*
-  /// Get the current nonce for the published batches.
-  #[cfg(test)]
-  pub async fn nonce(&self, at: [u8; 32]) -> Result<U256, RpcError<TransportErrorKind>> {
-    let call = TransactionRequest::default()
-      .to(self.1)
-      .input(TransactionInput::new(abi::nonceCall::new(()).abi_encode().into()));
-    let bytes = self
-      .0
-      .call(&call)
-      .block(BlockId::Hash(B256::from(at).into()))
-      .await
-      ?;
-    let res =
-      abi::nonceCall::abi_decode_returns(&bytes, true)?;
-    Ok(res._0)
-  }
-  */
-
-  /*
-  /// Get the message to be signed in order to update the key for Serai.
-  pub(crate) fn execute_message(
-    chain_id: U256,
-    nonce: U256,
-    outs: Vec<abi::OutInstruction>,
-  ) -> Vec<u8> {
-    ("execute".to_string(), chain_id, nonce, outs).abi_encode_params()
-  }
-  */
 
   /// Fetch the `InInstruction`s emitted by the Router from this block.
   pub async fn in_instructions(
@@ -568,15 +528,4 @@ impl Router {
 
     Ok(res)
   }
-
-  /*
-  #[cfg(feature = "tests")]
-  pub fn key_updated_filter(&self) -> Filter {
-    Filter::new().address(self.1).event_signature(SeraiKeyUpdated::SIGNATURE_HASH)
-  }
-  #[cfg(feature = "tests")]
-  pub fn executed_filter(&self) -> Filter {
-    Filter::new().address(self.1).event_signature(ExecutedEvent::SIGNATURE_HASH)
-  }
-  */
 }

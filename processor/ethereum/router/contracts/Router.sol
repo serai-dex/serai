@@ -77,6 +77,8 @@ contract Router {
     external
     _updateSeraiKeyAtEndOfFn(_nonce, newSeraiKey)
   {
+    // This DST needs a length prefix as well to prevent DSTs potentially being substrings of each
+    // other, yet this fine for our very well-defined, limited use
     bytes32 message = keccak256(abi.encodePacked("updateSeraiKey", block.chainid, _nonce, newSeraiKey));
     _nonce++;
 
