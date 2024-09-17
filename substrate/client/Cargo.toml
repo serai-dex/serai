@@ -24,7 +24,7 @@ bitvec = { version = "1", default-features = false, features = ["alloc", "serde"
 
 hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
-borsh = { version = "1" }
+borsh = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 

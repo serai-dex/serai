@@ -29,6 +29,13 @@ impl ContractDeployment {
     }
     Some(Self { gas, code })
   }
+
+  pub fn gas(&self) -> u32 {
+    self.gas
+  }
+  pub fn code(&self) -> &[u8] {
+    &self.code
+  }
 }
 
 /// A representation of an Ethereum address.

@@ -55,6 +55,7 @@ jobs:
             -p serai-processor-ethereum-contracts \
             -p serai-processor-ethereum-primitives \
             -p serai-processor-ethereum-deployer \
+            -p serai-processor-ethereum-router \
             -p serai-processor-ethereum-erc20 \
             -p ethereum-serai \
             -p serai-ethereum-processor \
