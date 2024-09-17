@@ -15,7 +15,7 @@ library Schnorr {
   // message := the message signed
   // c := Schnorr signature challenge
   // s := Schnorr signature solution
-  function verify(bytes32 px, bytes memory message, bytes32 c, bytes32 s)
+  function verify(bytes32 px, bytes32 message, bytes32 c, bytes32 s)
     internal
     pure
     returns (bool)
