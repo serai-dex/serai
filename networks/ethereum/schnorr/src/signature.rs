@@ -38,7 +38,7 @@ impl Signature {
       &Keccak256::digest(x_and_y_coordinates)[12 ..]
     });
     hash.update(key.eth_repr());
-    hash.update(message);
+    hash.update(Keccak256::digest(message));
     <Scalar as Reduce<KU256>>::reduce_bytes(&hash.finalize())
   }
 

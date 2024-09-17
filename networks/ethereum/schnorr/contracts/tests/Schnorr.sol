@@ -9,6 +9,6 @@ contract TestSchnorr {
     pure
     returns (bool)
   {
-    return Schnorr.verify(public_key, message, c, s);
+    return Schnorr.verify(public_key, keccak256(message), c, s);
   }
 }
