@@ -8,9 +8,11 @@ contract TestERC20 {
   function name() public pure returns (string memory) {
     return "Test ERC20";
   }
+
   function symbol() public pure returns (string memory) {
     return "TEST";
   }
+
   function decimals() public pure returns (uint8) {
     return 18;
   }
@@ -29,11 +31,13 @@ contract TestERC20 {
   function balanceOf(address owner) public view returns (uint256) {
     return balances[owner];
   }
+
   function transfer(address to, uint256 value) public returns (bool) {
     balances[msg.sender] -= value;
     balances[to] += value;
     return true;
   }
+
   function transferFrom(address from, address to, uint256 value) public returns (bool) {
     allowances[from][msg.sender] -= value;
     balances[from] -= value;
@@ -45,6 +49,7 @@ contract TestERC20 {
     allowances[msg.sender][spender] = value;
     return true;
   }
+
   function allowance(address owner, address spender) public view returns (uint256) {
     return allowances[owner][spender];
   }
