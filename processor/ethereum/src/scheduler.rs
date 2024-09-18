@@ -1,14 +1,23 @@
-use serai_client::primitives::{NetworkId, Balance};
+use alloy_core::primitives::U256;
 
-use ethereum_serai::{alloy::primitives::U256, router::PublicKey, machine::*};
+use serai_client::primitives::{NetworkId, Coin, Balance};
 
 use primitives::Payment;
 use scanner::{KeyFor, AddressFor, EventualityFor};
 
-use crate::{
-  transaction::{SignableTransaction, Eventuality},
-  rpc::Rpc,
-};
+use ethereum_schnorr::PublicKey;
+use ethereum_router::Coin as EthereumCoin;
+
+use crate::{DAI, transaction::Action, rpc::Rpc};
+
+fn coin_to_ethereum_coin(coin: Coin) -> EthereumCoin {
+  assert_eq!(coin.network(), NetworkId::Ethereum);
+  match coin {
+    Coin::Ether => EthereumCoin::Ether,
+    Coin::Dai => EthereumCoin::Erc20(DAI),
+    _ => unreachable!(),
+  }
+}
 
 fn balance_to_ethereum_amount(balance: Balance) -> U256 {
   assert_eq!(balance.coin.network(), NetworkId::Ethereum);
@@ -24,7 +33,7 @@ pub(crate) struct SmartContract {
   pub(crate) chain_id: U256,
 }
 impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
-  type SignableTransaction = SignableTransaction;
+  type SignableTransaction = Action;
 
   fn rotate(
     &self,
@@ -32,16 +41,14 @@ impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
     retiring_key: KeyFor<Rpc>,
     new_key: KeyFor<Rpc>,
   ) -> (Self::SignableTransaction, EventualityFor<Rpc>) {
-    let command = RouterCommand::UpdateSeraiKey {
+    let action = Action::SetKey {
       chain_id: self.chain_id,
-      nonce: U256::try_from(nonce).unwrap(),
+      nonce,
       key: PublicKey::new(new_key).expect("rotating to an invald key"),
     };
-    (
-      SignableTransaction(command.clone()),
-      Eventuality(PublicKey::new(retiring_key).expect("retiring an invalid key"), command),
-    )
+    (action.clone(), action.eventuality())
   }
+
   fn fulfill(
     &self,
     nonce: u64,
@@ -50,40 +57,20 @@ impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
   ) -> Vec<(Self::SignableTransaction, EventualityFor<Rpc>)> {
     let mut outs = Vec::with_capacity(payments.len());
     for payment in payments {
-      outs.push(OutInstruction {
-        target: if let Some(data) = payment.data() {
-          // This introspects the Call serialization format, expecting the first 20 bytes to
-          // be the address
-          // This avoids wasting the 20-bytes allocated within address
-          let full_data = [<[u8; 20]>::from(*payment.address()).as_slice(), data].concat();
-          let mut reader = full_data.as_slice();
-
-          let mut calls = vec![];
-          while !reader.is_empty() {
-            let Ok(call) = Call::read(&mut reader) else { break };
-            calls.push(call);
-          }
-          // The above must have executed at least once since reader contains the address
-          assert_eq!(calls[0].to, <[u8; 20]>::from(*payment.address()));
-
-          OutInstructionTarget::Calls(calls)
-        } else {
-          OutInstructionTarget::Direct((*payment.address()).into())
-        },
-        value: { balance_to_ethereum_amount(payment.balance()) },
-      });
+      outs.push((
+        payment.address().clone(),
+        (
+          coin_to_ethereum_coin(payment.balance().coin),
+          balance_to_ethereum_amount(payment.balance()),
+        ),
+      ));
     }
 
-    let command = RouterCommand::Execute {
-      chain_id: self.chain_id,
-      nonce: U256::try_from(nonce).unwrap(),
-      outs,
-    };
+    // TODO: Per-batch gas limit
+    // TODO: Create several batches
+    let action = Action::Batch { chain_id: self.chain_id, nonce, outs };
 
-    vec![(
-      SignableTransaction(command.clone()),
-      Eventuality(PublicKey::new(key).expect("fulfilling payments with an invalid key"), command),
-    )]
+    vec![(action.clone(), action.eventuality())]
   }
 }
 

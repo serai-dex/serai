@@ -1,7 +1,7 @@
 use ciphersuite::{Ciphersuite, Secp256k1};
 use dkg::ThresholdKeys;
 
-use ethereum_serai::crypto::PublicKey;
+use ethereum_schnorr::PublicKey;
 
 pub(crate) struct KeyGenParams;
 impl key_gen::KeyGenParams for KeyGenParams {

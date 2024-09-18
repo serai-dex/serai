@@ -24,7 +24,6 @@ alloy-core = { version = "0.8", default-features = false }
 alloy-consensus = { version = "0.3", default-features = false }
 
 alloy-sol-types = { version = "0.8", default-features = false }
-alloy-sol-macro = { version = "0.8", default-features = false }
 
 alloy-rpc-types-eth = { version = "0.3", default-features = false }
 alloy-transport = { version = "0.3", default-features = false }

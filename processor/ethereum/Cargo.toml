@@ -26,10 +26,18 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "secp256k1"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-secp256k1"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["secp256k1"] }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["std"] }
-ethereum-serai = { path = "./ethereum-serai", default-features = false, optional = true }
+
+alloy-core = { version = "0.8", default-features = false }
+alloy-rlp  = { version = "0.3", default-features = false }
+alloy-consensus = { version = "0.3", default-features = false }
+
+alloy-rpc-types-eth = { version = "0.3", default-features = false }
+alloy-simple-request-transport = { path = "../../networks/ethereum/alloy-simple-request-transport", default-features = false }
+alloy-rpc-client = { version = "0.3", default-features = false }
+alloy-provider = { version = "0.3", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["ethereum"] }
 
@@ -47,6 +55,11 @@ scheduler = { package = "serai-processor-scheduler-primitives", path = "../sched
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
 smart-contract-scheduler = { package = "serai-processor-smart-contract-scheduler", path = "../scheduler/smart-contract" }
 signers = { package = "serai-processor-signers", path = "../signers" }
+
+ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../networks/ethereum/schnorr" }
+ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "./primitives" }
+ethereum-router = { package = "serai-processor-ethereum-router", path = "./router" }
+ethereum-erc20 = { package = "serai-processor-ethereum-erc20", path = "./erc20" }
 
 bin = { package = "serai-processor-bin", path = "../bin" }
 

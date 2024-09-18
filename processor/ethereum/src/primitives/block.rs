@@ -5,6 +5,9 @@ use ciphersuite::{Ciphersuite, Secp256k1};
 use serai_client::networks::ethereum::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
+
+use ethereum_router::Executed;
+
 use crate::{output::Output, transaction::Eventuality};
 
 // We interpret 32-block Epochs as singular blocks.
@@ -37,9 +40,11 @@ impl primitives::BlockHeader for Epoch {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct FullEpoch {
   epoch: Epoch,
+  outputs: Vec<Output>,
+  executed: Vec<Executed>,
 }
 
 impl primitives::Block for FullEpoch {
@@ -54,7 +59,8 @@ impl primitives::Block for FullEpoch {
     self.epoch.end_hash
   }
 
-  fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output> {
+  fn scan_for_outputs_unordered(&self, _key: Self::Key) -> Vec<Self::Output> {
+    // Only return these outputs for the latest key
     todo!("TODO")
   }
 
@@ -66,6 +72,33 @@ impl primitives::Block for FullEpoch {
     <Self::Output as ReceivedOutput<Self::Key, Self::Address>>::TransactionId,
     Self::Eventuality,
   > {
-    todo!("TODO")
+    let mut res = HashMap::new();
+    for executed in &self.executed {
+      let Some(expected) =
+        eventualities.active_eventualities.remove(executed.nonce().to_le_bytes().as_slice())
+      else {
+        continue;
+      };
+      assert_eq!(
+        executed,
+        &expected.0,
+        "Router emitted distinct event for nonce {}",
+        executed.nonce()
+      );
+      /*
+        The transaction ID is used to determine how internal outputs from this transaction should
+        be handled (if they were actually internal or if they were just to an internal address).
+        The Ethereum integration doesn't have internal addresses, and this transaction wasn't made
+        by Serai. It was simply authorized by Serai yet may or may not be associated with other
+        actions we don't want to flag as our own.
+
+        Accordingly, we set the transaction ID to the nonce. This is unique barring someone finding
+        the preimage which hashes to this nonce, and won't cause any other data to be associated.
+      */
+      let mut tx_id = [0; 32];
+      tx_id[.. 8].copy_from_slice(executed.nonce().to_le_bytes().as_slice());
+      res.insert(tx_id, expected);
+    }
+    res
   }
 }
