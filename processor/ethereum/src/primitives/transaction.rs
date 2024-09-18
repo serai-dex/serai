@@ -40,8 +40,12 @@ impl Action {
 
   fn message(&self) -> Vec<u8> {
     match self {
-      Action::SetKey { chain_id, nonce, key } => Router::update_serai_key_message(*chain_id, *nonce, key),
-      Action::Batch { chain_id, nonce, outs } => Router::execute_message(*chain_id, *nonce, OutInstructions::from(outs.as_ref())),
+      Action::SetKey { chain_id, nonce, key } => {
+        Router::update_serai_key_message(*chain_id, *nonce, key)
+      }
+      Action::Batch { chain_id, nonce, outs } => {
+        Router::execute_message(*chain_id, *nonce, OutInstructions::from(outs.as_ref()))
+      }
     }
   }
 
@@ -129,9 +133,17 @@ impl PreprocessMachine for ClonableTransctionMachine {
     self,
     rng: &mut R,
   ) -> (Self::SignMachine, Self::Preprocess) {
-    let (machine, preprocess) = AlgorithmMachine::new(IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), self.0.clone())
-      .preprocess(rng);
-    (ActionSignMachine(PublicKey::new(self.0.group_key()).expect("signing with non-representable key"), self.1, machine), preprocess)
+    let (machine, preprocess) =
+      AlgorithmMachine::new(IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), self.0.clone())
+        .preprocess(rng);
+    (
+      ActionSignMachine(
+        PublicKey::new(self.0.group_key()).expect("signing with non-representable key"),
+        self.1,
+        machine,
+      ),
+      preprocess,
+    )
   }
 }
 
@@ -157,7 +169,7 @@ impl SignMachine<Transaction> for ActionSignMachine {
     params: Self::Params,
     keys: Self::Keys,
     cache: CachedPreprocess,
-) -> (Self, Self::Preprocess) {
+  ) -> (Self, Self::Preprocess) {
     unimplemented!()
   }
 

@@ -29,7 +29,6 @@ dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] 
 bitcoin-serai = { path = "../../networks/bitcoin" }
 
 k256 = "0.13"
-ethereum-serai = { path = "../../processor/ethereum/ethereum-serai" }
 
 monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }
 monero-wallet = { path = "../../networks/monero/wallet" }
