@@ -1,6 +1,6 @@
 use std::io;
 
-use ciphersuite::{Ciphersuite, Secp256k1};
+use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
 
 use alloy_core::primitives::U256;
 
@@ -59,7 +59,10 @@ impl AsMut<[u8]> for OutputId {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Output(pub(crate) EthereumInInstruction);
+pub(crate) struct Output {
+  pub(crate) key: <Secp256k1 as Ciphersuite>::G,
+  pub(crate) instruction: EthereumInInstruction,
+}
 impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];
@@ -71,40 +74,43 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
 
   fn id(&self) -> Self::Id {
     let mut id = [0; 40];
-    id[.. 32].copy_from_slice(&self.0.id.0);
-    id[32 ..].copy_from_slice(&self.0.id.1.to_le_bytes());
+    id[.. 32].copy_from_slice(&self.instruction.id.0);
+    id[32 ..].copy_from_slice(&self.instruction.id.1.to_le_bytes());
     OutputId(id)
   }
 
   fn transaction_id(&self) -> Self::TransactionId {
-    self.0.id.0
+    self.instruction.id.0
   }
 
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
-    todo!("TODO")
+    self.key
   }
 
   fn presumed_origin(&self) -> Option<Address> {
-    Some(Address::from(self.0.from))
+    Some(Address::from(self.instruction.from))
   }
 
   fn balance(&self) -> Balance {
-    let coin = coin_to_serai_coin(&self.0.coin).unwrap_or_else(|| {
+    let coin = coin_to_serai_coin(&self.instruction.coin).unwrap_or_else(|| {
       panic!(
         "mapping coin from an EthereumInInstruction with coin {}, which we don't handle.",
         "this never should have been yielded"
       )
     });
-    Balance { coin, amount: amount_to_serai_amount(coin, self.0.amount) }
+    Balance { coin, amount: amount_to_serai_amount(coin, self.instruction.amount) }
   }
   fn data(&self) -> &[u8] {
-    &self.0.data
+    &self.instruction.data
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.0.write(writer)
+    writer.write_all(self.key.to_bytes().as_ref())?;
+    self.instruction.write(writer)
   }
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    EthereumInInstruction::read(reader).map(Self)
+    let key = Secp256k1::read_G(reader)?;
+    let instruction = EthereumInInstruction::read(reader)?;
+    Ok(Self { key, instruction })
   }
 }

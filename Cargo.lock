@@ -8334,6 +8334,7 @@ dependencies = [
  "alloy-rpc-client",
  "alloy-rpc-types-eth",
  "alloy-simple-request-transport",
+ "alloy-transport",
  "borsh",
  "ciphersuite",
  "const-hex",

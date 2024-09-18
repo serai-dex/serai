@@ -68,6 +68,7 @@ impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
 
     // TODO: Per-batch gas limit
     // TODO: Create several batches
+    // TODO: Handle fees
     let action = Action::Batch { chain_id: self.chain_id, nonce, outs };
 
     vec![(action.clone(), action.eventuality())]

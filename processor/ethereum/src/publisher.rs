@@ -1,34 +1,68 @@
 use core::future::Future;
+use std::sync::Arc;
 
-use crate::transaction::Transaction;
+use alloy_transport::{TransportErrorKind, RpcError};
+use alloy_simple_request_transport::SimpleRequest;
+use alloy_provider::RootProvider;
+
+use tokio::sync::{RwLockReadGuard, RwLock};
+
+use ethereum_schnorr::PublicKey;
+use ethereum_router::{OutInstructions, Router};
+
+use crate::transaction::{Action, Transaction};
 
 #[derive(Clone)]
 pub(crate) struct TransactionPublisher {
+  initial_serai_key: PublicKey,
+  rpc: Arc<RootProvider<SimpleRequest>>,
+  router: Arc<RwLock<Option<Router>>>,
   relayer_url: String,
 }
 
 impl TransactionPublisher {
-  pub(crate) fn new(relayer_url: String) -> Self {
-    Self { relayer_url }
+  pub(crate) fn new(rpc: Arc<RootProvider<SimpleRequest>>, relayer_url: String) -> Self {
+    Self { initial_serai_key: todo!("TODO"), rpc, router: Arc::new(RwLock::new(None)), relayer_url }
+  }
+
+  // This will always return Ok(Some(_)) or Err(_), never Ok(None)
+  async fn router(&self) -> Result<RwLockReadGuard<'_, Option<Router>>, RpcError<TransportErrorKind>> {
+    let router = self.router.read().await;
+
+    // If the router is None, find it on-chain
+    if router.is_none() {
+      drop(router);
+      let mut router = self.router.write().await;
+      // Check again if it's None in case a different task already did this
+      if router.is_none() {
+        let Some(router_actual) = Router::new(self.rpc.clone(), &self.initial_serai_key).await? else {
+          Err(TransportErrorKind::Custom("publishing transaction yet couldn't find router on chain. was our node reset?".to_string().into()))?
+      };
+        *router = Some(router_actual);
+      }
+      return Ok(router.downgrade());
+    }
+
+    Ok(router)
   }
 }
 
 impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
-  type EphemeralError = ();
+  type EphemeralError = RpcError<TransportErrorKind>;
 
   fn publish(
     &self,
     tx: Transaction,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
-    // Convert from an Action (an internal representation of a signable event) to a TxLegacy
-    /* TODO
-    match tx.0 {
-      Action::SetKey { chain_id: _, nonce: _, key } => self.router.update_serai_key(key, tx.1),
-      Action::Batch { chain_id: _, nonce: _, outs } => self.router.execute(outs, tx.1),
-    }
-    */
-
     async move {
+      // Convert from an Action (an internal representation of a signable event) to a TxLegacy
+      let router = self.router().await?;
+      let router = router.as_ref().unwrap();
+      let tx = match tx.0 {
+        Action::SetKey { chain_id: _, nonce: _, key } => router.update_serai_key(&key, &tx.1),
+        Action::Batch { chain_id: _, nonce: _, outs } => router.execute(OutInstructions::from(outs.as_ref()), &tx.1),
+      };
+
       /*
       use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},

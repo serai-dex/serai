@@ -30,14 +30,13 @@ use publisher::TransactionPublisher;
 #[tokio::main]
 async fn main() {
   let db = bin::init();
-  let feed = {
-    let provider = Arc::new(RootProvider::new(
-      ClientBuilder::default().transport(SimpleRequest::new(bin::url()), true),
-    ));
-    Rpc { provider }
-  };
+
+  let provider = Arc::new(RootProvider::new(
+    ClientBuilder::default().transport(SimpleRequest::new(bin::url()), true),
+  ));
+
   let chain_id = loop {
-    match feed.provider.get_chain_id().await {
+    match provider.get_chain_id().await {
       Ok(chain_id) => break U256::try_from(chain_id).unwrap(),
       Err(e) => {
         log::error!("couldn't connect to the Ethereum node for the chain ID: {e:?}");
@@ -48,9 +47,9 @@ async fn main() {
 
   bin::main_loop::<_, KeyGenParams, _>(
     db,
-    feed.clone(),
+    Rpc { provider: provider.clone() },
     Scheduler::new(SmartContract { chain_id }),
-    TransactionPublisher::new({
+    TransactionPublisher::new(provider, {
       let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
         .expect("ethereum relayer hostname wasn't specified")
         .to_string();
