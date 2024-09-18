@@ -59,12 +59,10 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-processor-signers" },
 
   { allow = ["AGPL-3.0"], name = "serai-bitcoin-processor" },
-  { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-contracts" },
   { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-primitives" },
   { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-deployer" },
   { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-router" },
   { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-erc20" },
-  { allow = ["AGPL-3.0"], name = "ethereum-serai" },
   { allow = ["AGPL-3.0"], name = "serai-ethereum-processor" },
   { allow = ["AGPL-3.0"], name = "serai-monero-processor" },
 
