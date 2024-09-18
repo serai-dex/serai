@@ -8,12 +8,10 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 
 use std::sync::Arc;
 
-use ethereum_serai::alloy::{
-  primitives::U256,
-  simple_request_transport::SimpleRequest,
-  rpc_client::ClientBuilder,
-  provider::{Provider, RootProvider},
-};
+use alloy_core::primitives::U256;
+use alloy_simple_request_transport::SimpleRequest;
+use alloy_rpc_client::ClientBuilder;
+use alloy_provider::{Provider, RootProvider};
 
 use serai_env as env;
 

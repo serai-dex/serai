@@ -27,7 +27,7 @@ use ethereum_schnorr::{PublicKey, Signature};
 use ethereum_deployer::Deployer;
 use erc20::{Transfer, Erc20};
 
-use serai_client::{primitives::Amount, networks::ethereum::Address as SeraiAddress};
+use serai_client::networks::ethereum::Address as SeraiAddress;
 
 #[rustfmt::skip]
 #[expect(warnings)]
@@ -159,8 +159,8 @@ impl InInstruction {
 /// A list of `OutInstruction`s.
 #[derive(Clone)]
 pub struct OutInstructions(Vec<abi::OutInstruction>);
-impl From<&[(SeraiAddress, (Coin, Amount))]> for OutInstructions {
-  fn from(outs: &[(SeraiAddress, (Coin, Amount))]) -> Self {
+impl From<&[(SeraiAddress, (Coin, U256))]> for OutInstructions {
+  fn from(outs: &[(SeraiAddress, (Coin, U256))]) -> Self {
     Self(
       outs
         .iter()
@@ -184,7 +184,7 @@ impl From<&[(SeraiAddress, (Coin, Amount))]> for OutInstructions {
               Coin::Ether => [0; 20].into(),
               Coin::Erc20(address) => address.into(),
             },
-            value: amount.0.try_into().expect("couldn't convert u64 to u256"),
+            value: *amount,
           }
         })
         .collect(),
@@ -192,7 +192,7 @@ impl From<&[(SeraiAddress, (Coin, Amount))]> for OutInstructions {
   }
 }
 
-/// Executed an command.
+/// An action which was executed by the Router.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Executed {
   /// Set a new key.
@@ -217,6 +217,44 @@ impl Executed {
     match self {
       Executed::SetKey { nonce, .. } | Executed::Batch { nonce, .. } => *nonce,
     }
+  }
+
+  /// Write the Executed.
+  pub fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+    match self {
+      Self::SetKey { nonce, key } => {
+        writer.write_all(&[0])?;
+        writer.write_all(&nonce.to_le_bytes())?;
+        writer.write_all(key)
+      }
+      Self::Batch { nonce, message_hash } => {
+        writer.write_all(&[1])?;
+        writer.write_all(&nonce.to_le_bytes())?;
+        writer.write_all(message_hash)
+      }
+    }
+  }
+
+  /// Read an Executed.
+  pub fn read(reader: &mut impl io::Read) -> io::Result<Self> {
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+    if kind[0] >= 2 {
+      Err(io::Error::other("unrecognized type of Executed"))?;
+    }
+
+    let mut nonce = [0; 8];
+    reader.read_exact(&mut nonce)?;
+    let nonce = u64::from_le_bytes(nonce);
+
+    let mut payload = [0; 32];
+    reader.read_exact(&mut payload)?;
+
+    Ok(match kind[0] {
+      0 => Self::SetKey { nonce, key: payload },
+      1 => Self::Batch { nonce, message_hash: payload },
+      _ => unreachable!(),
+    })
   }
 }
 

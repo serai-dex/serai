@@ -2,10 +2,7 @@ use std::io;
 
 use ciphersuite::{Ciphersuite, Secp256k1};
 
-use ethereum_serai::{
-  alloy::primitives::U256,
-  router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction},
-};
+use alloy_core::primitives::U256;
 
 use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -16,12 +13,9 @@ use serai_client::{
 };
 
 use primitives::{OutputType, ReceivedOutput};
+use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction};
 
-const DAI: [u8; 20] =
-  match const_hex::const_decode_to_array(b"0x6B175474E89094C44Da98b954EedeAC495271d0F") {
-    Ok(res) => res,
-    Err(_) => panic!("invalid non-test DAI hex address"),
-  };
+use crate::DAI;
 
 fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
   match coin {
@@ -87,7 +81,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   }
 
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
-    self.0.key_at_end_of_block
+    todo!("TODO")
   }
 
   fn presumed_origin(&self) -> Option<Address> {

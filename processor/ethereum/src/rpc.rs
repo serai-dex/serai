@@ -1,13 +1,9 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use ethereum_serai::{
-  alloy::{
-    rpc_types::{BlockTransactionsKind, BlockNumberOrTag},
-    simple_request_transport::SimpleRequest,
-    provider::{Provider, RootProvider},
-  },
-};
+use alloy_rpc_types_eth::{BlockTransactionsKind, BlockNumberOrTag};
+use alloy_simple_request_transport::SimpleRequest;
+use alloy_provider::{Provider, RootProvider};
 
 use serai_client::primitives::{NetworkId, Coin, Amount};
 
