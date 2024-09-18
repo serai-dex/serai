@@ -2,6 +2,7 @@ use core::future::Future;
 use std::sync::Arc;
 
 use alloy_rpc_types_eth::{BlockTransactionsKind, BlockNumberOrTag};
+use alloy_transport::{RpcError, TransportErrorKind};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
@@ -28,7 +29,7 @@ impl ScannerFeed for Rpc {
 
   type Block = FullEpoch;
 
-  type EphemeralError = String;
+  type EphemeralError = RpcError<TransportErrorKind>;
 
   fn latest_finalized_block_number(
     &self,
@@ -37,14 +38,17 @@ impl ScannerFeed for Rpc {
       let actual_number = self
         .provider
         .get_block(BlockNumberOrTag::Finalized.into(), BlockTransactionsKind::Hashes)
-        .await
-        .map_err(|e| format!("couldn't get the latest finalized block: {e:?}"))?
-        .ok_or_else(|| "there was no finalized block".to_string())?
+        .await?
+        .ok_or_else(|| {
+          TransportErrorKind::Custom("there was no finalized block".to_string().into())
+        })?
         .header
         .number;
       // Error if there hasn't been a full epoch yet
       if actual_number < 32 {
-        Err("there has not been a completed epoch yet".to_string())?
+        Err(TransportErrorKind::Custom(
+          "there has not been a completed epoch yet".to_string().into(),
+        ))?
       }
       // The divison by 32 returns the amount of completed epochs
       // Converting from amount of completed epochs to the latest completed epoch requires
@@ -75,10 +79,12 @@ impl ScannerFeed for Rpc {
         self
           .provider
           .get_block((start - 1).into(), BlockTransactionsKind::Hashes)
-          .await
-          .map_err(|e| format!("couldn't get block: {e:?}"))?
+          .await?
           .ok_or_else(|| {
-            format!("ethereum node didn't have requested block: {number:?}. did we reorg?")
+            TransportErrorKind::Custom(
+              format!("ethereum node didn't have requested block: {number:?}. was the node reset?")
+                .into(),
+            )
           })?
           .header
           .hash
@@ -88,10 +94,12 @@ impl ScannerFeed for Rpc {
       let end_header = self
         .provider
         .get_block((start + 31).into(), BlockTransactionsKind::Hashes)
-        .await
-        .map_err(|e| format!("couldn't get block: {e:?}"))?
+        .await?
         .ok_or_else(|| {
-          format!("ethereum node didn't have requested block: {number:?}. did we reorg?")
+          TransportErrorKind::Custom(
+            format!("ethereum node didn't have requested block: {number:?}. was the node reset?")
+              .into(),
+          )
         })?
         .header;
 

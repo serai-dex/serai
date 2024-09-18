@@ -26,7 +26,9 @@ impl TransactionPublisher {
   }
 
   // This will always return Ok(Some(_)) or Err(_), never Ok(None)
-  async fn router(&self) -> Result<RwLockReadGuard<'_, Option<Router>>, RpcError<TransportErrorKind>> {
+  async fn router(
+    &self,
+  ) -> Result<RwLockReadGuard<'_, Option<Router>>, RpcError<TransportErrorKind>> {
     let router = self.router.read().await;
 
     // If the router is None, find it on-chain
@@ -35,9 +37,14 @@ impl TransactionPublisher {
       let mut router = self.router.write().await;
       // Check again if it's None in case a different task already did this
       if router.is_none() {
-        let Some(router_actual) = Router::new(self.rpc.clone(), &self.initial_serai_key).await? else {
-          Err(TransportErrorKind::Custom("publishing transaction yet couldn't find router on chain. was our node reset?".to_string().into()))?
-      };
+        let Some(router_actual) = Router::new(self.rpc.clone(), &self.initial_serai_key).await?
+        else {
+          Err(TransportErrorKind::Custom(
+            "publishing transaction yet couldn't find router on chain. was our node reset?"
+              .to_string()
+              .into(),
+          ))?
+        };
         *router = Some(router_actual);
       }
       return Ok(router.downgrade());
@@ -60,7 +67,9 @@ impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
       let router = router.as_ref().unwrap();
       let tx = match tx.0 {
         Action::SetKey { chain_id: _, nonce: _, key } => router.update_serai_key(&key, &tx.1),
-        Action::Batch { chain_id: _, nonce: _, outs } => router.execute(OutInstructions::from(outs.as_ref()), &tx.1),
+        Action::Batch { chain_id: _, nonce: _, outs } => {
+          router.execute(OutInstructions::from(outs.as_ref()), &tx.1)
+        }
       };
 
       /*
