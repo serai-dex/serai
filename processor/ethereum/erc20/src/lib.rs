@@ -149,6 +149,8 @@ impl Erc20 {
   }
 
   /// Fetch all top-level transfers to the specified address.
+  ///
+  /// The result of this function is unordered.
   pub async fn top_level_transfers(
     &self,
     block: u64,
