@@ -1,5 +1,6 @@
 pub(crate) mod output;
 pub(crate) mod transaction;
+pub(crate) mod machine;
 pub(crate) mod block;
 
 pub(crate) const DAI: [u8; 20] =

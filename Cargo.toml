@@ -204,9 +204,6 @@ directories-next = { path = "patches/directories-next" }
 # The official pasta_curves repo doesn't support Zeroize
 pasta_curves = { git = "https://github.com/kayabaNerve/pasta_curves", rev = "a46b5be95cacbff54d06aad8d3bbcba42e05d616" }
 
-# https://github.com/alloy-rs/core/issues/717
-alloy-sol-type-parser = { git = "https://github.com/alloy-rs/core", rev = "446b9d2fbce12b88456152170709a3eaac929af0" }
-
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
 borrow_as_ptr = "deny"

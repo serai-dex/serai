@@ -20,6 +20,14 @@ impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
     &self,
     tx: Transaction,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
+    // Convert from an Action (an internal representation of a signable event) to a TxLegacy
+    /* TODO
+    match tx.0 {
+      Action::SetKey { chain_id: _, nonce: _, key } => self.router.update_serai_key(key, tx.1),
+      Action::Batch { chain_id: _, nonce: _, outs } => self.router.execute(outs, tx.1),
+    }
+    */
+
     async move {
       /*
       use tokio::{
