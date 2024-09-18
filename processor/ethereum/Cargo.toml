@@ -35,6 +35,7 @@ alloy-rlp  = { version = "0.3", default-features = false }
 alloy-consensus = { version = "0.3", default-features = false }
 
 alloy-rpc-types-eth = { version = "0.3", default-features = false }
+alloy-transport = { version = "0.3", default-features = false }
 alloy-simple-request-transport = { path = "../../networks/ethereum/alloy-simple-request-transport", default-features = false }
 alloy-rpc-client = { version = "0.3", default-features = false }
 alloy-provider = { version = "0.3", default-features = false }
