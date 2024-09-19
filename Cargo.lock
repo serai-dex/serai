@@ -8801,6 +8801,7 @@ dependencies = [
  "serai-db",
  "serai-in-instructions-primitives",
  "serai-primitives",
+ "serai-processor-messages",
  "serai-processor-primitives",
  "serai-processor-scheduler-primitives",
  "tokio",

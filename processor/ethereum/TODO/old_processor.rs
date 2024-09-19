@@ -1,83 +1,4 @@
-#[async_trait]
-impl<D: Db> Network for Ethereum<D> {
-  async fn get_outputs(
-    &self,
-    block: &Self::Block,
-    _: <Secp256k1 as Ciphersuite>::G,
-  ) -> Vec<Self::Output> {
-    let router = self.router().await;
-    let router = router.as_ref().unwrap();
-    // Grab the key at the end of the epoch
-    let key_at_end_of_block = loop {
-      match router.key_at_end_of_block(block.start + 31).await {
-        Ok(Some(key)) => break key,
-        Ok(None) => return vec![],
-        Err(e) => {
-          log::error!("couldn't connect to router for the key at the end of the block: {e:?}");
-          sleep(Duration::from_secs(5)).await;
-          continue;
-        }
-      }
-    };
-
-    let mut all_events = vec![];
-    let mut top_level_txids = HashSet::new();
-    for erc20_addr in [DAI] {
-      let erc20 = Erc20::new(self.provider.clone(), erc20_addr);
-
-      for block in block.start .. (block.start + 32) {
-        let transfers = loop {
-          match erc20.top_level_transfers(block, router.address()).await {
-            Ok(transfers) => break transfers,
-            Err(e) => {
-              log::error!("couldn't connect to Ethereum node for the top-level transfers: {e:?}");
-              sleep(Duration::from_secs(5)).await;
-              continue;
-            }
-          }
-        };
-
-        for transfer in transfers {
-          top_level_txids.insert(transfer.id);
-          all_events.push(EthereumInInstruction {
-            id: (transfer.id, 0),
-            from: transfer.from,
-            coin: EthereumCoin::Erc20(erc20_addr),
-            amount: transfer.amount,
-            data: transfer.data,
-            key_at_end_of_block,
-          });
-        }
-      }
-    }
-
-    for block in block.start .. (block.start + 32) {
-      let mut events = router.in_instructions(block, &HashSet::from([DAI])).await;
-      while let Err(e) = events {
-        log::error!("couldn't connect to Ethereum node for the Router's events: {e:?}");
-        sleep(Duration::from_secs(5)).await;
-        events = router.in_instructions(block, &HashSet::from([DAI])).await;
-      }
-      let mut events = events.unwrap();
-      for event in &mut events {
-        // A transaction should either be a top-level transfer or a Router InInstruction
-        if top_level_txids.contains(&event.id.0) {
-          panic!("top-level transfer had {} and router had {:?}", hex::encode(event.id.0), event);
-        }
-        // Overwrite the key at end of block to key at end of epoch
-        event.key_at_end_of_block = key_at_end_of_block;
-      }
-      all_events.extend(events);
-    }
-
-    for event in &all_events {
-      assert!(
-        coin_to_serai_coin(&event.coin).is_some(),
-        "router yielded events for unrecognized coins"
-      );
-    }
-    all_events
-  }
+TODO
 
   async fn publish_completion(
     &self,
@@ -255,4 +176,3 @@ impl<D: Db> Network for Ethereum<D> {
     // Yield the freshly mined block
     self.get_block(self.get_latest_block_number().await.unwrap()).await.unwrap()
   }
-}
