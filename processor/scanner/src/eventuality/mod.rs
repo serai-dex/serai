@@ -273,6 +273,18 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         log::debug!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
 
         let (keys, keys_with_stages) = self.keys_and_keys_with_stages(b);
+        let latest_active_key = {
+          let mut keys_with_stages = keys_with_stages.clone();
+          loop {
+            // Use the most recent key
+            let (key, stage) = keys_with_stages.pop().unwrap();
+            // Unless this key is active, but not yet reporting
+            if stage == LifetimeStage::ActiveYetNotReporting {
+              continue;
+            }
+            break key;
+          }
+        };
 
         let mut txn = self.db.txn();
 
@@ -307,7 +319,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           }
 
           // Fetch all non-External outputs
-          let mut non_external_outputs = block.scan_for_outputs(key.key);
+          let mut non_external_outputs = block.scan_for_outputs(latest_active_key, key.key);
           non_external_outputs.retain(|output| output.kind() != OutputType::External);
           // Drop any outputs less than the dust limit
           non_external_outputs.retain(|output| {

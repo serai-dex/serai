@@ -122,6 +122,19 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
         let keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
           .expect("scanning for a blockchain without any keys set");
 
+        let latest_active_key = {
+          let mut keys = keys.clone();
+          loop {
+            // Use the most recent key
+            let key = keys.pop().unwrap();
+            // Unless this key is active, but not yet reporting
+            if key.stage == LifetimeStage::ActiveYetNotReporting {
+              continue;
+            }
+            break key.key;
+          }
+        };
+
         // The scan data for this block
         let mut scan_data = SenderScanData {
           block_number: b,
@@ -157,7 +170,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
         // Scan for each key
         for key in &keys {
-          for output in block.scan_for_outputs(key.key) {
+          for output in block.scan_for_outputs(latest_active_key, key.key) {
             assert_eq!(output.key(), key.key);
 
             /*

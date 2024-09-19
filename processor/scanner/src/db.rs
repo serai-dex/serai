@@ -28,6 +28,7 @@ struct SeraiKeyDbEntry<K: Borshy> {
   key: K,
 }
 
+#[derive(Clone)]
 pub(crate) struct SeraiKey<K> {
   pub(crate) key: K,
   pub(crate) stage: LifetimeStage,
