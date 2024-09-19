@@ -116,9 +116,6 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
         assert_eq!(ScanDb::<S>::next_to_scan_for_outputs_block(&txn).unwrap(), b);
 
-        // Tidy the keys, then fetch them
-        // We don't have to tidy them here, we just have to somewhere, so why not here?
-        ScannerGlobalDb::<S>::tidy_keys(&mut txn);
         let keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
           .expect("scanning for a blockchain without any keys set");
 
