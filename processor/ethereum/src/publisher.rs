@@ -50,8 +50,12 @@ impl<D: Db> TransactionPublisher<D> {
       if router.is_none() {
         let Some(router_actual) = Router::new(
           self.rpc.clone(),
-          &PublicKey::new(InitialSeraiKey::get(&self.db).unwrap().0)
-            .expect("initial key used by Serai wasn't representable on Ethereum"),
+          &PublicKey::new(
+            InitialSeraiKey::get(&self.db)
+              .expect("publishing a transaction yet never confirmed a key")
+              .0,
+          )
+          .expect("initial key used by Serai wasn't representable on Ethereum"),
         )
         .await?
         else {

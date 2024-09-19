@@ -1,146 +1,5 @@
-/*
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![doc = include_str!("../README.md")]
-#![deny(missing_docs)]
-
-use core::{fmt, time::Duration};
-use std::{
-  sync::Arc,
-  collections::{HashSet, HashMap},
-  io,
-};
-
-use async_trait::async_trait;
-
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
-use frost::ThresholdKeys;
-
-use ethereum_serai::{
-  alloy::{
-    primitives::U256,
-    rpc_types::{BlockTransactionsKind, BlockNumberOrTag, Transaction},
-    simple_request_transport::SimpleRequest,
-    rpc_client::ClientBuilder,
-    provider::{Provider, RootProvider},
-  },
-  crypto::{PublicKey, Signature},
-  erc20::Erc20,
-  deployer::Deployer,
-  router::{Router, Coin as EthereumCoin, InInstruction as EthereumInInstruction},
-  machine::*,
-};
-#[cfg(test)]
-use ethereum_serai::alloy::primitives::B256;
-
-use tokio::{
-  time::sleep,
-  sync::{RwLock, RwLockReadGuard},
-};
-#[cfg(not(test))]
-use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
-  net::TcpStream,
-};
-
-use serai_client::{
-  primitives::{Coin, Amount, Balance, NetworkId},
-  validator_sets::primitives::Session,
-};
-
-use crate::{
-  Db, Payment,
-  networks::{
-    OutputType, Output, Transaction as TransactionTrait, SignableTransaction, Block,
-    Eventuality as EventualityTrait, EventualitiesTracker, NetworkError, Network,
-  },
-  key_gen::NetworkKeyDb,
-  multisigs::scheduler::{
-    Scheduler as SchedulerTrait,
-    smart_contract::{Addendum, Scheduler},
-  },
-};
-
-#[derive(Clone)]
-pub struct Ethereum<D: Db> {
-  // This DB is solely used to access the first key generated, as needed to determine the Router's
-  // address. Accordingly, all methods present are consistent to a Serai chain with a finalized
-  // first key (regardless of local state), and this is safe.
-  db: D,
-  #[cfg_attr(test, allow(unused))]
-  relayer_url: String,
-  provider: Arc<RootProvider<SimpleRequest>>,
-  deployer: Deployer,
-  router: Arc<RwLock<Option<Router>>>,
-}
-impl<D: Db> Ethereum<D> {
-  pub async fn new(db: D, daemon_url: String, relayer_url: String) -> Self {
-    let provider = Arc::new(RootProvider::new(
-      ClientBuilder::default().transport(SimpleRequest::new(daemon_url), true),
-    ));
-
-    let mut deployer = Deployer::new(provider.clone()).await;
-    while !matches!(deployer, Ok(Some(_))) {
-      log::error!("Deployer wasn't deployed yet or networking error");
-      sleep(Duration::from_secs(5)).await;
-      deployer = Deployer::new(provider.clone()).await;
-    }
-    let deployer = deployer.unwrap().unwrap();
-
-    dbg!(&relayer_url);
-    dbg!(relayer_url.len());
-    Ethereum { db, relayer_url, provider, deployer, router: Arc::new(RwLock::new(None)) }
-  }
-
-  // Obtain a reference to the Router, sleeping until it's deployed if it hasn't already been.
-  // This is guaranteed to return Some.
-  pub async fn router(&self) -> RwLockReadGuard<'_, Option<Router>> {
-    // If we've already instantiated the Router, return a read reference
-    {
-      let router = self.router.read().await;
-      if router.is_some() {
-        return router;
-      }
-    }
-
-    // Instantiate it
-    let mut router = self.router.write().await;
-    // If another attempt beat us to it, return
-    if router.is_some() {
-      drop(router);
-      return self.router.read().await;
-    }
-
-    // Get the first key from the DB
-    let first_key =
-      NetworkKeyDb::get(&self.db, Session(0)).expect("getting outputs before confirming a key");
-    let key = Secp256k1::read_G(&mut first_key.as_slice()).unwrap();
-    let public_key = PublicKey::new(key).unwrap();
-
-    // Find the router
-    let mut found = self.deployer.find_router(self.provider.clone(), &public_key).await;
-    while !matches!(found, Ok(Some(_))) {
-      log::error!("Router wasn't deployed yet or networking error");
-      sleep(Duration::from_secs(5)).await;
-      found = self.deployer.find_router(self.provider.clone(), &public_key).await;
-    }
-
-    // Set it
-    *router = Some(found.unwrap().unwrap());
-
-    // Downgrade to a read lock
-    // Explicitly doesn't use `downgrade` so that another pending write txn can realize it's no
-    // longer necessary
-    drop(router);
-    self.router.read().await
-  }
-}
-
 #[async_trait]
 impl<D: Db> Network for Ethereum<D> {
-  const DUST: u64 = 0; // TODO
-
-  const COST_TO_AGGREGATE: u64 = 0;
-
   async fn get_outputs(
     &self,
     block: &Self::Block,
@@ -220,66 +79,6 @@ impl<D: Db> Network for Ethereum<D> {
     all_events
   }
 
-  async fn get_eventuality_completions(
-    &self,
-    eventualities: &mut EventualitiesTracker<Self::Eventuality>,
-    block: &Self::Block,
-  ) -> HashMap<
-    [u8; 32],
-    (
-      usize,
-      <Self::Transaction as TransactionTrait<Self>>::Id,
-      <Self::Eventuality as EventualityTrait>::Completion,
-    ),
-  > {
-    let mut res = HashMap::new();
-    if eventualities.map.is_empty() {
-      return res;
-    }
-
-    let router = self.router().await;
-    let router = router.as_ref().unwrap();
-
-    let past_scanned_epoch = loop {
-      match self.get_block(eventualities.block_number).await {
-        Ok(block) => break block,
-        Err(e) => log::error!("couldn't get the last scanned block in the tracker: {}", e),
-      }
-      sleep(Duration::from_secs(10)).await;
-    };
-    assert_eq!(
-      past_scanned_epoch.start / 32,
-      u64::try_from(eventualities.block_number).unwrap(),
-      "assumption of tracker block number's relation to epoch start is incorrect"
-    );
-
-    // Iterate from after the epoch number in the tracker to the end of this epoch
-    for block_num in (past_scanned_epoch.end() + 1) ..= block.end() {
-      let executed = loop {
-        match router.executed_commands(block_num).await {
-          Ok(executed) => break executed,
-          Err(e) => log::error!("couldn't get the executed commands in block {block_num}: {e}"),
-        }
-        sleep(Duration::from_secs(10)).await;
-      };
-
-      for executed in executed {
-        let lookup = executed.nonce.to_le_bytes().to_vec();
-        if let Some((plan_id, eventuality)) = eventualities.map.get(&lookup) {
-          if let Some(command) =
-            SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &executed.signature)
-          {
-            res.insert(*plan_id, (block_num.try_into().unwrap(), executed.tx_id, command));
-            eventualities.map.remove(&lookup);
-          }
-        }
-      }
-    }
-    eventualities.block_number = (block.start / 32).try_into().unwrap();
-
-    res
-  }
-
   async fn publish_completion(
     &self,
     completion: &<Self::Eventuality as EventualityTrait>::Completion,
@@ -333,14 +132,6 @@ impl<D: Db> Network for Ethereum<D> {
     }
   }
 
-  async fn confirm_completion(
-    &self,
-    eventuality: &Self::Eventuality,
-    claim: &<Self::Eventuality as EventualityTrait>::Claim,
-  ) -> Result<Option<<Self::Eventuality as EventualityTrait>::Completion>, NetworkError> {
-    Ok(SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &claim.signature))
-  }
-
   #[cfg(test)]
   async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
     self
@@ -353,15 +144,6 @@ impl<D: Db> Network for Ethereum<D> {
       .number
       .try_into()
       .unwrap()
-  }
-
-  #[cfg(test)]
-  async fn check_eventuality_by_claim(
-    &self,
-    eventuality: &Self::Eventuality,
-    claim: &<Self::Eventuality as EventualityTrait>::Claim,
-  ) -> bool {
-    SignedRouterCommand::new(&eventuality.0, eventuality.1.clone(), &claim.signature).is_some()
   }
 
   #[cfg(test)]
@@ -474,4 +256,3 @@ impl<D: Db> Network for Ethereum<D> {
     self.get_block(self.get_latest_block_number().await.unwrap()).await.unwrap()
   }
 }
-*/

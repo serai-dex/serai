@@ -8,3 +8,5 @@ pub(crate) const DAI: [u8; 20] =
     Ok(res) => res,
     Err(_) => panic!("invalid non-test DAI hex address"),
   };
+
+pub(crate) const TOKENS: [[u8; 20]; 1] = [DAI];
