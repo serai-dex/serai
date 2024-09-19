@@ -116,6 +116,28 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     StartBlock::set(txn, &block)
   }
 
+  fn tidy_keys(txn: &mut impl DbTxn) {
+    let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
+      ActiveKeys::get(txn).expect("retiring key yet no active keys");
+    let Some(key) = keys.first() else { return };
+
+    // Get the block we're scanning for next
+    let block_number = next_to_scan_for_outputs_block::<S>(txn).expect(
+      "tidying keys despite never setting the next to scan for block (done on initialization)",
+    );
+    // If this key is scheduled for retiry...
+    if let Some(retire_at) = RetireAt::get(txn, key.key) {
+      // And is retired by/at this block...
+      if retire_at <= block_number {
+        // Remove it from the list of keys
+        let key = keys.remove(0);
+        ActiveKeys::set(txn, &keys);
+        // Also clean up the retiry block
+        RetireAt::del(txn, key.key);
+      }
+    }
+  }
+
   /// Queue a key.
   ///
   /// Keys may be queued whenever, so long as they're scheduled to activate `WINDOW_LENGTH` blocks
@@ -165,6 +187,9 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     // Push and save the next key
     keys.push(SeraiKeyDbEntry { activation_block_number, key: EncodableG(key) });
     ActiveKeys::set(txn, &keys);
+
+    // Now tidy the keys, ensuring this has a maximum length of 2
+    Self::tidy_keys(txn);
   }
   /// Retire a key.
   ///
@@ -180,27 +205,6 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     assert_eq!(keys[0].key.0, key, "not retiring the oldest key");
 
     RetireAt::set(txn, EncodableG(key), &at_block);
-  }
-  pub(crate) fn tidy_keys(txn: &mut impl DbTxn) {
-    let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
-      ActiveKeys::get(txn).expect("retiring key yet no active keys");
-    let Some(key) = keys.first() else { return };
-
-    // Get the block we're scanning for next
-    let block_number = next_to_scan_for_outputs_block::<S>(txn).expect(
-      "tidying keys despite never setting the next to scan for block (done on initialization)",
-    );
-    // If this key is scheduled for retiry...
-    if let Some(retire_at) = RetireAt::get(txn, key.key) {
-      // And is retired by/at this block...
-      if retire_at <= block_number {
-        // Remove it from the list of keys
-        let key = keys.remove(0);
-        ActiveKeys::set(txn, &keys);
-        // Also clean up the retiry block
-        RetireAt::del(txn, key.key);
-      }
-    }
   }
   /// Fetch the active keys, as of the next-to-scan-for-outputs Block.
   ///
