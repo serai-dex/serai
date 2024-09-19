@@ -5,13 +5,15 @@ use tokio::sync::mpsc;
 
 use scale::Encode;
 use serai_client::{
-  primitives::{NetworkId, Signature},
+  primitives::Signature,
   validator_sets::primitives::Session,
   in_instructions::primitives::{Batch, SignedBatch},
 };
 
 use serai_db::{Get, DbTxn, Db, create_db, db_channel};
-use serai_env as env;
+
+use scanner::ScannerFeed;
+
 use message_queue::{Service, Metadata, client::MessageQueue};
 
 create_db! {
@@ -60,18 +62,11 @@ pub(crate) struct Coordinator {
 }
 
 impl Coordinator {
-  pub(crate) fn new(db: crate::Db) -> Self {
+  pub(crate) fn new<S: ScannerFeed>(db: crate::Db) -> Self {
     let (received_message_send, received_message_recv) = mpsc::unbounded_channel();
     let (sent_message_send, mut sent_message_recv) = mpsc::unbounded_channel();
 
-    let network_id = match env::var("NETWORK").expect("network wasn't specified").as_str() {
-      "bitcoin" => NetworkId::Bitcoin,
-      "ethereum" => NetworkId::Ethereum,
-      "monero" => NetworkId::Monero,
-      _ => panic!("unrecognized network"),
-    };
-    // TODO: Read this from ScannerFeed
-    let service = Service::Processor(network_id);
+    let service = Service::Processor(S::NETWORK);
     let message_queue = Arc::new(MessageQueue::from_env(service));
 
     // Spawn a task to move messages from the message-queue to our database so we can achieve
