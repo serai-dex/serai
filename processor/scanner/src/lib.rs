@@ -429,9 +429,6 @@ impl<S: ScannerFeed> Scanner<S> {
   /// This means the specified Batch was ordered on Serai in relation to Burn events, and all
   /// validators have achieved synchrony on it.
   ///
-  /// `in_instruction_succeededs` is the result of executing each InInstruction within this batch,
-  /// true if it succeeded and false if it did not (and did not cause any state changes on Serai).
-  ///
   /// `burns` is a list of Burns to queue with the acknowledgement of this Batch for efficiency's
   /// sake. Any Burns passed here MUST NOT be passed into any other call of `acknowledge_batch` nor
   /// `queue_burns`. Doing so will cause them to be executed multiple times.
@@ -441,7 +438,7 @@ impl<S: ScannerFeed> Scanner<S> {
     &mut self,
     mut txn: impl DbTxn,
     batch_id: u32,
-    in_instruction_succeededs: Vec<bool>,
+    in_instruction_results: Vec<messages::substrate::InInstructionResult>,
     burns: Vec<OutInstructionWithBalance>,
     key_to_activate: Option<KeyFor<S>>,
   ) {
@@ -451,7 +448,7 @@ impl<S: ScannerFeed> Scanner<S> {
     substrate::queue_acknowledge_batch::<S>(
       &mut txn,
       batch_id,
-      in_instruction_succeededs,
+      in_instruction_results,
       burns,
       key_to_activate,
     );

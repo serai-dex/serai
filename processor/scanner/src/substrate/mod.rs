@@ -16,14 +16,14 @@ use db::*;
 pub(crate) fn queue_acknowledge_batch<S: ScannerFeed>(
   txn: &mut impl DbTxn,
   batch_id: u32,
-  in_instruction_succeededs: Vec<bool>,
+  in_instruction_results: Vec<messages::substrate::InInstructionResult>,
   burns: Vec<OutInstructionWithBalance>,
   key_to_activate: Option<KeyFor<S>>,
 ) {
   SubstrateDb::<S>::queue_acknowledge_batch(
     txn,
     batch_id,
-    in_instruction_succeededs,
+    in_instruction_results,
     burns,
     key_to_activate,
   )
@@ -67,7 +67,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
         match action {
           Action::AcknowledgeBatch(AcknowledgeBatch {
             batch_id,
-            in_instruction_succeededs,
+            in_instruction_results,
             mut burns,
             key_to_activate,
           }) => {
@@ -127,16 +127,16 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
               let return_information = report::take_return_information::<S>(&mut txn, batch_id)
                 .expect("didn't save the return information for Batch we published");
               assert_eq!(
-              in_instruction_succeededs.len(),
+              in_instruction_results.len(),
               return_information.len(),
               "amount of InInstruction succeededs differed from amount of return information saved"
             );
 
               // We map these into standard Burns
-              for (succeeded, return_information) in
-                in_instruction_succeededs.into_iter().zip(return_information)
+              for (result, return_information) in
+                in_instruction_results.into_iter().zip(return_information)
               {
-                if succeeded {
+                if result == messages::substrate::InInstructionResult::Succeeded {
                   continue;
                 }
 
