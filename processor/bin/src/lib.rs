@@ -157,8 +157,18 @@ async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u6
   }
 }
 
+/// Hooks to run during the main loop.
+pub trait Hooks {
+  /// A hook to run upon receiving a message.
+  fn on_message(txn: &mut impl DbTxn, msg: &messages::CoordinatorMessage);
+}
+impl Hooks for () {
+  fn on_message(_: &mut impl DbTxn, _: &messages::CoordinatorMessage) {}
+}
+
 /// The main loop of a Processor, interacting with the Coordinator.
 pub async fn main_loop<
+  H: Hooks,
   S: ScannerFeed,
   K: KeyGenParams<ExternalNetworkCiphersuite: Ciphersuite<G = KeyFor<S>>>,
   Sch: Clone
@@ -183,6 +193,7 @@ pub async fn main_loop<
     let db_clone = db.clone();
     let mut txn = db.txn();
     let msg = coordinator.next_message(&mut txn).await;
+    H::on_message(&mut txn, &msg);
     let mut txn = Some(txn);
     match msg {
       messages::CoordinatorMessage::KeyGen(msg) => {

@@ -6,7 +6,7 @@ use serai_client::networks::ethereum::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 
-use ethereum_router::Executed;
+use ethereum_router::{InInstruction as EthereumInInstruction, Executed};
 
 use crate::{output::Output, transaction::Eventuality};
 
@@ -43,7 +43,7 @@ impl primitives::BlockHeader for Epoch {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct FullEpoch {
   epoch: Epoch,
-  outputs: Vec<Output>,
+  instructions: Vec<EthereumInInstruction>,
   executed: Vec<Executed>,
 }
 
@@ -72,7 +72,7 @@ impl primitives::Block for FullEpoch {
     // Associate all outputs with the latest active key
     // We don't associate these with the current key within the SC as that'll cause outputs to be
     // marked for forwarding if the SC is delayed to actually rotate
-    todo!("TODO")
+    self.instructions.iter().cloned().map(|instruction| Output { key, instruction }).collect()
   }
 
   #[allow(clippy::type_complexity)]
