@@ -8108,6 +8108,7 @@ dependencies = [
  "dkg",
  "flexible-transcript",
  "hex",
+ "k256",
  "log",
  "modular-frost",
  "parity-scale-codec",

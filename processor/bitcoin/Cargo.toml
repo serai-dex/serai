@@ -24,6 +24,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+k256 = { version = "0.13", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "secp256k1"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-secp256k1"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
