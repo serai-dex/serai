@@ -182,7 +182,7 @@ pub async fn main_loop<
   scheduler: Sch,
   publisher: impl TransactionPublisher<TransactionFor<Sch::SignableTransaction>>,
 ) {
-  let mut coordinator = Coordinator::new(db.clone());
+  let mut coordinator = Coordinator::new::<S>(db.clone());
 
   let mut key_gen = key_gen::<K>();
   let mut scanner = Scanner::new(db.clone(), feed.clone(), scheduler.clone()).await;
