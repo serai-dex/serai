@@ -31,6 +31,8 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 
 serai-db = { path = "../../common/db" }
 
+messages = { package = "serai-processor-messages", path = "../messages" }
+
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-in-instructions-primitives = { path = "../../substrate/in-instructions/primitives", default-features = false, features = ["std", "borsh"] }
 serai-coins-primitives = { path = "../../substrate/coins/primitives", default-features = false, features = ["std", "borsh"] }

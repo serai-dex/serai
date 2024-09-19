@@ -270,32 +270,43 @@ pub async fn main_loop<
           // This is a cheap call
           signers.retire_session(txn, session, &key)
         }
-        messages::substrate::CoordinatorMessage::BlockWithBatchAcknowledgement {
-          block: _,
-          batch_id,
-          in_instruction_succeededs,
-          burns,
+        messages::substrate::CoordinatorMessage::Block {
+          serai_block_number: _,
+          batches,
+          mut burns,
         } => {
-          let mut txn = txn.take().unwrap();
           let scanner = scanner.as_mut().unwrap();
-          let key_to_activate = KeyToActivate::<KeyFor<S>>::try_recv(&mut txn).map(|key| key.0);
+
+          // Substrate sets this limit to prevent DoSs from malicious validator sets
+          // That bound lets us consume this txn in the following loop body, as an optimization
+          assert!(batches.len() <= 1);
+          for messages::substrate::ExecutedBatch { id, in_instructions } in batches {
+            let key_to_activate =
+              KeyToActivate::<KeyFor<S>>::try_recv(txn.as_mut().unwrap()).map(|key| key.0);
+
+            /*
+              `acknowledge_batch` takes burns to optimize handling returns with standard payments.
+              That's why handling these with a Batch (and not waiting until the following potential
+              `queue_burns` call makes sense. As for which Batch, the first is equally valid unless
+              we want to start introspecting (and should be our only Batch anyways).
+            */
+            let mut this_batchs_burns = vec![];
+            std::mem::swap(&mut burns, &mut this_batchs_burns);
+
+            // This is a cheap call as it internally just queues this to be done later
+            let _: () = scanner.acknowledge_batch(
+              txn.take().unwrap(),
+              id,
+              in_instructions,
+              this_batchs_burns,
+              key_to_activate,
+            );
+          }
+
           // This is a cheap call as it internally just queues this to be done later
-          scanner.acknowledge_batch(
-            txn,
-            batch_id,
-            in_instruction_succeededs,
-            burns,
-            key_to_activate,
-          )
-        }
-        messages::substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement {
-          block: _,
-          burns,
-        } => {
-          let txn = txn.take().unwrap();
-          let scanner = scanner.as_mut().unwrap();
-          // This is a cheap call as it internally just queues this to be done later
-          scanner.queue_burns(txn, burns)
+          if !burns.is_empty() {
+            let _: () = scanner.queue_burns(txn.take().unwrap(), burns);
+          }
         }
       },
     };

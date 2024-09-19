@@ -181,7 +181,6 @@ pub mod coordinator {
 pub mod substrate {
   use super::*;
 
-  /* TODO
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum InInstructionResult {
     Succeeded,
@@ -189,15 +188,9 @@ pub mod substrate {
   }
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub struct ExecutedBatch {
-    batch_id: u32,
-    in_instructions: Vec<InInstructionResult>,
+    pub id: u32,
+    pub in_instructions: Vec<InInstructionResult>,
   }
-  Block {
-    block: u64,
-    batches: Vec<ExecutedBatch>,
-    burns: Vec<OutInstructionWithBalance>,
-  }
-  */
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
   pub enum CoordinatorMessage {
@@ -205,15 +198,12 @@ pub mod substrate {
     SetKeys { serai_time: u64, session: Session, key_pair: KeyPair },
     /// Slashes reported on the Serai blockchain OR the process timed out.
     SlashesReported { session: Session },
-    /// The data from a block which acknowledged a Batch.
-    BlockWithBatchAcknowledgement {
-      block: u64,
-      batch_id: u32,
-      in_instruction_succeededs: Vec<bool>,
+    /// A block from Serai with relevance to this processor.
+    Block {
+      serai_block_number: u64,
+      batches: Vec<ExecutedBatch>,
       burns: Vec<OutInstructionWithBalance>,
     },
-    /// The data from a block which didn't acknowledge a Batch.
-    BlockWithoutBatchAcknowledgement { block: u64, burns: Vec<OutInstructionWithBalance> },
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -323,11 +313,8 @@ impl CoordinatorMessage {
         let (sub, id) = match msg {
           substrate::CoordinatorMessage::SetKeys { session, .. } => (0, session.encode()),
           substrate::CoordinatorMessage::SlashesReported { session } => (1, session.encode()),
-          substrate::CoordinatorMessage::BlockWithBatchAcknowledgement { block, .. } => {
-            (2, block.encode())
-          }
-          substrate::CoordinatorMessage::BlockWithoutBatchAcknowledgement { block, .. } => {
-            (3, block.encode())
+          substrate::CoordinatorMessage::Block { serai_block_number, .. } => {
+            (2, serai_block_number.encode())
           }
         };
 
