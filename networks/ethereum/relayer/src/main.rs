@@ -40,8 +40,8 @@ async fn main() {
     db
   };
 
-  // Start command recipience server
-  // This should not be publicly exposed
+  // Start transaction recipience server
+  // This MUST NOT be publicly exposed
   // TODO: Add auth
   tokio::spawn({
     let db = db.clone();
@@ -58,25 +58,27 @@ async fn main() {
             let mut buf = vec![0; usize::try_from(msg_len).unwrap()];
             let Ok(_) = socket.read_exact(&mut buf).await else { break };
 
-            if buf.len() < 5 {
+            if buf.len() < (4 + 1) {
               break;
             }
             let nonce = u32::from_le_bytes(buf[.. 4].try_into().unwrap());
             let mut txn = db.txn();
+            // Save the transaction
             txn.put(nonce.to_le_bytes(), &buf[4 ..]);
             txn.commit();
 
             let Ok(()) = socket.write_all(&[1]).await else { break };
 
-            log::info!("received signed command #{nonce}");
+            log::info!("received transaction to publish (nonce {nonce})");
           }
         });
       }
     }
   });
 
-  // Start command fetch server
+  // Start transaction fetch server
   // 5132 ^ ((b'E' << 8) | b'R') + 1
+  // TODO: JSON-RPC server which returns this as JSON?
   let server = TcpListener::bind("0.0.0.0:20831").await.unwrap();
   loop {
     let (mut socket, _) = server.accept().await.unwrap();
@@ -84,16 +86,16 @@ async fn main() {
     tokio::spawn(async move {
       let db = db.clone();
       loop {
-        // Nonce to get the router comamnd for
+        // Nonce to get the unsigned transaction for
         let mut buf = vec![0; 4];
         let Ok(_) = socket.read_exact(&mut buf).await else { break };
 
-        let command = db.get(&buf[.. 4]).unwrap_or(vec![]);
-        let Ok(()) = socket.write_all(&u32::try_from(command.len()).unwrap().to_le_bytes()).await
+        let transaction = db.get(&buf[.. 4]).unwrap_or(vec![]);
+        let Ok(()) = socket.write_all(&u32::try_from(transaction.len()).unwrap().to_le_bytes()).await
         else {
           break;
         };
-        let Ok(()) = socket.write_all(&command).await else { break };
+        let Ok(()) = socket.write_all(&transaction).await else { break };
       }
     });
   }

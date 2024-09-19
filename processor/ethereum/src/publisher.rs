@@ -1,11 +1,17 @@
 use core::future::Future;
 use std::sync::Arc;
 
+use alloy_rlp::Encodable;
+
 use alloy_transport::{TransportErrorKind, RpcError};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::RootProvider;
 
-use tokio::sync::{RwLockReadGuard, RwLock};
+use tokio::{
+  sync::{RwLockReadGuard, RwLock},
+  io::{AsyncReadExt, AsyncWriteExt},
+  net::TcpStream,
+};
 
 use ethereum_schnorr::PublicKey;
 use ethereum_router::{OutInstructions, Router};
@@ -62,9 +68,11 @@ impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
     tx: Transaction,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      // Convert from an Action (an internal representation of a signable event) to a TxLegacy
       let router = self.router().await?;
       let router = router.as_ref().unwrap();
+
+      let nonce = tx.0.nonce();
+      // Convert from an Action (an internal representation of a signable event) to a TxLegacy
       let tx = match tx.0 {
         Action::SetKey { chain_id: _, nonce: _, key } => router.update_serai_key(&key, &tx.1),
         Action::Batch { chain_id: _, nonce: _, outs } => {
@@ -72,40 +80,33 @@ impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
         }
       };
 
-      /*
-      use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpStream,
-      };
-
-      let mut msg = vec![];
-      match completion.command() {
-        RouterCommand::UpdateSeraiKey { nonce, .. } | RouterCommand::Execute { nonce, .. } => {
-          msg.extend(&u32::try_from(nonce).unwrap().to_le_bytes());
-        }
-      }
-      completion.write(&mut msg).unwrap();
+      // Nonce
+      let mut msg = nonce.to_le_bytes().to_vec();
+      // Transaction
+      tx.encode(&mut msg);
 
       let Ok(mut socket) = TcpStream::connect(&self.relayer_url).await else {
-        log::warn!("couldn't connect to the relayer server");
-        Err(NetworkError::ConnectionError)?
+        Err(TransportErrorKind::Custom(
+          "couldn't connect to the relayer server".to_string().into(),
+        ))?
       };
       let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
-        log::warn!("couldn't send the message's len to the relayer server");
-        Err(NetworkError::ConnectionError)?
+        Err(TransportErrorKind::Custom(
+          "couldn't send the message's len to the relayer server".to_string().into(),
+        ))?
       };
       let Ok(()) = socket.write_all(&msg).await else {
-        log::warn!("couldn't write the message to the relayer server");
-        Err(NetworkError::ConnectionError)?
+        Err(TransportErrorKind::Custom(
+          "couldn't write the message to the relayer server".to_string().into(),
+        ))?
       };
       if socket.read_u8().await.ok() != Some(1) {
-        log::warn!("didn't get the ack from the relayer server");
-        Err(NetworkError::ConnectionError)?;
+        Err(TransportErrorKind::Custom(
+          "didn't get the ack from the relayer server".to_string().into(),
+        ))?;
       }
 
       Ok(())
-      */
-      todo!("TODO")
     }
   }
 }
