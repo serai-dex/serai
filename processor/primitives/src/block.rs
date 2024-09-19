@@ -43,7 +43,11 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   /// Scan all outputs within this block to find the outputs spendable by this key.
   ///
   /// No assumption on the order of the returned outputs is made.
-  fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output>;
+  fn scan_for_outputs_unordered(
+    &self,
+    latest_active_key: Self::Key,
+    key: Self::Key,
+  ) -> Vec<Self::Output>;
 
   /// Check if this block resolved any Eventualities.
   ///

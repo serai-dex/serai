@@ -59,8 +59,19 @@ impl primitives::Block for FullEpoch {
     self.epoch.end_hash
   }
 
-  fn scan_for_outputs_unordered(&self, _key: Self::Key) -> Vec<Self::Output> {
+  fn scan_for_outputs_unordered(
+    &self,
+    latest_active_key: Self::Key,
+    key: Self::Key,
+  ) -> Vec<Self::Output> {
     // Only return these outputs for the latest key
+    if latest_active_key != key {
+      return vec![];
+    }
+
+    // Associate all outputs with the latest active key
+    // We don't associate these with the current key within the SC as that'll cause outputs to be
+    // marked for forwarding if the SC is delayed to actually rotate
     todo!("TODO")
   }
 

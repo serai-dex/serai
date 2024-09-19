@@ -91,7 +91,8 @@ async fn main() {
         let Ok(_) = socket.read_exact(&mut buf).await else { break };
 
         let transaction = db.get(&buf[.. 4]).unwrap_or(vec![]);
-        let Ok(()) = socket.write_all(&u32::try_from(transaction.len()).unwrap().to_le_bytes()).await
+        let Ok(()) =
+          socket.write_all(&u32::try_from(transaction.len()).unwrap().to_le_bytes()).await
         else {
           break;
         };

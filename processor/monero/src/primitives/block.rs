@@ -40,7 +40,11 @@ impl primitives::Block for Block {
     self.0.block.hash()
   }
 
-  fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output> {
+  fn scan_for_outputs_unordered(
+    &self,
+    _latest_active_key: Self::Key,
+    key: Self::Key,
+  ) -> Vec<Self::Output> {
     let mut scanner = GuaranteedScanner::new(view_pair(key));
     scanner.register_subaddress(EXTERNAL_SUBADDRESS);
     scanner.register_subaddress(BRANCH_SUBADDRESS);

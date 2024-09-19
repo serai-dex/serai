@@ -46,11 +46,11 @@ pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>
 
 /// Extension traits around Block.
 pub(crate) trait BlockExt: Block {
-  fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output>;
+  fn scan_for_outputs(&self, latest_active_key: Self::Key, key: Self::Key) -> Vec<Self::Output>;
 }
 impl<B: Block> BlockExt for B {
-  fn scan_for_outputs(&self, key: Self::Key) -> Vec<Self::Output> {
-    let mut outputs = self.scan_for_outputs_unordered(key);
+  fn scan_for_outputs(&self, latest_active_key: Self::Key, key: Self::Key) -> Vec<Self::Output> {
+    let mut outputs = self.scan_for_outputs_unordered(latest_active_key, key);
     outputs.sort_by(sort_outputs);
     outputs
   }

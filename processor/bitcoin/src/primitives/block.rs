@@ -43,7 +43,11 @@ impl<D: Db> primitives::Block for Block<D> {
     primitives::BlockHeader::id(&BlockHeader(self.1.header))
   }
 
-  fn scan_for_outputs_unordered(&self, key: Self::Key) -> Vec<Self::Output> {
+  fn scan_for_outputs_unordered(
+    &self,
+    _latest_active_key: Self::Key,
+    key: Self::Key,
+  ) -> Vec<Self::Output> {
     let scanner = scanner(key);
 
     let mut res = vec![];
