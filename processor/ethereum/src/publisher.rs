@@ -13,22 +13,27 @@ use tokio::{
   net::TcpStream,
 };
 
+use serai_db::Db;
+
 use ethereum_schnorr::PublicKey;
 use ethereum_router::{OutInstructions, Router};
 
-use crate::transaction::{Action, Transaction};
+use crate::{
+  InitialSeraiKey,
+  transaction::{Action, Transaction},
+};
 
 #[derive(Clone)]
-pub(crate) struct TransactionPublisher {
-  initial_serai_key: PublicKey,
+pub(crate) struct TransactionPublisher<D: Db> {
+  db: D,
   rpc: Arc<RootProvider<SimpleRequest>>,
   router: Arc<RwLock<Option<Router>>>,
   relayer_url: String,
 }
 
-impl TransactionPublisher {
-  pub(crate) fn new(rpc: Arc<RootProvider<SimpleRequest>>, relayer_url: String) -> Self {
-    Self { initial_serai_key: todo!("TODO"), rpc, router: Arc::new(RwLock::new(None)), relayer_url }
+impl<D: Db> TransactionPublisher<D> {
+  pub(crate) fn new(db: D, rpc: Arc<RootProvider<SimpleRequest>>, relayer_url: String) -> Self {
+    Self { db, rpc, router: Arc::new(RwLock::new(None)), relayer_url }
   }
 
   // This will always return Ok(Some(_)) or Err(_), never Ok(None)
@@ -43,7 +48,12 @@ impl TransactionPublisher {
       let mut router = self.router.write().await;
       // Check again if it's None in case a different task already did this
       if router.is_none() {
-        let Some(router_actual) = Router::new(self.rpc.clone(), &self.initial_serai_key).await?
+        let Some(router_actual) = Router::new(
+          self.rpc.clone(),
+          &PublicKey::new(InitialSeraiKey::get(&self.db).unwrap().0)
+            .expect("initial key used by Serai wasn't representable on Ethereum"),
+        )
+        .await?
         else {
           Err(TransportErrorKind::Custom(
             "publishing transaction yet couldn't find router on chain. was our node reset?"
@@ -60,7 +70,7 @@ impl TransactionPublisher {
   }
 }
 
-impl signers::TransactionPublisher<Transaction> for TransactionPublisher {
+impl<D: Db> signers::TransactionPublisher<Transaction> for TransactionPublisher<D> {
   type EphemeralError = RpcError<TransportErrorKind>;
 
   fn publish(

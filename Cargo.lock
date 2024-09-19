@@ -8355,6 +8355,7 @@ dependencies = [
  "serai-processor-ethereum-primitives",
  "serai-processor-ethereum-router",
  "serai-processor-key-gen",
+ "serai-processor-messages",
  "serai-processor-primitives",
  "serai-processor-scanner",
  "serai-processor-scheduler-primitives",

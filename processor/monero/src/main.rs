@@ -33,7 +33,7 @@ async fn main() {
     },
   };
 
-  bin::main_loop::<_, KeyGenParams, _>(
+  bin::main_loop::<(), _, KeyGenParams, _>(
     db,
     feed.clone(),
     Scheduler::new(Planner(feed.clone())),

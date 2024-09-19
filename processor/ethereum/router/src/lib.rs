@@ -6,13 +6,6 @@ use std::{sync::Arc, io, collections::HashSet};
 
 use group::ff::PrimeField;
 
-/*
-use k256::{
-  elliptic_curve::{group::GroupEncoding, sec1},
-  ProjectivePoint,
-};
-*/
-
 use alloy_core::primitives::{hex::FromHex, Address, U256, Bytes, TxKind};
 use alloy_consensus::TxLegacy;
 
