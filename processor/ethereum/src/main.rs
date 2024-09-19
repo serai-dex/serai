@@ -75,8 +75,8 @@ async fn main() {
 
   bin::main_loop::<SetInitialKey, _, KeyGenParams, _>(
     db.clone(),
-    Rpc { provider: provider.clone() },
-    Scheduler::new(SmartContract { chain_id }),
+    Rpc { db: db.clone(), provider: provider.clone() },
+    Scheduler::<bin::Db>::new(SmartContract { chain_id }),
     TransactionPublisher::new(db, provider, {
       let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
         .expect("ethereum relayer hostname wasn't specified")

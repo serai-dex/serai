@@ -20,8 +20,6 @@ pub(crate) struct Epoch {
   pub(crate) start: u64,
   // The hash of the last block within this Epoch.
   pub(crate) end_hash: [u8; 32],
-  // The monotonic time for this Epoch.
-  pub(crate) time: u64,
 }
 
 impl Epoch {
@@ -42,9 +40,9 @@ impl primitives::BlockHeader for Epoch {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct FullEpoch {
-  epoch: Epoch,
-  instructions: Vec<EthereumInInstruction>,
-  executed: Vec<Executed>,
+  pub(crate) epoch: Epoch,
+  pub(crate) instructions: Vec<EthereumInInstruction>,
+  pub(crate) executed: Vec<Executed>,
 }
 
 impl primitives::Block for FullEpoch {

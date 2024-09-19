@@ -2,6 +2,8 @@ use alloy_core::primitives::U256;
 
 use serai_client::primitives::{NetworkId, Coin, Balance};
 
+use serai_db::Db;
+
 use primitives::Payment;
 use scanner::{KeyFor, AddressFor, EventualityFor};
 
@@ -32,15 +34,15 @@ fn balance_to_ethereum_amount(balance: Balance) -> U256 {
 pub(crate) struct SmartContract {
   pub(crate) chain_id: U256,
 }
-impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
+impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
   type SignableTransaction = Action;
 
   fn rotate(
     &self,
     nonce: u64,
-    retiring_key: KeyFor<Rpc>,
-    new_key: KeyFor<Rpc>,
-  ) -> (Self::SignableTransaction, EventualityFor<Rpc>) {
+    retiring_key: KeyFor<Rpc<D>>,
+    new_key: KeyFor<Rpc<D>>,
+  ) -> (Self::SignableTransaction, EventualityFor<Rpc<D>>) {
     let action = Action::SetKey {
       chain_id: self.chain_id,
       nonce,
@@ -52,9 +54,9 @@ impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
   fn fulfill(
     &self,
     nonce: u64,
-    key: KeyFor<Rpc>,
-    payments: Vec<Payment<AddressFor<Rpc>>>,
-  ) -> Vec<(Self::SignableTransaction, EventualityFor<Rpc>)> {
+    key: KeyFor<Rpc<D>>,
+    payments: Vec<Payment<AddressFor<Rpc<D>>>>,
+  ) -> Vec<(Self::SignableTransaction, EventualityFor<Rpc<D>>)> {
     let mut outs = Vec::with_capacity(payments.len());
     for payment in payments {
       outs.push((
@@ -75,4 +77,4 @@ impl smart_contract_scheduler::SmartContract<Rpc> for SmartContract {
   }
 }
 
-pub(crate) type Scheduler = smart_contract_scheduler::Scheduler<Rpc, SmartContract>;
+pub(crate) type Scheduler<D> = smart_contract_scheduler::Scheduler<Rpc<D>, SmartContract>;
