@@ -16,17 +16,8 @@ use crate::{output::Output, transaction::Eventuality};
 pub(crate) struct Epoch {
   // The hash of the block which ended the prior Epoch.
   pub(crate) prior_end_hash: [u8; 32],
-  // The first block number within this Epoch.
-  pub(crate) start: u64,
   // The hash of the last block within this Epoch.
   pub(crate) end_hash: [u8; 32],
-}
-
-impl Epoch {
-  // The block number of the last block within this epoch.
-  fn end(&self) -> u64 {
-    self.start + 31
-  }
 }
 
 impl primitives::BlockHeader for Epoch {
