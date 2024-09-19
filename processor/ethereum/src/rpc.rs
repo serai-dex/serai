@@ -131,7 +131,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
 
       let end_hash = end_header.hash.into();
 
-      Ok(Epoch { prior_end_hash, start, end_hash })
+      Ok(Epoch { prior_end_hash, end_hash })
     }
   }
 

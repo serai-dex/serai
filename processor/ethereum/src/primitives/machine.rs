@@ -102,9 +102,9 @@ impl SignMachine<Transaction> for ActionSignMachine {
     unimplemented!()
   }
   fn from_cache(
-    params: Self::Params,
-    keys: Self::Keys,
-    cache: CachedPreprocess,
+    _params: Self::Params,
+    _keys: Self::Keys,
+    _cache: CachedPreprocess,
   ) -> (Self, Self::Preprocess) {
     unimplemented!()
   }

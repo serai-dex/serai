@@ -40,7 +40,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
   fn rotate(
     &self,
     nonce: u64,
-    retiring_key: KeyFor<Rpc<D>>,
+    _retiring_key: KeyFor<Rpc<D>>,
     new_key: KeyFor<Rpc<D>>,
   ) -> (Self::SignableTransaction, EventualityFor<Rpc<D>>) {
     let action = Action::SetKey {
@@ -54,7 +54,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
   fn fulfill(
     &self,
     nonce: u64,
-    key: KeyFor<Rpc<D>>,
+    _key: KeyFor<Rpc<D>>,
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
   ) -> Vec<(Self::SignableTransaction, EventualityFor<Rpc<D>>)> {
     let mut outs = Vec::with_capacity(payments.len());
