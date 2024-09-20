@@ -18,7 +18,6 @@ workspace = true
 
 [dependencies]
 group = { version = "0.13", default-features = false }
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "ecdsa", "arithmetic"] }
 
 alloy-core = { version = "0.8", default-features = false }
 alloy-consensus = { version = "0.3", default-features = false }

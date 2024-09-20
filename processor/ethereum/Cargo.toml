@@ -32,7 +32,6 @@ k256 = { version = "^0.13.1", default-features = false, features = ["std"] }
 
 alloy-core = { version = "0.8", default-features = false }
 alloy-rlp  = { version = "0.3", default-features = false }
-alloy-consensus = { version = "0.3", default-features = false }
 
 alloy-rpc-types-eth = { version = "0.3", default-features = false }
 alloy-transport = { version = "0.3", default-features = false }
