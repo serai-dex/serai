@@ -284,21 +284,19 @@ pub async fn main_loop<
             let key_to_activate =
               KeyToActivate::<KeyFor<S>>::try_recv(txn.as_mut().unwrap()).map(|key| key.0);
 
-            /*
-              `acknowledge_batch` takes burns to optimize handling returns with standard payments.
-              That's why handling these with a Batch (and not waiting until the following potential
-              `queue_burns` call makes sense. As for which Batch, the first is equally valid unless
-              we want to start introspecting (and should be our only Batch anyways).
-            */
-            let mut this_batchs_burns = vec![];
-            std::mem::swap(&mut burns, &mut this_batchs_burns);
-
             // This is a cheap call as it internally just queues this to be done later
             let _: () = scanner.acknowledge_batch(
               txn.take().unwrap(),
               id,
               in_instructions,
-              this_batchs_burns,
+              /*
+                `acknowledge_batch` takes burns to optimize handling returns with standard
+                payments. That's why handling these with a Batch (and not waiting until the
+                following potential `queue_burns` call makes sense. As for which Batch, the first
+                is equally valid unless we want to start introspecting (and should be our only
+                Batch anyways).
+              */
+              burns.drain(..).collect(),
               key_to_activate,
             );
           }
