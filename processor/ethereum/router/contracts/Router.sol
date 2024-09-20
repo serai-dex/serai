@@ -7,9 +7,6 @@ import "Schnorr.sol";
 
 // _ is used as a prefix for internal functions and smart-contract-scoped variables
 contract Router {
-  // The block at which this contract was deployed.
-  uint256 private _deploymentBlock;
-
   // Nonce is incremented for each command executed, preventing replays
   uint256 private _nonce;
 
@@ -66,8 +63,6 @@ contract Router {
   }
 
   constructor(bytes32 initialSeraiKey) _updateSeraiKeyAtEndOfFn(0, initialSeraiKey) {
-    _deploymentBlock = block.number;
-
     // We consumed nonce 0 when setting the initial Serai key
     _nonce = 1;
     // Nonces are incremented by 1 upon account creation, prior to any code execution, per EIP-161
@@ -233,10 +228,6 @@ contract Router {
 
   function nonce() external view returns (uint256) {
     return _nonce;
-  }
-
-  function deploymentBlock() external view returns (uint256) {
-    return _deploymentBlock;
   }
 
   function smartContractNonce() external view returns (uint256) {
