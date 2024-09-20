@@ -321,7 +321,9 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// Any Eventualities returned by this function must include an output-to-Serai (such as a Branch
   /// or Change), unless they descend from a transaction returned by this function which satisfies
-  /// that requirement.
+  /// that requirement. This ensures when we scan outputs from transactions we made, we report the
+  /// block up to Substrate, and obtain synchrony on all prior blocks (allowing us to identify our
+  /// own transactions, which we may be prior unaware of due to a lagging view of Substrate).
   ///
   /// `active_keys` is the list of active keys, potentially including a key for which we've already
   /// called `retire_key` on. If so, its stage will be `Finishing` and no further operations will

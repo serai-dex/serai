@@ -61,7 +61,29 @@ impl primitives::Block for FullEpoch {
     // Associate all outputs with the latest active key
     // We don't associate these with the current key within the SC as that'll cause outputs to be
     // marked for forwarding if the SC is delayed to actually rotate
-    self.instructions.iter().cloned().map(|instruction| Output { key, instruction }).collect()
+    let mut outputs: Vec<_> = self
+      .instructions
+      .iter()
+      .cloned()
+      .map(|instruction| Output::Output { key, instruction })
+      .collect();
+
+    /*
+      The scanner requires a change output be associated with every Eventuality that came from
+      fulfilling payments, unless said Eventuality descends from an Eventuality meeting that
+      requirement from the same fulfillment. This ensures we have a fully populated Eventualities
+      set by the time we process the block which has an Eventuality.
+
+      Accordingly, for any block with an Eventuality completion, we claim there's a Change output
+      so that the block is flagged. Ethereum doesn't actually have Change outputs, yet the scanner
+      won't report them to Substrate, and the Smart Contract scheduler will drop any/all outputs
+      passed to it (handwaving their balances as present within the Smart Contract).
+    */
+    if !self.executed.is_empty() {
+      outputs.push(Output::Eventuality { key, nonce: self.executed.first().unwrap().nonce() });
+    }
+
+    outputs
   }
 
   #[allow(clippy::type_complexity)]
@@ -85,15 +107,17 @@ impl primitives::Block for FullEpoch {
         "Router emitted distinct event for nonce {}",
         executed.nonce()
       );
+
       /*
         The transaction ID is used to determine how internal outputs from this transaction should
         be handled (if they were actually internal or if they were just to an internal address).
-        The Ethereum integration doesn't have internal addresses, and this transaction wasn't made
-        by Serai. It was simply authorized by Serai yet may or may not be associated with other
-        actions we don't want to flag as our own.
+        The Ethereum integration doesn't use internal addresses, and only uses internal outputs to
+        flag a block as having an Eventuality. Those internal outputs will always be scanned, and
+        while they may be dropped/kept by this ID, the scheduler will then always drop them.
+        Accordingly, we have free reign as to what to set the transaction ID to.
 
-        Accordingly, we set the transaction ID to the nonce. This is unique barring someone finding
-        the preimage which hashes to this nonce, and won't cause any other data to be associated.
+        We set the ID to the nonce as it's the most helpful value and unique barring someone
+        finding the premise for this as a hash.
       */
       let mut tx_id = [0; 32];
       tx_id[.. 8].copy_from_slice(executed.nonce().to_le_bytes().as_slice());
