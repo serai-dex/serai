@@ -260,6 +260,7 @@ impl<S: ScannerFeed> SchedulerUpdate<S> {
 pub type KeyScopedEventualities<S> = HashMap<Vec<u8>, Vec<EventualityFor<S>>>;
 
 /// The object responsible for accumulating outputs and planning new transactions.
+// TODO: Move this to Scheduler primitives
 pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// An error encountered when handling updates/payments.
   ///
