@@ -59,19 +59,3 @@ async fn handle_coordinator_msg<D: Db, N: Network, Co: Coordinator>(
     }
   }
 }
-
-#[tokio::main]
-async fn main() {
-  match network_id {
-    #[cfg(feature = "ethereum")]
-    NetworkId::Ethereum => {
-      let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
-        .expect("ethereum relayer hostname wasn't specified")
-        .to_string();
-      let relayer_port =
-        env::var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
-      let relayer_url = relayer_hostname + ":" + &relayer_port;
-      run(db.clone(), Ethereum::new(db, url, relayer_url).await, coordinator).await
-    }
-  }
-}
