@@ -47,7 +47,7 @@ impl From<&Signature> for abi::Signature {
 }
 
 /// A coin on Ethereum.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Coin {
   /// Ether, the native coin of Ethereum.
   Ether,
@@ -56,6 +56,14 @@ pub enum Coin {
 }
 
 impl Coin {
+  fn address(&self) -> Address {
+    (match self {
+      Coin::Ether => [0; 20],
+      Coin::Erc20(address) => *address,
+    })
+    .into()
+  }
+
   /// Read a `Coin`.
   pub fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     let mut kind = [0xff];
@@ -152,12 +160,12 @@ impl InInstruction {
 /// A list of `OutInstruction`s.
 #[derive(Clone)]
 pub struct OutInstructions(Vec<abi::OutInstruction>);
-impl From<&[(SeraiAddress, (Coin, U256))]> for OutInstructions {
-  fn from(outs: &[(SeraiAddress, (Coin, U256))]) -> Self {
+impl From<&[(SeraiAddress, U256)]> for OutInstructions {
+  fn from(outs: &[(SeraiAddress, U256)]) -> Self {
     Self(
       outs
         .iter()
-        .map(|(address, (coin, amount))| {
+        .map(|(address, amount)| {
           #[allow(non_snake_case)]
           let (destinationType, destination) = match address {
             SeraiAddress::Address(address) => (
@@ -166,19 +174,14 @@ impl From<&[(SeraiAddress, (Coin, U256))]> for OutInstructions {
             ),
             SeraiAddress::Contract(contract) => (
               abi::DestinationType::Code,
-              (abi::CodeDestination { gas: contract.gas(), code: contract.code().to_vec().into() })
-                .abi_encode(),
+              (abi::CodeDestination {
+                gas_limit: contract.gas_limit(),
+                code: contract.code().to_vec().into(),
+              })
+              .abi_encode(),
             ),
           };
-          abi::OutInstruction {
-            destinationType,
-            destination: destination.into(),
-            coin: match coin {
-              Coin::Ether => [0; 20].into(),
-              Coin::Erc20(address) => address.into(),
-            },
-            value: *amount,
-          }
+          abi::OutInstruction { destinationType, destination: destination.into(), value: *amount }
         })
         .collect(),
     )
@@ -318,17 +321,31 @@ impl Router {
   }
 
   /// Get the message to be signed in order to execute a series of `OutInstruction`s.
-  pub fn execute_message(chain_id: U256, nonce: u64, outs: OutInstructions) -> Vec<u8> {
-    ("execute", chain_id, U256::try_from(nonce).expect("couldn't convert u64 to u256"), outs.0)
+  pub fn execute_message(
+    chain_id: U256,
+    nonce: u64,
+    coin: Coin,
+    fee_per_gas: U256,
+    outs: OutInstructions,
+  ) -> Vec<u8> {
+    ("execute", chain_id, U256::try_from(nonce).unwrap(), coin.address(), fee_per_gas, outs.0)
       .abi_encode()
   }
 
   /// Construct a transaction to execute a batch of `OutInstruction`s.
-  pub fn execute(&self, outs: OutInstructions, sig: &Signature) -> TxLegacy {
+  pub fn execute(
+    &self,
+    coin: Coin,
+    fee_per_gas: U256,
+    outs: OutInstructions,
+    sig: &Signature,
+  ) -> TxLegacy {
     let outs_len = outs.0.len();
     TxLegacy {
       to: TxKind::Call(self.1),
-      input: abi::executeCall::new((outs.0, sig.into())).abi_encode().into(),
+      input: abi::executeCall::new((coin.address(), fee_per_gas, outs.0, sig.into()))
+        .abi_encode()
+        .into(),
       // TODO
       gas_limit: 100_000 + ((200_000 + 10_000) * u128::try_from(outs_len).unwrap()),
       ..Default::default()
