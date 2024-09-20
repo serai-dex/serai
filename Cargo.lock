@@ -1054,7 +1054,6 @@ name = "bitcoin-serai"
 version = "0.3.0"
 dependencies = [
  "bitcoin",
- "flexible-transcript",
  "hex",
  "k256",
  "modular-frost",

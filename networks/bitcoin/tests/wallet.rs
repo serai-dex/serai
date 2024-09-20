@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
 
-use transcript::{Transcript, RecommendedTranscript};
-
 use k256::{
   elliptic_curve::{
     group::{ff::Field, Group},
@@ -94,12 +92,7 @@ fn sign(
 ) -> Transaction {
   let mut machines = HashMap::new();
   for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-    machines.insert(
-      i,
-      tx.clone()
-        .multisig(&keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
-        .unwrap(),
-    );
+    machines.insert(i, tx.clone().multisig(&keys[&i].clone()).unwrap());
   }
   sign_without_caching(&mut OsRng, machines, &[])
 }

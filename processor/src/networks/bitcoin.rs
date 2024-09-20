@@ -4,7 +4,6 @@ use async_trait::async_trait;
 
 use scale::{Encode, Decode};
 
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::ff::PrimeField;
 use k256::{ProjectivePoint, Scalar};
 use frost::{
@@ -249,7 +248,6 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  transcript: RecommendedTranscript,
   actual: BSignableTransaction,
 }
 impl PartialEq for SignableTransaction {
@@ -820,7 +818,7 @@ impl Network for Bitcoin {
   async fn signable_transaction(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
+    _plan_id: &[u8; 32],
     _key: ProjectivePoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
@@ -829,12 +827,8 @@ impl Network for Bitcoin {
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
       |signable| {
-        let mut transcript =
-          RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction Transcript");
-        transcript.append_message(b"plan", plan_id);
-
         let eventuality = Eventuality(signable.txid());
-        (SignableTransaction { transcript, actual: signable }, eventuality)
+        (SignableTransaction { actual: signable }, eventuality)
       },
     ))
   }
@@ -844,13 +838,7 @@ impl Network for Bitcoin {
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    Ok(
-      transaction
-        .actual
-        .clone()
-        .multisig(&keys, transaction.transcript)
-        .expect("used the wrong keys"),
-    )
+    Ok(transaction.actual.clone().multisig(&keys).expect("used the wrong keys"))
   }
 
   async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {

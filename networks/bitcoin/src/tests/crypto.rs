@@ -3,7 +3,6 @@ use rand_core::OsRng;
 use secp256k1::{Secp256k1 as BContext, Message, schnorr::Signature};
 
 use k256::Scalar;
-use transcript::{Transcript, RecommendedTranscript};
 use frost::{
   curve::Secp256k1,
   Participant,
@@ -25,8 +24,7 @@ fn test_algorithm() {
     *keys = keys.offset(Scalar::from(offset));
   }
 
-  let algo =
-    Schnorr::<RecommendedTranscript>::new(RecommendedTranscript::new(b"bitcoin-serai sign test"));
+  let algo = Schnorr::new();
   let sig = sign(
     &mut OsRng,
     &algo,

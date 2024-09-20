@@ -7,9 +7,7 @@ use thiserror::Error;
 
 use rand_core::{RngCore, CryptoRng};
 
-use transcript::{Transcript, RecommendedTranscript};
-
-use k256::{elliptic_curve::sec1::ToEncodedPoint, Scalar};
+use k256::Scalar;
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
@@ -268,41 +266,15 @@ impl SignableTransaction {
   /// Create a multisig machine for this transaction.
   ///
   /// Returns None if the wrong keys are used.
-  pub fn multisig(
-    self,
-    keys: &ThresholdKeys<Secp256k1>,
-    mut transcript: RecommendedTranscript,
-  ) -> Option<TransactionMachine> {
-    transcript.domain_separate(b"bitcoin_transaction");
-    transcript.append_message(b"root_key", keys.group_key().to_encoded_point(true).as_bytes());
-
-    // Transcript the inputs and outputs
-    let tx = &self.tx;
-    for input in &tx.input {
-      transcript.append_message(b"input_hash", input.previous_output.txid);
-      transcript.append_message(b"input_output_index", input.previous_output.vout.to_le_bytes());
-    }
-    for payment in &tx.output {
-      transcript.append_message(b"output_script", payment.script_pubkey.as_bytes());
-      transcript.append_message(b"output_amount", payment.value.to_sat().to_le_bytes());
-    }
-
+  pub fn multisig(self, keys: &ThresholdKeys<Secp256k1>) -> Option<TransactionMachine> {
     let mut sigs = vec![];
-    for i in 0 .. tx.input.len() {
-      let mut transcript = transcript.clone();
-      // This unwrap is safe since any transaction with this many inputs violates the maximum
-      // size allowed under standards, which this lib will error on creation of
-      transcript.append_message(b"signing_input", u32::try_from(i).unwrap().to_le_bytes());
-
+    for i in 0 .. self.tx.input.len() {
       let offset = keys.clone().offset(self.offsets[i]);
       if p2tr_script_buf(offset.group_key())? != self.prevouts[i].script_pubkey {
         None?;
       }
 
-      sigs.push(AlgorithmMachine::new(
-        Schnorr::new(transcript),
-        keys.clone().offset(self.offsets[i]),
-      ));
+      sigs.push(AlgorithmMachine::new(Schnorr::new(), keys.clone().offset(self.offsets[i])));
     }
 
     Some(TransactionMachine { tx: self, sigs })
@@ -315,7 +287,7 @@ impl SignableTransaction {
 /// This will panic if either `cache` is called or the message isn't empty.
 pub struct TransactionMachine {
   tx: SignableTransaction,
-  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
+  sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr>>,
 }
 
 impl PreprocessMachine for TransactionMachine {
@@ -344,7 +316,7 @@ impl PreprocessMachine for TransactionMachine {
 
 pub struct TransactionSignMachine {
   tx: SignableTransaction,
-  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
+  sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr>>,
 }
 
 impl SignMachine<Transaction> for TransactionSignMachine {
@@ -424,7 +396,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
 
 pub struct TransactionSignatureMachine {
   tx: Transaction,
-  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr<RecommendedTranscript>>>,
+  sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr>>,
 }
 
 impl SignatureMachine<Transaction> for TransactionSignatureMachine {
