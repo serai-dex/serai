@@ -126,23 +126,28 @@ contract Router {
     emit InInstruction(msg.sender, coin, amount, instruction);
   }
 
-  // Perform a transfer out
-  function _transferOut(address to, address coin, uint256 value) private {
-    /*
+  /*
     We on purposely do not check if these calls succeed. A call either succeeded, and there's no
     problem, or the call failed due to:
-    A) An insolvency
-    B) A malicious receiver
-    C) A non-standard token
+      A) An insolvency
+      B) A malicious receiver
+      C) A non-standard token
     A is an invariant, B should be dropped, C is something out of the control of this contract.
     It is again the Serai's network role to not add support for any non-standard tokens,
-    */
+  */
+
+  // Perform an ERC20 transfer out
+  function _erc20TransferOut(address to, address coin, uint256 value) private {
+    coin.call{ gas: 100_000 }(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, value));
+  }
+
+  // Perform an ETH/ERC20 transfer out
+  function _transferOut(address to, address coin, uint256 value) private {
     if (coin == address(0)) {
       // Enough gas to service the transfer and a minimal amount of logic
-      // TODO: If we're constructing a contract, we can do this at the same time as construction
       to.call{ value: value, gas: 5_000 }("");
     } else {
-      coin.call{ gas: 100_000 }(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, value));
+      _erc20TransferOut(to, coin, value);
     }
   }
 
@@ -151,13 +156,14 @@ contract Router {
   letting them execute whatever calls they're coded for. Since we can't meter CREATE, we call
   CREATE from this function which we call not internally, but with CALL (which we can meter).
   */
-  function arbitaryCallOut(bytes memory code) external {
+  function arbitaryCallOut(bytes memory code) external payable {
     // Because we're creating a contract, increment our nonce
     _smartContractNonce += 1;
 
+    uint256 msg_value = msg.value;
     address contractAddress;
     assembly {
-      contractAddress := create(0, add(code, 0x20), mload(code))
+      contractAddress := create(msg_value, add(code, 0x20), mload(code))
     }
   }
 
@@ -193,18 +199,24 @@ contract Router {
           abi.decode(transactions[i].destination, (AddressDestination));
         _transferOut(destination.destination, coin, transactions[i].value);
       } else {
-        // The destination is a piece of initcode. We calculate the hash of the will-be contract,
-        // transfer to it, and then run the initcode
-        address nextAddress =
-          address(uint160(uint256(keccak256(abi.encode(address(this), _smartContractNonce)))));
+        // Prepare for the transfer
+        uint256 eth_value = 0;
+        if (coin == address(0)) {
+          // If it's ETH, we transfer the value with the call
+          eth_value = transactions[i].value;
+        } else {
+          // If it's an ERC20, we calculate the hash of the will-be contract and transfer to it
+          // before deployment. This avoids needing to deploy, then call again, offering a few
+          // optimizations
+          address nextAddress =
+            address(uint160(uint256(keccak256(abi.encode(address(this), _smartContractNonce)))));
+          _erc20TransferOut(nextAddress, coin, transactions[i].value);
+        }
 
-        // Perform the transfer
-        _transferOut(nextAddress, coin, transactions[i].value);
-
-        // Perform the calls with a set gas budget
+        // Perform the deployment with the defined gas budget
         (CodeDestination memory destination) =
           abi.decode(transactions[i].destination, (CodeDestination));
-        address(this).call{ gas: destination.gas_limit }(
+        address(this).call{ gas: destination.gas_limit, value: eth_value }(
           abi.encodeWithSelector(Router.arbitaryCallOut.selector, destination.code)
         );
       }
