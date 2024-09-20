@@ -18,7 +18,7 @@ use ethereum_erc20::{TopLevelTransfer, Erc20};
 use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction, Router};
 
 use crate::{
-  TOKENS, InitialSeraiKey,
+  TOKENS, ETHER_DUST, DAI_DUST, InitialSeraiKey,
   block::{Epoch, FullEpoch},
 };
 
@@ -207,12 +207,9 @@ impl<D: Db> ScannerFeed for Rpc<D> {
 
   fn dust(coin: Coin) -> Amount {
     assert_eq!(coin.network(), NetworkId::Ethereum);
-    #[allow(clippy::inconsistent_digit_grouping)]
     match coin {
-      // 5 USD if Ether is ~3300 USD
-      Coin::Ether => Amount(1_500_00),
-      // 5 DAI
-      Coin::Dai => Amount(5_000_000_00),
+      Coin::Ether => ETHER_DUST,
+      Coin::Dai => DAI_DUST,
       _ => unreachable!(),
     }
   }
