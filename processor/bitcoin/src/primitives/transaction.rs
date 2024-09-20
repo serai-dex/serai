@@ -2,7 +2,6 @@ use std::io;
 
 use rand_core::{RngCore, CryptoRng};
 
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::Secp256k1;
 use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
@@ -81,7 +80,7 @@ impl PreprocessMachine for ClonableTransctionMachine {
       .0
       .signable()
       .expect("signing an invalid SignableTransaction")
-      .multisig(&self.1, RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction"))
+      .multisig(&self.1)
       .expect("incorrect keys used for SignableTransaction")
       .preprocess(rng)
   }
