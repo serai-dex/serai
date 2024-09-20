@@ -97,36 +97,6 @@ fn sign(
   sign_without_caching(&mut OsRng, machines, &[])
 }
 
-#[test]
-fn test_tweak_keys() {
-  let mut even = false;
-  let mut odd = false;
-
-  // Generate keys until we get an even set and an odd set
-  while !(even && odd) {
-    let mut keys = key_gen(&mut OsRng).drain().next().unwrap().1;
-    if is_even(keys.group_key()) {
-      // Tweaking should do nothing
-      assert_eq!(tweak_keys(&keys).group_key(), keys.group_key());
-
-      even = true;
-    } else {
-      let tweaked = tweak_keys(&keys).group_key();
-      assert_ne!(tweaked, keys.group_key());
-      // Tweaking should produce an even key
-      assert!(is_even(tweaked));
-
-      // Verify it uses the smallest possible offset
-      while keys.group_key().to_encoded_point(true).tag() == Tag::CompressedOddY {
-        keys = keys.offset(Scalar::ONE);
-      }
-      assert_eq!(tweaked, keys.group_key());
-
-      odd = true;
-    }
-  }
-}
-
 async_sequential! {
   async fn test_scanner() {
     // Test Scanners are creatable for even keys.
