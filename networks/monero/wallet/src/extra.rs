@@ -302,7 +302,8 @@ impl Extra {
     // `fill_buf` returns the current buffer, filled if empty, only empty if the reader is
     // exhausted
     while !r.fill_buf()?.is_empty() {
-      res.0.push(ExtraField::read(r)?);
+      let Ok(field) = ExtraField::read(r) else { break };
+      res.0.push(field);
     }
     Ok(res)
   }
