@@ -31,6 +31,9 @@ pragma solidity ^0.8.26;
   The alternative would be to have a council publish the Serai key on-Ethereum,
   with Serai verifying the published result. This would introduce a DoS risk in
   the council not publishing the correct key/not publishing any key.
+
+  This design does not work with designs expecting initialization (which may require re-deploying
+  the same code until the initialization successfully goes through, without being sniped).
 */
 
 contract Deployer {

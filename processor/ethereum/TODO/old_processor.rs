@@ -54,20 +54,6 @@ TODO
   }
 
   #[cfg(test)]
-  async fn get_block_number(&self, id: &<Self::Block as Block<Self>>::Id) -> usize {
-    self
-      .provider
-      .get_block(B256::from(*id).into(), BlockTransactionsKind::Hashes)
-      .await
-      .unwrap()
-      .unwrap()
-      .header
-      .number
-      .try_into()
-      .unwrap()
-  }
-
-  #[cfg(test)]
   async fn get_transaction_by_eventuality(
     &self,
     block: usize,

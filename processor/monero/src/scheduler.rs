@@ -88,7 +88,6 @@ async fn signable_transaction(
         // It is a reused value (with later code), but that's not an issue. Just an oddity
         &mut ChaCha20Rng::from_seed(id),
         &rpc.rpc,
-        // TODO: Have Decoys take RctType
         match rct_type {
           RctType::ClsagBulletproof => 11,
           RctType::ClsagBulletproofPlus => 16,
