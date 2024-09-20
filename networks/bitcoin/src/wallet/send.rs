@@ -44,7 +44,7 @@ pub enum TransactionError {
   #[error("fee was too low to pass the default minimum fee rate")]
   TooLowFee,
   #[error("not enough funds for these payments")]
-  NotEnoughFunds,
+  NotEnoughFunds { inputs: u64, payments: u64, fee: u64 },
   #[error("transaction was too large")]
   TooLargeTransaction,
 }
@@ -213,7 +213,11 @@ impl SignableTransaction {
     }
 
     if input_sat < (payment_sat + needed_fee) {
-      Err(TransactionError::NotEnoughFunds)?;
+      Err(TransactionError::NotEnoughFunds {
+        inputs: input_sat,
+        payments: payment_sat,
+        fee: needed_fee,
+      })?;
     }
 
     // If there's a change address, check if there's change to give it
@@ -258,9 +262,9 @@ impl SignableTransaction {
     res
   }
 
-  /// Returns the outputs this transaction will create.
-  pub fn outputs(&self) -> &[TxOut] {
-    &self.tx.output
+  /// Returns the transaction, sans witness, this will create if signed.
+  pub fn transaction(&self) -> &Transaction {
+    &self.tx
   }
 
   /// Create a multisig machine for this transaction.

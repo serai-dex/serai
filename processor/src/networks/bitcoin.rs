@@ -455,7 +455,7 @@ impl Bitcoin {
         panic!("trying to create a bitcoin transaction without inputs")
       }
       // No outputs left and the change isn't worth enough/not even enough funds to pay the fee
-      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds) => Ok(None),
+      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds { .. }) => Ok(None),
       // amortize_fee removes payments which fall below the dust threshold
       Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
       Err(TransactionError::TooMuchData) => {

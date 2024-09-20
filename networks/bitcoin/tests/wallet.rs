@@ -195,10 +195,10 @@ async_sequential! {
       Err(TransactionError::TooLowFee),
     );
 
-    assert_eq!(
+    assert!(matches!(
       SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
-      Err(TransactionError::NotEnoughFunds),
-    );
+      Err(TransactionError::NotEnoughFunds { .. }),
+    ));
 
     assert_eq!(
       SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
