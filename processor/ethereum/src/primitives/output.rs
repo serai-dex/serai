@@ -15,7 +15,7 @@ use serai_client::{
 use primitives::{OutputType, ReceivedOutput};
 use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction};
 
-use crate::DAI;
+use crate::{DAI, ETHER_DUST};
 
 fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
   match coin {
@@ -59,58 +59,122 @@ impl AsMut<[u8]> for OutputId {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Output {
-  pub(crate) key: <Secp256k1 as Ciphersuite>::G,
-  pub(crate) instruction: EthereumInInstruction,
+pub(crate) enum Output {
+  Output { key: <Secp256k1 as Ciphersuite>::G, instruction: EthereumInInstruction },
+  Eventuality { key: <Secp256k1 as Ciphersuite>::G, nonce: u64 },
 }
 impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];
 
-  // We only scan external outputs as we don't have branch/change/forwards
   fn kind(&self) -> OutputType {
-    OutputType::External
+    match self {
+      // All outputs received are External
+      Output::Output { .. } => OutputType::External,
+      // Yet upon Eventuality completions, we report a Change output to ensure synchrony per the
+      // scanner's documented bounds
+      Output::Eventuality { .. } => OutputType::Change,
+    }
   }
 
   fn id(&self) -> Self::Id {
-    let mut id = [0; 40];
-    id[.. 32].copy_from_slice(&self.instruction.id.0);
-    id[32 ..].copy_from_slice(&self.instruction.id.1.to_le_bytes());
-    OutputId(id)
+    match self {
+      Output::Output { key: _, instruction } => {
+        let mut id = [0; 40];
+        id[.. 32].copy_from_slice(&instruction.id.0);
+        id[32 ..].copy_from_slice(&instruction.id.1.to_le_bytes());
+        OutputId(id)
+      }
+      // Yet upon Eventuality completions, we report a Change output to ensure synchrony per the
+      // scanner's documented bounds
+      Output::Eventuality { key: _, nonce } => {
+        let mut id = [0; 40];
+        id[.. 8].copy_from_slice(&nonce.to_le_bytes());
+        OutputId(id)
+      }
+    }
   }
 
   fn transaction_id(&self) -> Self::TransactionId {
-    self.instruction.id.0
+    match self {
+      Output::Output { key: _, instruction } => instruction.id.0,
+      Output::Eventuality { key: _, nonce } => {
+        let mut id = [0; 32];
+        id[.. 8].copy_from_slice(&nonce.to_le_bytes());
+        id
+      }
+    }
   }
 
   fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
-    self.key
+    match self {
+      Output::Output { key, .. } | Output::Eventuality { key, .. } => *key,
+    }
   }
 
   fn presumed_origin(&self) -> Option<Address> {
-    Some(Address::from(self.instruction.from))
+    match self {
+      Output::Output { key: _, instruction } => Some(Address::from(instruction.from)),
+      Output::Eventuality { .. } => None,
+    }
   }
 
   fn balance(&self) -> Balance {
-    let coin = coin_to_serai_coin(&self.instruction.coin).unwrap_or_else(|| {
-      panic!(
-        "mapping coin from an EthereumInInstruction with coin {}, which we don't handle.",
-        "this never should have been yielded"
-      )
-    });
-    Balance { coin, amount: amount_to_serai_amount(coin, self.instruction.amount) }
+    match self {
+      Output::Output { key: _, instruction } => {
+        let coin = coin_to_serai_coin(&instruction.coin).unwrap_or_else(|| {
+          panic!(
+            "mapping coin from an EthereumInInstruction with coin {}, which we don't handle.",
+            "this never should have been yielded"
+          )
+        });
+        Balance { coin, amount: amount_to_serai_amount(coin, instruction.amount) }
+      }
+      Output::Eventuality { .. } => Balance { coin: Coin::Ether, amount: ETHER_DUST },
+    }
   }
   fn data(&self) -> &[u8] {
-    &self.instruction.data
+    match self {
+      Output::Output { key: _, instruction } => &instruction.data,
+      Output::Eventuality { .. } => &[],
+    }
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(self.key.to_bytes().as_ref())?;
-    self.instruction.write(writer)
+    match self {
+      Output::Output { key, instruction } => {
+        writer.write_all(&[0])?;
+        writer.write_all(key.to_bytes().as_ref())?;
+        instruction.write(writer)
+      }
+      Output::Eventuality { key, nonce } => {
+        writer.write_all(&[1])?;
+        writer.write_all(key.to_bytes().as_ref())?;
+        writer.write_all(&nonce.to_le_bytes())
+      }
+    }
   }
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let key = Secp256k1::read_G(reader)?;
-    let instruction = EthereumInInstruction::read(reader)?;
-    Ok(Self { key, instruction })
+    let mut kind = [0xff];
+    reader.read_exact(&mut kind)?;
+    if kind[0] >= 2 {
+      Err(io::Error::other("unknown Output type"))?;
+    }
+
+    Ok(match kind[0] {
+      0 => {
+        let key = Secp256k1::read_G(reader)?;
+        let instruction = EthereumInInstruction::read(reader)?;
+        Self::Output { key, instruction }
+      }
+      1 => {
+        let key = Secp256k1::read_G(reader)?;
+        let mut nonce = [0; 8];
+        reader.read_exact(&mut nonce)?;
+        let nonce = u64::from_le_bytes(nonce);
+        Self::Eventuality { key, nonce }
+      }
+      _ => unreachable!(),
+    })
   }
 }
