@@ -80,7 +80,7 @@ jobs:
           cache: false
 
       - name: Run forge fmt
-        run: FOUNDRY_FMT_SORT_INPUTS=false FOUNDRY_FMT_LINE_LENGTH=100 FOUNDRY_FMT_TABLE_WIDTH=2 FOUNDRY_FMT_BRACKET_SPACING=true FOUNDRY_FMT_INT_TYPES=preserve forge fmt --check $(find . -iname "*.sol")
+        run: FOUNDRY_FMT_SORT_INPUTS=false FOUNDRY_FMT_LINE_LENGTH=100 FOUNDRY_FMT_TAB_WIDTH=2 FOUNDRY_FMT_BRACKET_SPACING=true FOUNDRY_FMT_INT_TYPES=preserve forge fmt --check $(find . -iname "*.sol")
 
   machete:
     runs-on: ubuntu-latest

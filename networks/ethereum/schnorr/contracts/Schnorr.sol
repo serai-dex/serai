@@ -15,11 +15,7 @@ library Schnorr {
   // message := the message signed
   // c := Schnorr signature challenge
   // s := Schnorr signature solution
-  function verify(bytes32 px, bytes32 message, bytes32 c, bytes32 s)
-    internal
-    pure
-    returns (bool)
-  {
+  function verify(bytes32 px, bytes32 message, bytes32 c, bytes32 s) internal pure returns (bool) {
     // ecrecover = (m, v, r, s) -> key
     // We instead pass the following to obtain the nonce (not the key)
     // Then we hash it and verify it matches the challenge
