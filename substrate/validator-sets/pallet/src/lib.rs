@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 use core::marker::PhantomData;
 
 use scale::{Encode, Decode};
@@ -303,6 +309,7 @@ pub mod pallet {
 
   /// Pending deallocations, keyed by the Session they become unlocked on.
   #[pallet::storage]
+  #[pallet::getter(fn pending_deallocations)]
   type PendingDeallocations<T: Config> = StorageDoubleMap<
     _,
     Blake2_128Concat,
@@ -391,6 +398,7 @@ pub mod pallet {
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
       let mut participants = vec![];
+      let mut total_allocated_stake = 0;
       {
         let mut iter = SortedAllocationsIter::<T>::new(network);
         let mut key_shares = 0;
@@ -401,6 +409,7 @@ pub mod pallet {
             (amount.0 / allocation_per_key_share).min(u64::from(MAX_KEY_SHARES_PER_SET));
           participants.push((key, these_key_shares));
 
+          total_allocated_stake += amount.0;
           key_shares += these_key_shares;
         }
         amortize_excess_key_shares(&mut participants);
@@ -412,6 +421,12 @@ pub mod pallet {
 
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
+
+      // other networks set their Session(0) TAS once they set their keys but serai network
+      // doesn't have that so we set it here.
+      if network == NetworkId::Serai && session == Session(0) {
+        TotalAllocatedStake::<T>::set(network, Some(Amount(total_allocated_stake)));
+      }
 
       Participants::<T>::set(network, Some(participants.try_into().unwrap()));
       SessionBeginBlock::<T>::set(
@@ -618,7 +633,7 @@ pub mod pallet {
       // If we're not removing the entire allocation, yet the allocation is no longer at or above
       // the threshold for a key share, error
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      if (new_allocation != 0) && (new_allocation < allocation_per_key_share) {
+      if (new_allocation > 0) && (new_allocation < allocation_per_key_share) {
         Err(Error::<T>::DeallocationWouldRemoveParticipant)?;
       }
 
@@ -772,7 +787,7 @@ pub mod pallet {
       PendingDeallocations::<T>::take((network, key), session)
     }
 
-    fn rotate_session() {
+    pub(crate) fn rotate_session() {
       // next serai validators that is in the queue.
       let now_validators = Participants::<T>::get(NetworkId::Serai)
         .expect("no Serai participants upon rotate_session");

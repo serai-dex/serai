@@ -44,6 +44,18 @@ validator-sets-primitives = { package = "serai-validator-sets-primitives", path 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 
+[dev-dependencies]
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+ciphersuite = { path = "../../../crypto/ciphersuite", features = ["ristretto"] }
+frost = { package = "modular-frost", path = "../../../crypto/frost", features = ["tests"] }
+schnorrkel = { path = "../../../crypto/schnorrkel", package = "frost-schnorrkel" }
+
+zeroize = "^1.5"
+rand_core = "0.6"
+
 [features]
 std = [
   "scale/std",
@@ -56,12 +68,15 @@ std = [
   "sp-runtime/std",
   "sp-session/std",
   "sp-staking/std",
+  
+  "sp-consensus-babe/std",
 
   "frame-system/std",
   "frame-support/std",
 
   "pallet-babe/std",
   "pallet-grandpa/std",
+  "pallet-timestamp/std",
 
   "serai-primitives/std",
   "validator-sets-primitives/std",
@@ -70,8 +85,12 @@ std = [
   "dex-pallet/std",
 ]
 
-# TODO
-try-runtime = []
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
 
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
