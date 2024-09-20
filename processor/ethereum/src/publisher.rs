@@ -89,8 +89,8 @@ impl<D: Db> signers::TransactionPublisher<Transaction> for TransactionPublisher<
       // Convert from an Action (an internal representation of a signable event) to a TxLegacy
       let tx = match tx.0 {
         Action::SetKey { chain_id: _, nonce: _, key } => router.update_serai_key(&key, &tx.1),
-        Action::Batch { chain_id: _, nonce: _, coin, fee_per_gas, outs } => {
-          router.execute(coin, fee_per_gas, OutInstructions::from(outs.as_ref()), &tx.1)
+        Action::Batch { chain_id: _, nonce: _, coin, fee, outs } => {
+          router.execute(coin, fee, OutInstructions::from(outs.as_ref()), &tx.1)
         }
       };
 

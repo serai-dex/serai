@@ -325,27 +325,18 @@ impl Router {
     chain_id: U256,
     nonce: u64,
     coin: Coin,
-    fee_per_gas: U256,
+    fee: U256,
     outs: OutInstructions,
   ) -> Vec<u8> {
-    ("execute", chain_id, U256::try_from(nonce).unwrap(), coin.address(), fee_per_gas, outs.0)
-      .abi_encode()
+    ("execute", chain_id, U256::try_from(nonce).unwrap(), coin.address(), fee, outs.0).abi_encode()
   }
 
   /// Construct a transaction to execute a batch of `OutInstruction`s.
-  pub fn execute(
-    &self,
-    coin: Coin,
-    fee_per_gas: U256,
-    outs: OutInstructions,
-    sig: &Signature,
-  ) -> TxLegacy {
+  pub fn execute(&self, coin: Coin, fee: U256, outs: OutInstructions, sig: &Signature) -> TxLegacy {
     let outs_len = outs.0.len();
     TxLegacy {
       to: TxKind::Call(self.1),
-      input: abi::executeCall::new((coin.address(), fee_per_gas, outs.0, sig.into()))
-        .abi_encode()
-        .into(),
+      input: abi::executeCall::new((coin.address(), fee, outs.0, sig.into())).abi_encode().into(),
       // TODO
       gas_limit: 100_000 + ((200_000 + 10_000) * u128::try_from(outs_len).unwrap()),
       ..Default::default()
