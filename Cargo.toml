@@ -55,9 +55,6 @@ members = [
   "networks/monero/rpc/simple-request",
   "networks/monero/wallet/address",
   "networks/monero/wallet",
-  "networks/monero/wallet/seed",
-  "networks/monero/wallet/polyseed",
-  "networks/monero/wallet/util",
   "networks/monero/verify-chain",
 
   "message-queue",
