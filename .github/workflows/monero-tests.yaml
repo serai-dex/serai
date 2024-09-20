@@ -62,7 +62,6 @@ jobs:
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-simple-request-rpc --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet --test '*'
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet-util --test '*'
 
       - name: Run Integration Tests
         # Don't run if the the tests workflow also will
@@ -71,4 +70,3 @@ jobs:
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-serai --all-features --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-simple-request-rpc --test '*'
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet --all-features --test '*'
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --package monero-wallet-util --all-features --test '*'
