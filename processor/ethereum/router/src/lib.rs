@@ -11,7 +11,7 @@ use alloy_consensus::TxLegacy;
 
 use alloy_sol_types::{SolValue, SolConstructor, SolCall, SolEvent};
 
-use alloy_rpc_types_eth::Filter;
+use alloy_rpc_types_eth::{TransactionInput, TransactionRequest, Filter};
 use alloy_transport::{TransportErrorKind, RpcError};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
@@ -296,6 +296,23 @@ impl Router {
     self.1
   }
 
+  /// Fetch the block this contract was deployed at.
+  pub async fn deployment_block(&self) -> Result<u64, RpcError<TransportErrorKind>> {
+    let call = TransactionRequest::default()
+      .to(self.address())
+      .input(TransactionInput::new(abi::deploymentBlockCall::new(()).abi_encode().into()));
+    let bytes = self.0.call(&call).await?;
+    let deployment_block = abi::deploymentBlockCall::abi_decode_returns(&bytes, true)
+      .map_err(|e| {
+        TransportErrorKind::Custom(
+          format!("node returned a non-u256 for function returning u256: {e:?}").into(),
+        )
+      })?
+      ._0;
+
+    Ok(deployment_block.try_into().unwrap())
+  }
+
   /// Get the message to be signed in order to update the key for Serai.
   pub fn update_serai_key_message(chain_id: U256, nonce: u64, key: &PublicKey) -> Vec<u8> {
     (
@@ -420,7 +437,7 @@ impl Router {
         */
         if let Some(matched) = Erc20::match_top_level_transfer(&self.0, tx_hash, self.1).await? {
           // Mark this log index as used so it isn't used again
-          transfer_check.insert(matched.log_index);
+          transfer_check.insert(matched.id.1);
         }
 
         // Find a matching transfer log

@@ -156,10 +156,12 @@ impl<D: Db> ScannerFeed for Rpc<D> {
         // The Router wasn't deployed yet so we cannot have any on-chain interactions
         // If the Router has been deployed by the block we've synced to, it won't have any events
         // for these blocks anways, so this doesn't risk a consensus split
-        // TODO: This does as we can have top-level transfers to the router before it's deployed
         return Ok(FullEpoch { epoch, instructions, executed });
       };
 
+      let router_deployment_block = router.deployment_block().await?;
+
+      // TODO: Use a LocalSet and handle all these in parallel
       let mut to_check = epoch.end_hash;
       while to_check != epoch.prior_end_hash {
         let to_check_block = self
@@ -177,6 +179,12 @@ impl<D: Db> ScannerFeed for Rpc<D> {
           })?
           .header;
 
+        // If this is before the Router was deployed, move on
+        if to_check_block.number < router_deployment_block {
+          // This is sa
+          break;
+        }
+
         instructions.append(
           &mut router.in_instructions(to_check_block.number, &HashSet::from(TOKENS)).await?,
         );
@@ -187,7 +195,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
               .await?
           {
             instructions.push(EthereumInInstruction {
-              id: (id, u64::MAX),
+              id,
               from,
               coin: EthereumCoin::Erc20(token),
               amount,
