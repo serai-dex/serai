@@ -30,22 +30,14 @@ pub use abi::IERC20::Transfer;
 /// A top-level ERC20 transfer
 #[derive(Clone, Debug)]
 pub struct TopLevelTransfer {
-  /// The transaction ID which effected this transfer.
-  pub id: [u8; 32],
+  /// The ID of the event for this transfer.
+  pub id: ([u8; 32], u64),
   /// The address which made the transfer.
   pub from: [u8; 20],
   /// The amount transferred.
   pub amount: U256,
   /// The data appended after the call itself.
   pub data: Vec<u8>,
-}
-
-/// A transaction with a top-level transfer, matched to the log index of the transfer.
-pub struct MatchedTopLevelTransfer {
-  /// The transfer.
-  pub transfer: TopLevelTransfer,
-  /// The log index of the transfer.
-  pub log_index: u64,
 }
 
 /// A view for an ERC20 contract.
@@ -62,7 +54,7 @@ impl Erc20 {
     provider: impl AsRef<RootProvider<SimpleRequest>>,
     transaction_id: B256,
     to: Address,
-  ) -> Result<Option<MatchedTopLevelTransfer>, RpcError<TransportErrorKind>> {
+  ) -> Result<Option<TopLevelTransfer>, RpcError<TransportErrorKind>> {
     // Fetch the transaction
     let transaction =
       provider.as_ref().get_transaction_by_hash(transaction_id).await?.ok_or_else(|| {
@@ -132,15 +124,11 @@ impl Erc20 {
         let encoded = call.abi_encode();
         let data = transaction.input.as_ref()[encoded.len() ..].to_vec();
 
-        return Ok(Some(MatchedTopLevelTransfer {
-          transfer: TopLevelTransfer {
-            // Since there's only one top-level transfer per TX, set the ID to the TX ID
-            id: *transaction_id,
-            from: *log.from.0,
-            amount: log.value,
-            data,
-          },
-          log_index,
+        return Ok(Some(TopLevelTransfer {
+          id: (*transaction_id, log_index),
+          from: *log.from.0,
+          amount: log.value,
+          data,
         }));
       }
     }
@@ -193,7 +181,7 @@ impl Erc20 {
       // Panicking on a task panic is desired behavior, and we haven't aborted any tasks
       match top_level_transfer.unwrap() {
         // Top-level transfer
-        Ok(Some(top_level_transfer)) => top_level_transfers.push(top_level_transfer.transfer),
+        Ok(Some(top_level_transfer)) => top_level_transfers.push(top_level_transfer),
         // Not a top-level transfer
         Ok(None) => continue,
         // Failed to get this transaction's information so abort
