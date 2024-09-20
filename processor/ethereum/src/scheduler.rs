@@ -111,16 +111,19 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
 
       // Push each batch onto the result
       for outs in batches {
-        let base_gas = BASE_GAS.div_ceil(u32::try_from(outs.len()).unwrap());
+        let mut total_gas = 0;
+
+        let base_gas_per_payment = BASE_GAS.div_ceil(u32::try_from(outs.len()).unwrap());
         // Deduce the fee from each out
         for out in &mut outs {
-          let payment_gas = base_gas +
+          let payment_gas = base_gas_per_payment +
             match out.0 {
               Address::Address(_) => ADDRESS_PAYMENT_GAS,
               Address::Contract(deployment) => CONTRACT_PAYMENT_GAS + deployment.gas_limit(),
             };
+          total_gas += payment_gas;
 
-          let payment_gas_cost = fee_per_gas * U256::try_from(payment_gas).unwrap();
+          let payment_gas_cost = U256::try_from(payment_gas).unwrap() * fee_per_gas;
           out.1 -= payment_gas_cost;
         }
 
@@ -128,7 +131,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
           chain_id: self.chain_id,
           nonce,
           coin: coin_to_ethereum_coin(coin),
-          fee_per_gas,
+          fee: U256::try_from(total_gas).unwrap() * fee_per_gas,
           outs,
         });
         nonce += 1;

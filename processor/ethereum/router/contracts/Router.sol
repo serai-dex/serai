@@ -164,18 +164,16 @@ contract Router {
   // Execute a list of transactions if they were signed by the current key with the current nonce
   function execute(
     address coin,
-    uint256 fee_per_gas,
+    uint256 fee,
     OutInstruction[] calldata transactions,
     Signature calldata signature
   ) external {
-    uint256 gasLeftAtStart = gasleft();
-
     // Verify the signature
     // We hash the message here as we need the message's hash for the Executed event
     // Since we're already going to hash it, hashing it prior to verifying the signature reduces the
     // amount of words hashed by its challenge function (reducing our gas costs)
     bytes32 message =
-      keccak256(abi.encode("execute", block.chainid, _nonce, coin, fee_per_gas, transactions));
+      keccak256(abi.encode("execute", block.chainid, _nonce, coin, fee, transactions));
     if (!Schnorr.verify(_seraiKey, message, signature.c, signature.s)) {
       revert InvalidSignature();
     }
@@ -212,25 +210,8 @@ contract Router {
       }
     }
 
-    // Calculate the gas which will be used to transfer the fee out
-    // This is meant to be always over, never under, with any excess being a tip to the publisher
-    uint256 gasToTransferOut;
-    if (coin == address(0)) {
-      // 5,000 gas is explicitly allowed, with another 10,000 for whatever overhead remains
-      // unaccounted for
-      gasToTransferOut = 15_000;
-    } else {
-      // 100_000 gas is explicitly allowed, with another 15,000 for whatever overhead remains
-      // unaccounted for. More gas is given than for ETH due to needing to ABI encode the function
-      // call
-      gasToTransferOut = 115_000;
-    }
-
-    // Calculate the gas used
-    uint256 gasLeftAtEnd = gasleft();
-    uint256 gasUsed = gasLeftAtStart - gasLeftAtEnd;
     // Transfer to the caller the fee
-    _transferOut(msg.sender, coin, (gasUsed + gasToTransferOut) * fee_per_gas);
+    _transferOut(msg.sender, coin, fee);
   }
 
   function nonce() external view returns (uint256) {
