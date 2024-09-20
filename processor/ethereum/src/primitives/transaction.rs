@@ -18,7 +18,7 @@ use crate::{output::OutputId, machine::ClonableTransctionMachine};
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) enum Action {
   SetKey { chain_id: U256, nonce: u64, key: PublicKey },
-  Batch { chain_id: U256, nonce: u64, outs: Vec<(Address, (Coin, U256))> },
+  Batch { chain_id: U256, nonce: u64, coin: Coin, fee_per_gas: U256, outs: Vec<(Address, U256)> },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -36,9 +36,13 @@ impl Action {
       Action::SetKey { chain_id, nonce, key } => {
         Router::update_serai_key_message(*chain_id, *nonce, key)
       }
-      Action::Batch { chain_id, nonce, outs } => {
-        Router::execute_message(*chain_id, *nonce, OutInstructions::from(outs.as_ref()))
-      }
+      Action::Batch { chain_id, nonce, coin, fee_per_gas, outs } => Router::execute_message(
+        *chain_id,
+        *nonce,
+        *coin,
+        *fee_per_gas,
+        OutInstructions::from(outs.as_ref()),
+      ),
     }
   }
 
@@ -47,13 +51,9 @@ impl Action {
       Self::SetKey { chain_id: _, nonce, key } => {
         Executed::SetKey { nonce: *nonce, key: key.eth_repr() }
       }
-      Self::Batch { chain_id, nonce, outs } => Executed::Batch {
+      Self::Batch { nonce, .. } => Executed::Batch {
         nonce: *nonce,
-        message_hash: keccak256(Router::execute_message(
-          *chain_id,
-          *nonce,
-          OutInstructions::from(outs.as_ref()),
-        )),
+        message_hash: keccak256(self.message()),
       },
     })
   }
@@ -104,6 +104,12 @@ impl SignableTransaction for Action {
         Action::SetKey { chain_id, nonce, key }
       }
       1 => {
+        let coin = Coin::read(reader)?;
+
+        let mut fee_per_gas = [0; 32];
+        reader.read_exact(&mut fee_per_gas)?;
+        let fee_per_gas = U256::from_le_bytes(fee_per_gas);
+
         let mut outs_len = [0; 4];
         reader.read_exact(&mut outs_len)?;
         let outs_len = usize::try_from(u32::from_le_bytes(outs_len)).unwrap();
@@ -111,15 +117,14 @@ impl SignableTransaction for Action {
         let mut outs = vec![];
         for _ in 0 .. outs_len {
           let address = borsh::from_reader(reader)?;
-          let coin = Coin::read(reader)?;
 
           let mut amount = [0; 32];
           reader.read_exact(&mut amount)?;
           let amount = U256::from_le_bytes(amount);
 
-          outs.push((address, (coin, amount)));
+          outs.push((address, amount));
         }
-        Action::Batch { chain_id, nonce, outs }
+        Action::Batch { chain_id, nonce, coin, fee_per_gas, outs }
       }
       _ => unreachable!(),
     })
@@ -132,14 +137,15 @@ impl SignableTransaction for Action {
         writer.write_all(&nonce.to_le_bytes())?;
         writer.write_all(&key.eth_repr())
       }
-      Self::Batch { chain_id, nonce, outs } => {
+      Self::Batch { chain_id, nonce, coin, fee_per_gas, outs } => {
         writer.write_all(&[1])?;
         writer.write_all(&chain_id.as_le_bytes())?;
         writer.write_all(&nonce.to_le_bytes())?;
+        coin.write(writer)?;
+        writer.write_all(&fee_per_gas.as_le_bytes())?;
         writer.write_all(&u32::try_from(outs.len()).unwrap().to_le_bytes())?;
-        for (address, (coin, amount)) in outs {
+        for (address, amount) in outs {
           borsh::BorshSerialize::serialize(address, writer)?;
-          coin.write(writer)?;
           writer.write_all(&amount.as_le_bytes())?;
         }
         Ok(())
