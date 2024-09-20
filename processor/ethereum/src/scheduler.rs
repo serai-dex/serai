@@ -77,7 +77,17 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
       let Some(outs) = outs.remove(&coin) else { continue };
       assert!(!outs.is_empty());
 
-      let fee_per_gas: U256 = todo!("TODO");
+      let fee_per_gas = match coin {
+        // 10 gwei
+        Coin::Ether => {
+          U256::try_from(10u64).unwrap() * alloy_core::primitives::utils::Unit::GWEI.wei()
+        }
+        // 0.0003 DAI
+        Coin::Dai => {
+          U256::try_from(30u64).unwrap() * alloy_core::primitives::utils::Unit::TWEI.wei()
+        }
+        _ => unreachable!(),
+      };
 
       // The gas required to perform any interaction with the Router.
       const BASE_GAS: u32 = 0; // TODO
@@ -96,7 +106,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
       let mut batches = vec![vec![]];
       let mut current_gas = BASE_GAS;
       for out in outs {
-        let payment_gas = match out.0 {
+        let payment_gas = match &out.0 {
           Address::Address(_) => ADDRESS_PAYMENT_GAS,
           Address::Contract(deployment) => CONTRACT_PAYMENT_GAS + deployment.gas_limit(),
         };
@@ -110,14 +120,14 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
       }
 
       // Push each batch onto the result
-      for outs in batches {
+      for mut outs in batches {
         let mut total_gas = 0;
 
         let base_gas_per_payment = BASE_GAS.div_ceil(u32::try_from(outs.len()).unwrap());
         // Deduce the fee from each out
         for out in &mut outs {
           let payment_gas = base_gas_per_payment +
-            match out.0 {
+            match &out.0 {
               Address::Address(_) => ADDRESS_PAYMENT_GAS,
               Address::Contract(deployment) => CONTRACT_PAYMENT_GAS + deployment.gas_limit(),
             };
