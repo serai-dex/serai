@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 
 use group::ff::PrimeField;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 struct CoefficientIndex {
   y_pow: u64,
   x_pow: u64,
@@ -31,7 +31,7 @@ impl ConstantTimeGreater for CoefficientIndex {
 }
 
 /// A structure representing a Polynomial with x**i, y**i, and y**i * x**j terms.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Debug, Zeroize)]
 pub struct Poly<F: From<u64> + PrimeField> {
   /// c[i] * y ** (i + 1)
   pub y_coefficients: Vec<F>,
@@ -41,6 +41,66 @@ pub struct Poly<F: From<u64> + PrimeField> {
   pub x_coefficients: Vec<F>,
   /// Coefficient for x ** 0, y ** 0, and x ** 0 y ** 0 (the coefficient for 1)
   pub zero_coefficient: F,
+}
+
+impl<F: From<u64> + PrimeField> PartialEq for Poly<F> {
+  fn eq(&self, b: &Poly<F>) -> bool {
+    {
+      let mutual_y_coefficients = self.y_coefficients.len().min(b.y_coefficients.len());
+      if self.y_coefficients[.. mutual_y_coefficients] != b.y_coefficients[.. mutual_y_coefficients]
+      {
+        return false;
+      }
+      for coeff in &self.y_coefficients[mutual_y_coefficients ..] {
+        if *coeff != F::ZERO {
+          return false;
+        }
+      }
+      for coeff in &b.y_coefficients[mutual_y_coefficients ..] {
+        if *coeff != F::ZERO {
+          return false;
+        }
+      }
+    }
+
+    {
+      for (i, yx_coeffs) in self.yx_coefficients.iter().enumerate() {
+        for (j, coeff) in yx_coeffs.iter().enumerate() {
+          if coeff != b.yx_coefficients.get(i).unwrap_or(&vec![]).get(j).unwrap_or(&F::ZERO) {
+            return false;
+          }
+        }
+      }
+      // Run from the other perspective in case other is longer than self
+      for (i, yx_coeffs) in b.yx_coefficients.iter().enumerate() {
+        for (j, coeff) in yx_coeffs.iter().enumerate() {
+          if coeff != self.yx_coefficients.get(i).unwrap_or(&vec![]).get(j).unwrap_or(&F::ZERO) {
+            return false;
+          }
+        }
+      }
+    }
+
+    {
+      let mutual_x_coefficients = self.x_coefficients.len().min(b.x_coefficients.len());
+      if self.x_coefficients[.. mutual_x_coefficients] != b.x_coefficients[.. mutual_x_coefficients]
+      {
+        return false;
+      }
+      for coeff in &self.x_coefficients[mutual_x_coefficients ..] {
+        if *coeff != F::ZERO {
+          return false;
+        }
+      }
+      for coeff in &b.x_coefficients[mutual_x_coefficients ..] {
+        if *coeff != F::ZERO {
+          return false;
+        }
+      }
+    }
+
+    self.zero_coefficient == b.zero_coefficient
+  }
 }
 
 impl<F: From<u64> + PrimeField> Poly<F> {
@@ -198,12 +258,6 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     // Move the x coefficients
     self.yx_coefficients[power_of_y - 1] = self.x_coefficients;
     self.x_coefficients = vec![];
-
-    // Tidy the yx coefficients, which may have empty vectors if x_coefficients was empty
-    // TODO: Does this break a constant-time expectation?
-    while self.yx_coefficients.last().map(|coeffs| coeffs.is_empty()) == Some(true) {
-      self.yx_coefficients.pop();
-    }
 
     self
   }
@@ -366,6 +420,60 @@ impl<F: From<u64> + PrimeField> Poly<F> {
       unsafe { (ct_get(poly, coeff) as *const F as *mut F).as_mut().unwrap() }
     }
 
+    fn structurally_eq<F: From<u64> + PrimeField>(a: &Poly<F>, b: &Poly<F>) -> bool {
+      if a.y_coefficients.len() != b.y_coefficients.len() {
+        return false;
+      }
+      if a.yx_coefficients.len() != b.yx_coefficients.len() {
+        return false;
+      }
+      for (a, b) in a.yx_coefficients.iter().zip(b.yx_coefficients.iter()) {
+        if a.len() != b.len() {
+          return false;
+        }
+      }
+      if a.x_coefficients.len() != b.x_coefficients.len() {
+        return false;
+      }
+      true
+    }
+
+    fn conditional_select_poly<F: From<u64> + PrimeField>(
+      mut a: Poly<F>,
+      b: &Poly<F>,
+      choice: Choice,
+    ) -> Poly<F> {
+      // The following select is only constant time if the two Polys are of the same size
+      // Pad the first poly until it is
+      while a.x_coefficients.len() < b.x_coefficients.len() {
+        a.x_coefficients.push(F::ZERO);
+      }
+      while a.yx_coefficients.len() < b.yx_coefficients.len() {
+        a.yx_coefficients.push(vec![]);
+      }
+      for (a, b) in a.yx_coefficients.iter_mut().zip(&b.yx_coefficients) {
+        while a.len() < b.len() {
+          a.push(F::ZERO);
+        }
+      }
+      while a.y_coefficients.len() < b.y_coefficients.len() {
+        a.y_coefficients.push(F::ZERO);
+      }
+
+      debug_assert!(structurally_eq(&a, b));
+
+      unsafe {
+        (<_>::conditional_select(
+          &(&a as *const Poly<F> as u64),
+          &(b as *const Poly<F> as u64),
+          choice,
+        ) as usize as *const Poly<F>)
+          .as_ref()
+          .unwrap()
+          .clone()
+      }
+    }
+
     // The following long division algorithm only works if the denominator actually has a variable
     // If the denominator isn't variable to anything, short-circuit to scalar 'division'
     // This is safe as `leading_coefficient` is based on the structure, not the values, of the poly
@@ -452,40 +560,25 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
       // That matters as we now conditionally select the polynomial by cloning it, which is vartime
       // to the size of the polynomial cloned
-      quotient = unsafe {
-        (<_>::conditional_select(
-          &(&quotient as *const Poly<F> as u64),
-          &(&quotient_if_meaningful as *const Poly<F> as u64),
-          meaningful_iteration,
-        ) as usize as *const Poly<F>)
-          .as_ref()
-          .unwrap()
-          .clone()
-      };
+      quotient = conditional_select_poly(quotient, &quotient_if_meaningful, meaningful_iteration);
 
       // 3) Remove what we've divided out from self
 
-      // Subtraction follows addition regarding the size of the result. Since
-      // `quotient_term * denominator <= remainder`, this will be the same size as the remainder.
+      // Subtraction follows the same rules as addition regarding length, yet these two arguments
+      // won't be the same length as `quotient_term * denominator` generates a larger structure
+      // than `self` originally was. `remainder` will be padded for the difference by
+      // `conditional_select_poly`
       let remainder_if_meaningful = remainder.clone() - (quotient_term * denominator);
-
-      remainder = unsafe {
-        (<_>::conditional_select(
-          &(&remainder as *const Poly<F> as u64),
-          &(&remainder_if_meaningful as *const Poly<F> as u64),
-          meaningful_iteration,
-        ) as usize as *const Poly<F>)
-          .as_ref()
-          .unwrap()
-          .clone()
-      };
+      remainder =
+        conditional_select_poly(remainder, &remainder_if_meaningful, meaningful_iteration);
     }
 
     // We now return (quotient, remainder) if the dividing coefficient wasn't for y**0 x**0
     // In that case, we return (self * dividing coeffient, Poly::zero())
     let if_y_0_x_0_quotient = self.clone() * denominator_dividing_coefficient_inv;
 
-    let mut if_y_0_x_0_remainder = self;
+    // Create a zero remainder of equivalent size to the remainder
+    let mut if_y_0_x_0_remainder = remainder.clone();
     for y_coeff in &mut if_y_0_x_0_remainder.y_coefficients {
       *y_coeff = F::ZERO;
     }
@@ -499,27 +592,73 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     }
     if_y_0_x_0_remainder.zero_coefficient = F::ZERO;
 
-    // The two potential quotients/remainders are each the same size as their other
-    let quotient = unsafe {
-      (<_>::conditional_select(
-        &(&quotient as *const Poly<F> as u64),
-        &(&if_y_0_x_0_quotient as *const Poly<F> as u64),
-        denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
-      ) as usize as *const Poly<F>)
-        .as_ref()
-        .unwrap()
-        .clone()
+    // quotient will be smalled than if_y_0_x_0_quotient, as it's reduced by the structure of the
+    // denominator, yet conditional_select_poly will pad the first poly until it's of the same
+    // length
+    quotient = conditional_select_poly(
+      quotient,
+      &if_y_0_x_0_quotient,
+      denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
+    );
+    // The two potential remainders are each the same size as their other
+    remainder = conditional_select_poly(
+      remainder,
+      &if_y_0_x_0_remainder,
+      denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
+    );
+
+    // Clear any junk terms out of the remainder which are less than the denominator
+    let denominator_leading_coefficient = CoefficientIndex {
+      y_pow: denominator_leading_coefficient.0.try_into().unwrap(),
+      x_pow: denominator_leading_coefficient.1.try_into().unwrap(),
     };
-    let remainder = unsafe {
-      (<_>::conditional_select(
-        &(&remainder as *const Poly<F> as u64),
-        &(&if_y_0_x_0_remainder as *const Poly<F> as u64),
-        denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
-      ) as usize as *const Poly<F>)
-        .as_ref()
-        .unwrap()
-        .clone()
-    };
+    if denominator_leading_coefficient != (CoefficientIndex { y_pow: 0, x_pow: 0 }) {
+      while {
+        let index =
+          CoefficientIndex { y_pow: remainder.y_coefficients.len().try_into().unwrap(), x_pow: 0 };
+        bool::from(
+          index.ct_gt(&denominator_leading_coefficient) |
+            index.ct_eq(&denominator_leading_coefficient),
+        )
+      } {
+        let popped = remainder.y_coefficients.pop();
+        debug_assert_eq!(popped, Some(F::ZERO));
+      }
+      while {
+        let index = CoefficientIndex {
+          y_pow: remainder.yx_coefficients.len().try_into().unwrap(),
+          x_pow: remainder
+            .yx_coefficients
+            .last()
+            .map(|yx_coefficients| yx_coefficients.len())
+            .unwrap_or(0)
+            .try_into()
+            .unwrap(),
+        };
+        bool::from(
+          index.ct_gt(&denominator_leading_coefficient) |
+            index.ct_eq(&denominator_leading_coefficient),
+        )
+      } {
+        let popped = remainder.yx_coefficients.last_mut().unwrap().pop();
+        debug_assert_eq!(popped, Some(F::ZERO));
+        if remainder.yx_coefficients.last().unwrap().is_empty() {
+          let popped = remainder.yx_coefficients.pop();
+          debug_assert_eq!(popped, Some(vec![]));
+        }
+      }
+      while {
+        let index =
+          CoefficientIndex { y_pow: 0, x_pow: remainder.x_coefficients.len().try_into().unwrap() };
+        bool::from(
+          index.ct_gt(&denominator_leading_coefficient) |
+            index.ct_eq(&denominator_leading_coefficient),
+        )
+      } {
+        let popped = remainder.x_coefficients.pop();
+        debug_assert_eq!(popped, Some(F::ZERO));
+      }
+    }
 
     (quotient, remainder)
   }
@@ -565,12 +704,9 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
   /// Differentiate a polynomial, reduced by a modulus with a leading y term y**2 x**0, by x and y.
   ///
-  /// This function panics if a y**2 term is present within the polynomial.
+  /// This function has undefined behavior if unreduced.
   #[must_use]
   pub fn differentiate(&self) -> (Poly<F>, Poly<F>) {
-    assert!(self.y_coefficients.len() <= 1);
-    assert!(self.yx_coefficients.len() <= 1);
-
     // Differentation by x practically involves:
     // - Dropping everything without an x component
     // - Shifting everything down a power of x

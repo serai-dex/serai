@@ -18,7 +18,24 @@ fn test_poly() {
 
     let mut modulus = Poly::zero();
     modulus.y_coefficients = vec![one];
-    assert_eq!(poly % &modulus, Poly::zero());
+    assert_eq!(
+      poly.clone().div_rem(&modulus).0,
+      Poly {
+        y_coefficients: vec![one],
+        yx_coefficients: vec![],
+        x_coefficients: vec![],
+        zero_coefficient: zero
+      }
+    );
+    assert_eq!(
+      poly % &modulus,
+      Poly {
+        y_coefficients: vec![],
+        yx_coefficients: vec![],
+        x_coefficients: vec![],
+        zero_coefficient: zero
+      }
+    );
   }
 
   {
@@ -81,7 +98,7 @@ fn test_differentation() {
     diff_x,
     Poly {
       y_coefficients: vec![input.yx_coefficients[0][0]],
-      yx_coefficients: vec![vec![]],
+      yx_coefficients: vec![],
       x_coefficients: vec![
         F::from(2) * input.x_coefficients[1],
         F::from(3) * input.x_coefficients[2]
