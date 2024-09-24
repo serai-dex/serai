@@ -145,12 +145,12 @@ fn line<C: DivisorCurve>(a: C, b: C) -> Poly<C::FieldElement> {
     zero_coefficient: -intercept,
   };
 
-  res = <_>::conditional_select(&res, &if_both_are_identity, both_are_identity);
   res = <_>::conditional_select(
     &res,
     &if_one_is_identity_or_additive_inverses,
     one_is_identity_or_additive_inverses,
   );
+  res = <_>::conditional_select(&res, &if_both_are_identity, both_are_identity);
 
   Poly {
     y_coefficients: vec![res.y_coefficient],
@@ -213,11 +213,8 @@ pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement
       // Merge the two divisors
       let numerator = a_div.mul_mod(&b_div, &modulus).mul_mod(&line::<C>(a, b), &modulus);
       let denominator = line::<C>(a, -a).mul_mod(&line::<C>(b, -b), &modulus);
-      let (q, r) = numerator.clone().div_rem(&denominator);
-      // Checks all coefficients within the remainder are 0
-      // This is presumed imperfect yet is expected as a sanity check, not a strict soundness bound
-      debug_assert_eq!(r.eval(C::FieldElement::ONE, C::FieldElement::ONE), C::FieldElement::ZERO);
-      debug_assert_eq!(r.eval(C::FieldElement::ONE, -C::FieldElement::ONE), C::FieldElement::ZERO);
+      let (q, r) = numerator.div_rem(&denominator);
+      debug_assert_eq!(r, Poly::zero());
 
       next_divs.push((a + b, q));
     }
