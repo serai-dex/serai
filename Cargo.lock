@@ -2196,7 +2196,6 @@ dependencies = [
  "schnorr-signatures",
  "secq256k1",
  "std-shims",
- "subtle",
  "thiserror",
  "zeroize",
 ]

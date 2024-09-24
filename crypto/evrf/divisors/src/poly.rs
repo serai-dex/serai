@@ -44,6 +44,7 @@ pub struct Poly<F: From<u64> + Zeroize + PrimeField> {
 }
 
 impl<F: From<u64> + Zeroize + PrimeField> PartialEq for Poly<F> {
+  // This is not constant time and is not meant to be
   fn eq(&self, b: &Poly<F>) -> bool {
     {
       let mutual_y_coefficients = self.y_coefficients.len().min(b.y_coefficients.len());
@@ -367,116 +368,87 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   /// Panics upon division by a polynomial where all coefficients are zero.
   #[must_use]
   pub(crate) fn div_rem(self, denominator: &Self) -> (Self, Self) {
-    // These functions have undefined, unsafe behavior if this isn't a valid index
-    #[allow(clippy::needless_lifetimes)]
-    fn ct_get<'a, F: From<u64> + Zeroize + PrimeField>(
-      poly: &'a Poly<F>,
-      coeff: CoefficientIndex,
-    ) -> &'a F {
-      let y_pow = isize::try_from(coeff.y_pow).unwrap();
-      let x_pow = isize::try_from(coeff.x_pow).unwrap();
-
-      unsafe {
-        let zero_coefficient = (&poly.zero_coefficient) as *const F;
-        let y_coefficient = poly.y_coefficients[..].as_ptr().offset(y_pow - 1);
-
-        let yx_coefficients: *const Vec<F> = poly.yx_coefficients[..].as_ptr().offset(y_pow - 1);
-        // We now need to map this to the specific coefficient, yet this may not be a valid
-        // reference
-        let if_yx_is_invalid = vec![F::ZERO];
-        let if_yx_is_invalid = (&if_yx_is_invalid) as *const Vec<F>;
-        let valid_yx_ref = <_>::conditional_select(
-          &(if_yx_is_invalid as u64),
-          &(yx_coefficients as u64),
-          ((poly.yx_coefficients.len() as u64).ct_gt(&(y_pow as u64)) |
-            (poly.yx_coefficients.len() as u64).ct_eq(&(y_pow as u64))) &
-            (!y_pow.ct_eq(&0)),
-        );
-        let yx_coefficient =
-          (valid_yx_ref as *const Vec<F>).as_ref().unwrap()[..].as_ptr().offset(x_pow - 1);
-
-        let x_coefficient = poly.x_coefficients[..].as_ptr().offset(x_pow - 1);
-
-        let mut res = zero_coefficient as u64;
-        res = <_>::conditional_select(
-          &res,
-          &(y_coefficient as u64),
-          (!y_pow.ct_eq(&0)) & x_pow.ct_eq(&0),
-        );
-        res = <_>::conditional_select(
-          &res,
-          &(yx_coefficient as u64),
-          (!y_pow.ct_eq(&0)) & (!x_pow.ct_eq(&0)),
-        );
-        res = <_>::conditional_select(
-          &res,
-          &(x_coefficient as u64),
-          y_pow.ct_eq(&0) & (!x_pow.ct_eq(&0)),
-        );
-        (res as usize as *const F).as_ref().unwrap()
+    // These functions have undefined behavior if this isn't a valid index for this poly
+    fn ct_get<F: From<u64> + Zeroize + PrimeField>(
+      poly: &Poly<F>,
+      index: CoefficientIndex,
+    ) -> F {
+      let mut res = poly.zero_coefficient;
+      for (y_pow_sub_one, coeff) in poly.y_coefficients.iter().enumerate() {
+        res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }));
       }
-    }
-
-    #[allow(clippy::needless_lifetimes)]
-    fn ct_get_mut<'a, F: From<u64> + Zeroize + PrimeField>(
-      poly: &'a mut Poly<F>,
-      coeff: CoefficientIndex,
-    ) -> &'a mut F {
-      unsafe { (ct_get(poly, coeff) as *const F as *mut F).as_mut().unwrap() }
-    }
-
-    fn structurally_eq<F: From<u64> + Zeroize + PrimeField>(a: &Poly<F>, b: &Poly<F>) -> bool {
-      if a.y_coefficients.len() != b.y_coefficients.len() {
-        return false;
-      }
-      if a.yx_coefficients.len() != b.yx_coefficients.len() {
-        return false;
-      }
-      for (a, b) in a.yx_coefficients.iter().zip(b.yx_coefficients.iter()) {
-        if a.len() != b.len() {
-          return false;
+      for (y_pow_sub_one, coeffs) in poly.yx_coefficients.iter().enumerate() {
+        for (x_pow_sub_one, coeff) in coeffs.iter().enumerate() {
+          res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
         }
       }
-      if a.x_coefficients.len() != b.x_coefficients.len() {
-        return false;
+      for (x_pow_sub_one, coeff) in poly.x_coefficients.iter().enumerate() {
+        res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
       }
-      true
+      res
+    }
+
+    fn ct_set<F: From<u64> + Zeroize + PrimeField>(
+      poly: &mut Poly<F>,
+      index: CoefficientIndex,
+      value: F,
+    ) {
+      for (y_pow_sub_one, coeff) in poly.y_coefficients.iter_mut().enumerate() {
+        *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }));
+      }
+      for (y_pow_sub_one, coeffs) in poly.yx_coefficients.iter_mut().enumerate() {
+        for (x_pow_sub_one, coeff) in coeffs.iter_mut().enumerate() {
+          *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+        }
+      }
+      for (x_pow_sub_one, coeff) in poly.x_coefficients.iter_mut().enumerate() {
+        *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+      }
+      poly.zero_coefficient = <_>::conditional_select(&poly.zero_coefficient, &value, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }));
     }
 
     fn conditional_select_poly<F: From<u64> + Zeroize + PrimeField>(
       mut a: Poly<F>,
-      b: &Poly<F>,
+      mut b: Poly<F>,
       choice: Choice,
     ) -> Poly<F> {
-      // The following select is only constant time if the two Polys are of the same size
-      // Pad the first poly until it is
-      while a.x_coefficients.len() < b.x_coefficients.len() {
-        a.x_coefficients.push(F::ZERO);
-      }
-      while a.yx_coefficients.len() < b.yx_coefficients.len() {
-        a.yx_coefficients.push(vec![]);
-      }
-      for (a, b) in a.yx_coefficients.iter_mut().zip(&b.yx_coefficients) {
-        while a.len() < b.len() {
-          a.push(F::ZERO);
+      let pad_to = |a: &mut Poly<F>, b: &Poly<F>| {
+        while a.x_coefficients.len() < b.x_coefficients.len() {
+          a.x_coefficients.push(F::ZERO);
         }
-      }
-      while a.y_coefficients.len() < b.y_coefficients.len() {
-        a.y_coefficients.push(F::ZERO);
-      }
+        while a.yx_coefficients.len() < b.yx_coefficients.len() {
+          a.yx_coefficients.push(vec![]);
+        }
+        for (a, b) in a.yx_coefficients.iter_mut().zip(&b.yx_coefficients) {
+          while a.len() < b.len() {
+            a.push(F::ZERO);
+          }
+        }
+        while a.y_coefficients.len() < b.y_coefficients.len() {
+          a.y_coefficients.push(F::ZERO);
+        }
+      };
+      // Pad these to be the same size/layout as each other
+      pad_to(&mut a, &b);
+      pad_to(&mut b, &a);
 
-      debug_assert!(structurally_eq(&a, b));
-
-      unsafe {
-        (<_>::conditional_select(
-          &(&a as *const Poly<F> as u64),
-          &(b as *const Poly<F> as u64),
-          choice,
-        ) as usize as *const Poly<F>)
-          .as_ref()
-          .unwrap()
-          .clone()
+      let mut res = Poly::zero();
+      for (a, b) in a.y_coefficients.iter().zip(&b.y_coefficients) {
+        res.y_coefficients.push(<_>::conditional_select(a, b, choice));
       }
+      for (a, b) in a.yx_coefficients.iter().zip(&b.yx_coefficients) {
+        let mut yx_coefficients = Vec::with_capacity(a.len());
+        for (a, b) in a.iter().zip(b) {
+          yx_coefficients.push(<_>::conditional_select(a, b, choice))
+        }
+        res.yx_coefficients.push(yx_coefficients);
+      }
+      for (a, b) in a.x_coefficients.iter().zip(&b.x_coefficients) {
+        res.x_coefficients.push(<_>::conditional_select(a, b, choice));
+      }
+      res.zero_coefficient = <_>::conditional_select(&a.zero_coefficient, &b.zero_coefficient, choice);
+
+      res
     }
 
     // The following long division algorithm only works if the denominator actually has a variable
@@ -512,7 +484,7 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
     let denominator_dividing_coefficient =
       denominator.greater_than_or_equal_coefficient(&CoefficientIndex { y_pow: 0, x_pow: 0 });
     let denominator_dividing_coefficient_inv =
-      (*ct_get(denominator, denominator_dividing_coefficient)).invert().unwrap();
+      ct_get(denominator, denominator_dividing_coefficient).invert().unwrap();
 
     let mut quotient = quotient_structure.clone();
     let mut remainder = self.clone();
@@ -528,7 +500,7 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
 
       // 1) Find the scalar `q` such that the leading coefficient of `q * denominator` is equal to
       //    the leading coefficient of self.
-      let numerator_coefficient_value = *ct_get(&remainder, numerator_coefficient);
+      let numerator_coefficient_value = ct_get(&remainder, numerator_coefficient);
       let q = numerator_coefficient_value * denominator_dividing_coefficient_inv;
 
       // 2) Calculate the full term of the quotient by scaling with the necessary powers of y/x
@@ -538,63 +510,33 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
       };
       let fallabck_powers_of_yx = CoefficientIndex { y_pow: 0, x_pow: 0 };
       let mut quotient_term = quotient_structure.clone();
-      *ct_get_mut(
+      ct_set(
         &mut quotient_term,
         // If the numerator coefficient isn't >=, proper_powers_of_yx will have garbage in them
         <_>::conditional_select(&fallabck_powers_of_yx, &proper_powers_of_yx, meaningful_iteration),
-      ) = q;
+        q,
+      );
 
-      // Addition causes the result polynomial to have the size of the larger of the two
-      // polynomials. Since quotient_term has the same structure as quotient, this will be the same
-      // size as the quotient.
       let quotient_if_meaningful = quotient.clone() + &quotient_term;
-
-      // That matters as we now conditionally select the polynomial by cloning it, which is vartime
-      // to the size of the polynomial cloned
-      quotient = conditional_select_poly(quotient, &quotient_if_meaningful, meaningful_iteration);
+      quotient = conditional_select_poly(quotient, quotient_if_meaningful, meaningful_iteration);
 
       // 3) Remove what we've divided out from self
-
-      // Subtraction follows the same rules as addition regarding length, yet these two arguments
-      // won't be the same length as `quotient_term * denominator` generates a larger structure
-      // than `self` originally was. `remainder` will be padded for the difference by
-      // `conditional_select_poly`
       let remainder_if_meaningful = remainder.clone() - (quotient_term * denominator);
       remainder =
-        conditional_select_poly(remainder, &remainder_if_meaningful, meaningful_iteration);
+        conditional_select_poly(remainder, remainder_if_meaningful, meaningful_iteration);
     }
 
-    // We now return (quotient, remainder) if the dividing coefficient wasn't for y**0 x**0
-    // In that case, we return (self * dividing coeffient, Poly::zero())
-    let if_y_0_x_0_quotient = self.clone() * denominator_dividing_coefficient_inv;
-
-    // Create a zero remainder of equivalent size to the remainder
-    let mut if_y_0_x_0_remainder = remainder.clone();
-    for y_coeff in &mut if_y_0_x_0_remainder.y_coefficients {
-      *y_coeff = F::ZERO;
-    }
-    for yx_coeffs in &mut if_y_0_x_0_remainder.yx_coefficients {
-      for yx_coeff in yx_coeffs {
-        *yx_coeff = F::ZERO;
-      }
-    }
-    for x_coeff in &mut if_y_0_x_0_remainder.x_coefficients {
-      *x_coeff = F::ZERO;
-    }
-    if_y_0_x_0_remainder.zero_coefficient = F::ZERO;
-
-    // quotient will be smalled than if_y_0_x_0_quotient, as it's reduced by the structure of the
-    // denominator, yet conditional_select_poly will pad the first poly until it's of the same
-    // length
     quotient = conditional_select_poly(
       quotient,
-      &if_y_0_x_0_quotient,
+      // If the dividing coefficient was for y**0 x**0, we return the poly scaled by its inverse
+      self.clone() * denominator_dividing_coefficient_inv,
       denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
     );
-    // The two potential remainders are each the same size as their other
     remainder = conditional_select_poly(
       remainder,
-      &if_y_0_x_0_remainder,
+      // If the dividing coefficient was for y**0 x**0, we're able to perfectly divide and there's
+      // no remainder
+      Poly::zero(),
       denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
     );
 
