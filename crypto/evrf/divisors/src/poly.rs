@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 
 use group::ff::PrimeField;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 struct CoefficientIndex {
   y_pow: u64,
   x_pow: u64,
@@ -385,7 +385,9 @@ impl<F: From<u64> + PrimeField> Poly<F> {
         let valid_yx_ref = <_>::conditional_select(
           &(if_yx_is_invalid as u64),
           &(yx_coefficients as u64),
-          (poly.yx_coefficients.len() as u64).ct_gt(&(y_pow as u64)) & (!y_pow.ct_eq(&0)),
+          ((poly.yx_coefficients.len() as u64).ct_gt(&(y_pow as u64)) |
+            (poly.yx_coefficients.len() as u64).ct_eq(&(y_pow as u64))) &
+            (!y_pow.ct_eq(&0)),
         );
         let yx_coefficient =
           (valid_yx_ref as *const Vec<F>).as_ref().unwrap()[..].as_ptr().offset(x_pow - 1);
@@ -482,27 +484,13 @@ impl<F: From<u64> + PrimeField> Poly<F> {
       return (self * denominator.zero_coefficient.invert().unwrap(), Poly::zero());
     }
 
-    // The amount of y coefficients in the quotient
-    let theoretic_quotient_y = self.y_coefficients.len() - denominator_leading_coefficient.0;
-    // The amount of x coefficients in the quotient
-    let theoretic_quotient_x = self.x_coefficients.len() - denominator_leading_coefficient.1;
-
+    // The structure of the quotient, which is the the numerator with all coefficients set to 0
     let mut quotient_structure = Poly {
-      y_coefficients: vec![F::ZERO; theoretic_quotient_y],
+      y_coefficients: vec![F::ZERO; self.y_coefficients.len()],
       yx_coefficients: self.yx_coefficients.clone(),
-      x_coefficients: vec![F::ZERO; theoretic_quotient_x],
+      x_coefficients: vec![F::ZERO; self.x_coefficients.len()],
       zero_coefficient: F::ZERO,
     };
-    // We cloned the structure of the numerator's yx coefficients and now need to reduce/clear them
-    for _ in 0 .. denominator_leading_coefficient.0 {
-      quotient_structure.yx_coefficients.pop();
-    }
-    for yx_coefficients in &mut quotient_structure.yx_coefficients {
-      for _ in 0 .. denominator_leading_coefficient.1 {
-        yx_coefficients.pop();
-      }
-    }
-    // Now that we have the correct structure, set all coefficients within it to 0
     for coeff in quotient_structure
       .yx_coefficients
       .iter_mut()
@@ -641,7 +629,10 @@ impl<F: From<u64> + PrimeField> Poly<F> {
         )
       } {
         let popped = remainder.yx_coefficients.last_mut().unwrap().pop();
-        debug_assert_eq!(popped, Some(F::ZERO));
+        // This may have been `vec![]`
+        if let Some(popped) = popped {
+          debug_assert_eq!(popped, F::ZERO);
+        }
         if remainder.yx_coefficients.last().unwrap().is_empty() {
           let popped = remainder.yx_coefficients.pop();
           debug_assert_eq!(popped, Some(vec![]));
@@ -732,13 +723,15 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
       if !self.yx_coefficients.is_empty() {
         let mut yx_coeffs = self.yx_coefficients[0].clone();
-        diff_x.y_coefficients = vec![yx_coeffs.remove(0)];
-        diff_x.yx_coefficients = vec![yx_coeffs];
+        if !yx_coeffs.is_empty() {
+          diff_x.y_coefficients = vec![yx_coeffs.remove(0)];
+          diff_x.yx_coefficients = vec![yx_coeffs];
 
-        let mut prior_x_power = F::from(2);
-        for yx_coeff in &mut diff_x.yx_coefficients[0] {
-          *yx_coeff *= prior_x_power;
-          prior_x_power += F::ONE;
+          let mut prior_x_power = F::from(2);
+          for yx_coeff in &mut diff_x.yx_coefficients[0] {
+            *yx_coeff *= prior_x_power;
+            prior_x_power += F::ONE;
+          }
         }
       }
 
