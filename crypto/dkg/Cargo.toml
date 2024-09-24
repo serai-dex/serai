@@ -37,7 +37,6 @@ schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5
 dleq = { path = "../dleq", version = "^0.4.1", default-features = false }
 
 # eVRF DKG dependencies
-subtle = { version = "2", default-features = false, features = ["std"], optional = true }
 generic-array = { version = "1", default-features = false, features = ["alloc"], optional = true }
 blake2 = { version = "0.10", default-features = false, features = ["std"], optional = true }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"], optional = true }
@@ -82,7 +81,6 @@ borsh = ["dep:borsh"]
 evrf = [
   "std",
 
-  "dep:subtle",
   "dep:generic-array",
 
   "dep:blake2",

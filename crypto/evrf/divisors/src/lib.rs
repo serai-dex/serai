@@ -3,15 +3,16 @@
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
 
-use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConditionallySelectable};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::{
-  ff::{Field, PrimeField},
+  ff::{Field, PrimeField, PrimeFieldBits},
   Group,
 };
 
 mod poly;
-pub use poly::*;
+pub use poly::Poly;
 
 #[cfg(test)]
 mod tests;
@@ -19,7 +20,7 @@ mod tests;
 /// A curve usable with this library.
 pub trait DivisorCurve: Group + ConstantTimeEq + ConditionallySelectable {
   /// An element of the field this curve is defined over.
-  type FieldElement: PrimeField + ConditionallySelectable;
+  type FieldElement: Zeroize + PrimeField + ConditionallySelectable;
 
   /// The A in the curve equation y^2 = x^3 + A x + B.
   fn a() -> Self::FieldElement;
@@ -255,6 +256,186 @@ pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement
   let mut divisor = divs.remove(0).2;
   trim(&mut divisor, points_len);
   Some(divisor)
+}
+
+/// The decomposition of a scalar.
+///
+/// The decomposition ($d$) of a scalar ($s$) has the following two properties:
+///
+/// - $\sum^{\mathsf{NUM_BITS} - 1}_{i=0} d_i * 2^i = s$
+/// - $\sum^{\mathsf{NUM_BITS} - 1}_{i=0} d_i = \mathsf{NUM_BITS}$
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct ScalarDecomposition<F: Zeroize + PrimeFieldBits> {
+  scalar: F,
+  decomposition: Vec<u64>,
+}
+
+impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
+  /// Decompose a scalar.
+  pub fn new(scalar: F) -> Self {
+    /*
+      We need the sum of the coefficients to equal F::NUM_BITS. The scalar's bits will be less than
+      F::NUM_BITS. Accordingly, we need to increment the sum of the coefficients without
+      incrementing the scalar represented. We do this by finding the highest non-0 coefficient,
+      decrementing it, and increasing the immediately less significant coefficient by 2. This
+      increases the sum of the coefficients by 1 (-1+2=1).
+    */
+
+    let num_bits = u64::from(F::NUM_BITS);
+
+    // Obtain the bits of the scalar
+    let num_bits_usize = usize::try_from(num_bits).unwrap();
+    let mut decomposition = vec![0; num_bits_usize];
+    for (i, bit) in scalar.to_le_bits().into_iter().take(num_bits_usize).enumerate() {
+      let bit = u64::from(u8::from(bit));
+      decomposition[i] = bit;
+    }
+
+    // The following algorithm only works if the value of the scalar exceeds num_bits
+    // If it isn't, we increase it by the modulus such that it does exceed num_bits
+    {
+      let mut less_than_num_bits = Choice::from(0);
+      for i in 0 .. num_bits {
+        less_than_num_bits |= scalar.ct_eq(&F::from(i));
+      }
+      let mut decomposition_of_modulus = vec![0; num_bits_usize];
+      // Decompose negative one
+      for (i, bit) in (-F::ONE).to_le_bits().into_iter().take(num_bits_usize).enumerate() {
+        let bit = u64::from(u8::from(bit));
+        decomposition_of_modulus[i] = bit;
+      }
+      // Increment it by one
+      decomposition_of_modulus[0] += 1;
+
+      // Add the decomposition onto the decomposition of the modulus
+      for i in 0 .. num_bits_usize {
+        let new_decomposition = <_>::conditional_select(
+          &decomposition[i],
+          &(decomposition[i] + decomposition_of_modulus[i]),
+          less_than_num_bits,
+        );
+        decomposition[i] = new_decomposition;
+      }
+    }
+
+    // Calculcate the sum of the coefficients
+    let mut sum_of_coefficients: u64 = 0;
+    for decomposition in &decomposition {
+      sum_of_coefficients += *decomposition;
+    }
+
+    /*
+      Now, because we added a log2(k)-bit number to a k-bit number, we may have our sum of
+      coefficients be *too high*. We attempt to reduce the sum of the coefficients accordingly.
+
+      This algorithm is guaranteed to complete as expected. Take the sequence `222`. `222` becomes
+      `032` becomes `013`. Even if the next coefficient in the sequence is `2`, the third
+      coefficient will be reduced once and the next coefficient (`2`, increased to `3`) will only
+      be eligible for reduction once. This demonstrates, even for a worst case of log2(k) `2`s
+      followed by `1`s (as possible if the modulus is a Mersenne prime), the log2(k) `2`s can be
+      reduced as necessary so long as there is a single coefficient after (requiring the entire
+      sequence be at least of length log2(k) + 1). For a 2-bit number, log2(k) + 1 == 2, so this
+      holds for any odd prime field.
+
+      To fully type out the demonstration for the Mersenne prime 3, with scalar to encode 1 (the
+      highest value less than the number of bits):
+
+      10 - Little-endian bits of 1
+      21 - Little-endian bits of 1, plus the modulus
+      02 - After one reduction, where the sum of the coefficients does in fact equal 2 (the target)
+    */
+    {
+      let mut log2_num_bits = 0;
+      while (1 << log2_num_bits) < num_bits {
+        log2_num_bits += 1;
+      }
+
+      for _ in 0 .. log2_num_bits {
+        // If the sum of coefficients is the amount of bits, we're done
+        let mut done = sum_of_coefficients.ct_eq(&num_bits);
+
+        for i in 0 .. (num_bits_usize - 1) {
+          let should_act = (!done) & decomposition[i].ct_gt(&1);
+          // Subtract 2 from this coefficient
+          let amount_to_sub = <_>::conditional_select(&0, &2, should_act);
+          decomposition[i] -= amount_to_sub;
+          // Add 1 to the next coefficient
+          let amount_to_add = <_>::conditional_select(&0, &1, should_act);
+          decomposition[i + 1] += amount_to_add;
+
+          // Also update the sum of coefficients
+          sum_of_coefficients -= <_>::conditional_select(&0, &1, should_act);
+
+          // If we updated the coefficients this loop iter, we're done for this loop iter
+          done |= should_act;
+        }
+      }
+    }
+
+    for _ in 0 .. num_bits {
+      // If the sum of coefficients is the amount of bits, we're done
+      let mut done = sum_of_coefficients.ct_eq(&num_bits);
+
+      // Find the highest coefficient currently non-zero
+      for i in (1 .. decomposition.len()).rev() {
+        // If this is non-zero, we should decrement this coefficient if we haven't already
+        // decremented a coefficient this round
+        let is_non_zero = !(0.ct_eq(&decomposition[i]));
+        let should_act = (!done) & is_non_zero;
+
+        // Update this coefficient and the prior coefficient
+        let amount_to_sub = <_>::conditional_select(&0, &1, should_act);
+        decomposition[i] -= amount_to_sub;
+
+        let amount_to_add = <_>::conditional_select(&0, &2, should_act);
+        // i must be at least 1, so i - 1 will be at least 0 (meaning it's safe to index with)
+        decomposition[i - 1] += amount_to_add;
+
+        // Also update the sum of coefficients
+        sum_of_coefficients += <_>::conditional_select(&0, &1, should_act);
+
+        // If we updated the coefficients this loop iter, we're done for this loop iter
+        done |= should_act;
+      }
+    }
+    debug_assert!(bool::from(decomposition.iter().sum::<u64>().ct_eq(&num_bits)));
+
+    ScalarDecomposition { scalar, decomposition }
+  }
+
+  /// The decomposition of the scalar.
+  pub fn decomposition(&self) -> &[u64] {
+    &self.decomposition
+  }
+
+  /// A divisor to prove a scalar multiplication.
+  ///
+  /// The divisor will interpolate $d_i$ instances of $2^i \cdot G$ with $-(s \cdot G)$.
+  ///
+  /// This function executes in constant time with regards to the scalar.
+  ///
+  /// This function MAY panic if this scalar is zero.
+  pub fn scalar_mul_divisor<C: Zeroize + DivisorCurve<Scalar = F>>(
+    &self,
+    mut generator: C,
+  ) -> Poly<C::FieldElement> {
+    // The following for loop is constant time to the sum of `dlog`'s elements
+    let mut divisor_points =
+      Vec::with_capacity(usize::try_from(<C::Scalar as PrimeField>::NUM_BITS).unwrap());
+    divisor_points.push(-generator * self.scalar);
+    for coefficient in &self.decomposition {
+      let mut coefficient = *coefficient;
+      while coefficient != 0 {
+        coefficient -= 1;
+        divisor_points.push(generator);
+      }
+      generator = generator.double();
+    }
+
+    let res = new_divisor(&divisor_points).unwrap();
+    divisor_points.zeroize();
+    res
+  }
 }
 
 #[cfg(any(test, feature = "pasta"))]

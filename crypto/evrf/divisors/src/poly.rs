@@ -1,7 +1,7 @@
 use core::ops::{Add, Neg, Sub, Mul, Rem};
 
 use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConditionallySelectable};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use group::ff::PrimeField;
 
@@ -30,20 +30,20 @@ impl ConstantTimeGreater for CoefficientIndex {
   }
 }
 
-/// A structure representing a Polynomial with x**i, y**i, and y**i * x**j terms.
-#[derive(Clone, Debug, Zeroize)]
-pub struct Poly<F: From<u64> + PrimeField> {
-  /// c[i] * y ** (i + 1)
+/// A structure representing a Polynomial with x^i, y^i, and y^i * x^j terms.
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+pub struct Poly<F: From<u64> + Zeroize + PrimeField> {
+  /// c\[i] * y^(i + 1)
   pub y_coefficients: Vec<F>,
-  /// c[i][j] * y ** (i + 1) x ** (j + 1)
+  /// c\[i]\[j] * y^(i + 1) x^(j + 1)
   pub yx_coefficients: Vec<Vec<F>>,
-  /// c[i] * x ** (i + 1)
+  /// c\[i] * x^(i + 1)
   pub x_coefficients: Vec<F>,
-  /// Coefficient for x ** 0, y ** 0, and x ** 0 y ** 0 (the coefficient for 1)
+  /// Coefficient for x^0, y^0, and x^0 y^0 (the coefficient for 1)
   pub zero_coefficient: F,
 }
 
-impl<F: From<u64> + PrimeField> PartialEq for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> PartialEq for Poly<F> {
   fn eq(&self, b: &Poly<F>) -> bool {
     {
       let mutual_y_coefficients = self.y_coefficients.len().min(b.y_coefficients.len());
@@ -103,9 +103,9 @@ impl<F: From<u64> + PrimeField> PartialEq for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   /// A polynomial for zero.
-  pub fn zero() -> Self {
+  pub(crate) fn zero() -> Self {
     Poly {
       y_coefficients: vec![],
       yx_coefficients: vec![],
@@ -115,7 +115,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Add<&Self> for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Add<&Self> for Poly<F> {
   type Output = Self;
 
   fn add(mut self, other: &Self) -> Self {
@@ -153,7 +153,7 @@ impl<F: From<u64> + PrimeField> Add<&Self> for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Neg for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Neg for Poly<F> {
   type Output = Self;
 
   fn neg(mut self) -> Self {
@@ -174,7 +174,7 @@ impl<F: From<u64> + PrimeField> Neg for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Sub for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Sub for Poly<F> {
   type Output = Self;
 
   fn sub(self, other: Self) -> Self {
@@ -182,7 +182,7 @@ impl<F: From<u64> + PrimeField> Sub for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Mul<F> for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Mul<F> for Poly<F> {
   type Output = Self;
 
   fn mul(mut self, scalar: F) -> Self {
@@ -202,7 +202,7 @@ impl<F: From<u64> + PrimeField> Mul<F> for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   #[must_use]
   fn shift_by_x(mut self, power_of_x: usize) -> Self {
     if power_of_x == 0 {
@@ -256,14 +256,14 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     self.zero_coefficient = F::ZERO;
 
     // Move the x coefficients
-    self.yx_coefficients[power_of_y - 1] = self.x_coefficients;
+    std::mem::swap(&mut self.yx_coefficients[power_of_y - 1], &mut self.x_coefficients);
     self.x_coefficients = vec![];
 
     self
   }
 }
 
-impl<F: From<u64> + PrimeField> Mul<&Poly<F>> for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Mul<&Poly<F>> for Poly<F> {
   type Output = Self;
 
   fn mul(self, other: &Self) -> Self {
@@ -290,7 +290,7 @@ impl<F: From<u64> + PrimeField> Mul<&Poly<F>> for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   // The leading y coefficient and associated x coefficient.
   fn leading_coefficient(&self) -> (usize, usize) {
     if self.y_coefficients.len() > self.yx_coefficients.len() {
@@ -355,7 +355,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
   /// Perform multiplication mod `modulus`.
   #[must_use]
-  pub fn mul_mod(self, other: &Self, modulus: &Self) -> Self {
+  pub(crate) fn mul_mod(self, other: &Self, modulus: &Self) -> Self {
     (self * other) % modulus
   }
 
@@ -366,10 +366,13 @@ impl<F: From<u64> + PrimeField> Poly<F> {
   ///
   /// Panics upon division by a polynomial where all coefficients are zero.
   #[must_use]
-  pub fn div_rem(self, denominator: &Self) -> (Self, Self) {
+  pub(crate) fn div_rem(self, denominator: &Self) -> (Self, Self) {
     // These functions have undefined, unsafe behavior if this isn't a valid index
     #[allow(clippy::needless_lifetimes)]
-    fn ct_get<'a, F: From<u64> + PrimeField>(poly: &'a Poly<F>, coeff: CoefficientIndex) -> &'a F {
+    fn ct_get<'a, F: From<u64> + Zeroize + PrimeField>(
+      poly: &'a Poly<F>,
+      coeff: CoefficientIndex,
+    ) -> &'a F {
       let y_pow = isize::try_from(coeff.y_pow).unwrap();
       let x_pow = isize::try_from(coeff.x_pow).unwrap();
 
@@ -415,14 +418,14 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     }
 
     #[allow(clippy::needless_lifetimes)]
-    fn ct_get_mut<'a, F: From<u64> + PrimeField>(
+    fn ct_get_mut<'a, F: From<u64> + Zeroize + PrimeField>(
       poly: &'a mut Poly<F>,
       coeff: CoefficientIndex,
     ) -> &'a mut F {
       unsafe { (ct_get(poly, coeff) as *const F as *mut F).as_mut().unwrap() }
     }
 
-    fn structurally_eq<F: From<u64> + PrimeField>(a: &Poly<F>, b: &Poly<F>) -> bool {
+    fn structurally_eq<F: From<u64> + Zeroize + PrimeField>(a: &Poly<F>, b: &Poly<F>) -> bool {
       if a.y_coefficients.len() != b.y_coefficients.len() {
         return false;
       }
@@ -440,7 +443,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
       true
     }
 
-    fn conditional_select_poly<F: From<u64> + PrimeField>(
+    fn conditional_select_poly<F: From<u64> + Zeroize + PrimeField>(
       mut a: Poly<F>,
       b: &Poly<F>,
       choice: Choice,
@@ -655,7 +658,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Rem<&Self> for Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Rem<&Self> for Poly<F> {
   type Output = Self;
 
   fn rem(self, modulus: &Self) -> Self {
@@ -663,10 +666,10 @@ impl<F: From<u64> + PrimeField> Rem<&Self> for Poly<F> {
   }
 }
 
-impl<F: From<u64> + PrimeField> Poly<F> {
+impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   /// Evaluate this polynomial with the specified x/y values.
   ///
-  /// Panics on polynomials with terms whose powers exceed 2**64.
+  /// Panics on polynomials with terms whose powers exceed 2^64.
   #[must_use]
   pub fn eval(&self, x: F, y: F) -> F {
     let mut res = self.zero_coefficient;
@@ -693,7 +696,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     res
   }
 
-  /// Differentiate a polynomial, reduced by a modulus with a leading y term y**2 x**0, by x and y.
+  /// Differentiate a polynomial, reduced by a modulus with a leading y term y^2 x^0, by x and y.
   ///
   /// This function has undefined behavior if unreduced.
   #[must_use]
