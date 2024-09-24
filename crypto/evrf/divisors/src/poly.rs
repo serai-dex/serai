@@ -403,42 +403,10 @@ impl<F: From<u64> + PrimeField> Poly<F> {
       *coeff = F::ZERO;
     }
 
-    let denominator_leading_coefficient = CoefficientIndex {
-      y_pow: denominator_leading_coefficient.0.try_into().unwrap(),
-      x_pow: denominator_leading_coefficient.1.try_into().unwrap(),
-    };
-
     // Calculate the amount of iterations we need to perform
-    // This is the amount of coefficients for powers >= the denominator's leading coefficient
-    let mut iterations = 0;
-    for y_pow_sub_one in 0 .. self.y_coefficients.len() {
-      iterations = <_>::conditional_select(
-        &iterations,
-        &(iterations + 1),
-        denominator_leading_coefficient
-          .ct_gt(&CoefficientIndex { y_pow: u64::try_from(y_pow_sub_one + 1).unwrap(), x_pow: 0 }),
-      );
-    }
-    for x_pow_sub_one in 0 .. self.x_coefficients.len() {
-      iterations = <_>::conditional_select(
-        &iterations,
-        &(iterations + 1),
-        denominator_leading_coefficient
-          .ct_gt(&CoefficientIndex { y_pow: 0, x_pow: u64::try_from(x_pow_sub_one + 1).unwrap() }),
-      );
-    }
-    for (y_pow_sub_one, yx_coefficients) in self.yx_coefficients.iter().enumerate() {
-      for x_pow_sub_one in 0 .. yx_coefficients.len() {
-        iterations = <_>::conditional_select(
-          &iterations,
-          &(iterations + 1),
-          denominator_leading_coefficient.ct_gt(&CoefficientIndex {
-            y_pow: u64::try_from(y_pow_sub_one + 1).unwrap(),
-            x_pow: u64::try_from(x_pow_sub_one + 1).unwrap(),
-          }),
-        );
-      }
-    }
+    let iterations = self.y_coefficients.len() +
+      self.yx_coefficients.iter().map(|yx_coefficients| yx_coefficients.len()).sum::<usize>() +
+      self.x_coefficients.len();
 
     // Find the highest non-zero coefficient in the denominator
     // This is the coefficient which we actually perform division with
