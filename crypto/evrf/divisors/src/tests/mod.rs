@@ -152,7 +152,6 @@ fn test_same_point<C: DivisorCurve>() {
 }
 
 fn test_subset_sum_to_infinity<C: DivisorCurve>() {
-  dbg!("A");
   // Internally, a binary tree algorithm is used
   // This executes the first pass to end up with [0, 0] for further reductions
   {
@@ -183,7 +182,6 @@ fn test_subset_sum_to_infinity<C: DivisorCurve>() {
     points.push(-next);
     check_divisor(points);
   }
-  panic!();
 }
 
 #[test]
