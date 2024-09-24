@@ -20,7 +20,7 @@ impl ConditionallySelectable for CoefficientIndex {
 }
 impl ConstantTimeEq for CoefficientIndex {
   fn ct_eq(&self, other: &Self) -> Choice {
-    self.y_pow.ct_eq(&other.y_pow) & self.y_pow.ct_eq(&other.y_pow)
+    self.y_pow.ct_eq(&other.y_pow) & self.x_pow.ct_eq(&other.x_pow)
   }
 }
 impl ConstantTimeGreater for CoefficientIndex {
@@ -200,6 +200,7 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     self.x_coefficients = vec![];
 
     // Tidy the yx coefficients, which may have empty vectors if x_coefficients was empty
+    // TODO: Does this break a constant-time expectation?
     while self.yx_coefficients.last().map(|coeffs| coeffs.is_empty()) == Some(true) {
       self.yx_coefficients.pop();
     }
