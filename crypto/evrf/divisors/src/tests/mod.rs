@@ -6,6 +6,8 @@ use pasta_curves::{Ep, Eq};
 
 use crate::{DivisorCurve, Poly, new_divisor};
 
+mod poly;
+
 // Equation 4 in the security proofs
 fn check_divisor<C: DivisorCurve>(points: Vec<C>) {
   // Create the divisor
@@ -184,16 +186,16 @@ fn test_subset_sum_to_infinity<C: DivisorCurve>() {
 
 #[test]
 fn test_divisor_pallas() {
-  test_divisor::<Ep>();
   test_same_point::<Ep>();
   test_subset_sum_to_infinity::<Ep>();
+  test_divisor::<Ep>();
 }
 
 #[test]
 fn test_divisor_vesta() {
-  test_divisor::<Eq>();
   test_same_point::<Eq>();
   test_subset_sum_to_infinity::<Eq>();
+  test_divisor::<Eq>();
 }
 
 #[test]
@@ -229,7 +231,7 @@ fn test_divisor_ed25519() {
     }
   }
 
-  test_divisor::<EdwardsPoint>();
   test_same_point::<EdwardsPoint>();
   test_subset_sum_to_infinity::<EdwardsPoint>();
+  test_divisor::<EdwardsPoint>();
 }

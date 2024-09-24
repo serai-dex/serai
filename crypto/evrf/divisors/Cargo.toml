@@ -14,9 +14,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rand_core = { version = "0.6", default-features = false }
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
 
-group = "0.13"
+subtle = { version = "2", default-features = false, features = ["std"] }
+ff = { version = "0.13", default-features = false, features = ["std", "bits"] }
+group = { version = "0.13", default-features = false }
 
 hex = { version = "0.4", optional = true }
 dalek-ff-group = { path = "../../dalek-ff-group", features = ["std"], optional = true }

@@ -1,6 +1,5 @@
 use core::{marker::PhantomData, ops::Deref, fmt};
 
-use subtle::*;
 use zeroize::{Zeroize, Zeroizing};
 
 use rand_core::{RngCore, CryptoRng, SeedableRng};
@@ -10,10 +9,7 @@ use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
 
 use blake2::{Digest, Blake2s256};
 use ciphersuite::{
-  group::{
-    ff::{Field, PrimeField, PrimeFieldBits},
-    Group, GroupEncoding,
-  },
+  group::{ff::Field, Group, GroupEncoding},
   Ciphersuite,
 };
 
@@ -24,7 +20,7 @@ use generalized_bulletproofs::{
 };
 use generalized_bulletproofs_circuit_abstraction::*;
 
-use ec_divisors::{DivisorCurve, new_divisor};
+use ec_divisors::{DivisorCurve, ScalarDecomposition};
 use generalized_bulletproofs_ec_gadgets::*;
 
 /// A pair of curves to perform the eVRF with.
@@ -309,147 +305,6 @@ impl<C: EvrfCurve> Evrf<C> {
     debug_assert!(challenged_generators.next().is_none());
   }
 
-  /// Convert a scalar to a sequence of coefficients for the polynomial 2**i, where the sum of the
-  /// coefficients is F::NUM_BITS.
-  ///
-  /// Despite the name, the returned coefficients are not guaranteed to be bits (0 or 1).
-  ///
-  /// This scalar will presumably be used in a discrete log proof. That requires calculating a
-  /// divisor which is variable time to the amount of points interpolated. Since the amount of
-  /// points interpolated is equal to the sum of the coefficients in the polynomial, we need all
-  /// scalars to have a constant sum of their coefficients (instead of one variable to its bits).
-  ///
-  /// We achieve this by finding the highest non-0 coefficient, decrementing it, and increasing the
-  /// immediately less significant coefficient by 2. This increases the sum of the coefficients by
-  /// 1 (-1+2=1).
-  fn scalar_to_bits(scalar: &<C::EmbeddedCurve as Ciphersuite>::F) -> Vec<u64> {
-    let num_bits = u64::from(<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F::NUM_BITS);
-
-    // Obtain the bits of the private key
-    let num_bits_usize = usize::try_from(num_bits).unwrap();
-    let mut decomposition = vec![0; num_bits_usize];
-    for (i, bit) in scalar.to_le_bits().into_iter().take(num_bits_usize).enumerate() {
-      let bit = u64::from(u8::from(bit));
-      decomposition[i] = bit;
-    }
-
-    // The following algorithm only works if the value of the scalar exceeds num_bits
-    // If it isn't, we increase it by the modulus such that it does exceed num_bits
-    {
-      let mut less_than_num_bits = Choice::from(0);
-      for i in 0 .. num_bits {
-        less_than_num_bits |= scalar.ct_eq(&<C::EmbeddedCurve as Ciphersuite>::F::from(i));
-      }
-      let mut decomposition_of_modulus = vec![0; num_bits_usize];
-      // Decompose negative one
-      for (i, bit) in (-<C::EmbeddedCurve as Ciphersuite>::F::ONE)
-        .to_le_bits()
-        .into_iter()
-        .take(num_bits_usize)
-        .enumerate()
-      {
-        let bit = u64::from(u8::from(bit));
-        decomposition_of_modulus[i] = bit;
-      }
-      // Increment it by one
-      decomposition_of_modulus[0] += 1;
-
-      // Add the decomposition onto the decomposition of the modulus
-      for i in 0 .. num_bits_usize {
-        let new_decomposition = <_>::conditional_select(
-          &decomposition[i],
-          &(decomposition[i] + decomposition_of_modulus[i]),
-          less_than_num_bits,
-        );
-        decomposition[i] = new_decomposition;
-      }
-    }
-
-    // Calculcate the sum of the coefficients
-    let mut sum_of_coefficients: u64 = 0;
-    for decomposition in &decomposition {
-      sum_of_coefficients += *decomposition;
-    }
-
-    /*
-      Now, because we added a log2(k)-bit number to a k-bit number, we may have our sum of
-      coefficients be *too high*. We attempt to reduce the sum of the coefficients accordingly.
-
-      This algorithm is guaranteed to complete as expected. Take the sequence `222`. `222` becomes
-      `032` becomes `013`. Even if the next coefficient in the sequence is `2`, the third
-      coefficient will be reduced once and the next coefficient (`2`, increased to `3`) will only
-      be eligible for reduction once. This demonstrates, even for a worst case of log2(k) `2`s
-      followed by `1`s (as possible if the modulus is a Mersenne prime), the log2(k) `2`s can be
-      reduced as necessary so long as there is a single coefficient after (requiring the entire
-      sequence be at least of length log2(k) + 1). For a 2-bit number, log2(k) + 1 == 2, so this
-      holds for any odd prime field.
-
-      To fully type out the demonstration for the Mersenne prime 3, with scalar to encode 1 (the
-      highest value less than the number of bits):
-
-      10 - Little-endian bits of 1
-      21 - Little-endian bits of 1, plus the modulus
-      02 - After one reduction, where the sum of the coefficients does in fact equal 2 (the target)
-    */
-    {
-      let mut log2_num_bits = 0;
-      while (1 << log2_num_bits) < num_bits {
-        log2_num_bits += 1;
-      }
-
-      for _ in 0 .. log2_num_bits {
-        // If the sum of coefficients is the amount of bits, we're done
-        let mut done = sum_of_coefficients.ct_eq(&num_bits);
-
-        for i in 0 .. (num_bits_usize - 1) {
-          let should_act = (!done) & decomposition[i].ct_gt(&1);
-          // Subtract 2 from this coefficient
-          let amount_to_sub = <_>::conditional_select(&0, &2, should_act);
-          decomposition[i] -= amount_to_sub;
-          // Add 1 to the next coefficient
-          let amount_to_add = <_>::conditional_select(&0, &1, should_act);
-          decomposition[i + 1] += amount_to_add;
-
-          // Also update the sum of coefficients
-          sum_of_coefficients -= <_>::conditional_select(&0, &1, should_act);
-
-          // If we updated the coefficients this loop iter, we're done for this loop iter
-          done |= should_act;
-        }
-      }
-    }
-
-    for _ in 0 .. num_bits {
-      // If the sum of coefficients is the amount of bits, we're done
-      let mut done = sum_of_coefficients.ct_eq(&num_bits);
-
-      // Find the highest coefficient currently non-zero
-      for i in (1 .. decomposition.len()).rev() {
-        // If this is non-zero, we should decrement this coefficient if we haven't already
-        // decremented a coefficient this round
-        let is_non_zero = !(0.ct_eq(&decomposition[i]));
-        let should_act = (!done) & is_non_zero;
-
-        // Update this coefficient and the prior coefficient
-        let amount_to_sub = <_>::conditional_select(&0, &1, should_act);
-        decomposition[i] -= amount_to_sub;
-
-        let amount_to_add = <_>::conditional_select(&0, &2, should_act);
-        // i must be at least 1, so i - 1 will be at least 0 (meaning it's safe to index with)
-        decomposition[i - 1] += amount_to_add;
-
-        // Also update the sum of coefficients
-        sum_of_coefficients += <_>::conditional_select(&0, &1, should_act);
-
-        // If we updated the coefficients this loop iter, we're done for this loop iter
-        done |= should_act;
-      }
-    }
-    debug_assert!(bool::from(decomposition.iter().sum::<u64>().ct_eq(&num_bits)));
-
-    decomposition
-  }
-
   /// Prove a point on an elliptic curve had its discrete logarithm generated via an eVRF.
   pub(crate) fn prove(
     rng: &mut (impl RngCore + CryptoRng),
@@ -471,11 +326,9 @@ impl<C: EvrfCurve> Evrf<C> {
 
     // A function to calculate a divisor and push it onto the tape
     // This defines a vec, divisor_points, outside of the fn to reuse its allocation
-    let mut divisor_points =
-      Vec::with_capacity((<C::EmbeddedCurve as Ciphersuite>::F::NUM_BITS as usize) + 1);
     let mut divisor =
       |vector_commitment_tape: &mut Vec<_>,
-       dlog: &[u64],
+       dlog: &ScalarDecomposition<<<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::F>,
        push_generator: bool,
        generator: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G,
        dh: <<C as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G| {
@@ -484,24 +337,7 @@ impl<C: EvrfCurve> Evrf<C> {
           generator_tables.push(GeneratorTable::new(&curve_spec, x, y));
         }
 
-        {
-          let mut generator = generator;
-          for coefficient in dlog {
-            let mut coefficient = *coefficient;
-            while coefficient != 0 {
-              coefficient -= 1;
-              divisor_points.push(generator);
-            }
-            generator = generator.double();
-          }
-          debug_assert_eq!(
-            dlog.iter().sum::<u64>(),
-            u64::from(<C::EmbeddedCurve as Ciphersuite>::F::NUM_BITS)
-          );
-        }
-        divisor_points.push(-dh);
-        let mut divisor = new_divisor(&divisor_points).unwrap().normalize_x_coefficient();
-        divisor_points.zeroize();
+        let mut divisor = dlog.scalar_mul_divisor(generator).normalize_x_coefficient();
 
         vector_commitment_tape.push(divisor.zero_coefficient);
 
@@ -540,11 +376,12 @@ impl<C: EvrfCurve> Evrf<C> {
     let evrf_public_key;
     let mut actual_coefficients = Vec::with_capacity(coefficients);
     {
-      let mut dlog = Self::scalar_to_bits(evrf_private_key);
+      let dlog =
+        ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(**evrf_private_key);
       let points = Self::transcript_to_points(transcript, coefficients);
 
       // Start by pushing the discrete logarithm onto the tape
-      for coefficient in &dlog {
+      for coefficient in dlog.decomposition() {
         vector_commitment_tape.push(<_>::from(*coefficient));
       }
 
@@ -573,8 +410,6 @@ impl<C: EvrfCurve> Evrf<C> {
         actual_coefficients.push(res);
       }
       debug_assert_eq!(actual_coefficients.len(), coefficients);
-
-      dlog.zeroize();
     }
 
     // Now do the ECDHs for the encryption
@@ -595,14 +430,15 @@ impl<C: EvrfCurve> Evrf<C> {
             break;
           }
         }
-        let mut dlog = Self::scalar_to_bits(&ecdh_private_key);
+        let dlog =
+          ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(ecdh_private_key);
         let ecdh_commitment = <C::EmbeddedCurve as Ciphersuite>::generator() * ecdh_private_key;
         ecdh_commitments.push(ecdh_commitment);
         ecdh_commitments_xy.last_mut().unwrap()[j] =
           <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_commitment).unwrap();
 
         // Start by pushing the discrete logarithm onto the tape
-        for coefficient in &dlog {
+        for coefficient in dlog.decomposition() {
           vector_commitment_tape.push(<_>::from(*coefficient));
         }
 
@@ -625,7 +461,6 @@ impl<C: EvrfCurve> Evrf<C> {
         *res += dh_x;
 
         ecdh_private_key.zeroize();
-        dlog.zeroize();
       }
       encryption_masks.push(res);
     }

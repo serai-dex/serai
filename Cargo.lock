@@ -2196,7 +2196,6 @@ dependencies = [
  "schnorr-signatures",
  "secq256k1",
  "std-shims",
- "subtle",
  "thiserror",
  "zeroize",
 ]
@@ -2293,10 +2292,12 @@ name = "ec-divisors"
 version = "0.1.0"
 dependencies = [
  "dalek-ff-group",
+ "ff",
  "group",
  "hex",
  "pasta_curves",
  "rand_core",
+ "subtle",
  "zeroize",
 ]
 
