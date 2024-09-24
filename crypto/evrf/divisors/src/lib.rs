@@ -3,6 +3,8 @@
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
 
+use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
+
 use group::{
   ff::{Field, PrimeField},
   Group,
@@ -15,9 +17,9 @@ pub use poly::*;
 mod tests;
 
 /// A curve usable with this library.
-pub trait DivisorCurve: Group {
+pub trait DivisorCurve: Group + ConstantTimeEq + ConditionallySelectable {
   /// An element of the field this curve is defined over.
-  type FieldElement: PrimeField;
+  type FieldElement: PrimeField + ConditionallySelectable;
 
   /// The A in the curve equation y^2 = x^3 + A x + B.
   fn a() -> Self::FieldElement;
@@ -72,46 +74,89 @@ pub(crate) fn slope_intercept<C: DivisorCurve>(a: C, b: C) -> (C::FieldElement, 
 }
 
 // The line interpolating two points.
-fn line<C: DivisorCurve>(a: C, mut b: C) -> Poly<C::FieldElement> {
-  // If they're both the point at infinity, we simply set the line to one
-  if bool::from(a.is_identity() & b.is_identity()) {
-    return Poly {
-      y_coefficients: vec![],
-      yx_coefficients: vec![],
-      x_coefficients: vec![],
-      zero_coefficient: C::FieldElement::ONE,
-    };
+fn line<C: DivisorCurve>(a: C, b: C) -> Poly<C::FieldElement> {
+  #[derive(Clone, Copy)]
+  struct LinesRes<F: ConditionallySelectable> {
+    y_coefficient: F,
+    x_coefficient: F,
+    zero_coefficient: F,
   }
+  impl<F: ConditionallySelectable> ConditionallySelectable for LinesRes<F> {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+      Self {
+        y_coefficient: <_>::conditional_select(&a.y_coefficient, &b.y_coefficient, choice),
+        x_coefficient: <_>::conditional_select(&a.x_coefficient, &b.x_coefficient, choice),
+        zero_coefficient: <_>::conditional_select(&a.zero_coefficient, &b.zero_coefficient, choice),
+      }
+    }
+  }
+
+  let a_is_identity = a.is_identity();
+  let b_is_identity = b.is_identity();
+
+  // If they're both the point at infinity, we simply set the line to one
+  let both_are_identity = a_is_identity & b_is_identity;
+  let if_both_are_identity = LinesRes {
+    y_coefficient: C::FieldElement::ZERO,
+    x_coefficient: C::FieldElement::ZERO,
+    zero_coefficient: C::FieldElement::ONE,
+  };
 
   // If either point is the point at infinity, or these are additive inverses, the line is
   // `1 * x - x`. The first `x` is a term in the polynomial, the `x` is the `x` coordinate of these
   // points (of which there is one, as the second point is either at infinity or has a matching `x`
   // coordinate).
-  if bool::from(a.is_identity() | b.is_identity()) || (a == -b) {
-    let (x, _) = C::to_xy(if !bool::from(a.is_identity()) { a } else { b }).unwrap();
-    return Poly {
-      y_coefficients: vec![],
-      yx_coefficients: vec![],
-      x_coefficients: vec![C::FieldElement::ONE],
+  let one_is_identity = a_is_identity | b_is_identity;
+  let additive_inverses = a.ct_eq(&-b);
+  let one_is_identity_or_additive_inverses = one_is_identity | additive_inverses;
+  let if_one_is_identity_or_additive_inverses = {
+    // If both are identity, set `a` to the generator so we can safely evaluate the following
+    // (which we won't select at the end of this function)
+    let a = <_>::conditional_select(&a, &C::generator(), both_are_identity);
+    // If `a` is identity, this selects `b`. If `a` isn't identity, this selects `a`
+    let non_identity = <_>::conditional_select(&a, &b, a.is_identity());
+    let (x, _) = C::to_xy(non_identity).unwrap();
+    LinesRes {
+      y_coefficient: C::FieldElement::ZERO,
+      x_coefficient: C::FieldElement::ONE,
       zero_coefficient: -x,
-    };
-  }
+    }
+  };
+
+  // The following calculation assumes neither point is the point at infinity
+  // If either are, we use a prior result
+  // To ensure we can calculcate a result here, set any points at infinity to the generator
+  let a = <_>::conditional_select(&a, &C::generator(), a_is_identity);
+  let b = <_>::conditional_select(&b, &C::generator(), b_is_identity);
+  // It also assumes a, b aren't additive inverses which is also covered by a prior result
+  let b = <_>::conditional_select(&b, &a.double(), additive_inverses);
 
   // If the points are equal, we use the line interpolating the sum of these points with the point
   // at infinity
-  if a == b {
-    b = -a.double();
-  }
+  let b = <_>::conditional_select(&b, &-a.double(), a.ct_eq(&b));
 
   let (slope, intercept) = slope_intercept::<C>(a, b);
 
   // Section 4 of the proofs explicitly state the line `L = y - lambda * x - mu`
   // y - (slope * x) - intercept
-  Poly {
-    y_coefficients: vec![C::FieldElement::ONE],
-    yx_coefficients: vec![],
-    x_coefficients: vec![-slope],
+  let mut res = LinesRes {
+    y_coefficient: C::FieldElement::ONE,
+    x_coefficient: -slope,
     zero_coefficient: -intercept,
+  };
+
+  res = <_>::conditional_select(&res, &if_both_are_identity, both_are_identity);
+  res = <_>::conditional_select(
+    &res,
+    &if_one_is_identity_or_additive_inverses,
+    one_is_identity_or_additive_inverses,
+  );
+
+  Poly {
+    y_coefficients: vec![res.y_coefficient],
+    yx_coefficients: vec![],
+    x_coefficients: vec![res.x_coefficient],
+    zero_coefficient: res.zero_coefficient,
   }
 }
 
@@ -121,14 +166,22 @@ fn line<C: DivisorCurve>(a: C, mut b: C) -> Poly<C::FieldElement> {
 ///   - No points were passed in
 ///   - The points don't sum to the point at infinity
 ///   - A passed in point was the point at infinity
+///
+/// If the arguments were valid, this function executes in an amount of time constant to the amount
+/// of points.
 #[allow(clippy::new_ret_no_self)]
 pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement>> {
-  // A single point is either the point at infinity, or this doesn't sum to the point at infinity
-  // Both cause us to return None
-  if points.len() < 2 {
-    None?;
+  // No points were passed in, this is the point at infinity, or the single point isn't infinity
+  // and accordingly doesn't sum to infinity. All three cause us to return None
+  // Checks a bit other than the first bit is set, meaning this is >= 2
+  let mut invalid_args = (points.len() & (!1)).ct_eq(&0);
+  // The points don't sum to the point at infinity
+  invalid_args |= !points.iter().sum::<C>().is_identity();
+  // A point was the point at identity
+  for point in points {
+    invalid_args |= point.is_identity();
   }
-  if points.iter().sum::<C>() != C::identity() {
+  if bool::from(invalid_args) {
     None?;
   }
 
@@ -136,16 +189,11 @@ pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement
   let mut divs = vec![];
   let mut iter = points.iter().copied();
   while let Some(a) = iter.next() {
-    if a == C::identity() {
-      None?;
-    }
-
     let b = iter.next();
-    if b == Some(C::identity()) {
-      None?;
-    }
 
     // Draw the line between those points
+    // These unwraps are branching on the length of the iterator, not violating the constant-time
+    // priorites desired
     divs.push((a + b.unwrap_or(C::identity()), line::<C>(a, b.unwrap_or(-a))));
   }
 
@@ -163,10 +211,13 @@ pub fn new_divisor<C: DivisorCurve>(points: &[C]) -> Option<Poly<C::FieldElement
       let (b, b_div) = divs.pop().unwrap();
 
       // Merge the two divisors
-      let numerator = a_div.mul_mod(b_div, &modulus).mul_mod(line::<C>(a, b), &modulus);
-      let denominator = line::<C>(a, -a).mul_mod(line::<C>(b, -b), &modulus);
-      let (q, r) = numerator.div_rem(&denominator);
-      assert_eq!(r, Poly::zero());
+      let numerator = a_div.mul_mod(&b_div, &modulus).mul_mod(&line::<C>(a, b), &modulus);
+      let denominator = line::<C>(a, -a).mul_mod(&line::<C>(b, -b), &modulus);
+      let (q, r) = numerator.clone().div_rem(&denominator);
+      // Checks all coefficients within the remainder are 0
+      // This is presumed imperfect yet is expected as a sanity check, not a strict soundness bound
+      debug_assert_eq!(r.eval(C::FieldElement::ONE, C::FieldElement::ONE), C::FieldElement::ZERO);
+      debug_assert_eq!(r.eval(C::FieldElement::ONE, -C::FieldElement::ONE), C::FieldElement::ZERO);
 
       next_divs.push((a + b, q));
     }

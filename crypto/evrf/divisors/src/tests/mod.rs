@@ -6,6 +6,8 @@ use pasta_curves::{Ep, Eq};
 
 use crate::{DivisorCurve, Poly, new_divisor};
 
+mod poly;
+
 // Equation 4 in the security proofs
 fn check_divisor<C: DivisorCurve>(points: Vec<C>) {
   // Create the divisor
@@ -150,6 +152,7 @@ fn test_same_point<C: DivisorCurve>() {
 }
 
 fn test_subset_sum_to_infinity<C: DivisorCurve>() {
+  dbg!("A");
   // Internally, a binary tree algorithm is used
   // This executes the first pass to end up with [0, 0] for further reductions
   {
@@ -180,20 +183,21 @@ fn test_subset_sum_to_infinity<C: DivisorCurve>() {
     points.push(-next);
     check_divisor(points);
   }
+  panic!();
 }
 
 #[test]
 fn test_divisor_pallas() {
-  test_divisor::<Ep>();
   test_same_point::<Ep>();
   test_subset_sum_to_infinity::<Ep>();
+  test_divisor::<Ep>();
 }
 
 #[test]
 fn test_divisor_vesta() {
-  test_divisor::<Eq>();
   test_same_point::<Eq>();
   test_subset_sum_to_infinity::<Eq>();
+  test_divisor::<Eq>();
 }
 
 #[test]
@@ -229,7 +233,7 @@ fn test_divisor_ed25519() {
     }
   }
 
-  test_divisor::<EdwardsPoint>();
   test_same_point::<EdwardsPoint>();
   test_subset_sum_to_infinity::<EdwardsPoint>();
+  test_divisor::<EdwardsPoint>();
 }

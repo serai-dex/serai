@@ -2297,6 +2297,7 @@ dependencies = [
  "hex",
  "pasta_curves",
  "rand_core",
+ "subtle",
  "zeroize",
 ]
 

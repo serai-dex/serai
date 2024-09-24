@@ -1,3 +1,5 @@
+use rand_core::OsRng;
+
 use group::ff::Field;
 use pasta_curves::Ep;
 
@@ -25,7 +27,7 @@ fn test_poly() {
 
     let mut squared = Poly::zero();
     squared.y_coefficients = vec![zero, zero, zero, one];
-    assert_eq!(poly.clone() * poly.clone(), squared);
+    assert_eq!(poly.clone() * &poly, squared);
   }
 
   {
@@ -37,18 +39,18 @@ fn test_poly() {
 
     let mut res = Poly::zero();
     res.zero_coefficient = F::from(6u64);
-    assert_eq!(a.clone() * b.clone(), res);
+    assert_eq!(a.clone() * &b, res);
 
     b.y_coefficients = vec![F::from(4u64)];
     res.y_coefficients = vec![F::from(8u64)];
-    assert_eq!(a.clone() * b.clone(), res);
-    assert_eq!(b.clone() * a.clone(), res);
+    assert_eq!(a.clone() * &b, res);
+    assert_eq!(b.clone() * &a, res);
 
     a.x_coefficients = vec![F::from(5u64)];
     res.x_coefficients = vec![F::from(15u64)];
     res.yx_coefficients = vec![vec![F::from(20u64)]];
-    assert_eq!(a.clone() * b.clone(), res);
-    assert_eq!(b * a.clone(), res);
+    assert_eq!(a.clone() * &b, res);
+    assert_eq!(b * &a, res);
 
     // res is now 20xy + 8*y + 15*x + 6
     // res ** 2 =
@@ -60,7 +62,7 @@ fn test_poly() {
       vec![vec![F::from(480u64), F::from(600u64)], vec![F::from(320u64), F::from(400u64)]];
     squared.x_coefficients = vec![F::from(180u64), F::from(225u64)];
     squared.zero_coefficient = F::from(36u64);
-    assert_eq!(res.clone() * res, squared);
+    assert_eq!(res.clone() * &res, squared);
   }
 }
 
@@ -79,7 +81,7 @@ fn test_differentation() {
     diff_x,
     Poly {
       y_coefficients: vec![input.yx_coefficients[0][0]],
-      yx_coefficients: vec![],
+      yx_coefficients: vec![vec![]],
       x_coefficients: vec![
         F::from(2) * input.x_coefficients[1],
         F::from(3) * input.x_coefficients[2]
