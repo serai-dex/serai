@@ -1,7 +1,6 @@
 use core::ops::{Add, Neg, Sub, Mul, Rem};
 
-#[rustfmt::skip]
-use subtle::{Choice, ConstantTimeEq, ConstantTimeLess, ConstantTimeGreater, ConditionallySelectable};
+use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConditionallySelectable};
 use zeroize::Zeroize;
 
 use group::ff::PrimeField;
@@ -321,22 +320,22 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
       unsafe {
         let zero_coefficient = (&poly.zero_coefficient) as *const F;
-        let y_coefficient = poly.y_coefficients[..].as_ptr().offset(y_pow);
+        let y_coefficient = poly.y_coefficients[..].as_ptr().offset(y_pow - 1);
 
-        let yx_coefficients: *const Vec<F> = poly.yx_coefficients[..].as_ptr().offset(y_pow);
+        let yx_coefficients: *const Vec<F> = poly.yx_coefficients[..].as_ptr().offset(y_pow - 1);
         // We now need to map this to the specific coefficient, yet this may not be a valid
         // reference
         let if_yx_is_invalid = vec![F::ZERO];
         let if_yx_is_invalid = (&if_yx_is_invalid) as *const Vec<F>;
         let valid_yx_ref = <_>::conditional_select(
-          &((yx_coefficients as usize) as u64),
-          &((if_yx_is_invalid as usize) as u64),
-          (poly.yx_coefficients.len() as u64).ct_lt(&(y_pow as u64)),
+          &(if_yx_is_invalid as u64),
+          &(yx_coefficients as u64),
+          (poly.yx_coefficients.len() as u64).ct_gt(&(y_pow as u64)) & (!y_pow.ct_eq(&0)),
         );
         let yx_coefficient =
-          (valid_yx_ref as *const Vec<F>).as_ref().unwrap()[..].as_ptr().offset(x_pow);
+          (valid_yx_ref as *const Vec<F>).as_ref().unwrap()[..].as_ptr().offset(x_pow - 1);
 
-        let x_coefficient = poly.x_coefficients[..].as_ptr().offset(x_pow);
+        let x_coefficient = poly.x_coefficients[..].as_ptr().offset(x_pow - 1);
 
         let mut res = zero_coefficient as u64;
         res = <_>::conditional_select(
@@ -486,8 +485,8 @@ impl<F: From<u64> + PrimeField> Poly<F> {
       // to the size of the polynomial cloned
       quotient = unsafe {
         (<_>::conditional_select(
-          &(&quotient as *const Poly<F> as usize as u64),
-          &(&quotient_if_meaningful as *const Poly<F> as usize as u64),
+          &(&quotient as *const Poly<F> as u64),
+          &(&quotient_if_meaningful as *const Poly<F> as u64),
           meaningful_iteration,
         ) as usize as *const Poly<F>)
           .as_ref()
@@ -503,8 +502,8 @@ impl<F: From<u64> + PrimeField> Poly<F> {
 
       remainder = unsafe {
         (<_>::conditional_select(
-          &(&remainder as *const Poly<F> as usize as u64),
-          &(&remainder_if_meaningful as *const Poly<F> as usize as u64),
+          &(&remainder as *const Poly<F> as u64),
+          &(&remainder_if_meaningful as *const Poly<F> as u64),
           meaningful_iteration,
         ) as usize as *const Poly<F>)
           .as_ref()
@@ -534,8 +533,8 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     // The two potential quotients/remainders are each the same size as their other
     let quotient = unsafe {
       (<_>::conditional_select(
-        &(&quotient as *const Poly<F> as usize as u64),
-        &(&if_y_0_x_0_quotient as *const Poly<F> as usize as u64),
+        &(&quotient as *const Poly<F> as u64),
+        &(&if_y_0_x_0_quotient as *const Poly<F> as u64),
         denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
       ) as usize as *const Poly<F>)
         .as_ref()
@@ -544,8 +543,8 @@ impl<F: From<u64> + PrimeField> Poly<F> {
     };
     let remainder = unsafe {
       (<_>::conditional_select(
-        &(&remainder as *const Poly<F> as usize as u64),
-        &(&if_y_0_x_0_remainder as *const Poly<F> as usize as u64),
+        &(&remainder as *const Poly<F> as u64),
+        &(&if_y_0_x_0_remainder as *const Poly<F> as u64),
         denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
       ) as usize as *const Poly<F>)
         .as_ref()
