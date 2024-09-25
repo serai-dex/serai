@@ -369,21 +369,35 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
   #[must_use]
   pub(crate) fn div_rem(self, denominator: &Self) -> (Self, Self) {
     // These functions have undefined behavior if this isn't a valid index for this poly
-    fn ct_get<F: From<u64> + Zeroize + PrimeField>(
-      poly: &Poly<F>,
-      index: CoefficientIndex,
-    ) -> F {
+    fn ct_get<F: From<u64> + Zeroize + PrimeField>(poly: &Poly<F>, index: CoefficientIndex) -> F {
       let mut res = poly.zero_coefficient;
       for (y_pow_sub_one, coeff) in poly.y_coefficients.iter().enumerate() {
-        res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }));
+        res = <_>::conditional_select(
+          &res,
+          coeff,
+          index
+            .ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }),
+        );
       }
       for (y_pow_sub_one, coeffs) in poly.yx_coefficients.iter().enumerate() {
         for (x_pow_sub_one, coeff) in coeffs.iter().enumerate() {
-          res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+          res = <_>::conditional_select(
+            &res,
+            coeff,
+            index.ct_eq(&CoefficientIndex {
+              y_pow: (y_pow_sub_one + 1).try_into().unwrap(),
+              x_pow: (x_pow_sub_one + 1).try_into().unwrap(),
+            }),
+          );
         }
       }
       for (x_pow_sub_one, coeff) in poly.x_coefficients.iter().enumerate() {
-        res = <_>::conditional_select(&res, coeff, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+        res = <_>::conditional_select(
+          &res,
+          coeff,
+          index
+            .ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }),
+        );
       }
       res
     }
@@ -394,17 +408,38 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
       value: F,
     ) {
       for (y_pow_sub_one, coeff) in poly.y_coefficients.iter_mut().enumerate() {
-        *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }));
+        *coeff = <_>::conditional_select(
+          coeff,
+          &value,
+          index
+            .ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: 0 }),
+        );
       }
       for (y_pow_sub_one, coeffs) in poly.yx_coefficients.iter_mut().enumerate() {
         for (x_pow_sub_one, coeff) in coeffs.iter_mut().enumerate() {
-          *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: (y_pow_sub_one + 1).try_into().unwrap(), x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+          *coeff = <_>::conditional_select(
+            coeff,
+            &value,
+            index.ct_eq(&CoefficientIndex {
+              y_pow: (y_pow_sub_one + 1).try_into().unwrap(),
+              x_pow: (x_pow_sub_one + 1).try_into().unwrap(),
+            }),
+          );
         }
       }
       for (x_pow_sub_one, coeff) in poly.x_coefficients.iter_mut().enumerate() {
-        *coeff = <_>::conditional_select(coeff, &value, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }));
+        *coeff = <_>::conditional_select(
+          coeff,
+          &value,
+          index
+            .ct_eq(&CoefficientIndex { y_pow: 0, x_pow: (x_pow_sub_one + 1).try_into().unwrap() }),
+        );
       }
-      poly.zero_coefficient = <_>::conditional_select(&poly.zero_coefficient, &value, index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }));
+      poly.zero_coefficient = <_>::conditional_select(
+        &poly.zero_coefficient,
+        &value,
+        index.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
+      );
     }
 
     fn conditional_select_poly<F: From<u64> + Zeroize + PrimeField>(
@@ -446,7 +481,8 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
       for (a, b) in a.x_coefficients.iter().zip(&b.x_coefficients) {
         res.x_coefficients.push(<_>::conditional_select(a, b, choice));
       }
-      res.zero_coefficient = <_>::conditional_select(&a.zero_coefficient, &b.zero_coefficient, choice);
+      res.zero_coefficient =
+        <_>::conditional_select(&a.zero_coefficient, &b.zero_coefficient, choice);
 
       res
     }
@@ -522,8 +558,7 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
 
       // 3) Remove what we've divided out from self
       let remainder_if_meaningful = remainder.clone() - (quotient_term * denominator);
-      remainder =
-        conditional_select_poly(remainder, remainder_if_meaningful, meaningful_iteration);
+      remainder = conditional_select_poly(remainder, remainder_if_meaningful, meaningful_iteration);
     }
 
     quotient = conditional_select_poly(
