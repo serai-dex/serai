@@ -10,9 +10,23 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
+use sp_std::{vec, vec::Vec};
 
 #[cfg(feature = "borsh")]
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
+
+/// The type used to identify external networks.
+#[derive(
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, PartialOrd, Ord, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ExternalNetworkId {
+  Bitcoin,
+  Ethereum,
+  Monero,
+}
 
 /// The type used to identify networks.
 #[derive(
@@ -23,25 +37,71 @@ use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NetworkId {
   Serai,
-  Bitcoin,
-  Ethereum,
-  Monero,
+  External(ExternalNetworkId),
 }
-impl NetworkId {
-  pub fn coins(&self) -> &'static [Coin] {
+
+impl ExternalNetworkId {
+  pub fn coins(&self) -> Vec<ExternalCoin> {
     match self {
-      Self::Serai => &[Coin::Serai],
-      Self::Bitcoin => &[Coin::Bitcoin],
-      Self::Ethereum => &[Coin::Ether, Coin::Dai],
-      Self::Monero => &[Coin::Monero],
+      Self::Bitcoin => vec![ExternalCoin::Bitcoin],
+      Self::Ethereum => vec![ExternalCoin::Ether, ExternalCoin::Dai],
+      Self::Monero => vec![ExternalCoin::Monero],
     }
   }
 }
 
-pub const NETWORKS: [NetworkId; 4] =
-  [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
+impl NetworkId {
+  pub fn coins(&self) -> Vec<Coin> {
+    match self {
+      Self::Serai => vec![Coin::Serai],
+      Self::External(network) => {
+        network.coins().into_iter().map(core::convert::Into::into).collect()
+      }
+    }
+  }
+}
 
-pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero];
+impl From<ExternalNetworkId> for NetworkId {
+  fn from(network: ExternalNetworkId) -> Self {
+    match network {
+      ExternalNetworkId::Bitcoin => Self::External(ExternalNetworkId::Bitcoin),
+      ExternalNetworkId::Ethereum => Self::External(ExternalNetworkId::Ethereum),
+      ExternalNetworkId::Monero => Self::External(ExternalNetworkId::Monero),
+    }
+  }
+}
+
+impl TryFrom<NetworkId> for ExternalNetworkId {
+  type Error = ();
+
+  fn try_from(network: NetworkId) -> Result<Self, Self::Error> {
+    match network {
+      NetworkId::Serai => Err(())?,
+      NetworkId::External(n) => Ok(n),
+    }
+  }
+}
+
+pub const EXTERNAL_NETWORKS: [ExternalNetworkId; 3] =
+  [ExternalNetworkId::Bitcoin, ExternalNetworkId::Ethereum, ExternalNetworkId::Monero];
+
+pub const NETWORKS: [NetworkId; 4] = [
+  NetworkId::Serai,
+  NetworkId::External(ExternalNetworkId::Bitcoin),
+  NetworkId::External(ExternalNetworkId::Ethereum),
+  NetworkId::External(ExternalNetworkId::Monero),
+];
+
+pub const EXTERNAL_COINS: [ExternalCoin; 4] =
+  [ExternalCoin::Bitcoin, ExternalCoin::Ether, ExternalCoin::Dai, ExternalCoin::Monero];
+
+pub const COINS: [Coin; 5] = [
+  Coin::Serai,
+  Coin::External(ExternalCoin::Bitcoin),
+  Coin::External(ExternalCoin::Ether),
+  Coin::External(ExternalCoin::Dai),
+  Coin::External(ExternalCoin::Monero),
+];
 
 /// The type used to identify coins.
 #[derive(
@@ -52,10 +112,79 @@ pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Coin {
   Serai,
+  External(ExternalCoin),
+}
+
+/// The type used to identify external coins.
+#[derive(
+  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ExternalCoin {
   Bitcoin,
   Ether,
   Dai,
   Monero,
+}
+
+impl From<ExternalCoin> for Coin {
+  fn from(coin: ExternalCoin) -> Self {
+    match coin {
+      ExternalCoin::Bitcoin => Self::External(ExternalCoin::Bitcoin),
+      ExternalCoin::Ether => Self::External(ExternalCoin::Ether),
+      ExternalCoin::Dai => Self::External(ExternalCoin::Dai),
+      ExternalCoin::Monero => Self::External(ExternalCoin::Monero),
+    }
+  }
+}
+
+impl TryFrom<Coin> for ExternalCoin {
+  type Error = ();
+
+  fn try_from(coin: Coin) -> Result<Self, Self::Error> {
+    match coin {
+      Coin::Serai => Err(())?,
+      Coin::External(c) => Ok(c),
+    }
+  }
+}
+
+impl ExternalCoin {
+  pub fn network(&self) -> ExternalNetworkId {
+    match self {
+      ExternalCoin::Bitcoin => ExternalNetworkId::Bitcoin,
+      ExternalCoin::Ether | ExternalCoin::Dai => ExternalNetworkId::Ethereum,
+      ExternalCoin::Monero => ExternalNetworkId::Monero,
+    }
+  }
+
+  pub fn name(&self) -> &'static str {
+    match self {
+      ExternalCoin::Bitcoin => "Bitcoin",
+      ExternalCoin::Ether => "Ether",
+      ExternalCoin::Dai => "Dai Stablecoin",
+      ExternalCoin::Monero => "Monero",
+    }
+  }
+
+  pub fn symbol(&self) -> &'static str {
+    match self {
+      ExternalCoin::Bitcoin => "BTC",
+      ExternalCoin::Ether => "ETH",
+      ExternalCoin::Dai => "DAI",
+      ExternalCoin::Monero => "XMR",
+    }
+  }
+
+  pub fn decimals(&self) -> u32 {
+    match self {
+      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
+      ExternalCoin::Bitcoin | ExternalCoin::Ether | ExternalCoin::Dai => 8,
+      ExternalCoin::Monero => 12,
+    }
+  }
 }
 
 impl Coin {
@@ -66,37 +195,29 @@ impl Coin {
   pub fn network(&self) -> NetworkId {
     match self {
       Coin::Serai => NetworkId::Serai,
-      Coin::Bitcoin => NetworkId::Bitcoin,
-      Coin::Ether | Coin::Dai => NetworkId::Ethereum,
-      Coin::Monero => NetworkId::Monero,
+      Coin::External(c) => c.network().into(),
     }
   }
 
   pub fn name(&self) -> &'static str {
     match self {
       Coin::Serai => "Serai",
-      Coin::Bitcoin => "Bitcoin",
-      Coin::Ether => "Ether",
-      Coin::Dai => "Dai Stablecoin",
-      Coin::Monero => "Monero",
+      Coin::External(c) => c.name(),
     }
   }
 
   pub fn symbol(&self) -> &'static str {
     match self {
       Coin::Serai => "SRI",
-      Coin::Bitcoin => "BTC",
-      Coin::Ether => "ETH",
-      Coin::Dai => "DAI",
-      Coin::Monero => "XMR",
+      Coin::External(c) => c.symbol(),
     }
   }
 
   pub fn decimals(&self) -> u32 {
     match self {
       // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
-      Coin::Serai | Coin::Bitcoin | Coin::Ether | Coin::Dai => 8,
-      Coin::Monero => 12,
+      Coin::Serai => 8,
+      Coin::External(c) => c.decimals(),
     }
   }
 

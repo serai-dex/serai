@@ -2,6 +2,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use serai_primitives::ExternalBalance;
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
@@ -20,7 +21,7 @@ use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
 #[rustfmt::skip]
-use serai_primitives::{BlockHash, Balance, NetworkId, SeraiAddress, ExternalAddress, system_address};
+use serai_primitives::{BlockHash, Balance, ExternalNetworkId, NetworkId, SeraiAddress, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;
@@ -97,7 +98,7 @@ pub struct RefundableInInstruction {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct InInstructionWithBalance {
   pub instruction: InInstruction,
-  pub balance: Balance,
+  pub balance: ExternalBalance,
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
@@ -105,7 +106,7 @@ pub struct InInstructionWithBalance {
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Batch {
-  pub network: NetworkId,
+  pub network: ExternalNetworkId,
   pub id: u32,
   pub block: BlockHash,
   pub instructions: Vec<InInstructionWithBalance>,

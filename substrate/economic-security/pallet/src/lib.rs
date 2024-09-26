@@ -24,7 +24,7 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    EconomicSecurityReached { network: NetworkId },
+    EconomicSecurityReached { network: ExternalNetworkId },
   }
 
   #[pallet::pallet]
@@ -33,17 +33,18 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn economic_security_block)]
   pub(crate) type EconomicSecurityBlock<T: Config> =
-    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
+    StorageMap<_, Identity, ExternalNetworkId, BlockNumberFor<T>, OptionQuery>;
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
       // we accept we reached economic security once we can mint smallest amount of a network's coin
-      for coin in COINS {
+      for coin in EXTERNAL_COINS {
         let existing = EconomicSecurityBlock::<T>::get(coin.network());
+        // TODO: we don't need this if is_allowed returns false when there is no coin value
         if existing.is_none() &&
           Dex::<T>::security_oracle_value(coin).is_some() &&
-          <T as CoinsConfig>::AllowMint::is_allowed(&Balance { coin, amount: Amount(1) })
+          <T as CoinsConfig>::AllowMint::is_allowed(&ExternalBalance { coin, amount: Amount(1) })
         {
           EconomicSecurityBlock::<T>::set(coin.network(), Some(n));
           Self::deposit_event(Event::EconomicSecurityReached { network: coin.network() });

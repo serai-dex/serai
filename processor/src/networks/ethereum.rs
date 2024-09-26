@@ -38,7 +38,7 @@ use tokio::{
 };
 
 use serai_client::{
-  primitives::{Coin, Amount, Balance, NetworkId},
+  primitives::{ExternalCoin, Amount, ExternalBalance, ExternalNetworkId},
   validator_sets::primitives::Session,
 };
 
@@ -68,20 +68,20 @@ const DAI: [u8; 20] =
     Err(_) => panic!("invalid test DAI hex address"),
   };
 
-fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
+fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<ExternalCoin> {
   match coin {
-    EthereumCoin::Ether => Some(Coin::Ether),
+    EthereumCoin::Ether => Some(ExternalCoin::Ether),
     EthereumCoin::Erc20(token) => {
       if *token == DAI {
-        return Some(Coin::Dai);
+        return Some(ExternalCoin::Dai);
       }
       None
     }
   }
 }
 
-fn amount_to_serai_amount(coin: Coin, amount: U256) -> Amount {
-  assert_eq!(coin.network(), NetworkId::Ethereum);
+fn amount_to_serai_amount(coin: ExternalCoin, amount: U256) -> Amount {
+  assert_eq!(coin.network(), ExternalNetworkId::Ethereum);
   assert_eq!(coin.decimals(), 8);
   // Remove 10 decimals so we go from 18 decimals to 8 decimals
   let divisor = U256::from(10_000_000_000u64);
@@ -89,8 +89,8 @@ fn amount_to_serai_amount(coin: Coin, amount: U256) -> Amount {
   Amount(u64::try_from(amount / divisor).unwrap())
 }
 
-fn balance_to_ethereum_amount(balance: Balance) -> U256 {
-  assert_eq!(balance.coin.network(), NetworkId::Ethereum);
+fn balance_to_ethereum_amount(balance: ExternalBalance) -> U256 {
+  assert_eq!(balance.coin.network(), ExternalNetworkId::Ethereum);
   assert_eq!(balance.coin.decimals(), 8);
   // Restore 10 decimals so we go from 8 decimals to 18 decimals
   let factor = U256::from(10_000_000_000u64);
@@ -201,14 +201,14 @@ impl<D: Db> Output<Ethereum<D>> for EthereumInInstruction {
     Some(Address(self.from))
   }
 
-  fn balance(&self) -> Balance {
+  fn balance(&self) -> ExternalBalance {
     let coin = coin_to_serai_coin(&self.coin).unwrap_or_else(|| {
       panic!(
         "requesting coin for an EthereumInInstruction with a coin {}",
         "we don't handle. this never should have been yielded"
       )
     });
-    Balance { coin, amount: amount_to_serai_amount(coin, self.amount) }
+    ExternalBalance { coin, amount: amount_to_serai_amount(coin, self.amount) }
   }
   fn data(&self) -> &[u8] {
     &self.data
@@ -394,7 +394,7 @@ impl<D: Db> Network for Ethereum<D> {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = NetworkId::Ethereum;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Ethereum;
   const ID: &'static str = "Ethereum";
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 32 * 12;
   const CONFIRMATIONS: usize = 1;
@@ -681,7 +681,7 @@ impl<D: Db> Network for Ethereum<D> {
                 OutInstructionTarget::Direct(payment.address.0)
               },
               value: {
-                assert_eq!(payment.balance.coin, Coin::Ether); // TODO
+                assert_eq!(payment.balance.coin, ExternalCoin::Ether); // TODO
                 balance_to_ethereum_amount(payment.balance)
               },
             })

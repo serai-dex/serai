@@ -88,7 +88,7 @@ pub use pallet::*;
 
 use sp_runtime::{traits::TrailingZeroInput, DispatchError};
 
-use serai_primitives::{NetworkId, Coin, SubstrateAmount};
+use serai_primitives::{Coin, ExternalCoin, SubstrateAmount};
 
 use sp_std::prelude::*;
 pub use types::*;
@@ -110,13 +110,13 @@ pub mod pallet {
 
   use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
 
-  use serai_primitives::{Coin, Amount, Balance, SubstrateAmount, reverse_lexicographic_order};
+  use serai_primitives::{NetworkId, *};
 
   /// Pool ID.
   ///
   /// The pool's `AccountId` is derived from this type. Any changes to the type may necessitate a
   /// migration.
-  pub type PoolId = Coin;
+  pub type PoolId = ExternalCoin;
 
   /// LiquidityTokens Pallet as an instance of coins pallet.
   pub type LiquidityTokens<T> = coins_pallet::Pallet<T, coins_pallet::Instance1>;
@@ -164,7 +164,7 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn spot_price_for_block)]
   pub type SpotPriceForBlock<T: Config> =
-    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, Coin, Amount, OptionQuery>;
+    StorageDoubleMap<_, Identity, BlockNumberFor<T>, Identity, ExternalCoin, Amount, OptionQuery>;
 
   /// Moving window of prices from each block.
   ///
@@ -173,30 +173,32 @@ pub mod pallet {
   /// low to high.
   #[pallet::storage]
   pub type SpotPrices<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], u16, OptionQuery>;
+    StorageDoubleMap<_, Identity, ExternalCoin, Identity, [u8; 8], u16, OptionQuery>;
 
   // SpotPrices, yet with keys stored in reverse lexicographic order.
   #[pallet::storage]
   pub type ReverseSpotPrices<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Identity, [u8; 8], (), OptionQuery>;
+    StorageDoubleMap<_, Identity, ExternalCoin, Identity, [u8; 8], (), OptionQuery>;
 
   /// Current length of the `SpotPrices` map.
   #[pallet::storage]
-  pub type SpotPricesLength<T: Config> = StorageMap<_, Identity, Coin, u16, OptionQuery>;
+  pub type SpotPricesLength<T: Config> = StorageMap<_, Identity, ExternalCoin, u16, OptionQuery>;
 
   /// Current position of the median within the `SpotPrices` map;
   #[pallet::storage]
-  pub type CurrentMedianPosition<T: Config> = StorageMap<_, Identity, Coin, u16, OptionQuery>;
+  pub type CurrentMedianPosition<T: Config> =
+    StorageMap<_, Identity, ExternalCoin, u16, OptionQuery>;
 
   /// Current median price of the prices in the `SpotPrices` map at any given time.
   #[pallet::storage]
   #[pallet::getter(fn median_price)]
-  pub type MedianPrice<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+  pub type MedianPrice<T: Config> = StorageMap<_, Identity, ExternalCoin, Amount, OptionQuery>;
 
   /// The price used for evaluating economic security, which is the highest observed median price.
   #[pallet::storage]
   #[pallet::getter(fn security_oracle_value)]
-  pub type SecurityOracleValue<T: Config> = StorageMap<_, Identity, Coin, Amount, OptionQuery>;
+  pub type SecurityOracleValue<T: Config> =
+    StorageMap<_, Identity, ExternalCoin, Amount, OptionQuery>;
 
   /// Total swap volume of a given pool in terms of SRI.
   #[pallet::storage]
@@ -205,7 +207,7 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn restore_median(
-      coin: Coin,
+      coin: ExternalCoin,
       mut current_median_pos: u16,
       mut current_median: Amount,
       length: u16,
@@ -256,7 +258,7 @@ pub mod pallet {
       MedianPrice::<T>::set(coin, Some(current_median));
     }
 
-    pub(crate) fn insert_into_median(coin: Coin, amount: Amount) {
+    pub(crate) fn insert_into_median(coin: ExternalCoin, amount: Amount) {
       let new_quantity_of_presences =
         SpotPrices::<T>::get(coin, amount.0.to_be_bytes()).unwrap_or(0) + 1;
       SpotPrices::<T>::set(coin, amount.0.to_be_bytes(), Some(new_quantity_of_presences));
@@ -286,7 +288,7 @@ pub mod pallet {
       Self::restore_median(coin, current_median_pos, current_median, new_length);
     }
 
-    pub(crate) fn remove_from_median(coin: Coin, amount: Amount) {
+    pub(crate) fn remove_from_median(coin: ExternalCoin, amount: Amount) {
       let mut current_median = MedianPrice::<T>::get(coin).unwrap();
 
       let mut current_median_pos = CurrentMedianPosition::<T>::get(coin).unwrap();
@@ -451,7 +453,7 @@ pub mod pallet {
         // insert the new price to our oracle window
         // The spot price for 1 coin, in atomic units, to SRI is used
         let sri_per_coin =
-          if let Ok((sri_balance, coin_balance)) = Self::get_reserves(&Coin::native(), &coin) {
+          if let Ok((sri_balance, coin_balance)) = Self::get_reserves(&Coin::Serai, &coin.into()) {
             // We use 1 coin to handle rounding errors which may occur with atomic units
             // If we used atomic units, any coin whose atomic unit is worth less than SRI's atomic
             // unit would cause a 'price' of 0
@@ -493,9 +495,9 @@ pub mod pallet {
     /// (the id of which is returned in the `Event::PoolCreated` event).
     ///
     /// Once a pool is created, someone may [`Pallet::add_liquidity`] to it.
-    pub(crate) fn create_pool(coin: Coin) -> DispatchResult {
+    pub(crate) fn create_pool(coin: ExternalCoin) -> DispatchResult {
       // get pool_id
-      let pool_id = Self::get_pool_id(coin, Coin::Serai)?;
+      let pool_id = Self::get_pool_id(coin.into(), Coin::native())?;
       ensure!(!Pools::<T>::contains_key(pool_id), Error::<T>::PoolExists);
 
       let pool_account = Self::get_pool_account(pool_id);
@@ -509,8 +511,10 @@ pub mod pallet {
     /// A hook to be called whenever a network's session is rotated.
     pub fn on_new_session(network: NetworkId) {
       // reset the oracle value
-      for coin in network.coins() {
-        SecurityOracleValue::<T>::set(*coin, Self::median_price(coin));
+      if let NetworkId::External(n) = network {
+        for coin in n.coins() {
+          SecurityOracleValue::<T>::set(coin, Self::median_price(coin));
+        }
       }
     }
   }
@@ -532,7 +536,7 @@ pub mod pallet {
     #[allow(clippy::too_many_arguments)]
     pub fn add_liquidity(
       origin: OriginFor<T>,
-      coin: Coin,
+      coin: ExternalCoin,
       coin_desired: SubstrateAmount,
       sri_desired: SubstrateAmount,
       coin_min: SubstrateAmount,
@@ -542,7 +546,7 @@ pub mod pallet {
       let sender = ensure_signed(origin)?;
       ensure!((sri_desired > 0) && (coin_desired > 0), Error::<T>::WrongDesiredAmount);
 
-      let pool_id = Self::get_pool_id(coin, Coin::Serai)?;
+      let pool_id = Self::get_pool_id(coin.into(), Coin::native())?;
 
       // create the pool if it doesn't exist. We can just attempt to do that because our checks
       // far enough to allow that.
@@ -552,7 +556,7 @@ pub mod pallet {
       let pool_account = Self::get_pool_account(pool_id);
 
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
-      let coin_reserve = Self::get_balance(&pool_account, coin);
+      let coin_reserve = Self::get_balance(&pool_account, coin.into());
 
       let sri_amount: SubstrateAmount;
       let coin_amount: SubstrateAmount;
@@ -583,16 +587,20 @@ pub mod pallet {
         &pool_account,
         Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
       )?;
-      Self::transfer(&sender, &pool_account, Balance { coin, amount: Amount(coin_amount) })?;
+      Self::transfer(
+        &sender,
+        &pool_account,
+        Balance { coin: coin.into(), amount: Amount(coin_amount) },
+      )?;
 
-      let total_supply = LiquidityTokens::<T>::supply(coin);
+      let total_supply = LiquidityTokens::<T>::supply(Coin::from(coin));
 
       let lp_token_amount: SubstrateAmount;
       if total_supply == 0 {
         lp_token_amount = Self::calc_lp_amount_for_zero_supply(sri_amount, coin_amount)?;
         LiquidityTokens::<T>::mint(
           pool_account,
-          Balance { coin, amount: Amount(T::MintMinLiquidity::get()) },
+          Balance { coin: coin.into(), amount: Amount(T::MintMinLiquidity::get()) },
         )?;
       } else {
         let side1 = Self::mul_div(sri_amount, total_supply, sri_reserve)?;
@@ -605,7 +613,10 @@ pub mod pallet {
         Error::<T>::InsufficientLiquidityMinted
       );
 
-      LiquidityTokens::<T>::mint(mint_to, Balance { coin, amount: Amount(lp_token_amount) })?;
+      LiquidityTokens::<T>::mint(
+        mint_to,
+        Balance { coin: coin.into(), amount: Amount(lp_token_amount) },
+      )?;
 
       Self::deposit_event(Event::LiquidityAdded {
         who: sender,
@@ -626,25 +637,24 @@ pub mod pallet {
     #[pallet::weight(T::WeightInfo::remove_liquidity())]
     pub fn remove_liquidity(
       origin: OriginFor<T>,
-      coin: Coin,
+      coin: ExternalCoin,
       lp_token_burn: SubstrateAmount,
       coin_min_receive: SubstrateAmount,
       sri_min_receive: SubstrateAmount,
       withdraw_to: T::AccountId,
     ) -> DispatchResult {
       let sender = ensure_signed(origin.clone())?;
-      ensure!(coin != Coin::Serai, Error::<T>::EqualCoins);
 
-      let pool_id = Self::get_pool_id(coin, Coin::Serai).unwrap();
+      let pool_id = Self::get_pool_id(coin.into(), Coin::native()).unwrap();
       ensure!(lp_token_burn > 0, Error::<T>::ZeroLiquidity);
 
       Pools::<T>::get(pool_id).as_ref().ok_or(Error::<T>::PoolNotFound)?;
 
       let pool_account = Self::get_pool_account(pool_id);
       let sri_reserve = Self::get_balance(&pool_account, Coin::Serai);
-      let coin_reserve = Self::get_balance(&pool_account, coin);
+      let coin_reserve = Self::get_balance(&pool_account, coin.into());
 
-      let total_supply = LiquidityTokens::<T>::supply(coin);
+      let total_supply = LiquidityTokens::<T>::supply(Coin::from(coin));
       let lp_redeem_amount = lp_token_burn;
 
       let sri_amount = Self::mul_div(lp_redeem_amount, sri_reserve, total_supply)?;
@@ -665,14 +675,21 @@ pub mod pallet {
       ensure!(coin_reserve_left >= 1, Error::<T>::ReserveLeftLessThanMinimum);
 
       // burn the provided lp token amount that includes the fee
-      LiquidityTokens::<T>::burn(origin, Balance { coin, amount: Amount(lp_token_burn) })?;
+      LiquidityTokens::<T>::burn(
+        origin,
+        Balance { coin: coin.into(), amount: Amount(lp_token_burn) },
+      )?;
 
       Self::transfer(
         &pool_account,
         &withdraw_to,
         Balance { coin: Coin::Serai, amount: Amount(sri_amount) },
       )?;
-      Self::transfer(&pool_account, &withdraw_to, Balance { coin, amount: Amount(coin_amount) })?;
+      Self::transfer(
+        &pool_account,
+        &withdraw_to,
+        Balance { coin: coin.into(), amount: Amount(coin_amount) },
+      )?;
 
       Self::deposit_event(Event::LiquidityRemoved {
         who: sender,
@@ -921,9 +938,9 @@ pub mod pallet {
       ensure!((coin1 == Coin::Serai) || (coin2 == Coin::Serai), Error::<T>::PoolNotFound);
       ensure!(coin1 != coin2, Error::<T>::EqualCoins);
       if coin1 == Coin::Serai {
-        Ok(coin2)
+        Ok(coin2.try_into().unwrap())
       } else {
-        Ok(coin1)
+        Ok(coin1.try_into().unwrap())
       }
     }
 
@@ -985,18 +1002,17 @@ pub mod pallet {
       Ok(amounts)
     }
 
-    /// Used by the RPC service to provide current prices.
+    /// Used by the RPC service to provide price on coin/SRI pool.
     pub fn quote_price_exact_tokens_for_tokens(
-      coin1: Coin,
-      coin2: Coin,
+      coin: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
+      let pool_id = Self::get_pool_id(Coin::native(), coin.into()).ok()?;
       let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, coin1);
-      let balance2 = Self::get_balance(&pool_account, coin2);
+      let balance1 = Self::get_balance(&pool_account, Coin::native());
+      let balance2 = Self::get_balance(&pool_account, coin.into());
       if balance1 != 0 {
         if include_fee {
           Self::get_amount_out(amount, balance1, balance2).ok()
@@ -1010,16 +1026,15 @@ pub mod pallet {
 
     /// Used by the RPC service to provide current prices.
     pub fn quote_price_tokens_for_exact_tokens(
-      coin1: Coin,
-      coin2: Coin,
+      coin: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
+      let pool_id = Self::get_pool_id(Coin::native(), coin.into()).ok()?;
       let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, coin1);
-      let balance2 = Self::get_balance(&pool_account, coin2);
+      let balance1 = Self::get_balance(&pool_account, Coin::native());
+      let balance2 = Self::get_balance(&pool_account, coin.into());
       if balance1 != 0 {
         if include_fee {
           Self::get_amount_in(amount, balance1, balance2).ok()
@@ -1224,8 +1239,7 @@ sp_api::decl_runtime_apis! {
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_in_max` to control slippage.)
     fn quote_price_tokens_for_exact_tokens(
-      coin1: Coin,
-      coin2: Coin,
+      coin: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount>;
@@ -1235,8 +1249,7 @@ sp_api::decl_runtime_apis! {
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_out_min` to control slippage.)
     fn quote_price_exact_tokens_for_tokens(
-      coin1: Coin,
-      coin2: Coin,
+      coin: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount>;

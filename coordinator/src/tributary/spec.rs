@@ -9,7 +9,7 @@ use frost::Participant;
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::PublicKey, validator_sets::primitives::ValidatorSet};
+use serai_client::{primitives::PublicKey, validator_sets::primitives::ExternalValidatorSet};
 
 fn borsh_serialize_validators<W: io::Write>(
   validators: &Vec<(<Ristretto as Ciphersuite>::G, u16)>,
@@ -43,7 +43,7 @@ fn borsh_deserialize_validators<R: io::Read>(
 pub struct TributarySpec {
   serai_block: [u8; 32],
   start_time: u64,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   #[borsh(
     serialize_with = "borsh_serialize_validators",
     deserialize_with = "borsh_deserialize_validators"
@@ -55,7 +55,7 @@ impl TributarySpec {
   pub fn new(
     serai_block: [u8; 32],
     start_time: u64,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     set_participants: Vec<(PublicKey, u16)>,
   ) -> TributarySpec {
     let mut validators = vec![];
@@ -68,7 +68,7 @@ impl TributarySpec {
     Self { serai_block, start_time, set, validators }
   }
 
-  pub fn set(&self) -> ValidatorSet {
+  pub fn set(&self) -> ExternalValidatorSet {
     self.set
   }
 

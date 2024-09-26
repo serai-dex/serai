@@ -9,11 +9,14 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use serai_client::{
-  SeraiError, Block, Serai, TemporalSerai,
-  primitives::{BlockHash, NetworkId},
-  validator_sets::{primitives::ValidatorSet, ValidatorSetsEvent},
-  in_instructions::InInstructionsEvent,
   coins::CoinsEvent,
+  in_instructions::InInstructionsEvent,
+  primitives::{BlockHash, ExternalNetworkId, NetworkId},
+  validator_sets::{
+    primitives::{ExternalValidatorSet, ValidatorSet},
+    ValidatorSetsEvent,
+  },
+  Block, Serai, SeraiError, TemporalSerai,
 };
 
 use serai_db::DbTxn;
@@ -52,9 +55,9 @@ async fn handle_new_set<D: Db>(
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
   serai: &Serai,
   block: &Block,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
 ) -> Result<(), SeraiError> {
-  if in_set(key, &serai.as_of(block.hash()), set)
+  if in_set(key, &serai.as_of(block.hash()), set.into())
     .await?
     .expect("NewSet for set which doesn't exist")
   {
@@ -64,7 +67,7 @@ async fn handle_new_set<D: Db>(
       let serai = serai.as_of(block.hash());
       let serai = serai.validator_sets();
       let set_participants =
-        serai.participants(set.network).await?.expect("NewSet for set which doesn't exist");
+        serai.participants(set.network.into()).await?.expect("NewSet for set which doesn't exist");
 
       set_participants.into_iter().map(|(k, w)| (k, u16::try_from(w).unwrap())).collect::<Vec<_>>()
     };
@@ -131,7 +134,7 @@ async fn handle_batch_and_burns<Pro: Processors>(
   };
 
   let mut batch_block = HashMap::new();
-  let mut batches = HashMap::<NetworkId, Vec<u32>>::new();
+  let mut batches = HashMap::<ExternalNetworkId, Vec<u32>>::new();
   let mut burns = HashMap::new();
 
   let serai = serai.as_of(block.hash());
@@ -205,8 +208,8 @@ async fn handle_block<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
-  perform_slash_report: &mpsc::UnboundedSender<ValidatorSet>,
-  tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
+  perform_slash_report: &mpsc::UnboundedSender<ExternalValidatorSet>,
+  tributary_retired: &mpsc::UnboundedSender<ExternalValidatorSet>,
   processors: &Pro,
   serai: &Serai,
   block: Block,
@@ -232,6 +235,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       continue;
     }
 
+    let set: ExternalValidatorSet = set.try_into().unwrap();
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
       let mut txn = db.txn();
@@ -290,6 +294,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       continue;
     }
 
+    let set: ExternalValidatorSet = set.try_into().unwrap();
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh accepted handover event {:?}", accepted_handover);
       // TODO: This isn't atomic with the event handling
@@ -311,6 +316,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       continue;
     }
 
+    let set: ExternalValidatorSet = set.try_into().unwrap();
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh set retired event {:?}", retired_set);
       let mut txn = db.txn();
@@ -340,8 +346,8 @@ async fn handle_new_blocks<D: Db, Pro: Processors>(
   db: &mut D,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
   new_tributary_spec: &mpsc::UnboundedSender<TributarySpec>,
-  perform_slash_report: &mpsc::UnboundedSender<ValidatorSet>,
-  tributary_retired: &mpsc::UnboundedSender<ValidatorSet>,
+  perform_slash_report: &mpsc::UnboundedSender<ExternalValidatorSet>,
+  tributary_retired: &mpsc::UnboundedSender<ExternalValidatorSet>,
   processors: &Pro,
   serai: &Serai,
   next_block: &mut u64,
@@ -395,8 +401,8 @@ pub async fn scan_task<D: Db, Pro: Processors>(
   processors: Pro,
   serai: Arc<Serai>,
   new_tributary_spec: mpsc::UnboundedSender<TributarySpec>,
-  perform_slash_report: mpsc::UnboundedSender<ValidatorSet>,
-  tributary_retired: mpsc::UnboundedSender<ValidatorSet>,
+  perform_slash_report: mpsc::UnboundedSender<ExternalValidatorSet>,
+  tributary_retired: mpsc::UnboundedSender<ExternalValidatorSet>,
 ) {
   log::info!("scanning substrate");
   let mut next_substrate_block = NextBlock::get(&db).unwrap_or_default();
@@ -494,9 +500,12 @@ pub async fn scan_task<D: Db, Pro: Processors>(
 /// retry.
 pub(crate) async fn expected_next_batch(
   serai: &Serai,
-  network: NetworkId,
+  network: ExternalNetworkId,
 ) -> Result<u32, SeraiError> {
-  async fn expected_next_batch_inner(serai: &Serai, network: NetworkId) -> Result<u32, SeraiError> {
+  async fn expected_next_batch_inner(
+    serai: &Serai,
+    network: ExternalNetworkId,
+  ) -> Result<u32, SeraiError> {
     let serai = serai.as_of_latest_finalized_block().await?;
     let last = serai.in_instructions().last_batch_for_network(network).await?;
     Ok(if let Some(last) = last { last + 1 } else { 0 })
@@ -519,7 +528,7 @@ pub(crate) async fn expected_next_batch(
 /// This is deemed fine.
 pub(crate) async fn verify_published_batches<D: Db>(
   txn: &mut D::Transaction<'_>,
-  network: NetworkId,
+  network: ExternalNetworkId,
   optimistic_up_to: u32,
 ) -> Option<u32> {
   // TODO: Localize from MainDb to SubstrateDb

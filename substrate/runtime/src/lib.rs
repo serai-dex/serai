@@ -8,6 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use core::marker::PhantomData;
 
+use serai_primitives::ExternalCoin;
 // Re-export all components
 pub use serai_primitives as primitives;
 pub use primitives::{BlockNumber, Header};
@@ -610,21 +611,19 @@ sp_api::impl_runtime_apis! {
 
   impl dex::DexApi<Block> for Runtime {
     fn quote_price_exact_tokens_for_tokens(
-      asset1: Coin,
-      asset2: Coin,
+      asset: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount> {
-      Dex::quote_price_exact_tokens_for_tokens(asset1, asset2, amount, include_fee)
+      Dex::quote_price_exact_tokens_for_tokens(asset, amount, include_fee)
     }
 
     fn quote_price_tokens_for_exact_tokens(
-      asset1: Coin,
-      asset2: Coin,
+      asset: ExternalCoin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount> {
-      Dex::quote_price_tokens_for_exact_tokens(asset1, asset2, amount, include_fee)
+      Dex::quote_price_tokens_for_exact_tokens(asset, amount, include_fee)
     }
 
     fn get_reserves(asset1: Coin, asset2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {

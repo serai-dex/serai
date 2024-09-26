@@ -119,7 +119,7 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
 
     let algorithm = Schnorrkel::new(b"substrate");
     let keys: ThresholdKeys<Ristretto> =
-      musig(&musig_context(self.spec.set()), self.key, participants)
+      musig(&musig_context(self.spec.set().into()), self.key, participants)
         .expect("signing for a set we aren't in/validator present multiple times")
         .into();
 

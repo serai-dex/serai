@@ -84,7 +84,8 @@ pub mod pallet {
   pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, u32, ValueQuery>;
 
   #[pallet::storage]
-  pub(crate) type LastSwapVolume<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
+  pub(crate) type LastSwapVolume<T: Config> =
+    StorageMap<_, Identity, ExternalCoin, u64, OptionQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
@@ -136,19 +137,16 @@ pub mod pallet {
       let mut total_distance: u64 = 0;
       let reward_this_epoch = if pre_ec_security {
         // calculate distance to economic security per network
-        for n in NETWORKS {
-          if n == NetworkId::Serai {
-            continue;
-          }
-
+        for n in EXTERNAL_NETWORKS {
           let required = ValidatorSets::<T>::required_stake_for_network(n);
-          let mut current = ValidatorSets::<T>::total_allocated_stake(n).unwrap_or(Amount(0)).0;
+          let mut current =
+            ValidatorSets::<T>::total_allocated_stake(NetworkId::from(n)).unwrap_or(Amount(0)).0;
           if current > required {
             current = required;
           }
 
           let distance = required - current;
-          distances.insert(n, distance);
+          distances.insert(NetworkId::from(n), distance);
           total_distance = total_distance.saturating_add(distance);
         }
 
@@ -192,9 +190,8 @@ pub mod pallet {
         )
       } else {
         // get swap volumes
-        let mut volume_per_coin: BTreeMap<Coin, u64> = BTreeMap::new();
-        for c in COINS {
-          // this should return 0 for SRI and so it shouldn't affect the total volume.
+        let mut volume_per_coin: BTreeMap<ExternalCoin, u64> = BTreeMap::new();
+        for c in EXTERNAL_COINS {
           let current_volume = Dex::<T>::swap_volume(c).unwrap_or(0);
           let last_volume = LastSwapVolume::<T>::get(c).unwrap_or(0);
           let vol_this_epoch = current_volume.saturating_sub(last_volume);
@@ -209,11 +206,13 @@ pub mod pallet {
         let mut volume_per_network: BTreeMap<NetworkId, u64> = BTreeMap::new();
         for (c, vol) in &volume_per_coin {
           volume_per_network.insert(
-            c.network(),
-            (*volume_per_network.get(&c.network()).unwrap_or(&0)).saturating_add(*vol),
+            c.network().into(),
+            (*volume_per_network.get(&c.network().into()).unwrap_or(&0)).saturating_add(*vol),
           );
           total_volume = total_volume.saturating_add(*vol);
         }
+        // we add the serai network now
+        volume_per_network.insert(NetworkId::Serai, 0);
 
         (
           volume_per_network
@@ -250,7 +249,7 @@ pub mod pallet {
         } else {
           // calculate pool vs validator share
           let capacity = ValidatorSets::<T>::total_allocated_stake(n).unwrap_or(Amount(0)).0;
-          let required = ValidatorSets::<T>::required_stake_for_network(n);
+          let required = ValidatorSets::<T>::required_stake_for_network(n.try_into().unwrap());
           let unused_capacity = capacity.saturating_sub(required);
 
           let distribution = unused_capacity.saturating_mul(ACCURACY_MULTIPLIER) / capacity;
@@ -272,13 +271,14 @@ pub mod pallet {
           let vpc = volume_per_coin.as_ref().unwrap();
           for c in n.coins() {
             let pool_reward = u64::try_from(
-              u128::from(network_pool_reward).saturating_mul(u128::from(vpc[c])) /
+              u128::from(network_pool_reward)
+                .saturating_mul(u128::from(vpc[&c.try_into().unwrap()])) /
                 u128::from(vpn[&n]),
             )
             .unwrap();
 
             if Coins::<T>::mint(
-              Dex::<T>::get_pool_account(*c),
+              Dex::<T>::get_pool_account(c.try_into().unwrap()),
               Balance { coin: Coin::Serai, amount: Amount(pool_reward) },
             )
             .is_err()
@@ -318,11 +318,7 @@ pub mod pallet {
 
     /// Returns true if any of the external networks haven't reached economic security yet.
     fn pre_ec_security() -> bool {
-      for n in NETWORKS {
-        if n == NetworkId::Serai {
-          continue;
-        }
-
+      for n in EXTERNAL_NETWORKS {
         if EconomicSecurity::<T>::economic_security_block(n).is_none() {
           return true;
         }
@@ -362,16 +358,18 @@ pub mod pallet {
     pub fn swap_to_staked_sri(
       to: PublicKey,
       network: NetworkId,
-      balance: Balance,
+      balance: ExternalBalance,
     ) -> DispatchResult {
       // check the network didn't reach the economic security yet
-      if EconomicSecurity::<T>::economic_security_block(network).is_some() {
-        Err(Error::<T>::NetworkHasEconomicSecurity)?;
+      if let NetworkId::External(n) = network {
+        if EconomicSecurity::<T>::economic_security_block(n).is_some() {
+          Err(Error::<T>::NetworkHasEconomicSecurity)?;
+        }
       }
 
       // swap half of the liquidity for SRI to form PoL.
       let half = balance.amount.0 / 2;
-      let path = BoundedVec::try_from(vec![balance.coin, Coin::Serai]).unwrap();
+      let path = BoundedVec::try_from(vec![balance.coin.into(), Coin::Serai]).unwrap();
       let origin = RawOrigin::Signed(POL_ACCOUNT.into());
       Dex::<T>::swap_exact_tokens_for_tokens(
         origin.clone().into(),

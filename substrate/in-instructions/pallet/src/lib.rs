@@ -4,7 +4,7 @@
 
 use sp_io::hashing::blake2_256;
 
-use serai_primitives::{BlockHash, NetworkId};
+use serai_primitives::*;
 
 pub use in_instructions_primitives as primitives;
 use primitives::*;
@@ -23,8 +23,6 @@ pub mod pallet {
   use sp_runtime::traits::Zero;
   use sp_core::sr25519::Public;
 
-  use serai_primitives::{Coin, Amount, Balance};
-
   use frame_support::pallet_prelude::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
 
@@ -34,7 +32,7 @@ pub mod pallet {
   };
   use dex_pallet::{Config as DexConfig, Pallet as Dex};
   use validator_sets_pallet::{
-    primitives::{Session, ValidatorSet},
+    primitives::{Session, ValidatorSet, ExternalValidatorSet},
     Config as ValidatorSetsConfig, Pallet as ValidatorSets,
   };
 
@@ -60,8 +58,8 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
-    InstructionFailure { network: NetworkId, id: u32, index: u32 },
+    Batch { network: ExternalNetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
+    InstructionFailure { network: ExternalNetworkId, id: u32, index: u32 },
     Halt { network: NetworkId },
   }
 
@@ -77,13 +75,14 @@ pub mod pallet {
   // The ID of the last executed Batch for a network.
   #[pallet::storage]
   #[pallet::getter(fn batches)]
-  pub(crate) type LastBatch<T: Config> = StorageMap<_, Identity, NetworkId, u32, OptionQuery>;
+  pub(crate) type LastBatch<T: Config> =
+    StorageMap<_, Identity, ExternalNetworkId, u32, OptionQuery>;
 
   // The last Serai block in which this validator set included a batch
   #[pallet::storage]
   #[pallet::getter(fn last_batch_block)]
   pub(crate) type LastBatchBlock<T: Config> =
-    StorageMap<_, Identity, NetworkId, BlockNumberFor<T>, OptionQuery>;
+    StorageMap<_, Identity, ExternalNetworkId, BlockNumberFor<T>, OptionQuery>;
 
   // Halted networks.
   #[pallet::storage]
@@ -93,7 +92,7 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::getter(fn latest_network_block)]
   pub(crate) type LatestNetworkBlock<T: Config> =
-    StorageMap<_, Identity, NetworkId, BlockHash, OptionQuery>;
+    StorageMap<_, Identity, ExternalNetworkId, BlockHash, OptionQuery>;
 
   impl<T: Config> Pallet<T> {
     // Use a dedicated transaction layer when executing this InInstruction
@@ -102,7 +101,7 @@ pub mod pallet {
     fn execute(instruction: InInstructionWithBalance) -> Result<(), DispatchError> {
       match instruction.instruction {
         InInstruction::Transfer(address) => {
-          Coins::<T>::mint(address.into(), instruction.balance)?;
+          Coins::<T>::mint(address.into(), instruction.balance.into())?;
         }
         InInstruction::Dex(call) => {
           // This will only be initiated by external chain transactions. That is why we only need
@@ -114,11 +113,11 @@ pub mod pallet {
               let coin = instruction.balance.coin;
 
               // mint the given coin on the account
-              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance.into())?;
 
               // swap half of it for SRI
               let half = instruction.balance.amount.0 / 2;
-              let path = BoundedVec::try_from(vec![coin, Coin::Serai]).unwrap();
+              let path = BoundedVec::try_from(vec![coin.into(), Coin::Serai]).unwrap();
               Dex::<T>::swap_exact_tokens_for_tokens(
                 origin.clone().into(),
                 path,
@@ -144,13 +143,13 @@ pub mod pallet {
               // TODO: minimums are set to 1 above to guarantee successful adding liq call.
               // Ideally we either get this info from user or send the leftovers back to user.
               // Let's send the leftovers back to user for now.
-              let coin_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), coin);
+              let coin_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), coin.into());
               let sri_balance = Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai);
               if coin_balance != Amount(0) {
                 Coins::<T>::transfer_internal(
                   IN_INSTRUCTION_EXECUTOR.into(),
                   address.into(),
-                  Balance { coin, amount: coin_balance },
+                  Balance { coin: coin.into(), amount: coin_balance },
                 )?;
               }
               if sri_balance != Amount(0) {
@@ -171,10 +170,10 @@ pub mod pallet {
               }
 
               // mint the given coin on our account
-              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance)?;
+              Coins::<T>::mint(IN_INSTRUCTION_EXECUTOR.into(), instruction.balance.into())?;
 
               // get the path
-              let mut path = vec![instruction.balance.coin, Coin::Serai];
+              let mut path = vec![instruction.balance.coin.into(), Coin::Serai];
               if !native_coin {
                 path.push(out_balance.coin);
               }
@@ -210,7 +209,10 @@ pub mod pallet {
                     // TODO: Properly pass data. Replace address with an OutInstruction entirely?
                     data: None,
                   },
-                  balance: Balance { coin: out_balance.coin, amount: coin_balance },
+                  balance: ExternalBalance {
+                    coin: out_balance.coin.try_into().unwrap(),
+                    amount: coin_balance,
+                  },
                 };
                 Coins::<T>::burn_with_instruction(origin.into(), instruction)?;
               }
@@ -218,11 +220,11 @@ pub mod pallet {
           }
         }
         InInstruction::GenesisLiquidity(address) => {
-          Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance)?;
+          Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance.into())?;
           GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
         }
         InInstruction::SwapToStakedSRI(address, network) => {
-          Coins::<T>::mint(POL_ACCOUNT.into(), instruction.balance)?;
+          Coins::<T>::mint(POL_ACCOUNT.into(), instruction.balance.into())?;
           Emissions::<T>::swap_to_staked_sri(address.into(), network, instruction.balance)?;
         }
       }
@@ -230,6 +232,7 @@ pub mod pallet {
     }
 
     pub fn halt(network: NetworkId) -> Result<(), DispatchError> {
+      // TODO: is it possible to halt serai network?
       Halted::<T>::set(network, Some(()));
       Self::deposit_event(Event::Halt { network });
       Ok(())
@@ -237,13 +240,13 @@ pub mod pallet {
   }
 
   fn keys_for_network<T: Config>(
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Result<(Session, Option<Public>, Option<Public>), InvalidTransaction> {
     // If there's no session set, and therefore no keys set, then this must be an invalid signature
-    let Some(session) = ValidatorSets::<T>::session(network) else {
+    let Some(session) = ValidatorSets::<T>::session(NetworkId::from(network)) else {
       Err(InvalidTransaction::BadProof)?
     };
-    let mut set = ValidatorSet { session, network };
+    let mut set = ExternalValidatorSet { network, session };
     let latest = ValidatorSets::<T>::keys(set).map(|keys| keys.0);
     let prior = if set.session.0 != 0 {
       set.session.0 -= 1;
@@ -303,12 +306,7 @@ pub mod pallet {
       if batch.batch.encode().len() > MAX_BATCH_SIZE {
         Err(InvalidTransaction::ExhaustsResources)?;
       }
-
       let network = batch.batch.network;
-      // Don't allow the Serai set to publish `Batch`s as-if Serai itself was an external network
-      if network == NetworkId::Serai {
-        Err(InvalidTransaction::Custom(0))?;
-      }
 
       // verify the signature
       let (current_session, prior, current) = keys_for_network::<T>(network)?;
@@ -327,7 +325,7 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
-      if Halted::<T>::contains_key(network) {
+      if Halted::<T>::contains_key(NetworkId::from(network)) {
         Err(InvalidTransaction::Custom(1))?;
       }
 
@@ -336,7 +334,7 @@ pub mod pallet {
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
       if prior.is_some() && (!valid_by_prior) {
         ValidatorSets::<T>::retire_set(ValidatorSet {
-          network,
+          network: network.into(),
           session: Session(current_session.0 - 1),
         });
       }

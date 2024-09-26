@@ -6,8 +6,8 @@ use serai_abi::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress,
-    SeraiAddress,
+    Amount, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress, SeraiAddress,
+    ExternalCoin, ExternalBalance,
   },
   in_instructions::primitives::{
     InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR, OutAddress,
@@ -28,15 +28,14 @@ use common::{
 // TODO: Check Transfer events
 serai_test!(
   add_liquidity: (|serai: Serai| async move {
-    let coin = Coin::Monero;
+    let coin = ExternalCoin::Monero;
     let pair = insecure_pair_from_name("Ferdie");
 
     // mint sriXMR in the account so that we can add liq.
     // Ferdie account is already pre-funded with SRI.
     mint_coin(
       &serai,
-      Balance { coin, amount: Amount(100_000_000_000_000) },
-      NetworkId::Monero,
+      ExternalBalance { coin, amount: Amount(100_000_000_000_000) },
       0,
       pair.clone().public().into(),
     )
@@ -61,7 +60,7 @@ serai_test!(
       vec![DexEvent::LiquidityAdded {
         who: pair.public().into(),
         mint_to: pair.public().into(),
-        pool_id: Coin::Monero,
+        pool_id: coin,
         coin_amount: coin_amount.0,
         sri_amount: sri_amount.0,
         lp_token_minted: 49_999999990000
@@ -71,15 +70,14 @@ serai_test!(
 
   // Tests coin -> SRI and SRI -> coin swaps.
   swap_coin_to_sri: (|serai: Serai| async move {
-    let coin = Coin::Ether;
+    let coin = ExternalCoin::Ether;
     let pair = insecure_pair_from_name("Ferdie");
 
     // mint sriXMR in the account so that we can add liq.
     // Ferdie account is already pre-funded with SRI.
     mint_coin(
       &serai,
-      Balance { coin, amount: Amount(100_000_000_000_000) },
-      NetworkId::Ethereum,
+      ExternalBalance { coin, amount: Amount(100_000_000_000_000) },
       0,
       pair.clone().public().into(),
     )
@@ -96,14 +94,21 @@ serai_test!(
 
     // now that we have our liquid pool, swap some coin to SRI.
     let mut amount_in = Amount(25_000_000_000_000);
-    let mut block = common_swap(&serai, coin, Coin::Serai, amount_in, Amount(1), 1, pair.clone())
+    let mut block = common_swap(
+      &serai,
+      coin.into(),
+      Coin::Serai,
+      amount_in,
+      Amount(1),
+      1,
+      pair.clone())
       .await;
 
     // get only the swap events
     let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-    let mut path = BoundedVec::try_from(vec![coin, Coin::Serai]).unwrap();
+    let mut path = BoundedVec::try_from(vec![coin.into(), Coin::Serai]).unwrap();
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
@@ -117,13 +122,21 @@ serai_test!(
 
     // now swap some SRI to coin
     amount_in = Amount(10_000_000_000_000);
-    block = common_swap(&serai, Coin::Serai, coin, amount_in, Amount(1), 2, pair.clone()).await;
+    block = common_swap(
+      &serai,
+      Coin::Serai,
+      coin.into(),
+      amount_in,
+      Amount(1),
+      2,
+      pair.clone()
+    ).await;
 
     // get only the swap events
     let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-    path = BoundedVec::try_from(vec![Coin::Serai, coin]).unwrap();
+    path = BoundedVec::try_from(vec![Coin::Serai, coin.into()]).unwrap();
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
@@ -137,23 +150,21 @@ serai_test!(
   })
 
   swap_coin_to_coin: (|serai: Serai| async move {
-    let coin1 = Coin::Monero;
-    let coin2 = Coin::Dai;
+    let coin1 = ExternalCoin::Monero;
+    let coin2 = ExternalCoin::Dai;
     let pair = insecure_pair_from_name("Ferdie");
 
     // mint coins
     mint_coin(
       &serai,
-      Balance { coin: coin1, amount: Amount(100_000_000_000_000) },
-      NetworkId::Monero,
+      ExternalBalance { coin: coin1, amount: Amount(100_000_000_000_000) },
       0,
       pair.clone().public().into(),
     )
     .await;
     mint_coin(
       &serai,
-      Balance { coin: coin2, amount: Amount(100_000_000_000_000) },
-      NetworkId::Ethereum,
+      ExternalBalance { coin: coin2, amount: Amount(100_000_000_000_000) },
       0,
       pair.clone().public().into(),
     )
@@ -177,13 +188,21 @@ serai_test!(
 
     // swap coin1 -> coin2
     let amount_in = Amount(25_000_000_000_000);
-    let block = common_swap(&serai, coin1, coin2, amount_in, Amount(1), 2, pair.clone()).await;
+    let block = common_swap(
+      &serai,
+      coin1.into(),
+      coin2.into(),
+      amount_in,
+      Amount(1),
+      2,
+      pair.clone()
+    ).await;
 
     // get only the swap events
     let mut events = serai.as_of(block).dex().events().await.unwrap();
     events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-    let path = BoundedVec::try_from(vec![coin1, Coin::Serai, coin2]).unwrap();
+    let path = BoundedVec::try_from(vec![coin1.into(), Coin::Serai, coin2.into()]).unwrap();
     assert_eq!(
       events,
       vec![DexEvent::SwapExecuted {
@@ -197,7 +216,7 @@ serai_test!(
   })
 
   add_liquidity_in_instructions: (|serai: Serai| async move {
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
     let pair = insecure_pair_from_name("Ferdie");
     let mut batch_id = 0;
 
@@ -205,8 +224,7 @@ serai_test!(
     // Ferdie account is already pre-funded with SRI.
     mint_coin(
       &serai,
-      Balance { coin, amount: Amount(100_000_000_000_000) },
-      NetworkId::Bitcoin,
+      ExternalBalance { coin, amount: Amount(100_000_000_000_000) },
       batch_id,
       pair.clone().public().into(),
     )
@@ -227,12 +245,12 @@ serai_test!(
     let mut block_hash = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block_hash.0);
     let batch = Batch {
-      network: NetworkId::Bitcoin,
+      network: coin.network(),
       id: batch_id,
       block: block_hash,
       instructions: vec![InInstructionWithBalance {
         instruction: InInstruction::Dex(DexCall::SwapAndAddLiquidity(pair.public().into())),
-        balance: Balance { coin: Coin::Bitcoin, amount: Amount(20_000_000_000_000) },
+        balance: ExternalBalance { coin, amount: Amount(20_000_000_000_000) },
       }],
     };
 
@@ -244,7 +262,7 @@ serai_test!(
       vec![DexEvent::LiquidityAdded {
         who: IN_INSTRUCTION_EXECUTOR,
         mint_to: pair.public().into(),
-        pool_id: Coin::Bitcoin,
+        pool_id: coin,
         coin_amount: 10_000_000_000_000, // half of sent amount
         sri_amount: 111_333_778_668,
         lp_token_minted: 1_054_092_553_383
@@ -253,8 +271,8 @@ serai_test!(
   })
 
   swap_in_instructions: (|serai: Serai| async move {
-    let coin1 = Coin::Monero;
-    let coin2 = Coin::Ether;
+    let coin1 = ExternalCoin::Monero;
+    let coin2 = ExternalCoin::Ether;
     let pair = insecure_pair_from_name("Ferdie");
     let mut coin1_batch_id = 0;
     let mut coin2_batch_id = 0;
@@ -262,8 +280,7 @@ serai_test!(
     // mint coins
     mint_coin(
       &serai,
-      Balance { coin: coin1, amount: Amount(10_000_000_000_000_000) },
-      NetworkId::Monero,
+      ExternalBalance { coin: coin1, amount: Amount(10_000_000_000_000_000) },
       coin1_batch_id,
       pair.clone().public().into(),
     )
@@ -271,8 +288,7 @@ serai_test!(
     coin1_batch_id += 1;
     mint_coin(
       &serai,
-      Balance { coin: coin2, amount: Amount(100_000_000_000_000) },
-      NetworkId::Ethereum,
+      ExternalBalance { coin: coin2, amount: Amount(100_000_000_000_000) },
       coin2_batch_id,
       pair.clone().public().into(),
     )
@@ -305,18 +321,18 @@ serai_test!(
       let out_address = OutAddress::External(ExternalAddress::new(rand_bytes.clone()).unwrap());
 
       // amount is the min out amount
-      let out_balance = Balance { coin: coin2, amount: Amount(1) };
+      let out_balance = Balance { coin: coin2.into(), amount: Amount(1) };
 
       // now that we have our pools, we can try to swap
       let mut block_hash = BlockHash([0; 32]);
       OsRng.fill_bytes(&mut block_hash.0);
       let batch = Batch {
-        network: NetworkId::Monero,
+        network: coin1.network(),
         id: coin1_batch_id,
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address)),
-          balance: Balance { coin: coin1, amount: Amount(200_000_000_000_000) },
+          balance: ExternalBalance { coin: coin1, amount: Amount(200_000_000_000_000) },
         }],
       };
 
@@ -325,7 +341,7 @@ serai_test!(
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-      let path = BoundedVec::try_from(vec![coin1, Coin::Serai, coin2]).unwrap();
+      let path = BoundedVec::try_from(vec![coin1.into(), Coin::Serai, coin2.into()]).unwrap();
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
@@ -345,18 +361,18 @@ serai_test!(
         OutAddress::Serai(SeraiAddress::new(rand_bytes.clone().try_into().unwrap()));
 
       // amount is the min out amount
-      let out_balance = Balance { coin: coin1, amount: Amount(1) };
+      let out_balance = Balance { coin: coin1.into(), amount: Amount(1) };
 
       // now that we have our pools, we can try to swap
       let mut block_hash = BlockHash([0; 32]);
       OsRng.fill_bytes(&mut block_hash.0);
       let batch = Batch {
-        network: NetworkId::Ethereum,
+        network: coin2.network(),
         id: coin2_batch_id,
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
-          balance: Balance { coin: coin2, amount: Amount(200_000_000_000) },
+          balance: ExternalBalance { coin: coin2, amount: Amount(200_000_000_000) },
         }],
       };
 
@@ -364,7 +380,7 @@ serai_test!(
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-      let path = BoundedVec::try_from(vec![coin2, Coin::Serai, coin1]).unwrap();
+      let path = BoundedVec::try_from(vec![coin2.into(), Coin::Serai, coin1.into()]).unwrap();
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {
@@ -389,12 +405,12 @@ serai_test!(
       let mut block_hash = BlockHash([0; 32]);
       OsRng.fill_bytes(&mut block_hash.0);
       let batch = Batch {
-        network: NetworkId::Monero,
+        network: coin1.network(),
         id: coin1_batch_id,
         block: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
-          balance: Balance { coin: coin1, amount: Amount(100_000_000_000_000) },
+          balance: ExternalBalance { coin: coin1, amount: Amount(100_000_000_000_000) },
         }],
       };
 
@@ -402,7 +418,7 @@ serai_test!(
       let mut events = serai.as_of(block).dex().events().await.unwrap();
       events.retain(|e| matches!(e, DexEvent::SwapExecuted { .. }));
 
-      let path = BoundedVec::try_from(vec![coin1, Coin::Serai]).unwrap();
+      let path = BoundedVec::try_from(vec![coin1.into(), Coin::Serai]).unwrap();
       assert_eq!(
         events,
         vec![DexEvent::SwapExecuted {

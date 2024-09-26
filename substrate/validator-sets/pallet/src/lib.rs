@@ -316,11 +316,13 @@ pub mod pallet {
   /// The generated key pair for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn keys)]
-  pub type Keys<T: Config> = StorageMap<_, Twox64Concat, ValidatorSet, KeyPair, OptionQuery>;
+  pub type Keys<T: Config> =
+    StorageMap<_, Twox64Concat, ExternalValidatorSet, KeyPair, OptionQuery>;
 
   /// The key for validator sets which can (and still need to) publish their slash reports.
   #[pallet::storage]
-  pub type PendingSlashReport<T: Config> = StorageMap<_, Identity, NetworkId, Public, OptionQuery>;
+  pub type PendingSlashReport<T: Config> =
+    StorageMap<_, Identity, ExternalNetworkId, Public, OptionQuery>;
 
   /// Disabled validators.
   #[pallet::storage]
@@ -343,7 +345,7 @@ pub mod pallet {
       removed: T::AccountId,
     },
     KeyGen {
-      set: ValidatorSet,
+      set: ExternalValidatorSet,
       key_pair: KeyPair,
     },
     AcceptedHandover {
@@ -600,14 +602,16 @@ pub mod pallet {
       amount: Amount,
     ) -> Result<bool, DispatchError> {
       // Check it's safe to decrease this set's stake by this amount
-      let new_total_staked = Self::total_allocated_stake(network)
-        .unwrap()
-        .0
-        .checked_sub(amount.0)
-        .ok_or(Error::<T>::NotEnoughAllocated)?;
-      let required_stake = Self::required_stake_for_network(network);
-      if new_total_staked < required_stake {
-        Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
+      if let NetworkId::External(n) = network {
+        let new_total_staked = Self::total_allocated_stake(NetworkId::from(n))
+          .unwrap()
+          .0
+          .checked_sub(amount.0)
+          .ok_or(Error::<T>::NotEnoughAllocated)?;
+        let required_stake = Self::required_stake_for_network(n);
+        if new_total_staked < required_stake {
+          Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
+        }
       }
 
       let old_allocation =
@@ -690,20 +694,23 @@ pub mod pallet {
         return false;
       }
 
-      // Handover is automatically complete for Serai as it doesn't have a handover protocol
-      if network == NetworkId::Serai {
-        return true;
-      }
+      if let NetworkId::External(n) = network {
+        // The current session must have set keys for its handover to be completed
+        if !Keys::<T>::contains_key(ExternalValidatorSet { network: n, session }) {
+          return false;
+        }
 
-      // The current session must have set keys for its handover to be completed
-      if !Keys::<T>::contains_key(ValidatorSet { network, session }) {
-        return false;
+        // This must be the first session (which has set keys) OR the prior session must have been
+        // retired (signified by its keys no longer being present)
+        (session.0 == 0) ||
+          (!Keys::<T>::contains_key(ExternalValidatorSet {
+            network: n,
+            session: Session(session.0 - 1),
+          }))
+      } else {
+        // Handover is automatically complete for Serai as it doesn't have a handover protocol
+        true
       }
-
-      // This must be the first session (which has set keys) OR the prior session must have been
-      // retired (signified by its keys no longer being present)
-      (session.0 == 0) ||
-        (!Keys::<T>::contains_key(ValidatorSet { network, session: Session(session.0 - 1) }))
     }
 
     fn new_session() {
@@ -733,19 +740,20 @@ pub mod pallet {
     // TODO: This is called retire_set, yet just starts retiring the set
     // Update the nomenclature within this function
     pub fn retire_set(set: ValidatorSet) {
-      // If the prior prior set didn't report, emit they're retired now
-      if PendingSlashReport::<T>::get(set.network).is_some() {
-        Self::deposit_event(Event::SetRetired {
-          set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
-        });
-      }
-
       // Serai doesn't set keys and network slashes are handled by BABE/GRANDPA
-      if set.network != NetworkId::Serai {
+      if let NetworkId::External(n) = set.network {
+        // If the prior prior set didn't report, emit they're retired now
+        if PendingSlashReport::<T>::get(n).is_some() {
+          Self::deposit_event(Event::SetRetired {
+            set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
+          });
+        }
+
         // This overwrites the prior value as the prior to-report set's stake presumably just
         // unlocked, making their report unenforceable
-        let keys = Keys::<T>::take(set).unwrap();
-        PendingSlashReport::<T>::set(set.network, Some(keys.0));
+        let keys =
+          Keys::<T>::take(ExternalValidatorSet { network: n, session: set.session }).unwrap();
+        PendingSlashReport::<T>::set(n, Some(keys.0));
       }
 
       // We're retiring this set because the set after it accepted the handover
@@ -817,7 +825,7 @@ pub mod pallet {
     }
 
     /// Returns the required stake in terms SRI for a given `Balance`.
-    pub fn required_stake(balance: &Balance) -> SubstrateAmount {
+    pub fn required_stake(balance: &ExternalBalance) -> SubstrateAmount {
       use dex_pallet::HigherPrecisionBalance;
 
       // This is inclusive to an increase in accuracy
@@ -840,11 +848,11 @@ pub mod pallet {
     }
 
     /// Returns the current total required stake for a given `network`.
-    pub fn required_stake_for_network(network: NetworkId) -> SubstrateAmount {
+    pub fn required_stake_for_network(network: ExternalNetworkId) -> SubstrateAmount {
       let mut total_required = 0;
       for coin in network.coins() {
-        let supply = Coins::<T>::supply(coin);
-        total_required += Self::required_stake(&Balance { coin: *coin, amount: Amount(supply) });
+        let supply = Coins::<T>::supply(Coin::from(coin));
+        total_required += Self::required_stake(&ExternalBalance { coin, amount: Amount(supply) });
       }
       total_required
     }
@@ -940,7 +948,7 @@ pub mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn set_keys(
       origin: OriginFor<T>,
-      network: NetworkId,
+      network: ExternalNetworkId,
       removed_participants: BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
       key_pair: KeyPair,
       signature: Signature,
@@ -951,8 +959,8 @@ pub mod pallet {
       // (called by pre_dispatch) checks it
       let _ = signature;
 
-      let session = Self::session(network).unwrap();
-      let set = ValidatorSet { network, session };
+      let session = Self::session(NetworkId::from(network)).unwrap();
+      let set = ExternalValidatorSet { network, session };
 
       Keys::<T>::set(set, Some(key_pair.clone()));
 
@@ -960,7 +968,7 @@ pub mod pallet {
       // We generally set TotalAllocatedStake when the prior set retires, and the new set is fully
       // active and liable. Since this is the first set, there is no prior set to wait to retire
       if session == Session(0) {
-        Self::set_total_allocated_stake(network);
+        Self::set_total_allocated_stake(NetworkId::from(network));
       }
 
       // This does not remove from TotalAllocatedStake or InSet in order to:
@@ -970,7 +978,7 @@ pub mod pallet {
       // 2) Not allow parties removed to immediately deallocate, per commentary on deallocation
       //    scheduling (https://github.com/serai-dex/serai/issues/394).
       for removed in removed_participants {
-        Self::deposit_event(Event::ParticipantRemoved { set, removed });
+        Self::deposit_event(Event::ParticipantRemoved { set: set.into(), removed });
       }
       Self::deposit_event(Event::KeyGen { set, key_pair });
 
@@ -981,7 +989,7 @@ pub mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn report_slashes(
       origin: OriginFor<T>,
-      network: NetworkId,
+      network: ExternalNetworkId,
       slashes: BoundedVec<(Public, u32), ConstU32<{ MAX_KEY_SHARES_PER_SET / 3 }>>,
       signature: Signature,
     ) -> DispatchResult {
@@ -996,7 +1004,10 @@ pub mod pallet {
 
       // Emit set retireed
       Pallet::<T>::deposit_event(Event::SetRetired {
-        set: ValidatorSet { network, session: Session(Self::session(network).unwrap().0 - 1) },
+        set: ValidatorSet {
+          network: network.into(),
+          session: Session(Self::session(NetworkId::from(network)).unwrap().0 - 1),
+        },
       });
 
       Ok(())
@@ -1062,17 +1073,12 @@ pub mod pallet {
         Call::set_keys { network, ref removed_participants, ref key_pair, ref signature } => {
           let network = *network;
 
-          // Don't allow the Serai set to set_keys, as they have no reason to do so
-          if network == NetworkId::Serai {
-            Err(InvalidTransaction::Custom(0))?;
-          }
-
           // Confirm this set has a session
-          let Some(current_session) = Self::session(network) else {
+          let Some(current_session) = Self::session(NetworkId::from(network)) else {
             Err(InvalidTransaction::Custom(1))?
           };
 
-          let set = ValidatorSet { network, session: current_session };
+          let set = ExternalValidatorSet { network, session: current_session };
 
           // Confirm it has yet to set keys
           if Keys::<T>::get(set).is_some() {
@@ -1081,7 +1087,7 @@ pub mod pallet {
 
           // This is a needed precondition as this uses storage variables for the latest decided
           // session on this assumption
-          assert_eq!(Pallet::<T>::latest_decided_session(network), Some(current_session));
+          assert_eq!(Pallet::<T>::latest_decided_session(network.into()), Some(current_session));
 
           // This does not slash the removed participants as that'll be done at the end of the
           // set's lifetime
@@ -1094,15 +1100,15 @@ pub mod pallet {
             removed.insert(participant.0);
           }
 
-          let participants =
-            Participants::<T>::get(network).expect("session existed without participants");
+          let participants = Participants::<T>::get(NetworkId::from(network))
+            .expect("session existed without participants");
 
           let mut all_key_shares = 0;
           let mut signers = vec![];
           let mut signing_key_shares = 0;
           for participant in participants {
             let participant = participant.0;
-            let shares = InSet::<T>::get(network, participant)
+            let shares = InSet::<T>::get(NetworkId::from(network), participant)
               .expect("participant from Participants wasn't InSet");
             all_key_shares += shares;
 
@@ -1124,7 +1130,7 @@ pub mod pallet {
           // Verify the signature with the MuSig key of the signers
           // We theoretically don't need set_keys_message to bind to removed_participants, as the
           // key we're signing with effectively already does so, yet there's no reason not to
-          if !musig_key(set, &signers)
+          if !musig_key(set.into(), &signers)
             .verify(&set_keys_message(&set, removed_participants, key_pair), signature)
           {
             Err(InvalidTransaction::BadProof)?;
@@ -1138,17 +1144,16 @@ pub mod pallet {
         }
         Call::report_slashes { network, ref slashes, ref signature } => {
           let network = *network;
-          // Don't allow Serai to publish a slash report as BABE/GRANDPA handles slashes directly
-          if network == NetworkId::Serai {
-            Err(InvalidTransaction::Custom(0))?;
-          }
           let Some(key) = PendingSlashReport::<T>::take(network) else {
             // Assumed already published
             Err(InvalidTransaction::Stale)?
           };
+
           // There must have been a previous session is PendingSlashReport is populated
-          let set =
-            ValidatorSet { network, session: Session(Self::session(network).unwrap().0 - 1) };
+          let set = ExternalValidatorSet {
+            network,
+            session: Session(Self::session(NetworkId::from(network)).unwrap().0 - 1),
+          };
           if !key.verify(&report_slashes_message(&set, slashes), signature) {
             Err(InvalidTransaction::BadProof)?;
           }
@@ -1173,13 +1178,14 @@ pub mod pallet {
   }
 
   impl<T: Config> AllowMint for Pallet<T> {
-    fn is_allowed(balance: &Balance) -> bool {
+    fn is_allowed(balance: &ExternalBalance) -> bool {
       // get the required stake
       let current_required = Self::required_stake_for_network(balance.coin.network());
       let new_required = current_required + Self::required_stake(balance);
 
       // get the total stake for the network & compare.
-      let staked = Self::total_allocated_stake(balance.coin.network()).unwrap_or(Amount(0));
+      let staked =
+        Self::total_allocated_stake(NetworkId::from(balance.coin.network())).unwrap_or(Amount(0));
       staked.0 >= new_required
     }
   }

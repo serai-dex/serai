@@ -16,7 +16,7 @@ pub enum Call {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
-  Batch { network: NetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
-  InstructionFailure { network: NetworkId, id: u32, index: u32 },
+  Batch { network: ExternalNetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
+  InstructionFailure { network: ExternalNetworkId, id: u32, index: u32 },
   Halt { network: NetworkId },
 }

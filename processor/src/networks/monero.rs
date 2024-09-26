@@ -31,7 +31,7 @@ use monero_wallet::Scanner;
 use tokio::time::sleep;
 
 pub use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, ExternalCoin, ExternalNetworkId, Amount, ExternalBalance},
   networks::monero::Address,
 };
 
@@ -85,8 +85,8 @@ impl OutputTrait<Monero> for Output {
     None
   }
 
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Monero, amount: Amount(self.0.commitment().amount) }
+  fn balance(&self) -> ExternalBalance {
+    ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(self.0.commitment().amount) }
   }
 
   fn data(&self) -> &[u8] {
@@ -308,7 +308,7 @@ impl Monero {
     calculating_fee: bool,
   ) -> Result<Option<MakeSignableTransactionResult>, NetworkError> {
     for payment in payments {
-      assert_eq!(payment.balance.coin, Coin::Monero);
+      assert_eq!(payment.balance.coin, ExternalCoin::Monero);
     }
 
     // TODO2: Use an fee representative of several blocks, cached inside Self
@@ -363,7 +363,7 @@ impl Monero {
             .legacy_address(MoneroNetwork::Mainnet),
         )
         .unwrap(),
-        balance: Balance { coin: Coin::Monero, amount: Amount(0) },
+        balance: ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(0) },
         data: None,
       });
     }
@@ -470,7 +470,7 @@ impl Network for Monero {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = NetworkId::Monero;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Monero;
   const ID: &'static str = "Monero";
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 120;
   const CONFIRMATIONS: usize = 10;
