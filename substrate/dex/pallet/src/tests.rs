@@ -409,9 +409,9 @@ fn can_quote_price() {
   new_test_ext().execute_with(|| {
     let user = system_address(b"user1").into();
     let coin1 = Coin::native();
-    let coin2 = ExternalCoin::Ether;
+    let coin2 = Coin::External(ExternalCoin::Ether);
 
-    assert_ok!(Dex::create_pool(coin2));
+    assert_ok!(Dex::create_pool(coin2.try_into().unwrap()));
 
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(100000) }));
     assert_ok!(CoinsPallet::<Test>::mint(
@@ -419,38 +419,82 @@ fn can_quote_price() {
       Balance { coin: coin2.into(), amount: Amount(1000) }
     ));
 
-    assert_ok!(Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 200, 10000, 1, 1, user,));
+    assert_ok!(Dex::add_liquidity(
+      RuntimeOrigin::signed(user),
+      coin2.try_into().unwrap(),
+      200,
+      10000,
+      1,
+      1,
+      user,
+    ));
 
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 3000, false,), Some(60));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, 3000, false,),
+      Some(60)
+    );
     // including fee so should get less out...
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 3000, true,), Some(46));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, 3000, true,),
+      Some(46)
+    );
     // Check it still gives same price:
     // (if the above accidentally exchanged then it would not give same quote as before)
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 3000, false,), Some(60));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, 3000, false,),
+      Some(60)
+    );
     // including fee so should get less out...
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 3000, true,), Some(46));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, 3000, true,),
+      Some(46)
+    );
 
     // Check inverse:
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 60, false,), Some(3000));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(coin2, Coin::native(), 60, false,),
+      Some(3000)
+    );
     // including fee so should get less out...
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, 60, true,), Some(2302));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(coin2, Coin::native(), 60, true,),
+      Some(2302)
+    );
 
     //
     // same tests as above but for quote_price_tokens_for_exact_tokens:
     //
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 60, false,), Some(3000));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, 60, false,),
+      Some(3000)
+    );
     // including fee so should need to put more in...
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 60, true,), Some(4299));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, 60, true,),
+      Some(4299)
+    );
     // Check it still gives same price:
     // (if the above accidentally exchanged then it would not give same quote as before)
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 60, false,), Some(3000));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, 60, false,),
+      Some(3000)
+    );
     // including fee so should need to put more in...
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 60, true,), Some(4299));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, 60, true,),
+      Some(4299)
+    );
 
     // Check inverse:
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 3000, false,), Some(60));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(coin2, Coin::native(), 3000, false,),
+      Some(60)
+    );
     // including fee so should need to put more in...
-    assert_eq!(Dex::quote_price_tokens_for_exact_tokens(coin2, 3000, true,), Some(86));
+    assert_eq!(
+      Dex::quote_price_tokens_for_exact_tokens(coin2, Coin::native(), 3000, true,),
+      Some(86)
+    );
 
     //
     // roundtrip: Without fees one should get the original number
@@ -458,24 +502,28 @@ fn can_quote_price() {
     let amount_in = 100;
 
     assert_eq!(
-      Dex::quote_price_exact_tokens_for_tokens(coin2, amount_in, false,)
-        .and_then(|amount| { Dex::quote_price_exact_tokens_for_tokens(coin2, amount, false) }),
+      Dex::quote_price_exact_tokens_for_tokens(coin2, Coin::native(), amount_in, false,).and_then(
+        |amount| Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, amount, false,)
+      ),
       Some(amount_in)
     );
     assert_eq!(
-      Dex::quote_price_exact_tokens_for_tokens(coin2, amount_in, false,)
-        .and_then(|amount| Dex::quote_price_exact_tokens_for_tokens(coin2, amount, false,)),
+      Dex::quote_price_exact_tokens_for_tokens(Coin::native(), coin2, amount_in, false,).and_then(
+        |amount| Dex::quote_price_exact_tokens_for_tokens(coin2, Coin::native(), amount, false,)
+      ),
       Some(amount_in)
     );
 
     assert_eq!(
-      Dex::quote_price_tokens_for_exact_tokens(coin2, amount_in, false,)
-        .and_then(|amount| { Dex::quote_price_tokens_for_exact_tokens(coin2, amount, false) }),
+      Dex::quote_price_tokens_for_exact_tokens(coin2, Coin::native(), amount_in, false,).and_then(
+        |amount| Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, amount, false,)
+      ),
       Some(amount_in)
     );
     assert_eq!(
-      Dex::quote_price_tokens_for_exact_tokens(coin2, amount_in, false,)
-        .and_then(|amount| Dex::quote_price_tokens_for_exact_tokens(coin2, amount, false,)),
+      Dex::quote_price_tokens_for_exact_tokens(Coin::native(), coin2, amount_in, false,).and_then(
+        |amount| Dex::quote_price_tokens_for_exact_tokens(coin2, Coin::native(), amount, false,)
+      ),
       Some(amount_in)
     );
   });
@@ -487,31 +535,36 @@ fn quote_price_exact_tokens_for_tokens_matches_execution() {
     let user = system_address(b"user1").into();
     let user2 = system_address(b"user2").into();
     let coin1 = Coin::native();
-    let coin2 = ExternalCoin::Bitcoin;
+    let coin2 = Coin::External(ExternalCoin::Bitcoin);
 
-    assert_ok!(Dex::create_pool(coin2));
+    assert_ok!(Dex::create_pool(coin2.try_into().unwrap()));
 
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(100000) }));
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin2.into(), amount: Amount(1000) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
-    assert_ok!(Dex::add_liquidity(RuntimeOrigin::signed(user), coin2, 200, 10000, 1, 1, user,));
+    assert_ok!(Dex::add_liquidity(
+      RuntimeOrigin::signed(user),
+      coin2.try_into().unwrap(),
+      200,
+      10000,
+      1,
+      1,
+      user,
+    ));
 
     let amount = 1;
     let quoted_price = 49;
-    assert_eq!(Dex::quote_price_exact_tokens_for_tokens(coin2, amount, true,), Some(quoted_price));
+    assert_eq!(
+      Dex::quote_price_exact_tokens_for_tokens(coin2, coin1, amount, true,),
+      Some(quoted_price)
+    );
 
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user2,
-      Balance { coin: coin2.into(), amount: Amount(amount) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user2, Balance { coin: coin2, amount: Amount(amount) }));
     let prior_sri_balance = 0;
     assert_eq!(prior_sri_balance, balance(user2, coin1));
     assert_ok!(Dex::swap_exact_tokens_for_tokens(
       RuntimeOrigin::signed(user2),
-      bvec![coin2.into(), coin1],
+      bvec![coin2, coin1],
       amount,
       1,
       user2,
@@ -547,7 +600,7 @@ fn quote_price_tokens_for_exact_tokens_matches_execution() {
     let amount = 49;
     let quoted_price = 1;
     assert_eq!(
-      Dex::quote_price_tokens_for_exact_tokens(coin2.try_into().unwrap(), amount, true,),
+      Dex::quote_price_tokens_for_exact_tokens(coin2, coin1, amount, true,),
       Some(quoted_price)
     );
 

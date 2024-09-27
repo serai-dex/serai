@@ -744,6 +744,10 @@ async fn main() {
 
   let coordinator = MessageQueue::from_env(Service::Processor(network_id));
 
+  // This allow is necessary since each configuration deletes the other networks from the following
+  // match arms. So we match all cases but since all cases already there according to the compiler
+  // we put this to allow clippy to get pass this.
+  #[allow(unreachable_patterns)]
   match network_id {
     #[cfg(feature = "bitcoin")]
     ExternalNetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
@@ -759,5 +763,6 @@ async fn main() {
     }
     #[cfg(feature = "monero")]
     ExternalNetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
+    _ => panic!("spawning a processor for an unsupported network"),
   }
 }

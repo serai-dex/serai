@@ -1002,17 +1002,18 @@ pub mod pallet {
       Ok(amounts)
     }
 
-    /// Used by the RPC service to provide price on coin/SRI pool.
+    /// Used by the RPC service to provide current prices.
     pub fn quote_price_exact_tokens_for_tokens(
-      coin: ExternalCoin,
+      coin1: Coin,
+      coin2: Coin,
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(Coin::native(), coin.into()).ok()?;
+      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
       let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, Coin::native());
-      let balance2 = Self::get_balance(&pool_account, coin.into());
+      let balance1 = Self::get_balance(&pool_account, coin1);
+      let balance2 = Self::get_balance(&pool_account, coin2);
       if balance1 != 0 {
         if include_fee {
           Self::get_amount_out(amount, balance1, balance2).ok()
@@ -1026,15 +1027,16 @@ pub mod pallet {
 
     /// Used by the RPC service to provide current prices.
     pub fn quote_price_tokens_for_exact_tokens(
-      coin: ExternalCoin,
+      coin1: Coin,
+      coin2: Coin,
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(Coin::native(), coin.into()).ok()?;
+      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
       let pool_account = Self::get_pool_account(pool_id);
 
-      let balance1 = Self::get_balance(&pool_account, Coin::native());
-      let balance2 = Self::get_balance(&pool_account, coin.into());
+      let balance1 = Self::get_balance(&pool_account, coin1);
+      let balance2 = Self::get_balance(&pool_account, coin2);
       if balance1 != 0 {
         if include_fee {
           Self::get_amount_in(amount, balance1, balance2).ok()
@@ -1239,7 +1241,8 @@ sp_api::decl_runtime_apis! {
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_in_max` to control slippage.)
     fn quote_price_tokens_for_exact_tokens(
-      coin: ExternalCoin,
+      coin1: Coin,
+      coin2: Coin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount>;
@@ -1249,7 +1252,8 @@ sp_api::decl_runtime_apis! {
     /// Note that the price may have changed by the time the transaction is executed.
     /// (Use `amount_out_min` to control slippage.)
     fn quote_price_exact_tokens_for_tokens(
-      coin: ExternalCoin,
+      coin1: Coin,
+      coin2: Coin,
       amount: SubstrateAmount,
       include_fee: bool
     ) -> Option<SubstrateAmount>;
