@@ -414,10 +414,7 @@ fn can_quote_price() {
     assert_ok!(Dex::create_pool(coin2.try_into().unwrap()));
 
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin1, amount: Amount(100000) }));
-    assert_ok!(CoinsPallet::<Test>::mint(
-      user,
-      Balance { coin: coin2.into(), amount: Amount(1000) }
-    ));
+    assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(1000) }));
 
     assert_ok!(Dex::add_liquidity(
       RuntimeOrigin::signed(user),
