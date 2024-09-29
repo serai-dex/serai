@@ -410,7 +410,7 @@ impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
 
   /// A divisor to prove a scalar multiplication.
   ///
-  /// The divisor will interpolate $d_i$ instances of $2^i \cdot G$ with $-(s \cdot G)$.
+  /// The divisor will interpolate $-(s \cdot G)$ with $d_i$ instances of $2^i \cdot G$.
   ///
   /// This function executes in constant time with regards to the scalar.
   ///
@@ -419,19 +419,48 @@ impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
     &self,
     mut generator: C,
   ) -> Poly<C::FieldElement> {
-    // The following for loop is constant time to the sum of `dlog`'s elements
+    // 1 is used for the resulting point, NUM_BITS is used for the decomposition, and then we store
+    // one additional index in a usize for the points we shouldn't write at all (hence the +2)
+    let _ = usize::try_from(<C::Scalar as PrimeField>::NUM_BITS + 2)
+      .expect("NUM_BITS + 2 didn't fit in usize");
     let mut divisor_points =
-      Vec::with_capacity(usize::try_from(<C::Scalar as PrimeField>::NUM_BITS).unwrap());
-    divisor_points.push(-generator * self.scalar);
+      vec![C::identity(); (<C::Scalar as PrimeField>::NUM_BITS + 1) as usize];
+
+    // Write the inverse of the resulting point
+    divisor_points[0] = -generator * self.scalar;
+
+    // Write the decomposition
+    let mut write_to: u32 = 1;
     for coefficient in &self.decomposition {
       let mut coefficient = *coefficient;
-      while coefficient != 0 {
-        coefficient -= 1;
-        divisor_points.push(generator);
+      // Iterate over the maximum amount of iters for this value to be constant time regardless of
+      // any branch prediction algorithms
+      for _ in 0 .. <C::Scalar as PrimeField>::NUM_BITS {
+        // Write the generator to the slot we're supposed to
+        /*
+          Without this loop, we'd increment this dependent on the distribution within the
+          decomposition. If the distribution is bottom-heavy, we won't access the tail of
+          `divisor_points` for a while, risking it being ejected out of the cache (causing a cache
+          miss which may not occur with a top-heavy distribution which quickly moves to the tail).
+
+          This is O(log2(NUM_BITS) ** 3) though, as this the third loop, which is horrific.
+        */
+        for i in 1 ..= <C::Scalar as PrimeField>::NUM_BITS {
+          divisor_points[i as usize] =
+            <_>::conditional_select(&divisor_points[i as usize], &generator, i.ct_eq(&write_to));
+        }
+        // If the coefficient isn't zero, increment write_to (so we don't overwrite this generator
+        // when it should be there)
+        let coefficient_not_zero = !coefficient.ct_eq(&0);
+        write_to = <_>::conditional_select(&write_to, &(write_to + 1), coefficient_not_zero);
+        // Subtract one from the coefficient, if it's not zero and won't underflow
+        coefficient =
+          <_>::conditional_select(&coefficient, &coefficient.wrapping_sub(1), coefficient_not_zero);
       }
       generator = generator.double();
     }
 
+    // Create a divisor out of all points except the last point which is solely scratch
     let res = new_divisor(&divisor_points).unwrap();
     divisor_points.zeroize();
     res
