@@ -17,5 +17,4 @@ pub enum Event {
   GenesisLiquidityAdded { by: SeraiAddress, balance: ExternalBalance },
   GenesisLiquidityRemoved { by: SeraiAddress, balance: ExternalBalance },
   GenesisLiquidityAddedToPool { coin: ExternalBalance, sri: Amount },
-  EconomicSecurityReached { network: NetworkId },
 }

@@ -12,7 +12,7 @@ use tokio::{
 use borsh::BorshSerialize;
 use sp_application_crypto::RuntimePublic;
 use serai_client::{
-  primitives::{ExternalNetworkId, NetworkId, Signature, EXTERNAL_NETWORKS, NETWORKS},
+  primitives::{ExternalNetworkId, Signature, EXTERNAL_NETWORKS},
   validator_sets::primitives::{ExternalValidatorSet, Session},
   Serai, SeraiError, TemporalSerai,
 };
@@ -204,11 +204,9 @@ impl<D: Db> CosignEvaluator<D> {
 
       let mut total_stake = 0;
       let mut total_on_distinct_chain = 0;
-      for network in NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        }
-
+      // TODO: `network` isn't being used in the following loop. is this a bug?
+      // why are we going through the networks here?
+      for _network in EXTERNAL_NETWORKS {
         // Get the current set for this network
         let set_with_keys = {
           let mut res;

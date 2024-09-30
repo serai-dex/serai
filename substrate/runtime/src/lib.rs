@@ -53,8 +53,9 @@ use sp_runtime::{
 
 #[allow(unused_imports)]
 use primitives::{
-  NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, NETWORKS, MEDIAN_PRICE_WINDOW_LENGTH,
-  HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE, FAST_EPOCH_DURATION,
+  NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, EXTERNAL_NETWORKS,
+  MEDIAN_PRICE_WINDOW_LENGTH, HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
+  FAST_EPOCH_DURATION,
 };
 
 use support::{
@@ -570,10 +571,7 @@ sp_api::impl_runtime_apis! {
         .map(|(id, _)| id.into_inner().0)
         .collect::<hashbrown::HashSet<_>>();
       let mut all = serai_validators;
-      for network in NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        }
+      for network in EXTERNAL_NETWORKS {
         // Returning the latest-decided, not latest and active, means the active set
         // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
         // forcing some validators to successfully peer find in order for the threshold to become
@@ -581,7 +579,7 @@ sp_api::impl_runtime_apis! {
         //
         // This is assumed not to matter in real life, yet an interesting note.
         let participants =
-          ValidatorSets::participants_for_latest_decided_set(network)
+          ValidatorSets::participants_for_latest_decided_set(NetworkId::from(network))
             .map_or(vec![], BoundedVec::into_inner);
         for (participant, _) in participants {
           all.insert(participant.0);

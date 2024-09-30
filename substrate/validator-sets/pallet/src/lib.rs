@@ -171,6 +171,7 @@ pub mod pallet {
     ///
     /// This will still include participants which were removed from the DKG.
     pub fn in_set(network: NetworkId, account: Public) -> bool {
+      // TODO: should InSet only work for `ExternalNetworkId`?
       if InSet::<T>::contains_key(network, account) {
         return true;
       }
@@ -743,6 +744,9 @@ pub mod pallet {
       // Serai doesn't set keys and network slashes are handled by BABE/GRANDPA
       if let NetworkId::External(n) = set.network {
         // If the prior prior set didn't report, emit they're retired now
+        // TODO: we will emit the events 1 session late if there was no call to report_slashes.
+        // Also report_slashes calls must be made after the set publishes its first batch for this
+        // flow to work as expected.
         if PendingSlashReport::<T>::get(n).is_some() {
           Self::deposit_event(Event::SetRetired {
             set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
@@ -754,6 +758,9 @@ pub mod pallet {
         let keys =
           Keys::<T>::take(ExternalValidatorSet { network: n, session: set.session }).unwrap();
         PendingSlashReport::<T>::set(n, Some(keys.0));
+      } else {
+        // emit the event for serai network
+        Self::deposit_event(Event::SetRetired { set });
       }
 
       // We're retiring this set because the set after it accepted the handover

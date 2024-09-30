@@ -18,7 +18,10 @@
 // It has been forked into a crate distributed under the AGPL 3.0.
 // Please check the current distribution for up-to-date copyright and licensing information.
 
-use crate::{mock::*, *};
+use crate::{
+  mock::{*, MEDIAN_PRICE_WINDOW_LENGTH},
+  *,
+};
 use frame_support::{assert_noop, assert_ok};
 
 pub use coins_pallet as coins;

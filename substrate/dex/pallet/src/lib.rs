@@ -78,7 +78,7 @@ mod tests;
 #[cfg(test)]
 mod mock;
 
-use frame_support::ensure;
+use frame_support::{ensure, pallet_prelude::*, BoundedBTreeSet};
 use frame_system::{
   pallet_prelude::{BlockNumberFor, OriginFor},
   ensure_signed,
@@ -86,9 +86,12 @@ use frame_system::{
 
 pub use pallet::*;
 
-use sp_runtime::{traits::TrailingZeroInput, DispatchError};
+use sp_runtime::{
+  traits::{TrailingZeroInput, IntegerSquareRoot},
+  DispatchError,
+};
 
-use serai_primitives::{Coin, ExternalCoin, SubstrateAmount};
+use serai_primitives::*;
 
 use sp_std::prelude::*;
 pub use types::*;
@@ -103,14 +106,10 @@ pub use weights::WeightInfo;
 #[frame_support::pallet]
 pub mod pallet {
   use super::*;
-  use frame_support::{pallet_prelude::*, BoundedBTreeSet};
 
   use sp_core::sr25519::Public;
-  use sp_runtime::traits::IntegerSquareRoot;
 
   use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
-
-  use serai_primitives::{NetworkId, *};
 
   /// Pool ID.
   ///

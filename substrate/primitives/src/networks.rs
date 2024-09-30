@@ -215,7 +215,6 @@ impl Coin {
 
   pub fn decimals(&self) -> u32 {
     match self {
-      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
       Coin::Serai => 8,
       Coin::External(c) => c.decimals(),
     }

@@ -41,7 +41,8 @@ pub mod pallet {
       // we accept we reached economic security once we can mint smallest amount of a network's coin
       for coin in EXTERNAL_COINS {
         let existing = EconomicSecurityBlock::<T>::get(coin.network());
-        // TODO: we don't need this if is_allowed returns false when there is no coin value
+        // TODO: we don't need to check for oracle value if is_allowed returns false when there is
+        // no coin value
         if existing.is_none() &&
           Dex::<T>::security_oracle_value(coin).is_some() &&
           <T as CoinsConfig>::AllowMint::is_allowed(&ExternalBalance { coin, amount: Amount(1) })
