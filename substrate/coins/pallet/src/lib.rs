@@ -161,11 +161,9 @@ pub mod pallet {
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // If the coin isn't Serai, which we're always allowed to mint, and the mint isn't explicitly
       // allowed, error
-      if !balance.coin.is_native() &&
-        (!T::AllowMint::is_allowed(&ExternalBalance {
-          coin: balance.coin.try_into().unwrap(),
-          amount: balance.amount,
-        }))
+      if !ExternalCoin::try_from(balance.coin)
+        .map(|coin| T::AllowMint::is_allowed(&ExternalBalance { coin, amount: balance.amount }))
+        .unwrap_or(true)
       {
         Err(Error::<T, I>::MintNotAllowed)?;
       }

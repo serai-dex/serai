@@ -11,7 +11,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use serai_client::{
   coins::CoinsEvent,
   in_instructions::InInstructionsEvent,
-  primitives::{BlockHash, ExternalNetworkId, NetworkId},
+  primitives::{BlockHash, ExternalNetworkId},
   validator_sets::{
     primitives::{ExternalValidatorSet, ValidatorSet},
     ValidatorSetsEvent,
@@ -229,13 +229,8 @@ async fn handle_block<D: Db, Pro: Processors>(
       panic!("NewSet event wasn't NewSet: {new_set:?}");
     };
 
-    // If this is Serai, do nothing
     // We only coordinate/process external networks
-    if set.network == NetworkId::Serai {
-      continue;
-    }
-
-    let set: ExternalValidatorSet = set.try_into().unwrap();
+    let Ok(set) = ExternalValidatorSet::try_from(set) else { continue };
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh new set event {:?}", new_set);
       let mut txn = db.txn();
@@ -290,11 +285,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       panic!("AcceptedHandover event wasn't AcceptedHandover: {accepted_handover:?}");
     };
 
-    if set.network == NetworkId::Serai {
-      continue;
-    }
-
-    let set: ExternalValidatorSet = set.try_into().unwrap();
+    let Ok(set) = ExternalValidatorSet::try_from(set) else { continue };
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh accepted handover event {:?}", accepted_handover);
       // TODO: This isn't atomic with the event handling
@@ -312,11 +303,7 @@ async fn handle_block<D: Db, Pro: Processors>(
       panic!("SetRetired event wasn't SetRetired: {retired_set:?}");
     };
 
-    if set.network == NetworkId::Serai {
-      continue;
-    }
-
-    let set: ExternalValidatorSet = set.try_into().unwrap();
+    let Ok(set) = ExternalValidatorSet::try_from(set) else { continue };
     if HandledEvent::is_unhandled(db, hash, event_id) {
       log::info!("found fresh set retired event {:?}", retired_set);
       let mut txn = db.txn();

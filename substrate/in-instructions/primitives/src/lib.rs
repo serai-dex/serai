@@ -2,7 +2,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use serai_primitives::ExternalBalance;
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
@@ -21,7 +20,7 @@ use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
 #[rustfmt::skip]
-use serai_primitives::{BlockHash, Balance, ExternalNetworkId, NetworkId, SeraiAddress, ExternalAddress, system_address};
+use serai_primitives::{BlockHash, Balance, ExternalNetworkId, NetworkId, SeraiAddress, ExternalBalance, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;

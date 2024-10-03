@@ -509,7 +509,7 @@ pub mod pallet {
 
     /// A hook to be called whenever a network's session is rotated.
     pub fn on_new_session(network: NetworkId) {
-      // reset the oracle value
+      // Only track the price for non-SRI coins as this is SRI denominated
       if let NetworkId::External(n) = network {
         for coin in n.coins() {
           SecurityOracleValue::<T>::set(coin, Self::median_price(coin));
@@ -936,11 +936,9 @@ pub mod pallet {
     pub fn get_pool_id(coin1: Coin, coin2: Coin) -> Result<PoolId, Error<T>> {
       ensure!((coin1 == Coin::Serai) || (coin2 == Coin::Serai), Error::<T>::PoolNotFound);
       ensure!(coin1 != coin2, Error::<T>::EqualCoins);
-      if coin1 == Coin::Serai {
-        Ok(coin2.try_into().unwrap())
-      } else {
-        Ok(coin1.try_into().unwrap())
-      }
+      ExternalCoin::try_from(coin1)
+        .or_else(|()| ExternalCoin::try_from(coin2))
+        .map_err(|()| Error::<T>::PoolNotFound)
     }
 
     /// Returns the balance of each coin in the pool.

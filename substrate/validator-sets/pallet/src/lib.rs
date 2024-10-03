@@ -171,7 +171,6 @@ pub mod pallet {
     ///
     /// This will still include participants which were removed from the DKG.
     pub fn in_set(network: NetworkId, account: Public) -> bool {
-      // TODO: should InSet only work for `ExternalNetworkId`?
       if InSet::<T>::contains_key(network, account) {
         return true;
       }
@@ -695,23 +694,23 @@ pub mod pallet {
         return false;
       }
 
-      if let NetworkId::External(n) = network {
-        // The current session must have set keys for its handover to be completed
-        if !Keys::<T>::contains_key(ExternalValidatorSet { network: n, session }) {
-          return false;
-        }
-
-        // This must be the first session (which has set keys) OR the prior session must have been
-        // retired (signified by its keys no longer being present)
-        (session.0 == 0) ||
-          (!Keys::<T>::contains_key(ExternalValidatorSet {
-            network: n,
-            session: Session(session.0 - 1),
-          }))
-      } else {
+      let NetworkId::External(n) = network else {
         // Handover is automatically complete for Serai as it doesn't have a handover protocol
-        true
+        return true;
+      };
+
+      // The current session must have set keys for its handover to be completed
+      if !Keys::<T>::contains_key(ExternalValidatorSet { network: n, session }) {
+        return false;
       }
+
+      // This must be the first session (which has set keys) OR the prior session must have been
+      // retired (signified by its keys no longer being present)
+      (session.0 == 0) ||
+        (!Keys::<T>::contains_key(ExternalValidatorSet {
+          network: n,
+          session: Session(session.0 - 1),
+        }))
     }
 
     fn new_session() {
@@ -744,9 +743,6 @@ pub mod pallet {
       // Serai doesn't set keys and network slashes are handled by BABE/GRANDPA
       if let NetworkId::External(n) = set.network {
         // If the prior prior set didn't report, emit they're retired now
-        // TODO: we will emit the events 1 session late if there was no call to report_slashes.
-        // Also report_slashes calls must be made after the set publishes its first batch for this
-        // flow to work as expected.
         if PendingSlashReport::<T>::get(n).is_some() {
           Self::deposit_event(Event::SetRetired {
             set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },

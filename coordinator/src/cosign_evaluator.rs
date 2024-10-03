@@ -204,14 +204,12 @@ impl<D: Db> CosignEvaluator<D> {
 
       let mut total_stake = 0;
       let mut total_on_distinct_chain = 0;
-      // TODO: `network` isn't being used in the following loop. is this a bug?
-      // why are we going through the networks here?
-      for _network in EXTERNAL_NETWORKS {
+      for network in EXTERNAL_NETWORKS {
         // Get the current set for this network
         let set_with_keys = {
           let mut res;
           while {
-            res = set_with_keys_fn(&serai, cosign.network).await;
+            res = set_with_keys_fn(&serai, network).await;
             res.is_err()
           } {
             log::error!(
