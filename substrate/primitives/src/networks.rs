@@ -95,7 +95,7 @@ impl Decode for NetworkId {
     let kind = input.read_byte()?;
     match kind {
       0 => Ok(Self::Serai),
-      _ => Ok(ExternalNetworkId::decode(input)?.into()),
+      _ => Ok(ExternalNetworkId::decode(&mut [kind].as_slice())?.into()),
     }
   }
 }
@@ -264,7 +264,7 @@ impl Decode for Coin {
     let kind = input.read_byte()?;
     match kind {
       0 => Ok(Self::Serai),
-      _ => Ok(ExternalCoin::decode(input)?.into()),
+      _ => Ok(ExternalCoin::decode(&mut [kind].as_slice())?.into()),
     }
   }
 }

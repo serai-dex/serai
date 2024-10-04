@@ -13,7 +13,7 @@ use serai_client::{
   },
   primitives::{
     crypto::RuntimePublic, Amount, BlockHash, ExternalBalance, ExternalNetworkId, PublicKey,
-    SeraiAddress,
+    SeraiAddress, EXTERNAL_NETWORKS,
   },
   validator_sets::primitives::Session,
 };
@@ -190,9 +190,7 @@ pub(crate) async fn substrate_block(
 
 #[test]
 fn batch_test() {
-  for network in
-    [ExternalNetworkId::Bitcoin, ExternalNetworkId::Ethereum, ExternalNetworkId::Monero]
-  {
+  for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
