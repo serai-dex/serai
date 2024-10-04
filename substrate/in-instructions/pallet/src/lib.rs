@@ -60,7 +60,7 @@ pub mod pallet {
   pub enum Event<T: Config> {
     Batch { network: ExternalNetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
     InstructionFailure { network: ExternalNetworkId, id: u32, index: u32 },
-    Halt { network: NetworkId },
+    Halt { network: ExternalNetworkId },
   }
 
   #[pallet::error]
@@ -86,7 +86,7 @@ pub mod pallet {
 
   // Halted networks.
   #[pallet::storage]
-  pub(crate) type Halted<T: Config> = StorageMap<_, Identity, NetworkId, (), OptionQuery>;
+  pub(crate) type Halted<T: Config> = StorageMap<_, Identity, ExternalNetworkId, (), OptionQuery>;
 
   // The latest block a network has acknowledged as finalized
   #[pallet::storage]
@@ -231,8 +231,7 @@ pub mod pallet {
       Ok(())
     }
 
-    pub fn halt(network: NetworkId) -> Result<(), DispatchError> {
-      // TODO: is it possible to halt serai network?
+    pub fn halt(network: ExternalNetworkId) -> Result<(), DispatchError> {
       Halted::<T>::set(network, Some(()));
       Self::deposit_event(Event::Halt { network });
       Ok(())
@@ -325,7 +324,7 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
-      if Halted::<T>::contains_key(NetworkId::from(network)) {
+      if Halted::<T>::contains_key(network) {
         Err(InvalidTransaction::Custom(1))?;
       }
 

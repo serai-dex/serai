@@ -18,5 +18,5 @@ pub enum Call {
 pub enum Event {
   Batch { network: ExternalNetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
   InstructionFailure { network: ExternalNetworkId, id: u32, index: u32 },
-  Halt { network: NetworkId },
+  Halt { network: ExternalNetworkId },
 }
