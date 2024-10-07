@@ -1,6 +1,6 @@
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
-use serai_client::validator_sets::primitives::ValidatorSet;
+use serai_client::validator_sets::primitives::ExternalValidatorSet;
 
 use tributary::{
   ReadWrite,
@@ -40,7 +40,7 @@ pub fn removed_as_of_dkg_attempt(
 
 pub fn removed_as_of_set_keys(
   getter: &impl Get,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   genesis: [u8; 32],
 ) -> Option<Vec<<Ristretto as Ciphersuite>::G>> {
   // SeraiDkgCompleted has the key placed on-chain.

@@ -42,7 +42,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, ExternalCoin, ExternalNetworkId, Amount, ExternalBalance},
   networks::bitcoin::Address,
 };
 
@@ -125,8 +125,8 @@ impl OutputTrait<Bitcoin> for Output {
     self.presumed_origin.clone()
   }
 
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Bitcoin, amount: Amount(self.output.value()) }
+  fn balance(&self) -> ExternalBalance {
+    ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {
@@ -423,7 +423,7 @@ impl Bitcoin {
     calculating_fee: bool,
   ) -> Result<Option<BSignableTransaction>, NetworkError> {
     for payment in payments {
-      assert_eq!(payment.balance.coin, Coin::Bitcoin);
+      assert_eq!(payment.balance.coin, ExternalCoin::Bitcoin);
     }
 
     // TODO2: Use an fee representative of several blocks, cached inside Self
@@ -598,7 +598,7 @@ impl Network for Bitcoin {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = NetworkId::Bitcoin;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Bitcoin;
   const ID: &'static str = "Bitcoin";
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
   const CONFIRMATIONS: usize = 6;

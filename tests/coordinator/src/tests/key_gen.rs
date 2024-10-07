@@ -13,9 +13,8 @@ use ciphersuite::{
 use dkg::ThresholdParams;
 
 use serai_client::{
-  primitives::NetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair, Session},
   Public,
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 use messages::{key_gen::KeyGenId, CoordinatorMessage};
 
@@ -28,7 +27,7 @@ pub async fn key_gen<C: Ciphersuite>(
   let coordinators = processors.len();
   let mut participant_is = vec![];
 
-  let set = ValidatorSet { session, network: NetworkId::Bitcoin };
+  let set = ExternalValidatorSet { session, network: ExternalNetworkId::Bitcoin };
   let id = KeyGenId { session: set.session, attempt: 0 };
 
   for (i, processor) in processors.iter_mut().enumerate() {

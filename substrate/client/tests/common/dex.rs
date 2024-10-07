@@ -1,4 +1,4 @@
-use serai_abi::primitives::{Coin, Amount};
+use serai_abi::primitives::{Amount, Coin, ExternalCoin};
 
 use serai_client::{Serai, SeraiDex};
 use sp_core::{sr25519::Pair, Pair as PairTrait};
@@ -8,7 +8,7 @@ use crate::common::tx::publish_tx;
 #[allow(dead_code)]
 pub async fn add_liquidity(
   serai: &Serai,
-  coin: Coin,
+  coin: ExternalCoin,
   coin_amount: Amount,
   sri_amount: Amount,
   nonce: u32,

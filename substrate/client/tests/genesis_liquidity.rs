@@ -2,7 +2,7 @@ use std::{time::Duration, collections::HashMap};
 
 use serai_client::Serai;
 
-use serai_abi::primitives::{Coin, COINS, Amount, GENESIS_SRI};
+use serai_abi::primitives::{Amount, Coin, ExternalCoin, COINS, EXTERNAL_COINS, GENESIS_SRI};
 
 use serai_client::genesis_liquidity::primitives::{
   GENESIS_LIQUIDITY_ACCOUNT, INITIAL_GENESIS_LP_SHARES,
@@ -19,9 +19,12 @@ serai_test_fast_epoch!(
 
 pub async fn test_genesis_liquidity(serai: Serai) {
   // set up the genesis
-  let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
-  let values = HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
-  let (accounts, _) = set_up_genesis(&serai, &coins, &values).await;
+  let values = HashMap::from([
+    (ExternalCoin::Monero, 184100),
+    (ExternalCoin::Ether, 4785000),
+    (ExternalCoin::Dai, 1500),
+  ]);
+  let (accounts, _) = set_up_genesis(&serai, &values).await;
 
   // wait until genesis is complete
   while serai
@@ -55,9 +58,9 @@ pub async fn test_genesis_liquidity(serai: Serai) {
   // check pools has proper liquidity
   let mut pool_amounts = HashMap::new();
   let mut total_value = 0u128;
-  for coin in coins.clone() {
+  for coin in EXTERNAL_COINS {
     let total_coin = accounts[&coin].iter().fold(0u128, |acc, value| acc + u128::from(value.1 .0));
-    let value = if coin != Coin::Bitcoin {
+    let value = if coin != ExternalCoin::Bitcoin {
       (total_coin * u128::from(values[&coin])) / 10u128.pow(coin.decimals())
     } else {
       total_coin
@@ -69,8 +72,8 @@ pub async fn test_genesis_liquidity(serai: Serai) {
 
   // check distributed SRI per pool
   let mut total_sri_distributed = 0u128;
-  for coin in coins.clone() {
-    let sri = if coin == *COINS.last().unwrap() {
+  for coin in EXTERNAL_COINS {
+    let sri = if coin == *EXTERNAL_COINS.last().unwrap() {
       u128::from(GENESIS_SRI).checked_sub(total_sri_distributed).unwrap()
     } else {
       (pool_amounts[&coin].1 * u128::from(GENESIS_SRI)) / total_value
@@ -83,7 +86,7 @@ pub async fn test_genesis_liquidity(serai: Serai) {
   }
 
   // check each liquidity provider got liquidity tokens proportional to their value
-  for coin in coins {
+  for coin in EXTERNAL_COINS {
     let liq_supply = serai.genesis_liquidity().supply(coin).await.unwrap();
     for (acc, amount) in &accounts[&coin] {
       let acc_liq_shares = serai.genesis_liquidity().liquidity(acc, coin).await.unwrap().shares;

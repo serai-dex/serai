@@ -7,17 +7,18 @@ use sp_core::{
 
 use serai_client::{
   primitives::{
-    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION, TARGET_BLOCK_TIME,
+    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION,
+    TARGET_BLOCK_TIME, ExternalNetworkId, Amount,
   },
   validator_sets::{
-    primitives::{Session, ValidatorSet, KeyPair},
+    primitives::{Session, ValidatorSet, ExternalValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message},
     SeraiInInstructions,
   },
-  Amount, Serai,
+  Serai,
 };
 
 mod common;
@@ -58,8 +59,8 @@ async fn get_ordered_keys(serai: &Serai, network: NetworkId, accounts: &[Pair]) 
 
 serai_test!(
   set_keys_test: (|serai: Serai| async move {
-    let network = NetworkId::Bitcoin;
-    let set = ValidatorSet { session: Session(0), network };
+    let network = ExternalNetworkId::Bitcoin;
+    let set = ExternalValidatorSet { session: Session(0), network };
 
     let pair = insecure_pair_from_name("Alice");
     let public = pair.public();
@@ -89,7 +90,7 @@ serai_test!(
     {
       let vs_serai = serai.as_of_latest_finalized_block().await.unwrap();
       let vs_serai = vs_serai.validator_sets();
-      let participants = vs_serai.participants(set.network).await
+      let participants = vs_serai.participants(set.network.into()).await
         .unwrap()
         .unwrap()
         .into_iter()
@@ -197,9 +198,9 @@ async fn validator_set_rotation() {
       // amounts for single key share per network
       let key_shares = HashMap::from([
         (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
-        (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
-        (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
-        (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+        (NetworkId::External(ExternalNetworkId::Bitcoin), Amount(1_000_000 * 10_u64.pow(8))),
+        (NetworkId::External(ExternalNetworkId::Monero), Amount(100_000 * 10_u64.pow(8))),
+        (NetworkId::External(ExternalNetworkId::Ethereum), Amount(1_000_000 * 10_u64.pow(8))),
       ]);
 
       // genesis participants per network
@@ -208,9 +209,9 @@ async fn validator_set_rotation() {
         accounts[.. 4].to_vec().iter().map(|pair| pair.public()).collect::<Vec<_>>();
       let mut participants = HashMap::from([
         (NetworkId::Serai, default_participants.clone()),
-        (NetworkId::Bitcoin, default_participants.clone()),
-        (NetworkId::Monero, default_participants.clone()),
-        (NetworkId::Ethereum, default_participants),
+        (NetworkId::External(ExternalNetworkId::Bitcoin), default_participants.clone()),
+        (NetworkId::External(ExternalNetworkId::Monero), default_participants.clone()),
+        (NetworkId::External(ExternalNetworkId::Ethereum), default_participants),
       ]);
 
       // test the set rotation
@@ -237,7 +238,8 @@ async fn validator_set_rotation() {
 
         // set the keys if it is an external set
         if network != NetworkId::Serai {
-          let set = ValidatorSet { session: Session(0), network };
+          let set =
+            ExternalValidatorSet { session: Session(0), network: network.try_into().unwrap() };
           let key_pair = get_random_key_pair();
           let pairs = get_ordered_keys(&serai, network, &accounts).await;
           set_keys(&serai, set, key_pair, &pairs).await;
@@ -265,7 +267,8 @@ async fn validator_set_rotation() {
 
         if network != NetworkId::Serai {
           // set the keys if it is an external set
-          let set = ValidatorSet { session: Session(1), network };
+          let set =
+            ExternalValidatorSet { session: Session(1), network: network.try_into().unwrap() };
 
           // we need the whole substrate key pair to sign the batch
           let (substrate_pair, key_pair) = {
@@ -283,7 +286,12 @@ async fn validator_set_rotation() {
           // provide a batch to complete the handover and retire the previous set
           let mut block_hash = BlockHash([0; 32]);
           OsRng.fill_bytes(&mut block_hash.0);
-          let batch = Batch { network, id: 0, block: block_hash, instructions: vec![] };
+          let batch = Batch {
+            network: network.try_into().unwrap(),
+            id: 0,
+            block: block_hash,
+            instructions: vec![],
+          };
           publish_tx(
             &serai,
             &SeraiInInstructions::execute_batch(SignedBatch {
