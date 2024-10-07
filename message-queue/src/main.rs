@@ -6,7 +6,7 @@ pub(crate) use std::{
 pub(crate) use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 pub(crate) use schnorr_signatures::SchnorrSignature;
 
-pub(crate) use serai_primitives::NetworkId;
+pub(crate) use serai_primitives::ExternalNetworkId;
 
 pub(crate) use tokio::{
   io::{AsyncReadExt, AsyncWriteExt},
@@ -193,10 +193,7 @@ async fn main() {
     KEYS.write().unwrap().insert(service, key);
     let mut queues = QUEUES.write().unwrap();
     if service == Service::Coordinator {
-      for network in serai_primitives::NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        }
+      for network in serai_primitives::EXTERNAL_NETWORKS {
         queues.insert(
           (service, Service::Processor(network)),
           RwLock::new(Queue(db.clone(), service, Service::Processor(network))),
@@ -210,17 +207,13 @@ async fn main() {
     }
   };
 
-  // Make queues for each NetworkId, other than Serai
-  for network in serai_primitives::NETWORKS {
-    if network == NetworkId::Serai {
-      continue;
-    }
+  // Make queues for each ExternalNetworkId
+  for network in serai_primitives::EXTERNAL_NETWORKS {
     // Use a match so we error if the list of NetworkIds changes
     let Some(key) = read_key(match network {
-      NetworkId::Serai => unreachable!(),
-      NetworkId::Bitcoin => "BITCOIN_KEY",
-      NetworkId::Ethereum => "ETHEREUM_KEY",
-      NetworkId::Monero => "MONERO_KEY",
+      ExternalNetworkId::Bitcoin => "BITCOIN_KEY",
+      ExternalNetworkId::Ethereum => "ETHEREUM_KEY",
+      ExternalNetworkId::Monero => "MONERO_KEY",
     }) else {
       continue;
     };

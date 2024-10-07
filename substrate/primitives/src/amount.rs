@@ -29,6 +29,8 @@ pub type SubstrateAmount = u64;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Amount(pub SubstrateAmount);
 
+// TODO: these impl shouldn't panic and return error to be dealt with.
+// Otherwise we might have a panic that stops the network.
 impl Add for Amount {
   type Output = Amount;
   fn add(self, other: Amount) -> Amount {

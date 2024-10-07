@@ -3,7 +3,7 @@ use std::{sync::OnceLock, collections::HashMap};
 
 use tokio::sync::Mutex;
 
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::ExternalNetworkId;
 
 use dockertest::{
   LogAction, LogPolicy, LogSource, LogOptions, StartPolicy, TestBodySpecification,
@@ -56,15 +56,21 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
 
     let (coord_key, message_queue_keys, message_queue_composition) = message_queue_instance();
 
-    let (bitcoin_composition, bitcoin_port) = network_instance(NetworkId::Bitcoin);
-    let mut bitcoin_processor_composition =
-      processor_instance(NetworkId::Bitcoin, bitcoin_port, message_queue_keys[&NetworkId::Bitcoin]);
+    let (bitcoin_composition, bitcoin_port) = network_instance(ExternalNetworkId::Bitcoin);
+    let mut bitcoin_processor_composition = processor_instance(
+      ExternalNetworkId::Bitcoin,
+      bitcoin_port,
+      message_queue_keys[&ExternalNetworkId::Bitcoin],
+    );
     assert_eq!(bitcoin_processor_composition.len(), 1);
     let bitcoin_processor_composition = bitcoin_processor_composition.swap_remove(0);
 
-    let (monero_composition, monero_port) = network_instance(NetworkId::Monero);
-    let mut monero_processor_composition =
-      processor_instance(NetworkId::Monero, monero_port, message_queue_keys[&NetworkId::Monero]);
+    let (monero_composition, monero_port) = network_instance(ExternalNetworkId::Monero);
+    let mut monero_processor_composition = processor_instance(
+      ExternalNetworkId::Monero,
+      monero_port,
+      message_queue_keys[&ExternalNetworkId::Monero],
+    );
     assert_eq!(monero_processor_composition.len(), 1);
     let monero_processor_composition = monero_processor_composition.swap_remove(0);
 

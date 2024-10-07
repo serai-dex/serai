@@ -1,4 +1,4 @@
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::ExternalNetworkId;
 
 pub use serai_db::*;
 
@@ -9,7 +9,7 @@ mod inner_db {
     SubstrateDb {
       NextBlock: () -> u64,
       HandledEvent: (block: [u8; 32]) -> u32,
-      BatchInstructionsHashDb: (network: NetworkId, id: u32) -> [u8; 32]
+      BatchInstructionsHashDb: (network: ExternalNetworkId, id: u32) -> [u8; 32]
     }
   );
 }

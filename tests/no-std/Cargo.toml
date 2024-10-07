@@ -35,4 +35,4 @@ dkg = { path = "../../crypto/dkg", default-features = false }
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"] }
 
-monero-wallet-util = { path = "../../networks/monero/wallet/util", default-features = false, features = ["compile-time-generators"] }
+monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["compile-time-generators"] }

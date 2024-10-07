@@ -76,10 +76,18 @@ impl SignableTransaction {
       PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
       extra.push_nonce(id_vec);
     } else {
-      // If there's no payment ID, we push a dummy (as wallet2 does) if there's only one payment
-      if (self.payments.len() == 2) &&
-        self.payments.iter().any(|payment| matches!(payment, InternalPayment::Change(_)))
-      {
+      /*
+        If there's no payment ID, we push a dummy (as wallet2 does) to the first payment.
+
+        This does cause a random payment ID for the other recipient (a documented fingerprint).
+        Functionally, random payment IDs should be fine as wallet2 will trigger this same behavior
+        (a random payment ID being seen by the recipient) with a batch send if one of the recipient
+        addresses has a payment ID.
+
+        The alternative would be to not include any payment ID, fingerprinting to the entire
+        blockchain this is non-standard wallet software (instead of just a single recipient).
+      */
+      if self.payments.len() == 2 {
         let (_, payment_id_xor) = self
           .payments
           .iter()

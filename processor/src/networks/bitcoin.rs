@@ -4,7 +4,6 @@ use async_trait::async_trait;
 
 use scale::{Encode, Decode};
 
-use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::ff::PrimeField;
 use k256::{ProjectivePoint, Scalar};
 use frost::{
@@ -43,7 +42,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, ExternalCoin, ExternalNetworkId, Amount, ExternalBalance},
   networks::bitcoin::Address,
 };
 
@@ -126,8 +125,8 @@ impl OutputTrait<Bitcoin> for Output {
     self.presumed_origin.clone()
   }
 
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Bitcoin, amount: Amount(self.output.value()) }
+  fn balance(&self) -> ExternalBalance {
+    ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {
@@ -249,7 +248,6 @@ impl EventualityTrait for Eventuality {
 
 #[derive(Clone, Debug)]
 pub struct SignableTransaction {
-  transcript: RecommendedTranscript,
   actual: BSignableTransaction,
 }
 impl PartialEq for SignableTransaction {
@@ -425,7 +423,7 @@ impl Bitcoin {
     calculating_fee: bool,
   ) -> Result<Option<BSignableTransaction>, NetworkError> {
     for payment in payments {
-      assert_eq!(payment.balance.coin, Coin::Bitcoin);
+      assert_eq!(payment.balance.coin, ExternalCoin::Bitcoin);
     }
 
     // TODO2: Use an fee representative of several blocks, cached inside Self
@@ -457,7 +455,7 @@ impl Bitcoin {
         panic!("trying to create a bitcoin transaction without inputs")
       }
       // No outputs left and the change isn't worth enough/not even enough funds to pay the fee
-      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds) => Ok(None),
+      Err(TransactionError::NoOutputs | TransactionError::NotEnoughFunds { .. }) => Ok(None),
       // amortize_fee removes payments which fall below the dust threshold
       Err(TransactionError::DustPayment) => panic!("dust payment despite removing dust"),
       Err(TransactionError::TooMuchData) => {
@@ -600,7 +598,7 @@ impl Network for Bitcoin {
 
   type Address = Address;
 
-  const NETWORK: NetworkId = NetworkId::Bitcoin;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Bitcoin;
   const ID: &'static str = "Bitcoin";
   const ESTIMATED_BLOCK_TIME_IN_SECONDS: usize = 600;
   const CONFIRMATIONS: usize = 6;
@@ -820,7 +818,7 @@ impl Network for Bitcoin {
   async fn signable_transaction(
     &self,
     block_number: usize,
-    plan_id: &[u8; 32],
+    _plan_id: &[u8; 32],
     _key: ProjectivePoint,
     inputs: &[Output],
     payments: &[Payment<Self>],
@@ -829,12 +827,8 @@ impl Network for Bitcoin {
   ) -> Result<Option<(Self::SignableTransaction, Self::Eventuality)>, NetworkError> {
     Ok(self.make_signable_transaction(block_number, inputs, payments, change, false).await?.map(
       |signable| {
-        let mut transcript =
-          RecommendedTranscript::new(b"Serai Processor Bitcoin Transaction Transcript");
-        transcript.append_message(b"plan", plan_id);
-
         let eventuality = Eventuality(signable.txid());
-        (SignableTransaction { transcript, actual: signable }, eventuality)
+        (SignableTransaction { actual: signable }, eventuality)
       },
     ))
   }
@@ -844,13 +838,7 @@ impl Network for Bitcoin {
     keys: ThresholdKeys<Self::Curve>,
     transaction: Self::SignableTransaction,
   ) -> Result<Self::TransactionMachine, NetworkError> {
-    Ok(
-      transaction
-        .actual
-        .clone()
-        .multisig(&keys, transaction.transcript)
-        .expect("used the wrong keys"),
-    )
+    Ok(transaction.actual.clone().multisig(&keys).expect("used the wrong keys"))
   }
 
   async fn publish_completion(&self, tx: &Transaction) -> Result<(), NetworkError> {

@@ -1,7 +1,7 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use scale::{Encode, Decode, MaxEncodedLen};
+use scale::{Decode, Encode, EncodeLike, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 #[cfg(feature = "borsh")]
@@ -10,52 +10,340 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
+use sp_std::{vec, vec::Vec};
 
 #[cfg(feature = "borsh")]
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
-/// The type used to identify networks.
-#[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, PartialOrd, Ord, MaxEncodedLen, TypeInfo,
-)]
+/// The type used to identify external networks.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum NetworkId {
-  Serai,
+pub enum ExternalNetworkId {
   Bitcoin,
   Ethereum,
   Monero,
 }
-impl NetworkId {
-  pub fn coins(&self) -> &'static [Coin] {
+
+impl Encode for ExternalNetworkId {
+  fn encode(&self) -> Vec<u8> {
     match self {
-      Self::Serai => &[Coin::Serai],
-      Self::Bitcoin => &[Coin::Bitcoin],
-      Self::Ethereum => &[Coin::Ether, Coin::Dai],
-      Self::Monero => &[Coin::Monero],
+      ExternalNetworkId::Bitcoin => vec![1],
+      ExternalNetworkId::Ethereum => vec![2],
+      ExternalNetworkId::Monero => vec![3],
     }
   }
 }
 
-pub const NETWORKS: [NetworkId; 4] =
-  [NetworkId::Serai, NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero];
+impl Decode for ExternalNetworkId {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let kind = input.read_byte()?;
+    match kind {
+      1 => Ok(Self::Bitcoin),
+      2 => Ok(Self::Ethereum),
+      3 => Ok(Self::Monero),
+      _ => Err(scale::Error::from("invalid format")),
+    }
+  }
+}
 
-pub const COINS: [Coin; 5] = [Coin::Serai, Coin::Bitcoin, Coin::Ether, Coin::Dai, Coin::Monero];
+impl MaxEncodedLen for ExternalNetworkId {
+  fn max_encoded_len() -> usize {
+    1
+  }
+}
 
-/// The type used to identify coins.
-#[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
-)]
+impl EncodeLike for ExternalNetworkId {}
+
+#[cfg(feature = "borsh")]
+impl BorshSerialize for ExternalNetworkId {
+  fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    writer.write_all(&self.encode())
+  }
+}
+
+#[cfg(feature = "borsh")]
+impl BorshDeserialize for ExternalNetworkId {
+  fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind)?;
+    ExternalNetworkId::decode(&mut kind.as_slice())
+      .map_err(|_| std::io::Error::other("invalid format"))
+  }
+}
+
+/// The type used to identify networks.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum Coin {
+pub enum NetworkId {
   Serai,
+  External(ExternalNetworkId),
+}
+
+impl Encode for NetworkId {
+  fn encode(&self) -> Vec<u8> {
+    match self {
+      NetworkId::Serai => vec![0],
+      NetworkId::External(network) => network.encode(),
+    }
+  }
+}
+
+impl Decode for NetworkId {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let kind = input.read_byte()?;
+    match kind {
+      0 => Ok(Self::Serai),
+      _ => Ok(ExternalNetworkId::decode(&mut [kind].as_slice())?.into()),
+    }
+  }
+}
+
+impl MaxEncodedLen for NetworkId {
+  fn max_encoded_len() -> usize {
+    1
+  }
+}
+
+impl EncodeLike for NetworkId {}
+
+#[cfg(feature = "borsh")]
+impl BorshSerialize for NetworkId {
+  fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    writer.write_all(&self.encode())
+  }
+}
+
+#[cfg(feature = "borsh")]
+impl BorshDeserialize for NetworkId {
+  fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind)?;
+    NetworkId::decode(&mut kind.as_slice()).map_err(|_| std::io::Error::other("invalid format"))
+  }
+}
+
+impl ExternalNetworkId {
+  pub fn coins(&self) -> Vec<ExternalCoin> {
+    match self {
+      Self::Bitcoin => vec![ExternalCoin::Bitcoin],
+      Self::Ethereum => vec![ExternalCoin::Ether, ExternalCoin::Dai],
+      Self::Monero => vec![ExternalCoin::Monero],
+    }
+  }
+}
+
+impl NetworkId {
+  pub fn coins(&self) -> Vec<Coin> {
+    match self {
+      Self::Serai => vec![Coin::Serai],
+      Self::External(network) => {
+        network.coins().into_iter().map(core::convert::Into::into).collect()
+      }
+    }
+  }
+}
+
+impl From<ExternalNetworkId> for NetworkId {
+  fn from(network: ExternalNetworkId) -> Self {
+    NetworkId::External(network)
+  }
+}
+
+impl TryFrom<NetworkId> for ExternalNetworkId {
+  type Error = ();
+
+  fn try_from(network: NetworkId) -> Result<Self, Self::Error> {
+    match network {
+      NetworkId::Serai => Err(())?,
+      NetworkId::External(n) => Ok(n),
+    }
+  }
+}
+
+pub const EXTERNAL_NETWORKS: [ExternalNetworkId; 3] =
+  [ExternalNetworkId::Bitcoin, ExternalNetworkId::Ethereum, ExternalNetworkId::Monero];
+
+pub const NETWORKS: [NetworkId; 4] = [
+  NetworkId::Serai,
+  NetworkId::External(ExternalNetworkId::Bitcoin),
+  NetworkId::External(ExternalNetworkId::Ethereum),
+  NetworkId::External(ExternalNetworkId::Monero),
+];
+
+pub const EXTERNAL_COINS: [ExternalCoin; 4] =
+  [ExternalCoin::Bitcoin, ExternalCoin::Ether, ExternalCoin::Dai, ExternalCoin::Monero];
+
+pub const COINS: [Coin; 5] = [
+  Coin::Serai,
+  Coin::External(ExternalCoin::Bitcoin),
+  Coin::External(ExternalCoin::Ether),
+  Coin::External(ExternalCoin::Dai),
+  Coin::External(ExternalCoin::Monero),
+];
+
+/// The type used to identify external coins.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ExternalCoin {
   Bitcoin,
   Ether,
   Dai,
   Monero,
+}
+
+impl Encode for ExternalCoin {
+  fn encode(&self) -> Vec<u8> {
+    match self {
+      ExternalCoin::Bitcoin => vec![4],
+      ExternalCoin::Ether => vec![5],
+      ExternalCoin::Dai => vec![6],
+      ExternalCoin::Monero => vec![7],
+    }
+  }
+}
+
+impl Decode for ExternalCoin {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let kind = input.read_byte()?;
+    match kind {
+      4 => Ok(Self::Bitcoin),
+      5 => Ok(Self::Ether),
+      6 => Ok(Self::Dai),
+      7 => Ok(Self::Monero),
+      _ => Err(scale::Error::from("invalid format")),
+    }
+  }
+}
+impl MaxEncodedLen for ExternalCoin {
+  fn max_encoded_len() -> usize {
+    1
+  }
+}
+
+impl EncodeLike for ExternalCoin {}
+
+#[cfg(feature = "borsh")]
+impl BorshSerialize for ExternalCoin {
+  fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    writer.write_all(&self.encode())
+  }
+}
+
+#[cfg(feature = "borsh")]
+impl BorshDeserialize for ExternalCoin {
+  fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind)?;
+    ExternalCoin::decode(&mut kind.as_slice()).map_err(|_| std::io::Error::other("invalid format"))
+  }
+}
+
+/// The type used to identify coins.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Coin {
+  Serai,
+  External(ExternalCoin),
+}
+
+impl Encode for Coin {
+  fn encode(&self) -> Vec<u8> {
+    match self {
+      Coin::Serai => vec![0],
+      Coin::External(ec) => ec.encode(),
+    }
+  }
+}
+
+impl Decode for Coin {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let kind = input.read_byte()?;
+    match kind {
+      0 => Ok(Self::Serai),
+      _ => Ok(ExternalCoin::decode(&mut [kind].as_slice())?.into()),
+    }
+  }
+}
+
+impl MaxEncodedLen for Coin {
+  fn max_encoded_len() -> usize {
+    1
+  }
+}
+
+impl EncodeLike for Coin {}
+
+#[cfg(feature = "borsh")]
+impl BorshSerialize for Coin {
+  fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    writer.write_all(&self.encode())
+  }
+}
+
+#[cfg(feature = "borsh")]
+impl BorshDeserialize for Coin {
+  fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+    let mut kind = [0; 1];
+    reader.read_exact(&mut kind)?;
+    Coin::decode(&mut kind.as_slice()).map_err(|_| std::io::Error::other("invalid format"))
+  }
+}
+
+impl From<ExternalCoin> for Coin {
+  fn from(coin: ExternalCoin) -> Self {
+    Coin::External(coin)
+  }
+}
+
+impl TryFrom<Coin> for ExternalCoin {
+  type Error = ();
+
+  fn try_from(coin: Coin) -> Result<Self, Self::Error> {
+    match coin {
+      Coin::Serai => Err(())?,
+      Coin::External(c) => Ok(c),
+    }
+  }
+}
+
+impl ExternalCoin {
+  pub fn network(&self) -> ExternalNetworkId {
+    match self {
+      ExternalCoin::Bitcoin => ExternalNetworkId::Bitcoin,
+      ExternalCoin::Ether | ExternalCoin::Dai => ExternalNetworkId::Ethereum,
+      ExternalCoin::Monero => ExternalNetworkId::Monero,
+    }
+  }
+
+  pub fn name(&self) -> &'static str {
+    match self {
+      ExternalCoin::Bitcoin => "Bitcoin",
+      ExternalCoin::Ether => "Ether",
+      ExternalCoin::Dai => "Dai Stablecoin",
+      ExternalCoin::Monero => "Monero",
+    }
+  }
+
+  pub fn symbol(&self) -> &'static str {
+    match self {
+      ExternalCoin::Bitcoin => "BTC",
+      ExternalCoin::Ether => "ETH",
+      ExternalCoin::Dai => "DAI",
+      ExternalCoin::Monero => "XMR",
+    }
+  }
+
+  pub fn decimals(&self) -> u32 {
+    match self {
+      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
+      ExternalCoin::Bitcoin | ExternalCoin::Ether | ExternalCoin::Dai => 8,
+      ExternalCoin::Monero => 12,
+    }
+  }
 }
 
 impl Coin {
@@ -66,37 +354,28 @@ impl Coin {
   pub fn network(&self) -> NetworkId {
     match self {
       Coin::Serai => NetworkId::Serai,
-      Coin::Bitcoin => NetworkId::Bitcoin,
-      Coin::Ether | Coin::Dai => NetworkId::Ethereum,
-      Coin::Monero => NetworkId::Monero,
+      Coin::External(c) => c.network().into(),
     }
   }
 
   pub fn name(&self) -> &'static str {
     match self {
       Coin::Serai => "Serai",
-      Coin::Bitcoin => "Bitcoin",
-      Coin::Ether => "Ether",
-      Coin::Dai => "Dai Stablecoin",
-      Coin::Monero => "Monero",
+      Coin::External(c) => c.name(),
     }
   }
 
   pub fn symbol(&self) -> &'static str {
     match self {
       Coin::Serai => "SRI",
-      Coin::Bitcoin => "BTC",
-      Coin::Ether => "ETH",
-      Coin::Dai => "DAI",
-      Coin::Monero => "XMR",
+      Coin::External(c) => c.symbol(),
     }
   }
 
   pub fn decimals(&self) -> u32 {
     match self {
-      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
-      Coin::Serai | Coin::Bitcoin | Coin::Ether | Coin::Dai => 8,
-      Coin::Monero => 12,
+      Coin::Serai => 8,
+      Coin::External(c) => c.decimals(),
     }
   }
 

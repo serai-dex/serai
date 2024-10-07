@@ -19,9 +19,9 @@ use ciphersuite::{Ciphersuite, Ristretto};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client::{
-  SeraiError, Serai,
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
+  primitives::ExternalNetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, Session},
+  Serai, SeraiError,
 };
 
 use serai_db::*;
@@ -70,13 +70,18 @@ impl LatestCosignedBlock {
 
 db_channel! {
   SubstrateDbChannels {
-    CosignTransactions: (network: NetworkId) -> (Session, u64, [u8; 32]),
+    CosignTransactions: (network: ExternalNetworkId) -> (Session, u64, [u8; 32]),
   }
 }
 
 impl CosignTransactions {
   // Append a cosign transaction.
-  pub fn append_cosign(txn: &mut impl DbTxn, set: ValidatorSet, number: u64, hash: [u8; 32]) {
+  pub fn append_cosign(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+    number: u64,
+    hash: [u8; 32],
+  ) {
     CosignTransactions::send(txn, set.network, &(set.session, number, hash))
   }
 }
@@ -256,22 +261,22 @@ async fn advance_cosign_protocol_inner(
       // Using the keys of the prior block ensures this deadlock isn't reached
       let serai = serai.as_of(actual_block.header.parent_hash.into());
 
-      for network in serai_client::primitives::NETWORKS {
+      for network in serai_client::primitives::EXTERNAL_NETWORKS {
         // Get the latest session to have set keys
         let set_with_keys = {
-          let Some(latest_session) = serai.validator_sets().session(network).await? else {
+          let Some(latest_session) = serai.validator_sets().session(network.into()).await? else {
             continue;
           };
           let prior_session = Session(latest_session.0.saturating_sub(1));
           if serai
             .validator_sets()
-            .keys(ValidatorSet { network, session: prior_session })
+            .keys(ExternalValidatorSet { network, session: prior_session })
             .await?
             .is_some()
           {
-            ValidatorSet { network, session: prior_session }
+            ExternalValidatorSet { network, session: prior_session }
           } else {
-            let set = ValidatorSet { network, session: latest_session };
+            let set = ExternalValidatorSet { network, session: latest_session };
             if serai.validator_sets().keys(set).await?.is_none() {
               continue;
             }
@@ -280,7 +285,7 @@ async fn advance_cosign_protocol_inner(
         };
 
         log::debug!("{:?} will be cosigning {block}", set_with_keys.network);
-        cosigning.push((set_with_keys, in_set(key, &serai, set_with_keys).await?.unwrap()));
+        cosigning.push((set_with_keys, in_set(key, &serai, set_with_keys.into()).await?.unwrap()));
       }
 
       break;

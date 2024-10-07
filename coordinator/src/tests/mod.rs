@@ -4,7 +4,7 @@ use std::{
   collections::{VecDeque, HashSet, HashMap},
 };
 
-use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet};
+use serai_client::{primitives::ExternalNetworkId, validator_sets::primitives::ExternalValidatorSet};
 
 use processor_messages::CoordinatorMessage;
 
@@ -20,7 +20,7 @@ use crate::{
 pub mod tributary;
 
 #[derive(Clone)]
-pub struct MemProcessors(pub Arc<RwLock<HashMap<NetworkId, VecDeque<CoordinatorMessage>>>>);
+pub struct MemProcessors(pub Arc<RwLock<HashMap<ExternalNetworkId, VecDeque<CoordinatorMessage>>>>);
 impl MemProcessors {
   #[allow(clippy::new_without_default)]
   pub fn new() -> MemProcessors {
@@ -30,12 +30,12 @@ impl MemProcessors {
 
 #[async_trait::async_trait]
 impl Processors for MemProcessors {
-  async fn send(&self, network: NetworkId, msg: impl Send + Into<CoordinatorMessage>) {
+  async fn send(&self, network: ExternalNetworkId, msg: impl Send + Into<CoordinatorMessage>) {
     let mut processors = self.0.write().await;
     let processor = processors.entry(network).or_insert_with(VecDeque::new);
     processor.push_back(msg.into());
   }
-  async fn recv(&self, _: NetworkId) -> Message {
+  async fn recv(&self, _: ExternalNetworkId) -> Message {
     todo!()
   }
   async fn ack(&self, _: Message) {
@@ -65,8 +65,8 @@ impl LocalP2p {
 impl P2p for LocalP2p {
   type Id = usize;
 
-  async fn subscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
-  async fn unsubscribe(&self, _set: ValidatorSet, _genesis: [u8; 32]) {}
+  async fn subscribe(&self, _set: ExternalValidatorSet, _genesis: [u8; 32]) {}
+  async fn unsubscribe(&self, _set: ExternalValidatorSet, _genesis: [u8; 32]) {}
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>) {
     let mut msg_ref = msg.as_slice();

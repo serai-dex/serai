@@ -12,7 +12,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, Data, ExternalAddress,
+    Amount, ExternalCoin, ExternalBalance, BlockHash, SeraiAddress, Data, ExternalAddress,
     insecure_pair_from_name,
   },
   in_instructions::{
@@ -28,9 +28,7 @@ use common::{tx::publish_tx, in_instructions::provide_batch};
 
 serai_test!(
   burn: (|serai: Serai| async move {
-    let network = NetworkId::Bitcoin;
     let id = 0;
-
     let mut block_hash = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block_hash.0);
 
@@ -38,9 +36,10 @@ serai_test!(
     let public = pair.public();
     let address = SeraiAddress::from(public);
 
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
+    let network = coin.network();
     let amount = Amount(OsRng.next_u64().saturating_add(1));
-    let balance = Balance { coin, amount };
+    let balance = ExternalBalance { coin, amount };
 
     let batch = Batch {
       network,
@@ -69,10 +68,10 @@ serai_test!(
 
     assert_eq!(
       serai.coins().mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { to: address, balance }]
+      vec![CoinsEvent::Mint { to: address, balance: balance.into() }]
     );
-    assert_eq!(serai.coins().coin_supply(coin).await.unwrap(), amount);
-    assert_eq!(serai.coins().coin_balance(coin, address).await.unwrap(), amount);
+    assert_eq!(serai.coins().coin_supply(coin.into()).await.unwrap(), amount);
+    assert_eq!(serai.coins().coin_balance(coin.into(), address).await.unwrap(), amount);
 
     // Now burn it
     let mut rand_bytes = vec![0; 32];
@@ -99,7 +98,7 @@ serai_test!(
     let serai = serai.coins();
     let events = serai.burn_with_instruction_events().await.unwrap();
     assert_eq!(events, vec![CoinsEvent::BurnWithInstruction { from: address, instruction }]);
-    assert_eq!(serai.coin_supply(coin).await.unwrap(), Amount(0));
-    assert_eq!(serai.coin_balance(coin, address).await.unwrap(), Amount(0));
+    assert_eq!(serai.coin_supply(coin.into()).await.unwrap(), Amount(0));
+    assert_eq!(serai.coin_balance(coin.into(), address).await.unwrap(), Amount(0));
   })
 );

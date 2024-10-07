@@ -60,9 +60,9 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    GenesisLiquidityAdded { by: SeraiAddress, balance: Balance },
-    GenesisLiquidityRemoved { by: SeraiAddress, balance: Balance },
-    GenesisLiquidityAddedToPool { coin1: Balance, sri: Amount },
+    GenesisLiquidityAdded { by: SeraiAddress, balance: ExternalBalance },
+    GenesisLiquidityRemoved { by: SeraiAddress, balance: ExternalBalance },
+    GenesisLiquidityAddedToPool { coin: ExternalBalance, sri: Amount },
   }
 
   #[pallet::pallet]
@@ -70,17 +70,23 @@ pub mod pallet {
 
   /// Keeps shares and the amount of coins per account.
   #[pallet::storage]
-  #[pallet::getter(fn liquidity)]
-  pub(crate) type Liquidity<T: Config> =
-    StorageDoubleMap<_, Identity, Coin, Blake2_128Concat, PublicKey, LiquidityAmount, OptionQuery>;
+  pub(crate) type Liquidity<T: Config> = StorageDoubleMap<
+    _,
+    Identity,
+    ExternalCoin,
+    Blake2_128Concat,
+    PublicKey,
+    LiquidityAmount,
+    OptionQuery,
+  >;
 
   /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
-  #[pallet::getter(fn supply)]
-  pub(crate) type Supply<T: Config> = StorageMap<_, Identity, Coin, LiquidityAmount, OptionQuery>;
+  pub(crate) type Supply<T: Config> =
+    StorageMap<_, Identity, ExternalCoin, LiquidityAmount, OptionQuery>;
 
   #[pallet::storage]
-  pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, Coin, u64, OptionQuery>;
+  pub(crate) type Oracle<T: Config> = StorageMap<_, Identity, ExternalCoin, u64, OptionQuery>;
 
   #[pallet::storage]
   #[pallet::getter(fn genesis_complete_block)]
@@ -104,11 +110,7 @@ pub mod pallet {
         // get pool & total values
         let mut pool_values = vec![];
         let mut total_value: u128 = 0;
-        for coin in COINS {
-          if coin == Coin::Serai {
-            continue;
-          }
-
+        for coin in EXTERNAL_COINS {
           // initial coin value in terms of btc
           let Some(value) = Oracle::<T>::get(coin) else {
             continue;
@@ -160,7 +162,7 @@ pub mod pallet {
 
           // let everyone know about the event
           Self::deposit_event(Event::GenesisLiquidityAddedToPool {
-            coin1: Balance { coin, amount: Amount(u64::try_from(pool_amount).unwrap()) },
+            coin: ExternalBalance { coin, amount: Amount(u64::try_from(pool_amount).unwrap()) },
             sri: Amount(sri_amount),
           });
         }
@@ -182,7 +184,7 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     /// Add genesis liquidity for the given account. All accounts that provide liquidity
     /// will receive the genesis SRI according to their liquidity ratio.
-    pub fn add_coin_liquidity(account: PublicKey, balance: Balance) -> DispatchResult {
+    pub fn add_coin_liquidity(account: PublicKey, balance: ExternalBalance) -> DispatchResult {
       // check we are still in genesis period
       if Self::genesis_ended() {
         Err(Error::<T>::GenesisPeriodEnded)?;
@@ -229,7 +231,7 @@ pub mod pallet {
     /// If networks is yet to be reached that threshold, None is returned.
     fn blocks_since_ec_security() -> Option<u64> {
       let mut min = u64::MAX;
-      for n in &NETWORKS[1 ..] {
+      for n in EXTERNAL_NETWORKS {
         let ec_security_block =
           EconomicSecurity::<T>::economic_security_block(n)?.saturated_into::<u64>();
         let current = <frame_system::Pallet<T>>::block_number().saturated_into::<u64>();
@@ -245,11 +247,7 @@ pub mod pallet {
     }
 
     fn oraclization_is_done() -> bool {
-      for c in COINS {
-        if c == Coin::Serai {
-          continue;
-        }
-
+      for c in EXTERNAL_COINS {
         if Oracle::<T>::get(c).is_none() {
           return false;
         }
@@ -278,7 +276,7 @@ pub mod pallet {
     /// Remove the provided genesis liquidity for an account.
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
-    pub fn remove_coin_liquidity(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
+    pub fn remove_coin_liquidity(origin: OriginFor<T>, balance: ExternalBalance) -> DispatchResult {
       let account = ensure_signed(origin)?;
       let origin = RawOrigin::Signed(GENESIS_LIQUIDITY_ACCOUNT.into());
       let supply = Supply::<T>::get(balance.coin).ok_or(Error::<T>::NotEnoughLiquidity)?;
@@ -287,7 +285,8 @@ pub mod pallet {
       let (new_liquidity, new_supply) = if Self::genesis_ended() {
         // see how much liq tokens we have
         let total_liq_tokens =
-          LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin).0;
+          LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::from(balance.coin))
+            .0;
 
         // get how much user wants to remove
         let LiquidityAmount { shares, coins } =
@@ -301,7 +300,7 @@ pub mod pallet {
 
         // remove liquidity from pool
         let prev_sri = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
-        let prev_coin = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin);
+        let prev_coin = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin.into());
         Dex::<T>::remove_liquidity(
           origin.clone().into(),
           balance.coin,
@@ -311,7 +310,8 @@ pub mod pallet {
           GENESIS_LIQUIDITY_ACCOUNT.into(),
         )?;
         let current_sri = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
-        let current_coin = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin);
+        let current_coin =
+          Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.coin.into());
 
         // burn the SRI if necessary
         // TODO: take into consideration movement between pools.
@@ -330,7 +330,7 @@ pub mod pallet {
         Coins::<T>::transfer(
           origin.clone().into(),
           account,
-          Balance { coin: balance.coin, amount: Amount(coin_out) },
+          Balance { coin: balance.coin.into(), amount: Amount(coin_out) },
         )?;
         Coins::<T>::transfer(
           origin.into(),
@@ -365,7 +365,7 @@ pub mod pallet {
         Coins::<T>::transfer(
           origin.into(),
           account,
-          Balance { coin: balance.coin, amount: Amount(existing.coins) },
+          Balance { coin: balance.coin.into(), amount: Amount(existing.coins) },
         )?;
 
         (
@@ -403,10 +403,10 @@ pub mod pallet {
       ensure_none(origin)?;
 
       // set their relative values
-      Oracle::<T>::set(Coin::Bitcoin, Some(10u64.pow(Coin::Bitcoin.decimals())));
-      Oracle::<T>::set(Coin::Monero, Some(values.monero));
-      Oracle::<T>::set(Coin::Ether, Some(values.ether));
-      Oracle::<T>::set(Coin::Dai, Some(values.dai));
+      Oracle::<T>::set(ExternalCoin::Bitcoin, Some(10u64.pow(ExternalCoin::Bitcoin.decimals())));
+      Oracle::<T>::set(ExternalCoin::Monero, Some(values.monero));
+      Oracle::<T>::set(ExternalCoin::Ether, Some(values.ether));
+      Oracle::<T>::set(ExternalCoin::Dai, Some(values.dai));
       Ok(())
     }
   }
