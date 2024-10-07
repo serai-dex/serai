@@ -104,7 +104,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
       handles.insert(name, handle);
     }
 
-    let processor_key = message_queue_keys[&NetworkId::Bitcoin];
+    let processor_key = message_queue_keys[&ExternalNetworkId::Bitcoin];
 
     coordinators.push((
       Handles {
@@ -198,7 +198,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
         processors.push(
           Processor::new(
             i.try_into().unwrap(),
-            NetworkId::Bitcoin,
+            ExternalNetworkId::Bitcoin,
             &outer_ops,
             handles.clone(),
             *key,

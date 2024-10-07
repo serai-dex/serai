@@ -6,7 +6,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 use frost::Participant;
 
-use serai_client::validator_sets::primitives::{KeyPair, ValidatorSet};
+use serai_client::validator_sets::primitives::{KeyPair, ExternalValidatorSet};
 
 use processor_messages::coordinator::SubstrateSignableId;
 
@@ -46,7 +46,7 @@ pub enum Accumulation {
 create_db!(
   Tributary {
     SeraiBlockNumber: (hash: [u8; 32]) -> u64,
-    SeraiDkgCompleted: (spec: ValidatorSet) -> [u8; 32],
+    SeraiDkgCompleted: (spec: ExternalValidatorSet) -> [u8; 32],
 
     TributaryBlockNumber: (block: [u8; 32]) -> u32,
     LastHandledBlock: (genesis: [u8; 32]) -> [u8; 32],
@@ -80,7 +80,7 @@ create_db!(
     SlashReports: (genesis: [u8; 32], signer: [u8; 32]) -> Vec<u32>,
     SlashReported: (genesis: [u8; 32]) -> u16,
     SlashReportCutOff: (genesis: [u8; 32]) -> u64,
-    SlashReport: (set: ValidatorSet) -> Vec<([u8; 32], u32)>,
+    SlashReport: (set: ExternalValidatorSet) -> Vec<([u8; 32], u32)>,
   }
 );
 

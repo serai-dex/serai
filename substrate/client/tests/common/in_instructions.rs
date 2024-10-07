@@ -9,8 +9,8 @@ use scale::Encode;
 use sp_core::Pair;
 
 use serai_client::{
-  primitives::{insecure_pair_from_name, BlockHash, NetworkId, Balance, SeraiAddress},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  primitives::{insecure_pair_from_name, BlockHash, ExternalBalance, SeraiAddress},
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
     InInstructionsEvent,
@@ -23,8 +23,8 @@ use crate::common::{tx::publish_tx, validator_sets::set_keys};
 #[allow(dead_code)]
 pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   let serai_latest = serai.as_of_latest_finalized_block().await.unwrap();
-  let session = serai_latest.validator_sets().session(batch.network).await.unwrap().unwrap();
-  let set = ValidatorSet { session, network: batch.network };
+  let session = serai_latest.validator_sets().session(batch.network.into()).await.unwrap().unwrap();
+  let set = ExternalValidatorSet { session, network: batch.network };
 
   let pair = insecure_pair_from_name(&format!("ValidatorSet {set:?}"));
   let keys = if let Some(keys) = serai_latest.validator_sets().keys(set).await.unwrap() {
@@ -65,8 +65,7 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
 #[allow(dead_code)]
 pub async fn mint_coin(
   serai: &Serai,
-  balance: Balance,
-  network: NetworkId,
+  balance: ExternalBalance,
   batch_id: u32,
   address: SeraiAddress,
 ) -> [u8; 32] {
@@ -74,7 +73,7 @@ pub async fn mint_coin(
   OsRng.fill_bytes(&mut block_hash.0);
 
   let batch = Batch {
-    network,
+    network: balance.coin.network(),
     id: batch_id,
     block: block_hash,
     instructions: vec![InInstructionWithBalance {

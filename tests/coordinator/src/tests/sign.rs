@@ -10,18 +10,17 @@ use ciphersuite::Secp256k1;
 use dkg::Participant;
 
 use serai_client::{
-  PairTrait,
-  primitives::{
-    NetworkId, Coin, Amount, Balance, BlockHash, SeraiAddress, ExternalAddress,
-    insecure_pair_from_name,
-  },
   coins::{
     primitives::{OutInstruction, OutInstructionWithBalance},
     CoinsEvent,
   },
-  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  in_instructions::primitives::{Batch, InInstruction, InInstructionWithBalance},
+  primitives::{
+    insecure_pair_from_name, Amount, Balance, BlockHash, Coin, ExternalAddress, ExternalBalance,
+    ExternalCoin, SeraiAddress,
+  },
   validator_sets::primitives::Session,
-  SeraiCoins,
+  PairTrait, SeraiCoins,
 };
 use messages::{coordinator::PlanMeta, sign::SignId, SubstrateContext, CoordinatorMessage};
 
@@ -202,7 +201,7 @@ async fn sign_test() {
 
       #[allow(clippy::inconsistent_digit_grouping)]
       let amount = Amount(1_000_000_00);
-      let balance = Balance { coin: Coin::Bitcoin, amount };
+      let balance = ExternalBalance { coin: ExternalCoin::Bitcoin, amount };
 
       let coin_block = BlockHash([0x33; 32]);
       let block_included_in = batch(
@@ -211,7 +210,7 @@ async fn sign_test() {
         Session(0),
         &substrate_key,
         Batch {
-          network: NetworkId::Bitcoin,
+          network: balance.coin.network(),
           id: 0,
           block: coin_block,
           instructions: vec![InInstructionWithBalance {
@@ -236,10 +235,13 @@ async fn sign_test() {
         // Verify the mint occurred as expected
         assert_eq!(
           serai.mint_events().await.unwrap(),
-          vec![CoinsEvent::Mint { to: serai_addr, balance }]
+          vec![CoinsEvent::Mint { to: serai_addr, balance: balance.into() }]
         );
-        assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), amount);
-        assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), amount);
+        assert_eq!(serai.coin_supply(ExternalCoin::Bitcoin.into()).await.unwrap(), amount);
+        assert_eq!(
+          serai.coin_balance(ExternalCoin::Bitcoin.into(), serai_addr).await.unwrap(),
+          amount
+        );
       }
 
       // Trigger a burn
@@ -296,8 +298,11 @@ async fn sign_test() {
       let last_serai_block_hash = last_serai_block.hash();
       let serai = serai.as_of(last_serai_block_hash);
       let serai = serai.coins();
-      assert_eq!(serai.coin_supply(Coin::Bitcoin).await.unwrap(), Amount(0));
-      assert_eq!(serai.coin_balance(Coin::Bitcoin, serai_addr).await.unwrap(), Amount(0));
+      assert_eq!(serai.coin_supply(ExternalCoin::Bitcoin.into()).await.unwrap(), Amount(0));
+      assert_eq!(
+        serai.coin_balance(ExternalCoin::Bitcoin.into(), serai_addr).await.unwrap(),
+        Amount(0)
+      );
 
       let mut plan_id = [0; 32];
       OsRng.fill_bytes(&mut plan_id);
