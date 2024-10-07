@@ -2,6 +2,8 @@
 
 use super::*;
 
+use std::collections::HashMap;
+
 use frame_support::{
   construct_runtime,
   traits::{ConstU16, ConstU32, ConstU64},
@@ -141,8 +143,18 @@ impl Config for Test {
   type RuntimeEvent = RuntimeEvent;
 }
 
+pub fn key_shares() -> HashMap<NetworkId, Amount> {
+  HashMap::from([
+    (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Bitcoin), Amount(1_000_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Ethereum), Amount(1_000_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Monero), Amount(100_000 * 10_u64.pow(8))),
+  ])
+}
+
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
   let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+  let networks: Vec<(NetworkId, Amount)> = key_shares().into_iter().collect::<Vec<_>>();
 
   let validators: Vec<Public> = vec![
     insecure_pair_from_name("Alice").public(),
@@ -152,16 +164,6 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     insecure_pair_from_name("Eve").public(),
     insecure_pair_from_name("Ferdie").public(),
   ];
-
-  let networks = NETWORKS
-    .iter()
-    .map(|network| match network {
-      NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
-      NetworkId::Bitcoin => (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
-      NetworkId::Ethereum => (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
-      NetworkId::Monero => (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
-    })
-    .collect::<Vec<_>>();
 
   coins::GenesisConfig::<Test> {
     accounts: validators

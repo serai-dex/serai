@@ -70,6 +70,7 @@ pub mod pallet {
 
   /// Keeps shares and the amount of coins per account.
   #[pallet::storage]
+  #[pallet::getter(fn liquidity)]
   pub(crate) type Liquidity<T: Config> = StorageDoubleMap<
     _,
     Identity,
@@ -82,6 +83,7 @@ pub mod pallet {
 
   /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
+  #[pallet::getter(fn supply)]
   pub(crate) type Supply<T: Config> =
     StorageMap<_, Identity, ExternalCoin, LiquidityAmount, OptionQuery>;
 
