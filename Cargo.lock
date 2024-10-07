@@ -8121,11 +8121,19 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-babe",
+ "pallet-grandpa",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "serai-coins-pallet",
  "serai-dex-pallet",
  "serai-primitives",
+ "serai-validator-sets-pallet",
+ "sp-consensus-babe",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]
