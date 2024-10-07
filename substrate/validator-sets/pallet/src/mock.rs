@@ -155,9 +155,9 @@ pub fn genesis_participants() -> Vec<Pair> {
 pub fn key_shares() -> HashMap<NetworkId, Amount> {
   HashMap::from([
     (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
-    (NetworkId::Bitcoin, Amount(1_000_000 * 10_u64.pow(8))),
-    (NetworkId::Monero, Amount(100_000 * 10_u64.pow(8))),
-    (NetworkId::Ethereum, Amount(1_000_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Bitcoin), Amount(1_000_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Ethereum), Amount(1_000_000 * 10_u64.pow(8))),
+    (NetworkId::External(ExternalNetworkId::Monero), Amount(100_000 * 10_u64.pow(8))),
   ])
 }
 

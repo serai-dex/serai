@@ -59,7 +59,7 @@ fn get_session_at_which_changes_activate(network: NetworkId) -> u32 {
   }
 }
 
-fn set_keys_for_session(network: NetworkId) {
+fn set_keys_for_session(network: ExternalNetworkId) {
   ValidatorSets::set_keys(
     RawOrigin::None.into(),
     network,
@@ -70,7 +70,7 @@ fn set_keys_for_session(network: NetworkId) {
   .unwrap();
 }
 
-fn set_keys_signature(set: &ValidatorSet, key_pair: &KeyPair, pairs: &[Pair]) -> Signature {
+fn set_keys_signature(set: &ExternalValidatorSet, key_pair: &KeyPair, pairs: &[Pair]) -> Signature {
   let mut pub_keys = vec![];
   for pair in pairs {
     let public_key =
@@ -87,7 +87,8 @@ fn set_keys_signature(set: &ValidatorSet, key_pair: &KeyPair, pairs: &[Pair]) ->
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     threshold_keys.push(
-      musig::<Ristretto>(&musig_context(*set), &Zeroizing::new(secret_key), &pub_keys).unwrap(),
+      musig::<Ristretto>(&musig_context((*set).into()), &Zeroizing::new(secret_key), &pub_keys)
+        .unwrap(),
     );
   }
 
@@ -125,7 +126,9 @@ fn rotate_session_until(network: NetworkId, session: u32) {
   while current < session {
     Babe::on_initialize(System::block_number() + 1);
     ValidatorSets::rotate_session();
-    set_keys_for_session(network);
+    if let NetworkId::External(n) = network {
+      set_keys_for_session(n);
+    }
     ValidatorSets::retire_set(ValidatorSet { session: Session(current), network });
     current += 1;
   }
@@ -141,9 +144,9 @@ fn rotate_session() {
 
     let mut participants = HashMap::from([
       (NetworkId::Serai, genesis_participants.clone()),
-      (NetworkId::Bitcoin, genesis_participants.clone()),
-      (NetworkId::Monero, genesis_participants.clone()),
-      (NetworkId::Ethereum, genesis_participants),
+      (NetworkId::External(ExternalNetworkId::Bitcoin), genesis_participants.clone()),
+      (NetworkId::External(ExternalNetworkId::Ethereum), genesis_participants.clone()),
+      (NetworkId::External(ExternalNetworkId::Monero), genesis_participants),
     ]);
 
     // rotate session
@@ -152,7 +155,9 @@ fn rotate_session() {
 
       // verify for session 0
       participants.sort();
-      set_keys_for_session(network);
+      if let NetworkId::External(n) = network {
+        set_keys_for_session(n);
+      }
       verify_session_and_active_validators(network, participants, 0);
 
       // add 1 participant
@@ -215,10 +220,10 @@ fn allocate() {
       genesis_participants().into_iter().map(|p| p.public()).collect();
     let key_shares = key_shares();
     let participant = insecure_pair_from_name("random1").public();
-    let network = NetworkId::Ethereum;
+    let network = NetworkId::External(ExternalNetworkId::Ethereum);
 
     // check genesis TAS
-    set_keys_for_session(network);
+    set_keys_for_session(network.try_into().unwrap());
     assert_eq!(
       ValidatorSets::total_allocated_stake(network).unwrap().0,
       key_shares[&network].0 * u64::try_from(genesis_participants.len()).unwrap()
@@ -278,10 +283,10 @@ fn deallocate_pending() {
       genesis_participants().into_iter().map(|p| p.public()).collect();
     let key_shares = key_shares();
     let participant = insecure_pair_from_name("random1").public();
-    let network = NetworkId::Bitcoin;
+    let network = NetworkId::External(ExternalNetworkId::Bitcoin);
 
     // check genesis TAS
-    set_keys_for_session(network);
+    set_keys_for_session(network.try_into().unwrap());
     assert_eq!(
       ValidatorSets::total_allocated_stake(network).unwrap().0,
       key_shares[&network].0 * u64::try_from(genesis_participants.len()).unwrap()
@@ -347,10 +352,10 @@ fn deallocate_immediately() {
       genesis_participants().into_iter().map(|p| p.public()).collect();
     let key_shares = key_shares();
     let participant = insecure_pair_from_name("random1").public();
-    let network = NetworkId::Monero;
+    let network = NetworkId::External(ExternalNetworkId::Monero);
 
     // check genesis TAS
-    set_keys_for_session(network);
+    set_keys_for_session(network.try_into().unwrap());
     assert_eq!(
       ValidatorSets::total_allocated_stake(network).unwrap().0,
       key_shares[&network].0 * u64::try_from(genesis_participants.len()).unwrap()
@@ -416,9 +421,9 @@ fn deallocate_immediately() {
 
     // make a pool so that we have security oracle value for the coin
     let liq_acc = insecure_pair_from_name("liq-acc").public();
-    let coin = Coin::Monero;
-    let balance = Balance { coin, amount: Amount(2 * key_shares[&network].0) };
-    Coins::mint(liq_acc, balance).unwrap();
+    let coin = ExternalCoin::Monero;
+    let balance = ExternalBalance { coin, amount: Amount(2 * key_shares[&network].0) };
+    Coins::mint(liq_acc, balance.into()).unwrap();
     Coins::mint(liq_acc, Balance { coin: Coin::Serai, amount: balance.amount }).unwrap();
     Dex::add_liquidity(
       RawOrigin::Signed(liq_acc).into(),
@@ -450,26 +455,9 @@ fn deallocate_immediately() {
 }
 
 #[test]
-fn set_keys_no_serai_network() {
-  new_test_ext().execute_with(|| {
-    let call = validator_sets::Call::<Test>::set_keys {
-      network: NetworkId::Serai,
-      removed_participants: Vec::new().try_into().unwrap(),
-      key_pair: KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap()),
-      signature: Signature([0u8; 64]),
-    };
-
-    assert_eq!(
-      ValidatorSets::validate_unsigned(TransactionSource::External, &call),
-      InvalidTransaction::Custom(0).into()
-    );
-  })
-}
-
-#[test]
 fn set_keys_keys_exist() {
   new_test_ext().execute_with(|| {
-    let network = NetworkId::Monero;
+    let network = ExternalNetworkId::Monero;
 
     // set the keys first
     ValidatorSets::set_keys(
@@ -498,11 +486,11 @@ fn set_keys_keys_exist() {
 #[test]
 fn set_keys_invalid_signature() {
   new_test_ext().execute_with(|| {
-    let network = NetworkId::Ethereum;
-    let mut participants = get_ordered_keys(network, &genesis_participants());
+    let network = ExternalNetworkId::Ethereum;
+    let mut participants = get_ordered_keys(network.into(), &genesis_participants());
 
     // we can't have invalid set
-    let mut set = ValidatorSet { network, session: Session(1) };
+    let mut set = ExternalValidatorSet { network, session: Session(1) };
     let key_pair =
       KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap());
     let signature = set_keys_signature(&set, &key_pair, &participants);
