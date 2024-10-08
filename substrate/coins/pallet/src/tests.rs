@@ -48,7 +48,7 @@ fn mint() {
 fn burn_with_instruction() {
   new_test_ext().execute_with(|| {
     // mint some coin
-    let coin = Coin::Bitcoin;
+    let coin = Coin::External(ExternalCoin::Bitcoin);
     let to = insecure_pair_from_name("random1").public();
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 
@@ -59,7 +59,10 @@ fn burn_with_instruction() {
     // we shouldn't be able to burn more than what we have
     let mut instruction = OutInstructionWithBalance {
       instruction: OutInstruction { address: ExternalAddress::new(vec![]).unwrap(), data: None },
-      balance: Balance { coin, amount: Amount(balance.amount.0 + 1) },
+      balance: ExternalBalance {
+        coin: coin.try_into().unwrap(),
+        amount: Amount(balance.amount.0 + 1),
+      },
     };
     assert!(
       Coins::burn_with_instruction(RawOrigin::Signed(to).into(), instruction.clone()).is_err()
@@ -96,7 +99,7 @@ fn burn_with_instruction() {
 fn transfer() {
   new_test_ext().execute_with(|| {
     // mint some coin
-    let coin = Coin::Bitcoin;
+    let coin = Coin::External(ExternalCoin::Bitcoin);
     let from = insecure_pair_from_name("random1").public();
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 

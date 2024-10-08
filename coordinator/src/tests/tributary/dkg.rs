@@ -10,7 +10,7 @@ use frost::Participant;
 use sp_runtime::traits::Verify;
 use serai_client::{
   primitives::{SeraiAddress, Signature},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair},
 };
 
 use tokio::time::sleep;
@@ -350,7 +350,7 @@ async fn dkg_test() {
     async fn publish_set_keys(
       &self,
       _db: &(impl Sync + Get),
-      set: ValidatorSet,
+      set: ExternalValidatorSet,
       removed: Vec<SeraiAddress>,
       key_pair: KeyPair,
       signature: Signature,
@@ -362,7 +362,7 @@ async fn dkg_test() {
         &*serai_client::validator_sets::primitives::set_keys_message(&set, &[], &key_pair),
         &serai_client::Public(
           frost::dkg::musig::musig_key::<Ristretto>(
-            &serai_client::validator_sets::primitives::musig_context(set),
+            &serai_client::validator_sets::primitives::musig_context(set.into()),
             &self.spec.validators().into_iter().map(|(validator, _)| validator).collect::<Vec<_>>()
           )
           .unwrap()

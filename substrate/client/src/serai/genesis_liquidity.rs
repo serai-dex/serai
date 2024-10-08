@@ -35,7 +35,7 @@ impl<'a> SeraiGenesisLiquidity<'a> {
     ))
   }
 
-  pub fn remove_coin_liquidity(balance: Balance) -> serai_abi::Call {
+  pub fn remove_coin_liquidity(balance: ExternalBalance) -> serai_abi::Call {
     serai_abi::Call::GenesisLiquidity(serai_abi::genesis_liquidity::Call::remove_coin_liquidity {
       balance,
     })
@@ -44,7 +44,7 @@ impl<'a> SeraiGenesisLiquidity<'a> {
   pub async fn liquidity(
     &self,
     address: &SeraiAddress,
-    coin: Coin,
+    coin: ExternalCoin,
   ) -> Result<LiquidityAmount, SeraiError> {
     Ok(
       self
@@ -59,7 +59,7 @@ impl<'a> SeraiGenesisLiquidity<'a> {
     )
   }
 
-  pub async fn supply(&self, coin: Coin) -> Result<LiquidityAmount, SeraiError> {
+  pub async fn supply(&self, coin: ExternalCoin) -> Result<LiquidityAmount, SeraiError> {
     Ok(self.0.storage(PALLET, "Supply", coin).await?.unwrap_or(LiquidityAmount::zero()))
   }
 

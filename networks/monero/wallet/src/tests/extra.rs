@@ -8,7 +8,7 @@ use crate::{
 // Tests derived from
 // https://github.com/monero-project/monero/blob/ac02af92867590ca80b2779a7bbeafa99ff94dcb/
 //   tests/unit_tests/test_tx_utils.cpp
-// which is licensed
+// which is licensed as follows:
 #[rustfmt::skip]
 /*
 Copyright (c) 2014-2022, The Monero Project
@@ -105,13 +105,15 @@ fn padding_only_max_size() {
 #[test]
 fn padding_only_exceed_max_size() {
   let buf: Vec<u8> = vec![0; MAX_TX_EXTRA_PADDING_COUNT + 1];
-  Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap_err();
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert!(extra.0.is_empty());
 }
 
 #[test]
 fn invalid_padding_only() {
   let buf: Vec<u8> = vec![0, 42];
-  Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap_err();
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert!(extra.0.is_empty());
 }
 
 #[test]
@@ -135,7 +137,8 @@ fn extra_nonce_only_wrong_size() {
   let mut buf: Vec<u8> = vec![0; 20];
   buf[0] = 2;
   buf[1] = 255;
-  Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap_err();
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert!(extra.0.is_empty());
 }
 
 #[test]
@@ -155,7 +158,8 @@ fn pub_key_and_padding() {
 fn pub_key_and_invalid_padding() {
   let mut buf: Vec<u8> = PUB_KEY_BYTES.to_vec();
   buf.extend([0, 1]);
-  Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap_err();
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert_eq!(extra.0, vec![ExtraField::PublicKey(pub_key())]);
 }
 
 #[test]
@@ -181,7 +185,8 @@ fn extra_mysterious_minergate_only_wrong_size() {
   let mut buf: Vec<u8> = vec![0; 20];
   buf[0] = 222;
   buf[1] = 255;
-  Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap_err();
+  let extra = Extra::read::<&[u8]>(&mut buf.as_ref()).unwrap();
+  assert!(extra.0.is_empty());
 }
 
 #[test]

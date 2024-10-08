@@ -10,7 +10,7 @@ use tokio::sync::broadcast;
 use scale::{Encode, Decode};
 use serai_client::{
   primitives::{SeraiAddress, Signature},
-  validator_sets::primitives::{KeyPair, ValidatorSet},
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair},
   Serai,
 };
 
@@ -38,7 +38,7 @@ pub enum RecognizedIdType {
 pub trait RIDTrait {
   async fn recognized_id(
     &self,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     genesis: [u8; 32],
     kind: RecognizedIdType,
     id: Vec<u8>,
@@ -47,12 +47,12 @@ pub trait RIDTrait {
 #[async_trait::async_trait]
 impl<
     FRid: Send + Future<Output = ()>,
-    F: Sync + Fn(ValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid,
+    F: Sync + Fn(ExternalValidatorSet, [u8; 32], RecognizedIdType, Vec<u8>) -> FRid,
   > RIDTrait for F
 {
   async fn recognized_id(
     &self,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     genesis: [u8; 32],
     kind: RecognizedIdType,
     id: Vec<u8>,
@@ -66,7 +66,7 @@ pub trait PublishSeraiTransaction {
   async fn publish_set_keys(
     &self,
     db: &(impl Sync + Get),
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     removed: Vec<SeraiAddress>,
     key_pair: KeyPair,
     signature: Signature,
@@ -86,7 +86,7 @@ mod impl_pst_for_serai {
       async fn publish(
         serai: &Serai,
         db: &impl Get,
-        set: ValidatorSet,
+        set: ExternalValidatorSet,
         tx: serai_client::Transaction,
         meta: $Meta,
       ) -> bool {
@@ -128,7 +128,7 @@ mod impl_pst_for_serai {
     async fn publish_set_keys(
       &self,
       db: &(impl Sync + Get),
-      set: ValidatorSet,
+      set: ExternalValidatorSet,
       removed: Vec<SeraiAddress>,
       key_pair: KeyPair,
       signature: Signature,
@@ -140,7 +140,7 @@ mod impl_pst_for_serai {
         key_pair,
         signature,
       );
-      async fn check(serai: SeraiValidatorSets<'_>, set: ValidatorSet, (): ()) -> bool {
+      async fn check(serai: SeraiValidatorSets<'_>, set: ExternalValidatorSet, (): ()) -> bool {
         if matches!(serai.keys(set).await, Ok(Some(_))) {
           log::info!("another coordinator set key pair for {:?}", set);
           return true;

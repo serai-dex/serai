@@ -4,9 +4,9 @@ use rand_core::{RngCore, OsRng};
 use scale::Encode;
 
 use serai_client::{
-  primitives::{Amount, NetworkId, Coin, Balance, ExternalAddress},
-  validator_sets::primitives::ExternalKey,
   in_instructions::primitives::{InInstruction, RefundableInInstruction, Shorthand},
+  primitives::{Amount, ExternalAddress, ExternalBalance, ExternalCoin, ExternalNetworkId},
+  validator_sets::primitives::ExternalKey,
 };
 
 use dockertest::{PullPolicy, Image, StartPolicy, TestBodySpecification, DockerOperations};
@@ -52,37 +52,32 @@ pub fn monero_instance() -> (TestBodySpecification, u32) {
   (composition, XMR_PORT)
 }
 
-pub fn network_instance(network: NetworkId) -> (TestBodySpecification, u32) {
+pub fn network_instance(network: ExternalNetworkId) -> (TestBodySpecification, u32) {
   match network {
-    NetworkId::Bitcoin => bitcoin_instance(),
-    NetworkId::Ethereum => ethereum_instance(),
-    NetworkId::Monero => monero_instance(),
-    NetworkId::Serai => {
-      panic!("Serai is not a valid network to spawn an instance of for a processor")
-    }
+    ExternalNetworkId::Bitcoin => bitcoin_instance(),
+    ExternalNetworkId::Ethereum => ethereum_instance(),
+    ExternalNetworkId::Monero => monero_instance(),
   }
 }
 
-pub fn network_rpc(network: NetworkId, ops: &DockerOperations, handle: &str) -> String {
+pub fn network_rpc(network: ExternalNetworkId, ops: &DockerOperations, handle: &str) -> String {
   let (ip, port) = ops
     .handle(handle)
     .host_port(match network {
-      NetworkId::Bitcoin => BTC_PORT,
-      NetworkId::Ethereum => ETH_PORT,
-      NetworkId::Monero => XMR_PORT,
-      NetworkId::Serai => panic!("getting port for external network yet it was Serai"),
+      ExternalNetworkId::Bitcoin => BTC_PORT,
+      ExternalNetworkId::Ethereum => ETH_PORT,
+      ExternalNetworkId::Monero => XMR_PORT,
     })
     .unwrap();
   format!("http://{RPC_USER}:{RPC_PASS}@{ip}:{port}")
 }
 
-pub fn confirmations(network: NetworkId) -> usize {
+pub fn confirmations(network: ExternalNetworkId) -> usize {
   use processor::networks::*;
   match network {
-    NetworkId::Bitcoin => Bitcoin::CONFIRMATIONS,
-    NetworkId::Ethereum => Ethereum::<serai_db::MemDb>::CONFIRMATIONS,
-    NetworkId::Monero => Monero::CONFIRMATIONS,
-    NetworkId::Serai => panic!("getting confirmations required for Serai"),
+    ExternalNetworkId::Bitcoin => Bitcoin::CONFIRMATIONS,
+    ExternalNetworkId::Ethereum => Ethereum::<serai_db::MemDb>::CONFIRMATIONS,
+    ExternalNetworkId::Monero => Monero::CONFIRMATIONS,
   }
 }
 
@@ -108,11 +103,11 @@ pub enum Wallet {
 
 // TODO: Merge these functions with the processor's tests, which offers very similar functionality
 impl Wallet {
-  pub async fn new(network: NetworkId, ops: &DockerOperations, handle: String) -> Wallet {
+  pub async fn new(network: ExternalNetworkId, ops: &DockerOperations, handle: String) -> Wallet {
     let rpc_url = network_rpc(network, ops, &handle);
 
     match network {
-      NetworkId::Bitcoin => {
+      ExternalNetworkId::Bitcoin => {
         use bitcoin_serai::{
           bitcoin::{
             secp256k1::{SECP256K1, SecretKey},
@@ -153,7 +148,7 @@ impl Wallet {
         Wallet::Bitcoin { private_key, public_key, input_tx: funds }
       }
 
-      NetworkId::Ethereum => {
+      ExternalNetworkId::Ethereum => {
         use ciphersuite::{group::ff::Field, Secp256k1};
         use ethereum_serai::alloy::{
           primitives::{U256, Address},
@@ -185,7 +180,7 @@ impl Wallet {
         Wallet::Ethereum { rpc_url: rpc_url.clone(), key, nonce: 0 }
       }
 
-      NetworkId::Monero => {
+      ExternalNetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
@@ -210,7 +205,6 @@ impl Wallet {
           last_tx: (height, block.miner_transaction.hash()),
         }
       }
-      NetworkId::Serai => panic!("creating a wallet for for Serai"),
     }
   }
 
@@ -219,7 +213,7 @@ impl Wallet {
     ops: &DockerOperations,
     to: &ExternalKey,
     instruction: Option<InInstruction>,
-  ) -> (Vec<u8>, Balance) {
+  ) -> (Vec<u8>, ExternalBalance) {
     match self {
       Wallet::Bitcoin { private_key, public_key, ref mut input_tx } => {
         use bitcoin_serai::bitcoin::{
@@ -298,7 +292,7 @@ impl Wallet {
         let mut buf = vec![];
         tx.consensus_encode(&mut buf).unwrap();
         *input_tx = tx;
-        (buf, Balance { coin: Coin::Bitcoin, amount: Amount(AMOUNT) })
+        (buf, ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(AMOUNT) })
       }
 
       Wallet::Ethereum { rpc_url, key, ref mut nonce } => {
@@ -400,7 +394,10 @@ impl Wallet {
         // We drop the bottom 10 decimals
         (
           bytes,
-          Balance { coin: Coin::Ether, amount: Amount(u64::try_from(eight_decimals).unwrap()) },
+          ExternalBalance {
+            coin: ExternalCoin::Ether,
+            amount: Amount(u64::try_from(eight_decimals).unwrap()),
+          },
         )
       }
 
@@ -417,7 +414,7 @@ impl Wallet {
         };
         use processor::{additional_key, networks::Monero};
 
-        let rpc_url = network_rpc(NetworkId::Monero, ops, handle);
+        let rpc_url = network_rpc(ExternalNetworkId::Monero, ops, handle);
         let rpc = SimpleRequestRpc::new(rpc_url).await.expect("couldn't connect to the Monero RPC");
 
         // Prepare inputs
@@ -429,8 +426,7 @@ impl Wallet {
             block.transactions.contains(&last_tx.1)
           {
             outputs = Scanner::new(view_pair.clone())
-              .scan(&rpc, &block)
-              .await
+              .scan(rpc.get_scannable_block(block).await.unwrap())
               .unwrap()
               .ignore_additional_timelock();
           }
@@ -486,7 +482,7 @@ impl Wallet {
         last_tx.0 = current_height;
         last_tx.1 = tx.hash();
 
-        (tx.serialize(), Balance { coin: Coin::Monero, amount: Amount(AMOUNT) })
+        (tx.serialize(), ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(AMOUNT) })
       }
     }
   }

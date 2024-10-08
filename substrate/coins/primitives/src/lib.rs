@@ -13,7 +13,7 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use serai_primitives::{Balance, SeraiAddress, ExternalAddress, Data, system_address};
+use serai_primitives::{system_address, Data, ExternalAddress, ExternalBalance, SeraiAddress};
 
 pub const FEE_ACCOUNT: SeraiAddress = system_address(b"Coins-fees");
 
@@ -32,7 +32,7 @@ pub struct OutInstruction {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct OutInstructionWithBalance {
   pub instruction: OutInstruction,
-  pub balance: Balance,
+  pub balance: ExternalBalance,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]

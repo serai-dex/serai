@@ -79,10 +79,13 @@ pub struct Block {
 }
 
 impl Block {
-  /// The zero-index position of this block within the blockchain.
+  /// The zero-indexed position of this block within the blockchain.
   ///
   /// This information comes from the Block's miner transaction. If the miner transaction isn't
-  /// structed as expected, this will return None.
+  /// structed as expected, this will return None. This will return Some for any Block which would
+  /// pass the consensus rules.
+  // https://github.com/monero-project/monero/blob/a1dc85c5373a30f14aaf7dcfdd95f5a7375d3623
+  //   /src/cryptonote_core/blockchain.cpp#L1365-L1382
   pub fn number(&self) -> Option<usize> {
     match &self.miner_transaction {
       Transaction::V1 { prefix, .. } | Transaction::V2 { prefix, .. } => {

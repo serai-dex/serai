@@ -8,11 +8,12 @@ use dkg::{Participant, tests::clone_without};
 use messages::{coordinator::*, SubstrateContext};
 
 use serai_client::{
-  primitives::{
-    BlockHash, Amount, Balance, crypto::RuntimePublic, PublicKey, SeraiAddress, NetworkId,
-  },
   in_instructions::primitives::{
-    InInstruction, InInstructionWithBalance, Batch, SignedBatch, batch_message,
+    batch_message, Batch, InInstruction, InInstructionWithBalance, SignedBatch,
+  },
+  primitives::{
+    crypto::RuntimePublic, Amount, BlockHash, ExternalBalance, ExternalNetworkId, PublicKey,
+    SeraiAddress, EXTERNAL_NETWORKS,
   },
   validator_sets::primitives::Session,
 };
@@ -189,7 +190,7 @@ pub(crate) async fn substrate_block(
 
 #[test]
 fn batch_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
+  for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
@@ -255,15 +256,14 @@ fn batch_test() {
           instructions: if let Some(instruction) = &instruction {
             vec![InInstructionWithBalance {
               instruction: instruction.clone(),
-              balance: Balance {
+              balance: ExternalBalance {
                 coin: balance_sent.coin,
                 amount: Amount(
                   balance_sent.amount.0 -
                     (2 * match network {
-                      NetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
-                      NetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
-                      NetworkId::Monero => Monero::COST_TO_AGGREGATE,
-                      NetworkId::Serai => panic!("minted for Serai?"),
+                      ExternalNetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
+                      ExternalNetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
+                      ExternalNetworkId::Monero => Monero::COST_TO_AGGREGATE,
                     }),
                 ),
               },
@@ -322,7 +322,9 @@ fn batch_test() {
             },
           )
           .await;
-          if instruction.is_some() || (instruction.is_none() && (network == NetworkId::Monero)) {
+          if instruction.is_some() ||
+            (instruction.is_none() && (network == ExternalNetworkId::Monero))
+          {
             assert!(plans.is_empty());
           } else {
             // If no instruction was used, and the processor csn presume the origin, it'd have
@@ -335,7 +337,7 @@ fn batch_test() {
       // With the latter InInstruction not existing, we should've triggered a refund if the origin
       // was detectable
       // Check this is trying to sign a Plan
-      if network != NetworkId::Monero {
+      if network != ExternalNetworkId::Monero {
         let mut refund_id = None;
         for coordinator in &mut coordinators {
           match coordinator.recv_message().await {

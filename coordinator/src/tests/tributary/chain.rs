@@ -15,8 +15,8 @@ use ciphersuite::{
 use sp_application_crypto::sr25519;
 use borsh::BorshDeserialize;
 use serai_client::{
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
+  primitives::ExternalNetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, Session},
 };
 
 use tokio::time::sleep;
@@ -50,7 +50,7 @@ pub fn new_spec<R: RngCore + CryptoRng>(
 
   let start_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
 
-  let set = ValidatorSet { session: Session(0), network: NetworkId::Bitcoin };
+  let set = ExternalValidatorSet { session: Session(0), network: ExternalNetworkId::Bitcoin };
 
   let set_participants = keys
     .iter()

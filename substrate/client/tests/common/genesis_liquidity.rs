@@ -11,11 +11,12 @@ use sp_core::{sr25519::Signature, Pair as PairTrait};
 
 use serai_abi::{
   genesis_liquidity::primitives::{oraclize_values_message, Values},
-  validator_sets::primitives::{musig_context, Session, ValidatorSet},
-  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  in_instructions::primitives::{Batch, InInstruction, InInstructionWithBalance},
   primitives::{
-    Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress, insecure_pair_from_name,
+    insecure_pair_from_name, Amount, ExternalBalance, BlockHash, ExternalCoin, ExternalNetworkId,
+    NetworkId, SeraiAddress, EXTERNAL_COINS,
   },
+  validator_sets::primitives::{musig_context, Session, ValidatorSet},
 };
 
 use serai_client::{Serai, SeraiGenesisLiquidity};
@@ -25,12 +26,11 @@ use crate::common::{in_instructions::provide_batch, tx::publish_tx};
 #[allow(dead_code)]
 pub async fn set_up_genesis(
   serai: &Serai,
-  coins: &[Coin],
-  values: &HashMap<Coin, u64>,
-) -> (HashMap<Coin, Vec<(SeraiAddress, Amount)>>, HashMap<NetworkId, u32>) {
+  values: &HashMap<ExternalCoin, u64>,
+) -> (HashMap<ExternalCoin, Vec<(SeraiAddress, Amount)>>, HashMap<ExternalNetworkId, u32>) {
   // make accounts with amounts
   let mut accounts = HashMap::new();
-  for coin in coins {
+  for coin in EXTERNAL_COINS {
     // make 5 accounts per coin
     let mut values = vec![];
     for _ in 0 .. 5 {
@@ -38,18 +38,18 @@ pub async fn set_up_genesis(
       OsRng.fill_bytes(&mut address.0);
       values.push((address, Amount(OsRng.next_u64() % 10u64.pow(coin.decimals()))));
     }
-    accounts.insert(*coin, values);
+    accounts.insert(coin, values);
   }
 
   // send a batch per coin
-  let mut batch_ids: HashMap<NetworkId, u32> = HashMap::new();
-  for coin in coins {
+  let mut batch_ids: HashMap<ExternalNetworkId, u32> = HashMap::new();
+  for coin in EXTERNAL_COINS {
     // set up instructions
-    let instructions = accounts[coin]
+    let instructions = accounts[&coin]
       .iter()
       .map(|(addr, amount)| InInstructionWithBalance {
         instruction: InInstruction::GenesisLiquidity(*addr),
-        balance: Balance { coin: *coin, amount: *amount },
+        balance: ExternalBalance { coin, amount: *amount },
       })
       .collect::<Vec<_>>();
 
@@ -73,8 +73,11 @@ pub async fn set_up_genesis(
   // set values relative to each other. We can do that without checking for genesis period blocks
   // since we are running in test(fast-epoch) mode.
   // TODO: Random values here
-  let values =
-    Values { monero: values[&Coin::Monero], ether: values[&Coin::Ether], dai: values[&Coin::Dai] };
+  let values = Values {
+    monero: values[&ExternalCoin::Monero],
+    ether: values[&ExternalCoin::Ether],
+    dai: values[&ExternalCoin::Dai],
+  };
   set_values(serai, &values).await;
 
   (accounts, batch_ids)

@@ -5,7 +5,7 @@ use std::{
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
-use serai_client::primitives::{NetworkId, Coin, Amount, Balance};
+use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount, ExternalBalance};
 
 use crate::{
   DbTxn, Db, Payment, Plan,
@@ -17,7 +17,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Scheduler<N: UtxoNetwork> {
   key: <N::Curve as Ciphersuite>::G,
-  coin: Coin,
+  coin: ExternalCoin,
 
   // Serai, when it has more outputs expected than it can handle in a single transaction, will
   // schedule the outputs to be handled later. Immediately, it just creates additional outputs
@@ -57,7 +57,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
 
   fn read<R: Read>(
     key: <N::Curve as Ciphersuite>::G,
-    coin: Coin,
+    coin: ExternalCoin,
     reader: &mut R,
   ) -> io::Result<Self> {
     let mut read_plans = || -> io::Result<_> {
@@ -145,7 +145,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
   pub fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Self {
     assert!(N::branch_address(key).is_some());
     assert!(N::change_address(key).is_some());
@@ -173,7 +173,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
   pub fn from_db<D: Db>(
     db: &D,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> io::Result<Self> {
     let coin = {
       let coins = network.coins();
@@ -190,7 +190,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
     Self::read(key, coin, reader)
   }
 
-  pub fn can_use_branch(&self, balance: Balance) -> bool {
+  pub fn can_use_branch(&self, balance: ExternalBalance) -> bool {
     assert_eq!(balance.coin, self.coin);
     self.plans.contains_key(&balance.amount.0)
   }
@@ -249,7 +249,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> Scheduler<N> {
         Payment {
           address: branch_address.clone(),
           data: None,
-          balance: Balance { coin: self.coin, amount: Amount(amount) },
+          balance: ExternalBalance { coin: self.coin, amount: Amount(amount) },
         },
       );
     }
@@ -536,7 +536,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
   fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Self {
     Scheduler::new::<D>(txn, key, network)
   }
@@ -545,13 +545,13 @@ impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
   fn from_db<D: Db>(
     db: &D,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> io::Result<Self> {
     Scheduler::from_db::<D>(db, key, network)
   }
 
   /// Check if a branch is usable.
-  fn can_use_branch(&self, balance: Balance) -> bool {
+  fn can_use_branch(&self, balance: ExternalBalance) -> bool {
     Scheduler::can_use_branch(self, balance)
   }
 
@@ -574,7 +574,7 @@ impl<N: UtxoNetwork<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
 
   /// Note a branch output as having been created, with the amount it was actually created with,
   /// or not having been created due to being too small.
-  // TODO: Move this to Balance.
+  // TODO: Move this to ExternalBalance.
   fn created_output<D: Db>(
     &mut self,
     txn: &mut D::Transaction<'_>,
