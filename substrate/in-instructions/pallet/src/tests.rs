@@ -15,14 +15,8 @@ use validator_sets::{Pallet as ValidatorSets, primitives::KeyPair};
 use coins::primitives::{OutInstruction, OutInstructionWithBalance};
 use genesis_liquidity::primitives::GENESIS_LIQUIDITY_ACCOUNT;
 
-use serai_primitives::*;
-
 fn set_keys_for_session(key: Public) {
-  for n in NETWORKS {
-    if n == NetworkId::Serai {
-      continue;
-    }
-
+  for n in EXTERNAL_NETWORKS {
     ValidatorSets::<Test>::set_keys(
       RawOrigin::None.into(),
       n,
@@ -50,10 +44,10 @@ fn get_events() -> Vec<Event<Test>> {
   events
 }
 
-fn make_liquid_pool(coin: Coin, amount: u64) {
+fn make_liquid_pool(coin: ExternalCoin, amount: u64) {
   // mint coins so that we can add liquidity
   let account = insecure_pair_from_name("make-pool-account").public();
-  Coins::mint(account, Balance { coin, amount: Amount(amount) }).unwrap();
+  Coins::mint(account, ExternalBalance { coin, amount: Amount(amount) }.into()).unwrap();
   Coins::mint(account, Balance { coin: Coin::Serai, amount: Amount(amount) }).unwrap();
 
   // make some liquid pool
@@ -68,14 +62,18 @@ fn validate_batch() {
     set_keys_for_session(pair.public());
 
     let mut batch_size = 0;
-    let mut batch =
-      Batch { network: NetworkId::Serai, id: 1, block: BlockHash([0u8; 32]), instructions: vec![] };
+    let mut batch = Batch {
+      network: ExternalNetworkId::Monero,
+      id: 1,
+      block: BlockHash([0u8; 32]),
+      instructions: vec![],
+    };
 
     // batch size bigger than MAX_BATCH_SIZE should fail
     while batch_size <= MAX_BATCH_SIZE + 1000 {
       batch.instructions.push(InInstructionWithBalance {
         instruction: InInstruction::Transfer(SeraiAddress::new([0u8; 32])),
-        balance: Balance { coin: Coin::Serai, amount: Amount(1) },
+        balance: ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(1) },
       });
       batch_size = batch.encode().len();
     }
@@ -94,18 +92,6 @@ fn validate_batch() {
       batch_size = batch.encode().len();
     }
 
-    // serai network can't submit batches
-    let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: Signature([0u8; 64]) },
-    };
-    assert_eq!(
-      InInstructions::validate_unsigned(TransactionSource::External, &call),
-      InvalidTransaction::Custom(0).into() // network is serai error
-    );
-
-    // change the network to an external network
-    batch.network = NetworkId::Monero;
-
     // 0 signature should be invalid
     let call = pallet::Call::<Test>::execute_batch {
       batch: SignedBatch { batch: batch.clone(), signature: Signature([0u8; 64]) },
@@ -119,7 +105,7 @@ fn validate_batch() {
     let signature = pair.sign(&batch_message(&batch));
 
     // network shouldn't be halted
-    InInstructions::halt(NetworkId::Monero).unwrap();
+    InInstructions::halt(ExternalNetworkId::Monero).unwrap();
     let call = pallet::Call::<Test>::execute_batch {
       batch: SignedBatch { batch: batch.clone(), signature },
     };
@@ -129,7 +115,7 @@ fn validate_batch() {
     );
 
     // submit from an un-halted network
-    batch.network = NetworkId::Bitcoin;
+    batch.network = ExternalNetworkId::Bitcoin;
     let signature = pair.sign(&batch_message(&batch));
 
     // can't submit in the first block(Block 0)
@@ -181,7 +167,7 @@ fn validate_batch() {
     // update block number & batch
     System::set_block_number(3);
     for ins in &mut batch.instructions {
-      ins.balance.coin = Coin::Bitcoin
+      ins.balance.coin = ExternalCoin::Bitcoin;
     }
     let signature = pair.sign(&batch_message(&batch));
 
@@ -224,7 +210,7 @@ fn validate_batch() {
 #[test]
 fn transfer_instruction() {
   new_test_ext().execute_with(|| {
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
     let amount = Amount(2 * 10u64.pow(coin.decimals()));
     let account = insecure_pair_from_name("random1").public();
     let batch = SignedBatch {
@@ -234,7 +220,7 @@ fn transfer_instruction() {
         block: BlockHash([0u8; 32]),
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Transfer(account.into()),
-          balance: Balance { coin, amount },
+          balance: ExternalBalance { coin, amount },
         }],
       },
       signature: Signature([0u8; 64]),
@@ -242,14 +228,14 @@ fn transfer_instruction() {
     InInstructions::execute_batch(RawOrigin::None.into(), batch).unwrap();
 
     // check that account has the coins
-    assert_eq!(Coins::balance(account, coin), amount);
+    assert_eq!(Coins::balance(account, coin.into()), amount);
   })
 }
 
 #[test]
 fn dex_instruction_add_liquidity() {
   new_test_ext().execute_with(|| {
-    let coin = Coin::Ether;
+    let coin = ExternalCoin::Ether;
     let amount = Amount(2 * 10u64.pow(coin.decimals()));
     let account = insecure_pair_from_name("random1").public();
 
@@ -260,7 +246,7 @@ fn dex_instruction_add_liquidity() {
         block: BlockHash([0u8; 32]),
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::SwapAndAddLiquidity(account.into())),
-          balance: Balance { coin, amount },
+          balance: ExternalBalance { coin, amount },
         }],
       },
       signature: Signature([0u8; 64]),
@@ -301,15 +287,15 @@ fn dex_instruction_add_liquidity() {
     // we can't know the actual SRI amount since we don't know the result of the swap.
     // Moreover, knowing exactly how much isn't the responsibility of InInstruction pallet,
     // it is responsibility of the Dex pallet.
-    let (coin_amount, _serai_amount) = Dex::get_reserves(&coin, &Coin::Serai).unwrap();
+    let (coin_amount, _serai_amount) = Dex::get_reserves(&coin.into(), &Coin::Serai).unwrap();
     assert_eq!(coin_amount, original_coin_amount + amount.0);
 
     // assert that the account got the liquidity tokens, again we don't how much and
     // it isn't this pallets responsibility.
-    assert!(LiquidityTokens::balance(account, coin).0 > 0);
+    assert!(LiquidityTokens::balance(account, coin.into()).0 > 0);
 
     // check that in ins account doesn't have the coins
-    assert_eq!(Coins::balance(IN_INSTRUCTION_EXECUTOR.into(), coin), Amount(0));
+    assert_eq!(Coins::balance(IN_INSTRUCTION_EXECUTOR.into(), coin.into()), Amount(0));
     assert_eq!(Coins::balance(IN_INSTRUCTION_EXECUTOR.into(), Coin::Serai), Amount(0));
   })
 }
@@ -317,7 +303,7 @@ fn dex_instruction_add_liquidity() {
 #[test]
 fn dex_instruction_swap() {
   new_test_ext().execute_with(|| {
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
     let amount = Amount(2 * 10u64.pow(coin.decimals()));
     let account = insecure_pair_from_name("random1").public();
 
@@ -334,7 +320,7 @@ fn dex_instruction_swap() {
             Balance { coin: Coin::Serai, amount: Amount(1) },
             OutAddress::External(ExternalAddress::new([0u8; 64].to_vec()).unwrap()),
           )),
-          balance: Balance { coin, amount },
+          balance: ExternalBalance { coin, amount },
         }],
       },
       signature: Signature([0u8; 64]),
@@ -368,13 +354,13 @@ fn dex_instruction_swap() {
     assert!(Coins::balance(account, Coin::Serai).0 > 0);
 
     // make another pool for external coin
-    let coin2 = Coin::Monero;
+    let coin2 = ExternalCoin::Monero;
     make_liquid_pool(coin2, 5 * 10u64.pow(coin.decimals()));
 
     // update the batch
     let out_addr = ExternalAddress::new([0u8; 64].to_vec()).unwrap();
     batch.batch.instructions[0].instruction = InInstruction::Dex(DexCall::Swap(
-      Balance { coin: Coin::Monero, amount: Amount(1) },
+      Balance { coin: ExternalCoin::Monero.into(), amount: Amount(1) },
       OutAddress::External(out_addr.clone()),
     ));
     InInstructions::execute_batch(RawOrigin::None.into(), batch.clone()).unwrap();
@@ -401,7 +387,7 @@ fn dex_instruction_swap() {
         from: IN_INSTRUCTION_EXECUTOR.into(),
         instruction: OutInstructionWithBalance {
           instruction: OutInstruction { address: out_addr, data: None },
-          balance: Balance { coin: coin2, amount: Amount(68228493) }
+          balance: ExternalBalance { coin: coin2, amount: Amount(68228493) }
         }
       }]
     )
@@ -411,7 +397,7 @@ fn dex_instruction_swap() {
 #[test]
 fn genesis_liquidity_instruction() {
   new_test_ext().execute_with(|| {
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
     let amount = Amount(2 * 10u64.pow(coin.decimals()));
     let account = insecure_pair_from_name("random1").public();
 
@@ -422,7 +408,7 @@ fn genesis_liquidity_instruction() {
         block: BlockHash([0u8; 32]),
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::GenesisLiquidity(account.into()),
-          balance: Balance { coin, amount },
+          balance: ExternalBalance { coin, amount },
         }],
       },
       signature: Signature([0u8; 64]),
@@ -431,7 +417,7 @@ fn genesis_liquidity_instruction() {
     InInstructions::execute_batch(RawOrigin::None.into(), batch.clone()).unwrap();
 
     // check that genesis liq account got the coins
-    assert_eq!(Coins::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin), amount);
+    assert_eq!(Coins::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), coin.into()), amount);
 
     // check that it registered the liquidity for the account
     // detailed tests about the amounts has to be done in GenesisLiquidity pallet tests.
@@ -448,8 +434,9 @@ fn genesis_liquidity_instruction() {
 #[test]
 fn swap_to_staked_sri_instruction() {
   new_test_ext().execute_with(|| {
-    let coin = Coin::Monero;
-    let key_share = ValidatorSets::<Test>::allocation_per_key_share(coin.network()).unwrap();
+    let coin = ExternalCoin::Monero;
+    let key_share =
+      ValidatorSets::<Test>::allocation_per_key_share(NetworkId::from(coin.network())).unwrap();
     let amount = Amount(2 * key_share.0);
     let account = insecure_pair_from_name("random1").public();
 
@@ -457,9 +444,9 @@ fn swap_to_staked_sri_instruction() {
     make_liquid_pool(coin, 5 * 10u64.pow(coin.decimals()));
 
     // make sure account doesn't already have lTs or allocation
-    let current_liq_tokens = LiquidityTokens::balance(POL_ACCOUNT.into(), coin).0;
+    let current_liq_tokens = LiquidityTokens::balance(POL_ACCOUNT.into(), coin.into()).0;
     assert_eq!(current_liq_tokens, 0);
-    assert_eq!(ValidatorSets::<Test>::allocation((coin.network(), account)), None);
+    assert_eq!(ValidatorSets::<Test>::allocation((NetworkId::from(coin.network()), account)), None);
 
     // we need this so that value for the coin exist
     Dex::on_finalize(0);
@@ -471,8 +458,8 @@ fn swap_to_staked_sri_instruction() {
         id: 0,
         block: BlockHash([0u8; 32]),
         instructions: vec![InInstructionWithBalance {
-          instruction: InInstruction::SwapToStakedSRI(account.into(), coin.network()),
-          balance: Balance { coin, amount },
+          instruction: InInstruction::SwapToStakedSRI(account.into(), coin.network().into()),
+          balance: ExternalBalance { coin, amount },
         }],
       },
       signature: Signature([0u8; 64]),
@@ -481,7 +468,7 @@ fn swap_to_staked_sri_instruction() {
     InInstructions::execute_batch(RawOrigin::None.into(), batch.clone()).unwrap();
 
     // assert that we added liq from POL account
-    assert!(LiquidityTokens::balance(POL_ACCOUNT.into(), coin).0 > current_liq_tokens);
+    assert!(LiquidityTokens::balance(POL_ACCOUNT.into(), coin.into()).0 > current_liq_tokens);
 
     // assert that user allocated SRI for the network
     let value = Dex::spot_price_for_block(0, coin).unwrap();
@@ -495,6 +482,9 @@ fn swap_to_staked_sri_instruction() {
       )
       .unwrap(),
     );
-    assert_eq!(ValidatorSets::<Test>::allocation((coin.network(), account)).unwrap(), sri_amount);
+    assert_eq!(
+      ValidatorSets::<Test>::allocation((NetworkId::from(coin.network()), account)).unwrap(),
+      sri_amount
+    );
   })
 }

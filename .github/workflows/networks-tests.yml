@@ -45,7 +45,4 @@ jobs:
             -p monero-simple-request-rpc \
             -p monero-address \
             -p monero-wallet \
-            -p monero-seed \
-            -p polyseed \
-            -p monero-wallet-util \
             -p monero-serai-verify-chain

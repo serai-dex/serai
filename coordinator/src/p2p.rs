@@ -11,7 +11,9 @@ use rand_core::{RngCore, OsRng};
 
 use scale::{Decode, Encode};
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet, Serai};
+use serai_client::{
+  primitives::ExternalNetworkId, validator_sets::primitives::ExternalValidatorSet, Serai,
+};
 
 use serai_db::Db;
 
@@ -69,7 +71,7 @@ const BLOCKS_PER_BATCH: usize = BLOCKS_PER_MINUTE + 1;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub struct CosignedBlock {
-  pub network: NetworkId,
+  pub network: ExternalNetworkId,
   pub block_number: u64,
   pub block: [u8; 32],
   pub signature: [u8; 64],
@@ -208,8 +210,8 @@ pub struct HeartbeatBatch {
 pub trait P2p: Send + Sync + Clone + fmt::Debug + TributaryP2p {
   type Id: Send + Sync + Clone + Copy + fmt::Debug;
 
-  async fn subscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
-  async fn unsubscribe(&self, set: ValidatorSet, genesis: [u8; 32]);
+  async fn subscribe(&self, set: ExternalValidatorSet, genesis: [u8; 32]);
+  async fn unsubscribe(&self, set: ExternalValidatorSet, genesis: [u8; 32]);
 
   async fn send_raw(&self, to: Self::Id, msg: Vec<u8>);
   async fn broadcast_raw(&self, kind: P2pMessageKind, msg: Vec<u8>);
@@ -309,7 +311,7 @@ struct Behavior {
 #[allow(clippy::type_complexity)]
 #[derive(Clone)]
 pub struct LibP2p {
-  subscribe: Arc<Mutex<mpsc::UnboundedSender<(bool, ValidatorSet, [u8; 32])>>>,
+  subscribe: Arc<Mutex<mpsc::UnboundedSender<(bool, ExternalValidatorSet, [u8; 32])>>>,
   send: Arc<Mutex<mpsc::UnboundedSender<(PeerId, Vec<u8>)>>>,
   broadcast: Arc<Mutex<mpsc::UnboundedSender<(P2pMessageKind, Vec<u8>)>>>,
   receive: Arc<Mutex<mpsc::UnboundedReceiver<Message<Self>>>>,
@@ -397,7 +399,7 @@ impl LibP2p {
     let (receive_send, receive_recv) = mpsc::unbounded_channel();
     let (subscribe_send, mut subscribe_recv) = mpsc::unbounded_channel();
 
-    fn topic_for_set(set: ValidatorSet) -> IdentTopic {
+    fn topic_for_set(set: ExternalValidatorSet) -> IdentTopic {
       IdentTopic::new(format!("{LIBP2P_TOPIC}-{}", hex::encode(set.encode())))
     }
 
@@ -407,7 +409,8 @@ impl LibP2p {
     // The addrs we're currently dialing, and the networks associated with them
     let dialing_peers = Arc::new(RwLock::new(HashMap::new()));
     // The peers we're currently connected to, and the networks associated with them
-    let connected_peers = Arc::new(RwLock::new(HashMap::<Multiaddr, HashSet<NetworkId>>::new()));
+    let connected_peers =
+      Arc::new(RwLock::new(HashMap::<Multiaddr, HashSet<ExternalNetworkId>>::new()));
 
     // Find and connect to peers
     let (connect_to_network_send, mut connect_to_network_recv) =
@@ -420,7 +423,7 @@ impl LibP2p {
       let connect_to_network_send = connect_to_network_send.clone();
       async move {
         loop {
-          let connect = |network: NetworkId, addr: Multiaddr| {
+          let connect = |network: ExternalNetworkId, addr: Multiaddr| {
             let dialing_peers = dialing_peers.clone();
             let connected_peers = connected_peers.clone();
             let to_dial_send = to_dial_send.clone();
@@ -507,7 +510,7 @@ impl LibP2p {
             connect_to_network_networks.insert(network);
           }
           for network in connect_to_network_networks {
-            if let Ok(mut nodes) = serai.p2p_validators(network).await {
+            if let Ok(mut nodes) = serai.p2p_validators(network.into()).await {
               // If there's an insufficient amount of nodes known, connect to all yet add it
               // back and break
               if nodes.len() < TARGET_PEERS {
@@ -557,7 +560,7 @@ impl LibP2p {
 
             // Subscribe to any new topics
             set = subscribe_recv.recv() => {
-              let (subscribe, set, genesis): (_, ValidatorSet, [u8; 32]) =
+              let (subscribe, set, genesis): (_, ExternalValidatorSet, [u8; 32]) =
                 set.expect("subscribe_recv closed. are we shutting down?");
               let topic = topic_for_set(set);
               if subscribe {
@@ -776,7 +779,7 @@ impl LibP2p {
 impl P2p for LibP2p {
   type Id = PeerId;
 
-  async fn subscribe(&self, set: ValidatorSet, genesis: [u8; 32]) {
+  async fn subscribe(&self, set: ExternalValidatorSet, genesis: [u8; 32]) {
     self
       .subscribe
       .lock()
@@ -785,7 +788,7 @@ impl P2p for LibP2p {
       .expect("subscribe_send closed. are we shutting down?");
   }
 
-  async fn unsubscribe(&self, set: ValidatorSet, genesis: [u8; 32]) {
+  async fn unsubscribe(&self, set: ExternalValidatorSet, genesis: [u8; 32]) {
     self
       .subscribe
       .lock()

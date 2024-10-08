@@ -33,7 +33,7 @@ pub(crate) mod output;
 pub use output::WalletOutput;
 
 mod scan;
-pub use scan::{ScanError, Scanner, GuaranteedScanner};
+pub use scan::{Timelocked, ScanError, Scanner, GuaranteedScanner};
 
 mod decoys;
 pub use decoys::OutputWithDecoys;
@@ -137,15 +137,13 @@ impl SharedKeyDerivations {
 
   fn decrypt(&self, enc_amount: &EncryptedAmount) -> Commitment {
     match enc_amount {
-      // TODO: Add a test vector for this
       EncryptedAmount::Original { mask, amount } => {
-        let mask_shared_sec = keccak256(self.shared_key.as_bytes());
-        let mask =
-          Scalar::from_bytes_mod_order(*mask) - Scalar::from_bytes_mod_order(mask_shared_sec);
+        let mask_shared_sec_scalar = keccak256_to_scalar(self.shared_key.as_bytes());
+        let amount_shared_sec_scalar = keccak256_to_scalar(mask_shared_sec_scalar.as_bytes());
 
-        let amount_shared_sec = keccak256(mask_shared_sec);
-        let amount_scalar =
-          Scalar::from_bytes_mod_order(*amount) - Scalar::from_bytes_mod_order(amount_shared_sec);
+        let mask = Scalar::from_bytes_mod_order(*mask) - mask_shared_sec_scalar;
+        let amount_scalar = Scalar::from_bytes_mod_order(*amount) - amount_shared_sec_scalar;
+
         // d2b from rctTypes.cpp
         let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
 

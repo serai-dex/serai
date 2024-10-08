@@ -3,7 +3,7 @@ use std::io;
 
 use ciphersuite::Ciphersuite;
 
-use serai_client::primitives::{NetworkId, Balance};
+use serai_client::primitives::{ExternalBalance, ExternalNetworkId};
 
 use crate::{networks::Network, Db, Payment, Plan};
 
@@ -34,18 +34,18 @@ pub trait Scheduler<N: Network>: Sized + Clone + PartialEq + Debug {
   fn new<D: Db>(
     txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Self;
 
   /// Load a Scheduler from the DB.
   fn from_db<D: Db>(
     db: &D,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> io::Result<Self>;
 
   /// Check if a branch is usable.
-  fn can_use_branch(&self, balance: Balance) -> bool;
+  fn can_use_branch(&self, balance: ExternalBalance) -> bool;
 
   /// Schedule a series of outputs/payments.
   fn schedule<D: Db>(

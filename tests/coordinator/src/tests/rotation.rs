@@ -132,13 +132,13 @@ async fn set_rotation_test() {
 
       // excluded participant
       let pair5 = insecure_pair_from_name("Eve");
-      let network = NetworkId::Bitcoin;
+      let network = ExternalNetworkId::Bitcoin;
       let amount = Amount(1_000_000 * 10_u64.pow(8));
       let serai = processors[0].serai().await;
 
       // allocate now for the last participant so that it is guaranteed to be included into session
       // 1 set. This doesn't affect the genesis set at all since that is a predetermined set.
-      allocate_stake(&serai, network, amount, &pair5, 0).await;
+      allocate_stake(&serai, network.into(), amount, &pair5, 0).await;
 
       // genesis keygen
       let _ = key_gen::<Secp256k1>(&mut processors, Session(0)).await;
@@ -151,12 +151,14 @@ async fn set_rotation_test() {
       }
 
       // wait until next session to see the effect on coordinator
-      wait_till_session_1(&serai, network).await;
+      wait_till_session_1(&serai, network.into()).await;
 
       // Ensure the new validator was included in the new set
       assert_eq!(
-        most_recent_new_set_event(&serai, network).await,
-        ValidatorSetsEvent::NewSet { set: ValidatorSet { session: Session(1), network } },
+        most_recent_new_set_event(&serai, network.into()).await,
+        ValidatorSetsEvent::NewSet {
+          set: ValidatorSet { session: Session(1), network: network.into() }
+        },
       );
 
       // add the last participant & do the keygen

@@ -2,12 +2,12 @@ use scale::Encode;
 
 use sp_core::sr25519::{Public, Signature};
 
-use serai_abi::primitives::Amount;
+use serai_abi::{primitives::Amount, validator_sets::primitives::ExternalValidatorSet};
 pub use serai_abi::validator_sets::primitives;
-use primitives::{Session, ValidatorSet, KeyPair};
+use primitives::{Session, KeyPair};
 
 use crate::{
-  primitives::{NetworkId, SeraiAddress},
+  primitives::{NetworkId, ExternalNetworkId, SeraiAddress},
   Transaction, Serai, TemporalSerai, SeraiError,
 };
 
@@ -167,13 +167,13 @@ impl<'a> SeraiValidatorSets<'a> {
   }
 
   // TODO: Store these separately since we almost never need both at once?
-  pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
+  pub async fn keys(&self, set: ExternalValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
   }
 
   pub async fn key_pending_slash_report(
     &self,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Result<Option<Public>, SeraiError> {
     self.0.storage(PALLET, "PendingSlashReport", network).await
   }
@@ -187,7 +187,7 @@ impl<'a> SeraiValidatorSets<'a> {
   }
 
   pub fn set_keys(
-    network: NetworkId,
+    network: ExternalNetworkId,
     removed_participants: sp_runtime::BoundedVec<
       SeraiAddress,
       sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
@@ -212,7 +212,7 @@ impl<'a> SeraiValidatorSets<'a> {
   }
 
   pub fn report_slashes(
-    network: NetworkId,
+    network: ExternalNetworkId,
     slashes: sp_runtime::BoundedVec<
       (SeraiAddress, u32),
       sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,

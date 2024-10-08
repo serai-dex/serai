@@ -19,7 +19,7 @@ use ciphersuite::{
   Ciphersuite, Ristretto,
 };
 
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::ExternalNetworkId;
 
 use messages::{
   coordinator::{SubstrateSignableId, SubstrateSignId, cosign_block_msg},
@@ -108,7 +108,7 @@ pub struct Handles {
 }
 
 pub struct Processor {
-  network: NetworkId,
+  network: ExternalNetworkId,
 
   serai_rpc: String,
   #[allow(unused)]
@@ -132,7 +132,7 @@ impl Drop for Processor {
 impl Processor {
   pub async fn new(
     raw_i: u8,
-    network: NetworkId,
+    network: ExternalNetworkId,
     ops: &DockerOperations,
     handles: Handles,
     processor_key: <Ristretto as Ciphersuite>::F,

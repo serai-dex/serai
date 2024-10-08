@@ -23,8 +23,8 @@ use serai_db::{DbTxn, Db};
 use scale::Encode;
 use borsh::BorshSerialize;
 use serai_client::{
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
+  primitives::ExternalNetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair, Session},
   Public, Serai, SeraiInInstructions,
 };
 
@@ -79,7 +79,7 @@ pub struct ActiveTributary<D: Db, P: P2p> {
 #[derive(Clone)]
 pub enum TributaryEvent<D: Db, P: P2p> {
   NewTributary(ActiveTributary<D, P>),
-  TributaryRetired(ValidatorSet),
+  TributaryRetired(ExternalValidatorSet),
 }
 
 // Creates a new tributary and sends it to all listeners.
@@ -145,7 +145,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
   p2p: &P,
   cosign_channel: &mpsc::UnboundedSender<CosignedBlock>,
   tributaries: &HashMap<Session, ActiveTributary<D, P>>,
-  network: NetworkId,
+  network: ExternalNetworkId,
   msg: &processors::Message,
 ) -> bool {
   #[allow(clippy::nonminimal_bool)]
@@ -193,7 +193,8 @@ async fn handle_processor_message<D: Db, P: P2p>(
           .iter()
           .map(|plan| plan.session)
           .filter(|session| {
-            RetiredTributaryDb::get(&txn, ValidatorSet { network, session: *session }).is_none()
+            RetiredTributaryDb::get(&txn, ExternalValidatorSet { network, session: *session })
+              .is_none()
           })
           .collect::<HashSet<_>>();
 
@@ -265,7 +266,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
       }
       // This causes an action on Substrate yet not on any Tributary
       coordinator::ProcessorMessage::SignedSlashReport { session, signature } => {
-        let set = ValidatorSet { network, session: *session };
+        let set = ExternalValidatorSet { network, session: *session };
         let signature: &[u8] = signature.as_ref();
         let signature = serai_client::Signature(signature.try_into().unwrap());
 
@@ -393,7 +394,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
   if let Some(relevant_tributary_value) = relevant_tributary {
     if RetiredTributaryDb::get(
       &txn,
-      ValidatorSet { network: msg.network, session: relevant_tributary_value },
+      ExternalValidatorSet { network: msg.network, session: relevant_tributary_value },
     )
     .is_some()
     {
@@ -782,7 +783,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
   processors: Pro,
   p2p: P,
   cosign_channel: mpsc::UnboundedSender<CosignedBlock>,
-  network: NetworkId,
+  network: ExternalNetworkId,
   mut tributary_event: mpsc::UnboundedReceiver<TributaryEvent<D, P>>,
 ) {
   let mut tributaries = HashMap::new();
@@ -831,7 +832,7 @@ async fn handle_processor_messages<D: Db, Pro: Processors, P: P2p>(
 #[allow(clippy::too_many_arguments)]
 async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
   mut db: D,
-  network: NetworkId,
+  network: ExternalNetworkId,
   mut tributary_event: mpsc::UnboundedReceiver<TributaryEvent<D, P>>,
 ) {
   let mut tributaries = HashMap::new();
@@ -905,7 +906,7 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
         for batch in start_id ..= last_id {
           let is_pre_handover = LookupHandoverBatchDb::get(&txn, network, batch + 1);
           if let Some(session) = is_pre_handover {
-            let set = ValidatorSet { network, session };
+            let set = ExternalValidatorSet { network, session };
             let mut queued = QueuedBatchesDb::take(&mut txn, set);
             // is_handover_batch is only set for handover `Batch`s we're participating in, making
             // this safe
@@ -923,7 +924,8 @@ async fn handle_cosigns_and_batch_publication<D: Db, P: P2p>(
 
           let is_handover = LookupHandoverBatchDb::get(&txn, network, batch);
           if let Some(session) = is_handover {
-            for queued in QueuedBatchesDb::take(&mut txn, ValidatorSet { network, session }) {
+            for queued in QueuedBatchesDb::take(&mut txn, ExternalValidatorSet { network, session })
+            {
               to_publish.push((session, queued));
             }
           }
@@ -970,10 +972,7 @@ pub async fn handle_processors<D: Db, Pro: Processors, P: P2p>(
   mut tributary_event: broadcast::Receiver<TributaryEvent<D, P>>,
 ) {
   let mut channels = HashMap::new();
-  for network in serai_client::primitives::NETWORKS {
-    if network == NetworkId::Serai {
-      continue;
-    }
+  for network in serai_client::primitives::EXTERNAL_NETWORKS {
     let (processor_send, processor_recv) = mpsc::unbounded_channel();
     tokio::spawn(handle_processor_messages(
       db.clone(),
@@ -1195,7 +1194,7 @@ pub async fn run<D: Db, Pro: Processors, P: P2p>(
       }
     });
 
-    move |set: ValidatorSet, genesis, id_type, id: Vec<u8>| {
+    move |set: ExternalValidatorSet, genesis, id_type, id: Vec<u8>| {
       log::debug!("recognized ID {:?} {}", id_type, hex::encode(&id));
       let mut raw_db = raw_db.clone();
       let key = key.clone();
