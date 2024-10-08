@@ -9,12 +9,13 @@ use rand_core::{RngCore, OsRng};
 use scale::Encode;
 
 use serai_client::{
-  primitives::{
-    NetworkId, Coin, Amount, Balance, SeraiAddress, ExternalAddress, insecure_pair_from_name,
-  },
-  validator_sets::primitives::{Session, ValidatorSet},
-  in_instructions::primitives::Shorthand,
   coins::primitives::{OutInstruction, OutInstructionWithBalance},
+  in_instructions::primitives::Shorthand,
+  primitives::{
+    insecure_pair_from_name, Amount, Balance, Coin, ExternalAddress, ExternalBalance, ExternalCoin,
+    SeraiAddress,
+  },
+  validator_sets::primitives::{ExternalValidatorSet, Session},
   PairTrait, SeraiCoins,
 };
 
@@ -199,7 +200,7 @@ async fn mint_and_burn_test() {
               .await
               .unwrap()
               .validator_sets()
-              .keys(ValidatorSet { network, session: Session(0) })
+              .keys(ExternalValidatorSet { network, session: Session(0) })
               .await
               .unwrap()
             {
@@ -224,7 +225,10 @@ async fn mint_and_burn_test() {
         }
       };
 
-      (key_pair(false, NetworkId::Bitcoin).await, key_pair(true, NetworkId::Monero).await)
+      (
+        key_pair(false, ExternalNetworkId::Bitcoin).await,
+        key_pair(true, ExternalNetworkId::Monero).await,
+      )
     };
 
     // Because the initial keys only become active when the network's time matches the Serai
@@ -357,8 +361,7 @@ async fn mint_and_burn_test() {
       let view_pair = ViewPair::new(ED25519_BASEPOINT_POINT, Zeroizing::new(Scalar::ONE)).unwrap();
       let mut scanner = Scanner::new(view_pair.clone());
       let output = scanner
-        .scan(&rpc, &rpc.get_block_by_number(1).await.unwrap())
-        .await
+        .scan(rpc.get_scannable_block_by_number(1).await.unwrap())
         .unwrap()
         .additional_timelock_satisfied_by(rpc.get_height().await.unwrap(), 0)
         .swap_remove(0);
@@ -440,8 +443,8 @@ async fn mint_and_burn_test() {
           );
         }
       };
-      wait_for_batch(false, NetworkId::Bitcoin).await;
-      wait_for_batch(true, NetworkId::Monero).await;
+      wait_for_batch(false, ExternalNetworkId::Bitcoin).await;
+      wait_for_batch(true, ExternalNetworkId::Monero).await;
     }
 
     // TODO: Verify the mints
@@ -493,7 +496,7 @@ async fn mint_and_burn_test() {
         let serai_pair = &serai_pair;
         move |nonce, coin, amount, address| async move {
           let out_instruction = OutInstructionWithBalance {
-            balance: Balance { coin, amount: Amount(amount) },
+            balance: ExternalBalance { coin, amount: Amount(amount) },
             instruction: OutInstruction { address, data: None },
           };
 
@@ -512,7 +515,7 @@ async fn mint_and_burn_test() {
       #[allow(clippy::inconsistent_digit_grouping)]
       burn(
         0,
-        Coin::Bitcoin,
+        ExternalCoin::Bitcoin,
         1_000_000_00,
         ExternalAddress::new(
           serai_client::networks::bitcoin::Address::new(bitcoin_addr.clone()).unwrap().into(),
@@ -523,7 +526,7 @@ async fn mint_and_burn_test() {
 
       burn(
         1,
-        Coin::Monero,
+        ExternalCoin::Monero,
         1_000_000_000_000,
         ExternalAddress::new(
           serai_client::networks::monero::Address::new(monero_addr).unwrap().into(),
@@ -587,7 +590,10 @@ async fn mint_and_burn_test() {
       while i < (5 * 6) {
         if let Ok(block) = rpc.get_block_by_number(start_monero_block).await {
           start_monero_block += 1;
-          let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+          let outputs = scanner
+            .scan(rpc.get_scannable_block(block.clone()).await.unwrap())
+            .unwrap()
+            .not_additionally_locked();
           if !outputs.is_empty() {
             assert_eq!(outputs.len(), 1);
 

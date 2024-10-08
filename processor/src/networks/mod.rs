@@ -10,7 +10,7 @@ use frost::{
   sign::PreprocessMachine,
 };
 
-use serai_client::primitives::{NetworkId, Balance};
+use serai_client::primitives::{ExternalBalance, ExternalNetworkId};
 
 use log::error;
 
@@ -115,7 +115,7 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 
   fn presumed_origin(&self) -> Option<N::Address>;
 
-  fn balance(&self) -> Balance;
+  fn balance(&self) -> ExternalBalance;
   fn data(&self) -> &[u8];
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
@@ -126,13 +126,13 @@ pub trait Output<N: Network>: Send + Sync + Sized + Clone + PartialEq + Eq + Deb
 pub trait Transaction<N: Network>: Send + Sync + Sized + Clone + PartialEq + Debug {
   type Id: 'static + Id;
   fn id(&self) -> Self::Id;
-  // TODO: Move to Balance
+  // TODO: Move to ExternalBalance
   #[cfg(test)]
   async fn fee(&self, network: &N) -> u64;
 }
 
 pub trait SignableTransaction: Send + Sync + Clone + Debug {
-  // TODO: Move to Balance
+  // TODO: Move to ExternalBalance
   fn fee(&self) -> u64;
 }
 
@@ -280,7 +280,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
     + TryFrom<Vec<u8>>;
 
   /// Network ID for this network.
-  const NETWORK: NetworkId;
+  const NETWORK: ExternalNetworkId;
   /// String ID for this network.
   const ID: &'static str;
   /// The estimated amount of time a block will take.
@@ -297,7 +297,7 @@ pub trait Network: 'static + Send + Sync + Clone + PartialEq + Debug {
   /// For any received output, there's the cost to spend the output. This value MUST exceed the
   /// cost to spend said output, and should by a notable margin (not just 2x, yet an order of
   /// magnitude).
-  // TODO: Dust needs to be diversified per Coin
+  // TODO: Dust needs to be diversified per ExternalCoin
   const DUST: u64;
 
   /// The cost to perform input aggregation with a 2-input 1-output TX.

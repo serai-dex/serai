@@ -6,7 +6,7 @@ use k256::{Scalar, ProjectivePoint};
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, tests::key_gen as frost_key_gen};
 
 use alloy_core::{
-  primitives::{Address, U256, Bytes, TxKind},
+  primitives::{Address, U256, Bytes, Signature, TxKind},
   hex::FromHex,
 };
 use alloy_consensus::{SignableTransaction, TxLegacy};
@@ -69,7 +69,7 @@ pub async fn send(
   );
 
   let mut bytes = vec![];
-  tx.encode_with_signature_fields(&sig.into(), &mut bytes);
+  tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
   let pending_tx = provider.send_raw_transaction(&bytes).await.ok()?;
   pending_tx.get_receipt().await.ok()
 }

@@ -77,7 +77,7 @@ sp-application-crypto = { git = "https://github.com/serai-dex/substrate", defaul
 
 ethereum-serai = { path = "../networks/ethereum", default-features = false, features = ["tests"] }
 
-dockertest = "0.4"
+dockertest = "0.5"
 serai-docker-tests = { path = "../tests/docker" }
 
 [features]

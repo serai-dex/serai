@@ -17,9 +17,9 @@ use frost_schnorrkel::Schnorrkel;
 use log::{info, warn};
 
 use serai_client::{
+  primitives::ExternalNetworkId,
+  validator_sets::primitives::{report_slashes_message, ExternalValidatorSet, Session},
   Public,
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet, report_slashes_message},
 };
 
 use messages::coordinator::*;
@@ -38,7 +38,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
 >>::SignatureShare;
 
 pub struct SlashReportSigner {
-  network: NetworkId,
+  network: ExternalNetworkId,
   session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
   report: Vec<([u8; 32], u32)>,
@@ -66,7 +66,7 @@ impl fmt::Debug for SlashReportSigner {
 impl SlashReportSigner {
   pub fn new(
     txn: &mut impl DbTxn,
-    network: NetworkId,
+    network: ExternalNetworkId,
     session: Session,
     keys: Vec<ThresholdKeys<Ristretto>>,
     report: Vec<([u8; 32], u32)>,
@@ -178,7 +178,7 @@ impl SlashReportSigner {
           let (machine, share) = match machine.sign(
             preprocesses,
             &report_slashes_message(
-              &ValidatorSet { network: self.network, session: self.session },
+              &ExternalValidatorSet { network: self.network, session: self.session },
               &self
                 .report
                 .clone()

@@ -2,7 +2,7 @@ use std::{io, collections::HashSet};
 
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
-use serai_client::primitives::{NetworkId, Coin, Balance};
+use serai_client::primitives::{ExternalBalance, ExternalCoin, ExternalNetworkId};
 
 use crate::{
   Get, DbTxn, Db, Payment, Plan, create_db,
@@ -13,7 +13,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Scheduler<N: Network> {
   key: <N::Curve as Ciphersuite>::G,
-  coins: HashSet<Coin>,
+  coins: HashSet<ExternalCoin>,
   rotated: bool,
 }
 
@@ -78,7 +78,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
   fn new<D: Db>(
     _txn: &mut D::Transaction<'_>,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Self {
     assert!(N::branch_address(key).is_none());
     assert!(N::change_address(key).is_none());
@@ -91,7 +91,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
   fn from_db<D: Db>(
     db: &D,
     key: <N::Curve as Ciphersuite>::G,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> io::Result<Self> {
     Ok(Scheduler {
       key,
@@ -100,7 +100,7 @@ impl<N: Network<Scheduler = Self>> SchedulerTrait<N> for Scheduler<N> {
     })
   }
 
-  fn can_use_branch(&self, _balance: Balance) -> bool {
+  fn can_use_branch(&self, _balance: ExternalBalance) -> bool {
     false
   }
 

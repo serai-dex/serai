@@ -12,9 +12,9 @@ use tokio::{
 use borsh::BorshSerialize;
 use sp_application_crypto::RuntimePublic;
 use serai_client::{
-  primitives::{NETWORKS, NetworkId, Signature},
-  validator_sets::primitives::{Session, ValidatorSet},
-  SeraiError, TemporalSerai, Serai,
+  primitives::{ExternalNetworkId, Signature, EXTERNAL_NETWORKS},
+  validator_sets::primitives::{ExternalValidatorSet, Session},
+  Serai, SeraiError, TemporalSerai,
 };
 
 use serai_db::{Get, DbTxn, Db, create_db};
@@ -28,17 +28,17 @@ use crate::{
 
 create_db! {
   CosignDb {
-    ReceivedCosign: (set: ValidatorSet, block: [u8; 32]) -> CosignedBlock,
-    LatestCosign: (network: NetworkId) -> CosignedBlock,
-    DistinctChain: (set: ValidatorSet) -> (),
+    ReceivedCosign: (set: ExternalValidatorSet, block: [u8; 32]) -> CosignedBlock,
+    LatestCosign: (network: ExternalNetworkId) -> CosignedBlock,
+    DistinctChain: (set: ExternalValidatorSet) -> (),
   }
 }
 
 pub struct CosignEvaluator<D: Db> {
   db: Mutex<D>,
   serai: Arc<Serai>,
-  stakes: RwLock<Option<HashMap<NetworkId, u64>>>,
-  latest_cosigns: RwLock<HashMap<NetworkId, CosignedBlock>>,
+  stakes: RwLock<Option<HashMap<ExternalNetworkId, u64>>>,
+  latest_cosigns: RwLock<HashMap<ExternalNetworkId, CosignedBlock>>,
 }
 
 impl<D: Db> CosignEvaluator<D> {
@@ -79,7 +79,7 @@ impl<D: Db> CosignEvaluator<D> {
     let serai = self.serai.as_of_latest_finalized_block().await?;
 
     let mut stakes = HashMap::new();
-    for network in NETWORKS {
+    for network in EXTERNAL_NETWORKS {
       // Use if this network has published a Batch for a short-circuit of if they've ever set a key
       let set_key = serai.in_instructions().last_batch_for_network(network).await?.is_some();
       if set_key {
@@ -87,7 +87,7 @@ impl<D: Db> CosignEvaluator<D> {
           network,
           serai
             .validator_sets()
-            .total_allocated_stake(network)
+            .total_allocated_stake(network.into())
             .await?
             .expect("network which published a batch didn't have a stake set")
             .0,
@@ -126,9 +126,9 @@ impl<D: Db> CosignEvaluator<D> {
 
     async fn set_with_keys_fn(
       serai: &TemporalSerai<'_>,
-      network: NetworkId,
-    ) -> Result<Option<ValidatorSet>, SeraiError> {
-      let Some(latest_session) = serai.validator_sets().session(network).await? else {
+      network: ExternalNetworkId,
+    ) -> Result<Option<ExternalValidatorSet>, SeraiError> {
+      let Some(latest_session) = serai.validator_sets().session(network.into()).await? else {
         log::warn!("received cosign from {:?}, which doesn't yet have a session", network);
         return Ok(None);
       };
@@ -136,13 +136,13 @@ impl<D: Db> CosignEvaluator<D> {
       Ok(Some(
         if serai
           .validator_sets()
-          .keys(ValidatorSet { network, session: prior_session })
+          .keys(ExternalValidatorSet { network, session: prior_session })
           .await?
           .is_some()
         {
-          ValidatorSet { network, session: prior_session }
+          ExternalValidatorSet { network, session: prior_session }
         } else {
-          ValidatorSet { network, session: latest_session }
+          ExternalValidatorSet { network, session: latest_session }
         },
       ))
     }
@@ -204,16 +204,12 @@ impl<D: Db> CosignEvaluator<D> {
 
       let mut total_stake = 0;
       let mut total_on_distinct_chain = 0;
-      for network in NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        }
-
+      for network in EXTERNAL_NETWORKS {
         // Get the current set for this network
         let set_with_keys = {
           let mut res;
           while {
-            res = set_with_keys_fn(&serai, cosign.network).await;
+            res = set_with_keys_fn(&serai, network).await;
             res.is_err()
           } {
             log::error!(
@@ -231,7 +227,8 @@ impl<D: Db> CosignEvaluator<D> {
           let stake = {
             let mut res;
             while {
-              res = serai.validator_sets().total_allocated_stake(set_with_keys.network).await;
+              res =
+                serai.validator_sets().total_allocated_stake(set_with_keys.network.into()).await;
               res.is_err()
             } {
               log::error!(
@@ -271,7 +268,7 @@ impl<D: Db> CosignEvaluator<D> {
   #[allow(clippy::new_ret_no_self)]
   pub fn new<P: P2p>(db: D, p2p: P, serai: Arc<Serai>) -> mpsc::UnboundedSender<CosignedBlock> {
     let mut latest_cosigns = HashMap::new();
-    for network in NETWORKS {
+    for network in EXTERNAL_NETWORKS {
       if let Some(cosign) = LatestCosign::get(&db, network) {
         latest_cosigns.insert(network, cosign);
       }

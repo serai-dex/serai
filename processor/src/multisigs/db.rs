@@ -4,7 +4,11 @@ use ciphersuite::Ciphersuite;
 pub use serai_db::*;
 
 use scale::{Encode, Decode};
-use serai_client::{primitives::Balance, in_instructions::primitives::InInstructionWithBalance};
+#[rustfmt::skip]
+use serai_client::{
+  in_instructions::primitives::InInstructionWithBalance,
+  primitives::ExternalBalance
+};
 
 use crate::{
   Get, Plan,
@@ -69,7 +73,7 @@ create_db!(
     OperatingCostsDb: () -> u64,
     ResolvedDb: (tx: &[u8]) -> [u8; 32],
     SigningDb: (key: &[u8]) -> Vec<u8>,
-    ForwardedOutputDb: (balance: Balance) -> Vec<u8>,
+    ForwardedOutputDb: (balance: ExternalBalance) -> Vec<u8>,
     DelayedOutputDb: () -> Vec<u8>
   }
 );
@@ -224,7 +228,7 @@ impl ForwardedOutputDb {
 
   pub fn take_forwarded_output(
     txn: &mut impl DbTxn,
-    balance: Balance,
+    balance: ExternalBalance,
   ) -> Option<InInstructionWithBalance> {
     let outputs = Self::get(txn, balance)?;
     let mut outputs_ref = outputs.as_slice();

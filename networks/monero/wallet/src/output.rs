@@ -301,12 +301,28 @@ impl WalletOutput {
 
   /// The payment ID included with this output.
   ///
-  /// This field may be `Some` even if wallet2 would not return a payment ID. This will happen if
-  /// the scanned output belongs to the subaddress which spent Monero within the transaction which
-  /// created the output. If multiple subaddresses spent Monero within this transactions, the key
-  /// image with the highest index is determined to be the subaddress considered as the one
-  /// spending.
-  // TODO: Clarify and cite for point A ("highest index spent key image"??)
+  /// This field may be `Some` even if wallet2 would not return a payment ID. wallet2 will only
+  /// decrypt a payment ID if either:
+  ///
+  /// A) The transaction wasn't made by the wallet (via checking if any key images are recognized)
+  /// B) For the highest-indexed input with a recognized key image, it spends an output with
+  ///    subaddress account `(a, _)` which is distinct from this output's subaddress account
+  ///
+  /// Neither of these cases are handled by `monero-wallet` as scanning doesn't have the context
+  /// of key images.
+  //
+  // Identification of the subaddress account for the highest-indexed input with a recognized key
+  // image:
+  //   https://github.com/monero-project/monero/blob/a1dc85c5373a30f14aaf7dcfdd95f5a7375d3623
+  //     /src/wallet/wallet2.cpp/#L2637-L2670
+  //
+  // Removal of 'transfers' received to this account:
+  //   https://github.com/monero-project/monero/blob/a1dc85c5373a30f14aaf7dcfdd95f5a7375d3623
+  //     /src/wallet/wallet2.cpp/#L2782-L2794
+  //
+  // Payment IDs only being decrypted for the remaining transfers:
+  //   https://github.com/monero-project/monero/blob/a1dc85c5373a30f14aaf7dcfdd95f5a7375d3623
+  //     /src/wallet/wallet2.cpp/#L2796-L2844
   pub fn payment_id(&self) -> Option<PaymentId> {
     self.metadata.payment_id
   }

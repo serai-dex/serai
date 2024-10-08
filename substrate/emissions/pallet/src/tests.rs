@@ -1,9 +1,10 @@
 use crate::{mock::*, primitives::*};
 
+use std::collections::HashMap;
+
 use rand_core::{RngCore, OsRng};
 
 use sp_core::{sr25519::Signature, Pair};
-use sp_std::{vec, collections::btree_map::BTreeMap};
 use sp_runtime::BoundedVec;
 
 use frame_system::RawOrigin;
@@ -22,19 +23,27 @@ use serai_primitives::*;
 use validator_sets_primitives::{KeyPair, ValidatorSet};
 
 fn set_up_genesis() -> u64 {
-  // add some genesis liquidity
-  for coin in COINS {
-    if coin == Coin::Serai {
-      continue;
+  // make accounts with amounts
+  let mut accounts = HashMap::new();
+  for coin in EXTERNAL_COINS {
+    // make 5 accounts per coin
+    let mut values = vec![];
+    for _ in 0 .. 5 {
+      let mut address = SeraiAddress::new([0; 32]);
+      OsRng.fill_bytes(&mut address.0);
+      values.push((address, Amount(OsRng.next_u64() % (10_000 * 10u64.pow(coin.decimals())))));
     }
+    accounts.insert(coin, values);
+  }
 
-    let mut address = SeraiAddress::new([0; 32]);
-    OsRng.fill_bytes(&mut address.0);
-    let balance =
-      Balance { coin, amount: Amount(OsRng.next_u64() % (10_000 * 10u64.pow(coin.decimals()))) };
+  // add some genesis liquidity
+  for (coin, amounts) in accounts {
+    for (address, amount) in amounts {
+      let balance = ExternalBalance { coin, amount };
 
-    Coins::<Test>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), balance).unwrap();
-    GenesisLiquidity::<Test>::add_coin_liquidity(address.into(), balance).unwrap();
+      Coins::<Test>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), balance.into()).unwrap();
+      GenesisLiquidity::<Test>::add_coin_liquidity(address.into(), balance).unwrap();
+    }
   }
 
   // make genesis liquidity event happen
@@ -42,11 +51,11 @@ fn set_up_genesis() -> u64 {
   let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
   GenesisLiquidity::<Test>::oraclize_values(RawOrigin::None.into(), values, Signature([0u8; 64]))
     .unwrap();
-  <GenesisLiquidity<Test> as Hooks<BlockNumber>>::on_initialize(block_number);
+  GenesisLiquidity::<Test>::on_initialize(block_number);
   System::set_block_number(block_number);
 
   // populate the coin values
-  <Dex<Test> as Hooks<BlockNumber>>::on_finalize(block_number);
+  Dex::<Test>::on_finalize(block_number);
 
   block_number
 }
@@ -54,30 +63,26 @@ fn set_up_genesis() -> u64 {
 // TODO: make this fn belong to the pallet itself use it there as well?
 // The problem with that would be if there is a problem with this function
 // tests can't catch it since it would the same fn?
-fn distances() -> (BTreeMap<NetworkId, u64>, u64) {
-  let mut distances = BTreeMap::new();
+fn distances() -> (HashMap<NetworkId, u64>, u64) {
+  let mut distances = HashMap::new();
   let mut total_distance: u64 = 0;
 
   // calculate distance to economic security per network
-  for n in NETWORKS {
-    if n == NetworkId::Serai {
-      continue;
-    }
-
+  for n in EXTERNAL_NETWORKS {
     let required = ValidatorSets::<Test>::required_stake_for_network(n);
-    let mut current = ValidatorSets::<Test>::total_allocated_stake(n).unwrap_or(Amount(0)).0;
+    let mut current =
+      ValidatorSets::<Test>::total_allocated_stake(NetworkId::from(n)).unwrap_or(Amount(0)).0;
     if current > required {
       current = required;
     }
 
     let distance = required - current;
-    distances.insert(n, distance);
+    distances.insert(n.into(), distance);
     total_distance = total_distance.saturating_add(distance);
   }
 
   // add serai network portion (20%)
-  let new_total_distance =
-    total_distance.saturating_mul(100) / (100 - SERAI_VALIDATORS_DESIRED_PERCENTAGE);
+  let new_total_distance = total_distance.saturating_mul(100) / (100 - 20);
   distances.insert(NetworkId::Serai, new_total_distance - total_distance);
   total_distance = new_total_distance;
 
@@ -85,14 +90,10 @@ fn distances() -> (BTreeMap<NetworkId, u64>, u64) {
 }
 
 fn set_keys_for_session() {
-  for n in NETWORKS {
-    if n == NetworkId::Serai {
-      continue;
-    }
-
+  for network in EXTERNAL_NETWORKS {
     ValidatorSets::<Test>::set_keys(
       RawOrigin::None.into(),
-      n,
+      network,
       BoundedVec::new(),
       KeyPair(insecure_pair_from_name("Alice").public(), vec![].try_into().unwrap()),
       Signature([0u8; 64]),
@@ -139,11 +140,10 @@ fn make_fake_swap_volume() {
 }
 
 fn get_session_swap_volumes(
-  last_swap_volume: &mut BTreeMap<Coin, u64>,
-) -> (BTreeMap<Coin, u64>, BTreeMap<NetworkId, u64>, u64) {
-  let mut volume_per_coin: BTreeMap<Coin, u64> = BTreeMap::new();
-  for c in COINS {
-    // this should return 0 for SRI and so it shouldn't affect the total volume.
+  last_swap_volume: &mut HashMap<ExternalCoin, u64>,
+) -> (HashMap<ExternalCoin, u64>, HashMap<NetworkId, u64>, u64) {
+  let mut volume_per_coin: HashMap<ExternalCoin, u64> = HashMap::new();
+  for c in EXTERNAL_COINS {
     let current_volume = Dex::<Test>::swap_volume(c).unwrap_or(0);
     let last_volume = last_swap_volume.get(&c).unwrap_or(&0);
     let vol_this_epoch = current_volume.saturating_sub(*last_volume);
@@ -155,14 +155,15 @@ fn get_session_swap_volumes(
 
   // aggregate per network
   let mut total_volume = 0u64;
-  let mut volume_per_network: BTreeMap<NetworkId, u64> = BTreeMap::new();
+  let mut volume_per_network: HashMap<NetworkId, u64> = HashMap::new();
   for (c, vol) in &volume_per_coin {
     volume_per_network.insert(
-      c.network(),
-      (*volume_per_network.get(&c.network()).unwrap_or(&0)).saturating_add(*vol),
+      c.network().into(),
+      (*volume_per_network.get(&c.network().into()).unwrap_or(&0)).saturating_add(*vol),
     );
     total_volume = total_volume.saturating_add(*vol);
   }
+  volume_per_network.insert(NetworkId::Serai, 0);
 
   (volume_per_coin, volume_per_network, total_volume)
 }
@@ -173,7 +174,7 @@ fn get_pool_vs_validator_rewards(n: NetworkId, reward: u64) -> (u64, u64) {
   } else {
     // calculate pool vs validator share
     let capacity = ValidatorSets::<Test>::total_allocated_stake(n).unwrap_or(Amount(0)).0;
-    let required = ValidatorSets::<Test>::required_stake_for_network(n);
+    let required = ValidatorSets::<Test>::required_stake_for_network(n.try_into().unwrap());
     let unused_capacity = capacity.saturating_sub(required);
 
     let distribution = unused_capacity.saturating_mul(ACCURACY_MULTIPLIER) / capacity;
@@ -197,14 +198,14 @@ fn check_pre_ec_security_initial_period_emissions() {
       set_keys_for_session();
 
       // get current stakes
-      let mut current_stake = BTreeMap::new();
+      let mut current_stake = HashMap::new();
       for n in NETWORKS {
         current_stake.insert(n, ValidatorSets::<Test>::total_allocated_stake(n).unwrap().0);
       }
 
       // trigger rewards distribution for the past session
       ValidatorSets::<Test>::new_session();
-      <Emissions as Hooks<BlockNumber>>::on_initialize(block_number + 1);
+      Emissions::on_initialize(block_number + 1);
 
       // calculate the total reward for this epoch
       let (distances, total_distance) = distances();
@@ -224,7 +225,7 @@ fn check_pre_ec_security_initial_period_emissions() {
           .unwrap();
           (n, reward)
         })
-        .collect::<BTreeMap<NetworkId, u64>>();
+        .collect::<HashMap<NetworkId, u64>>();
 
       for (n, reward) in reward_per_network {
         ValidatorSets::<Test>::retire_set(ValidatorSet {
@@ -272,7 +273,7 @@ fn check_pre_ec_security_emissions() {
       set_keys_for_session();
 
       // get current stakes
-      let mut current_stake = BTreeMap::new();
+      let mut current_stake = HashMap::new();
       for n in NETWORKS {
         current_stake.insert(n, ValidatorSets::<Test>::total_allocated_stake(n).unwrap().0);
       }
@@ -299,7 +300,7 @@ fn check_pre_ec_security_emissions() {
           .unwrap();
           (n, reward)
         })
-        .collect::<BTreeMap<NetworkId, u64>>();
+        .collect::<HashMap<NetworkId, u64>>();
 
       for (n, reward) in reward_per_network {
         ValidatorSets::<Test>::retire_set(ValidatorSet {
@@ -367,15 +368,15 @@ fn check_post_ec_security_emissions() {
 
     // make sure we reached economic security
     <EconomicSecurity<Test> as Hooks<BlockNumber>>::on_initialize(block_number);
-    for n in NETWORKS.iter().filter(|&n| *n != NetworkId::Serai).collect::<Vec<_>>() {
-      EconomicSecurity::<Test>::economic_security_block(*n).unwrap();
+    for n in EXTERNAL_NETWORKS {
+      EconomicSecurity::<Test>::economic_security_block(n).unwrap();
     }
 
     // move the block number for the next session
     block_number += <<Test as pallet_babe::Config>::EpochDuration as Get<u64>>::get();
     System::set_block_number(block_number);
 
-    let mut last_swap_volume = BTreeMap::new();
+    let mut last_swap_volume = HashMap::new();
     for _ in 0 .. 5 {
       set_keys_for_session();
 
@@ -384,14 +385,15 @@ fn check_post_ec_security_emissions() {
       let (vpc, vpn, total_volume) = get_session_swap_volumes(&mut last_swap_volume);
 
       // get current stakes & each pool SRI amounts
-      let mut current_stake = BTreeMap::new();
-      let mut current_pool_coins = BTreeMap::new();
+      let mut current_stake = HashMap::new();
+      let mut current_pool_coins = HashMap::new();
       for n in NETWORKS {
         current_stake.insert(n, ValidatorSets::<Test>::total_allocated_stake(n).unwrap().0);
-
-        for c in n.coins() {
-          let acc = Dex::<Test>::get_pool_account(*c);
-          current_pool_coins.insert(c, Coins::<Test>::balance(acc, Coin::Serai).0);
+        if let NetworkId::External(network) = n {
+          for c in network.coins() {
+            let acc = Dex::<Test>::get_pool_account(c);
+            current_pool_coins.insert(c, Coins::<Test>::balance(acc, Coin::Serai).0);
+          }
         }
       }
 
@@ -424,7 +426,7 @@ fn check_post_ec_security_emissions() {
           };
           (*n, reward)
         })
-        .collect::<BTreeMap<NetworkId, u64>>();
+        .collect::<HashMap<NetworkId, u64>>();
 
       for (n, reward) in reward_per_network {
         let (validator_rewards, network_pool_rewards) = get_pool_vs_validator_rewards(n, reward);
@@ -441,14 +443,15 @@ fn check_post_ec_security_emissions() {
 
         // all pool rewards should be available in the pool account
         if network_pool_rewards != 0 {
-          for c in n.coins() {
+          for coin in n.coins() {
+            let c: ExternalCoin = coin.try_into().unwrap();
             let pool_reward = u64::try_from(
-              u128::from(network_pool_rewards).saturating_mul(u128::from(vpc[c])) /
+              u128::from(network_pool_rewards).saturating_mul(u128::from(vpc[&c])) /
                 u128::from(vpn[&n]),
             )
             .unwrap();
 
-            let acc = Dex::<Test>::get_pool_account(*c);
+            let acc = Dex::<Test>::get_pool_account(c);
             assert_eq!(
               Coins::<Test>::balance(acc, Coin::Serai).0,
               current_pool_coins[&c] + pool_reward

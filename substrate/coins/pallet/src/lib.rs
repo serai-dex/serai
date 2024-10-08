@@ -1,13 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use serai_primitives::{Coin, SubstrateAmount, Balance};
+use serai_primitives::{Balance, Coin, ExternalBalance, SubstrateAmount};
 
 pub trait AllowMint {
-  fn is_allowed(balance: &Balance) -> bool;
+  fn is_allowed(balance: &ExternalBalance) -> bool;
 }
 
 impl AllowMint for () {
-  fn is_allowed(_: &Balance) -> bool {
+  fn is_allowed(_: &ExternalBalance) -> bool {
     true
   }
 }
@@ -161,7 +161,10 @@ pub mod pallet {
     pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // If the coin isn't Serai, which we're always allowed to mint, and the mint isn't explicitly
       // allowed, error
-      if (balance.coin != Coin::Serai) && (!T::AllowMint::is_allowed(&balance)) {
+      if !ExternalCoin::try_from(balance.coin)
+        .map(|coin| T::AllowMint::is_allowed(&ExternalBalance { coin, amount: balance.amount }))
+        .unwrap_or(true)
+      {
         Err(Error::<T, I>::MintNotAllowed)?;
       }
 
@@ -230,22 +233,18 @@ pub mod pallet {
     }
 
     /// Burn `balance` with `OutInstructionWithBalance` from the caller.
-    /// Errors if called for SRI or Instance1 instance of this pallet.
     #[pallet::call_index(2)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn burn_with_instruction(
       origin: OriginFor<T>,
       instruction: OutInstructionWithBalance,
     ) -> DispatchResult {
-      if instruction.balance.coin == Coin::Serai {
-        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
-      }
       if TypeId::of::<I>() == TypeId::of::<LiquidityTokensInstance>() {
         Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
       }
 
       let from = ensure_signed(origin)?;
-      Self::burn_internal(from, instruction.balance)?;
+      Self::burn_internal(from, instruction.balance.into())?;
       Self::deposit_event(Event::BurnWithInstruction { from, instruction });
       Ok(())
     }

@@ -6,7 +6,6 @@ members = [
   "patches/parking_lot",
   "patches/zstd",
   "patches/rocksdb",
-  "patches/proc-macro-crate",
 
   # std patches
   "patches/matches",
@@ -18,6 +17,7 @@ members = [
 
   "common/std-shims",
   "common/zalloc",
+  "common/patchable-async-sleep",
   "common/db",
   "common/env",
   "common/request",
@@ -55,9 +55,6 @@ members = [
   "networks/monero/rpc/simple-request",
   "networks/monero/wallet/address",
   "networks/monero/wallet",
-  "networks/monero/wallet/seed",
-  "networks/monero/wallet/polyseed",
-  "networks/monero/wallet/util",
   "networks/monero/verify-chain",
 
   "message-queue",
@@ -138,17 +135,12 @@ panic = "unwind"
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
-# Needed due to dockertest's usage of `Rc`s when we need `Arc`s
-dockertest = { git = "https://github.com/orcalabs/dockertest-rs", rev = "4dd6ae24738aa6dc5c89444cc822ea4745517493" }
-
 parking_lot_core = { path = "patches/parking_lot_core" }
 parking_lot = { path = "patches/parking_lot" }
 # wasmtime pulls in an old version for this
 zstd = { path = "patches/zstd" }
 # Needed for WAL compression
 rocksdb = { path = "patches/rocksdb" }
-# proc-macro-crate 2 binds to an old version of toml for msrv so we patch to 3
-proc-macro-crate = { path = "patches/proc-macro-crate" }
 
 # is-terminal now has an std-based solution with an equivalent API
 is-terminal = { path = "patches/is-terminal" }
@@ -162,6 +154,9 @@ matches = { path = "patches/matches" }
 # The following two patches resolve everything
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
+
+# https://github.com/alloy-rs/core/issues/717
+alloy-sol-type-parser = { git = "https://github.com/alloy-rs/core", rev = "446b9d2fbce12b88456152170709a3eaac929af0" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"

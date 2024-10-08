@@ -2,9 +2,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
+use core::future::Future;
 use std::{sync::Arc, io::Read, time::Duration};
-
-use async_trait::async_trait;
 
 use tokio::sync::Mutex;
 
@@ -280,11 +279,16 @@ impl SimpleRequestRpc {
   }
 }
 
-#[async_trait]
 impl Rpc for SimpleRequestRpc {
-  async fn post(&self, route: &str, body: Vec<u8>) -> Result<Vec<u8>, RpcError> {
-    tokio::time::timeout(self.request_timeout, self.inner_post(route, body))
-      .await
-      .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
+  fn post(
+    &self,
+    route: &str,
+    body: Vec<u8>,
+  ) -> impl Send + Future<Output = Result<Vec<u8>, RpcError>> {
+    async move {
+      tokio::time::timeout(self.request_timeout, self.inner_post(route, body))
+        .await
+        .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
+    }
   }
 }

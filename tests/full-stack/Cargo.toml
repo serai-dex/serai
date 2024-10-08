@@ -40,7 +40,7 @@ serai-client = { path = "../../substrate/client", features = ["serai"] }
 
 tokio = { version = "1", features = ["time"] }
 
-dockertest = "0.4"
+dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
 serai-message-queue-tests = { path = "../message-queue" }
 serai-processor-tests = { path = "../processor" }

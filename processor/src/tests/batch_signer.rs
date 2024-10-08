@@ -33,17 +33,17 @@ fn test_batch_signer() {
   let block = BlockHash([0xaa; 32]);
 
   let batch = Batch {
-    network: NetworkId::Monero,
+    network: ExternalNetworkId::Monero,
     id,
     block,
     instructions: vec![
       InInstructionWithBalance {
         instruction: InInstruction::Transfer(SeraiAddress([0xbb; 32])),
-        balance: Balance { coin: Coin::Bitcoin, amount: Amount(1000) },
+        balance: ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(1000) },
       },
       InInstructionWithBalance {
         instruction: InInstruction::Dex(DexCall::SwapAndAddLiquidity(SeraiAddress([0xbb; 32]))),
-        balance: Balance { coin: Coin::Monero, amount: Amount(9999999999999999) },
+        balance: ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(9999999999999999) },
       },
     ],
   };
@@ -70,7 +70,7 @@ fn test_batch_signer() {
     let i = Participant::new(u16::try_from(i).unwrap()).unwrap();
     let keys = keys.get(&i).unwrap().clone();
 
-    let mut signer = BatchSigner::<MemDb>::new(NetworkId::Monero, Session(0), vec![keys]);
+    let mut signer = BatchSigner::<MemDb>::new(ExternalNetworkId::Monero, Session(0), vec![keys]);
     let mut db = MemDb::new();
 
     let mut txn = db.txn();

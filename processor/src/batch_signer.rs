@@ -17,7 +17,7 @@ use frost_schnorrkel::Schnorrkel;
 use log::{info, debug, warn};
 
 use serai_client::{
-  primitives::{NetworkId, BlockHash},
+  primitives::{ExternalNetworkId, BlockHash},
   in_instructions::primitives::{Batch, SignedBatch, batch_message},
   validator_sets::primitives::Session,
 };
@@ -41,7 +41,7 @@ type SignatureShare = <AlgorithmSignMachine<Ristretto, Schnorrkel> as SignMachin
 pub struct BatchSigner<D: Db> {
   db: PhantomData<D>,
 
-  network: NetworkId,
+  network: ExternalNetworkId,
   session: Session,
   keys: Vec<ThresholdKeys<Ristretto>>,
 
@@ -65,7 +65,7 @@ impl<D: Db> fmt::Debug for BatchSigner<D> {
 
 impl<D: Db> BatchSigner<D> {
   pub fn new(
-    network: NetworkId,
+    network: ExternalNetworkId,
     session: Session,
     keys: Vec<ThresholdKeys<Ristretto>>,
   ) -> BatchSigner<D> {

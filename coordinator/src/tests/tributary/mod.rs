@@ -7,7 +7,7 @@ use ciphersuite::{group::Group, Ciphersuite, Ristretto};
 use scale::{Encode, Decode};
 use serai_client::{
   primitives::{SeraiAddress, Signature},
-  validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ValidatorSet, KeyPair},
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair, MAX_KEY_SHARES_PER_SET},
 };
 use processor_messages::coordinator::SubstrateSignableId;
 
@@ -31,7 +31,7 @@ impl PublishSeraiTransaction for () {
   async fn publish_set_keys(
     &self,
     _db: &(impl Sync + serai_db::Get),
-    _set: ValidatorSet,
+    _set: ExternalValidatorSet,
     _removed: Vec<SeraiAddress>,
     _key_pair: KeyPair,
     _signature: Signature,
