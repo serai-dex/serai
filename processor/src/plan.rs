@@ -6,7 +6,7 @@ use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
 use frost::curve::Ciphersuite;
 
-use serai_client::primitives::Balance;
+use serai_client::primitives::ExternalBalance;
 
 use crate::{
   networks::{Output, Network},
@@ -17,7 +17,7 @@ use crate::{
 pub struct Payment<N: Network> {
   pub address: N::Address,
   pub data: Option<Vec<u8>>,
-  pub balance: Balance,
+  pub balance: ExternalBalance,
 }
 
 impl<N: Network> Payment<N> {
@@ -69,7 +69,7 @@ impl<N: Network> Payment<N> {
       None
     };
 
-    let balance = Balance::decode(&mut scale::IoReader(reader))
+    let balance = ExternalBalance::decode(&mut scale::IoReader(reader))
       .map_err(|_| io::Error::other("invalid balance"))?;
 
     Ok(Payment { address, data, balance })

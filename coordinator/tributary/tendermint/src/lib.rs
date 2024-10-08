@@ -13,7 +13,7 @@ use futures_util::{
   FutureExt, StreamExt, SinkExt,
   future::{self, Fuse},
 };
-use tokio::time::sleep;
+use patchable_async_sleep::sleep;
 
 use serai_db::{Get, DbTxn, Db};
 

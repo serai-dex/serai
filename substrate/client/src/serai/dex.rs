@@ -1,5 +1,5 @@
 use sp_core::bounded_vec::BoundedVec;
-use serai_abi::primitives::{SeraiAddress, Amount, Coin};
+use serai_abi::primitives::{Amount, Coin, ExternalCoin, SeraiAddress};
 
 use crate::{SeraiError, TemporalSerai};
 
@@ -20,7 +20,7 @@ impl<'a> SeraiDex<'a> {
   }
 
   pub fn add_liquidity(
-    coin: Coin,
+    coin: ExternalCoin,
     coin_amount: Amount,
     sri_amount: Amount,
     min_coin_amount: Amount,
@@ -61,11 +61,14 @@ impl<'a> SeraiDex<'a> {
   }
 
   /// Returns the reserves of `coin:SRI` pool.
-  pub async fn get_reserves(&self, coin: Coin) -> Result<Option<(Amount, Amount)>, SeraiError> {
-    self.0.runtime_api("DexApi_get_reserves", (coin, Coin::Serai)).await
+  pub async fn get_reserves(
+    &self,
+    coin: ExternalCoin,
+  ) -> Result<Option<(Amount, Amount)>, SeraiError> {
+    self.0.runtime_api("DexApi_get_reserves", (Coin::from(coin), Coin::Serai)).await
   }
 
-  pub async fn oracle_value(&self, coin: Coin) -> Result<Option<Amount>, SeraiError> {
+  pub async fn oracle_value(&self, coin: ExternalCoin) -> Result<Option<Amount>, SeraiError> {
     self.0.storage(PALLET, "SecurityOracleValue", coin).await
   }
 }

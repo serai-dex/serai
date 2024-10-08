@@ -1,0 +1,19 @@
+[package]
+name = "patchable-async-sleep"
+version = "0.1.0"
+description = "An async sleep function, patchable to the preferred runtime"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/patchable-async-sleep"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["async", "sleep", "tokio", "smol", "async-std"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { version = "1", default-features = false, features = [ "time"] }

@@ -8,7 +8,7 @@ use blake2::{
 use scale::Encode;
 
 use serai_client::{
-  primitives::{Amount, NetworkId, Coin, Balance, BlockHash, SeraiAddress},
+  primitives::{Amount, BlockHash, ExternalBalance, ExternalCoin, SeraiAddress},
   in_instructions::{
     primitives::{InInstruction, InInstructionWithBalance, Batch},
     InInstructionsEvent,
@@ -22,18 +22,17 @@ use common::in_instructions::provide_batch;
 
 serai_test!(
   publish_batch: (|serai: Serai| async move {
-    let network = NetworkId::Bitcoin;
     let id = 0;
-
     let mut block_hash = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block_hash.0);
 
     let mut address = SeraiAddress::new([0; 32]);
     OsRng.fill_bytes(&mut address.0);
 
-    let coin = Coin::Bitcoin;
+    let coin = ExternalCoin::Bitcoin;
+    let network = coin.network();
     let amount = Amount(OsRng.next_u64().saturating_add(1));
-    let balance = Balance { coin, amount };
+    let balance = ExternalBalance { coin, amount };
 
     let batch = Batch {
       network,
@@ -67,9 +66,9 @@ serai_test!(
     let serai = serai.coins();
     assert_eq!(
       serai.mint_events().await.unwrap(),
-      vec![CoinsEvent::Mint { to: address, balance }]
+      vec![CoinsEvent::Mint { to: address, balance: balance.into() }]
     );
-    assert_eq!(serai.coin_supply(coin).await.unwrap(), amount);
-    assert_eq!(serai.coin_balance(coin, address).await.unwrap(), amount);
+    assert_eq!(serai.coin_supply(coin.into()).await.unwrap(), amount);
+    assert_eq!(serai.coin_balance(coin.into(), address).await.unwrap(), amount);
   })
 );

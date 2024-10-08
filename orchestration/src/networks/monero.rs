@@ -10,7 +10,7 @@ fn monero_internal(
   monero_binary: &str,
   ports: &str,
 ) {
-  const MONERO_VERSION: &str = "0.18.3.1";
+  const MONERO_VERSION: &str = "0.18.3.4";
 
   let arch = match std::env::consts::ARCH {
     // We probably would run this without issues yet it's not worth needing to provide support for

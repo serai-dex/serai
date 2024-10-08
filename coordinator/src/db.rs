@@ -6,9 +6,9 @@ use blake2::{
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_client::{
-  primitives::NetworkId,
-  validator_sets::primitives::{Session, ValidatorSet},
   in_instructions::primitives::{Batch, SignedBatch},
+  primitives::ExternalNetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, Session},
 };
 
 pub use serai_db::*;
@@ -18,21 +18,21 @@ use crate::tributary::{TributarySpec, Transaction, scanner::RecognizedIdType};
 
 create_db!(
   MainDb {
-    HandledMessageDb: (network: NetworkId) -> u64,
+    HandledMessageDb: (network: ExternalNetworkId) -> u64,
     ActiveTributaryDb: () -> Vec<u8>,
-    RetiredTributaryDb: (set: ValidatorSet) -> (),
+    RetiredTributaryDb: (set: ExternalValidatorSet) -> (),
     FirstPreprocessDb: (
-      network: NetworkId,
+      network: ExternalNetworkId,
       id_type: RecognizedIdType,
       id: &[u8]
     ) -> Vec<Vec<u8>>,
-    LastReceivedBatchDb: (network: NetworkId) -> u32,
-    ExpectedBatchDb: (network: NetworkId, id: u32) -> [u8; 32],
-    BatchDb: (network: NetworkId, id: u32)  -> SignedBatch,
-    LastVerifiedBatchDb: (network: NetworkId) -> u32,
-    HandoverBatchDb: (set: ValidatorSet) -> u32,
-    LookupHandoverBatchDb: (network: NetworkId, batch: u32) -> Session,
-    QueuedBatchesDb: (set: ValidatorSet) -> Vec<u8>
+    LastReceivedBatchDb: (network: ExternalNetworkId) -> u32,
+    ExpectedBatchDb: (network: ExternalNetworkId, id: u32) -> [u8; 32],
+    BatchDb: (network: ExternalNetworkId, id: u32)  -> SignedBatch,
+    LastVerifiedBatchDb: (network: ExternalNetworkId) -> u32,
+    HandoverBatchDb: (set: ExternalValidatorSet) -> u32,
+    LookupHandoverBatchDb: (network: ExternalNetworkId, batch: u32) -> Session,
+    QueuedBatchesDb: (set: ExternalValidatorSet) -> Vec<u8>
   }
 );
 
@@ -61,7 +61,7 @@ impl ActiveTributaryDb {
     ActiveTributaryDb::set(txn, &existing_bytes);
   }
 
-  pub fn retire_tributary(txn: &mut impl DbTxn, set: ValidatorSet) {
+  pub fn retire_tributary(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
     let mut active = Self::active_tributaries(txn).1;
     for i in 0 .. active.len() {
       if active[i].set() == set {
@@ -82,7 +82,7 @@ impl ActiveTributaryDb {
 impl FirstPreprocessDb {
   pub fn save_first_preprocess(
     txn: &mut impl DbTxn,
-    network: NetworkId,
+    network: ExternalNetworkId,
     id_type: RecognizedIdType,
     id: &[u8],
     preprocess: &Vec<Vec<u8>>,
@@ -108,19 +108,19 @@ impl ExpectedBatchDb {
 }
 
 impl HandoverBatchDb {
-  pub fn set_handover_batch(txn: &mut impl DbTxn, set: ValidatorSet, batch: u32) {
+  pub fn set_handover_batch(txn: &mut impl DbTxn, set: ExternalValidatorSet, batch: u32) {
     Self::set(txn, set, &batch);
     LookupHandoverBatchDb::set(txn, set.network, batch, &set.session);
   }
 }
 impl QueuedBatchesDb {
-  pub fn queue(txn: &mut impl DbTxn, set: ValidatorSet, batch: &Transaction) {
+  pub fn queue(txn: &mut impl DbTxn, set: ExternalValidatorSet, batch: &Transaction) {
     let mut batches = Self::get(txn, set).unwrap_or_default();
     batch.write(&mut batches).unwrap();
     Self::set(txn, set, &batches);
   }
 
-  pub fn take(txn: &mut impl DbTxn, set: ValidatorSet) -> Vec<Transaction> {
+  pub fn take(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Vec<Transaction> {
     let batches_vec = Self::get(txn, set).unwrap_or_default();
     txn.del(Self::key(set));
 

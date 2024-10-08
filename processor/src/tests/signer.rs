@@ -12,7 +12,7 @@ use frost::{
 use serai_db::{DbTxn, Db, MemDb};
 
 use serai_client::{
-  primitives::{NetworkId, Coin, Amount, Balance},
+  primitives::{ExternalNetworkId, ExternalCoin, Amount, ExternalBalance},
   validator_sets::primitives::Session,
 };
 
@@ -185,12 +185,11 @@ pub async fn test_signer<N: Network>(
     let payments = vec![Payment {
       address: N::external_address(&network, key).await,
       data: None,
-      balance: Balance {
+      balance: ExternalBalance {
         coin: match N::NETWORK {
-          NetworkId::Serai => panic!("test_signer called with Serai"),
-          NetworkId::Bitcoin => Coin::Bitcoin,
-          NetworkId::Ethereum => Coin::Ether,
-          NetworkId::Monero => Coin::Monero,
+          ExternalNetworkId::Bitcoin => ExternalCoin::Bitcoin,
+          ExternalNetworkId::Ethereum => ExternalCoin::Ether,
+          ExternalNetworkId::Monero => ExternalCoin::Monero,
         },
         amount: Amount(amount),
       },
@@ -224,7 +223,7 @@ pub async fn test_signer<N: Network>(
     .await;
   // Don't run if Ethereum as the received output will revert by the contract
   // (and therefore not actually exist)
-  if N::NETWORK != NetworkId::Ethereum {
+  if N::NETWORK != ExternalNetworkId::Ethereum {
     assert_eq!(outputs.len(), 1 + usize::from(u8::from(plan.change.is_some())));
     // Adjust the amount for the fees
     let amount = amount - tx.fee(&network).await;

@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, OsRng};
 
-use transcript::{Transcript, RecommendedTranscript};
-
 use k256::{
   elliptic_curve::{
     group::{ff::Field, Group},
@@ -94,44 +92,9 @@ fn sign(
 ) -> Transaction {
   let mut machines = HashMap::new();
   for i in (1 ..= THRESHOLD).map(|i| Participant::new(i).unwrap()) {
-    machines.insert(
-      i,
-      tx.clone()
-        .multisig(&keys[&i].clone(), RecommendedTranscript::new(b"bitcoin-serai Test Transaction"))
-        .unwrap(),
-    );
+    machines.insert(i, tx.clone().multisig(&keys[&i].clone()).unwrap());
   }
   sign_without_caching(&mut OsRng, machines, &[])
-}
-
-#[test]
-fn test_tweak_keys() {
-  let mut even = false;
-  let mut odd = false;
-
-  // Generate keys until we get an even set and an odd set
-  while !(even && odd) {
-    let mut keys = key_gen(&mut OsRng).drain().next().unwrap().1;
-    if is_even(keys.group_key()) {
-      // Tweaking should do nothing
-      assert_eq!(tweak_keys(&keys).group_key(), keys.group_key());
-
-      even = true;
-    } else {
-      let tweaked = tweak_keys(&keys).group_key();
-      assert_ne!(tweaked, keys.group_key());
-      // Tweaking should produce an even key
-      assert!(is_even(tweaked));
-
-      // Verify it uses the smallest possible offset
-      while keys.group_key().to_encoded_point(true).tag() == Tag::CompressedOddY {
-        keys = keys.offset(Scalar::ONE);
-      }
-      assert_eq!(tweaked, keys.group_key());
-
-      odd = true;
-    }
-  }
 }
 
 async_sequential! {
@@ -232,10 +195,10 @@ async_sequential! {
       Err(TransactionError::TooLowFee),
     );
 
-    assert_eq!(
+    assert!(matches!(
       SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
-      Err(TransactionError::NotEnoughFunds),
-    );
+      Err(TransactionError::NotEnoughFunds { .. }),
+    ));
 
     assert_eq!(
       SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, FEE),

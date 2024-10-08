@@ -39,6 +39,6 @@ borsh = { version = "1", features = ["de_strict_order"] }
 
 tokio = { version = "1", features = ["time"] }
 
-dockertest = "0.4"
+dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
 serai-message-queue-tests = { path = "../message-queue" }

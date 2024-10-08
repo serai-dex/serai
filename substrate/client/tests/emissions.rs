@@ -7,16 +7,13 @@ use serai_abi::{
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
   in_instructions::primitives::Batch,
   primitives::{
-    BlockHash, Coin, COINS, FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD, NETWORKS,
-    TARGET_BLOCK_TIME,
+    BlockHash, ExternalBalance, ExternalCoin, ExternalNetworkId, EXTERNAL_NETWORKS,
+    FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD, NETWORKS, TARGET_BLOCK_TIME, Amount, NetworkId,
   },
   validator_sets::primitives::Session,
 };
 
-use serai_client::{
-  primitives::{Amount, NetworkId, Balance},
-  Serai,
-};
+use serai_client::Serai;
 
 mod common;
 use common::{genesis_liquidity::set_up_genesis, in_instructions::provide_batch};
@@ -27,31 +24,32 @@ serai_test_fast_epoch!(
   })
 );
 
-async fn send_batches(serai: &Serai, ids: &mut HashMap<NetworkId, u32>) {
-  for network in NETWORKS {
-    if network != NetworkId::Serai {
-      // set up batch id
-      ids
-        .entry(network)
-        .and_modify(|v| {
-          *v += 1;
-        })
-        .or_insert(0);
+async fn send_batches(serai: &Serai, ids: &mut HashMap<ExternalNetworkId, u32>) {
+  for network in EXTERNAL_NETWORKS {
+    // set up batch id
+    ids
+      .entry(network)
+      .and_modify(|v| {
+        *v += 1;
+      })
+      .or_insert(0);
 
-      // set up block hash
-      let mut block = BlockHash([0; 32]);
-      OsRng.fill_bytes(&mut block.0);
+    // set up block hash
+    let mut block = BlockHash([0; 32]);
+    OsRng.fill_bytes(&mut block.0);
 
-      provide_batch(serai, Batch { network, id: ids[&network], block, instructions: vec![] }).await;
-    }
+    provide_batch(serai, Batch { network, id: ids[&network], block, instructions: vec![] }).await;
   }
 }
 
 async fn test_emissions(serai: Serai) {
   // set up the genesis
-  let coins = COINS.into_iter().filter(|c| *c != Coin::native()).collect::<Vec<_>>();
-  let values = HashMap::from([(Coin::Monero, 184100), (Coin::Ether, 4785000), (Coin::Dai, 1500)]);
-  let (_, mut batch_ids) = set_up_genesis(&serai, &coins, &values).await;
+  let values = HashMap::from([
+    (ExternalCoin::Monero, 184100),
+    (ExternalCoin::Ether, 4785000),
+    (ExternalCoin::Dai, 1500),
+  ]);
+  let (_, mut batch_ids) = set_up_genesis(&serai, &values).await;
 
   // wait until genesis is complete
   let mut genesis_complete_block = None;
@@ -144,7 +142,7 @@ async fn test_emissions(serai: Serai) {
 }
 
 /// Returns the required stake in terms SRI for a given `Balance`.
-async fn required_stake(serai: &TemporalSerai<'_>, balance: Balance) -> u64 {
+async fn required_stake(serai: &TemporalSerai<'_>, balance: ExternalBalance) -> u64 {
   // This is inclusive to an increase in accuracy
   let sri_per_coin = serai.dex().oracle_value(balance.coin).await.unwrap().unwrap_or(Amount(0));
 
@@ -208,18 +206,14 @@ async fn get_distances(
   // we can check the supply to see how much coin hence liability we have.
   let mut distances: HashMap<NetworkId, u64> = HashMap::new();
   let mut total_distance = 0;
-  for n in NETWORKS {
-    if n == NetworkId::Serai {
-      continue;
-    }
-
+  for n in EXTERNAL_NETWORKS {
     let mut required = 0;
     for c in n.coins() {
-      let amount = serai.coins().coin_supply(*c).await.unwrap();
-      required += required_stake(serai, Balance { coin: *c, amount }).await;
+      let amount = serai.coins().coin_supply(c.into()).await.unwrap();
+      required += required_stake(serai, ExternalBalance { coin: c, amount }).await;
     }
 
-    let mut current = *current_stake.get(&n).unwrap();
+    let mut current = *current_stake.get(&n.into()).unwrap();
     if current > required {
       current = required;
     }
@@ -227,7 +221,7 @@ async fn get_distances(
     let distance = required - current;
     total_distance += distance;
 
-    distances.insert(n, distance);
+    distances.insert(n.into(), distance);
   }
 
   // add serai network portion(20%)

@@ -4,12 +4,20 @@ use rand_core::OsRng;
 
 use monero_simple_request_rpc::SimpleRequestRpc;
 use monero_wallet::{
-  ringct::RctType, transaction::Transaction, rpc::Rpc, address::SubaddressIndex, extra::Extra,
+  ringct::RctType,
+  transaction::Transaction,
+  rpc::{ScannableBlock, Rpc},
+  address::SubaddressIndex,
+  extra::Extra,
   WalletOutput, OutputWithDecoys,
 };
 
 mod runner;
 use runner::{SignableTransactionBuilder, ring_len};
+
+#[allow(clippy::upper_case_acronyms)]
+type SRR = SimpleRequestRpc;
+type SB = ScannableBlock;
 
 // Set up inputs, select decoys, then add them to the TX builder
 async fn add_inputs(
@@ -40,9 +48,8 @@ test!(
       builder.add_payment(addr, 5);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 5);
     },
@@ -57,8 +64,8 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 2);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].transaction(), tx.hash());
@@ -74,9 +81,8 @@ test!(
       builder.add_payment(addr, 6);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 6);
     },
@@ -93,8 +99,8 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -130,17 +136,15 @@ test!(
         .add_payment(sub_view.subaddress(Network::Mainnet, SubaddressIndex::new(0, 1).unwrap()), 1);
       (builder.build().unwrap(), (change_view, sub_view))
     },
-    |rpc, block, tx: Transaction, _, views: (ViewPair, ViewPair)| async move {
+    |_rpc: SRR, block: SB, tx: Transaction, _, views: (ViewPair, ViewPair)| async move {
       // Make sure the change can pick up its output
       let mut change_scanner = Scanner::new(views.0);
-      assert!(
-        change_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().len() == 1
-      );
+      assert!(change_scanner.scan(block.clone()).unwrap().not_additionally_locked().len() == 1);
 
       // Make sure the subaddress can pick up its output
       let mut sub_scanner = Scanner::new(views.1);
       sub_scanner.register_subaddress(SubaddressIndex::new(0, 1).unwrap());
-      let sub_outputs = sub_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      let sub_outputs = sub_scanner.scan(block).unwrap().not_additionally_locked();
       assert!(sub_outputs.len() == 1);
       assert_eq!(sub_outputs[0].transaction(), tx.hash());
       assert_eq!(sub_outputs[0].commitment().amount, 1);
@@ -165,8 +169,8 @@ test!(
       builder.add_payment(addr, 2000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 2000000000000);
@@ -179,9 +183,8 @@ test!(
       builder.add_payment(addr, 2);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let output =
-        scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked().swap_remove(0);
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let output = scanner.scan(block).unwrap().not_additionally_locked().swap_remove(0);
       assert_eq!(output.transaction(), tx.hash());
       assert_eq!(output.commitment().amount, 2);
     },
@@ -195,8 +198,8 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -212,8 +215,8 @@ test!(
       }
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut scanned_tx = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut scanned_tx = scanner.scan(block).unwrap().not_additionally_locked();
 
       let mut output_amounts = HashSet::new();
       for i in 0 .. 15 {
@@ -237,8 +240,8 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -263,10 +266,14 @@ test!(
 
       (builder.build().unwrap(), (scanner, subaddresses))
     },
-    |rpc, block, tx: Transaction, _, mut state: (Scanner, Vec<SubaddressIndex>)| async move {
+    |_rpc: SimpleRequestRpc,
+     block,
+     tx: Transaction,
+     _,
+     mut state: (Scanner, Vec<SubaddressIndex>)| async move {
       use std::collections::HashMap;
 
-      let mut scanned_tx = state.0.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      let mut scanned_tx = state.0.scan(block).unwrap().not_additionally_locked();
 
       let mut output_amounts_by_subaddress = HashMap::new();
       for i in 0 .. 15 {
@@ -294,8 +301,8 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -320,8 +327,8 @@ test!(
 
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let mut outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let mut outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 2);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[1].transaction(), tx.hash());
@@ -345,8 +352,8 @@ test!(
       builder.add_payment(addr, 1000000000000);
       (builder.build().unwrap(), ())
     },
-    |rpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
-      let outputs = scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+    |_rpc: SimpleRequestRpc, block, tx: Transaction, mut scanner: Scanner, ()| async move {
+      let outputs = scanner.scan(block).unwrap().not_additionally_locked();
       assert_eq!(outputs.len(), 1);
       assert_eq!(outputs[0].transaction(), tx.hash());
       assert_eq!(outputs[0].commitment().amount, 1000000000000);
@@ -381,11 +388,11 @@ test!(
       builder.add_payment(view.legacy_address(Network::Mainnet), 1);
       (builder.build().unwrap(), change_view)
     },
-    |rpc, block, _, _, change_view: ViewPair| async move {
+    |_rpc: SimpleRequestRpc, block, _, _, change_view: ViewPair| async move {
       // Make sure the change can pick up its output
       let mut change_scanner = Scanner::new(change_view);
       change_scanner.register_subaddress(SubaddressIndex::new(0, 1).unwrap());
-      let outputs = change_scanner.scan(&rpc, &block).await.unwrap().not_additionally_locked();
+      let outputs = change_scanner.scan(block).unwrap().not_additionally_locked();
       assert!(outputs.len() == 1);
       assert!(outputs[0].subaddress().unwrap().account() == 0);
       assert!(outputs[0].subaddress().unwrap().address() == 1);

@@ -1,16 +1,15 @@
 use core::ops::Deref;
-use std_shims::{alloc::format, vec, vec::Vec, string::ToString, collections::HashMap};
+use std_shims::{vec, vec::Vec, collections::HashMap};
 
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use curve25519_dalek::{constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY};
 
-use monero_rpc::{RpcError, Rpc};
+use monero_rpc::ScannableBlock;
 use monero_serai::{
   io::*,
   primitives::Commitment,
   transaction::{Timelock, Pruned, Transaction},
-  block::Block,
 };
 use crate::{
   address::SubaddressIndex, ViewPair, GuaranteedViewPair, output::*, PaymentId, Extra,
@@ -42,9 +41,9 @@ impl Timelocked {
   ///
   /// `block` is the block number of the block the additional timelock must be satsified by.
   ///
-  /// `time` is represented in seconds since the epoch. Please note Monero uses an on-chain
-  /// deterministic clock for time which is subject to variance from the real world time. This time
-  /// argument will be evaluated against Monero's clock, not the local system's clock.
+  /// `time` is represented in seconds since the epoch and is in terms of Monero's on-chain clock.
+  /// That means outputs whose additional timelocks are statisfied by `Instant::now()` (the time
+  /// according to the local system clock) may still be locked due to variance with Monero's clock.
   #[must_use]
   pub fn additional_timelock_satisfied_by(self, block: usize, time: u64) -> Vec<WalletOutput> {
     let mut res = vec![];
@@ -65,6 +64,18 @@ impl Timelocked {
     core::mem::swap(&mut self.0, &mut res);
     res
   }
+}
+
+/// Errors when scanning a block.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum ScanError {
+  /// The block was for an unsupported protocol version.
+  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
+  UnsupportedProtocol(u8),
+  /// The ScannableBlock was invalid.
+  #[cfg_attr(feature = "std", error("invalid scannable block ({0})"))]
+  InvalidScannableBlock(&'static str),
 }
 
 #[derive(Clone)]
@@ -107,10 +118,10 @@ impl InternalScanner {
 
   fn scan_transaction(
     &self,
-    tx_start_index_on_blockchain: u64,
+    output_index_for_first_ringct_output: u64,
     tx_hash: [u8; 32],
     tx: &Transaction<Pruned>,
-  ) -> Result<Timelocked, RpcError> {
+  ) -> Result<Timelocked, ScanError> {
     // Only scan TXs creating RingCT outputs
     // For the full details on why this check is equivalent, please see the documentation in `scan`
     if tx.version() != 2 {
@@ -197,14 +208,14 @@ impl InternalScanner {
         } else {
           let Transaction::V2 { proofs: Some(ref proofs), .. } = &tx else {
             // Invalid transaction, as of consensus rules at the time of writing this code
-            Err(RpcError::InvalidNode("non-miner v2 transaction without RCT proofs".to_string()))?
+            Err(ScanError::InvalidScannableBlock("non-miner v2 transaction without RCT proofs"))?
           };
 
           commitment = match proofs.base.encrypted_amounts.get(o) {
             Some(amount) => output_derivations.decrypt(amount),
             // Invalid transaction, as of consensus rules at the time of writing this code
-            None => Err(RpcError::InvalidNode(
-              "RCT proofs without an encrypted amount per output".to_string(),
+            None => Err(ScanError::InvalidScannableBlock(
+              "RCT proofs without an encrypted amount per output",
             ))?,
           };
 
@@ -223,7 +234,7 @@ impl InternalScanner {
             index_in_transaction: o.try_into().unwrap(),
           },
           relative_id: RelativeId {
-            index_on_blockchain: tx_start_index_on_blockchain + u64::try_from(o).unwrap(),
+            index_on_blockchain: output_index_for_first_ringct_output + u64::try_from(o).unwrap(),
           },
           data: OutputData { key: output_key, key_offset, commitment },
           metadata: Metadata {
@@ -243,12 +254,22 @@ impl InternalScanner {
     Ok(Timelocked(res))
   }
 
-  async fn scan(&mut self, rpc: &impl Rpc, block: &Block) -> Result<Timelocked, RpcError> {
+  fn scan(&mut self, block: ScannableBlock) -> Result<Timelocked, ScanError> {
+    // This is the output index for the first RingCT output within the block
+    // We mutate it to be the output index for the first RingCT for each transaction
+    let ScannableBlock { block, transactions, output_index_for_first_ringct_output } = block;
+    if block.transactions.len() != transactions.len() {
+      Err(ScanError::InvalidScannableBlock(
+        "scanning a ScannableBlock with more/less transactions than it should have",
+      ))?;
+    }
+    let Some(mut output_index_for_first_ringct_output) = output_index_for_first_ringct_output
+    else {
+      return Ok(Timelocked(vec![]));
+    };
+
     if block.header.hardfork_version > 16 {
-      Err(RpcError::InternalError(format!(
-        "scanning a hardfork {} block, when we only support up to 16",
-        block.header.hardfork_version
-      )))?;
+      Err(ScanError::UnsupportedProtocol(block.header.hardfork_version))?;
     }
 
     // We obtain all TXs in full
@@ -256,72 +277,9 @@ impl InternalScanner {
       block.miner_transaction.hash(),
       Transaction::<Pruned>::from(block.miner_transaction.clone()),
     )];
-    let txs = rpc.get_pruned_transactions(&block.transactions).await?;
-    for (hash, tx) in block.transactions.iter().zip(txs) {
+    for (hash, tx) in block.transactions.iter().zip(transactions) {
       txs_with_hashes.push((*hash, tx));
     }
-
-    /*
-      Requesting the output index for each output we sucessfully scan would cause a loss of privacy
-      We could instead request the output indexes for all outputs we scan, yet this would notably
-      increase the amount of RPC calls we make.
-
-      We solve this by requesting the output index for the first RingCT output in the block, which
-      should be within the miner transaction. Then, as we scan transactions, we update the output
-      index ourselves.
-
-      Please note we only will scan RingCT outputs so we only need to track the RingCT output
-      index. This decision was made due to spending CN outputs potentially having burdensome
-      requirements (the need to make a v1 TX due to insufficient decoys).
-
-      We bound ourselves to only scanning RingCT outputs by only scanning v2 transactions. This is
-      safe and correct since:
-
-      1) v1 transactions cannot create RingCT outputs.
-
-         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
-           /src/cryptonote_basic/cryptonote_format_utils.cpp#L866-L869
-
-      2) v2 miner transactions implicitly create RingCT outputs.
-
-         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
-           /src/blockchain_db/blockchain_db.cpp#L232-L241
-
-      3) v2 transactions must create RingCT outputs.
-
-         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c45
-           /src/cryptonote_core/blockchain.cpp#L3055-L3065
-
-         That does bound on the hard fork version being >= 3, yet all v2 TXs have a hard fork
-         version > 3.
-
-         https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
-           /src/cryptonote_core/blockchain.cpp#L3417
-    */
-
-    // Get the starting index
-    let mut tx_start_index_on_blockchain = {
-      let mut tx_start_index_on_blockchain = None;
-      for (hash, tx) in &txs_with_hashes {
-        // If this isn't a RingCT output, or there are no outputs, move to the next TX
-        if (!matches!(tx, Transaction::V2 { .. })) || tx.prefix().outputs.is_empty() {
-          continue;
-        }
-
-        let index = *rpc.get_o_indexes(*hash).await?.first().ok_or_else(|| {
-          RpcError::InvalidNode(
-            "requested output indexes for a TX with outputs and got none".to_string(),
-          )
-        })?;
-        tx_start_index_on_blockchain = Some(index);
-        break;
-      }
-      let Some(tx_start_index_on_blockchain) = tx_start_index_on_blockchain else {
-        // Block had no RingCT outputs
-        return Ok(Timelocked(vec![]));
-      };
-      tx_start_index_on_blockchain
-    };
 
     let mut res = Timelocked(vec![]);
     for (hash, tx) in txs_with_hashes {
@@ -329,7 +287,7 @@ impl InternalScanner {
       {
         let mut this_txs_outputs = vec![];
         core::mem::swap(
-          &mut self.scan_transaction(tx_start_index_on_blockchain, hash, &tx)?.0,
+          &mut self.scan_transaction(output_index_for_first_ringct_output, hash, &tx)?.0,
           &mut this_txs_outputs,
         );
         res.0.extend(this_txs_outputs);
@@ -337,7 +295,7 @@ impl InternalScanner {
 
       // Update the RingCT starting index for the next TX
       if matches!(tx, Transaction::V2 { .. }) {
-        tx_start_index_on_blockchain += u64::try_from(tx.prefix().outputs.len()).unwrap()
+        output_index_for_first_ringct_output += u64::try_from(tx.prefix().outputs.len()).unwrap()
       }
     }
 
@@ -384,8 +342,8 @@ impl Scanner {
   }
 
   /// Scan a block.
-  pub async fn scan(&mut self, rpc: &impl Rpc, block: &Block) -> Result<Timelocked, RpcError> {
-    self.0.scan(rpc, block).await
+  pub fn scan(&mut self, block: ScannableBlock) -> Result<Timelocked, ScanError> {
+    self.0.scan(block)
   }
 }
 
@@ -413,7 +371,7 @@ impl GuaranteedScanner {
   }
 
   /// Scan a block.
-  pub async fn scan(&mut self, rpc: &impl Rpc, block: &Block) -> Result<Timelocked, RpcError> {
-    self.0.scan(rpc, block).await
+  pub fn scan(&mut self, block: ScannableBlock) -> Result<Timelocked, ScanError> {
+    self.0.scan(block)
   }
 }

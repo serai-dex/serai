@@ -16,8 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-async-trait = { version = "0.1", default-features = false }
-
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 digest_auth = { version = "0.3", default-features = false }
 simple-request = { path = "../../../../common/request", version = "0.1", default-features = false, features = ["tls"] }

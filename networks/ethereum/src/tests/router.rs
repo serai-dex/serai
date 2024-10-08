@@ -91,7 +91,6 @@ async fn latest_block_hash(client: &RootProvider<SimpleRequest>) -> [u8; 32] {
     .unwrap()
     .header
     .hash
-    .unwrap()
     .0
 }
 

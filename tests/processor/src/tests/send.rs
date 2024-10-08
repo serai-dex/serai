@@ -8,9 +8,9 @@ use dkg::{Participant, tests::clone_without};
 use messages::{sign::SignId, SubstrateContext};
 
 use serai_client::{
-  primitives::{BlockHash, NetworkId, Amount, Balance, SeraiAddress},
   coins::primitives::{OutInstruction, OutInstructionWithBalance},
-  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
+  in_instructions::primitives::{Batch, InInstruction, InInstructionWithBalance},
+  primitives::{Amount, BlockHash, ExternalBalance, SeraiAddress, EXTERNAL_NETWORKS},
   validator_sets::primitives::Session,
 };
 
@@ -147,7 +147,7 @@ pub(crate) async fn sign_tx(
 
 #[test]
 fn send_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
+  for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {
@@ -202,10 +202,9 @@ fn send_test() {
       let amount_minted = Amount(
         balance_sent.amount.0 -
           (2 * match network {
-            NetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
-            NetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
-            NetworkId::Monero => Monero::COST_TO_AGGREGATE,
-            NetworkId::Serai => panic!("minted for Serai?"),
+            ExternalNetworkId::Bitcoin => Bitcoin::COST_TO_AGGREGATE,
+            ExternalNetworkId::Ethereum => Ethereum::<MemDb>::COST_TO_AGGREGATE,
+            ExternalNetworkId::Monero => Monero::COST_TO_AGGREGATE,
           }),
       );
 
@@ -215,7 +214,7 @@ fn send_test() {
         block: BlockHash(block_with_tx.unwrap()),
         instructions: vec![InInstructionWithBalance {
           instruction,
-          balance: Balance { coin: balance_sent.coin, amount: amount_minted },
+          balance: ExternalBalance { coin: balance_sent.coin, amount: amount_minted },
         }],
       };
 
@@ -245,7 +244,7 @@ fn send_test() {
             block: substrate_block_num,
             burns: vec![OutInstructionWithBalance {
               instruction: OutInstruction { address: wallet.address(), data: None },
-              balance: Balance { coin: balance_sent.coin, amount: amount_minted },
+              balance: ExternalBalance { coin: balance_sent.coin, amount: amount_minted },
             }],
             batches: vec![batch.batch.id],
           },

@@ -22,7 +22,7 @@ use bitcoin::{
   Block,
 };
 #[cfg(feature = "std")]
-use bitcoin::consensus::encode::Decodable;
+use bitcoin::{hashes::Hash, consensus::encode::Decodable, TapTweakHash};
 
 use crate::crypto::x_only;
 #[cfg(feature = "std")]
@@ -33,12 +33,40 @@ mod send;
 #[cfg(feature = "std")]
 pub use send::*;
 
-/// Tweak keys to ensure they're usable with Bitcoin.
+/// Tweak keys to ensure they're usable with Bitcoin's Taproot upgrade.
 ///
-/// Taproot keys, which these keys are used as, must be even. This offsets the keys until they're
-/// even.
+/// This adds an unspendable script path to the key, preventing any outputs received to this key
+/// from being spent via a script. To have keys which have spendable script paths, further offsets
+/// from this position must be used.
+///
+/// After adding an unspendable script path, the key is incremented until its even. This means the
+/// existence of the unspendable script path may not provable, without an understanding of the
+/// algorithm used here.
 #[cfg(feature = "std")]
 pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
+  // Adds the unspendable script path per
+  // https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#cite_note-23
+  let keys = {
+    use k256::elliptic_curve::{
+      bigint::{Encoding, U256},
+      ops::Reduce,
+      group::GroupEncoding,
+    };
+    let tweak_hash = TapTweakHash::hash(&keys.group_key().to_bytes().as_slice()[1 ..]);
+    /*
+      https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki#cite_ref-13-0 states how the
+      bias is negligible. This reduction shouldn't ever occur, yet if it did, the script path
+      would be unusable due to a check the script path hash is less than the order. That doesn't
+      impact us as we don't want the script path to be usable.
+    */
+    keys.offset(<Secp256k1 as Ciphersuite>::F::reduce(U256::from_be_bytes(
+      *tweak_hash.to_raw_hash().as_ref(),
+    )))
+  };
+
+  // This doesn't risk re-introducing a script path as you'd have to find a preimage for the tweak
+  // hash with whatever increment, or manipulate the key so that the tweak hash and increment
+  // equals the desired offset, yet manipulating the key would change the tweak hash
   let (_, offset) = make_even(keys.group_key());
   keys.offset(Scalar::from(offset))
 }
@@ -142,6 +170,10 @@ impl Scanner {
   ///
   /// This means offsets are surjective, not bijective, and the order offsets are registered in
   /// may determine the validity of future offsets.
+  ///
+  /// The offsets registered must be securely generated. Arbitrary offsets may introduce a script
+  /// path into the output, allowing the output to be spent by satisfaction of an arbitrary script
+  /// (not by the signature of the key).
   pub fn register_offset(&mut self, mut offset: Scalar) -> Option<Scalar> {
     // This loop will terminate as soon as an even point is found, with any point having a ~50%
     // chance of being even

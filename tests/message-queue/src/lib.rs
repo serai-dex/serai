@@ -7,23 +7,25 @@ use ciphersuite::{
   Ciphersuite, Ristretto,
 };
 
-use serai_primitives::NetworkId;
+use serai_primitives::{ExternalNetworkId, EXTERNAL_NETWORKS};
 
 use dockertest::{
   PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, TestBodySpecification,
 };
 
 pub type MessageQueuePrivateKey = <Ristretto as Ciphersuite>::F;
-pub fn instance(
-) -> (MessageQueuePrivateKey, HashMap<NetworkId, MessageQueuePrivateKey>, TestBodySpecification) {
+pub fn instance() -> (
+  MessageQueuePrivateKey,
+  HashMap<ExternalNetworkId, MessageQueuePrivateKey>,
+  TestBodySpecification,
+) {
   serai_docker_tests::build("message-queue".to_string());
 
   let coord_key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-  let priv_keys = HashMap::from([
-    (NetworkId::Bitcoin, <Ristretto as Ciphersuite>::F::random(&mut OsRng)),
-    (NetworkId::Ethereum, <Ristretto as Ciphersuite>::F::random(&mut OsRng)),
-    (NetworkId::Monero, <Ristretto as Ciphersuite>::F::random(&mut OsRng)),
-  ]);
+  let priv_keys = EXTERNAL_NETWORKS
+    .into_iter()
+    .map(|n| (n, <Ristretto as Ciphersuite>::F::random(&mut OsRng)))
+    .collect::<HashMap<_, _>>();
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-message-queue").pull_policy(PullPolicy::Never),
@@ -38,15 +40,15 @@ pub fn instance(
       ("COORDINATOR_KEY".to_string(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
       (
         "BITCOIN_KEY".to_string(),
-        hex::encode((Ristretto::generator() * priv_keys[&NetworkId::Bitcoin]).to_bytes()),
+        hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Bitcoin]).to_bytes()),
       ),
       (
         "ETHEREUM_KEY".to_string(),
-        hex::encode((Ristretto::generator() * priv_keys[&NetworkId::Ethereum]).to_bytes()),
+        hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Ethereum]).to_bytes()),
       ),
       (
         "MONERO_KEY".to_string(),
-        hex::encode((Ristretto::generator() * priv_keys[&NetworkId::Monero]).to_bytes()),
+        hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Monero]).to_bytes()),
       ),
       ("DB_PATH".to_string(), "./message-queue-db".to_string()),
       ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
@@ -85,7 +87,7 @@ fn basic_functionality() {
         .queue(
           Metadata {
             from: Service::Coordinator,
-            to: Service::Processor(NetworkId::Bitcoin),
+            to: Service::Processor(ExternalNetworkId::Bitcoin),
             intent: b"intent".to_vec(),
           },
           b"Hello, World!".to_vec(),
@@ -98,7 +100,7 @@ fn basic_functionality() {
           .queue(
             Metadata {
               from: Service::Coordinator,
-              to: Service::Processor(NetworkId::Bitcoin),
+              to: Service::Processor(ExternalNetworkId::Bitcoin),
               intent: b"intent 2".to_vec(),
             },
             b"Hello, World, again!".to_vec(),
@@ -108,9 +110,9 @@ fn basic_functionality() {
 
       // Successfully get it
       let bitcoin = MessageQueue::new(
-        Service::Processor(NetworkId::Bitcoin),
+        Service::Processor(ExternalNetworkId::Bitcoin),
         rpc.clone(),
-        Zeroizing::new(priv_keys[&NetworkId::Bitcoin]),
+        Zeroizing::new(priv_keys[&ExternalNetworkId::Bitcoin]),
       );
       let msg = bitcoin.next(Service::Coordinator).await;
       assert_eq!(msg.from, Service::Coordinator);
@@ -140,7 +142,7 @@ fn basic_functionality() {
         .queue(
           Metadata {
             from: Service::Coordinator,
-            to: Service::Processor(NetworkId::Monero),
+            to: Service::Processor(ExternalNetworkId::Monero),
             // Intents should be per-from-to, making this valid
             intent: b"intent".to_vec(),
           },
@@ -149,9 +151,9 @@ fn basic_functionality() {
         .await;
 
       let monero = MessageQueue::new(
-        Service::Processor(NetworkId::Monero),
+        Service::Processor(ExternalNetworkId::Monero),
         rpc,
-        Zeroizing::new(priv_keys[&NetworkId::Monero]),
+        Zeroizing::new(priv_keys[&ExternalNetworkId::Monero]),
       );
       assert_eq!(monero.next(Service::Coordinator).await.id, 0);
       monero.ack(Service::Coordinator, 0).await;

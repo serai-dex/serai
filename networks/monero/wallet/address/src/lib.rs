@@ -228,9 +228,6 @@ pub enum AddressError {
     /// The Network embedded within the Address.
     actual: Network,
   },
-  /// The view key was of small order despite being in a guaranteed address.
-  #[cfg_attr(feature = "std", error("small-order view key in guaranteed address"))]
-  SmallOrderView,
 }
 
 /// Bytes used as prefixes when encoding addresses, variable to the network instance.

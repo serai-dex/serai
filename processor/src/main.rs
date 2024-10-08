@@ -9,7 +9,7 @@ use log::{info, warn};
 use tokio::time::sleep;
 
 use serai_client::{
-  primitives::{BlockHash, NetworkId},
+  primitives::{BlockHash, ExternalNetworkId},
   validator_sets::primitives::{Session, KeyPair},
 };
 
@@ -736,19 +736,23 @@ async fn main() {
     "http://".to_string() + &login + "@" + &hostname + ":" + &port
   };
   let network_id = match env::var("NETWORK").expect("network wasn't specified").as_str() {
-    "bitcoin" => NetworkId::Bitcoin,
-    "ethereum" => NetworkId::Ethereum,
-    "monero" => NetworkId::Monero,
+    "bitcoin" => ExternalNetworkId::Bitcoin,
+    "ethereum" => ExternalNetworkId::Ethereum,
+    "monero" => ExternalNetworkId::Monero,
     _ => panic!("unrecognized network"),
   };
 
   let coordinator = MessageQueue::from_env(Service::Processor(network_id));
 
+  // This allow is necessary since each configuration deletes the other networks from the following
+  // match arms. So we match all cases but since all cases already there according to the compiler
+  // we put this to allow clippy to get pass this.
+  #[allow(unreachable_patterns)]
   match network_id {
     #[cfg(feature = "bitcoin")]
-    NetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
+    ExternalNetworkId::Bitcoin => run(db, Bitcoin::new(url).await, coordinator).await,
     #[cfg(feature = "ethereum")]
-    NetworkId::Ethereum => {
+    ExternalNetworkId::Ethereum => {
       let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
         .expect("ethereum relayer hostname wasn't specified")
         .to_string();
@@ -758,7 +762,7 @@ async fn main() {
       run(db.clone(), Ethereum::new(db, url, relayer_url).await, coordinator).await
     }
     #[cfg(feature = "monero")]
-    NetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
+    ExternalNetworkId::Monero => run(db, Monero::new(url).await, coordinator).await,
     _ => panic!("spawning a processor for an unsupported network"),
   }
 }

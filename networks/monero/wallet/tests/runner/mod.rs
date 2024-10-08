@@ -105,7 +105,11 @@ pub async fn get_miner_tx_output(rpc: &SimpleRequestRpc, view: &ViewPair) -> Wal
   rpc.generate_blocks(&view.legacy_address(Network::Mainnet), 60).await.unwrap();
 
   let block = rpc.get_block_by_number(start).await.unwrap();
-  scanner.scan(rpc, &block).await.unwrap().ignore_additional_timelock().swap_remove(0)
+  scanner
+    .scan(rpc.get_scannable_block(block).await.unwrap())
+    .unwrap()
+    .ignore_additional_timelock()
+    .swap_remove(0)
 }
 
 /// Make sure the weight and fee match the expected calculation.
@@ -315,6 +319,7 @@ macro_rules! test {
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
               mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
+            let block = rpc.get_scannable_block(block).await.unwrap();
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             check_weight_and_fee(&tx, fee_rate);
             let scanner = Scanner::new(view.clone());
@@ -336,6 +341,7 @@ macro_rules! test {
             rpc.publish_transaction(&signed).await.unwrap();
             let block =
               mine_until_unlocked(&rpc, &random_address().2, signed.hash()).await;
+            let block = rpc.get_scannable_block(block).await.unwrap();
             let tx = rpc.get_transaction(signed.hash()).await.unwrap();
             if stringify!($name) != "spend_one_input_to_two_outputs_no_change" {
               // Skip weight and fee check for the above test because when there is no change,

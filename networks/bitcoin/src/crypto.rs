@@ -40,14 +40,12 @@ mod frost_crypto {
 
   use bitcoin::hashes::{HashEngine, Hash, sha256::Hash as Sha256};
 
-  use transcript::Transcript;
-
   use k256::{elliptic_curve::ops::Reduce, U256, Scalar};
 
   use frost::{
     curve::{Ciphersuite, Secp256k1},
     Participant, ThresholdKeys, ThresholdView, FrostError,
-    algorithm::{Hram as HramTrait, Algorithm, Schnorr as FrostSchnorr},
+    algorithm::{Hram as HramTrait, Algorithm, IetfSchnorr as FrostSchnorr},
   };
 
   use super::*;
@@ -82,16 +80,17 @@ mod frost_crypto {
   ///
   /// This must be used with a ThresholdKeys whose group key is even. If it is odd, this will panic.
   #[derive(Clone)]
-  pub struct Schnorr<T: Sync + Clone + Debug + Transcript>(FrostSchnorr<Secp256k1, T, Hram>);
-  impl<T: Sync + Clone + Debug + Transcript> Schnorr<T> {
+  pub struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
+  impl Schnorr {
     /// Construct a Schnorr algorithm continuing the specified transcript.
-    pub fn new(transcript: T) -> Schnorr<T> {
-      Schnorr(FrostSchnorr::new(transcript))
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Schnorr {
+      Schnorr(FrostSchnorr::ietf())
     }
   }
 
-  impl<T: Sync + Clone + Debug + Transcript> Algorithm<Secp256k1> for Schnorr<T> {
-    type Transcript = T;
+  impl Algorithm<Secp256k1> for Schnorr {
+    type Transcript = <FrostSchnorr<Secp256k1, Hram> as Algorithm<Secp256k1>>::Transcript;
     type Addendum = ();
     type Signature = [u8; 64];
 
