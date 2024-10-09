@@ -16,13 +16,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-tower = "0.4"
+tower = "0.5"
 
 serde_json = { version = "1", default-features = false }
 simple-request = { path = "../../../common/request", default-features = false }
 
-alloy-json-rpc = { version = "0.3", default-features = false }
-alloy-transport = { version = "0.3", default-features = false }
+alloy-json-rpc = { version = "0.4", default-features = false }
+alloy-transport = { version = "0.4", default-features = false }
 
 [features]
 default = ["tls"]

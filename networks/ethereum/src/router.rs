@@ -226,7 +226,7 @@ impl Router {
       to: TxKind::Call(self.1),
       input: abi::executeCall::new((outs.to_vec(), sig.into())).abi_encode().into(),
       // TODO
-      gas_limit: 100_000 + ((200_000 + 10_000) * u128::try_from(outs.len()).unwrap()),
+      gas_limit: 100_000 + ((200_000 + 10_000) * u64::try_from(outs.len()).unwrap()),
       ..Default::default()
     }
   }

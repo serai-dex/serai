@@ -764,7 +764,7 @@ impl<D: Db> Network for Ethereum<D> {
           completion.signature(),
         ),
       };
-      tx.gas_limit = 1_000_000u64.into();
+      tx.gas_limit = 1_000_000u64;
       tx.gas_price = 1_000_000_000u64.into();
       let tx = ethereum_serai::crypto::deterministically_sign(&tx);
 
@@ -905,7 +905,7 @@ impl<D: Db> Network for Ethereum<D> {
       chain_id: None,
       nonce: 0,
       gas_price: 1_000_000_000u128,
-      gas_limit: 200_000u128,
+      gas_limit: 200_000,
       to: ethereum_serai::alloy::primitives::TxKind::Call(send_to.0.into()),
       // 1 ETH
       value,
@@ -924,7 +924,10 @@ impl<D: Db> Network for Ethereum<D> {
       .unwrap();
 
     let mut bytes = vec![];
-    tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
+    tx.encode_with_signature_fields(
+      &Signature::from(sig).with_chain_id(self.provider.get_chain_id().await.unwrap()),
+      &mut bytes,
+    );
     let pending_tx = self.provider.send_raw_transaction(&bytes).await.ok().unwrap();
 
     // Mine an epoch containing this TX
