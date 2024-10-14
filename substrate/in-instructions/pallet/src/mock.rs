@@ -112,7 +112,7 @@ impl grandpa::Config for Test {
 
 impl coins::Config for Test {
   type RuntimeEvent = RuntimeEvent;
-  type AllowMint = ();
+  type AllowMint = ValidatorSets;
 }
 
 impl coins::Config<coins::Instance1> for Test {

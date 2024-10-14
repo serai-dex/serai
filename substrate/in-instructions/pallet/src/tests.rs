@@ -443,6 +443,16 @@ fn swap_to_staked_sri_instruction() {
     // make a pool so that can actually swap
     make_liquid_pool(coin, 5 * 10u64.pow(coin.decimals()));
 
+    // set the keys to set the TAS for the network
+    ValidatorSets::<Test>::set_keys(
+      RawOrigin::None.into(),
+      coin.network(),
+      Vec::new().try_into().unwrap(),
+      KeyPair(insecure_pair_from_name("random-key").public(), Vec::new().try_into().unwrap()),
+      Signature([0u8; 64]),
+    )
+    .unwrap();
+
     // make sure account doesn't already have lTs or allocation
     let current_liq_tokens = LiquidityTokens::balance(POL_ACCOUNT.into(), coin.into()).0;
     assert_eq!(current_liq_tokens, 0);
