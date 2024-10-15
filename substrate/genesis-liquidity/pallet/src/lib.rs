@@ -437,9 +437,7 @@ pub mod pallet {
             Err(InvalidTransaction::Custom(1))?;
           }
 
-          // make sure signers settings the value at the end of the genesis period.
-          // we don't need this check for tests.
-          #[cfg(not(feature = "fast-epoch"))]
+          // check we waited for a month before setting the values
           if <frame_system::Pallet<T>>::block_number().saturated_into::<u64>() < MONTHS {
             Err(InvalidTransaction::Custom(2))?;
           }

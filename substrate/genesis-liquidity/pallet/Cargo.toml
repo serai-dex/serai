@@ -47,6 +47,11 @@ pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-fea
 sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
+ciphersuite = { path = "../../../crypto/ciphersuite", features = ["ristretto"] }
+frost = { package = "modular-frost", path = "../../../crypto/frost", features = ["tests"] }
+schnorrkel = { path = "../../../crypto/schnorrkel", package = "frost-schnorrkel" }
+
+zeroize = "^1.5"
 rand_core = "0.6"
 
 [features]

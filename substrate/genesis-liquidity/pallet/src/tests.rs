@@ -1,16 +1,28 @@
-use crate::{mock::*, primitives::*};
+use crate::{mock::*, pallet, primitives::*};
 
 use std::collections::HashMap;
 
+use ciphersuite::{Ciphersuite, Ristretto};
+use frost::dkg::musig::musig;
+use schnorrkel::Schnorrkel;
+
 use rand_core::{RngCore, OsRng};
+use zeroize::Zeroizing;
 
 use frame_system::RawOrigin;
-use frame_support::{assert_noop, assert_ok, traits::Hooks};
+use frame_support::{
+  assert_noop, assert_ok,
+  pallet_prelude::{TransactionSource, InvalidTransaction},
+  traits::Hooks,
+};
 
-use sp_core::Pair;
-use sp_runtime::BoundedVec;
+use sp_core::{
+  sr25519::{Pair, Signature},
+  Pair as PairTrait,
+};
+use sp_runtime::{traits::ValidateUnsigned, BoundedVec};
 
-use validator_sets_primitives::{ValidatorSet, Session, KeyPair};
+use validator_sets_primitives::{ValidatorSet, Session, KeyPair, musig_context};
 use serai_primitives::*;
 
 fn set_up_genesis(
@@ -137,6 +149,56 @@ fn make_networks_reach_economic_security(block_number: u64) {
   for n in EXTERNAL_NETWORKS {
     EconomicSecurity::economic_security_block(n).unwrap();
   }
+}
+
+fn oraclize_values_signature(set: ValidatorSet, values: &Values, pairs: &[Pair]) -> Signature {
+  let mut pub_keys = vec![];
+  for pair in pairs {
+    let public_key =
+      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut pair.public().0.as_ref()).unwrap();
+    pub_keys.push(public_key);
+  }
+
+  let mut threshold_keys = vec![];
+  for i in 0 .. pairs.len() {
+    let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
+      &mut pairs[i].as_ref().secret.to_bytes()[.. 32].as_ref(),
+    )
+    .unwrap();
+    assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
+
+    threshold_keys.push(
+      musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &pub_keys).unwrap(),
+    );
+  }
+
+  let mut musig_keys = HashMap::new();
+  for tk in threshold_keys {
+    musig_keys.insert(tk.params().i(), tk.into());
+  }
+
+  let sig = frost::tests::sign_without_caching(
+    &mut OsRng,
+    frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
+    &oraclize_values_message(&set, values),
+  );
+
+  Signature(sig.to_bytes())
+}
+
+fn get_ordered_keys(network: NetworkId, participants: &[Pair]) -> Vec<Pair> {
+  // retrieve the current session validators so that we know the order of the keys
+  // that is necessary for the correct musig signature.
+  let validators = ValidatorSets::participants_for_latest_decided_set(network).unwrap();
+
+  // collect the pairs of the validators
+  let mut pairs = vec![];
+  for (v, _) in validators {
+    let p = participants.iter().find(|pair| pair.public() == v).unwrap().clone();
+    pairs.push(p);
+  }
+
+  pairs
 }
 
 #[test]
@@ -330,5 +392,69 @@ fn remove_coin_liquidity_after_genesis_period() {
     // mul_divs? There is no pool movement to attribute it to.
     // assert_eq!(Coins::balance(account, coin).0 - account_coin_balance, account_liquidity / 2);
     assert!(Coins::balance(account, coin.into()).0 > account_coin_balance);
+  })
+}
+
+#[test]
+fn validate_oraclize_values_already_done() {
+  new_test_ext().execute_with(|| {
+    let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
+
+    // set the oraclization
+    GenesisLiquidity::oraclize_values(RawOrigin::None.into(), values, Signature([0u8; 64]))
+      .unwrap();
+
+    // trying to oraclize again should fail
+    let call = pallet::Call::<Test>::oraclize_values { values, signature: Signature([0u8; 64]) };
+    assert_eq!(
+      GenesisLiquidity::validate_unsigned(TransactionSource::External, &call),
+      InvalidTransaction::Custom(1).into()
+    );
+  })
+}
+
+#[test]
+fn validate_oraclize_values_submit_before_a_month() {
+  new_test_ext().execute_with(|| {
+    let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
+    let call = pallet::Call::<Test>::oraclize_values { values, signature: Signature([0u8; 64]) };
+
+    // we should wait for a month before setting the values
+    assert_eq!(
+      GenesisLiquidity::validate_unsigned(TransactionSource::External, &call),
+      InvalidTransaction::Custom(2).into()
+    );
+  })
+}
+
+#[test]
+fn validate_oraclize_values_invalid_signature() {
+  new_test_ext().execute_with(|| {
+    let genesis_participants = vec![
+      insecure_pair_from_name("Alice"),
+      insecure_pair_from_name("Bob"),
+      insecure_pair_from_name("Charlie"),
+      insecure_pair_from_name("Dave"),
+      insecure_pair_from_name("Eve"),
+      insecure_pair_from_name("Ferdie"),
+    ];
+    let network = NetworkId::Serai;
+    let values = Values { monero: 184100, ether: 4785000, dai: 1500 };
+
+    // invalid signature should fail
+    System::set_block_number(MONTHS);
+    let call = pallet::Call::<Test>::oraclize_values { values, signature: Signature([0u8; 64]) };
+    assert_eq!(
+      GenesisLiquidity::validate_unsigned(TransactionSource::External, &call),
+      InvalidTransaction::BadProof.into()
+    );
+
+    let pairs = get_ordered_keys(network, &genesis_participants);
+    let signature =
+      oraclize_values_signature(ValidatorSet { session: Session(0), network }, &values, &pairs);
+    let call = pallet::Call::<Test>::oraclize_values { values, signature };
+
+    // valid signature should pass
+    GenesisLiquidity::validate_unsigned(TransactionSource::External, &call).unwrap();
   })
 }
