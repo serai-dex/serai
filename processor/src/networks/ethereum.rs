@@ -918,16 +918,17 @@ impl<D: Db> Network for Ethereum<D> {
       .into(),
     };
 
-    use ethereum_serai::alloy::{primitives::Signature, consensus::SignableTransaction};
+    use ethereum_serai::alloy::{
+      primitives::{Parity, Signature},
+      consensus::SignableTransaction,
+    };
     let sig = k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(key).unwrap())
       .sign_prehash_recoverable(tx.signature_hash().as_ref())
       .unwrap();
 
     let mut bytes = vec![];
-    tx.encode_with_signature_fields(
-      &Signature::from(sig).with_chain_id(self.provider.get_chain_id().await.unwrap()),
-      &mut bytes,
-    );
+    let parity = Parity::NonEip155(Parity::from(sig.1).y_parity());
+    tx.encode_with_signature_fields(&Signature::from(sig).with_parity(parity), &mut bytes);
     let pending_tx = self.provider.send_raw_transaction(&bytes).await.ok().unwrap();
 
     // Mine an epoch containing this TX
