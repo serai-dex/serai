@@ -69,7 +69,7 @@ jobs:
         uses: ./.github/actions/build-dependencies
       - name: Buld Rust docs
         run: |
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rust-docs
+          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c rust-docs
           RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
           mv target/doc docs/_site/rust
 
