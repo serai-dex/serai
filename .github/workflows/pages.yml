@@ -65,6 +65,8 @@ jobs:
         id: nightly
         shell: bash
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
       - name: Buld Rust docs
         run: |
           rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rust-docs
