@@ -27,8 +27,6 @@ on:
   push:
     branches:
       - "develop"
-    paths:
-      - "docs/**"
 
   workflow_dispatch:
 
@@ -65,11 +63,17 @@ jobs:
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
+
+      - name: Get nightly version to use
+        id: nightly
+        shell: bash
+        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
       - name: Buld Rust docs
         run: |
-          rustup update stable
-          cargo doc --workspace --no-deps --all-features
+          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c doc
+          RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
           mv target/doc docs/_site/rust
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
