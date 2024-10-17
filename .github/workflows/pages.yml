@@ -67,7 +67,7 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
       - name: Buld Rust docs
         run: |
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c doc
+          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rust-docs
           RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
           mv target/doc docs/_site/rust
 
