@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod mock;
+
 #[allow(
   unreachable_patterns,
   clippy::cast_possible_truncation,
@@ -308,15 +314,9 @@ pub mod pallet {
     }
 
     fn initial_period(n: BlockNumberFor<T>) -> bool {
-      #[cfg(feature = "fast-epoch")]
-      let initial_period_duration = FAST_EPOCH_INITIAL_PERIOD;
-
-      #[cfg(not(feature = "fast-epoch"))]
-      let initial_period_duration = 2 * MONTHS;
-
       let genesis_complete_block = GenesisLiquidity::<T>::genesis_complete_block();
       genesis_complete_block.is_some() &&
-        (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + initial_period_duration))
+        (n.saturated_into::<u64>() < (genesis_complete_block.unwrap() + (2 * MONTHS)))
     }
 
     /// Returns true if any of the external networks haven't reached economic security yet.
@@ -344,17 +344,21 @@ pub mod pallet {
       }
 
       // stake the rewards
-      for (p, score) in scores {
-        let p_reward = u64::try_from(
-          u128::from(reward).saturating_mul(u128::from(score)) / u128::from(total_score),
-        )
-        .unwrap();
+      let mut total_reward_distributed = 0u64;
+      for (i, (p, score)) in scores.iter().enumerate() {
+        let p_reward = if i == (scores.len() - 1) {
+          reward.saturating_sub(total_reward_distributed)
+        } else {
+          u64::try_from(
+            u128::from(reward).saturating_mul(u128::from(*score)) / u128::from(total_score),
+          )
+          .unwrap()
+        };
 
-        Coins::<T>::mint(p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
-        if ValidatorSets::<T>::distribute_block_rewards(n, p, Amount(p_reward)).is_err() {
-          // TODO: log the failure
-          continue;
-        }
+        Coins::<T>::mint(*p, Balance { coin: Coin::Serai, amount: Amount(p_reward) }).unwrap();
+        ValidatorSets::<T>::distribute_block_rewards(n, *p, Amount(p_reward)).unwrap();
+
+        total_reward_distributed = total_reward_distributed.saturating_add(p_reward);
       }
     }
 

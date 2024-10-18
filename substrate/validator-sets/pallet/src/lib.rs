@@ -393,6 +393,7 @@ pub mod pallet {
       let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
 
       let mut participants = vec![];
+      let mut total_allocated_stake = 0;
       {
         let mut iter = SortedAllocationsIter::<T>::new(network);
         let mut key_shares = 0;
@@ -403,6 +404,7 @@ pub mod pallet {
             (amount.0 / allocation_per_key_share).min(u64::from(MAX_KEY_SHARES_PER_SET));
           participants.push((key, these_key_shares));
 
+          total_allocated_stake += amount.0;
           key_shares += these_key_shares;
         }
         amortize_excess_key_shares(&mut participants);
@@ -416,6 +418,10 @@ pub mod pallet {
       Pallet::<T>::deposit_event(Event::NewSet { set });
 
       Participants::<T>::set(network, Some(participants.try_into().unwrap()));
+      if network == NetworkId::Serai {
+        TotalAllocatedStake::<T>::set(network, Some(Amount(total_allocated_stake)));
+      }
+
       SessionBeginBlock::<T>::set(
         network,
         session,
@@ -713,7 +719,7 @@ pub mod pallet {
         }))
     }
 
-    fn new_session() {
+    pub fn new_session() {
       for network in serai_primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };
