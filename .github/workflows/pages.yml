@@ -70,7 +70,7 @@ jobs:
       - name: Buld Rust docs
         run: |
           rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c rust-docs
-          RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
+          RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --all-features
           mv target/doc docs/_site/rust
 
       - name: Upload artifact
