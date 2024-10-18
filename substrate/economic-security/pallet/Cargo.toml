@@ -30,6 +30,19 @@ coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", de
 
 serai-primitives = { path = "../../primitives", default-features = false }
 
+
+[dev-dependencies]
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+
+sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 [features]
 std = [
   "scale/std",
@@ -38,11 +51,27 @@ std = [
   "frame-system/std",
   "frame-support/std",
 
+  "sp-io/std",
+  "sp-core/std",
+  "sp-consensus-babe/std",
+
   "dex-pallet/std",
   "coins-pallet/std",
+  "validator-sets-pallet/std",
 
   "serai-primitives/std",
+
+  "pallet-babe/std",
+  "pallet-grandpa/std",
+  "pallet-timestamp/std",
 ]
-try-runtime = [] # TODO
+
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
+
 
 default = ["std"]
