@@ -1016,7 +1016,7 @@ pub mod pallet {
 
       Coins::<T>::burn(
         RawOrigin::Signed(pool_account).into(),
-        Balance { coin, amount: Amount(burn_amount.try_into().map_err(|_| Error::<T>::Overflow)?) },
+        Balance { coin, amount: Amount(burn_amount) },
       )?;
       Ok(())
     }
