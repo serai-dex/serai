@@ -215,7 +215,8 @@ impl coins::Config<coins::Instance1> for Runtime {
 impl dex::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 
-  type LPFee = ConstU32<3>; // 0.3%
+  // 0.5% in total but only half will go to LPs(0.25%) other half to be burned.
+  type LPFee = ConstU32<5>;
   type MintMinLiquidity = ConstU64<10000>;
 
   type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2

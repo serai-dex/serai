@@ -29,6 +29,7 @@ pub use coins_pallet as coins;
 use coins::Pallet as CoinsPallet;
 
 use serai_primitives::{Balance, COINS, PublicKey, system_address, Amount};
+use sp_core::Get;
 
 type LiquidityTokens<T> = coins_pallet::Pallet<T, coins::Instance1>;
 type LiquidityTokensError<T> = coins_pallet::Error<T, coins::Instance1>;
@@ -61,6 +62,20 @@ fn balance(owner: PublicKey, coin: Coin) -> u64 {
 
 fn pool_balance(owner: PublicKey, token_id: Coin) -> u64 {
   LiquidityTokens::<Test>::balance(owner, token_id).0
+}
+
+fn get_burn_amount(liquidity: u64) -> u64 {
+  // burn half of the swap fee left in the pool
+  let burn_percent = HigherPrecisionBalance::from(<<Test as Config>::LPFee as Get<u32>>::get())
+    .checked_div(2)
+    .unwrap();
+
+  let burn_amount = HigherPrecisionBalance::from(liquidity)
+    .checked_mul(burn_percent)
+    .unwrap()
+    .checked_div(1000)
+    .unwrap();
+  u64::try_from(burn_amount).unwrap()
 }
 
 macro_rules! bvec {
@@ -1083,15 +1098,16 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin2, amount: Amount(base2) }));
     assert_ok!(CoinsPallet::<Test>::mint(user, Balance { coin: coin3, amount: Amount(base2) }));
 
-    let liquidity1 = 10000;
-    let liquidity2 = 200;
+    let liquidity1_pool1 = 10000;
+    let mut liquidity1_pool2 = liquidity1_pool1;
+    let mut liquidity2 = 200;
     let liquidity3 = 2000;
 
     assert_ok!(Dex::add_liquidity(
       RuntimeOrigin::signed(user),
       coin2.try_into().unwrap(),
       liquidity2,
-      liquidity1,
+      liquidity1_pool1,
       1,
       1,
       user,
@@ -1100,15 +1116,15 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
       RuntimeOrigin::signed(user),
       coin3.try_into().unwrap(),
       liquidity3,
-      liquidity1,
+      liquidity1_pool2,
       1,
       1,
       user,
     ));
 
     let input_amount = 500;
-    let expect_out2 = Dex::get_amount_out(input_amount, liquidity2, liquidity1).ok().unwrap();
-    let expect_out3 = Dex::get_amount_out(expect_out2, liquidity1, liquidity3).ok().unwrap();
+    let expect_out2 = Dex::get_amount_out(input_amount, liquidity2, liquidity1_pool1).ok().unwrap();
+    let expect_out3 = Dex::get_amount_out(expect_out2, liquidity1_pool2, liquidity3).ok().unwrap();
 
     assert_noop!(
       Dex::swap_exact_tokens_for_tokens(
@@ -1140,6 +1156,13 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
       user,
     ));
 
+    // burn half of the taken fees
+    let burn_amount = get_burn_amount(input_amount);
+    liquidity2 -= burn_amount;
+
+    let burn_amount = get_burn_amount(expect_out2);
+    liquidity1_pool2 -= burn_amount;
+
     let pool_id1 = Dex::get_pool_id(coin1, coin2).unwrap();
     let pool_id2 = Dex::get_pool_id(coin1, coin3).unwrap();
     let pallet_account1 = Dex::get_pool_account(pool_id1);
@@ -1147,8 +1170,8 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
 
     assert_eq!(balance(user, coin2), base2 - liquidity2 - input_amount);
     assert_eq!(balance(pallet_account1, coin2), liquidity2 + input_amount);
-    assert_eq!(balance(pallet_account1, coin1), liquidity1 - expect_out2);
-    assert_eq!(balance(pallet_account2, coin1), liquidity1 + expect_out2);
+    assert_eq!(balance(pallet_account1, coin1), liquidity1_pool1 - expect_out2);
+    assert_eq!(balance(pallet_account2, coin1), liquidity1_pool2 + expect_out2);
     assert_eq!(balance(pallet_account2, coin3), liquidity3 - expect_out3);
     assert_eq!(balance(user, coin3), 10000 - liquidity3 + expect_out3);
   });
