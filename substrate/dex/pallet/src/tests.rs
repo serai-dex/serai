@@ -1157,10 +1157,10 @@ fn swap_exact_tokens_for_tokens_in_multi_hops() {
     ));
 
     // burn half of the taken fees
-    let burn_amount = get_burn_amount(liquidity2);
+    let burn_amount = get_burn_amount(input_amount);
     liquidity2 -= burn_amount;
 
-    let burn_amount = get_burn_amount(liquidity1_pool2);
+    let burn_amount = get_burn_amount(expect_out2);
     liquidity1_pool2 -= burn_amount;
 
     let pool_id1 = Dex::get_pool_id(coin1, coin2).unwrap();

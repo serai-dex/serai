@@ -992,32 +992,30 @@ pub mod pallet {
           let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2)?;
           let prev_amount = amounts.last().expect("Always has at least one element");
           let amount_out = Self::get_amount_out(*prev_amount, reserve_in, reserve_out)?;
-          amounts.push(amount_out);
 
           // now that we got swap fee from the user, burn half of it.
-          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin1)?;
+          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin1, *prev_amount)?;
+
+          amounts.push(amount_out);
         }
       }
 
       Ok(amounts)
     }
 
-    fn burn_half_of_swap_fee(pool: PoolId, coin: Coin) -> Result<(), DispatchError> {
+    fn burn_half_of_swap_fee(
+      pool: PoolId,
+      coin: Coin,
+      amount: SubstrateAmount,
+    ) -> Result<(), DispatchError> {
       let pool_account = Self::get_pool_account(pool);
-      let origin = RawOrigin::Signed(pool_account);
 
-      let balance = Coins::<T>::balance(pool_account, coin).0;
-      let burn_percent =
-        HigherPrecisionBalance::from(T::LPFee::get()).checked_div(2).ok_or(Error::<T>::Overflow)?;
-
-      let burn_amount = HigherPrecisionBalance::from(balance)
-        .checked_mul(burn_percent)
-        .ok_or(Error::<T>::Overflow)?
-        .checked_div(1000)
-        .ok_or(Error::<T>::Overflow)?;
+      // half of the taken fee
+      let burn_percent = T::LPFee::get().checked_div(2).ok_or(Error::<T>::Overflow)?;
+      let burn_amount = Self::mul_div(amount, burn_percent.into(), 1000)?;
 
       Coins::<T>::burn(
-        origin.into(),
+        RawOrigin::Signed(pool_account).into(),
         Balance { coin, amount: Amount(burn_amount.try_into().map_err(|_| Error::<T>::Overflow)?) },
       )?;
       Ok(())

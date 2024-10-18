@@ -116,7 +116,7 @@ serai_test!(
         send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
-        amount_out: 16599866399465
+        amount_out: 16611018363939
       }]
     );
 
@@ -144,7 +144,7 @@ serai_test!(
         send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
-        amount_out: 17166744497317
+        amount_out: 17207430166736
       }]
     );
   })
@@ -210,7 +210,7 @@ serai_test!(
         send_to: pair.public().into(),
         path,
         amount_in: amount_in.0,
-        amount_out: 12406166091918,
+        amount_out: 12421816676180,
       }]
     );
   })
@@ -264,8 +264,8 @@ serai_test!(
         mint_to: pair.public().into(),
         pool_id: coin,
         coin_amount: 10_000_000_000_000, // half of sent amount
-        sri_amount: 111669009482,
-        lp_token_minted: 1055147701082
+        sri_amount: 111631562261,
+        lp_token_minted: 1055499886564
       }]
     );
   })
@@ -349,7 +349,7 @@ serai_test!(
           send_to: IN_INSTRUCTION_EXECUTOR,
           path,
           amount_in: 200_000_000_000_000,
-          amount_out: 18933113030
+          amount_out: 18970355346
         }]
       );
     }
@@ -388,7 +388,7 @@ serai_test!(
           send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 200_000_000_000,
-          amount_out: 1473437558561637
+          amount_out: 1482888317565764
         }]
       );
     }
@@ -426,7 +426,7 @@ serai_test!(
           send_to: out_address.as_native().unwrap(),
           path,
           amount_in: 100_000_000_000_000,
-          amount_out: 1751430396
+          amount_out: 1755477054
         }]
       );
     }
