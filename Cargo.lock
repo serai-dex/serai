@@ -8033,6 +8033,7 @@ dependencies = [
  "serai-coins-primitives",
  "serai-primitives",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

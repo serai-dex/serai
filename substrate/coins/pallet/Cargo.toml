@@ -34,6 +34,9 @@ pallet-transaction-payment = { git = "https://github.com/serai-dex/substrate", d
 serai-primitives = { path = "../../primitives", default-features = false, features = ["serde"] }
 coins-primitives = { package = "serai-coins-primitives", path = "../primitives", default-features = false }
 
+[dev-dependencies]
+sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
 [features]
 std = [
   "frame-system/std",
@@ -41,6 +44,7 @@ std = [
 
   "sp-core/std",
   "sp-std/std",
+  "sp-io/std",
   "sp-runtime/std",
 
   "pallet-transaction-payment/std",
@@ -49,8 +53,12 @@ std = [
   "coins-primitives/std",
 ]
 
-# TODO
-try-runtime = []
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
 
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
