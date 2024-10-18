@@ -40,6 +40,14 @@ validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../..
 genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 emissions-pallet = { package = "serai-emissions-pallet", path = "../../emissions/pallet", default-features = false }
 
+
+[dev-dependencies]
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+economic-security-pallet = { package = "serai-economic-security-pallet", path = "../../economic-security/pallet", default-features = false }
+
 [features]
 std = [
   "scale/std",
@@ -62,8 +70,19 @@ std = [
   "validator-sets-pallet/std",
   "genesis-liquidity-pallet/std",
   "emissions-pallet/std",
-]
-default = ["std"]
 
-# TODO
-try-runtime = []
+  "economic-security-pallet/std",
+
+  "pallet-babe/std",
+  "pallet-grandpa/std",
+  "pallet-timestamp/std",
+]
+
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
+
+default = ["std"]

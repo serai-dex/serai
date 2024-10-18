@@ -9,6 +9,12 @@ use serai_primitives::*;
 pub use in_instructions_primitives as primitives;
 use primitives::*;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 // TODO: Investigate why Substrate generates these
 #[allow(
   unreachable_patterns,
