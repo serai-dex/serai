@@ -1,6 +1,7 @@
 # MIT License
 #
 # Copyright (c) 2022 just-the-docs
+# Copyright (c) 2022-2024 Luke Parker
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,31 +21,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# Sample workflow for building and deploying a Jekyll site to GitHub Pages
-name: Deploy Jekyll site to Pages
+name: Deploy Rust docs and Jekyll site to Pages
 
 on:
   push:
     branches:
       - "develop"
-    paths:
-      - "docs/**"
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow one concurrent deployment
+# Only allow one concurrent deployment
 concurrency:
   group: "pages"
   cancel-in-progress: true
@@ -53,9 +44,6 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -69,11 +57,24 @@ jobs:
         id: pages
         uses: actions/configure-pages@v3
       - name: Build with Jekyll
-        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+        run: cd ${{ github.workspace }}/docs && bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
+
+      - name: Get nightly version to use
+        id: nightly
+        shell: bash
+        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
+      - name: Buld Rust docs
+        run: |
+          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c rust-docs
+          RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --all-features
+          mv target/doc docs/_site/rust
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: "docs/_site/"
 
@@ -87,4 +88,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4

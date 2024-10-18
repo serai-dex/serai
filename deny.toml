@@ -92,7 +92,10 @@ license-files = [
 multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
-deny = [ { name = "serde_derive", version = ">=1.0.172, <1.0.185" } ]
+deny = [
+  { name = "serde_derive", version = ">=1.0.172, <1.0.185" },
+  { name = "hashbrown", version = ">=0.15" },
+]
 
 [sources]
 unknown-registry = "deny"
@@ -102,5 +105,4 @@ allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
-  "https://github.com/alloy-rs/core",
 ]

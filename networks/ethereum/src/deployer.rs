@@ -39,7 +39,7 @@ impl Deployer {
       nonce: 0,
       gas_price: 100_000_000_000u128,
       // TODO: Use a more accurate gas limit
-      gas_limit: 1_000_000u128,
+      gas_limit: 1_000_000,
       to: TxKind::Create,
       value: U256::ZERO,
       input: bytecode,

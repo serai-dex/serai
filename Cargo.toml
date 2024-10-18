@@ -141,6 +141,9 @@ parking_lot = { path = "patches/parking_lot" }
 zstd = { path = "patches/zstd" }
 # Needed for WAL compression
 rocksdb = { path = "patches/rocksdb" }
+# 1.0.1 was yanked due to a breaking change (an extra field)
+# 2.0 has fewer dependencies and still works within our tree
+tiny-bip39 = { path = "patches/tiny-bip39" }
 
 # is-terminal now has an std-based solution with an equivalent API
 is-terminal = { path = "patches/is-terminal" }
@@ -154,9 +157,6 @@ matches = { path = "patches/matches" }
 # The following two patches resolve everything
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
-
-# https://github.com/alloy-rs/core/issues/717
-alloy-sol-type-parser = { git = "https://github.com/alloy-rs/core", rev = "446b9d2fbce12b88456152170709a3eaac929af0" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"

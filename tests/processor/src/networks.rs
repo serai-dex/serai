@@ -299,7 +299,7 @@ impl Wallet {
         use std::sync::Arc;
         use ethereum_serai::{
           alloy::{
-            primitives::{U256, Signature, TxKind},
+            primitives::{U256, Parity, Signature, TxKind},
             sol_types::SolCall,
             simple_request_transport::SimpleRequest,
             consensus::{TxLegacy, SignableTransaction},
@@ -343,13 +343,13 @@ impl Wallet {
             provider
               .raw_request::<_, ()>(
                 "anvil_setBalance".into(),
-                [signer.to_string(), (tx.gas_limit * tx.gas_price).to_string()],
+                [signer.to_string(), (u128::from(tx.gas_limit) * tx.gas_price).to_string()],
               )
               .await
               .unwrap();
 
             let mut bytes = vec![];
-            tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
+            tx.encode_with_signature_fields(&sig, &mut bytes);
             let _ = provider.send_raw_transaction(&bytes).await.unwrap();
 
             provider.raw_request::<_, ()>("anvil_mine".into(), [96]).await.unwrap();
@@ -364,7 +364,7 @@ impl Wallet {
           chain_id: None,
           nonce: *nonce,
           gas_price: 1_000_000_000u128,
-          gas_limit: 200_000u128,
+          gas_limit: 200_000,
           to: TxKind::Call(router_addr.into()),
           // 1 ETH
           value: one_eth,
@@ -389,7 +389,8 @@ impl Wallet {
             .unwrap();
 
         let mut bytes = vec![];
-        tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
+        let parity = Parity::NonEip155(Parity::from(sig.1).y_parity());
+        tx.encode_with_signature_fields(&Signature::from(sig).with_parity(parity), &mut bytes);
 
         // We drop the bottom 10 decimals
         (

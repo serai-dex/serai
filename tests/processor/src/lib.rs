@@ -248,7 +248,7 @@ impl Coordinator {
                   provider
                     .raw_request::<_, ()>(
                       "anvil_setBalance".into(),
-                      [signer.to_string(), (tx.gas_limit * tx.gas_price).to_string()],
+                      [signer.to_string(), (u128::from(tx.gas_limit) * tx.gas_price).to_string()],
                     )
                     .await
                     .unwrap();

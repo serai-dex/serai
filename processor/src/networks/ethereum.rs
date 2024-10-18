@@ -764,7 +764,7 @@ impl<D: Db> Network for Ethereum<D> {
           completion.signature(),
         ),
       };
-      tx.gas_limit = 1_000_000u64.into();
+      tx.gas_limit = 1_000_000u64;
       tx.gas_price = 1_000_000_000u64.into();
       let tx = ethereum_serai::crypto::deterministically_sign(&tx);
 
@@ -905,7 +905,7 @@ impl<D: Db> Network for Ethereum<D> {
       chain_id: None,
       nonce: 0,
       gas_price: 1_000_000_000u128,
-      gas_limit: 200_000u128,
+      gas_limit: 200_000,
       to: ethereum_serai::alloy::primitives::TxKind::Call(send_to.0.into()),
       // 1 ETH
       value,
@@ -918,13 +918,17 @@ impl<D: Db> Network for Ethereum<D> {
       .into(),
     };
 
-    use ethereum_serai::alloy::{primitives::Signature, consensus::SignableTransaction};
+    use ethereum_serai::alloy::{
+      primitives::{Parity, Signature},
+      consensus::SignableTransaction,
+    };
     let sig = k256::ecdsa::SigningKey::from(k256::elliptic_curve::NonZeroScalar::new(key).unwrap())
       .sign_prehash_recoverable(tx.signature_hash().as_ref())
       .unwrap();
 
     let mut bytes = vec![];
-    tx.encode_with_signature_fields(&Signature::from(sig), &mut bytes);
+    let parity = Parity::NonEip155(Parity::from(sig.1).y_parity());
+    tx.encode_with_signature_fields(&Signature::from(sig).with_parity(parity), &mut bytes);
     let pending_tx = self.provider.send_raw_transaction(&bytes).await.ok().unwrap();
 
     // Mine an epoch containing this TX

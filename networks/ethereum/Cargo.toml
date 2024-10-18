@@ -29,21 +29,21 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 
 alloy-core = { version = "0.8", default-features = false }
 alloy-sol-types = { version = "0.8", default-features = false, features = ["json"] }
-alloy-consensus = { version = "0.3", default-features = false, features = ["k256"] }
-alloy-network = { version = "0.3", default-features = false }
-alloy-rpc-types-eth = { version = "0.3", default-features = false }
-alloy-rpc-client = { version = "0.3", default-features = false }
+alloy-consensus = { version = "0.4", default-features = false, features = ["k256"] }
+alloy-network = { version = "0.4", default-features = false }
+alloy-rpc-types-eth = { version = "0.4", default-features = false }
+alloy-rpc-client = { version = "0.4", default-features = false }
 alloy-simple-request-transport = { path = "./alloy-simple-request-transport", default-features = false }
-alloy-provider = { version = "0.3", default-features = false }
+alloy-provider = { version = "0.4", default-features = false }
 
-alloy-node-bindings = { version = "0.3", default-features = false, optional = true }
+alloy-node-bindings = { version = "0.4", default-features = false, optional = true }
 
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["tests"] }
 
 tokio = { version = "1", features = ["macros"] }
 
-alloy-node-bindings = { version = "0.3", default-features = false }
+alloy-node-bindings = { version = "0.4", default-features = false }
 
 [features]
 tests = ["alloy-node-bindings", "frost/tests"]
