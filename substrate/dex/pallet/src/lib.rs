@@ -1007,9 +1007,9 @@ pub mod pallet {
         return None;
       }
 
-      let path = if coin1 == Coin::native() {
-        vec![coin2, coin1]
-      } else if coin2 == Coin::native() {
+      let path = if (coin1 == Coin::native() && coin2 != Coin::native()) ||
+        (coin2 == Coin::native() && coin1 != Coin::native())
+      {
         vec![coin1, coin2]
       } else {
         vec![coin1, Coin::native(), coin2]

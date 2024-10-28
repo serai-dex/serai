@@ -49,7 +49,6 @@ tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 jsonrpsee = { version = "0.16", features = ["server"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 
 sc-offchain = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
